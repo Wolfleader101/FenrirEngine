@@ -14,9 +14,7 @@ public:
 	}
 };
 
-int main()
+Fenrir::Application* Fenrir::CreateApplication()
 {
-	Sandbox* sandbox = new Sandbox();
-	sandbox->Run();
-	delete sandbox;
+	return new Sandbox();
 }

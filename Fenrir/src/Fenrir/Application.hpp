@@ -12,5 +12,8 @@ namespace Fenrir {
 
 		void Run();
 	};
+
+	// to be defined in CLIENT
+	Application* CreateApplication();
 }
 
