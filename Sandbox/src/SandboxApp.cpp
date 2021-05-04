@@ -1,4 +1,4 @@
-#include <FenrirEngine.h>
+#include <Fenrir.h>
 
 class Sandbox : public Fenrir::Application
 {
