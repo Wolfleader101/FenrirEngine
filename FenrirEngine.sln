@@ -5,7 +5,7 @@ VisualStudioVersion = 16.0.30907.101
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Sandbox", "Sandbox\Sandbox.vcxproj", "{7AF9FF14-3981-468F-B0F6-08682CEEC3A4}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FenrirEngine", "FenrirEngine\FenrirEngine.vcxproj", "{AF1C53E3-B245-459E-8FC9-9819DEF95464}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Fenrir", "Fenrir\Fenrir.vcxproj", "{AF1C53E3-B245-459E-8FC9-9819DEF95464}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

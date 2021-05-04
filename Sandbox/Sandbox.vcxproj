@@ -59,7 +59,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>FE_PLATFORM_WINDOWS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)FenrirEngine\src;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Fenrir\src;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -74,7 +74,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>FE_PLATFORM_WINDOWS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>$(SolutionDir)FenrirEngine\src;</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(SolutionDir)Fenrir\src;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -85,6 +85,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ProjectReference Include="..\FenrirEngine\FenrirEngine.vcxproj">
+      <Project>{af1c53e3-b245-459e-8fc9-9819def95464}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\Fenrir\Fenrir.vcxproj">
       <Project>{af1c53e3-b245-459e-8fc9-9819def95464}</Project>
     </ProjectReference>
   </ItemGroup>

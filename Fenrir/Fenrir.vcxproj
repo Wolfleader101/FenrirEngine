@@ -14,7 +14,7 @@
     <VCProjectVersion>16.0</VCProjectVersion>
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{af1c53e3-b245-459e-8fc9-9819def95464}</ProjectGuid>
-    <RootNamespace>FenrirEngine</RootNamespace>
+    <RootNamespace>Fenrir</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
     <ProjectName>Fenrir</ProjectName>
   </PropertyGroup>
@@ -83,7 +83,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\FenrirEngine.h" />
+    <ClInclude Include="src\Fenrir.h" />
     <ClInclude Include="src\Fenrir\Application.hpp" />
     <ClInclude Include="src\Fenrir\Core.hpp" />
   </ItemGroup>
