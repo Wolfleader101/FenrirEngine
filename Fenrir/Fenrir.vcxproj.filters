@@ -27,9 +27,15 @@
     <ClInclude Include="src\Fenrir\EntryPoint.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\Fenrir\Log.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Fenrir\Application.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Fenrir\Log.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
