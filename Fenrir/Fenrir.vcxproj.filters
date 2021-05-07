@@ -35,6 +35,8 @@
       <Filter>Fenrir</Filter>
     </ClInclude>
     <ClInclude Include="src\pch.h" />
+    <ClInclude Include="src\Fenrir\Window.hpp" />
+    <ClInclude Include="src\Fenrir\Platform\Windows\WindowsWindow.hpp" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Fenrir\Application.cpp">
@@ -44,5 +46,6 @@
       <Filter>Fenrir</Filter>
     </ClCompile>
     <ClCompile Include="src\pch.cpp" />
+    <ClCompile Include="src\Fenrir\Platform\Windows\WindowsWindow.cpp" />
   </ItemGroup>
 </Project>

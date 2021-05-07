@@ -12,6 +12,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "Fenrir/Log.hpp"
+
 #ifdef FE_PLATFORM_WINDOWS
 	#include <Windows.h>
 #endif // FE_PLATFORM_WINDOWS
