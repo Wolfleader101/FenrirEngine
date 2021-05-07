@@ -1,3 +1,4 @@
+#include "pch.h"
 #include "Application.hpp"
 
 #include "Fenrir/Events/ApplicationEvent.hpp"

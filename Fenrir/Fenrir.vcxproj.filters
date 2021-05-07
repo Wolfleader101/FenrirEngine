@@ -34,6 +34,7 @@
     <ClInclude Include="src\Fenrir\Log.hpp">
       <Filter>Fenrir</Filter>
     </ClInclude>
+    <ClInclude Include="src\pch.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Fenrir\Application.cpp">
@@ -42,5 +43,6 @@
     <ClCompile Include="src\Fenrir\Log.cpp">
       <Filter>Fenrir</Filter>
     </ClCompile>
+    <ClCompile Include="src\pch.cpp" />
   </ItemGroup>
 </Project>

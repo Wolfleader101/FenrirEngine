@@ -1,8 +1,6 @@
 #pragma once
 
 #include "Fenrir/Core.hpp"
-#include <string>
-#include <functional>
 
 namespace Fenrir
 {

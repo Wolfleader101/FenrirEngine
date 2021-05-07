@@ -2,8 +2,6 @@
 
 #include "Event.hpp"
 
-#include <sstream>
-
 namespace Fenrir {
 
 	class FENRIR_API WindowResizeEvent : public Event

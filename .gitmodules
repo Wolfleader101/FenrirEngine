@@ -1,3 +1,6 @@
 [submodule "Fenrir/vendor/spdlog"]
 	path = Fenrir/vendor/spdlog
 	url = https://github.com/gabime/spdlog
+[submodule "Fenrir/vendor/GLFW"]
+	path = Fenrir/vendor/GLFW
+	url = https://github.com/Wolfleader101/glfw
