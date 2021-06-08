@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Fenrir/Window.hpp"
+
 #include <GLFW/glfw3.h>
 
 namespace Fenrir {

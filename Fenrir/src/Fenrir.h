@@ -3,6 +3,7 @@
 // For use by applications
 
 #include "Fenrir/Application.hpp"
+#include "Fenrir/Layer.hpp"
 #include "Fenrir/Log.hpp"
 
 // Entry Point

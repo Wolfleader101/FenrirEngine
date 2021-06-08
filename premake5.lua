@@ -12,7 +12,10 @@ outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 
 IncludeDir = {}
 IncludeDir["GLFW"] = "Fenrir/vendor/GLFW/include"
+IncludeDir["Glad"] = "Fenrir/vendor/Glad/include"
+
 include "Fenrir/vendor/GLFW"
+include "Fenrir/vendor/Glad"
 
 project "Fenrir"
 	location "Fenrir"
@@ -36,12 +39,14 @@ project "Fenrir"
 	{
 		"%{prj.name}/src",
 		"%{prj.name}/vendor/spdlog/include",
-		"%{IncludeDir.GLFW}"
+		"%{IncludeDir.GLFW}",
+		"%{IncludeDir.Glad}"
 	}
 	
 	links
 	{
 		"GLFW",
+		"Glad",
 		"opengl32.lib"
 	}
 
@@ -53,7 +58,8 @@ project "Fenrir"
 		defines
 		{
 			"FE_PLATFORM_WINDOWS",
-			"FE_BUILD_DLL"
+			"FE_BUILD_DLL",
+			"GLFW_INCLUDE_NONE"
 		}
 
 		postbuildcommands
@@ -63,14 +69,17 @@ project "Fenrir"
 
 	filter "configurations:Debug"
 		defines "FE_DEBUG"
+		buildoptions "/MDd"
 		symbols "On"
 
 	filter "configurations:Release"
 		defines "FE_RELEASE"
+		buildoptions "/MD"
 		optimize "On"
 
 	filter "configurations:Dist"
 		defines "FE_DIST"
+		buildoptions "/MD"
 		optimize "On"
 
 project "Sandbox"
@@ -112,12 +121,15 @@ project "Sandbox"
 
 	filter "configurations:Debug"
 		defines "FE_DEBUG"
+		buildoptions "/MDd"
 		symbols "On"
 
 	filter "configurations:Release"
 		defines "FE_RELEASE"
+		buildoptions "/MD"
 		optimize "On"
 
 	filter "configurations:Dist"
 		defines "FE_DIST"
+		buildoptions "/MD"
 		optimize "On"
