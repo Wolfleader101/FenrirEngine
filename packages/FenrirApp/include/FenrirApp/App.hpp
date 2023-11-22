@@ -36,10 +36,14 @@ namespace Fenrir
 
         Scheduler& AddSystem(SchedulePriority priority, SystemFunc system);
 
+        void Init();
         void Run();
 
       private:
-        std::map<SchedulePriority, std::vector<SystemFunc>> m_systems;
+        std::map<SchedulePriority, std::vector<SystemFunc>> m_runOnceSystems;
+        std::map<SchedulePriority, std::vector<SystemFunc>> m_updateSystems;
+
+        bool IsRunOnceSystem(SchedulePriority priority);
     };
 
     class App
@@ -55,6 +59,7 @@ namespace Fenrir
 
       private:
         Scheduler m_scheduler;
+        bool m_running = true;
     };
 
 } // namespace Fenrir
