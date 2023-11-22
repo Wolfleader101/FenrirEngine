@@ -1,0 +1,3 @@
+[submodule "packages/FenrirLogger/libs/spdlog"]
+	path = packages/FenrirLogger/libs/spdlog
+	url = https://github.com/gabime/spdlog

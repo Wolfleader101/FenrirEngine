@@ -2,7 +2,7 @@
 
 namespace Fenrir
 {
-    App::App()
+    App::App(std::unique_ptr<ILogger> logger) : m_time(), m_scheduler(), m_logger(std::move(logger))
     {
     }
 
@@ -18,72 +18,33 @@ namespace Fenrir
         return *this;
     }
 
+    const std::unique_ptr<ILogger>& App::Logger() const
+    {
+        return m_logger;
+    }
+
     void App::Run()
     {
-        m_scheduler.Init();
+        m_scheduler.Init(*this);
 
         while (m_running)
         {
-            // TODO eventually make this a loop
-            m_scheduler.Run();
-        }
-    }
+            m_time.Update();
 
-    Scheduler::Scheduler()
-    {
-    }
+            m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
 
-    bool Scheduler::IsRunOnceSystem(SchedulePriority priority)
-    {
-        return priority == SchedulePriority::PreInit || priority == SchedulePriority::Init ||
-               priority == SchedulePriority::PostInit;
-    }
-
-    Scheduler& Scheduler::AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
-    {
-        // for each system, add it to the map
-        for (auto system : systems)
-        {
-            AddSystem(priority, system);
-        }
-
-        return *this;
-    }
-
-    Scheduler& Scheduler::AddSystem(SchedulePriority priority, SystemFunc system)
-    {
-        if (IsRunOnceSystem(priority))
-        {
-            m_runOnceSystems[priority].push_back(system);
-        }
-        else
-        {
-            m_updateSystems[priority].push_back(system);
-        }
-        return *this;
-    }
-
-    void Scheduler::Init()
-    {
-        // for each priority, run each system in order of their insertion
-        for (auto& [priority, systems] : m_runOnceSystems)
-        {
-            for (auto& system : systems)
+            while (m_time.accumulator >= m_time.tickRate)
             {
-                system(); // TODO this might need to be a wrapper, so it can take in Scene??
-            }
-        }
-    }
+                m_scheduler.RunSystems(*this, SchedulePriority::Tick);
 
-    void Scheduler::Run()
-    {
-        // for each priority, run each system in order of their insertion
-        for (auto& [priority, systems] : m_updateSystems)
-        {
-            for (auto& system : systems)
-            {
-                system(); // TODO this might need to be a wrapper, so it can take in Scene??
+                m_time.accumulator -= m_time.tickRate;
             }
+
+            m_scheduler.RunSystems(*this, SchedulePriority::Update);
+
+            m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
+
+            m_scheduler.RunSystems(*this, SchedulePriority::Last);
         }
     }
 

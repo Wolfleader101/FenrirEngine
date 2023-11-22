@@ -1,41 +1,50 @@
 #include <iostream>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirLogger/ConsoleLogger.hpp"
 
-static void systemA()
+static void systemA(Fenrir::App& app)
 {
-    std::cout << "System A" << std::endl;
+    app.Logger()->Info("System A {0}", 1);
 }
 
-static void systemB()
+static void systemB(Fenrir::App& app)
 {
-    std::cout << "System B" << std::endl;
+    app.Logger()->Info("System B");
 }
 
-static void PreInit()
+static void Tick(Fenrir::App& app)
 {
-    std::cout << "PreInit" << std::endl;
+    app.Logger()->Info("Tick");
 }
 
-static void Init()
+static void PreInit(Fenrir::App& app)
 {
-    std::cout << "Init" << std::endl;
+    app.Logger()->Info("PreInit");
 }
 
-static void PostInit()
+static void Init(Fenrir::App& app)
 {
-    std::cout << "PostInit" << std::endl;
+    app.Logger()->Info("Init");
+}
+
+static void PostInit(Fenrir::App& app)
+{
+    app.Logger()->Info("PostInit");
 }
 
 int main()
 {
     std::cout << "hello world" << std::endl;
 
-    Fenrir::App app;
+    auto logger = std::make_unique<Fenrir::ConsoleLogger>();
+    Fenrir::App app(std::move(logger));
+
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {PreInit})
         .AddSystems(Fenrir::SchedulePriority::Init, {Init})
         .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
         .AddSystems(Fenrir::SchedulePriority::Update, {systemB})
         .AddSystems(Fenrir::SchedulePriority::PreUpdate, {systemA})
+        .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .Run();
 }

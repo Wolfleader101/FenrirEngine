@@ -30,6 +30,10 @@ option(BUILD_FENRIR_APP "Build FenrirApp module" ON)
 option(BUILD_FENRIR_CORE "Build FenrirCore module" ON)
 option(BUILD_FENRIR_ECS "Build FenrirECS module" ON)
 
+add_subdirectory(packages/FenrirTime)
+add_subdirectory(packages/FenrirScheduler)
+add_subdirectory(packages/FenrirLogger)
+
 if(BUILD_FENRIR_APP)
     add_subdirectory(packages/FenrirApp)
 endif()
@@ -41,5 +45,4 @@ endif()
 if(BUILD_FENRIR_ECS)
     add_subdirectory(packages/FenrirECS)
 endif()
-
 
