@@ -6,6 +6,10 @@
 
 namespace Fenrir
 {
+    /**
+     * @brief in-built console logger class that uses spdlog under the hood
+     *
+     */
     class ConsoleLogger : public ILogger
     {
       public:

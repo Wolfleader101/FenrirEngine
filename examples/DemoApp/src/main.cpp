@@ -5,17 +5,17 @@
 
 static void systemA(Fenrir::App& app)
 {
-    app.Logger()->Info("System A {0}", 1);
+    app.Logger()->Warn("System A {0}", 1);
 }
 
 static void systemB(Fenrir::App& app)
 {
-    app.Logger()->Info("System B");
+    app.Logger()->Error("System B");
 }
 
 static void Tick(Fenrir::App& app)
 {
-    app.Logger()->Info("Tick");
+    app.Logger()->Log("Tick");
 }
 
 static void PreInit(Fenrir::App& app)
@@ -30,13 +30,11 @@ static void Init(Fenrir::App& app)
 
 static void PostInit(Fenrir::App& app)
 {
-    app.Logger()->Info("PostInit");
+    app.Logger()->Fatal("PostInit");
 }
 
 int main()
 {
-    std::cout << "hello world" << std::endl;
-
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
     Fenrir::App app(std::move(logger));
 
