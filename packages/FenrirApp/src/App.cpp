@@ -6,11 +6,6 @@ namespace Fenrir
     {
     }
 
-    App& App::Init()
-    {
-        return *this;
-    }
-
     App& App::AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
     {
         m_scheduler.AddSystems(priority, systems);
@@ -25,6 +20,7 @@ namespace Fenrir
 
     void App::Run()
     {
+        // TODO eventually make this a loop
         m_scheduler.Run();
     }
 

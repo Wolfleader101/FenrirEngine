@@ -47,8 +47,6 @@ namespace Fenrir
       public:
         App();
 
-        App& Init();
-
         App& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         App& AddSystem(SchedulePriority priority, SystemFunc system);
