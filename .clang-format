@@ -1,0 +1,7 @@
+---
+BasedOnStyle: Microsoft
+AlignEscapedNewlines: Left
+AlwaysBreakTemplateDeclarations: "Yes"
+ColumnLimit: "120"
+PointerAlignment: Left
+NamespaceIndentation: All
