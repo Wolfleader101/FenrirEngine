@@ -31,7 +31,6 @@ std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 
 namespace
 {
-    hostfxr_initialize_for_dotnet_command_line_fn init_for_cmd_line_fptr;
     hostfxr_initialize_for_runtime_config_fn init_fptr;
     hostfxr_get_runtime_delegate_fn get_delegate_fptr;
     hostfxr_run_app_fn run_app_fptr;
@@ -157,8 +156,6 @@ namespace
 
         // Load hostfxr and get desired exports
         void* lib = load_library(hostfxr_path.c_str());
-        init_for_cmd_line_fptr = (hostfxr_initialize_for_dotnet_command_line_fn)get_export(
-            lib, "hostfxr_initialize_for_dotnet_command_line");
         init_fptr = (hostfxr_initialize_for_runtime_config_fn)get_export(lib, "hostfxr_initialize_for_runtime_config");
         if (init_fptr == nullptr)
         {
@@ -261,18 +258,24 @@ static void Init(Fenrir::App& app)
     }
 
 #if _WIN32
-    const auto dotnetlib_path = std::wstring(widen(base_dir) + L"\\Fenrir.Managed.dll");
+    const std::wstring dotnetlib_path = std::wstring(widen(base_dir) + L"\\Fenrir.Managed.dll");
     app.Logger()->Info("Fenrir Managed DLL: {}", narrow(dotnetlib_path));
 #else
     const std::string dotnetlib_path = std::string((base_dir + "\\Fenrir.Managed.dll").c_str());
 #endif
-    const auto dotnet_type = STR("Fenrir.Managed.Lib, Fenrir.Managed");
-    const auto dotnet_type_method = STR("Hello");
     // Namespace, assembly name
+    const char_t* dotnet_type = STR("Fenrir.Managed.Lib, Fenrir.Managed");
+
+    const char_t* dotnet_type_method = STR("Hello");
+
+    app.Logger()->Info("Loading Managed Code, Type: {}", narrow(std::wstring(dotnet_type)));
+    app.Logger()->Info("Loading Managed Code, Method: {}", narrow(std::wstring(dotnet_type_method)));
 
     typedef int(CORECLR_DELEGATE_CALLTYPE * custom_entry_point_fn)();
     custom_entry_point_fn entry_point = nullptr;
-    const int rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(), dotnet_type, dotnet_type_method,
+    const int rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(), // Assembly path
+                                                          dotnet_type,            // Assembly qualified type name
+                                                          dotnet_type_method,     // Entry point method name
                                                           nullptr, // No delegate type name needed for static methods
                                                           nullptr, reinterpret_cast<void**>(&entry_point));
 
@@ -283,7 +286,7 @@ static void Init(Fenrir::App& app)
     }
 
     int result = entry_point();
-    if (result != 0)
+    if (result != 2)
     {
         app.Logger()->Error("Hello method returned failure.");
         return;

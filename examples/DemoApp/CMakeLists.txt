@@ -21,13 +21,13 @@ target_link_libraries(DemoApp PRIVATE FenrirApp)
 
 
 set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/managed/Fenrir.Managed")
-set(CS_OUTPUT_DIR "${CS_PROJECT_DIR}/bin/Debug/net8.0")
+set(CS_OUTPUT_DIR "${CS_PROJECT_DIR}/bin/Debug")
 
 
 
 # Custom command to build the C# project
 add_custom_target(BuildCsProj
-    COMMAND dotnet build "${CS_PROJECT_DIR}" --configuration Debug
+    COMMAND dotnet build "${CS_PROJECT_DIR}"
     WORKING_DIRECTORY "${CS_PROJECT_DIR}"
     COMMENT "Building C# Project"
 )
