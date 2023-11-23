@@ -142,15 +142,16 @@ namespace
     {
         // Construct the path for hostfxr based on the OS
         std::wstring hostfxr_path;
-#if _WIN32
+#if _WIN64
+        hostfxr_path = std::wstring(L"C:\\Program Files\\dotnet\\host\\fxr\\8.0.0\\hostfxr.dll");
+#elif _WIN32
         hostfxr_path = std::wstring(L"C:\\Program Files (x86)\\dotnet\\host\\fxr\\8.0.0\\hostfxr.dll");
-
 #else
         // Adjust the path for non-Windows systems
         hostfxr_path = "/usr/local/share/dotnet/host/fxr/8.0.0/libhostfxr.so"; // Example path, adjust as needed
 #endif
 
-        std::cout << "Loading hostfxr" << std::endl;
+        std::cout << "Loading hostfxr from: " << narrow(hostfxr_path) << std::endl;
 
         // Load hostfxr and get desired exports
         void* lib = load_library(hostfxr_path.c_str());
