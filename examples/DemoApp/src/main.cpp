@@ -31,8 +31,10 @@ std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
 
 namespace
 {
+    hostfxr_initialize_for_dotnet_command_line_fn init_for_cmd_line_fptr;
     hostfxr_initialize_for_runtime_config_fn init_fptr;
     hostfxr_get_runtime_delegate_fn get_delegate_fptr;
+    hostfxr_run_app_fn run_app_fptr;
     hostfxr_close_fn close_fptr;
     hostfxr_handle cxt;
 
@@ -155,24 +157,24 @@ namespace
 
         // Load hostfxr and get desired exports
         void* lib = load_library(hostfxr_path.c_str());
+        init_for_cmd_line_fptr = (hostfxr_initialize_for_dotnet_command_line_fn)get_export(
+            lib, "hostfxr_initialize_for_dotnet_command_line");
         init_fptr = (hostfxr_initialize_for_runtime_config_fn)get_export(lib, "hostfxr_initialize_for_runtime_config");
         if (init_fptr == nullptr)
         {
-            // CRITICAL("unable to get export function: \"hostfxr_initialize_for_runtime_config\"");
             std::cout << "unable to get export function: \"hostfxr_initialize_for_runtime_config\"" << std::endl;
             return false;
         }
         get_delegate_fptr = (hostfxr_get_runtime_delegate_fn)get_export(lib, "hostfxr_get_runtime_delegate");
         if (!get_delegate_fptr)
         {
-            // CRITICAL("unable to get export function: \"hostfxr_get_runtime_delegate\"");
             std::cout << "unable to get export function: \"hostfxr_get_runtime_delegate\"" << std::endl;
             return false;
         }
+        run_app_fptr = (hostfxr_run_app_fn)get_export(lib, "hostfxr_run_app");
         close_fptr = (hostfxr_close_fn)get_export(lib, "hostfxr_close");
         if (!close_fptr)
         {
-            // CRITICAL("unable to get export function: \"hostfxr_close\"");
             std::cout << "unable to get export function: \"hostfxr_close\"" << std::endl;
             return false;
         }
@@ -187,10 +189,11 @@ namespace
     {
         // Load .NET Core
         void* load_assembly_and_get_function_pointer = nullptr;
+        hostfxr_handle cxt = nullptr;
         int rc = init_fptr(config_path, nullptr, &cxt);
         if (rc != 0 || cxt == nullptr)
         {
-            // CRITICAL("Init failed: {0:x}", rc);
+            std::cerr << "Init failed: " << std::hex << std::showbase << rc << std::endl;
             close_fptr(cxt);
             return nullptr;
         }
@@ -199,11 +202,9 @@ namespace
         rc =
             get_delegate_fptr(cxt, hdt_load_assembly_and_get_function_pointer, &load_assembly_and_get_function_pointer);
         if (rc != 0 || load_assembly_and_get_function_pointer == nullptr)
-        {
-            // ERROR("Get delegate failed: {0:x}", rc);
-        }
+            std::cerr << "Get delegate failed: " << std::hex << std::showbase << rc << std::endl;
 
-        // close_fptr(cxt);
+        close_fptr(cxt);
         return (load_assembly_and_get_function_pointer_fn)load_assembly_and_get_function_pointer;
     }
 
@@ -272,7 +273,6 @@ static void Init(Fenrir::App& app)
     typedef int(CORECLR_DELEGATE_CALLTYPE * custom_entry_point_fn)();
     custom_entry_point_fn entry_point = nullptr;
     const int rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(), dotnet_type, dotnet_type_method,
-                                                          //   UNMANAGEDCALLERSONLY_METHOD,
                                                           nullptr, // No delegate type name needed for static methods
                                                           nullptr, reinterpret_cast<void**>(&entry_point));
 
@@ -286,14 +286,10 @@ static void Init(Fenrir::App& app)
     if (result != 0)
     {
         app.Logger()->Error("Hello method returned failure.");
-    }
-    else
-    {
-        app.Logger()->Info("Fenrir.Managed Loaded Successfully.");
+        return;
     }
 
     app.Logger()->Info("Fenrir.Managed Loaded Successfully.");
-    return;
 }
 
 static void PostInit(Fenrir::App& app)

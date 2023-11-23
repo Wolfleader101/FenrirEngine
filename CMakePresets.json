@@ -70,16 +70,16 @@
       }
     },
     {
-      "name": "msvc-debug",
-      "displayName": "MSVC Debug",
+      "name": "msvc-x86-debug",
+      "displayName": "MSVC x86 Debug",
       "inherits": "windows-msvc-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "msvc-release",
-      "displayName": "MSVC Release",
+      "name": "msvc-x86-release",
+      "displayName": "MSVC x86 Release",
       "inherits": "msvc-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
