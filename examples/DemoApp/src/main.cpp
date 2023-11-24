@@ -141,6 +141,7 @@ namespace
     // Using the nethost library, discover the location of hostfxr and get exports
     bool load_hostfxr()
     {
+
         // Construct the path for hostfxr based on the OS
         std::wstring hostfxr_path;
 #if _WIN64
