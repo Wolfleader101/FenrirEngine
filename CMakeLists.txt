@@ -33,6 +33,7 @@ option(BUILD_FENRIR_ECS "Build FenrirECS module" ON)
 add_subdirectory(packages/FenrirTime)
 add_subdirectory(packages/FenrirScheduler)
 add_subdirectory(packages/FenrirLogger)
+add_subdirectory(packages/FenrirScripting)
 
 if(BUILD_FENRIR_APP)
     add_subdirectory(packages/FenrirApp)
