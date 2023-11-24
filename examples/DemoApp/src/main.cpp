@@ -243,7 +243,7 @@ static void Init(Fenrir::App& app)
 
     app.Logger()->Info(".NET Runtime Initialised.");
 #if _WIN32
-    const auto wide_str = std::wstring(widen(base_dir) + L"\\Fenrir.Managed.runtimeconfig.json");
+    const auto wide_str = std::wstring(widen(base_dir) + L"\\DotNetLib.runtimeconfig.json");
     app.Logger()->Info("Loading Managed Code, Runtime config: {}", narrow(wide_str).c_str());
 #else
     std::string wide_str = std::string((base_dir + "\\Fenrir.Managed.runtimeconfig.json").c_str());
@@ -258,26 +258,25 @@ static void Init(Fenrir::App& app)
     }
 
 #if _WIN32
-    const std::wstring dotnetlib_path = std::wstring(widen(base_dir) + L"\\Fenrir.Managed.dll");
+    const std::wstring dotnetlib_path = std::wstring(widen(base_dir) + L"\\DotNetLib.dll");
     app.Logger()->Info("Fenrir Managed DLL: {}", narrow(dotnetlib_path));
 #else
     const std::string dotnetlib_path = std::string((base_dir + "\\Fenrir.Managed.dll").c_str());
 #endif
     // Namespace, assembly name
-    const char_t* dotnet_type = STR("Fenrir.Managed.Lib, Fenrir.Managed");
+    const char_t* dotnet_type = STR("DotNetLib.Lib, DotNetLib");
 
     const char_t* dotnet_type_method = STR("Hello");
 
     app.Logger()->Info("Loading Managed Code, Type: {}", narrow(std::wstring(dotnet_type)));
     app.Logger()->Info("Loading Managed Code, Method: {}", narrow(std::wstring(dotnet_type_method)));
 
-    typedef int(CORECLR_DELEGATE_CALLTYPE * custom_entry_point_fn)();
-    custom_entry_point_fn entry_point = nullptr;
-    const int rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(), // Assembly path
-                                                          dotnet_type,            // Assembly qualified type name
-                                                          dotnet_type_method,     // Entry point method name
-                                                          nullptr, // No delegate type name needed for static methods
-                                                          nullptr, reinterpret_cast<void**>(&entry_point));
+    component_entry_point_fn entry_point = nullptr;
+    int rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(), // Assembly path
+                                                    dotnet_type,            // Assembly qualified type name
+                                                    dotnet_type_method,     // Entry point method name
+                                                    nullptr, // No delegate type name needed for static methods
+                                                    nullptr, reinterpret_cast<void**>(&entry_point));
 
     if (rc != 0 || entry_point == nullptr)
     {
@@ -285,12 +284,44 @@ static void Init(Fenrir::App& app)
         return;
     }
 
-    int result = entry_point();
-    if (result != 2)
+    //
+    // STEP 4: Run managed code
+    //
+    struct lib_args
     {
-        app.Logger()->Error("Hello method returned failure.");
+        const char_t* message;
+        int number;
+    };
+    for (int i = 0; i < 3; ++i)
+    {
+        // <SnippetCallManaged>
+        lib_args args{STR("from host!"), i};
+
+        entry_point(&args, sizeof(args));
+        // </SnippetCallManaged>
+    }
+
+    typedef void(CORECLR_DELEGATE_CALLTYPE * test_fn)();
+    test_fn test = nullptr;
+    rc = load_assembly_and_get_function_pointer(dotnetlib_path.c_str(),      // Assembly path
+                                                dotnet_type,                 // Assembly qualified type name
+                                                STR("Test"),                 // Entry point method name
+                                                UNMANAGEDCALLERSONLY_METHOD, // needed as its not taking in IntPtr
+                                                nullptr, reinterpret_cast<void**>(&test));
+
+    if (rc != 0 || test == nullptr)
+    {
+        app.Logger()->Error("Failed to get 'Test' {0}", rc);
         return;
     }
+
+    test();
+
+    // if (result != 2)
+    // {
+    //     app.Logger()->Error("Hello method returned failure.");
+    //     return;
+    // }
 
     app.Logger()->Info("Fenrir.Managed Loaded Successfully.");
 }
