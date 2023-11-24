@@ -6,9 +6,10 @@ add_executable(DemoApp
     src/main.cpp
 )
 
-set(BUILD_FENRIR_APP ON)
-set(BUILD_FENRIR_CORE OFF)
-set(BUILD_FENRIR_ECS OFF)
-
 # Link against the modules from your engine
 target_link_libraries(DemoApp PRIVATE FenrirApp FenrirScripting)
+
+include(${CMAKE_SOURCE_DIR}/cmake/FenrirCMakeUtils.cmake)
+
+
+copy_dll_to_executable_target(DemoApp)

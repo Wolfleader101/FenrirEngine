@@ -12,28 +12,19 @@ target_include_directories(FenrirScripting PUBLIC include)
 
 target_link_libraries(FenrirScripting PUBLIC FenrirApp)
 
+set_property(GLOBAL PROPERTY CS_PROJECT_NAME "Fenrir.Managed")
+set_property(GLOBAL PROPERTY CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Managed")
+set_property(GLOBAL PROPERTY CS_OUTPUT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Managed/bin/Debug")
 
-set(CS_PROJECT_NAME "Fenrir.Managed")
-set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Managed/${CS_PROJECT_NAME}")
-set(CS_OUTPUT_DIR "${CS_PROJECT_DIR}/bin/Debug")
+get_property(CS_PROJECT_NAME GLOBAL PROPERTY CS_PROJECT_NAME)
+get_property(CS_PROJECT_DIR GLOBAL PROPERTY CS_PROJECT_DIR)
+get_property(CS_OUTPUT_DIR GLOBAL PROPERTY CS_OUTPUT_DIR)
 
-# Custom command to build the C# project
 add_custom_target(BuildCsProj
     COMMAND dotnet build "${CS_PROJECT_DIR}"
     WORKING_DIRECTORY "${CS_PROJECT_DIR}"
     COMMENT "Building C# Project"
 )
 
-add_dependencies(FenrirScripting BuildCsProj)
-
-# Custom command to copy the C# build output after building the C# project
-add_custom_command(TARGET FenrirScripting POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${CS_OUTPUT_DIR}/${CS_PROJECT_NAME}.dll"
-        "$<TARGET_FILE_DIR:FenrirScripting>"
-    COMMAND ${CMAKE_COMMAND} -E copy
-        "${CS_OUTPUT_DIR}/${CS_PROJECT_NAME}.runtimeconfig.json"
-        "$<TARGET_FILE_DIR:FenrirScripting>"
-    DEPENDS BuildCsProj
-    COMMENT "Copying C# build output"
-)
+# add_dependencies(FenrirScripting BuildCsProj)
+include(${CMAKE_SOURCE_DIR}/cmake/FenrirCMakeUtils.cmake)
