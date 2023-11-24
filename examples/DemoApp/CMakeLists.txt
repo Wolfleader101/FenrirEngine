@@ -20,8 +20,8 @@ set(BUILD_FENRIR_ECS OFF)
 target_link_libraries(DemoApp PRIVATE FenrirApp)
 
 
-# set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/managed/Fenrir.Managed")
-set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/managed/DotNetLib")
+set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/managed/Fenrir.Managed")
+# set(CS_PROJECT_DIR "${CMAKE_CURRENT_SOURCE_DIR}/managed/DotNetLib")
 set(CS_OUTPUT_DIR "${CS_PROJECT_DIR}/bin/Debug")
 
 
@@ -38,10 +38,10 @@ add_dependencies(DemoApp BuildCsProj)
 # Custom command to copy the C# build output after building the C# project
 add_custom_command(TARGET DemoApp POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy
-        "${CS_OUTPUT_DIR}/DotNetLib.dll"
+        "${CS_OUTPUT_DIR}/Fenrir.Managed.dll"
         "$<TARGET_FILE_DIR:DemoApp>"
     COMMAND ${CMAKE_COMMAND} -E copy
-        "${CS_OUTPUT_DIR}/DotNetLib.runtimeconfig.json"
+        "${CS_OUTPUT_DIR}/Fenrir.Managed.runtimeconfig.json"
         "$<TARGET_FILE_DIR:DemoApp>"
     DEPENDS BuildCsProj
     COMMENT "Copying C# build output"
