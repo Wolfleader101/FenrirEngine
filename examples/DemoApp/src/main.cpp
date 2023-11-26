@@ -110,6 +110,15 @@ class Window
         // copy the vertex data into the buffer's memory
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+        // create an element buffer object, store its ID in EBO
+        glGenBuffers(1, &EBO);
+
+        // bind the buffer to the GL_ELEMENT_ARRAY_BUFFER target
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+
+        // copy the vertex data into the buffer's memory
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
         // create a vertex shader object, store its ID in vertexShaderId
         vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
 
@@ -129,7 +138,7 @@ class Window
         if (!success)
         {
             // get the error message
-            glGetShaderInfoLog(vertexShaderId, 512, NULL, infoLog);
+            glGetShaderInfoLog(vertexShaderId, 512, nullptr, infoLog);
             app.Logger()->Fatal("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{0}", infoLog);
             return;
         }
@@ -149,7 +158,7 @@ class Window
         if (!success)
         {
             // get the error message
-            glGetShaderInfoLog(fragmentShaderId, 512, NULL, infoLog);
+            glGetShaderInfoLog(fragmentShaderId, 512, nullptr, infoLog);
             app.Logger()->Fatal("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{0}", infoLog);
             return;
         }
@@ -170,7 +179,7 @@ class Window
         if (!success)
         {
             // get the error message
-            glGetProgramInfoLog(shaderProgramId, 512, NULL, infoLog);
+            glGetProgramInfoLog(shaderProgramId, 512, nullptr, infoLog);
             app.Logger()->Fatal("ERROR::SHADER::PROGRAM::LINKING_FAILED\n{0}", infoLog);
             return;
         }
@@ -189,10 +198,14 @@ class Window
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
 
+        // bind the element buffer object
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
         // tell OpenGL how to interpret the vertex data (per vertex attribute)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
-        }
+    }
 
     void PostUpdate(Fenrir::App& app)
     {
@@ -204,9 +217,12 @@ class Window
         glClear(GL_COLOR_BUFFER_BIT);
 
         // draw the triangle
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
         glUseProgram(shaderProgramId);
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+        glBindVertexArray(0);
 
         // swap the buffers and then process events
         glfwSwapBuffers(m_window);
@@ -226,11 +242,18 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    float vertices[9] = {
-        -0.5f, -0.5f, 0.0f, // left
-        0.5f,  -0.5f, 0.0f, // right
-        0.0f,  0.5f,  0.0f  // top
+    float vertices[12] = {
+        0.5f,  0.5f,  0.0f, // top right
+        0.5f,  -0.5f, 0.0f, // bottom right
+        -0.5f, -0.5f, 0.0f, // bottom left
+        -0.5f, 0.5f,  0.0f  // top left
     };
+
+    unsigned int indices[6] = {
+        0, 1, 3, // first triangle
+        1, 2, 3  // second triangle
+    };
+
     unsigned int VBO;
 
     unsigned int vertexShaderId;
@@ -246,12 +269,14 @@ class Window
                                        "out vec4 FragColor;\n"
                                        "void main()\n"
                                        "{\n"
-                                       "   FragColor = vec4(0.25f, 0.5f, 0.4f, 1.0f);\n"
+                                       "   FragColor = vec4(0.8f, 0.6f, 0.15f, 1.0f);\n"
                                        "}\0";
 
     unsigned int shaderProgramId;
 
     unsigned int VAO;
+
+    unsigned int EBO;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
