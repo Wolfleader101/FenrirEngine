@@ -95,12 +95,104 @@ class Window
             return;
         }
 
-        //! GL SPECIFIC CODE
-        glViewport(0, 0, m_width, m_height);
-
         // TODO setup event listeners
         // look into EventDistacher<T> and EventListener<T> classes
-    }
+
+        //! GL SPECIFIC CODE FOR TESTING
+        glViewport(0, 0, m_width, m_height);
+
+        // create a vertex buffer object, store its ID in VBO
+        glGenBuffers(1, &VBO);
+
+        // bind the buffer to the GL_ARRAY_BUFFER target (any calls made to GL_ARRAY_BUFFER will affect VBO)
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+        // copy the vertex data into the buffer's memory
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        // create a vertex shader object, store its ID in vertexShaderId
+        vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
+
+        // attach the shader source code to the shader object and compile the shader
+        glShaderSource(vertexShaderId, 1, &vertex_shader_code, nullptr);
+
+        // compile the shader
+        glCompileShader(vertexShaderId);
+
+        // check for compilation errors
+        int success = 0;
+        char infoLog[512] = {0};
+
+        // get the compilation status
+        glGetShaderiv(vertexShaderId, GL_COMPILE_STATUS, &success);
+
+        if (!success)
+        {
+            // get the error message
+            glGetShaderInfoLog(vertexShaderId, 512, NULL, infoLog);
+            app.Logger()->Fatal("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n{0}", infoLog);
+            return;
+        }
+
+        // create a fragment shader object, store its ID in fragmentShaderId
+        fragmentShaderId = glCreateShader(GL_FRAGMENT_SHADER);
+
+        // attach the shader source code to the shader object and compile the shader
+        glShaderSource(fragmentShaderId, 1, &fragment_shader_code, nullptr);
+
+        // compile the shader
+        glCompileShader(fragmentShaderId);
+
+        // check for compilation errors
+        glGetShaderiv(fragmentShaderId, GL_COMPILE_STATUS, &success);
+
+        if (!success)
+        {
+            // get the error message
+            glGetShaderInfoLog(fragmentShaderId, 512, NULL, infoLog);
+            app.Logger()->Fatal("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n{0}", infoLog);
+            return;
+        }
+
+        // create a shader program object, store its ID in shaderProgramId
+        shaderProgramId = glCreateProgram();
+
+        // attach the vertex shader and fragment shader to the shader program
+        glAttachShader(shaderProgramId, vertexShaderId);
+        glAttachShader(shaderProgramId, fragmentShaderId);
+
+        // link the shader program
+        glLinkProgram(shaderProgramId);
+
+        // check for linking errors
+        glGetProgramiv(shaderProgramId, GL_LINK_STATUS, &success);
+
+        if (!success)
+        {
+            // get the error message
+            glGetProgramInfoLog(shaderProgramId, 512, NULL, infoLog);
+            app.Logger()->Fatal("ERROR::SHADER::PROGRAM::LINKING_FAILED\n{0}", infoLog);
+            return;
+        }
+
+        // delete the shader objects once they've been linked into the program object
+        glDeleteShader(vertexShaderId);
+        glDeleteShader(fragmentShaderId);
+
+        // create a vertex array object, store its ID in VAO
+        glGenVertexArrays(1, &VAO);
+
+        // initialise VAO only once
+        glBindVertexArray(VAO);
+
+        // bind the vertex buffer object
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        // tell OpenGL how to interpret the vertex data (per vertex attribute)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        }
 
     void PostUpdate(Fenrir::App& app)
     {
@@ -110,6 +202,11 @@ class Window
 
         glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
+
+        // draw the triangle
+        glUseProgram(shaderProgramId);
+        glBindVertexArray(VAO);
+        glDrawArrays(GL_TRIANGLES, 0, 3);
 
         // swap the buffers and then process events
         glfwSwapBuffers(m_window);
@@ -128,6 +225,33 @@ class Window
     std::string m_title = "";
     int m_width = 0;
     int m_height = 0;
+
+    float vertices[9] = {
+        -0.5f, -0.5f, 0.0f, // left
+        0.5f,  -0.5f, 0.0f, // right
+        0.0f,  0.5f,  0.0f  // top
+    };
+    unsigned int VBO;
+
+    unsigned int vertexShaderId;
+    const char* vertex_shader_code = "#version 460 core\n"
+                                     "layout (location = 0) in vec3 aPos;\n"
+                                     "void main()\n"
+                                     "{\n"
+                                     "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+                                     "}\0";
+
+    unsigned int fragmentShaderId;
+    const char* fragment_shader_code = "#version 460 core\n"
+                                       "out vec4 FragColor;\n"
+                                       "void main()\n"
+                                       "{\n"
+                                       "   FragColor = vec4(0.25f, 0.5f, 0.4f, 1.0f);\n"
+                                       "}\0";
+
+    unsigned int shaderProgramId;
+
+    unsigned int VAO;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
