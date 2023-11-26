@@ -27,6 +27,7 @@ namespace Fenrir
         PostUpdate,
         // CreateScene,
         // LastUpdate,
+        Exit
     };
 
     class Scheduler

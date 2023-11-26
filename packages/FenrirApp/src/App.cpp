@@ -23,6 +23,11 @@ namespace Fenrir
         return m_logger;
     }
 
+    void App::Stop()
+    {
+        m_running = false;
+    }
+
     void App::Run()
     {
         m_scheduler.Init(*this);
@@ -46,6 +51,7 @@ namespace Fenrir
 
             // m_scheduler.RunSystems(*this, SchedulePriority::LastUpdate);
         }
+        m_scheduler.RunSystems(*this, SchedulePriority::Exit);
     }
 
 } // namespace Fenrir

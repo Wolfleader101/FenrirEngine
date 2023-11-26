@@ -38,12 +38,23 @@ static void PostInit(Fenrir::App& app)
     app.Logger()->Fatal("PostInit");
 }
 
+// Wrapper function that matches the GLADloadproc signature
+static void* Glad_GLFW_GetProcAddr(const char* name)
+{
+    return reinterpret_cast<void*>(glfwGetProcAddress(name));
+}
+
 class Window
 {
   public:
     Window(std::string title = "FenrirEngine Window", int width = 800, int height = 600)
         : m_title(std::move(title)), m_width(width), m_height(height)
     {
+    }
+
+    ~Window()
+    {
+        glfwDestroyWindow(m_window);
     }
 
     void PreInit(Fenrir::App& app)
@@ -77,7 +88,7 @@ class Window
         // cursor mode
         // glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
+        if (!gladLoadGLLoader(Glad_GLFW_GetProcAddr))
         {
             app.Logger()->Fatal("Failed to initialise GLAD");
             // TODO exit the application?
@@ -91,10 +102,24 @@ class Window
         // look into EventDistacher<T> and EventListener<T> classes
     }
 
-    void PostUpdate(Fenrir::App&)
+    void PostUpdate(Fenrir::App& app)
     {
+        //! TEMP FOR TESTING
+        if (glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            app.Stop();
+
+        glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        // swap the buffers and then process events
         glfwSwapBuffers(m_window);
+
         glfwPollEvents();
+    }
+
+    void Exit(Fenrir::App&)
+    {
+        glfwTerminate();
     }
 
   private:
@@ -120,5 +145,6 @@ int main()
         .AddSystems(Fenrir::SchedulePriority::PreUpdate, {systemA})
         .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
+        .AddSystems(Fenrir::SchedulePriority::Exit, {BIND_WINDOW_SYSTEM_FN(Window::Exit, window)})
         .Run();
 }

@@ -21,6 +21,8 @@ namespace Fenrir
 
         void Run();
 
+        void Stop();
+
       private:
         Time m_time;
         Scheduler m_scheduler;
