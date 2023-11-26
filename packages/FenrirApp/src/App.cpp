@@ -44,7 +44,7 @@ namespace Fenrir
 
             m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
 
-            m_scheduler.RunSystems(*this, SchedulePriority::Last);
+            // m_scheduler.RunSystems(*this, SchedulePriority::LastUpdate);
         }
     }
 

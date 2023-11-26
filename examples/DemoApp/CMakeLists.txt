@@ -6,9 +6,12 @@ add_executable(DemoApp
     src/main.cpp
 )
 
-set(BUILD_FENRIR_APP ON)
-set(BUILD_FENRIR_CORE OFF)
-set(BUILD_FENRIR_ECS OFF)
+add_subdirectory(libs)
 
 # Link against the modules from your engine
 target_link_libraries(DemoApp PRIVATE FenrirApp)
+
+target_link_libraries(DemoApp PUBLIC
+    glad
+    glfw
+)
