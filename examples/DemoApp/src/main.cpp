@@ -98,27 +98,10 @@ class Window
         // TODO setup event listeners
         // look into EventDistacher<T> and EventListener<T> classes
 
-        //! GL SPECIFIC CODE FOR TESTING
+        //? GL SPECIFIC CODE FOR TESTING
         glViewport(0, 0, m_width, m_height);
 
-        // create a vertex buffer object, store its ID in VBO
-        glGenBuffers(1, &VBO);
-
-        // bind the buffer to the GL_ARRAY_BUFFER target (any calls made to GL_ARRAY_BUFFER will affect VBO)
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-        // copy the vertex data into the buffer's memory
-        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-        // create an element buffer object, store its ID in EBO
-        glGenBuffers(1, &EBO);
-
-        // bind the buffer to the GL_ELEMENT_ARRAY_BUFFER target
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-
-        // copy the vertex data into the buffer's memory
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
+        //! SHADERS
         // create a vertex shader object, store its ID in vertexShaderId
         vertexShaderId = glCreateShader(GL_VERTEX_SHADER);
 
@@ -188,6 +171,26 @@ class Window
         glDeleteShader(vertexShaderId);
         glDeleteShader(fragmentShaderId);
 
+        //! VERTEX DATA AND BUFFERS
+
+        // create a vertex buffer object, store its ID in VBO
+        glGenBuffers(1, &VBO);
+
+        // bind the buffer to the GL_ARRAY_BUFFER target (any calls made to GL_ARRAY_BUFFER will affect VBO)
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+        // copy the vertex data into the buffer's memory
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        // create an element buffer object, store its ID in EBO
+        glGenBuffers(1, &EBO);
+
+        // bind the buffer to the GL_ELEMENT_ARRAY_BUFFER target
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+
+        // copy the vertex data into the buffer's memory
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
         // create a vertex array object, store its ID in VAO
         glGenVertexArrays(1, &VAO);
 
@@ -205,6 +208,11 @@ class Window
         // tell OpenGL how to interpret the vertex data (per vertex attribute)
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
+
+        // unbind the VBO and VAO
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+        // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
     }
 
     void PostUpdate(Fenrir::App& app)
@@ -222,7 +230,7 @@ class Window
         glUseProgram(shaderProgramId);
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
+        // glBindVertexArray(0); // dont need to unbind every time
 
         // swap the buffers and then process events
         glfwSwapBuffers(m_window);
@@ -232,6 +240,12 @@ class Window
 
     void Exit(Fenrir::App&)
     {
+        // cleanup of resources
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        glDeleteBuffers(1, &EBO);
+        glDeleteProgram(shaderProgramId);
+
         glfwTerminate();
     }
 
