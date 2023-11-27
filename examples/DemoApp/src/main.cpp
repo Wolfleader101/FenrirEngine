@@ -3,34 +3,23 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image/stb_image.h"
+
+#include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
-// struct MouseMoveEvent
-// {
-//     float x, y;
-//     float deltaX, deltaY;
-// };
 
 static void systemA(Fenrir::App&)
 {
-    // app.Logger()->Warn("System A {0}", 1);
-    //     float last_x = rand() % 50, last_y = rand() % 50;
-    //     float new_x = rand() % 100, new_y = rand() % 100;
-
-    //     // send mock event
-    //     MouseMoveEvent event{new_x, new_y, new_x - last_x, new_y - last_y};
-    //     app.SendEvent(event);
 }
 
 static void systemB(Fenrir::App&)
 {
-    // mock handle the event
-    // for (const auto& event : app.ReadEvents<MouseMoveEvent>())
-    // {
-    //     std::cout << "Mouse moved to (" << event.x << ", " << event.y << ")" << std::endl;
-    // }
 }
 
 static void Tick(Fenrir::App&)
@@ -111,10 +100,6 @@ struct KeyboardKeyEvent
     int mods;
 };
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
-#include <string>
 class Shader
 {
   public:
@@ -307,7 +292,7 @@ class Window
             return;
         }
 
-        // Setup Event Listeners
+        //! Setup Event Listeners
 
         // set the user pointer to this
         glfwSetWindowUserPointer(m_window, this);
@@ -393,6 +378,31 @@ class Window
         m_shader = std::make_unique<Shader>(logger, std::string("assets/shaders/vertex.glsl"),
                                             std::string("assets/shaders/fragment.glsl"));
 
+        //! TEXTURES
+        int width, height, nrChannels;
+        unsigned char* data =
+            stbi_load("assets/textures/mortar-bricks/mortar-bricks_albedo.png", &width, &height, &nrChannels, 0);
+
+        if (!data)
+        {
+            logger->Fatal("Failed to load texture");
+        }
+
+        glGenTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+
+        // set texture filter options on current texture object
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        // generate the texture
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        stbi_image_free(data);
+
         //! VERTEX DATA AND BUFFERS
 
         // create a vertex buffer object, store its ID in VBO
@@ -430,12 +440,16 @@ class Window
         // tell OpenGL how to interpret the vertex data (per vertex attribute)
 
         // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
 
         // color attribute
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
+
+        // texture coord attribute
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
         // unbind the VBO and VAO
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -471,7 +485,9 @@ class Window
         // int vertexColorLocation = glGetUniformLocation(shaderProgramId, "ourColor");
 
         m_shader->Use();
-        // m_shader->SetFloat("ourColor", 0.5f);
+
+        // bind the texture
+        glBindTexture(GL_TEXTURE_2D, textureId);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
@@ -502,12 +518,12 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    float vertices[24] = {
-        // positions       //colors
-        0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, // top right
-        0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, // bottom right
-        -0.5f, -0.5f, 0.0f, 0.5f, 0.5f, 0.5f, // bottom left
-        -0.5f, 0.5f,  0.0f, 0.0f, 0.0f, 1.0f, // top left
+    float vertices[32] = {
+        // positions          // colors           // texture coords
+        0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
+        0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
+        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom left
+        -0.5f, 0.5f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f  // top left
     };
 
     unsigned int indices[6] = {
@@ -520,6 +536,8 @@ class Window
     unsigned int VAO;
 
     unsigned int EBO;
+
+    unsigned int textureId;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 

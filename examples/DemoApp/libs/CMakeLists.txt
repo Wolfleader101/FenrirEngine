@@ -8,4 +8,5 @@ add_subdirectory(glfw)
 target_include_directories(DemoApp SYSTEM PUBLIC
     glad/include
     glfw/include
+    stb_image/include/
 )
