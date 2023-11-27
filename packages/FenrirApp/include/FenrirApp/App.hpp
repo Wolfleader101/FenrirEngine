@@ -155,6 +155,16 @@ namespace Fenrir
         template <typename TEvent>
         const std::vector<TEvent>& ReadEvents() const;
 
+        /**
+         * @brief Get the Time object
+         *
+         * @return const Time& the time
+         */
+        const Time& GetTime() const
+        {
+            return m_time;
+        }
+
       private:
         Time m_time;
         Scheduler m_scheduler;

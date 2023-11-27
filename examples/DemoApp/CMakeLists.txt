@@ -15,3 +15,11 @@ target_link_libraries(DemoApp PUBLIC
     glad
     glfw
 )
+
+# symlink the assets folder to the build directory
+add_custom_command(TARGET DemoApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    ${CMAKE_CURRENT_SOURCE_DIR}/assets $<TARGET_FILE_DIR:DemoApp>/assets
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets
+    COMMENT "symbolic link resources folder from ${CMAKE_SOURCE_DIR}/assets to $<TARGET_FILE_DIR:DemoApp>/assets"
+)
