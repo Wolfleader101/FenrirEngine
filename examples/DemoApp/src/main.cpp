@@ -7,15 +7,30 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
+struct MouseMoveEvent
+{
+    float x, y;
+    float deltaX, deltaY;
+};
 
-static void systemA(Fenrir::App&)
+static void systemA(Fenrir::App& app)
 {
     // app.Logger()->Warn("System A {0}", 1);
+    float last_x = rand() % 50, last_y = rand() % 50;
+    float new_x = rand() % 100, new_y = rand() % 100;
+
+    // send mock event
+    MouseMoveEvent event{new_x, new_y, new_x - last_x, new_y - last_y};
+    app.SendEvent(event);
 }
 
-static void systemB(Fenrir::App&)
+static void systemB(Fenrir::App& app)
 {
-    // app.Logger()->Error("System B");
+    // mock handle the event
+    for (const auto& event : app.ReadEvents<MouseMoveEvent>())
+    {
+        std::cout << "Mouse moved to (" << event.x << ", " << event.y << ")" << std::endl;
+    }
 }
 
 static void Tick(Fenrir::App&)
