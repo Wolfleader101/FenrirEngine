@@ -7,30 +7,30 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
-struct MouseMoveEvent
-{
-    float x, y;
-    float deltaX, deltaY;
-};
+// struct MouseMoveEvent
+// {
+//     float x, y;
+//     float deltaX, deltaY;
+// };
 
-static void systemA(Fenrir::App& app)
+static void systemA(Fenrir::App&)
 {
     // app.Logger()->Warn("System A {0}", 1);
-    float last_x = rand() % 50, last_y = rand() % 50;
-    float new_x = rand() % 100, new_y = rand() % 100;
+    //     float last_x = rand() % 50, last_y = rand() % 50;
+    //     float new_x = rand() % 100, new_y = rand() % 100;
 
-    // send mock event
-    MouseMoveEvent event{new_x, new_y, new_x - last_x, new_y - last_y};
-    app.SendEvent(event);
+    //     // send mock event
+    //     MouseMoveEvent event{new_x, new_y, new_x - last_x, new_y - last_y};
+    //     app.SendEvent(event);
 }
 
-static void systemB(Fenrir::App& app)
+static void systemB(Fenrir::App&)
 {
     // mock handle the event
-    for (const auto& event : app.ReadEvents<MouseMoveEvent>())
-    {
-        std::cout << "Mouse moved to (" << event.x << ", " << event.y << ")" << std::endl;
-    }
+    // for (const auto& event : app.ReadEvents<MouseMoveEvent>())
+    // {
+    //     std::cout << "Mouse moved to (" << event.x << ", " << event.y << ")" << std::endl;
+    // }
 }
 
 static void Tick(Fenrir::App&)
@@ -59,6 +59,57 @@ static void* Glad_GLFW_GetProcAddr(const char* name)
     return reinterpret_cast<void*>(glfwGetProcAddress(name));
 }
 
+struct FrameBufferResizeEvent
+{
+    int width, height;
+};
+struct WindowResizeEvent
+{
+    int width, height;
+};
+
+struct WindowCloseEvent
+{
+};
+
+struct MouseMoveEvent
+{
+    double x, y;
+};
+
+struct MouseScrollEvent
+{
+    double xOffset, yOffset;
+};
+
+enum class MouseButton
+{
+    Left = 0,
+    Right = 1,
+    Middle = 2
+};
+
+enum class InputState
+{
+    Released = 0,
+    Pressed = 1,
+    Held = 2,
+};
+struct MouseButtonEvent
+{
+    MouseButton button;
+    InputState state;
+    int mods;
+};
+
+struct KeyboardKeyEvent
+{
+    int key;
+    int scancode;
+    int repeat;
+    InputState state;
+};
+
 class Window
 {
   public:
@@ -74,6 +125,7 @@ class Window
 
     void PreInit(Fenrir::App& app)
     {
+        m_appPtr = &app;
         app.Logger()->Info("Window Pre-Init");
 
         glfwInit();
@@ -110,8 +162,102 @@ class Window
             return;
         }
 
-        // TODO setup event listeners
-        // look into EventDistacher<T> and EventListener<T> classes
+        // Setup Event Listeners
+
+        // set the user pointer to this
+        glfwSetWindowUserPointer(m_window, this);
+        //? argued with myself whether the userPointer should be the application or the window
+        //? decided on the window, which meant i needed to store an App* in the window, however provides more
+        //? flexibility, and makes more sense as this is a window class
+
+        // set the callback function for framebuffer resize events
+        glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            // TODO remove this as its render specific
+            glViewport(0, 0, width, height);
+
+            FrameBufferResizeEvent event{width, height};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        // set the callback function for window resize events
+        glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            WindowResizeEvent event{width, height};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        // set the callback function for window close events
+        glfwSetWindowCloseCallback(m_window, [](GLFWwindow* window) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            WindowCloseEvent event{};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        glfwSetKeyCallback(m_window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            InputState state = InputState::Released;
+
+            switch (action)
+            {
+            case GLFW_PRESS:
+                state = InputState::Pressed;
+                break;
+            case GLFW_RELEASE:
+                state = InputState::Released;
+                break;
+            case GLFW_REPEAT:
+                state = InputState::Held;
+                break;
+            default:
+                break;
+            }
+
+            KeyboardKeyEvent event{key, scancode, action, state};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            InputState state = InputState::Released;
+
+            switch (action)
+            {
+            case GLFW_PRESS:
+                state = InputState::Pressed;
+                break;
+            case GLFW_RELEASE:
+                state = InputState::Released;
+                break;
+            case GLFW_REPEAT:
+                state = InputState::Held;
+                break;
+            default:
+                break;
+            }
+
+            MouseButtonEvent event{static_cast<MouseButton>(button), state, mods};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xoffset, double yoffset) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            MouseScrollEvent event{xoffset, yoffset};
+            win.m_appPtr->SendEvent(event);
+        });
+
+        glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xpos, double ypos) {
+            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
+
+            MouseMoveEvent event{xpos, ypos};
+            win.m_appPtr->SendEvent(event);
+        });
 
         //? GL SPECIFIC CODE FOR TESTING
         glViewport(0, 0, m_width, m_height);
@@ -230,11 +376,20 @@ class Window
         // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
     }
 
+    void OnKeyPress(const KeyboardKeyEvent& event)
+    {
+        if (event.key == GLFW_KEY_ESCAPE && event.state == InputState::Pressed)
+        {
+            m_appPtr->Stop();
+        }
+    }
+
     void PostUpdate(Fenrir::App& app)
     {
-        //! TEMP FOR TESTING
-        if (glfwGetKey(m_window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            app.Stop();
+        for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
+        {
+            OnKeyPress(event);
+        }
 
         glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -266,6 +421,7 @@ class Window
 
   private:
     GLFWwindow* m_window = nullptr;
+    Fenrir::App* m_appPtr = nullptr;
 
     std::string m_title = "";
     int m_width = 0;
