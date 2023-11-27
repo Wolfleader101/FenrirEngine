@@ -240,6 +240,35 @@ class Shader
     }
 };
 
+static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& textureId)
+{
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    // set texture filter options on current texture object
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int width, height, nrChannels;
+    stbi_set_flip_vertically_on_load(true);
+    unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
+
+    if (data)
+    {
+        // generate the texture
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        logger->Fatal("Failed to load texture");
+    }
+
+    stbi_image_free(data);
+}
+
 class Window
 {
   public:
@@ -379,29 +408,11 @@ class Window
                                             std::string("assets/shaders/fragment.glsl"));
 
         //! TEXTURES
-        int width, height, nrChannels;
-        unsigned char* data =
-            stbi_load("assets/textures/mortar-bricks/mortar-bricks_albedo.png", &width, &height, &nrChannels, 0);
+        glActiveTexture(GL_TEXTURE0);
+        LoadImage(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png", textureId1);
 
-        if (!data)
-        {
-            logger->Fatal("Failed to load texture");
-        }
-
-        glGenTextures(1, &textureId);
-        glBindTexture(GL_TEXTURE_2D, textureId);
-
-        // set texture filter options on current texture object
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        // generate the texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-
-        stbi_image_free(data);
+        glActiveTexture(GL_TEXTURE1);
+        LoadImage(logger, "assets/textures/art-deco-scales/art-deco-scales_albedo.png", textureId2);
 
         //! VERTEX DATA AND BUFFERS
 
@@ -478,16 +489,9 @@ class Window
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
 
-        double time = app.GetTime().CurrentTime();
-        double greenValue = (sin(time) / 2.0) + 0.5;
-
-        // get the uniform location, if it returns -1 then the uniform does not exist
-        // int vertexColorLocation = glGetUniformLocation(shaderProgramId, "ourColor");
-
         m_shader->Use();
-
-        // bind the texture
-        glBindTexture(GL_TEXTURE_2D, textureId);
+        m_shader->SetInt("texture1", 0);
+        m_shader->SetInt("texture2", 1);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
@@ -537,7 +541,8 @@ class Window
 
     unsigned int EBO;
 
-    unsigned int textureId;
+    unsigned int textureId1;
+    unsigned int textureId2;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
