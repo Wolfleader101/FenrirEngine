@@ -200,22 +200,10 @@ class Window
         glfwSetKeyCallback(m_window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
             auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-            InputState state = InputState::Released;
-
-            switch (action)
-            {
-            case GLFW_PRESS:
-                state = InputState::Pressed;
-                break;
-            case GLFW_RELEASE:
-                state = InputState::Released;
-                break;
-            case GLFW_REPEAT:
-                state = InputState::Held;
-                break;
-            default:
-                break;
-            }
+            InputState state = (action == GLFW_PRESS)     ? InputState::Pressed
+                               : (action == GLFW_RELEASE) ? InputState::Released
+                               : (action == GLFW_REPEAT)  ? InputState::Held
+                                                          : InputState::Released;
 
             KeyboardKeyEvent event{key, scancode, action, state};
             win.m_appPtr->SendEvent(event);
@@ -224,24 +212,17 @@ class Window
         glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
             auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-            InputState state = InputState::Released;
+            InputState state = (action == GLFW_PRESS) ? InputState::Pressed
+                               : (action == GLFW_RELEASE)
+                                   ? InputState::Released
+                                   : InputState::Released; // GLFW doesnt have GLFW_REPEAT for mouse buttons
 
-            switch (action)
-            {
-            case GLFW_PRESS:
-                state = InputState::Pressed;
-                break;
-            case GLFW_RELEASE:
-                state = InputState::Released;
-                break;
-            case GLFW_REPEAT:
-                state = InputState::Held;
-                break;
-            default:
-                break;
-            }
+            MouseButton btn = (button == GLFW_MOUSE_BUTTON_LEFT)     ? MouseButton::Left
+                              : (button == GLFW_MOUSE_BUTTON_RIGHT)  ? MouseButton::Right
+                              : (button == GLFW_MOUSE_BUTTON_MIDDLE) ? MouseButton::Middle
+                                                                     : MouseButton::Left;
 
-            MouseButtonEvent event{static_cast<MouseButton>(button), state, mods};
+            MouseButtonEvent event{btn, state, mods};
             win.m_appPtr->SendEvent(event);
         });
 
