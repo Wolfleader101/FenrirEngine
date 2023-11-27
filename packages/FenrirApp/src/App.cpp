@@ -28,6 +28,14 @@ namespace Fenrir
         m_running = false;
     }
 
+    void App::UpdateEvents()
+    {
+        for (auto& [type, queue] : m_eventQueues)
+        {
+            queue->Update();
+        }
+    }
+
     void App::Run()
     {
         m_scheduler.Init(*this);
@@ -50,6 +58,8 @@ namespace Fenrir
             m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
 
             // m_scheduler.RunSystems(*this, SchedulePriority::LastUpdate);
+
+            UpdateEvents();
         }
         m_scheduler.RunSystems(*this, SchedulePriority::Exit);
     }
