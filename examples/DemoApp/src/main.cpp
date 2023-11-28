@@ -13,6 +13,7 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
+#include "FenrirMath/Math.hpp"
 
 static void systemA(Fenrir::App&)
 {
@@ -238,6 +239,45 @@ class Shader
     {
         glUniform1f(glGetUniformLocation(Id, name.c_str()), value);
     }
+    void SetVec2(const std::string& name, const Fenrir::Math::Vec2& value) const
+    {
+        glUniform2fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
+    }
+
+    void SetVec2(const std::string& name, float x, float y) const
+    {
+        glUniform2f(glGetUniformLocation(Id, name.c_str()), x, y);
+    }
+
+    void SetVec3(const std::string& name, const Fenrir::Math::Vec3& value) const
+    {
+        glUniform3fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
+    }
+
+    void SetVec3(const std::string& name, float x, float y, float z) const
+    {
+        glUniform3f(glGetUniformLocation(Id, name.c_str()), x, y, z);
+    }
+
+    void SetVec4(const std::string& name, const Fenrir::Math::Vec4& value) const
+    {
+        glUniform4fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
+    }
+
+    void SetVec4(const std::string& name, float x, float y, float z, float w) const
+    {
+        glUniform4f(glGetUniformLocation(Id, name.c_str()), x, y, z, w);
+    }
+
+    void SetMat3(const std::string& name, const Fenrir::Math::Mat3& mat) const
+    {
+        glUniformMatrix3fv(glGetUniformLocation(Id, name.c_str()), 1, GL_FALSE, Fenrir::Math::AsArray(mat));
+    }
+
+    void SetMat4(const std::string& name, const Fenrir::Math::Mat4& mat) const
+    {
+        glUniformMatrix4fv(glGetUniformLocation(Id, name.c_str()), 1, GL_FALSE, Fenrir::Math::AsArray(mat));
+    }
 };
 
 static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& textureId)
@@ -411,9 +451,6 @@ class Window
         glActiveTexture(GL_TEXTURE0);
         LoadImage(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png", textureId1);
 
-        glActiveTexture(GL_TEXTURE1);
-        LoadImage(logger, "assets/textures/art-deco-scales/art-deco-scales_albedo.png", textureId2);
-
         //! VERTEX DATA AND BUFFERS
 
         // create a vertex buffer object, store its ID in VBO
@@ -451,16 +488,12 @@ class Window
         // tell OpenGL how to interpret the vertex data (per vertex attribute)
 
         // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
 
-        // color attribute
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(1);
-
         // texture coord attribute
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
-        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
 
         // unbind the VBO and VAO
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -489,12 +522,17 @@ class Window
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
 
+        Fenrir::Math::Mat4 trans = Fenrir::Math::Mat4(1.0f);
+        trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
+        trans = glm::rotate(trans, (float)app.GetTime().CurrentTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+
         m_shader->Use();
-        m_shader->SetInt("texture1", 0);
-        m_shader->SetInt("texture2", 1);
+
+        m_shader->SetMat4("transform", trans);
 
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
         // glBindVertexArray(0); // dont need to unbind every time
 
         // swap the buffers and then process events
@@ -522,12 +560,12 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    float vertices[32] = {
-        // positions          // colors           // texture coords
-        0.5f,  0.5f,  0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, // top right
-        0.5f,  -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f, // bottom right
-        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom left
-        -0.5f, 0.5f,  0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f  // top left
+    float vertices[20] = {
+        // positions       // texture coords
+        0.5f,  0.5f,  0.0f, 1.0f, 1.0f, // top right
+        0.5f,  -0.5f, 0.0f, 1.0f, 0.0f, // bottom right
+        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // bottom left
+        -0.5f, 0.5f,  0.0f, 0.0f, 1.0f  // top left
     };
 
     unsigned int indices[6] = {

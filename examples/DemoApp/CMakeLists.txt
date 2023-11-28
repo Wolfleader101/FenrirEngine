@@ -9,7 +9,7 @@ add_executable(DemoApp
 add_subdirectory(libs)
 
 # Link against the modules from your engine
-target_link_libraries(DemoApp PRIVATE FenrirApp)
+target_link_libraries(DemoApp PRIVATE FenrirApp FenrirMath)
 
 target_link_libraries(DemoApp PUBLIC
     glad
