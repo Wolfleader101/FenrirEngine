@@ -1,3 +1,6 @@
 [submodule "packages/FenrirLogger/libs/spdlog"]
 	path = packages/FenrirLogger/libs/spdlog
 	url = https://github.com/gabime/spdlog
+[submodule "packages/FenrirMath/libs/glm"]
+	path = packages/FenrirMath/libs/glm
+	url = https://github.com/g-truc/glm
