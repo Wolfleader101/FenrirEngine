@@ -280,6 +280,13 @@ class Shader
     }
 };
 
+struct Transform
+{
+    Fenrir::Math::Vec3 pos;
+    Fenrir::Math::Vec3 rot; // TODO convert to quat
+    Fenrir::Math::Vec3 scale;
+};
+
 static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& textureId)
 {
     glGenTextures(1, &textureId);
@@ -384,6 +391,9 @@ class Window
         glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
             auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
+            // TODO remove this as its render specific
+            glViewport(0, 0, width, height);
+
             WindowResizeEvent event{width, height};
             win.m_appPtr->SendEvent(event);
         });
@@ -442,6 +452,8 @@ class Window
         //? GL SPECIFIC CODE FOR TESTING
         glViewport(0, 0, m_width, m_height);
 
+        glEnable(GL_DEPTH_TEST);
+
         //! SHADERS
         Fenrir::ILogger* logger = app.Logger().get();
         m_shader = std::make_unique<Shader>(logger, std::string("assets/shaders/vertex.glsl"),
@@ -492,7 +504,7 @@ class Window
         glEnableVertexAttribArray(0);
 
         // texture coord attribute
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
 
         // unbind the VBO and VAO
@@ -516,22 +528,54 @@ class Window
             OnKeyPress(event);
         }
 
+        if (app.ReadEvents<WindowCloseEvent>().size() > 0)
+        {
+            app.Stop();
+        }
+
         glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
 
-        Fenrir::Math::Mat4 trans = Fenrir::Math::Mat4(1.0f);
-        trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
-        trans = glm::rotate(trans, (float)app.GetTime().CurrentTime(), glm::vec3(0.0f, 0.0f, 1.0f));
+        // Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
+        // model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        // model = glm::rotate(model, static_cast<float>(app.GetTime().CurrentTime()) * glm::radians(50.0f),
+        //                     glm::vec3(0.5f, 1.0f, 0.0f));
+
+        Fenrir::Math::Mat4 view = Fenrir::Math::Mat4(1.0f);
+        view = glm::translate(view, glm::vec3(0.0f, 0.0f, -3.0f));
+
+        Fenrir::Math::Mat4 projection = Fenrir::Math::Mat4(1.0f);
+        projection = glm::perspective(glm::radians(45.0f), static_cast<float>(m_width / m_height), 0.1f, 100.0f);
 
         m_shader->Use();
 
-        m_shader->SetMat4("transform", trans);
+        // m_shader->SetMat4("model", model);
+        m_shader->SetMat4("view", view);
+        m_shader->SetMat4("projection", projection);
 
         glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+        // glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        constexpr const glm::vec3 cubePositions[] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
+                                                     glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
+                                                     glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
+                                                     glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
+                                                     glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
+
+        for (unsigned int i = 0; i < 10; i++)
+        {
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, cubePositions[i]);
+            float angle = 20.0f * i;
+            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+            m_shader->SetMat4("model", model);
+
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+        // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
         // glBindVertexArray(0); // dont need to unbind every time
 
@@ -560,18 +604,38 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    float vertices[20] = {
-        // positions       // texture coords
-        0.5f,  0.5f,  0.0f, 1.0f, 1.0f, // top right
-        0.5f,  -0.5f, 0.0f, 1.0f, 0.0f, // bottom right
-        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, // bottom left
-        -0.5f, 0.5f,  0.0f, 0.0f, 1.0f  // top left
-    };
+    float vertices[180] = {
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
+        0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
 
-    unsigned int indices[6] = {
-        0, 1, 3, // first triangle
-        1, 2, 3  // second triangle
-    };
+        -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
+        0.5f,  0.5f,  0.5f,  1.0f, 1.0f, -0.5f, 0.5f,  0.5f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f,
+
+        -0.5f, 0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 1.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  1.0f, 0.0f,
+
+        0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f,  -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 1.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+
+        -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        0.5f,  0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f};
+
+    unsigned int indices[36] = {
+        // Back face
+        0, 1, 2, 0, 2, 3,
+        // Front face
+        4, 5, 6, 4, 6, 7,
+        // Left face
+        8, 9, 10, 8, 10, 11,
+        // Right face
+        12, 13, 14, 12, 14, 15,
+        // Bottom face
+        16, 17, 18, 16, 18, 19,
+        // Top face
+        20, 21, 22, 20, 22, 23};
 
     unsigned int VBO;
 
@@ -580,7 +644,6 @@ class Window
     unsigned int EBO;
 
     unsigned int textureId1;
-    unsigned int textureId2;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
