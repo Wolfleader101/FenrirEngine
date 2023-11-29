@@ -317,14 +317,155 @@ static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& t
     stbi_image_free(data);
 }
 
+namespace Fenrir
+{
+
+    class Camera
+    {
+      public:
+        Math::Vec3 pos = Math::Vec3(0.0f, 0.0f, 0.0f);
+        Math::Vec3 front = Math::Vec3(0.0f, 0.0f, -1.0f);
+        Math::Vec3 up = Math::Vec3(0.0f, 1.0f, 0.0f);
+        Math::Vec3 right = Math::Vec3(1.0f, 0.0f, 0.0f);
+        Fenrir::Math::Vec3 worldUp = Math::Vec3(0.0f, 1.0f, 0.0f);
+        float yaw = -90.0f;
+        float pitch = 0.0f;
+
+        float fov = 70;
+
+        Math::Mat4 GetViewMatrix()
+        {
+            return Math::LookAt(pos, pos + front, up);
+        }
+
+        Camera()
+        {
+            Update();
+        }
+
+        void Update()
+        {
+            Math::Vec3 tempFront;
+            tempFront.x = cos(Fenrir::Math::DegToRad(yaw)) * cos(Fenrir::Math::DegToRad(pitch));
+            tempFront.y = sin(Fenrir::Math::DegToRad(pitch));
+            tempFront.z = sin(Fenrir::Math::DegToRad(yaw)) * cos(Fenrir::Math::DegToRad(pitch));
+            front = Math::Normalized(tempFront);
+
+            right = Math::Normalized(Math::Cross(front, worldUp));
+            up = Math::Normalized(Math::Cross(right, front));
+        }
+    };
+} // namespace Fenrir
+
+class CameraController
+{
+  public:
+    CameraController(Fenrir::Camera& camera, float sensitity, float speed)
+        : m_camera(camera), m_sensitive(sensitity), m_speed(speed)
+    {
+    }
+
+    void OnKeyPress(const KeyboardKeyEvent& event)
+    {
+        if (event.state == InputState::Pressed)
+        {
+            m_pressedKeys.insert(event.key);
+        }
+        else if (event.state == InputState::Released)
+        {
+            m_pressedKeys.erase(event.key);
+        }
+    }
+
+    void OnMouseMove(const MouseMoveEvent& event)
+    {
+        float xpos = static_cast<float>(event.x);
+        float ypos = static_cast<float>(event.y);
+
+        float xoffset = xpos - m_lastMousePos.x;
+        float yoffset = m_lastMousePos.y - ypos; // reversed since y-coordinates go from bottom to top
+        m_lastMousePos.x = xpos;
+        m_lastMousePos.y = ypos;
+
+        xoffset *= m_sensitive;
+        yoffset *= m_sensitive;
+
+        m_camera.yaw += xoffset;
+        m_camera.pitch += yoffset;
+
+        if (m_camera.pitch > 89.0f)
+            m_camera.pitch = 89.0f;
+        if (m_camera.pitch < -89.0f)
+            m_camera.pitch = -89.0f;
+
+        m_camera.Update();
+    }
+
+    void OnMouseScroll(const MouseScrollEvent& event)
+    {
+        m_camera.fov -= static_cast<float>(event.yOffset);
+        if (m_camera.fov < 1.0f)
+            m_camera.fov = 1.0f;
+    }
+
+    void Update(Fenrir::App& app)
+    {
+        for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
+        {
+            OnKeyPress(event);
+        }
+
+        for (const auto& event : app.ReadEvents<MouseMoveEvent>())
+        {
+            OnMouseMove(event);
+        }
+
+        for (const auto& event : app.ReadEvents<MouseScrollEvent>())
+        {
+            OnMouseScroll(event);
+        }
+
+        float vel = m_speed * static_cast<float>(app.GetTime().deltaTime);
+
+        if (m_pressedKeys.count(GLFW_KEY_W))
+        {
+            m_camera.pos += vel * m_camera.front;
+        }
+
+        if (m_pressedKeys.count(GLFW_KEY_S))
+        {
+            m_camera.pos -= vel * m_camera.front;
+        }
+
+        if (m_pressedKeys.count(GLFW_KEY_A))
+        {
+            m_camera.pos -= Fenrir::Math::Normalized(Fenrir::Math::Cross(m_camera.front, m_camera.up)) * vel;
+        }
+
+        if (m_pressedKeys.count(GLFW_KEY_D))
+        {
+            m_camera.pos += Fenrir::Math::Normalized(Fenrir::Math::Cross(m_camera.front, m_camera.up)) * vel;
+        }
+    }
+
+  private:
+    Fenrir::Camera& m_camera;
+    float m_sensitive = 0.1f;
+    float m_speed = 3.0f;
+    Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
+
+    // TODO move to a custom input class
+    std::unordered_set<int> m_pressedKeys;
+};
+#define BIND_CAMERA_CONTROLLER_FN(fn, controllerInstance) \
+    std::bind(&CameraController::fn, &controllerInstance, std::placeholders::_1)
+
 class Window
 {
   public:
-    Window(std::string title = "FenrirEngine Window", int width = 800, int height = 600)
-        : m_title(std::move(title)), m_width(width), m_height(height)
+    Window(Fenrir::Camera& camera, std::string title = "FenrirEngine Window", int width = 800, int height = 600)
+        : m_title(std::move(title)), m_camera(camera), m_width(width), m_height(height)
     {
-        lastX = width / 2.0f;
-        lastY = height / 2.0f;
     }
 
     ~Window()
@@ -522,85 +663,6 @@ class Window
         {
             m_appPtr->Stop();
         }
-
-        if (event.state == InputState::Pressed)
-        {
-            pressedKeys.insert(event.key);
-        }
-        else if (event.state == InputState::Released)
-        {
-            pressedKeys.erase(event.key);
-        }
-    }
-
-    void UpdateMovement()
-    {
-        const float camSpeed = 3.0f * static_cast<float>(m_appPtr->GetTime().deltaTime);
-
-        if (pressedKeys.count(GLFW_KEY_W))
-        {
-            cameraPos += camSpeed * cameraFront;
-        }
-
-        if (pressedKeys.count(GLFW_KEY_S))
-        {
-            cameraPos -= camSpeed * cameraFront;
-        }
-
-        if (pressedKeys.count(GLFW_KEY_A))
-        {
-            cameraPos -= Fenrir::Math::Normalized(Fenrir::Math::Cross(cameraFront, cameraUp)) * camSpeed;
-        }
-
-        if (pressedKeys.count(GLFW_KEY_D))
-        {
-            cameraPos += Fenrir::Math::Normalized(Fenrir::Math::Cross(cameraFront, cameraUp)) * camSpeed;
-        }
-    }
-
-    void OnMouseMove(const MouseMoveEvent& event)
-    {
-        float xpos = static_cast<float>(event.x);
-        float ypos = static_cast<float>(event.y);
-
-        if (firstMouse)
-        {
-            lastX = xpos;
-            lastY = ypos;
-            firstMouse = false;
-        }
-
-        float xoffset = xpos - lastX;
-        float yoffset = lastY - ypos; // reversed since y-coordinates go from bottom to top
-        lastX = xpos;
-        lastY = ypos;
-
-        float sensitivity = 0.01f;
-        xoffset *= sensitivity;
-        yoffset *= sensitivity;
-
-        yaw += xoffset;
-        pitch += yoffset;
-
-        if (pitch > 89.0f)
-            pitch = 89.0f;
-        if (pitch < -89.0f)
-            pitch = -89.0f;
-
-        Fenrir::Math::Vec3 front;
-        front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
-        front.y = sin(glm::radians(pitch));
-        front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
-        cameraFront = Fenrir::Math::Normalized(front);
-    }
-
-    void OnMouseScroll(const MouseScrollEvent& event)
-    {
-        fov -= static_cast<float>(event.yOffset);
-        if (fov < 1.0f)
-            fov = 1.0f;
-        // if (fov > 45.0f)
-        //     fov = 45.0f;
     }
 
     void PostUpdate(Fenrir::App& app)
@@ -615,42 +677,23 @@ class Window
             OnKeyPress(event);
         }
 
-        for (const auto& event : app.ReadEvents<MouseMoveEvent>())
-        {
-            OnMouseMove(event);
-        }
-
-        for (const auto& event : app.ReadEvents<MouseScrollEvent>())
-        {
-            OnMouseScroll(event);
-        }
-
-        UpdateMovement();
-
         glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
 
-        // Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
-        // model = glm::rotate(model, glm::radians(-55.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        // model = glm::rotate(model, static_cast<float>(app.GetTime().CurrentTime()) * glm::radians(50.0f),
-        //                     glm::vec3(0.5f, 1.0f, 0.0f));
-        Fenrir::Math::Mat4 view = Fenrir::Math::Mat4(1.0f);
-        view = Fenrir::Math::LookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        Fenrir::Math::Mat4 view = m_camera.GetViewMatrix();
 
-        Fenrir::Math::Mat4 projection = Fenrir::Math::Mat4(1.0f);
-        projection = glm::perspective(glm::radians(fov), static_cast<float>(m_width / m_height), 0.1f, 100.0f);
+        Fenrir::Math::Mat4 projection = Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
+                                                                  static_cast<float>(m_width / m_height), 0.1f, 100.0f);
 
         m_shader->Use();
 
-        // m_shader->SetMat4("model", model);
         m_shader->SetMat4("view", view);
         m_shader->SetMat4("projection", projection);
 
         glBindVertexArray(VAO);
-        // glDrawArrays(GL_TRIANGLES, 0, 36);
 
         constexpr const glm::vec3 cubePositions[] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
                                                      glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
@@ -663,7 +706,7 @@ class Window
             glm::mat4 model = glm::mat4(1.0f);
             model = glm::translate(model, cubePositions[i]);
             float angle = 20.0f * i;
-            model = glm::rotate(model, glm::radians(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+            model = glm::rotate(model, Fenrir::Math::DegToRad(angle), glm::vec3(1.0f, 0.3f, 0.5f));
             m_shader->SetMat4("model", model);
 
             glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -695,10 +738,7 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    // TODO move to a custom input class
-    std::unordered_set<int> pressedKeys;
-
-    // GL SPEFICI
+    // GL SPEFICIC
     std::unique_ptr<Shader> m_shader = nullptr;
 
     float vertices[180] = {
@@ -742,18 +782,8 @@ class Window
 
     unsigned int textureId1;
 
-    Fenrir::Math::Vec3 cameraPos = Fenrir::Math::Vec3(0.0f, 0.0f, 3.0f);
-    Fenrir::Math::Vec3 cameraFront = Fenrir::Math::Vec3(0.0f, 0.0f, -1.0f);
-    Fenrir::Math::Vec3 cameraUp = Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f);
-
-    float lastX = 400;
-    float lastY = 300;
-
-    float yaw = -90.0f;
-    float pitch = 0.0f;
-
-    float fov = 45.0f;
-    bool firstMouse = true;
+    //! TEMP
+    Fenrir::Camera& m_camera;
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
@@ -762,13 +792,18 @@ int main()
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
     Fenrir::App app(std::move(logger));
 
-    Window window("Demo App");
+    Fenrir::Camera camera;
+
+    CameraController cameraController(camera, 0.1f, 3.0f);
+
+    Window window(camera, "Demo App");
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {PreInit, BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init, {Init})
         .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
-        .AddSystems(Fenrir::SchedulePriority::Update, {systemB})
         .AddSystems(Fenrir::SchedulePriority::PreUpdate, {systemA})
+        .AddSystems(Fenrir::SchedulePriority::Update,
+                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
         .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
         .AddSystems(Fenrir::SchedulePriority::Exit, {BIND_WINDOW_SYSTEM_FN(Window::Exit, window)})
