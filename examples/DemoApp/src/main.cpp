@@ -13,6 +13,7 @@
 #include <unordered_set>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirCamera/Camera.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -317,46 +318,6 @@ static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& t
     stbi_image_free(data);
 }
 
-namespace Fenrir
-{
-
-    class Camera
-    {
-      public:
-        Math::Vec3 pos = Math::Vec3(0.0f, 0.0f, 0.0f);
-        Math::Vec3 front = Math::Vec3(0.0f, 0.0f, -1.0f);
-        Math::Vec3 up = Math::Vec3(0.0f, 1.0f, 0.0f);
-        Math::Vec3 right = Math::Vec3(1.0f, 0.0f, 0.0f);
-        Fenrir::Math::Vec3 worldUp = Math::Vec3(0.0f, 1.0f, 0.0f);
-        float yaw = -90.0f;
-        float pitch = 0.0f;
-
-        float fov = 70;
-
-        Math::Mat4 GetViewMatrix()
-        {
-            return Math::LookAt(pos, pos + front, up);
-        }
-
-        Camera()
-        {
-            Update();
-        }
-
-        void Update()
-        {
-            Math::Vec3 tempFront;
-            tempFront.x = cos(Fenrir::Math::DegToRad(yaw)) * cos(Fenrir::Math::DegToRad(pitch));
-            tempFront.y = sin(Fenrir::Math::DegToRad(pitch));
-            tempFront.z = sin(Fenrir::Math::DegToRad(yaw)) * cos(Fenrir::Math::DegToRad(pitch));
-            front = Math::Normalized(tempFront);
-
-            right = Math::Normalized(Math::Cross(front, worldUp));
-            up = Math::Normalized(Math::Cross(right, front));
-        }
-    };
-} // namespace Fenrir
-
 class CameraController
 {
   public:
@@ -425,7 +386,17 @@ class CameraController
             OnMouseScroll(event);
         }
 
-        float vel = m_speed * static_cast<float>(app.GetTime().deltaTime);
+        if (m_pressedKeys.count(GLFW_KEY_LEFT_SHIFT))
+        {
+            m_isSprinting = true;
+        }
+        else
+        {
+            m_isSprinting = false;
+        }
+
+        float speed = m_isSprinting ? m_sprintSpeed : m_speed;
+        float vel = speed * static_cast<float>(app.GetTime().deltaTime);
 
         if (m_pressedKeys.count(GLFW_KEY_W))
         {
@@ -452,6 +423,8 @@ class CameraController
     Fenrir::Camera& m_camera;
     float m_sensitive = 0.1f;
     float m_speed = 3.0f;
+    float m_sprintSpeed = 6.0f;
+    bool m_isSprinting = false;
     Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
 
     // TODO move to a custom input class
@@ -464,7 +437,7 @@ class Window
 {
   public:
     Window(Fenrir::Camera& camera, std::string title = "FenrirEngine Window", int width = 800, int height = 600)
-        : m_title(std::move(title)), m_camera(camera), m_width(width), m_height(height)
+        : m_title(std::move(title)), m_width(width), m_height(height), m_camera(camera)
     {
     }
 
