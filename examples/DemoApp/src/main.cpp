@@ -683,7 +683,8 @@ class Window
 
         // move lightpos around
         lightPos.x = 1.0f + sin(static_cast<float>(app.GetTime().CurrentTime())) * 2.0f;
-        lightPos.y = sin(static_cast<float>(app.GetTime().CurrentTime() / 2.0f)) * 1.0f;
+        lightPos.y = sin(static_cast<float>(app.GetTime().CurrentTime()) / 2.0f) * 1.0f;
+        lightPos.z = 0.5f + cos(static_cast<float>(app.GetTime().CurrentTime()) / 2.0f) * 1.0f;
 
         light_model = Fenrir::Math::Translate(light_model, lightPos);
         light_model = Fenrir::Math::Scale(light_model, Fenrir::Math::Vec3(0.2f));
