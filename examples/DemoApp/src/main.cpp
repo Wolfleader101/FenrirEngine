@@ -21,10 +21,6 @@ static void systemA(Fenrir::App&)
 {
 }
 
-static void systemB(Fenrir::App&)
-{
-}
-
 static void Tick(Fenrir::App&)
 {
     // app.Logger()->Log("Tick");
@@ -573,9 +569,13 @@ class Window
 
         //! SHADERS
         Fenrir::ILogger* logger = app.Logger().get();
-        m_shader = std::make_unique<Shader>(logger, std::string("assets/shaders/vertex.glsl"),
-                                            std::string("assets/shaders/fragment.glsl"));
+        // m_shader = std::make_unique<Shader>(logger, std::string("assets/shaders/vertex.glsl"),
+        //                                     std::string("assets/shaders/fragment.glsl"));
+        m_shader = std::make_unique<Shader>(logger, std::string("assets/shaders/lighted_vertex.glsl"),
+                                            std::string("assets/shaders/lighted_fragment.glsl"));
 
+        m_lightShader = std::make_unique<Shader>(logger, std::string("assets/shaders/light_vertex.glsl"),
+                                                 std::string("assets/shaders/light_fragment.glsl"));
         //! TEXTURES
         glActiveTexture(GL_TEXTURE0);
         LoadImage(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png", textureId1);
@@ -617,17 +617,31 @@ class Window
         // tell OpenGL how to interpret the vertex data (per vertex attribute)
 
         // position attribute
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
 
-        // texture coord attribute
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
+        // normal attribute
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
         glEnableVertexAttribArray(1);
+
+        // texture coord attribute
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void*>(6 * sizeof(float)));
+        glEnableVertexAttribArray(2);
 
         // unbind the VBO and VAO
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
         // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
+
+        glGenVertexArrays(1, &lightVAO);
+        glBindVertexArray(lightVAO);
+
+        // use pre exising VBO
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+        // position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
+        glEnableVertexAttribArray(0);
     }
 
     void OnKeyPress(const KeyboardKeyEvent& event)
@@ -650,7 +664,8 @@ class Window
             OnKeyPress(event);
         }
 
-        glClearColor(0.45f, 0.6f, 0.75f, 1.0f);
+        // glClearColor(0.45f, 0.6f, 0.75f, 1.0f); // vakol blue
+        glClearColor(0.0941176f, 0.0941176f, 0.0941176f, 1.0f); // dark grey
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
@@ -661,10 +676,29 @@ class Window
         Fenrir::Math::Mat4 projection = Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
                                                                   static_cast<float>(m_width / m_height), 0.1f, 100.0f);
 
+        m_lightShader->Use();
+        m_lightShader->SetMat4("view", view);
+        m_lightShader->SetMat4("projection", projection);
+        Fenrir::Math::Mat4 light_model = Fenrir::Math::Mat4(1.0f);
+
+        // move lightpos around
+        lightPos.x = 1.0f + sin(static_cast<float>(app.GetTime().CurrentTime())) * 2.0f;
+        lightPos.y = sin(static_cast<float>(app.GetTime().CurrentTime() / 2.0f)) * 1.0f;
+
+        light_model = Fenrir::Math::Translate(light_model, lightPos);
+        light_model = Fenrir::Math::Scale(light_model, Fenrir::Math::Vec3(0.2f));
+        m_lightShader->SetMat4("model", light_model);
+
+        glBindVertexArray(lightVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
         m_shader->Use();
 
         m_shader->SetMat4("view", view);
         m_shader->SetMat4("projection", projection);
+        m_shader->SetVec3("lightColor", 1.0f, 1.0f, 1.0f);
+        m_shader->SetVec3("lightPos", lightPos);
+        m_shader->SetVec3("viewPos", m_camera.pos);
 
         glBindVertexArray(VAO);
 
@@ -714,24 +748,33 @@ class Window
     // GL SPEFICIC
     std::unique_ptr<Shader> m_shader = nullptr;
 
-    float vertices[180] = {
-        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f,
-        0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
+    std::unique_ptr<Shader> m_lightShader = nullptr;
 
-        -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 1.0f,
-        0.5f,  0.5f,  0.5f,  1.0f, 1.0f, -0.5f, 0.5f,  0.5f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f,
+    float vertices[288] = {
+        // Position         // Normals        // Texture Coords
+        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 0.0f,
+        0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f,
 
-        -0.5f, 0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 1.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 0.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
 
-        0.5f,  0.5f,  0.5f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f, 1.0f,
-        0.5f,  -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, 0.5f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
+        -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, -1.0f, 0.0f,  0.0f,  1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f, -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f,
+        -0.5f, -0.5f, 0.5f,  -1.0f, 0.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f,
 
-        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f, 1.0f, 0.5f,  -0.5f, 0.5f,  1.0f, 0.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f, 0.0f, -0.5f, -0.5f, 0.5f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f, 1.0f,
+        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
+        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
 
-        -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  1.0f, 0.0f,
-        0.5f,  0.5f,  0.5f,  1.0f, 0.0f, -0.5f, 0.5f,  0.5f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f, 1.0f};
+        -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  1.0f, 1.0f,
+        0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f,
+
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
+        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f};
 
     unsigned int indices[36] = {
         // Back face
@@ -754,6 +797,10 @@ class Window
     unsigned int EBO;
 
     unsigned int textureId1;
+
+    unsigned int lightVAO;
+
+    Fenrir::Math::Vec3 lightPos = Fenrir::Math::Vec3(1.2f, 1.0f, 2.0f);
 
     //! TEMP
     Fenrir::Camera& m_camera;
