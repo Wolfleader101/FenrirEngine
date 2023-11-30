@@ -710,9 +710,14 @@ class Window
 
         // set light in shader
         m_shader->SetVec3("light.pos", lightPos);
+        // m_shader->SetVec3("light.direction", -0.2f, -1.0f, -0.3f);
         m_shader->SetVec3("light.ambient", 0.2f, 0.2f, 0.2f);
         m_shader->SetVec3("light.diffuse", 0.7f, 0.7f, 0.7f);
         m_shader->SetVec3("light.specular", 1.0f, 1.0f, 1.0f);
+
+        m_shader->SetFloat("light.constant", 1.0f);
+        m_shader->SetFloat("light.linear", 0.07f);
+        m_shader->SetFloat("light.quadratic", 0.017f);
 
         // set material in shader (diffuse and specular is set as texture once above)
         m_shader->SetFloat("material.shininess", 32.0f); // bind diffuse map
