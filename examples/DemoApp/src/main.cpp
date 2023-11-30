@@ -684,44 +684,77 @@ class Window
         Fenrir::Math::Mat4 projection = Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
                                                                   static_cast<float>(m_width / m_height), 0.1f, 100.0f);
 
+        //! DRAWING LIGHTS
         m_lightShader->Use();
         m_lightShader->SetMat4("view", view);
         m_lightShader->SetMat4("projection", projection);
-        Fenrir::Math::Mat4 light_model = Fenrir::Math::Mat4(1.0f);
-
-        // move lightpos around
-        lightPos.x = 1.0f + sin(static_cast<float>(app.GetTime().CurrentTime())) * 2.0f;
-        lightPos.y = sin(static_cast<float>(app.GetTime().CurrentTime()) / 2.0f) * 1.0f;
-        lightPos.z = 0.5f + cos(static_cast<float>(app.GetTime().CurrentTime()) / 2.0f) * 1.0f;
-
-        light_model = Fenrir::Math::Translate(light_model, lightPos);
-        light_model = Fenrir::Math::Scale(light_model, Fenrir::Math::Vec3(0.2f));
-        m_lightShader->SetMat4("model", light_model);
 
         glBindVertexArray(lightVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        for (unsigned int i = 0; i < 4; i++)
+        {
+            // calculate the model matrix for each object and pass it to shader before drawing
+            Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
+            model = Fenrir::Math::Translate(model, pointLightPositions[i]);
+            model = glm::scale(model, glm::vec3(0.2f));
+            m_lightShader->SetMat4("model", model);
 
-        // FOR DRAWING CUBES
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
 
+        //! DRAWING CUBES
         m_shader->Use();
 
         m_shader->SetMat4("view", view);
         m_shader->SetMat4("projection", projection);
 
-        // set light in shader
-        // m_shader->SetVec3("light.pos", lightPos);
-        m_shader->SetVec3("light.pos", m_camera.pos); // move light with camera
-        m_shader->SetVec3("light.direction", m_camera.front);
-        m_shader->SetFloat("light.cutOff", Fenrir::Math::Cos(Fenrir::Math::DegToRad(12.5f)));
-        m_shader->SetFloat("light.outerCutOff", Fenrir::Math::Cos(Fenrir::Math::DegToRad(17.5f)));
-        // m_shader->SetVec3("light.direction", -0.2f, -1.0f, -0.3f); // directional light test
-        m_shader->SetVec3("light.ambient", 0.2f, 0.2f, 0.2f);
-        m_shader->SetVec3("light.diffuse", 0.7f, 0.7f, 0.7f);
-        m_shader->SetVec3("light.specular", 1.0f, 1.0f, 1.0f);
-
-        m_shader->SetFloat("light.constant", 1.0f);
-        m_shader->SetFloat("light.linear", 0.07f);
-        m_shader->SetFloat("light.quadratic", 0.017f);
+        // directional light
+        m_shader->SetVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+        m_shader->SetVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+        m_shader->SetVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+        m_shader->SetVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+        // point light 1
+        m_shader->SetVec3("pointLights[0].pos", pointLightPositions[0]);
+        m_shader->SetVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
+        m_shader->SetVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
+        m_shader->SetVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
+        m_shader->SetFloat("pointLights[0].constant", 1.0f);
+        m_shader->SetFloat("pointLights[0].linear", 0.09f);
+        m_shader->SetFloat("pointLights[0].quadratic", 0.032f);
+        // point light 2
+        m_shader->SetVec3("pointLights[1].pos", pointLightPositions[1]);
+        m_shader->SetVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
+        m_shader->SetVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
+        m_shader->SetVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
+        m_shader->SetFloat("pointLights[1].constant", 1.0f);
+        m_shader->SetFloat("pointLights[1].linear", 0.09f);
+        m_shader->SetFloat("pointLights[1].quadratic", 0.032f);
+        // point light 3
+        m_shader->SetVec3("pointLights[2].pos", pointLightPositions[2]);
+        m_shader->SetVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
+        m_shader->SetVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
+        m_shader->SetVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
+        m_shader->SetFloat("pointLights[2].constant", 1.0f);
+        m_shader->SetFloat("pointLights[2].linear", 0.09f);
+        m_shader->SetFloat("pointLights[2].quadratic", 0.032f);
+        // point light 4
+        m_shader->SetVec3("pointLights[3].pos", pointLightPositions[3]);
+        m_shader->SetVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
+        m_shader->SetVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
+        m_shader->SetVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
+        m_shader->SetFloat("pointLights[3].constant", 1.0f);
+        m_shader->SetFloat("pointLights[3].linear", 0.09f);
+        m_shader->SetFloat("pointLights[3].quadratic", 0.032f);
+        // spotLight
+        m_shader->SetVec3("spotLight.pos", m_camera.pos);
+        m_shader->SetVec3("spotLight.direction", m_camera.front);
+        m_shader->SetVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+        m_shader->SetVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+        m_shader->SetVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+        m_shader->SetFloat("spotLight.constant", 1.0f);
+        m_shader->SetFloat("spotLight.linear", 0.09f);
+        m_shader->SetFloat("spotLight.quadratic", 0.032f);
+        m_shader->SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+        m_shader->SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
         // set material in shader (diffuse and specular is set as texture once above)
         m_shader->SetFloat("material.shininess", 32.0f); // bind diffuse map
@@ -737,12 +770,6 @@ class Window
         glBindTexture(GL_TEXTURE_2D, specularId);
 
         glBindVertexArray(VAO);
-
-        constexpr const glm::vec3 cubePositions[] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
-                                                     glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
-                                                     glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
-                                                     glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
-                                                     glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
 
         for (unsigned int i = 0; i < 10; i++)
         {
@@ -812,6 +839,15 @@ class Window
         0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
         -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f};
 
+    const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
+                                              glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
+
+    const glm::vec3 cubePositions[10] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
+                                         glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
+                                         glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
+                                         glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
+                                         glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
+
     unsigned int indices[36] = {
         // Back face
         0, 1, 2, 0, 2, 3,
@@ -836,8 +872,6 @@ class Window
     unsigned int specularId;
 
     unsigned int lightVAO;
-
-    Fenrir::Math::Vec3 lightPos = Fenrir::Math::Vec3(1.2f, 1.0f, 2.0f);
 
     //! TEMP
     Fenrir::Camera& m_camera;
