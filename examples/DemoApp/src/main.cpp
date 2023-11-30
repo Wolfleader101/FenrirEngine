@@ -582,6 +582,8 @@ class Window
         //! TEXTURES
         glActiveTexture(GL_TEXTURE0);
         diffuseId = LoadTexture(logger, "assets/textures/art-deco-scales/art-deco-scales_albedo.png");
+
+        glActiveTexture(GL_TEXTURE1);
         specularId = LoadTexture(logger, "assets/textures/art-deco-scales/art-deco-scales_metallic.png");
 
         // diffuseId = LoadTexture(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png");
@@ -648,16 +650,6 @@ class Window
         // position attribute
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
-
-        // setting material diffuse can be set once
-        m_shader->SetInt("material.diffuse", 0);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, diffuseId);
-
-        // setting material specular can be set once
-        m_shader->SetInt("material.specular", 1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, specularId);
     }
 
     void OnKeyPress(const KeyboardKeyEvent& event)
@@ -725,9 +717,13 @@ class Window
         // set material in shader (diffuse and specular is set as texture once above)
         m_shader->SetFloat("material.shininess", 32.0f); // bind diffuse map
 
+        // setting material diffuse can be set once
+        m_shader->SetInt("material.diffuse", 0);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, diffuseId);
-        // bind specular map
+
+        // setting material specular can be set once
+        m_shader->SetInt("material.specular", 1);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, specularId);
 
