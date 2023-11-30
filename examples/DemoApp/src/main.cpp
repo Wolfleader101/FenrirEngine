@@ -709,8 +709,12 @@ class Window
         m_shader->SetMat4("projection", projection);
 
         // set light in shader
-        m_shader->SetVec3("light.pos", lightPos);
-        // m_shader->SetVec3("light.direction", -0.2f, -1.0f, -0.3f);
+        // m_shader->SetVec3("light.pos", lightPos);
+        m_shader->SetVec3("light.pos", m_camera.pos); // move light with camera
+        m_shader->SetVec3("light.direction", m_camera.front);
+        m_shader->SetFloat("light.cutOff", Fenrir::Math::Cos(Fenrir::Math::DegToRad(12.5f)));
+        m_shader->SetFloat("light.outerCutOff", Fenrir::Math::Cos(Fenrir::Math::DegToRad(17.5f)));
+        // m_shader->SetVec3("light.direction", -0.2f, -1.0f, -0.3f); // directional light test
         m_shader->SetVec3("light.ambient", 0.2f, 0.2f, 0.2f);
         m_shader->SetVec3("light.diffuse", 0.7f, 0.7f, 0.7f);
         m_shader->SetVec3("light.specular", 1.0f, 1.0f, 1.0f);
