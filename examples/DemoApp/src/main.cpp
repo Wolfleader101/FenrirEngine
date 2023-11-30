@@ -285,8 +285,9 @@ struct Transform
     Fenrir::Math::Vec3 scale;
 };
 
-static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& textureId)
+static unsigned int LoadTexture(Fenrir::ILogger* logger, const char* path)
 {
+    unsigned int textureId;
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
 
@@ -312,6 +313,8 @@ static void LoadImage(Fenrir::ILogger* logger, const char* path, unsigned int& t
     }
 
     stbi_image_free(data);
+
+    return textureId;
 }
 
 class CameraController
@@ -578,8 +581,11 @@ class Window
                                                  std::string("assets/shaders/light_fragment.glsl"));
         //! TEXTURES
         glActiveTexture(GL_TEXTURE0);
-        LoadImage(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png", textureId1);
+        diffuseId = LoadTexture(logger, "assets/textures/art-deco-scales/art-deco-scales_albedo.png");
+        specularId = LoadTexture(logger, "assets/textures/art-deco-scales/art-deco-scales_metallic.png");
 
+        // diffuseId = LoadTexture(logger, "assets/textures/mortar-bricks/mortar-bricks_albedo.png");
+        // specularId = LoadTexture(logger, "assets/textures/mortar-bricks/mortar-bricks_metallic.png");
         //! VERTEX DATA AND BUFFERS
 
         // create a vertex buffer object, store its ID in VBO
@@ -642,6 +648,16 @@ class Window
         // position attribute
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
+
+        // setting material diffuse can be set once
+        m_shader->SetInt("material.diffuse", 0);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, diffuseId);
+
+        // setting material specular can be set once
+        m_shader->SetInt("material.specular", 1);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, specularId);
     }
 
     void OnKeyPress(const KeyboardKeyEvent& event)
@@ -693,13 +709,27 @@ class Window
         glBindVertexArray(lightVAO);
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
+        // FOR DRAWING CUBES
+
         m_shader->Use();
 
         m_shader->SetMat4("view", view);
         m_shader->SetMat4("projection", projection);
-        m_shader->SetVec3("lightColor", 1.0f, 1.0f, 1.0f);
-        m_shader->SetVec3("lightPos", lightPos);
-        m_shader->SetVec3("viewPos", m_camera.pos);
+
+        // set light in shader
+        m_shader->SetVec3("light.pos", lightPos);
+        m_shader->SetVec3("light.ambient", 0.2f, 0.2f, 0.2f);
+        m_shader->SetVec3("light.diffuse", 0.7f, 0.7f, 0.7f);
+        m_shader->SetVec3("light.specular", 1.0f, 1.0f, 1.0f);
+
+        // set material in shader (diffuse and specular is set as texture once above)
+        m_shader->SetFloat("material.shininess", 32.0f); // bind diffuse map
+
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, diffuseId);
+        // bind specular map
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, specularId);
 
         glBindVertexArray(VAO);
 
@@ -752,7 +782,7 @@ class Window
     std::unique_ptr<Shader> m_lightShader = nullptr;
 
     float vertices[288] = {
-        // Position         // Normals        // Texture Coords
+        // positions          // normals           // texture coords
         -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 0.0f,
         0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f,
         -0.5f, 0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f,
@@ -797,7 +827,8 @@ class Window
 
     unsigned int EBO;
 
-    unsigned int textureId1;
+    unsigned int diffuseId;
+    unsigned int specularId;
 
     unsigned int lightVAO;
 
