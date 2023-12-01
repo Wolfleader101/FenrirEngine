@@ -3,23 +3,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "Math_fwd.hpp"
+
 constexpr const float EPSILON = 1e-6f;
 
 namespace Fenrir::Math
 {
-    using Vec2 = glm::vec2;
-
-    using Vec3 = glm::vec3;
-    using DVec3 = glm::dvec3;
-    using BVec3 = glm::bvec3;
-
-    using Point = Vec3;
-
-    using Vec4 = glm::vec4;
-
-    using Mat3 = glm::mat3;
-    using Mat4 = glm::mat4;
-    using Quat = glm::quat;
+    // TODO in future might be worth seperating into seperate files?
 
     Math::Vec3 RoundToZero(const Math::Vec3& vec);
 

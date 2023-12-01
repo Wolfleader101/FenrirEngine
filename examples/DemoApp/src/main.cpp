@@ -6,11 +6,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/stb_image.h"
 
-#include <fstream>
-#include <iostream>
-#include <sstream>
 #include <string>
 #include <unordered_set>
+
+#include "ShaderLibrary.hpp"
 
 #include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
@@ -51,6 +50,7 @@ struct FrameBufferResizeEvent
 {
     int width, height;
 };
+
 struct WindowResizeEvent
 {
     int width, height;
@@ -83,6 +83,7 @@ enum class InputState
     Pressed = 1,
     Held = 2,
 };
+
 struct MouseButtonEvent
 {
     MouseButton button;
@@ -97,185 +98,6 @@ struct KeyboardKeyEvent
     int repeat;
     InputState state;
     int mods;
-};
-
-class Shader
-{
-  public:
-    unsigned int Id;
-
-    /**
-     * @brief Construct a new Shader object
-     *
-     * @param logger the logger to use
-     * @param vertexPath the path to the vertex shader
-     * @param fragmentPath the path to the fragment shader
-     */
-    Shader(Fenrir::ILogger* logger, std::string vertexPath, std::string fragmentPath)
-    {
-        // TODO eventually move this code to shader library/Asset manager to load shaders from files
-
-        std::string vertexCode;
-        std::string fragmentCode;
-
-        std::ifstream vShaderFile;
-        std::ifstream fShaderFile;
-
-        vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-
-        try
-        {
-            vShaderFile.open(vertexPath);
-            fShaderFile.open(fragmentPath);
-
-            std::stringstream vShaderStream, fShaderStream;
-
-            vShaderStream << vShaderFile.rdbuf();
-            fShaderStream << fShaderFile.rdbuf();
-
-            vShaderFile.close();
-            fShaderFile.close();
-
-            vertexCode = vShaderStream.str();
-            fragmentCode = fShaderStream.str();
-        }
-        catch (std::ifstream::failure& e)
-        {
-            logger->Fatal("COULD NOT READ SHADERS {0} {1}, message: {2}", vertexPath, fragmentPath, e.what());
-        }
-
-        const char* vShaderCode = vertexCode.c_str();
-        const char* fShaderCode = fragmentCode.c_str();
-
-        unsigned int vertex, fragment;
-        int success = -1;
-        char infoLog[512] = {0};
-
-        // create the vertex shader
-        vertex = glCreateShader(GL_VERTEX_SHADER);
-
-        // attach the shader source code to the shader object and compile the shader
-        glShaderSource(vertex, 1, &vShaderCode, nullptr);
-
-        // compile the shader
-        glCompileShader(vertex);
-
-        // check for compilation errors
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if (!success)
-        {
-            glGetShaderInfoLog(vertex, 512, nullptr, infoLog);
-            logger->Fatal("VERTEX SHADER COMPILATION FAILED\n{0}", infoLog);
-        }
-
-        // create the fragment shader
-        fragment = glCreateShader(GL_FRAGMENT_SHADER);
-
-        // attach the shader source code to the shader object and compile the shader
-        glShaderSource(fragment, 1, &fShaderCode, nullptr);
-
-        // compile the shader
-        glCompileShader(fragment);
-
-        // check for compilation errors
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if (!success)
-        {
-            glGetShaderInfoLog(fragment, 512, nullptr, infoLog);
-            logger->Fatal("FRAGMENT SHADER COMPILATION FAILED\n{0}", infoLog);
-        }
-
-        // create a shader program object, store its ID in Id
-        Id = glCreateProgram();
-
-        // attach the vertex shader and fragment shader to the shader program
-        glAttachShader(Id, vertex);
-        glAttachShader(Id, fragment);
-
-        // link the shader program
-        glLinkProgram(Id);
-
-        // check for linking errors
-        glGetProgramiv(Id, GL_LINK_STATUS, &success);
-        if (!success)
-        {
-            glGetProgramInfoLog(Id, 512, nullptr, infoLog);
-            logger->Fatal("SHADER PROGRAM LINKING FAILED\n{0}", infoLog);
-        }
-
-        // delete the shaders as they have been linked and not needed
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-    }
-
-    ~Shader()
-    {
-        glDeleteProgram(Id);
-    }
-
-    /**
-     * @brief use the shader program
-     *
-     */
-    void Use()
-    {
-        glUseProgram(Id);
-    }
-
-    void SetBool(const std::string& name, bool value) const
-    {
-        glUniform1i(glGetUniformLocation(Id, name.c_str()), static_cast<int>(value));
-    }
-
-    void SetInt(const std::string& name, int value) const
-    {
-        glUniform1i(glGetUniformLocation(Id, name.c_str()), value);
-    }
-
-    void SetFloat(const std::string& name, float value) const
-    {
-        glUniform1f(glGetUniformLocation(Id, name.c_str()), value);
-    }
-    void SetVec2(const std::string& name, const Fenrir::Math::Vec2& value) const
-    {
-        glUniform2fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
-    }
-
-    void SetVec2(const std::string& name, float x, float y) const
-    {
-        glUniform2f(glGetUniformLocation(Id, name.c_str()), x, y);
-    }
-
-    void SetVec3(const std::string& name, const Fenrir::Math::Vec3& value) const
-    {
-        glUniform3fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
-    }
-
-    void SetVec3(const std::string& name, float x, float y, float z) const
-    {
-        glUniform3f(glGetUniformLocation(Id, name.c_str()), x, y, z);
-    }
-
-    void SetVec4(const std::string& name, const Fenrir::Math::Vec4& value) const
-    {
-        glUniform4fv(glGetUniformLocation(Id, name.c_str()), 1, Fenrir::Math::AsArray(value));
-    }
-
-    void SetVec4(const std::string& name, float x, float y, float z, float w) const
-    {
-        glUniform4f(glGetUniformLocation(Id, name.c_str()), x, y, z, w);
-    }
-
-    void SetMat3(const std::string& name, const Fenrir::Math::Mat3& mat) const
-    {
-        glUniformMatrix3fv(glGetUniformLocation(Id, name.c_str()), 1, GL_FALSE, Fenrir::Math::AsArray(mat));
-    }
-
-    void SetMat4(const std::string& name, const Fenrir::Math::Mat4& mat) const
-    {
-        glUniformMatrix4fv(glGetUniformLocation(Id, name.c_str()), 1, GL_FALSE, Fenrir::Math::AsArray(mat));
-    }
 };
 
 struct Transform
@@ -342,22 +164,21 @@ class CameraController
         float xpos = static_cast<float>(event.x);
         float ypos = static_cast<float>(event.y);
 
-        float xoffset = xpos - m_lastMousePos.x;
-        float yoffset = m_lastMousePos.y - ypos; // reversed since y-coordinates go from bottom to top
+        m_deltaMousePos.x = xpos - m_lastMousePos.x;
+        m_deltaMousePos.y = m_lastMousePos.y - ypos;
+
         m_lastMousePos.x = xpos;
         m_lastMousePos.y = ypos;
 
-        xoffset *= m_sensitive;
-        yoffset *= m_sensitive;
+        Fenrir::Math::Vec2 deltaWithSens = m_deltaMousePos * m_sensitive;
 
-        m_camera.yaw += xoffset;
-        m_camera.pitch += yoffset;
+        m_camera.yaw += deltaWithSens.x;
+        m_camera.pitch += deltaWithSens.y;
 
         if (m_camera.pitch > 89.0f)
             m_camera.pitch = 89.0f;
         if (m_camera.pitch < -89.0f)
             m_camera.pitch = -89.0f;
-
         m_camera.Update();
     }
 
@@ -424,10 +245,12 @@ class CameraController
     float m_speed = 3.0f;
     float m_sprintSpeed = 6.0f;
     bool m_isSprinting = false;
-    Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
+    Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(400.0f, 300.0f);
 
     // TODO move to a custom input class
     std::unordered_set<int> m_pressedKeys;
+
+    Fenrir::Math::Vec2 m_deltaMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
 };
 #define BIND_CAMERA_CONTROLLER_FN(fn, controllerInstance) \
     std::bind(&CameraController::fn, &controllerInstance, std::placeholders::_1)
@@ -650,6 +473,13 @@ class Window
         // position attribute
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
         glEnableVertexAttribArray(0);
+
+        m_shader->Use();
+
+        // setting material diffuse can be set once
+        m_shader->SetInt("material.diffuse", 0);
+        // setting material specular can be set once
+        m_shader->SetInt("material.specular", 1);
     }
 
     void OnKeyPress(const KeyboardKeyEvent& event)
@@ -760,12 +590,16 @@ class Window
         m_shader->SetFloat("material.shininess", 32.0f); // bind diffuse map
 
         // setting material diffuse can be set once
-        m_shader->SetInt("material.diffuse", 0);
+        // m_shader->SetInt("material.diffuse", 0);
+        // glActiveTexture(GL_TEXTURE0);
+        // glBindTexture(GL_TEXTURE_2D, diffuseId);
+
+        // // setting material specular can be set once
+        // m_shader->SetInt("material.specular", 1);
+        // glActiveTexture(GL_TEXTURE1);
+        // glBindTexture(GL_TEXTURE_2D, specularId);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, diffuseId);
-
-        // setting material specular can be set once
-        m_shader->SetInt("material.specular", 1);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, specularId);
 

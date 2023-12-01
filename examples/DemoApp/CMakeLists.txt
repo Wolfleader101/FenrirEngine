@@ -4,6 +4,12 @@ project(DemoApp)
 # Set the executable for the demo app
 add_executable(DemoApp
     src/main.cpp
+
+    src/TextureLibrary.hpp
+    src/TextureLibrary.cpp
+
+    src/ShaderLibrary.hpp
+    src/ShaderLibrary.cpp
 )
 
 add_subdirectory(libs)
