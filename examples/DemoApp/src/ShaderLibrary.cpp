@@ -16,7 +16,7 @@ Shader::Shader(unsigned int id) : Id(id)
 
 Shader::~Shader()
 {
-    glDeleteProgram(Id);
+    // glDeleteProgram(Id);
 }
 
 void Shader::Use()
@@ -81,7 +81,8 @@ void Shader::SetMat4(const std::string& name, const Fenrir::Math::Mat4& mat) con
 
 ShaderLibrary::ShaderLibrary(Fenrir::ILogger& logger) : m_logger(logger)
 {
-    m_shaders["error"] = LoadShader("assets/shaders/error.vert", "assets/shaders/error.frag");
+    // TODO figure out where to put this as GL isnt intiialised yet
+    // m_shaders["error"] = LoadShader("assets/shaders/error.vert", "assets/shaders/error.frag");
 }
 
 void ShaderLibrary::AddShader(const std::string& name, const std::string& vertexPath, const std::string& fragmentPath)

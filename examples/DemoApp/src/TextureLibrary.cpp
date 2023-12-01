@@ -9,7 +9,8 @@
 
 TextureLibrary::TextureLibrary(Fenrir::ILogger& logger) : m_logger(logger)
 {
-    m_textures["error"] = LoadTexture("assets/textures/error.png");
+    // TODO figure out where to put this as GL isnt intiialised yet
+    // m_textures["error"] = LoadTexture("assets/textures/error.png");
 }
 
 void TextureLibrary::AddTexture(const std::string& path)
@@ -67,6 +68,8 @@ const Texture& TextureLibrary::GetTexture(const std::string& path)
 
         m_logger.Info("TextureLibrary::GetTexture - Attempting to load texture: " + path);
         Texture texture = LoadTexture(path);
+
+        m_textures[path] = texture;
     }
 
     return m_textures.at(path);
