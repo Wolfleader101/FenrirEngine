@@ -10,6 +10,10 @@ add_executable(DemoApp
 
     src/ShaderLibrary.hpp
     src/ShaderLibrary.cpp
+
+
+    src/Window.hpp
+    src/Window.cpp
 )
 
 add_subdirectory(libs)

@@ -3,42 +3,16 @@
 #include <GLFW/glfw3.h>
 // clang-format on
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image/stb_image.h"
-
 #include <string>
 #include <unordered_set>
 
 #include "ShaderLibrary.hpp"
+#include "TextureLibrary.hpp"
 
 #include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirMath/Math.hpp"
-
-static void systemA(Fenrir::App&)
-{
-}
-
-static void Tick(Fenrir::App&)
-{
-    // app.Logger()->Log("Tick");
-}
-
-static void PreInit(Fenrir::App& app)
-{
-    app.Logger()->Info("PreInit");
-}
-
-static void Init(Fenrir::App& app)
-{
-    app.Logger()->Info("Init");
-}
-
-static void PostInit(Fenrir::App& app)
-{
-    app.Logger()->Fatal("PostInit");
-}
 
 // Wrapper function that matches the GLADloadproc signature
 static void* Glad_GLFW_GetProcAddr(const char* name)
@@ -106,38 +80,6 @@ struct Transform
     Fenrir::Math::Vec3 rot; // TODO convert to quat
     Fenrir::Math::Vec3 scale;
 };
-
-static unsigned int LoadTexture(Fenrir::ILogger* logger, const char* path)
-{
-    unsigned int textureId;
-    glGenTextures(1, &textureId);
-    glBindTexture(GL_TEXTURE_2D, textureId);
-
-    // set texture filter options on current texture object
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    int width, height, nrChannels;
-    stbi_set_flip_vertically_on_load(true);
-    unsigned char* data = stbi_load(path, &width, &height, &nrChannels, 0);
-
-    if (data)
-    {
-        // generate the texture
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-    }
-    else
-    {
-        logger->Fatal("Failed to load texture");
-    }
-
-    stbi_image_free(data);
-
-    return textureId;
-}
 
 class CameraController
 {
@@ -642,10 +584,7 @@ class Window
     int m_width = 0;
     int m_height = 0;
 
-    // GL SPEFICIC
-    std::unique_ptr<Shader> m_shader = nullptr;
-
-    std::unique_ptr<Shader> m_lightShader = nullptr;
+    // GL SPECIFIC
 
     float vertices[288] = {
         // positions          // normals           // texture coords
@@ -712,6 +651,7 @@ class Window
 };
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
 
+#include <iostream>
 int main()
 {
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
@@ -720,6 +660,9 @@ int main()
     Fenrir::Camera camera;
 
     CameraController cameraController(camera, 0.1f, 3.0f);
+
+    ShaderLibrary shaderLibrary(*app.Logger().get());
+    TextureLibrary textureLibrary(*app.Logger().get());
 
     Window window(camera, "Demo App");
 
