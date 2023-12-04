@@ -24,6 +24,7 @@ target_link_libraries(DemoApp PRIVATE FenrirApp FenrirCamera FenrirMath)
 target_link_libraries(DemoApp PUBLIC
     glad
     glfw
+    assimp
 )
 
 # symlink the assets folder to the build directory

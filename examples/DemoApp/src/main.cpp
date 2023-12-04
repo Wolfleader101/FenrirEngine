@@ -6,6 +6,10 @@
 #include <string>
 #include <unordered_set>
 
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #include "ShaderLibrary.hpp"
 #include "TextureLibrary.hpp"
 
@@ -384,6 +388,296 @@ class Window
 Fenrir::Camera camera;
 Window window(camera, "Demo App");
 
+struct Vertex
+{
+    Fenrir::Math::Vec3 pos;
+    Fenrir::Math::Vec3 normal;
+    Fenrir::Math::Vec2 texCoords;
+};
+
+class Mesh
+{
+  public:
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    std::vector<Texture> textures;
+
+    Mesh() = default;
+    Mesh(std::vector<Vertex> verts, std::vector<unsigned int> ind, std::vector<Texture> texts)
+        : vertices(std::move(verts)), indices(std::move(ind)), textures(std::move(texts))
+    {
+    }
+
+    unsigned int VAO;
+    unsigned int VBO;
+    unsigned int EBO;
+};
+
+void SetupMesh(Mesh& mesh)
+{
+    glGenVertexArrays(1, &mesh.VAO);
+    glGenBuffers(1, &mesh.VBO);
+    glGenBuffers(1, &mesh.EBO);
+
+    glBindVertexArray(mesh.VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
+    glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex), &mesh.vertices[0], GL_STATIC_DRAW);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(unsigned int), &mesh.indices[0], GL_STATIC_DRAW);
+
+    // vertex positions
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
+    // vertex normals
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, normal)));
+    // vertex texture coords
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                          reinterpret_cast<void*>(offsetof(Vertex, texCoords)));
+
+    glBindVertexArray(0);
+}
+
+void DrawMesh(Mesh& mesh, Shader& shader)
+{
+    unsigned int diffuseNr = 1;
+    unsigned int specularNr = 1;
+
+    for (unsigned int i = 0; i < mesh.textures.size(); i++)
+    {
+        glActiveTexture(GL_TEXTURE0 + i);
+
+        // retrieve texture number (the N in diffuse_textureN)
+        std::string number;
+        std::string name = "material.";
+        TextureType type = mesh.textures[i].type;
+        if (type == TextureType::Diffuse)
+        {
+            number = std::to_string(diffuseNr++);
+            name += "diffuse";
+        }
+        else if (type == TextureType::Specular)
+        {
+            number = std::to_string(specularNr++);
+            name += "specular";
+        }
+
+        shader.SetInt((name + number).c_str(), i);
+        glBindTexture(GL_TEXTURE_2D, mesh.textures[i].Id);
+    }
+
+    // draw mesh
+    glBindVertexArray(mesh.VAO);
+    glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+
+    glActiveTexture(GL_TEXTURE0);
+}
+
+class Model
+{
+  public:
+    std::vector<Mesh> meshes;
+
+    std::string directory;
+};
+
+void DrawModel(Model& model, Shader& shader)
+{
+    for (auto& mesh : model.meshes)
+    {
+        DrawMesh(mesh, shader);
+    }
+}
+
+class ModelLibrary
+{
+  public:
+    ModelLibrary(Fenrir::ILogger& logger, TextureLibrary& textureLibrary, ShaderLibrary& shaderLibrary)
+        : m_logger(logger), m_textureLibrary(textureLibrary), m_shaderLibrary(shaderLibrary)
+    {
+    }
+
+    void AddModel(const std::string& path)
+    {
+        if (m_models.count(path) > 0)
+        {
+            m_logger.Warn("ModelLibrary::AddModel - Model already loaded: {}", path);
+            return;
+        }
+
+        Model model;
+        LoadModel(path, model);
+
+        m_models.emplace(path, std::move(model));
+    }
+
+    const Model& GetModel(const std::string& path)
+    {
+        if (m_models.count(path) == 0)
+        {
+            m_logger.Error("ModelLibrary::GetModel - Model not loaded: {}", path);
+
+            m_logger.Info("ModelLibrary::GetModel - Attempting to load model: {}", path);
+
+            AddModel(path);
+        }
+
+        return m_models.at(path);
+    }
+
+    bool HasModel(const std::string& path) const
+    {
+        return m_models.count(path) > 0;
+    }
+
+  private:
+    std::unordered_map<std::string, Model> m_models;
+
+    Fenrir::ILogger& m_logger;
+
+    TextureLibrary& m_textureLibrary;
+    ShaderLibrary& m_shaderLibrary;
+
+    void LoadModel(const std::string& path, Model& model)
+    {
+        Assimp::Importer importer;
+        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+
+        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+        {
+            m_logger.Error("ModelLibrary::LoadModel - {}", importer.GetErrorString());
+            return;
+        }
+
+        model.directory = path.substr(0, path.find_last_of('/'));
+
+        ProcessNode(scene->mRootNode, scene, model);
+    }
+
+    void ProcessNode(aiNode* node, const aiScene* scene, Model& model)
+    {
+        // process all the node's meshes (if any)
+        for (unsigned int i = 0; i < node->mNumMeshes; i++)
+        {
+            aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+
+            model.meshes.push_back(ProcessMesh(mesh, scene, model.directory));
+        }
+
+        // then do the same for each of its children
+        for (unsigned int i = 0; i < node->mNumChildren; i++)
+        {
+            ProcessNode(node->mChildren[i], scene, model);
+        }
+    }
+
+    Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, std::string& directory)
+    {
+        std::vector<Vertex> vertices;
+        std::vector<unsigned int> indices;
+        std::vector<Texture> textures;
+
+        for (unsigned int i = 0; i < mesh->mNumVertices; i++)
+        {
+            Vertex vertex;
+            glm::vec3
+                vector; // we declare a placeholder vector since assimp uses its own vector class that doesn't directly
+                        // convert to glm's vec3 class so we transfer the data to this placeholder glm::vec3 first.
+            // positions
+            vector.x = mesh->mVertices[i].x;
+            vector.y = mesh->mVertices[i].y;
+            vector.z = mesh->mVertices[i].z;
+            vertex.pos = vector;
+            // normals
+            if (mesh->HasNormals())
+            {
+                vector.x = mesh->mNormals[i].x;
+                vector.y = mesh->mNormals[i].y;
+                vector.z = mesh->mNormals[i].z;
+                vertex.normal = vector;
+            }
+            // texture coordinates
+            if (mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
+            {
+                glm::vec2 vec;
+                // a vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't
+                // use models where a vertex can have multiple texture coordinates so we always take the first set (0).
+                vec.x = mesh->mTextureCoords[0][i].x;
+                vec.y = mesh->mTextureCoords[0][i].y;
+                vertex.texCoords = vec;
+                // // tangent
+                // vector.x = mesh->mTangents[i].x;
+                // vector.y = mesh->mTangents[i].y;
+                // vector.z = mesh->mTangents[i].z;
+                // vertex.Tangent = vector;
+                // // bitangent
+                // vector.x = mesh->mBitangents[i].x;
+                // vector.y = mesh->mBitangents[i].y;
+                // vector.z = mesh->mBitangents[i].z;
+                // vertex.Bitangent = vector;
+            }
+            else
+                vertex.texCoords = glm::vec2(0.0f, 0.0f);
+
+            vertices.push_back(vertex);
+        }
+
+        for (unsigned int i = 0; i < mesh->mNumFaces; i++)
+        {
+            aiFace face = mesh->mFaces[i];
+            // retrieve all indices of the face and store them in the indices vector
+            for (unsigned int j = 0; j < face.mNumIndices; j++)
+                indices.push_back(face.mIndices[j]);
+        }
+
+        if (mesh->mMaterialIndex >= 0)
+        {
+            aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+
+            std::vector<Texture> diffuseMaps =
+                LoadMaterialTextures(material, aiTextureType_DIFFUSE, TextureType::Diffuse, directory);
+            textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
+
+            std::vector<Texture> specularMaps =
+                LoadMaterialTextures(material, aiTextureType_SPECULAR, TextureType::Specular, directory);
+            textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
+        }
+
+        Mesh returnMesh(vertices, indices, textures);
+
+        SetupMesh(returnMesh);
+
+        return returnMesh;
+    }
+
+    std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, TextureType textureType,
+                                              const std::string& directory)
+    {
+        std::vector<Texture> textures;
+
+        for (unsigned int i = 0; i < mat->GetTextureCount(type); i++)
+        {
+            aiString str;
+            mat->GetTexture(type, i, &str);
+
+            std::string path = directory + "/" + str.C_Str();
+
+            if (!m_textureLibrary.HasTexture(path))
+            {
+                m_textureLibrary.AddTexture(path);
+            }
+
+            textures.push_back(m_textureLibrary.GetTexture(path));
+        }
+
+        return textures;
+    }
+};
+
 float cubeVertices[288] = {
     // positions          // normals           // texture coords
     -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 0.0f,
@@ -416,6 +710,14 @@ const glm::vec3 cubePositions[10] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2
                                      glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
                                      glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
 
+Shader cubeShader;
+
+Fenrir::Math::Mat4 view;
+Fenrir::Math::Mat4 projection;
+
+const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
+                                          glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
+
 unsigned int cubeIndices[36] = {
     // Back face
     0, 1, 2, 0, 2, 3,
@@ -434,20 +736,14 @@ unsigned int cubeVBO;
 unsigned int cubeVAO;
 unsigned int cubeEBO;
 
-Shader cubeShader;
-
-Fenrir::Math::Mat4 view;
-Fenrir::Math::Mat4 projection;
-
-const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
-                                          glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
-
 Texture cubeDiffuse;
 Texture cubeSpecular;
 
+Model backpack;
+
 void InitCubes(Fenrir::App& app)
 {
-    //! VERTEX DATA AND BUFFERS
+    // //! VERTEX DATA AND BUFFERS
     // create a vertex buffer object, store its ID in VBO
     glGenBuffers(1, &cubeVBO);
 
@@ -499,12 +795,12 @@ void InitCubes(Fenrir::App& app)
     glBindVertexArray(0);
     // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
 
-    cubeShader.Use();
+    // cubeShader.Use();
 
-    // setting material diffuse can be set once
-    cubeShader.SetInt("material.diffuse", 0);
-    // setting material specular can be set once
-    cubeShader.SetInt("material.specular", 1);
+    // // setting material diffuse can be set once
+    // cubeShader.SetInt("material.diffuse", 0);
+    // // setting material specular can be set once
+    // cubeShader.SetInt("material.specular", 1);
 }
 
 void DrawCubes(Fenrir::App& app)
@@ -567,27 +863,33 @@ void DrawCubes(Fenrir::App& app)
     // set material in shader (diffuse and specular is set as texture once above)
     cubeShader.SetFloat("material.shininess", 32.0f); // bind diffuse map
 
-    // bind textures on corresponding texture units
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, cubeDiffuse.Id);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, cubeSpecular.Id);
+    // // bind textures on corresponding texture units
+    // glActiveTexture(GL_TEXTURE0);
+    // glBindTexture(GL_TEXTURE_2D, cubeDiffuse.Id);
+    // glActiveTexture(GL_TEXTURE1);
+    // glBindTexture(GL_TEXTURE_2D, cubeSpecular.Id);
 
-    glBindVertexArray(cubeVAO);
+    // glBindVertexArray(cubeVAO);
 
-    for (unsigned int i = 0; i < 10; i++)
-    {
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, cubePositions[i]);
-        float angle = 20.0f * i;
-        model = glm::rotate(model, Fenrir::Math::DegToRad(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-        cubeShader.SetMat4("model", model);
+    // for (unsigned int i = 0; i < 10; i++)
+    // {
+    //     glm::mat4 model = glm::mat4(1.0f);
+    //     model = glm::translate(model, cubePositions[i]);
+    //     float angle = 20.0f * i;
+    //     model = glm::rotate(model, Fenrir::Math::DegToRad(angle), glm::vec3(1.0f, 0.3f, 0.5f));
+    //     cubeShader.SetMat4("model", model);
 
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-    }
+    //     glDrawArrays(GL_TRIANGLES, 0, 36);
+    // }
     // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
     // glBindVertexArray(0); // dont need to unbind every time
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale it down
+    cubeShader.SetMat4("model", model);
+
+    DrawModel(backpack, cubeShader);
 }
 
 unsigned int lightVAO;
@@ -668,7 +970,8 @@ void RenderExit(Fenrir::App& app)
 class AssetLoader
 {
   public:
-    AssetLoader(Fenrir::ILogger& logger) : m_shaderLibrary(logger), m_textureLibrary(logger)
+    AssetLoader(Fenrir::ILogger& logger)
+        : m_shaderLibrary(logger), m_textureLibrary(logger), m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary)
     {
     }
 
@@ -686,12 +989,18 @@ class AssetLoader
 
         glActiveTexture(GL_TEXTURE1);
         cubeSpecular = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_metallic.png");
+
+        m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
+
+        backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
     }
 
   private:
     ShaderLibrary m_shaderLibrary;
     TextureLibrary m_textureLibrary;
+    ModelLibrary m_modelLibrary;
 };
+
 #define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
     std::bind(&AssetLoader::fn, &assetLoaderInstance, std::placeholders::_1)
 
