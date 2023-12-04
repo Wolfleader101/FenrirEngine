@@ -7,22 +7,23 @@ namespace Fenrir
     class ILogger;
 } // namespace Fenrir
 
+enum class TextureType
+{
+    Diffuse,
+    Specular,
+    Normal,
+    Height
+};
+
 class Texture
 {
   public:
-    std::string Path;
+    // std::string path;
     unsigned int Id;
-
+    TextureType type;
     int width;
     int height;
     int nrChannels;
-
-    // int channels;
-
-    //   private:
-    //     std::string m_path;
-
-    //     unsigned int m_id;
 };
 
 class TextureLibrary

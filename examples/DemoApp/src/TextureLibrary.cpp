@@ -27,7 +27,7 @@ void TextureLibrary::AddTexture(const std::string& path)
 Texture TextureLibrary::LoadTexture(const std::string& path)
 {
     Texture texture;
-    texture.Path = path;
+    // texture.Path = path; // TODO do we want to store path?
 
     glGenTextures(1, &texture.Id);
     glBindTexture(GL_TEXTURE_2D, texture.Id);
