@@ -11,11 +11,13 @@ add_executable(DemoApp
     src/ShaderLibrary.hpp
     src/ShaderLibrary.cpp
 
-    src/ModelLibrary.hpp
-    src/ModelLibrary.cpp
+    # src/ModelLibrary.hpp
+    # src/ModelLibrary.cpp
 
     src/Window.hpp
     src/Window.cpp
+
+    src/Events.hpp
 
     src/CameraController.hpp
     src/CameraController.cpp
@@ -29,7 +31,7 @@ target_link_libraries(DemoApp PRIVATE FenrirApp FenrirCamera FenrirMath)
 target_link_libraries(DemoApp PUBLIC
     glad
     glfw
-    assimp
+    # assimp
 )
 
 # symlink the assets folder to the build directory

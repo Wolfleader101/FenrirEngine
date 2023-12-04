@@ -2,26 +2,29 @@
 #include <string>
 #include <unordered_set>
 
-#include "CameraController.hpp"
+// clang-format off
 #include "Window.hpp"
+#include "CameraController.hpp"
+// clang-format on
 
-#include "ModelLibrary.hpp"
+// #include "ModelLibrary.hpp"
 #include "ShaderLibrary.hpp"
 #include "TextureLibrary.hpp"
 
-#include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
-#include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirMath/Math.hpp"
+
+#include "FenrirApp/App.hpp"
+#include "FenrirLogger/ConsoleLogger.hpp"
 
 #include <glad/glad.h>
 
-struct Transform
-{
-    Fenrir::Math::Vec3 pos;
-    Fenrir::Math::Vec3 rot; // TODO convert to quat
-    Fenrir::Math::Vec3 scale;
-};
+// struct Transform
+// {
+//     Fenrir::Math::Vec3 pos;
+//     Fenrir::Math::Vec3 rot; // TODO convert to quat
+//     Fenrir::Math::Vec3 scale;
+// };
 
 Fenrir::Camera camera;
 Window window("Demo App");
@@ -30,49 +33,49 @@ class GLRenderer
 {
 };
 
-void DrawMesh(Mesh& mesh, Shader& shader)
-{
-    unsigned int diffuseNr = 1;
-    unsigned int specularNr = 1;
+// void DrawMesh(Mesh& mesh, Shader& shader)
+// {
+//     unsigned int diffuseNr = 1;
+//     unsigned int specularNr = 1;
 
-    for (unsigned int i = 0; i < mesh.textures.size(); i++)
-    {
-        glActiveTexture(GL_TEXTURE0 + i);
+//     for (unsigned int i = 0; i < mesh.textures.size(); i++)
+//     {
+//         glActiveTexture(GL_TEXTURE0 + i);
 
-        // retrieve texture number (the N in diffuse_textureN)
-        std::string number;
-        std::string name = "material.";
-        TextureType type = mesh.textures[i].type;
-        if (type == TextureType::Diffuse)
-        {
-            number = std::to_string(diffuseNr++);
-            name += "diffuse";
-        }
-        else if (type == TextureType::Specular)
-        {
-            number = std::to_string(specularNr++);
-            name += "specular";
-        }
+//         // retrieve texture number (the N in diffuse_textureN)
+//         std::string number;
+//         std::string name = "material.";
+//         TextureType type = mesh.textures[i].type;
+//         if (type == TextureType::Diffuse)
+//         {
+//             number = std::to_string(diffuseNr++);
+//             name += "diffuse";
+//         }
+//         else if (type == TextureType::Specular)
+//         {
+//             number = std::to_string(specularNr++);
+//             name += "specular";
+//         }
 
-        shader.SetInt((name + number).c_str(), i);
-        glBindTexture(GL_TEXTURE_2D, mesh.textures[i].Id);
-    }
+//         shader.SetInt((name + number).c_str(), i);
+//         glBindTexture(GL_TEXTURE_2D, mesh.textures[i].Id);
+//     }
 
-    // draw mesh
-    glBindVertexArray(mesh.VAO);
-    glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);
-    glBindVertexArray(0);
+//     // draw mesh
+//     glBindVertexArray(mesh.VAO);
+//     glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);
+//     glBindVertexArray(0);
 
-    glActiveTexture(GL_TEXTURE0);
-}
+//     glActiveTexture(GL_TEXTURE0);
+// }
 
-void DrawModel(Model& model, Shader& shader)
-{
-    for (auto& mesh : model.meshes)
-    {
-        DrawMesh(mesh, shader);
-    }
-}
+// void DrawModel(Model& model, Shader& shader)
+// {
+//     for (auto& mesh : model.meshes)
+//     {
+//         DrawMesh(mesh, shader);
+//     }
+// }
 
 float cubeVertices[288] = {
     // positions          // normals           // texture coords
@@ -135,9 +138,9 @@ unsigned int cubeEBO;
 Texture cubeDiffuse;
 Texture cubeSpecular;
 
-Model backpack;
+// Model backpack;
 
-Model backpack2;
+// Model backpack2;
 
 void InitCubes(Fenrir::App& app)
 {
@@ -282,18 +285,18 @@ void DrawCubes(Fenrir::App& app)
     // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 
     // glBindVertexArray(0); // dont need to unbind every time
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the scene
-    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale it down
-    cubeShader.SetMat4("model", model);
+    // glm::mat4 model = glm::mat4(1.0f);
+    // model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f));   // translate it down so it's at the center of the
+    // scene model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f)); // it's a bit too big for our scene, so scale
+    // it down cubeShader.SetMat4("model", model);
 
-    DrawModel(backpack, cubeShader);
+    // DrawModel(backpack, cubeShader);
 
-    model = glm::translate(model, glm::vec3(0.0f, 5.0f, 0.0f)); // translate it down so it's at the center of the scene
-    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale it down
-    cubeShader.SetMat4("model", model);
+    // model = glm::translate(model, glm::vec3(0.0f, 5.0f, 0.0f));   // translate it down so it's at the center of the
+    // scene model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f)); // it's a bit too big for our scene, so scale
+    // it down cubeShader.SetMat4("model", model);
 
-    DrawModel(backpack2, cubeShader);
+    // DrawModel(backpack2, cubeShader);
 }
 
 unsigned int lightVAO;
@@ -371,43 +374,44 @@ void RenderExit(Fenrir::App& app)
     glDeleteBuffers(1, &cubeEBO);
 }
 
-class AssetLoader
-{
-  public:
-    AssetLoader(Fenrir::ILogger& logger)
-        : m_shaderLibrary(logger), m_textureLibrary(logger), m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary)
-    {
-    }
+// class AssetLoader
+// {
+//   public:
+//     AssetLoader(Fenrir::ILogger& logger)
+//         : m_shaderLibrary(logger), m_textureLibrary(logger), m_modelLibrary(logger, m_textureLibrary,
+//         m_shaderLibrary)
+//     {
+//     }
 
-    void Init(Fenrir::App&)
-    {
-        m_shaderLibrary.AddShader("lightedObject", "assets/shaders/lighted_vertex.glsl",
-                                  "assets/shaders/lighted_fragment.glsl");
-        m_shaderLibrary.AddShader("light", "assets/shaders/light_vertex.glsl", "assets/shaders/light_fragment.glsl");
+//     void Init(Fenrir::App&)
+//     {
+//         m_shaderLibrary.AddShader("lightedObject", "assets/shaders/lighted_vertex.glsl",
+//                                   "assets/shaders/lighted_fragment.glsl");
+//         m_shaderLibrary.AddShader("light", "assets/shaders/light_vertex.glsl", "assets/shaders/light_fragment.glsl");
 
-        cubeShader = m_shaderLibrary.GetShader("lightedObject");
-        lightShader = m_shaderLibrary.GetShader("light");
+//         cubeShader = m_shaderLibrary.GetShader("lightedObject");
+//         lightShader = m_shaderLibrary.GetShader("light");
 
-        glActiveTexture(GL_TEXTURE0);
-        cubeDiffuse = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_albedo.png");
+//         glActiveTexture(GL_TEXTURE0);
+//         cubeDiffuse = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_albedo.png");
 
-        glActiveTexture(GL_TEXTURE1);
-        cubeSpecular = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_metallic.png");
+//         glActiveTexture(GL_TEXTURE1);
+//         cubeSpecular = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_metallic.png");
 
-        m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
+//         m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
 
-        backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
-        backpack2 = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
-    }
+//         backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
+//         backpack2 = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
+//     }
 
-  private:
-    ShaderLibrary m_shaderLibrary;
-    TextureLibrary m_textureLibrary;
-    ModelLibrary m_modelLibrary;
-};
+//   private:
+//     ShaderLibrary m_shaderLibrary;
+//     TextureLibrary m_textureLibrary;
+//     ModelLibrary m_modelLibrary;
+// };
 
-#define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
-    std::bind(&AssetLoader::fn, &assetLoaderInstance, std::placeholders::_1)
+// #define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
+//     std::bind(&AssetLoader::fn, &assetLoaderInstance, std::placeholders::_1)
 
 int main()
 {
@@ -416,17 +420,16 @@ int main()
 
     CameraController cameraController(camera, 0.1f, 3.0f);
 
-    AssetLoader assetLoader(*app.Logger().get());
-
+    // AssetLoader assetLoader(*app.Logger().get());
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,
-                    {RenderInit, BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitCubes, InitLights})
-        // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
+                    {RenderInit, InitCubes, InitLights}) // BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader),
+                                                         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
         .AddSystems(Fenrir::SchedulePriority::PreUpdate, {RenderPreUpdate})
         .AddSystems(Fenrir::SchedulePriority::Update,
                     {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController), RenderUpdate, DrawCubes,
                      DrawLights})
-        // .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
+        //    .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
         .AddSystems(Fenrir::SchedulePriority::Exit, {BIND_WINDOW_SYSTEM_FN(Window::Exit, window), RenderExit})
         .Run();
