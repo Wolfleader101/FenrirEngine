@@ -3,7 +3,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "FenrirMath/Math_fwd.hpp"
+#include "FenrirMath/Math.hpp"
 
 namespace Fenrir
 {
