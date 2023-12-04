@@ -11,9 +11,14 @@ add_executable(DemoApp
     src/ShaderLibrary.hpp
     src/ShaderLibrary.cpp
 
+    src/ModelLibrary.hpp
+    src/ModelLibrary.cpp
 
     src/Window.hpp
     src/Window.cpp
+
+    src/CameraController.hpp
+    src/CameraController.cpp
 )
 
 add_subdirectory(libs)

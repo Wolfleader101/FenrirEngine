@@ -1,82 +1,20 @@
-// clang-format off
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-// clang-format on
 
 #include <string>
 #include <unordered_set>
 
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-
+#include "ModelLibrary.hpp"
 #include "ShaderLibrary.hpp"
 #include "TextureLibrary.hpp"
+#include "Window.hpp"
+
+#include "CameraController.hpp"
 
 #include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
 #include "FenrirMath/Math.hpp"
 
-// Wrapper function that matches the GLADloadproc signature
-static void* Glad_GLFW_GetProcAddr(const char* name)
-{
-    return reinterpret_cast<void*>(glfwGetProcAddress(name));
-}
-
-struct FrameBufferResizeEvent
-{
-    int width, height;
-};
-
-struct WindowResizeEvent
-{
-    int width, height;
-};
-
-struct WindowCloseEvent
-{
-};
-
-struct MouseMoveEvent
-{
-    double x, y;
-};
-
-struct MouseScrollEvent
-{
-    double xOffset, yOffset;
-};
-
-enum class MouseButton
-{
-    Left = 0,
-    Right = 1,
-    Middle = 2
-};
-
-enum class InputState
-{
-    Released = 0,
-    Pressed = 1,
-    Held = 2,
-};
-
-struct MouseButtonEvent
-{
-    MouseButton button;
-    InputState state;
-    int mods;
-};
-
-struct KeyboardKeyEvent
-{
-    int key;
-    int scancode;
-    int repeat;
-    InputState state;
-    int mods;
-};
+#include <glad/glad.h>
 
 struct Transform
 {
@@ -85,361 +23,8 @@ struct Transform
     Fenrir::Math::Vec3 scale;
 };
 
-class CameraController
-{
-  public:
-    CameraController(Fenrir::Camera& camera, float sensitity, float speed)
-        : m_camera(camera), m_sensitive(sensitity), m_speed(speed)
-    {
-    }
-
-    void OnKeyPress(const KeyboardKeyEvent& event)
-    {
-        if (event.state == InputState::Pressed)
-        {
-            m_pressedKeys.insert(event.key);
-        }
-        else if (event.state == InputState::Released)
-        {
-            m_pressedKeys.erase(event.key);
-        }
-    }
-
-    void OnMouseMove(const MouseMoveEvent& event)
-    {
-        float xpos = static_cast<float>(event.x);
-        float ypos = static_cast<float>(event.y);
-
-        m_deltaMousePos.x = xpos - m_lastMousePos.x;
-        m_deltaMousePos.y = m_lastMousePos.y - ypos;
-
-        m_lastMousePos.x = xpos;
-        m_lastMousePos.y = ypos;
-
-        Fenrir::Math::Vec2 deltaWithSens = m_deltaMousePos * m_sensitive;
-
-        m_camera.yaw += deltaWithSens.x;
-        m_camera.pitch += deltaWithSens.y;
-
-        if (m_camera.pitch > 89.0f)
-            m_camera.pitch = 89.0f;
-        if (m_camera.pitch < -89.0f)
-            m_camera.pitch = -89.0f;
-        m_camera.Update();
-    }
-
-    void OnMouseScroll(const MouseScrollEvent& event)
-    {
-        m_camera.fov -= static_cast<float>(event.yOffset);
-        if (m_camera.fov < 1.0f)
-            m_camera.fov = 1.0f;
-    }
-
-    void Update(Fenrir::App& app)
-    {
-        for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
-        {
-            OnKeyPress(event);
-        }
-
-        for (const auto& event : app.ReadEvents<MouseMoveEvent>())
-        {
-            OnMouseMove(event);
-        }
-
-        for (const auto& event : app.ReadEvents<MouseScrollEvent>())
-        {
-            OnMouseScroll(event);
-        }
-
-        if (m_pressedKeys.count(GLFW_KEY_LEFT_SHIFT))
-        {
-            m_isSprinting = true;
-        }
-        else
-        {
-            m_isSprinting = false;
-        }
-
-        float speed = m_isSprinting ? m_sprintSpeed : m_speed;
-        float vel = speed * static_cast<float>(app.GetTime().deltaTime);
-
-        if (m_pressedKeys.count(GLFW_KEY_W))
-        {
-            m_camera.pos += vel * m_camera.front;
-        }
-
-        if (m_pressedKeys.count(GLFW_KEY_S))
-        {
-            m_camera.pos -= vel * m_camera.front;
-        }
-
-        if (m_pressedKeys.count(GLFW_KEY_A))
-        {
-            m_camera.pos -= Fenrir::Math::Normalized(Fenrir::Math::Cross(m_camera.front, m_camera.up)) * vel;
-        }
-
-        if (m_pressedKeys.count(GLFW_KEY_D))
-        {
-            m_camera.pos += Fenrir::Math::Normalized(Fenrir::Math::Cross(m_camera.front, m_camera.up)) * vel;
-        }
-    }
-
-  private:
-    Fenrir::Camera& m_camera;
-    float m_sensitive = 0.1f;
-    float m_speed = 3.0f;
-    float m_sprintSpeed = 6.0f;
-    bool m_isSprinting = false;
-    Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(400.0f, 300.0f);
-
-    // TODO move to a custom input class
-    std::unordered_set<int> m_pressedKeys;
-
-    Fenrir::Math::Vec2 m_deltaMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
-};
-#define BIND_CAMERA_CONTROLLER_FN(fn, controllerInstance) \
-    std::bind(&CameraController::fn, &controllerInstance, std::placeholders::_1)
-
-class Window
-{
-  public:
-    Window(Fenrir::Camera& camera, std::string title = "FenrirEngine Window", int width = 800, int height = 600)
-        : m_title(std::move(title)), m_width(width), m_height(height)
-    {
-    }
-
-    ~Window()
-    {
-        glfwDestroyWindow(m_window);
-    }
-
-    void PreInit(Fenrir::App& app)
-    {
-        m_appPtr = &app;
-        app.Logger()->Info("Window Pre-Init");
-
-        glfwInit();
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-        glfwWindowHint(GLFW_OPENGL_PROFILE,
-                       GLFW_OPENGL_CORE_PROFILE); // core profile only, no fixed pipeline functionality
-        // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // MacOS
-
-        m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
-
-        if (m_window == nullptr)
-        {
-            app.Logger()->Fatal("Failed to create GLFW window!");
-
-            glfwTerminate();
-            // TODO exit the application?
-            return;
-        }
-        glfwMakeContextCurrent(m_window);
-
-        // Not calling: driver default
-        // 0: do not wait for vsync (may be overridden by driver/driver settings)
-        // 1: wait for 1st vsync (may be overridden by driver/driver settings)
-        // glfwSwapInterval(0);
-
-        // cursor mode
-        glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-        if (!gladLoadGLLoader(Glad_GLFW_GetProcAddr))
-        {
-            app.Logger()->Fatal("Failed to initialise GLAD");
-            // TODO exit the application?
-            return;
-        }
-
-        //! Setup Event Listeners
-
-        // set the user pointer to this
-        glfwSetWindowUserPointer(m_window, this);
-        //? argued with myself whether the userPointer should be the application or the window
-        //? decided on the window, which meant i needed to store an App* in the window, however provides more
-        //? flexibility, and makes more sense as this is a window class
-
-        // set the callback function for framebuffer resize events
-        glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            // TODO remove this as its render specific
-            glViewport(0, 0, width, height);
-
-            FrameBufferResizeEvent event{width, height};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        // set the callback function for window resize events
-        glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            // TODO remove this as its render specific
-            glViewport(0, 0, width, height);
-
-            WindowResizeEvent event{width, height};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        // set the callback function for window close events
-        glfwSetWindowCloseCallback(m_window, [](GLFWwindow* window) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            WindowCloseEvent event{};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        glfwSetKeyCallback(m_window, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            InputState state = (action == GLFW_PRESS)     ? InputState::Pressed
-                               : (action == GLFW_RELEASE) ? InputState::Released
-                               : (action == GLFW_REPEAT)  ? InputState::Held
-                                                          : InputState::Released;
-
-            KeyboardKeyEvent event{key, scancode, action, state, mods};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        glfwSetMouseButtonCallback(m_window, [](GLFWwindow* window, int button, int action, int mods) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            InputState state = (action == GLFW_PRESS) ? InputState::Pressed
-                               : (action == GLFW_RELEASE)
-                                   ? InputState::Released
-                                   : InputState::Released; // GLFW doesnt have GLFW_REPEAT for mouse buttons
-
-            MouseButton btn = (button == GLFW_MOUSE_BUTTON_LEFT)     ? MouseButton::Left
-                              : (button == GLFW_MOUSE_BUTTON_RIGHT)  ? MouseButton::Right
-                              : (button == GLFW_MOUSE_BUTTON_MIDDLE) ? MouseButton::Middle
-                                                                     : MouseButton::Left;
-
-            MouseButtonEvent event{btn, state, mods};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        glfwSetScrollCallback(m_window, [](GLFWwindow* window, double xoffset, double yoffset) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            MouseScrollEvent event{xoffset, yoffset};
-            win.m_appPtr->SendEvent(event);
-        });
-
-        glfwSetCursorPosCallback(m_window, [](GLFWwindow* window, double xpos, double ypos) {
-            auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
-
-            MouseMoveEvent event{xpos, ypos};
-            win.m_appPtr->SendEvent(event);
-        });
-    }
-
-    void OnKeyPress(const KeyboardKeyEvent& event)
-    {
-        if (event.key == GLFW_KEY_ESCAPE && event.state == InputState::Pressed)
-        {
-            m_appPtr->Stop();
-        }
-    }
-
-    void PostUpdate(Fenrir::App& app)
-    {
-        if (app.ReadEvents<WindowCloseEvent>().size() > 0)
-        {
-            app.Stop();
-        }
-
-        for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
-        {
-            OnKeyPress(event);
-        }
-
-        // swap the buffers and then process events
-        glfwSwapBuffers(m_window);
-
-        glfwPollEvents();
-    }
-
-    void Exit(Fenrir::App&)
-    {
-        glfwTerminate();
-    }
-
-    int GetWidth() const
-    {
-        return m_width;
-    }
-
-    int GetHeight() const
-    {
-        return m_height;
-    }
-
-  private:
-    GLFWwindow* m_window = nullptr;
-    Fenrir::App* m_appPtr = nullptr;
-    std::string m_title = "";
-    int m_width = 0;
-    int m_height = 0;
-};
-#define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
-
 Fenrir::Camera camera;
-Window window(camera, "Demo App");
-
-struct Vertex
-{
-    Fenrir::Math::Vec3 pos;
-    Fenrir::Math::Vec3 normal;
-    Fenrir::Math::Vec2 texCoords;
-};
-
-class Mesh
-{
-  public:
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
-    std::vector<Texture> textures;
-
-    Mesh() = default;
-    Mesh(std::vector<Vertex> verts, std::vector<unsigned int> ind, std::vector<Texture> texts)
-        : vertices(std::move(verts)), indices(std::move(ind)), textures(std::move(texts))
-    {
-    }
-
-    unsigned int VAO;
-    unsigned int VBO;
-    unsigned int EBO;
-};
-
-void SetupMesh(Mesh& mesh)
-{
-    glGenVertexArrays(1, &mesh.VAO);
-    glGenBuffers(1, &mesh.VBO);
-    glGenBuffers(1, &mesh.EBO);
-
-    glBindVertexArray(mesh.VAO);
-
-    glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO);
-    glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex), &mesh.vertices[0], GL_STATIC_DRAW);
-
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(unsigned int), &mesh.indices[0], GL_STATIC_DRAW);
-
-    // vertex positions
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), nullptr);
-    // vertex normals
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), reinterpret_cast<void*>(offsetof(Vertex, normal)));
-    // vertex texture coords
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
-                          reinterpret_cast<void*>(offsetof(Vertex, texCoords)));
-
-    glBindVertexArray(0);
-}
+Window window("Demo App");
 
 void DrawMesh(Mesh& mesh, Shader& shader)
 {
@@ -477,14 +62,6 @@ void DrawMesh(Mesh& mesh, Shader& shader)
     glActiveTexture(GL_TEXTURE0);
 }
 
-class Model
-{
-  public:
-    std::vector<Mesh> meshes;
-
-    std::string directory;
-};
-
 void DrawModel(Model& model, Shader& shader)
 {
     for (auto& mesh : model.meshes)
@@ -492,191 +69,6 @@ void DrawModel(Model& model, Shader& shader)
         DrawMesh(mesh, shader);
     }
 }
-
-class ModelLibrary
-{
-  public:
-    ModelLibrary(Fenrir::ILogger& logger, TextureLibrary& textureLibrary, ShaderLibrary& shaderLibrary)
-        : m_logger(logger), m_textureLibrary(textureLibrary), m_shaderLibrary(shaderLibrary)
-    {
-    }
-
-    void AddModel(const std::string& path)
-    {
-        if (m_models.count(path) > 0)
-        {
-            m_logger.Warn("ModelLibrary::AddModel - Model already loaded: {}", path);
-            return;
-        }
-
-        Model model;
-        LoadModel(path, model);
-
-        m_models.emplace(path, std::move(model));
-    }
-
-    const Model& GetModel(const std::string& path)
-    {
-        if (m_models.count(path) == 0)
-        {
-            m_logger.Error("ModelLibrary::GetModel - Model not loaded: {}", path);
-
-            m_logger.Info("ModelLibrary::GetModel - Attempting to load model: {}", path);
-
-            AddModel(path);
-        }
-
-        return m_models.at(path);
-    }
-
-    bool HasModel(const std::string& path) const
-    {
-        return m_models.count(path) > 0;
-    }
-
-  private:
-    std::unordered_map<std::string, Model> m_models;
-
-    Fenrir::ILogger& m_logger;
-
-    TextureLibrary& m_textureLibrary;
-    ShaderLibrary& m_shaderLibrary;
-
-    void LoadModel(const std::string& path, Model& model)
-    {
-        Assimp::Importer importer;
-        const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
-
-        if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-        {
-            m_logger.Error("ModelLibrary::LoadModel - {}", importer.GetErrorString());
-            return;
-        }
-
-        model.directory = path.substr(0, path.find_last_of('/'));
-
-        ProcessNode(scene->mRootNode, scene, model);
-    }
-
-    void ProcessNode(aiNode* node, const aiScene* scene, Model& model)
-    {
-        // process all the node's meshes (if any)
-        for (unsigned int i = 0; i < node->mNumMeshes; i++)
-        {
-            aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-
-            model.meshes.push_back(ProcessMesh(mesh, scene, model.directory));
-        }
-
-        // then do the same for each of its children
-        for (unsigned int i = 0; i < node->mNumChildren; i++)
-        {
-            ProcessNode(node->mChildren[i], scene, model);
-        }
-    }
-
-    Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, std::string& directory)
-    {
-        std::vector<Vertex> vertices;
-        std::vector<unsigned int> indices;
-        std::vector<Texture> textures;
-
-        for (unsigned int i = 0; i < mesh->mNumVertices; i++)
-        {
-            Vertex vertex;
-            glm::vec3
-                vector; // we declare a placeholder vector since assimp uses its own vector class that doesn't directly
-                        // convert to glm's vec3 class so we transfer the data to this placeholder glm::vec3 first.
-            // positions
-            vector.x = mesh->mVertices[i].x;
-            vector.y = mesh->mVertices[i].y;
-            vector.z = mesh->mVertices[i].z;
-            vertex.pos = vector;
-            // normals
-            if (mesh->HasNormals())
-            {
-                vector.x = mesh->mNormals[i].x;
-                vector.y = mesh->mNormals[i].y;
-                vector.z = mesh->mNormals[i].z;
-                vertex.normal = vector;
-            }
-            // texture coordinates
-            if (mesh->mTextureCoords[0]) // does the mesh contain texture coordinates?
-            {
-                glm::vec2 vec;
-                // a vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't
-                // use models where a vertex can have multiple texture coordinates so we always take the first set (0).
-                vec.x = mesh->mTextureCoords[0][i].x;
-                vec.y = mesh->mTextureCoords[0][i].y;
-                vertex.texCoords = vec;
-                // // tangent
-                // vector.x = mesh->mTangents[i].x;
-                // vector.y = mesh->mTangents[i].y;
-                // vector.z = mesh->mTangents[i].z;
-                // vertex.Tangent = vector;
-                // // bitangent
-                // vector.x = mesh->mBitangents[i].x;
-                // vector.y = mesh->mBitangents[i].y;
-                // vector.z = mesh->mBitangents[i].z;
-                // vertex.Bitangent = vector;
-            }
-            else
-                vertex.texCoords = glm::vec2(0.0f, 0.0f);
-
-            vertices.push_back(vertex);
-        }
-
-        for (unsigned int i = 0; i < mesh->mNumFaces; i++)
-        {
-            aiFace face = mesh->mFaces[i];
-            // retrieve all indices of the face and store them in the indices vector
-            for (unsigned int j = 0; j < face.mNumIndices; j++)
-                indices.push_back(face.mIndices[j]);
-        }
-
-        if (mesh->mMaterialIndex >= 0)
-        {
-            aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-
-            std::vector<Texture> diffuseMaps =
-                LoadMaterialTextures(material, aiTextureType_DIFFUSE, TextureType::Diffuse, directory);
-            textures.insert(textures.end(), diffuseMaps.begin(), diffuseMaps.end());
-
-            std::vector<Texture> specularMaps =
-                LoadMaterialTextures(material, aiTextureType_SPECULAR, TextureType::Specular, directory);
-            textures.insert(textures.end(), specularMaps.begin(), specularMaps.end());
-        }
-
-        Mesh returnMesh(vertices, indices, textures);
-
-        SetupMesh(returnMesh);
-
-        return returnMesh;
-    }
-
-    std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, TextureType textureType,
-                                              const std::string& directory)
-    {
-        std::vector<Texture> textures;
-
-        for (unsigned int i = 0; i < mat->GetTextureCount(type); i++)
-        {
-            aiString str;
-            mat->GetTexture(type, i, &str);
-
-            std::string path = directory + "/" + str.C_Str();
-
-            if (!m_textureLibrary.HasTexture(path))
-            {
-                m_textureLibrary.AddTexture(path);
-            }
-
-            textures.push_back(m_textureLibrary.GetTexture(path));
-        }
-
-        return textures;
-    }
-};
 
 float cubeVertices[288] = {
     // positions          // normals           // texture coords
@@ -740,6 +132,8 @@ Texture cubeDiffuse;
 Texture cubeSpecular;
 
 Model backpack;
+
+Model backpack2;
 
 void InitCubes(Fenrir::App& app)
 {
@@ -890,6 +284,12 @@ void DrawCubes(Fenrir::App& app)
     cubeShader.SetMat4("model", model);
 
     DrawModel(backpack, cubeShader);
+
+    model = glm::translate(model, glm::vec3(0.0f, 5.0f, 0.0f)); // translate it down so it's at the center of the scene
+    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale it down
+    cubeShader.SetMat4("model", model);
+
+    DrawModel(backpack2, cubeShader);
 }
 
 unsigned int lightVAO;
@@ -993,6 +393,7 @@ class AssetLoader
         m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
 
         backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
+        backpack2 = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
     }
 
   private:
