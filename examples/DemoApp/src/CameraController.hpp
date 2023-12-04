@@ -10,7 +10,7 @@ namespace Fenrir
     class Camera;
 } // namespace Fenrir
 
-#include "Window.hpp"
+#include "Events.hpp"
 
 class CameraController
 {
