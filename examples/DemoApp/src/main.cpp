@@ -2,12 +2,12 @@
 #include <string>
 #include <unordered_set>
 
+#include "CameraController.hpp"
+#include "Window.hpp"
+
 #include "ModelLibrary.hpp"
 #include "ShaderLibrary.hpp"
 #include "TextureLibrary.hpp"
-#include "Window.hpp"
-
-#include "CameraController.hpp"
 
 #include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
@@ -25,6 +25,10 @@ struct Transform
 
 Fenrir::Camera camera;
 Window window("Demo App");
+
+class GLRenderer
+{
+};
 
 void DrawMesh(Mesh& mesh, Shader& shader)
 {

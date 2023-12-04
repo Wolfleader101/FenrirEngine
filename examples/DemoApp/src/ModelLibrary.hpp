@@ -4,12 +4,15 @@
 #include <unordered_map>
 #include <vector>
 
+class aiNode;
+class aiScene;
+class aiMesh;
+class aiMaterial;
+
+enum aiTextureType;
+
 #include "FenrirMath/Math.hpp"
 #include "TextureLibrary.hpp"
-
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
 
 namespace Fenrir
 {

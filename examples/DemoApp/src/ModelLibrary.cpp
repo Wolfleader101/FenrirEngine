@@ -1,6 +1,10 @@
 #include "ModelLibrary.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
+#include <assimp/scene.h>
+
 #include <glad/glad.h>
 
 Mesh::Mesh(std::vector<Vertex> verts, std::vector<unsigned int> ind, std::vector<Texture> texts)
