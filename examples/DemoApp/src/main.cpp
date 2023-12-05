@@ -16,13 +16,53 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
 
+#include "FenrirECS/DefaultComponents.hpp"
+
 #include <glad/glad.h>
 
-struct Transform
+struct DirLight
 {
-    Fenrir::Math::Vec3 pos;
-    Fenrir::Math::Quat rot;
-    Fenrir::Math::Vec3 scale;
+    Fenrir::Math::Vec3 direction = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+
+    Fenrir::Math::Vec3 ambient = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 diffuse = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 specular = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+};
+
+struct PointLight
+{
+    Fenrir::Math::Vec3 ambient = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 diffuse = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 specular = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+
+    float constant;
+    float linear;
+    float quadratic;
+};
+
+struct SpotLight
+{
+    Fenrir::Math::Vec3 direction = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+
+    Fenrir::Math::Vec3 ambient = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 diffuse = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    Fenrir::Math::Vec3 specular = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+
+    float constant;
+    float linear;
+    float quadratic;
+
+    float cutOff;
+    float outerCutOff;
+};
+
+struct Material
+{
+    // Material(Shader& sh) : shader(sh)
+    // {
+    // }
+
+    Shader shader;
 };
 
 float cubeVertices[288] = {
@@ -80,11 +120,12 @@ Texture cubeSpecular;
 Model backpack;
 Model backpack2;
 
-Transform backpackTransform = {Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
-                               Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
+Fenrir::Transform backpackTransform = {Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
+                                       Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
 
-Transform backpack2Transform = {Fenrir::Math::Vec3(0.0f, 5.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
-                                Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
+Fenrir::Transform backpack2Transform = {Fenrir::Math::Vec3(0.0f, 5.0f, 0.0f),
+                                        Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
+                                        Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
 
 void InitCubes(Fenrir::App& app)
 {
@@ -266,7 +307,7 @@ class GLRenderer
     }
 
     // TODO this will eventually be private and called by ecs
-    void DrawModel(Transform& transform, Model& model, Shader& shader)
+    void DrawModel(Fenrir::Transform& transform, Model& model, Shader& shader)
     {
         Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
 

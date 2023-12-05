@@ -1,9 +1,15 @@
-# add_library(FenrirECS STATIC
-#     include/FenrirECS/Entity.hpp
-# )
+add_library(FenrirECS STATIC
+    include/FenrirECS/Entity.hpp
+    src/Entity.cpp
 
-# # add_subdirectory(libs)
+    include/FenrirECS/EntityList.hpp
+    src/EntityList.cpp
 
-# # target_link_libraries(FenrirECS PUBLIC )
+    include/FenrirECS/DefaultComponents.hpp
+)
 
-# target_include_directories(FenrirECS PUBLIC include)
+add_subdirectory(libs)
+
+target_link_libraries(FenrirECS PUBLIC FenrirMath)
+
+target_include_directories(FenrirECS PUBLIC include)

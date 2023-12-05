@@ -1,3 +1,5 @@
+#pragma once
+
 #include "FenrirMath/Math.hpp"
 namespace Fenrir
 {
