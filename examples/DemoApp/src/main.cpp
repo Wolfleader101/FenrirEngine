@@ -18,63 +18,12 @@
 
 #include <glad/glad.h>
 
-// struct Transform
-// {
-//     Fenrir::Math::Vec3 pos;
-//     Fenrir::Math::Vec3 rot; // TODO convert to quat
-//     Fenrir::Math::Vec3 scale;
-// };
-
-Fenrir::Camera camera;
-Window window("Demo App");
-
-class GLRenderer
+struct Transform
 {
+    Fenrir::Math::Vec3 pos;
+    Fenrir::Math::Quat rot;
+    Fenrir::Math::Vec3 scale;
 };
-
-void DrawMesh(Mesh& mesh, Shader& shader)
-{
-    unsigned int diffuseNr = 1;
-    unsigned int specularNr = 1;
-
-    for (unsigned int i = 0; i < mesh.textures.size(); i++)
-    {
-        glActiveTexture(GL_TEXTURE0 + i);
-
-        // retrieve texture number (the N in diffuse_textureN)
-        std::string number;
-        std::string name = "material.";
-        TextureType type = mesh.textures[i].type;
-        if (type == TextureType::Diffuse)
-        {
-            number = std::to_string(diffuseNr++);
-            name += "diffuse";
-        }
-        else if (type == TextureType::Specular)
-        {
-            number = std::to_string(specularNr++);
-            name += "specular";
-        }
-
-        shader.SetInt((name + number).c_str(), i);
-        glBindTexture(GL_TEXTURE_2D, mesh.textures[i].Id);
-    }
-
-    // draw mesh
-    glBindVertexArray(mesh.VAO);
-    glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);
-    glBindVertexArray(0);
-
-    glActiveTexture(GL_TEXTURE0);
-}
-
-void DrawModel(Model& model, Shader& shader)
-{
-    for (auto& mesh : model.meshes)
-    {
-        DrawMesh(mesh, shader);
-    }
-}
 
 float cubeVertices[288] = {
     // positions          // normals           // texture coords
@@ -102,16 +51,7 @@ float cubeVertices[288] = {
     0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
     -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f};
 
-const glm::vec3 cubePositions[10] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
-                                     glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
-                                     glm::vec3(2.4f, -0.4f, -3.5f),  glm::vec3(-1.7f, 3.0f, -7.5f),
-                                     glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
-                                     glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
-
-Shader cubeShader;
-
-Fenrir::Math::Mat4 view;
-Fenrir::Math::Mat4 projection;
+Shader myShader;
 
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
@@ -138,8 +78,13 @@ Texture cubeDiffuse;
 Texture cubeSpecular;
 
 Model backpack;
-
 Model backpack2;
+
+Transform backpackTransform = {Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
+                               Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
+
+Transform backpack2Transform = {Fenrir::Math::Vec3(0.0f, 5.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
+                                Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
 
 void InitCubes(Fenrir::App& app)
 {
@@ -196,102 +141,6 @@ void InitCubes(Fenrir::App& app)
     // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
 }
 
-void DrawCubes(Fenrir::App& app)
-{
-    //! DRAWING CUBES
-    cubeShader.Use();
-
-    cubeShader.SetMat4("view", view);
-    cubeShader.SetMat4("projection", projection);
-
-    // directional light
-    cubeShader.SetVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-    cubeShader.SetVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-    cubeShader.SetVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-    cubeShader.SetVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
-    // point light 1
-    cubeShader.SetVec3("pointLights[0].pos", pointLightPositions[0]);
-    cubeShader.SetVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
-    cubeShader.SetVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
-    cubeShader.SetVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetFloat("pointLights[0].constant", 1.0f);
-    cubeShader.SetFloat("pointLights[0].linear", 0.09f);
-    cubeShader.SetFloat("pointLights[0].quadratic", 0.032f);
-    // point light 2
-    cubeShader.SetVec3("pointLights[1].pos", pointLightPositions[1]);
-    cubeShader.SetVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
-    cubeShader.SetVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
-    cubeShader.SetVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetFloat("pointLights[1].constant", 1.0f);
-    cubeShader.SetFloat("pointLights[1].linear", 0.09f);
-    cubeShader.SetFloat("pointLights[1].quadratic", 0.032f);
-    // point light 3
-    cubeShader.SetVec3("pointLights[2].pos", pointLightPositions[2]);
-    cubeShader.SetVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
-    cubeShader.SetVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
-    cubeShader.SetVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetFloat("pointLights[2].constant", 1.0f);
-    cubeShader.SetFloat("pointLights[2].linear", 0.09f);
-    cubeShader.SetFloat("pointLights[2].quadratic", 0.032f);
-    // point light 4
-    cubeShader.SetVec3("pointLights[3].pos", pointLightPositions[3]);
-    cubeShader.SetVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
-    cubeShader.SetVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
-    cubeShader.SetVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetFloat("pointLights[3].constant", 1.0f);
-    cubeShader.SetFloat("pointLights[3].linear", 0.09f);
-    cubeShader.SetFloat("pointLights[3].quadratic", 0.032f);
-    // spotLight
-    cubeShader.SetVec3("spotLight.pos", camera.pos);
-    cubeShader.SetVec3("spotLight.direction", camera.front);
-    cubeShader.SetVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-    cubeShader.SetVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-    cubeShader.SetFloat("spotLight.constant", 1.0f);
-    cubeShader.SetFloat("spotLight.linear", 0.09f);
-    cubeShader.SetFloat("spotLight.quadratic", 0.032f);
-    cubeShader.SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-    cubeShader.SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
-
-    // set material in shader (diffuse and specular is set as texture once above)
-    cubeShader.SetFloat("material.shininess", 32.0f); // bind diffuse map
-
-    // // bind textures on corresponding texture units
-    // glActiveTexture(GL_TEXTURE0);
-    // glBindTexture(GL_TEXTURE_2D, cubeDiffuse.Id);
-    // glActiveTexture(GL_TEXTURE1);
-    // glBindTexture(GL_TEXTURE_2D, cubeSpecular.Id);
-
-    // glBindVertexArray(cubeVAO);
-
-    // for (unsigned int i = 0; i < 10; i++)
-    // {
-    //     glm::mat4 model = glm::mat4(1.0f);
-    //     model = glm::translate(model, cubePositions[i]);
-    //     float angle = 20.0f * i;
-    //     model = glm::rotate(model, Fenrir::Math::DegToRad(angle), glm::vec3(1.0f, 0.3f, 0.5f));
-    //     cubeShader.SetMat4("model", model);
-
-    //     glDrawArrays(GL_TRIANGLES, 0, 36);
-    // }
-    // glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-
-    // glBindVertexArray(0); // dont need to unbind every time
-
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(0.0f, 0.0f, 0.0f)); // translate it down so it's at the center of the
-    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale
-    cubeShader.SetMat4("model", model);
-
-    DrawModel(backpack, cubeShader);
-
-    model = glm::translate(model, glm::vec3(0.0f, 5.0f, 0.0f)); // translate it down so it's at the center of the
-    model = glm::scale(model, glm::vec3(1.0f, 1.0f, 1.0f));     // it's a bit too big for our scene, so scale
-    cubeShader.SetMat4("model", model);
-
-    DrawModel(backpack2, cubeShader);
-}
-
 unsigned int lightVAO;
 Shader lightShader;
 
@@ -309,63 +158,199 @@ void InitLights(Fenrir::App& app)
     glEnableVertexAttribArray(0);
 }
 
-void DrawLights(Fenrir::App& app)
+class GLRenderer
 {
-    //! DRAWING LIGHTS
-    lightShader.Use();
-    lightShader.SetMat4("view", view);
-    lightShader.SetMat4("projection", projection);
-
-    glBindVertexArray(lightVAO);
-    for (unsigned int i = 0; i < 4; i++)
+  public:
+    GLRenderer(Fenrir::ILogger& logger, Window& window, Fenrir::Camera& camera)
+        : m_logger(logger), m_window(window), m_camera(camera)
     {
-        // calculate the model matrix for each object and pass it to shader before drawing
-        Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
-        model = Fenrir::Math::Translate(model, pointLightPositions[i]);
-        model = glm::scale(model, glm::vec3(0.2f));
-        lightShader.SetMat4("model", model);
-
-        glDrawArrays(GL_TRIANGLES, 0, 36);
     }
-}
 
-void RenderInit(Fenrir::App& app)
-{
-    //? GL SPECIFIC CODE FOR TESTING
-    glViewport(0, 0, window.GetWidth(), window.GetHeight());
+    void Init(Fenrir::App& app)
+    {
+        //? GL SPECIFIC CODE FOR TESTING
+        glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
 
-    glEnable(GL_DEPTH_TEST);
-}
+        glEnable(GL_DEPTH_TEST);
+    }
 
-void RenderPreUpdate(Fenrir::App& app)
-{
-    // glClearColor(0.45f, 0.6f, 0.75f, 1.0f); // vakol blue
-    glClearColor(0.529f, 0.808f, 0.922f, 1.0f); // sky blue
-    // glClearColor(0.0941176f, 0.0941176f, 0.0941176f, 1.0f); // dark grey
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    void PreUpdate(Fenrir::App& app)
+    {
+        glClearColor(0.45f, 0.6f, 0.75f, 1.0f); // vakol blue
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
-    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
-}
+        // glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // wireframe mode
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
+    }
 
-void RenderUpdate(Fenrir::App& app)
-{
-    // TODO move this eventually
-    view = camera.GetViewMatrix();
+    void Update(Fenrir::App& app)
+    {
+        m_view = m_camera.GetViewMatrix();
 
-    projection = Fenrir::Math::Perspective(Fenrir::Math::DegToRad(camera.fov),
-                                           static_cast<float>(window.GetWidth() / window.GetHeight()), 0.1f, 100.0f);
-}
+        // TODO might only want to recalculate this if it changes? (could use events)
+        m_projection =
+            Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
+                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
 
-void RenderExit(Fenrir::App& app)
-{
-    // cleanup of resources
-    glDeleteVertexArrays(1, &cubeVAO);
-    glDeleteVertexArrays(1, &lightVAO);
+        //! HARD CODE SHADER FOR NOW
+        myShader.Use();
 
-    glDeleteBuffers(1, &cubeVBO);
-    glDeleteBuffers(1, &cubeEBO);
-}
+        myShader.SetMat4("view", m_view);
+        myShader.SetMat4("projection", m_projection);
+
+        // directional light
+        myShader.SetVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
+        myShader.SetVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
+        myShader.SetVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
+        myShader.SetVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
+        // point light 1
+        myShader.SetVec3("pointLights[0].pos", pointLightPositions[0]);
+        myShader.SetVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
+        myShader.SetVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
+        myShader.SetVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
+        myShader.SetFloat("pointLights[0].constant", 1.0f);
+        myShader.SetFloat("pointLights[0].linear", 0.09f);
+        myShader.SetFloat("pointLights[0].quadratic", 0.032f);
+        // point light 2
+        myShader.SetVec3("pointLights[1].pos", pointLightPositions[1]);
+        myShader.SetVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
+        myShader.SetVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
+        myShader.SetVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
+        myShader.SetFloat("pointLights[1].constant", 1.0f);
+        myShader.SetFloat("pointLights[1].linear", 0.09f);
+        myShader.SetFloat("pointLights[1].quadratic", 0.032f);
+        // point light 3
+        myShader.SetVec3("pointLights[2].pos", pointLightPositions[2]);
+        myShader.SetVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
+        myShader.SetVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
+        myShader.SetVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
+        myShader.SetFloat("pointLights[2].constant", 1.0f);
+        myShader.SetFloat("pointLights[2].linear", 0.09f);
+        myShader.SetFloat("pointLights[2].quadratic", 0.032f);
+        // point light 4
+        myShader.SetVec3("pointLights[3].pos", pointLightPositions[3]);
+        myShader.SetVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
+        myShader.SetVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
+        myShader.SetVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
+        myShader.SetFloat("pointLights[3].constant", 1.0f);
+        myShader.SetFloat("pointLights[3].linear", 0.09f);
+        myShader.SetFloat("pointLights[3].quadratic", 0.032f);
+        // spotLight
+        myShader.SetVec3("spotLight.pos", m_camera.pos);
+        myShader.SetVec3("spotLight.direction", m_camera.front);
+        myShader.SetVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
+        myShader.SetVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
+        myShader.SetVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
+        myShader.SetFloat("spotLight.constant", 1.0f);
+        myShader.SetFloat("spotLight.linear", 0.09f);
+        myShader.SetFloat("spotLight.quadratic", 0.032f);
+        myShader.SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
+        myShader.SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
+
+        // set material in shader (diffuse and specular is set as texture once above)
+        myShader.SetFloat("material.shininess", 32.0f); // bind diffuse map
+
+        // TODO remove this
+        DrawModel(backpackTransform, backpack, myShader);
+        DrawModel(backpack2Transform, backpack2, myShader);
+
+        DrawLights();
+    }
+
+    void PostUpdate(Fenrir::App& app)
+    {
+    }
+
+    void Exit(Fenrir::App& app)
+    {
+    }
+
+    // TODO this will eventually be private and called by ecs
+    void DrawModel(Transform& transform, Model& model, Shader& shader)
+    {
+        Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
+
+        mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
+
+        mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
+
+        mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+
+        myShader.SetMat4("model", mdl_mat);
+
+        for (auto& mesh : model.meshes)
+        {
+            DrawMesh(mesh, shader);
+        }
+    }
+
+  private:
+    Fenrir::ILogger& m_logger;
+    Window& m_window;
+    Fenrir::Camera& m_camera;
+
+    Fenrir::Math::Mat4 m_view;
+    Fenrir::Math::Mat4 m_projection;
+
+    // TODO remove this eww
+    void DrawLights()
+    {
+        //! DRAWING LIGHTS
+        lightShader.Use();
+        lightShader.SetMat4("view", m_view);
+        lightShader.SetMat4("projection", m_projection);
+
+        glBindVertexArray(lightVAO);
+        for (unsigned int i = 0; i < 4; i++)
+        {
+            // calculate the model matrix for each object and pass it to shader before drawing
+            Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
+            model = Fenrir::Math::Translate(model, pointLightPositions[i]);
+            model = glm::scale(model, glm::vec3(0.2f));
+            lightShader.SetMat4("model", model);
+
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
+    }
+
+    void DrawMesh(Mesh& mesh, Shader& shader)
+    {
+        unsigned int diffuseNr = 1;
+        unsigned int specularNr = 1;
+
+        for (unsigned int i = 0; i < mesh.textures.size(); i++)
+        {
+            glActiveTexture(GL_TEXTURE0 + i);
+
+            // retrieve texture number (the N in diffuse_textureN)
+            std::string number;
+            std::string name = "material.";
+            TextureType type = mesh.textures[i].type;
+            if (type == TextureType::Diffuse)
+            {
+                number = std::to_string(diffuseNr++);
+                name += "diffuse";
+            }
+            else if (type == TextureType::Specular)
+            {
+                number = std::to_string(specularNr++);
+                name += "specular";
+            }
+
+            shader.SetInt((name + number).c_str(), i);
+            glBindTexture(GL_TEXTURE_2D, mesh.textures[i].Id);
+        }
+
+        // draw mesh
+        glBindVertexArray(mesh.VAO);
+        glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);
+        glBindVertexArray(0);
+
+        glActiveTexture(GL_TEXTURE0);
+    }
+};
+#define BIND_GL_RENDERER_FN(fn, glRendererInstance) \
+    std::bind(&GLRenderer::fn, &glRendererInstance, std::placeholders::_1)
 
 class AssetLoader
 {
@@ -381,7 +366,7 @@ class AssetLoader
                                   "assets/shaders/lighted_fragment.glsl");
         m_shaderLibrary.AddShader("light", "assets/shaders/light_vertex.glsl", "assets/shaders/light_fragment.glsl");
 
-        cubeShader = m_shaderLibrary.GetShader("lightedObject");
+        myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
 
         glActiveTexture(GL_TEXTURE0);
@@ -410,20 +395,28 @@ int main()
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
     Fenrir::App app(std::move(logger));
 
+    Fenrir::Camera camera;
+    Window window("Demo App");
+
     CameraController cameraController(camera, 0.1f, 3.0f);
+
+    GLRenderer glRenderer(*app.Logger().get(), window, camera);
 
     AssetLoader assetLoader(*app.Logger().get());
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,
-                    {RenderInit, BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitCubes, InitLights})
+                    {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
+                     BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitCubes, InitLights})
         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
-        .AddSystems(Fenrir::SchedulePriority::PreUpdate, {RenderPreUpdate})
+        .AddSystems(Fenrir::SchedulePriority::PreUpdate, {BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
         .AddSystems(Fenrir::SchedulePriority::Update,
-                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController), RenderUpdate, DrawCubes,
-                     DrawLights})
+                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController),
+                     BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer)})
         //    .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
-        .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
-        .AddSystems(Fenrir::SchedulePriority::Exit, {BIND_WINDOW_SYSTEM_FN(Window::Exit, window), RenderExit})
+        .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),
+                                                           BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
+        .AddSystems(Fenrir::SchedulePriority::Exit,
+                    {BIND_WINDOW_SYSTEM_FN(Window::Exit, window), BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)})
         .Run();
 }
