@@ -22,13 +22,15 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options(/W4)
 endif()
 
-add_subdirectory(packages/FenrirECS)
 add_subdirectory(packages/FenrirMath)
+add_subdirectory(packages/FenrirECS)
 add_subdirectory(packages/FenrirCamera)
 add_subdirectory(packages/FenrirTime)
 add_subdirectory(packages/FenrirScheduler)
 add_subdirectory(packages/FenrirLogger)
-add_subdirectory(packages/FenrirApp)
+add_subdirectory(packages/FenrirScene)
+
 add_subdirectory(packages/FenrirCore)
+add_subdirectory(packages/FenrirApp)
 
 add_subdirectory(examples)
