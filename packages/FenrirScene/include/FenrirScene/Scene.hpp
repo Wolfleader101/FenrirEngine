@@ -3,15 +3,21 @@
 #include <string>
 
 #include "FenrirECS/EntityList.hpp"
-#include "FenrirLogger/ILogger.hpp"
 
 namespace Fenrir
 {
+    class ILogger;
     class Scene
     {
-        Scene(Fenrir::ILogger& logger, const std::string& name = "Untitled Scene") : m_logger(logger), m_name(name)
-        {
-        }
+        Scene(Fenrir::ILogger& logger, const std::string& name);
+
+        const std::string& GetName() const;
+
+        void SetName(const std::string& name);
+
+        const EntityList& GetEntityList() const;
+
+        EntityList& GetEntityList();
 
       private:
         std::string m_name;
