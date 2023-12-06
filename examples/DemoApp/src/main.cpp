@@ -17,8 +17,11 @@
 #include "FenrirLogger/ConsoleLogger.hpp"
 
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/Entity.hpp"
 
 #include <glad/glad.h>
+
+#include <iostream>
 
 struct DirLight
 {
@@ -58,145 +61,82 @@ struct SpotLight
 
 struct Material
 {
-    // Material(Shader& sh) : shader(sh)
-    // {
-    // }
-
     Shader shader;
 };
 
-float cubeVertices[288] = {
-    // positions          // normals           // texture coords
-    -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 0.0f,
-    0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f,
-    -0.5f, 0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f,
-
-    -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 0.0f,
-    0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f,
-    -0.5f, 0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
-
-    -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, -1.0f, 0.0f,  0.0f,  1.0f, 1.0f,
-    -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f, -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f,
-    -0.5f, -0.5f, 0.5f,  -1.0f, 0.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f,
-
-    0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
-    0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
-    0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
-
-    -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  1.0f, 1.0f,
-    0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f,
-    -0.5f, -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f,
-
-    -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
-    0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
-    -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f};
-
 Shader myShader;
+Shader lightShader;
+
+Model backpack;
+
+Model cube;
 
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
 
-unsigned int cubeIndices[36] = {
-    // Back face
-    0, 1, 2, 0, 2, 3,
-    // Front face
-    4, 5, 6, 4, 6, 7,
-    // Left face
-    8, 9, 10, 8, 10, 11,
-    // Right face
-    12, 13, 14, 12, 14, 15,
-    // Bottom face
-    16, 17, 18, 16, 18, 19,
-    // Top face
-    20, 21, 22, 20, 22, 23};
-
-unsigned int cubeVBO;
-unsigned int cubeVAO;
-unsigned int cubeEBO;
-
-Texture cubeDiffuse;
-Texture cubeSpecular;
-
-Model backpack;
-Model backpack2;
-
-Fenrir::Transform backpackTransform = {Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
-                                       Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
-
-Fenrir::Transform backpack2Transform = {Fenrir::Math::Vec3(0.0f, 5.0f, 0.0f),
-                                        Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f),
-                                        Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f)};
-
-void InitCubes(Fenrir::App& app)
-{
-    // //! VERTEX DATA AND BUFFERS
-    // create a vertex buffer object, store its ID in VBO
-    glGenBuffers(1, &cubeVBO);
-
-    // bind the buffer to the GL_ARRAY_BUFFER target (any calls made to GL_ARRAY_BUFFER will affect VBO)
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-
-    // copy the vertex data into the buffer's memory
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-
-    // create an element buffer object, store its ID in EBO
-    glGenBuffers(1, &cubeEBO);
-
-    // bind the buffer to the GL_ELEMENT_ARRAY_BUFFER target
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeEBO);
-
-    // copy the vertex data into the buffer's memory
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
-
-    // create a vertex array object, store its ID in VAO
-    glGenVertexArrays(1, &cubeVAO);
-
-    // initialise VAO only once
-    glBindVertexArray(cubeVAO);
-
-    // bind the vertex buffer object
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
-
-    // bind the element buffer object
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
-
-    // tell OpenGL how to interpret the vertex data (per vertex attribute)
-
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-
-    // normal attribute
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    // texture coord attribute
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), reinterpret_cast<void*>(6 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    // unbind the VBO and VAO
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-    // unbinding is not always needed as a VAO is is created and bound before other objects are bound to it
-}
-
-unsigned int lightVAO;
-Shader lightShader;
-
 void InitLights(Fenrir::App& app)
 {
 
-    glGenVertexArrays(1, &lightVAO);
-    glBindVertexArray(lightVAO);
+    Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
-    // use pre exising VBO
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    Fenrir::Entity light1_ent = entityList.CreateEntity();
+    Fenrir::Entity light2_ent = entityList.CreateEntity();
+    Fenrir::Entity light3_ent = entityList.CreateEntity();
+    Fenrir::Entity light4_ent = entityList.CreateEntity();
 
-    // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
+    Fenrir::Transform light1_trans = {Fenrir::Math::Vec3(0.7f, 0.2f, 2.0f), Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                      Fenrir::Math::Vec3(0.2f, 0.2f, 0.2f)};
+
+    Fenrir::Transform light2_trans = {Fenrir::Math::Vec3(2.3f, -3.3f, -4.0f),
+                                      Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), Fenrir::Math::Vec3(0.2f, 0.2f, 0.2f)};
+    Fenrir::Transform light3_trans = {Fenrir::Math::Vec3(-4.0f, 2.0f, -12.0f),
+                                      Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), Fenrir::Math::Vec3(0.2f, 0.2f, 0.2f)};
+
+    Fenrir::Transform light4_trans = {Fenrir::Math::Vec3(0.0f, 0.0f, -3.0f), Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                      Fenrir::Math::Vec3(0.2f, 0.2f, 0.2f)};
+
+    light1_ent.GetComponent<Fenrir::Transform>() = light1_trans;
+    light2_ent.GetComponent<Fenrir::Transform>() = light2_trans;
+    light3_ent.GetComponent<Fenrir::Transform>() = light3_trans;
+    light4_ent.GetComponent<Fenrir::Transform>() = light4_trans;
+
+    light1_ent.AddComponent<Material>(Material{lightShader});
+    light2_ent.AddComponent<Material>(Material{lightShader});
+    light3_ent.AddComponent<Material>(Material{lightShader});
+    light4_ent.AddComponent<Material>(Material{lightShader});
+
+    light1_ent.AddComponent<Model>(cube);
+    light2_ent.AddComponent<Model>(cube);
+    light3_ent.AddComponent<Model>(cube);
+    light4_ent.AddComponent<Model>(cube);
+}
+
+void InitBackpacks(Fenrir::App& app)
+{
+    Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+
+    Fenrir::Entity backpack1_ent = entityList.CreateEntity();
+    Fenrir::Entity backpack2_ent = entityList.CreateEntity();
+
+    Fenrir::Transform backpackTransform(Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f),
+                                        Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                        Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f));
+
+    Fenrir::Transform backpack2Transform(Fenrir::Math::Vec3(0.0f, 5.0f, 0.0f),
+                                         Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                         Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f));
+
+    backpack1_ent.GetComponent<Fenrir::Transform>() = backpackTransform;
+
+    backpack2_ent.GetComponent<Fenrir::Transform>() = backpack2Transform;
+
+    Material backpackMaterial = {myShader};
+
+    backpack1_ent.AddComponent<Material>(backpackMaterial);
+    backpack2_ent.AddComponent<Material>(backpackMaterial);
+
+    backpack1_ent.AddComponent<Model>(backpack);
+    backpack2_ent.AddComponent<Model>(backpack);
 }
 
 class GLRenderer
@@ -291,11 +231,14 @@ class GLRenderer
         // set material in shader (diffuse and specular is set as texture once above)
         myShader.SetFloat("material.shininess", 32.0f); // bind diffuse map
 
-        // TODO remove this
-        DrawModel(backpackTransform, backpack, myShader);
-        DrawModel(backpack2Transform, backpack2, myShader);
+        // TODO above needs to be moved somehow
 
-        DrawLights();
+        Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+
+        entityList.ForEach<Fenrir::Transform, Model, Material>(
+            [&](Fenrir::Transform& transform, Model& model, Material& material) {
+                DrawModel(transform, model, material.shader);
+            });
     }
 
     void PostUpdate(Fenrir::App& app)
@@ -317,7 +260,10 @@ class GLRenderer
 
         mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
 
-        myShader.SetMat4("model", mdl_mat);
+        shader.Use();
+        shader.SetMat4("view", m_view);
+        shader.SetMat4("projection", m_projection);
+        shader.SetMat4("model", mdl_mat);
 
         for (auto& mesh : model.meshes)
         {
@@ -332,27 +278,6 @@ class GLRenderer
 
     Fenrir::Math::Mat4 m_view;
     Fenrir::Math::Mat4 m_projection;
-
-    // TODO remove this eww
-    void DrawLights()
-    {
-        //! DRAWING LIGHTS
-        lightShader.Use();
-        lightShader.SetMat4("view", m_view);
-        lightShader.SetMat4("projection", m_projection);
-
-        glBindVertexArray(lightVAO);
-        for (unsigned int i = 0; i < 4; i++)
-        {
-            // calculate the model matrix for each object and pass it to shader before drawing
-            Fenrir::Math::Mat4 model = Fenrir::Math::Mat4(1.0f);
-            model = Fenrir::Math::Translate(model, pointLightPositions[i]);
-            model = glm::scale(model, glm::vec3(0.2f));
-            lightShader.SetMat4("model", model);
-
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-    }
 
     void DrawMesh(Mesh& mesh, Shader& shader)
     {
@@ -410,16 +335,12 @@ class AssetLoader
         myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
 
-        glActiveTexture(GL_TEXTURE0);
-        cubeDiffuse = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_albedo.png");
-
-        glActiveTexture(GL_TEXTURE1);
-        cubeSpecular = m_textureLibrary.GetTexture("assets/textures/art-deco-scales/art-deco-scales_metallic.png");
-
         m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
 
         backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
-        backpack2 = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
+
+        m_modelLibrary.AddModel("assets/models/cube/cube.obj");
+        cube = m_modelLibrary.GetModel("assets/models/cube/cube.obj");
     }
 
   private:
@@ -448,7 +369,7 @@ int main()
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,
                     {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
-                     BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitCubes, InitLights})
+                     BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitLights, InitBackpacks})
         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
         .AddSystems(Fenrir::SchedulePriority::PreUpdate, {BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
         .AddSystems(Fenrir::SchedulePriority::Update,

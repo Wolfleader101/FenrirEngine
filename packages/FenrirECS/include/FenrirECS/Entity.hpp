@@ -40,16 +40,6 @@ namespace Fenrir
         template <typename T, typename... Args>
         T& AddComponent(Args&&... args);
 
-        // /**
-        //  * @brief Add a component to the entity. If the component already exists it wont add it
-        //  *
-        //  * @tparam T The type of component to add
-        //  * @tparam Args The arguments to pass to the constructor of the component
-        //  * @param args The arguments to pass to the constructor of the component
-        //  */
-        // template <typename T, typename... Args>
-        // void AddComponent(Args&&... args);
-
         /**
          * @brief Remove a component from the entity, if it doesnt exist then it ignores
          *
@@ -120,17 +110,6 @@ namespace Fenrir
 
         return m_entityList->m_registry.emplace<T>(m_entityId, std::forward<Args>(args)...);
     }
-
-    // template <typename T, typename... Args>
-    // void Entity::AddComponent(Args&&... args)
-    // {
-    //     if (HasComponent<T>())
-    //     {
-    //         return;
-    //     }
-
-    //     m_entityList->m_registry.emplace<T>(m_entityId, std::forward<Args>(args)...);
-    // }
 
     template <typename T>
     void Entity::RemoveComponent() const

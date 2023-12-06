@@ -5,6 +5,7 @@ namespace Fenrir
     App::App(std::unique_ptr<ILogger> logger)
         : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
     {
+        m_scenes.push_back(Scene("Default"));
     }
 
     App& App::AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
@@ -103,7 +104,7 @@ namespace Fenrir
         {
             if (m_scenes.at(i).GetName() == name)
             {
-                m_scenes.erase(m_scenes.begin() + i);
+                m_scenes.erase(m_scenes.begin() + static_cast<int>(i));
                 return;
             }
         }
