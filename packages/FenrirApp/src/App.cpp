@@ -3,7 +3,7 @@
 namespace Fenrir
 {
     App::App(std::unique_ptr<ILogger> logger)
-        : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_activeScene(nullptr), m_eventQueues()
+        : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
     {
     }
 
@@ -70,46 +70,62 @@ namespace Fenrir
         return m_time;
     }
 
-    std::shared_ptr<Scene> App::GetActiveScene()
+    Scene& App::GetActiveScene()
     {
-        return m_activeScene;
+        return m_scenes.at(activeSceneIndex);
     }
 
     void App::ChangeActiveScene(const std::string& name)
     {
-        auto scene = m_scenes.at(name);
 
-        if (scene)
+        for (size_t i = 0; i < m_scenes.size(); i++)
         {
-            m_activeScene = scene;
-            return;
+            if (m_scenes.at(i).GetName() == name)
+            {
+                activeSceneIndex = i;
+                return;
+            }
         }
 
         //! if we get here, the scene doesnt exist
         m_logger->Error("Scene with name {0} does not exist", name);
     }
 
-    std::shared_ptr<Scene> App::CreateScene(const std::string& name)
+    Scene& App::CreateScene(const std::string& name)
     {
-        m_scenes.insert({name, std::make_shared<Scene>(name)});
-        return m_scenes.at(name);
+        m_scenes.push_back(Scene(name));
+        return m_scenes.back();
     }
 
     void App::DestroyScene(const std::string& name)
     {
-        m_scenes.erase(name);
+        for (size_t i = 0; i < m_scenes.size(); i++)
+        {
+            if (m_scenes.at(i).GetName() == name)
+            {
+                m_scenes.erase(m_scenes.begin() + i);
+                return;
+            }
+        }
 
         //! if we get here, the scene doesnt exist
         m_logger->Error("Scene with name {0} does not exist", name);
     }
 
-    std::shared_ptr<Scene> App::GetScene(const std::string& name)
+    Scene& App::GetScene(const std::string& name)
     {
-        return m_scenes.at(name);
+
+        for (size_t i = 0; i < m_scenes.size(); i++)
+        {
+            if (m_scenes.at(i).GetName() == name)
+            {
+                return m_scenes.at(i);
+            }
+        }
 
         //! if we get here, the scene doesnt exist
         m_logger->Error("Scene with name {0} does not exist", name);
-        return nullptr;
+        return m_scenes.at(0);
     }
 
 } // namespace Fenrir

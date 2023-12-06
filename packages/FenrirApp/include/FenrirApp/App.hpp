@@ -9,6 +9,7 @@
 
 #include <typeindex>
 #include <unordered_map>
+#include <vector>
 
 namespace Fenrir
 {
@@ -163,15 +164,15 @@ namespace Fenrir
          */
         const Time& GetTime() const;
 
-        std::shared_ptr<Scene> GetActiveScene();
+        Scene& GetActiveScene();
 
         void ChangeActiveScene(const std::string& name);
 
-        std::shared_ptr<Scene> CreateScene(const std::string& name);
+        Scene& CreateScene(const std::string& name);
 
         void DestroyScene(const std::string& name);
 
-        std::shared_ptr<Scene> GetScene(const std::string& name);
+        Scene& GetScene(const std::string& name);
 
       private:
         Time m_time;
@@ -179,8 +180,8 @@ namespace Fenrir
         std::unique_ptr<ILogger> m_logger;
         bool m_running = true;
 
-        std::unordered_map<std::string, std::shared_ptr<Scene>> m_scenes;
-        std::shared_ptr<Scene> m_activeScene;
+        std::vector<Scene> m_scenes;
+        size_t activeSceneIndex = 0;
 
         // this is mutable because GetEventQueue() is const
         mutable std::unordered_map<std::type_index, std::unique_ptr<IEventQueue>> m_eventQueues;
