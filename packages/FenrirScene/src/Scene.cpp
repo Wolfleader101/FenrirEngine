@@ -1,10 +1,8 @@
 #include "FenrirScene/Scene.hpp"
 
-#include "FenrirLogger/ILogger.hpp"
-
 namespace Fenrir
 {
-    Scene::Scene(Fenrir::ILogger& logger, const std::string& name) : m_logger(logger), m_name(name)
+    Scene::Scene(const std::string& name) : m_name(name)
     {
     }
 

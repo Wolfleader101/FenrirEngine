@@ -6,10 +6,10 @@
 
 namespace Fenrir
 {
-    class ILogger;
     class Scene
     {
-        Scene(Fenrir::ILogger& logger, const std::string& name);
+      public:
+        Scene(const std::string& name);
 
         const std::string& GetName() const;
 
@@ -23,7 +23,5 @@ namespace Fenrir
         std::string m_name;
 
         EntityList m_entityList;
-
-        Fenrir::ILogger& m_logger;
     };
 } // namespace Fenrir

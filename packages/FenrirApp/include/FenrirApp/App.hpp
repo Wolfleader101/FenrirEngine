@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "FenrirLogger/ILogger.hpp"
+#include "FenrirScene/Scene.hpp"
 #include "FenrirScheduler/Scheduler.hpp"
 #include "FenrirTime/Time.hpp"
 
@@ -160,16 +161,26 @@ namespace Fenrir
          *
          * @return const Time& the time
          */
-        const Time& GetTime() const
-        {
-            return m_time;
-        }
+        const Time& GetTime() const;
+
+        std::shared_ptr<Scene> GetActiveScene();
+
+        void ChangeActiveScene(const std::string& name);
+
+        std::shared_ptr<Scene> CreateScene(const std::string& name);
+
+        void DestroyScene(const std::string& name);
+
+        std::shared_ptr<Scene> GetScene(const std::string& name);
 
       private:
         Time m_time;
         Scheduler m_scheduler;
         std::unique_ptr<ILogger> m_logger;
         bool m_running = true;
+
+        std::unordered_map<std::string, std::shared_ptr<Scene>> m_scenes;
+        std::shared_ptr<Scene> m_activeScene;
 
         // this is mutable because GetEventQueue() is const
         mutable std::unordered_map<std::type_index, std::unique_ptr<IEventQueue>> m_eventQueues;

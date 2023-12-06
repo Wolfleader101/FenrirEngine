@@ -4,6 +4,6 @@ add_library(FenrirScene STATIC
     src/Scene.cpp
 )
 
-target_link_libraries(FenrirScene PUBLIC FenrirECS FenrirLogger)
+target_link_libraries(FenrirScene PUBLIC FenrirECS)
 
 target_include_directories(FenrirScene PUBLIC include)

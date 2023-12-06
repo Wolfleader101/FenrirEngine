@@ -2,7 +2,8 @@
 
 namespace Fenrir
 {
-    App::App(std::unique_ptr<ILogger> logger) : m_time(), m_scheduler(), m_logger(std::move(logger))
+    App::App(std::unique_ptr<ILogger> logger)
+        : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_activeScene(nullptr), m_eventQueues()
     {
     }
 
@@ -62,6 +63,53 @@ namespace Fenrir
             UpdateEvents();
         }
         m_scheduler.RunSystems(*this, SchedulePriority::Exit);
+    }
+
+    const Time& App::GetTime() const
+    {
+        return m_time;
+    }
+
+    std::shared_ptr<Scene> App::GetActiveScene()
+    {
+        return m_activeScene;
+    }
+
+    void App::ChangeActiveScene(const std::string& name)
+    {
+        auto scene = m_scenes.at(name);
+
+        if (scene)
+        {
+            m_activeScene = scene;
+            return;
+        }
+
+        //! if we get here, the scene doesnt exist
+        m_logger->Error("Scene with name {0} does not exist", name);
+    }
+
+    std::shared_ptr<Scene> App::CreateScene(const std::string& name)
+    {
+        m_scenes.insert({name, std::make_shared<Scene>(name)});
+        return m_scenes.at(name);
+    }
+
+    void App::DestroyScene(const std::string& name)
+    {
+        m_scenes.erase(name);
+
+        //! if we get here, the scene doesnt exist
+        m_logger->Error("Scene with name {0} does not exist", name);
+    }
+
+    std::shared_ptr<Scene> App::GetScene(const std::string& name)
+    {
+        return m_scenes.at(name);
+
+        //! if we get here, the scene doesnt exist
+        m_logger->Error("Scene with name {0} does not exist", name);
+        return nullptr;
     }
 
 } // namespace Fenrir
