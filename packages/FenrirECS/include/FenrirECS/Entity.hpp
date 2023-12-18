@@ -105,7 +105,10 @@ namespace Fenrir
     {
         if (HasComponent<T>())
         {
-            return GetComponent<T>();
+            //!! for now lets override but this might be bad??
+            RemoveComponent<T>();
+
+            // return GetComponent<T>();
         }
 
         return m_entityList->m_registry.emplace<T>(m_entityId, std::forward<Args>(args)...);

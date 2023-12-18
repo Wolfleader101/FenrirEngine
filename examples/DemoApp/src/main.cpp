@@ -22,6 +22,9 @@
 #include <glad/glad.h>
 
 #include <iostream>
+#include <variant>
+
+#include <entt/container/dense_map.hpp>
 
 struct DirLight
 {
@@ -59,9 +62,13 @@ struct SpotLight
     float outerCutOff;
 };
 
+using MaterialProperty = std::variant<bool, int, float, Fenrir::Math::Vec2, Fenrir::Math::Vec3, Fenrir::Math::Vec4,
+                                      Fenrir::Math::Mat3, Fenrir::Math::Mat4>;
+
 struct Material
 {
     Shader shader;
+    entt::dense_map<std::string, MaterialProperty> properties;
 };
 
 Shader myShader;
@@ -132,6 +139,65 @@ void InitBackpacks(Fenrir::App& app)
 
     Material backpackMaterial = {myShader};
 
+    // directional light
+    backpackMaterial.properties["dirLight.direction"] = Fenrir::Math::Vec3(-0.2f, -1.0f, -0.3f);
+    backpackMaterial.properties["dirLight.ambient"] = Fenrir::Math::Vec3(0.05f, 0.05f, 0.05f);
+    backpackMaterial.properties["dirLight.diffuse"] = Fenrir::Math::Vec3(0.4f, 0.4f, 0.4f);
+    backpackMaterial.properties["dirLight.specular"] = Fenrir::Math::Vec3(0.5f, 0.5f, 0.5f);
+
+    // point light 1
+    backpackMaterial.properties["pointLights[0].pos"] = pointLightPositions[0];
+    backpackMaterial.properties["pointLights[0].ambient"] = Fenrir::Math::Vec3(0.05f, 0.05f, 0.05f);
+    backpackMaterial.properties["pointLights[0].diffuse"] = Fenrir::Math::Vec3(0.8f, 0.8f, 0.8f);
+    backpackMaterial.properties["pointLights[0].specular"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+    backpackMaterial.properties["pointLights[0].constant"] = 1.0f;
+    backpackMaterial.properties["pointLights[0].linear"] = 0.09f;
+    backpackMaterial.properties["pointLights[0].quadratic"] = 0.032f;
+
+    // point light 2
+    backpackMaterial.properties["pointLights[1].pos"] = pointLightPositions[1];
+    backpackMaterial.properties["pointLights[1].ambient"] = Fenrir::Math::Vec3(0.05f, 0.05f, 0.05f);
+    backpackMaterial.properties["pointLights[1].diffuse"] = Fenrir::Math::Vec3(0.8f, 0.8f, 0.8f);
+    backpackMaterial.properties["pointLights[1].specular"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+
+    backpackMaterial.properties["pointLights[1].constant"] = 1.0f;
+    backpackMaterial.properties["pointLights[1].linear"] = 0.09f;
+    backpackMaterial.properties["pointLights[1].quadratic"] = 0.032f;
+
+    // point light 3
+    backpackMaterial.properties["pointLights[2].pos"] = pointLightPositions[2];
+    backpackMaterial.properties["pointLights[2].ambient"] = Fenrir::Math::Vec3(0.05f, 0.05f, 0.05f);
+    backpackMaterial.properties["pointLights[2].diffuse"] = Fenrir::Math::Vec3(0.8f, 0.8f, 0.8f);
+    backpackMaterial.properties["pointLights[2].specular"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+
+    backpackMaterial.properties["pointLights[2].constant"] = 1.0f;
+    backpackMaterial.properties["pointLights[2].linear"] = 0.09f;
+    backpackMaterial.properties["pointLights[2].quadratic"] = 0.032f;
+
+    // point light 4
+    backpackMaterial.properties["pointLights[3].pos"] = pointLightPositions[3];
+    backpackMaterial.properties["pointLights[3].ambient"] = Fenrir::Math::Vec3(0.05f, 0.05f, 0.05f);
+    backpackMaterial.properties["pointLights[3].diffuse"] = Fenrir::Math::Vec3(0.8f, 0.8f, 0.8f);
+    backpackMaterial.properties["pointLights[3].specular"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+
+    backpackMaterial.properties["pointLights[3].constant"] = 1.0f;
+    backpackMaterial.properties["pointLights[3].linear"] = 0.09f;
+    backpackMaterial.properties["pointLights[3].quadratic"] = 0.032f;
+
+    // spotLight
+    backpackMaterial.properties["spotLight.ambient"] = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    backpackMaterial.properties["spotLight.diffuse"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+    backpackMaterial.properties["spotLight.specular"] = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+
+    backpackMaterial.properties["spotLight.constant"] = 1.0f;
+    backpackMaterial.properties["spotLight.linear"] = 0.09f;
+    backpackMaterial.properties["spotLight.quadratic"] = 0.032f;
+    backpackMaterial.properties["spotLight.cutOff"] = glm::cos(glm::radians(12.5f));
+    backpackMaterial.properties["spotLight.outerCutOff"] = glm::cos(glm::radians(15.0f));
+
+    // set material in shader (diffuse and specular is set as texture once above)
+    backpackMaterial.properties["material.shininess"] = 32.0f; // bind diffuse map
+
     backpack1_ent.AddComponent<Material>(backpackMaterial);
     backpack2_ent.AddComponent<Material>(backpackMaterial);
 
@@ -173,70 +239,15 @@ class GLRenderer
             Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
                                       static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
 
-        //! HARD CODE SHADER FOR NOW
-        myShader.Use();
-
-        myShader.SetMat4("view", m_view);
-        myShader.SetMat4("projection", m_projection);
-
-        // directional light
-        myShader.SetVec3("dirLight.direction", -0.2f, -1.0f, -0.3f);
-        myShader.SetVec3("dirLight.ambient", 0.05f, 0.05f, 0.05f);
-        myShader.SetVec3("dirLight.diffuse", 0.4f, 0.4f, 0.4f);
-        myShader.SetVec3("dirLight.specular", 0.5f, 0.5f, 0.5f);
-        // point light 1
-        myShader.SetVec3("pointLights[0].pos", pointLightPositions[0]);
-        myShader.SetVec3("pointLights[0].ambient", 0.05f, 0.05f, 0.05f);
-        myShader.SetVec3("pointLights[0].diffuse", 0.8f, 0.8f, 0.8f);
-        myShader.SetVec3("pointLights[0].specular", 1.0f, 1.0f, 1.0f);
-        myShader.SetFloat("pointLights[0].constant", 1.0f);
-        myShader.SetFloat("pointLights[0].linear", 0.09f);
-        myShader.SetFloat("pointLights[0].quadratic", 0.032f);
-        // point light 2
-        myShader.SetVec3("pointLights[1].pos", pointLightPositions[1]);
-        myShader.SetVec3("pointLights[1].ambient", 0.05f, 0.05f, 0.05f);
-        myShader.SetVec3("pointLights[1].diffuse", 0.8f, 0.8f, 0.8f);
-        myShader.SetVec3("pointLights[1].specular", 1.0f, 1.0f, 1.0f);
-        myShader.SetFloat("pointLights[1].constant", 1.0f);
-        myShader.SetFloat("pointLights[1].linear", 0.09f);
-        myShader.SetFloat("pointLights[1].quadratic", 0.032f);
-        // point light 3
-        myShader.SetVec3("pointLights[2].pos", pointLightPositions[2]);
-        myShader.SetVec3("pointLights[2].ambient", 0.05f, 0.05f, 0.05f);
-        myShader.SetVec3("pointLights[2].diffuse", 0.8f, 0.8f, 0.8f);
-        myShader.SetVec3("pointLights[2].specular", 1.0f, 1.0f, 1.0f);
-        myShader.SetFloat("pointLights[2].constant", 1.0f);
-        myShader.SetFloat("pointLights[2].linear", 0.09f);
-        myShader.SetFloat("pointLights[2].quadratic", 0.032f);
-        // point light 4
-        myShader.SetVec3("pointLights[3].pos", pointLightPositions[3]);
-        myShader.SetVec3("pointLights[3].ambient", 0.05f, 0.05f, 0.05f);
-        myShader.SetVec3("pointLights[3].diffuse", 0.8f, 0.8f, 0.8f);
-        myShader.SetVec3("pointLights[3].specular", 1.0f, 1.0f, 1.0f);
-        myShader.SetFloat("pointLights[3].constant", 1.0f);
-        myShader.SetFloat("pointLights[3].linear", 0.09f);
-        myShader.SetFloat("pointLights[3].quadratic", 0.032f);
-        // spotLight
-        myShader.SetVec3("spotLight.pos", m_camera.pos);
-        myShader.SetVec3("spotLight.direction", m_camera.front);
-        myShader.SetVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
-        myShader.SetVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
-        myShader.SetVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-        myShader.SetFloat("spotLight.constant", 1.0f);
-        myShader.SetFloat("spotLight.linear", 0.09f);
-        myShader.SetFloat("spotLight.quadratic", 0.032f);
-        myShader.SetFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
-        myShader.SetFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
-
-        // set material in shader (diffuse and specular is set as texture once above)
-        myShader.SetFloat("material.shininess", 32.0f); // bind diffuse map
-
         // TODO above needs to be moved somehow
 
         Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
         entityList.ForEach<Fenrir::Transform, Model, Material>(
             [&](Fenrir::Transform& transform, Model& model, Material& material) {
+                material.properties["spotLight.pos"] = m_camera.pos;
+                material.properties["spotLight.direction"] = m_camera.front;
+                SetMatProps(material.shader, material);
                 DrawModel(transform, model, material.shader);
             });
     }
@@ -249,7 +260,64 @@ class GLRenderer
     {
     }
 
-    // TODO this will eventually be private and called by ecs
+  private:
+    Fenrir::ILogger& m_logger;
+    Window& m_window;
+    Fenrir::Camera& m_camera;
+
+    Fenrir::Math::Mat4 m_view;
+    Fenrir::Math::Mat4 m_projection;
+
+    void SetMatProps(const Shader& shader, const Material& mat)
+    {
+        mat.shader.Use();
+        for (const auto [name, property] : mat.properties)
+        {
+            std::visit(
+                [&](const auto& value) {
+                    using T = std::decay_t<decltype(value)>;
+
+                    if constexpr (std::is_same_v<T, bool>)
+                    {
+                        shader.SetBool(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, int>)
+                    {
+                        shader.SetInt(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, float>)
+                    {
+                        shader.SetFloat(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, Fenrir::Math::Vec2>)
+                    {
+                        shader.SetVec2(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, Fenrir::Math::Vec3>)
+                    {
+                        shader.SetVec3(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, Fenrir::Math::Vec4>)
+                    {
+                        shader.SetVec4(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, Fenrir::Math::Mat3>)
+                    {
+                        shader.SetMat3(name, value);
+                    }
+                    else if constexpr (std::is_same_v<T, Fenrir::Math::Mat4>)
+                    {
+                        shader.SetMat4(name, value);
+                    }
+                    else
+                    {
+                        m_logger.Fatal("GLRenderer::SetMatProps - Unknown material property type for {0}", name);
+                    }
+                },
+                property);
+        }
+    }
+
     void DrawModel(Fenrir::Transform& transform, Model& model, Shader& shader)
     {
         Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
@@ -270,14 +338,6 @@ class GLRenderer
             DrawMesh(mesh, shader);
         }
     }
-
-  private:
-    Fenrir::ILogger& m_logger;
-    Window& m_window;
-    Fenrir::Camera& m_camera;
-
-    Fenrir::Math::Mat4 m_view;
-    Fenrir::Math::Mat4 m_projection;
 
     void DrawMesh(Mesh& mesh, Shader& shader)
     {
