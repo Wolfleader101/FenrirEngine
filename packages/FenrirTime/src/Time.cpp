@@ -2,8 +2,9 @@
 
 namespace Fenrir
 {
-    Time::Time() : prevTime(std::chrono::steady_clock::now())
+    Time::Time()
     {
+        startTime = prevTime = std::chrono::steady_clock::now();
     }
 
     void Time::Update()
@@ -13,14 +14,11 @@ namespace Fenrir
         prevTime = now;
 
         accumulator += deltaTime;
-        // frameCount++;
+    }
 
-        // // Update FPS every second
-        // if (currTime - prevFPSTime >= 1.0)
-        // {
-        //     fps = frameCount;
-        //     frameCount = 0;
-        //     prevFPSTime = currTime;
-        // }
+    double Time::CurrentTime() const
+    {
+        auto now = std::chrono::steady_clock::now();
+        return std::chrono::duration<double>(now - startTime).count();
     }
 } // namespace Fenrir
