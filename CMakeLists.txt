@@ -28,6 +28,7 @@ add_subdirectory(packages/FenrirCamera)
 add_subdirectory(packages/FenrirTime)
 add_subdirectory(packages/FenrirScheduler)
 add_subdirectory(packages/FenrirLogger)
+add_subdirectory(packages/FenrirScripting)
 add_subdirectory(packages/FenrirScene)
 
 add_subdirectory(packages/FenrirCore)

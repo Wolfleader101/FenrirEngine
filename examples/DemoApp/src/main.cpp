@@ -15,6 +15,7 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirLogger/ConsoleLogger.hpp"
+#include "FenrirScripting/Host.hpp"
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
