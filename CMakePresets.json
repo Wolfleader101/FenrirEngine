@@ -8,8 +8,8 @@
       "binaryDir": "${sourceDir}/out/build/${presetName}",
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_C_COMPILER": "clang-cl.exe",
+        "CMAKE_CXX_COMPILER": "clang-cl.exe"
       },
       "condition": {
         "type": "equals",
@@ -50,8 +50,8 @@
       }
     },
     {
-      "name": "clang-x64-debug",
-      "displayName": "Clang x64 Debug",
+      "name": "clang-cl-x64-debug",
+      "displayName": "Windows Clang x64 Debug",
       "inherits": "windows-clang-base",
       "architecture": {
         "value": "x64",
@@ -62,9 +62,29 @@
       }
     },
     {
-      "name": "clang-x64-release",
-      "displayName": "Clang x64 Release",
-      "inherits": "clang-x64-debug",
+      "name": "clang-cl-x64-release",
+      "displayName": "Windows Clang x64 Release",
+      "inherits": "clang-cl-x64-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang-cl-x86-debug",
+      "displayName": "Windows Clang x86 Debug",
+      "inherits": "windows-clang-base",
+      "architecture": {
+        "value": "x86",
+        "strategy": "external"
+      },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "clang-cl-x86-release",
+      "displayName": "Windows Clang x86 Release",
+      "inherits": "clang-x86-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
@@ -80,7 +100,7 @@
     {
       "name": "msvc-x86-release",
       "displayName": "MSVC x86 Release",
-      "inherits": "msvc-debug",
+      "inherits": "msvc-x86-debug",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
