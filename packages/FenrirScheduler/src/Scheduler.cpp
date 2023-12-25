@@ -1,9 +1,11 @@
 #include "FenrirScheduler/Scheduler.hpp"
 
+#include <future>
+#include <vector>
 namespace Fenrir
 {
 
-    Scheduler::Scheduler()
+    Scheduler::Scheduler() : m_runOnceSystems(), m_systems(), m_threadPool(std::thread::hardware_concurrency())
     {
     }
 
@@ -17,7 +19,27 @@ namespace Fenrir
     {
         if (m_systems.find(priority) != m_systems.end())
         {
+            std::vector<std::future<void>> futures;
             for (auto& system : m_systems[priority])
+            {
+                // system(app);
+                futures.emplace_back(m_threadPool.enqueue([&app, &system] { system(app); }));
+            }
+
+            for (auto& fut : futures)
+            {
+                fut.wait();
+            }
+        }
+
+        RunSequentialSystems(app, priority);
+    }
+
+    void Scheduler::RunSequentialSystems(App& app, SchedulePriority priority)
+    {
+        if (m_sequentialSystems.find(priority) != m_sequentialSystems.end())
+        {
+            for (auto& system : m_sequentialSystems[priority])
             {
                 system(app);
             }
@@ -32,6 +54,22 @@ namespace Fenrir
             AddSystem(priority, system);
         }
 
+        return *this;
+    }
+
+    Scheduler& Scheduler::AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
+    {
+        for (auto system : systems)
+        {
+            AddSequentialSystem(priority, system);
+        }
+
+        return *this;
+    }
+
+    Scheduler& Scheduler::AddSequentialSystem(SchedulePriority priority, SystemFunc system)
+    {
+        m_sequentialSystems[priority].push_back(system);
         return *this;
     }
 

@@ -215,6 +215,8 @@ class GLRenderer
 
     void Init(Fenrir::App& app)
     {
+        m_logger.Info("GLRenderer::Init - Initializing GLRenderer");
+
         //? GL SPECIFIC CODE FOR TESTING
         glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
 
@@ -431,13 +433,15 @@ int main()
                     {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
                      BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitLights, InitBackpacks})
         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
-        .AddSystems(Fenrir::SchedulePriority::PreUpdate, {BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
-        .AddSystems(Fenrir::SchedulePriority::Update,
-                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController),
-                     BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate,
+                              {BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer)})
         //    .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
-        .AddSystems(Fenrir::SchedulePriority::PostUpdate, {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),
-                                                           BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::PostUpdate,
+                              {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),
+                               BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
         .AddSystems(Fenrir::SchedulePriority::Exit,
                     {BIND_WINDOW_SYSTEM_FN(Window::Exit, window), BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)})
         .Run();

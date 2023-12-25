@@ -13,6 +13,11 @@ namespace Fenrir
         m_scheduler.AddSystems(priority, systems);
         return *this;
     }
+    App& App::AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
+    {
+        m_scheduler.AddSequentialSystems(priority, systems);
+        return *this;
+    }
 
     App& App::AddSystem(SchedulePriority priority, SystemFunc system)
     {
