@@ -414,6 +414,18 @@ class AssetLoader
 #define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
     std::bind(&AssetLoader::fn, &assetLoaderInstance, std::placeholders::_1)
 
+void Tick(Fenrir::App& app)
+{
+    Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+
+    entityList.ForEach<Fenrir::Transform, Model, Material>(
+        [&](Fenrir::Transform& transform, Model& model, Material& material) {
+            Fenrir::Math::Vec3 newPos =
+                transform.pos + Fenrir::Math::Vec3(0.0f, 1.f, 0.0f) * static_cast<float>(app.GetTime().tickRate);
+            transform.pos = newPos;
+        });
+}
+
 int main()
 {
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
@@ -438,7 +450,7 @@ int main()
         .AddSequentialSystems(Fenrir::SchedulePriority::Update,
                               {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
         .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer)})
-        //    .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
+        .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSequentialSystems(Fenrir::SchedulePriority::PostUpdate,
                               {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),
                                BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
