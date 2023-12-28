@@ -4,6 +4,8 @@
 #include <initializer_list>
 #include <map>
 
+#include "ThreadPool.hpp"
+
 namespace Fenrir
 {
     class App;
@@ -36,8 +38,10 @@ namespace Fenrir
         Scheduler();
 
         Scheduler& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
+        Scheduler& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         Scheduler& AddSystem(SchedulePriority priority, SystemFunc system);
+        Scheduler& AddSequentialSystem(SchedulePriority priority, SystemFunc system);
 
         void Init(App& app);
         void RunSystems(App& app, SchedulePriority priority);
@@ -45,7 +49,10 @@ namespace Fenrir
       private:
         std::map<SchedulePriority, std::vector<SystemFunc>> m_runOnceSystems;
         std::map<SchedulePriority, std::vector<SystemFunc>> m_systems;
+        std::map<SchedulePriority, std::vector<SystemFunc>> m_sequentialSystems;
+        ThreadPool m_threadPool;
 
         bool IsRunOnceSystem(SchedulePriority priority);
+        void RunSequentialSystems(App& app, SchedulePriority priority);
     };
-}
+} // namespace Fenrir
