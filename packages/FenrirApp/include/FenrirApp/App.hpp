@@ -13,6 +13,7 @@
 
 namespace Fenrir
 {
+
     /**
      * @brief Interface for event queues
      * This is needed because we need to store different event queues in a single container
@@ -103,13 +104,22 @@ namespace Fenrir
         App(std::unique_ptr<ILogger> logger);
 
         /**
-         * @brief Add systems to the scheduler
+         * @brief Add systems to the scheduler that run in parallel
          *
          * @param priority the priority of the systems
          * @param systems the system functions
          * @return App& the app
          */
         App& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
+
+        /**
+         * @brief Add systems to the scheduler that run sequentially
+         *
+         * @param priority the priority of the systems
+         * @param systems the system functions
+         * @return App& the app
+         */
+        App& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         /**
          * @brief Add a system to the scheduler
