@@ -23,7 +23,7 @@ namespace Fenrir
             for (auto& system : m_systems[priority])
             {
                 // system(app);
-                futures.emplace_back(m_threadPool.enqueue([&app, &system] { system(app); }));
+                futures.emplace_back(m_threadPool.Enqueue([&app, &system] { system(app); }));
             }
 
             for (auto& fut : futures)
