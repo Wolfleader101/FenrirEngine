@@ -7,10 +7,10 @@
 #include "FenrirMath/Math.hpp"
 #include "TextureLibrary.hpp"
 
-class aiNode;
-class aiScene;
-class aiMesh;
-class aiMaterial;
+struct aiNode;
+struct aiScene;
+struct aiMesh;
+struct aiMaterial;
 enum aiTextureType;
 
 namespace Fenrir
