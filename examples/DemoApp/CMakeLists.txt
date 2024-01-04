@@ -28,10 +28,11 @@ add_subdirectory(libs)
 # Link against the modules from your engine
 target_link_libraries(DemoApp PRIVATE FenrirApp FenrirCamera FenrirMath)
 
-target_link_libraries(DemoApp PUBLIC
+target_link_libraries(DemoApp PRIVATE
     glad
     glfw
     assimp
+    glaze::glaze
 )
 
 # symlink the assets folder to the build directory

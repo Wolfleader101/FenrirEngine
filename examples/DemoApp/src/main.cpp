@@ -26,6 +26,53 @@
 
 #include <entt/container/dense_map.hpp>
 
+#include <glaze/glaze.hpp>
+
+struct ProjectSettings
+{
+    std::string identity = "";
+    std::string name = "";
+    std::string version = "0.1.0";
+    std::string description = "";
+    std::string author = "";
+    std::string assetPath = "";
+};
+
+template <>
+struct glz::meta<ProjectSettings>
+{
+    using T = ProjectSettings;
+    static constexpr auto value =
+        object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
+};
+
+// template <>
+// struct glz::meta<Fenrir::Math::Vec3>
+// {
+//     using T = Fenrir::Math::Vec3;
+//     static constexpr auto value = object(&T::x, &T::y, &T::z);
+// };
+
+// template <>
+// struct glz::meta<Fenrir::Math::Quat>
+// {
+//     using T = Fenrir::Math::Quat;
+//     static constexpr auto value = object(&T::x, &T::y, &T::z, &T::w);
+// };
+// template <>
+// struct glz::meta<Fenrir::Transform>
+// {
+//     using T = Fenrir::Transform;
+//     static constexpr auto value = object(&T::pos, &T::rot, &T::scale);
+// };
+
+// template <>
+// struct glz::meta<Fenrir::Entity>
+// {
+//     using T = Fenrir::Entity;
+//     static constexpr auto value = object("entity", &T::GetId);
+// };
+
 struct DirLight
 {
     Fenrir::Math::Vec3 direction = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
@@ -383,29 +430,32 @@ class GLRenderer
 class AssetLoader
 {
   public:
-    AssetLoader(Fenrir::ILogger& logger)
-        : m_shaderLibrary(logger), m_textureLibrary(logger), m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary)
+    AssetLoader(Fenrir::ILogger& logger, std::string& assetPath)
+        : m_assetPath(assetPath), m_shaderLibrary(logger), m_textureLibrary(logger),
+          m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary)
     {
     }
 
     void Init(Fenrir::App&)
     {
-        m_shaderLibrary.AddShader("lightedObject", "assets/shaders/lighted_vertex.glsl",
-                                  "assets/shaders/lighted_fragment.glsl");
-        m_shaderLibrary.AddShader("light", "assets/shaders/light_vertex.glsl", "assets/shaders/light_fragment.glsl");
+        m_shaderLibrary.AddShader("lightedObject", m_assetPath + "shaders/lighted_vertex.glsl",
+                                  m_assetPath + "shaders/lighted_fragment.glsl");
+        m_shaderLibrary.AddShader("light", m_assetPath + "shaders/light_vertex.glsl",
+                                  m_assetPath + "shaders/light_fragment.glsl");
 
         myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
 
-        m_modelLibrary.AddModel("assets/models/backpack/backpack.obj");
+        m_modelLibrary.AddModel(m_assetPath + "models/backpack/backpack.obj");
 
-        backpack = m_modelLibrary.GetModel("assets/models/backpack/backpack.obj");
+        backpack = m_modelLibrary.GetModel(m_assetPath + "models/backpack/backpack.obj");
 
-        m_modelLibrary.AddModel("assets/models/cube/cube.obj");
-        cube = m_modelLibrary.GetModel("assets/models/cube/cube.obj");
+        m_modelLibrary.AddModel(m_assetPath + "models/cube/cube.obj");
+        cube = m_modelLibrary.GetModel(m_assetPath + "models/cube/cube.obj");
     }
 
   private:
+    std::string m_assetPath;
     ShaderLibrary m_shaderLibrary;
     TextureLibrary m_textureLibrary;
     ModelLibrary m_modelLibrary;
@@ -428,17 +478,20 @@ void Tick(Fenrir::App& app)
 
 int main()
 {
+    ProjectSettings projectSettings{};
+    auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
+
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
     Fenrir::App app(std::move(logger));
 
     Fenrir::Camera camera;
-    Window window("Demo App");
+    Window window(projectSettings.name + " v" + projectSettings.version);
 
     CameraController cameraController(camera, 0.1f, 3.0f);
 
     GLRenderer glRenderer(*app.Logger().get(), window, camera);
 
-    AssetLoader assetLoader(*app.Logger().get());
+    AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath);
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,

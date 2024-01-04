@@ -1,7 +1,6 @@
 #pragma once
 
-#include <spdlog/fmt/fmt.h>
-
+#include <format>
 #include <string>
 
 namespace Fenrir
@@ -41,30 +40,30 @@ namespace Fenrir
     template <typename... Args>
     void ILogger::Log(const std::string& format, Args&&... args)
     {
-        LogImpl(fmt::format(format, std::forward<Args>(args)...));
+        LogImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
     }
 
     template <typename... Args>
     void ILogger::Info(const std::string& format, Args&&... args)
     {
-        InfoImpl(fmt::format(format, std::forward<Args>(args)...));
+        InfoImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
     }
 
     template <typename... Args>
     void ILogger::Warn(const std::string& format, Args&&... args)
     {
-        WarnImpl(fmt::format(format, std::forward<Args>(args)...));
+        WarnImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
     }
 
     template <typename... Args>
     void ILogger::Error(const std::string& format, Args&&... args)
     {
-        ErrorImpl(fmt::format(format, std::forward<Args>(args)...));
+        ErrorImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
     }
 
     template <typename... Args>
     void ILogger::Fatal(const std::string& format, Args&&... args)
     {
-        FatalImpl(fmt::format(format, std::forward<Args>(args)...));
+        FatalImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
     }
 } // namespace Fenrir
