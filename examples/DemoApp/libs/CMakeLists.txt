@@ -18,8 +18,11 @@ set(ASSIMP_WARNINGS_AS_ERRORS OFF)
 
 add_subdirectory(glad)
 add_subdirectory(glfw)
+add_subdirectory(imgui)
 add_subdirectory(assimp)
 add_subdirectory(glaze)
+
+target_include_directories(imgui PUBLIC glfw/include)
 
 target_include_directories(DemoApp SYSTEM PUBLIC
     glad/include

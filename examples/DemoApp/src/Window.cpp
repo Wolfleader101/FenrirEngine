@@ -178,3 +178,8 @@ int Window::GetHeight() const
 {
     return m_height;
 }
+
+GLFWwindow* Window::GetGlWindow() const
+{
+    return m_window;
+}

@@ -25,8 +25,11 @@
 #include <variant>
 
 #include <entt/container/dense_map.hpp>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
-#include <glaze/glaze.hpp>
+// #include <glaze/glaze.hpp>
 
 struct ProjectSettings
 {
@@ -38,13 +41,13 @@ struct ProjectSettings
     std::string assetPath = "";
 };
 
-template <>
-struct glz::meta<ProjectSettings>
-{
-    using T = ProjectSettings;
-    static constexpr auto value =
-        object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
-};
+// template <>
+// struct glz::meta<ProjectSettings>
+// {
+//     using T = ProjectSettings;
+//     static constexpr auto value =
+//         object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
+// };
 
 // template <>
 // struct glz::meta<Fenrir::Math::Vec3>
@@ -466,20 +469,117 @@ class AssetLoader
 
 void Tick(Fenrir::App& app)
 {
-    Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+    //     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
-    entityList.ForEach<Fenrir::Transform, Model, Material>(
-        [&](Fenrir::Transform& transform, Model& model, Material& material) {
-            Fenrir::Math::Vec3 newPos =
-                transform.pos + Fenrir::Math::Vec3(0.0f, 1.f, 0.0f) * static_cast<float>(app.GetTime().tickRate);
-            transform.pos = newPos;
-        });
+    //     entityList.ForEach<Fenrir::Transform, Model, Material>(
+    //         [&](Fenrir::Transform& transform, Model& model, Material& material) {
+    //             Fenrir::Math::Vec3 newPos =
+    //                 transform.pos + Fenrir::Math::Vec3(0.0f, 1.f, 0.0f) * static_cast<float>(app.GetTime().tickRate);
+    //             transform.pos = newPos;
+    //         });
 }
+
+class Editor
+{
+  public:
+    Editor(Fenrir::ILogger& logger, Window& window, Fenrir::Camera& camera)
+        : m_logger(logger), m_window(window), m_camera(camera)
+    {
+    }
+
+    void Init(Fenrir::App& app)
+    {
+        m_logger.Info("Editor::Init - Initializing Editor");
+
+        // setup imgui
+        IMGUI_CHECKVERSION();
+        m_guiContext = ImGui::CreateContext();
+
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-viewport
+
+        ImGui::StyleColorsDark();
+
+        ImGui_ImplGlfw_InitForOpenGL(m_window.GetGlWindow(), true); // Takes in the GLFW Window
+        ImGui_ImplOpenGL3_Init("#version 460");                     // Sets the version of GLSL being used
+    }
+
+    void PreUpdate(Fenrir::App& app)
+    {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+    }
+
+    void Update(Fenrir::App& app)
+    {
+        static float f = 0.0f;
+        static int counter = 0;
+
+        ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
+
+        ImGui::Text("This is some useful text."); // Display some text (you can use a format strings too)
+
+        ImGui::SliderFloat("float", &f, 0.0f, 1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+
+        if (ImGui::Button(
+                "Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
+            counter++;
+        ImGui::SameLine();
+        ImGui::Text("counter = %d", counter);
+        ImGuiIO& io = ImGui::GetIO();
+        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::End();
+    }
+
+    void PostUpdate(Fenrir::App& app)
+    {
+        ImGui::Render();
+
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        // handle the viewports
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(backup_current_context);
+        }
+    }
+
+    void Exit(Fenrir::App& app)
+    {
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::DestroyPlatformWindows();
+        }
+
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext(m_guiContext);
+    }
+
+  private:
+    Fenrir::ILogger& m_logger;
+    Window& m_window;
+    Fenrir::Camera& m_camera;
+    ImGuiContext* m_guiContext;
+};
+#define BIND_EDITOR_FN(fn, editorInstance) std::bind(&Editor::fn, &editorInstance, std::placeholders::_1)
 
 int main()
 {
     ProjectSettings projectSettings{};
-    auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
+    // auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
+    //! HARDCODED WHILE GLZ DOENST WORK
+    projectSettings.identity = "fenrir.examples.demo.app";
+    projectSettings.name = "Demo App";
+    projectSettings.version = "0.1.0";
+    projectSettings.description = "";
+    projectSettings.author = "";
+    projectSettings.assetPath = "assets/";
 
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
     Fenrir::App app(std::move(logger));
@@ -493,21 +593,28 @@ int main()
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath);
 
+    Editor editor(*app.Logger().get(), window, camera);
+
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,
-                    {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
+                    {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer), BIND_EDITOR_FN(Editor::Init, editor),
                      BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitLights, InitBackpacks})
         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
-        .AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate,
-                              {BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
-        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
-                              {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
-        .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer)})
+        .AddSequentialSystems(
+            Fenrir::SchedulePriority::PreUpdate,
+            {BIND_EDITOR_FN(Editor::PreUpdate, editor), BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
+
+        .AddSystems(Fenrir::SchedulePriority::Update,
+                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
+                                                                 BIND_EDITOR_FN(Editor::Update, editor)})
         .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSequentialSystems(Fenrir::SchedulePriority::PostUpdate,
                               {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),
+                               BIND_EDITOR_FN(Editor::PostUpdate, editor),
                                BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
-        .AddSystems(Fenrir::SchedulePriority::Exit,
-                    {BIND_WINDOW_SYSTEM_FN(Window::Exit, window), BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Exit,
+                              {BIND_EDITOR_FN(Editor::Exit, editor), BIND_WINDOW_SYSTEM_FN(Window::Exit, window),
+                               BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)})
         .Run();
 }

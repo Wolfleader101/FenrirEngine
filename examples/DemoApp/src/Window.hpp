@@ -34,6 +34,8 @@ class Window
 
     int GetHeight() const;
 
+    GLFWwindow* GetGlWindow() const;
+
   private:
     GLFWwindow* m_window = nullptr;
     Fenrir::App* m_appPtr = nullptr;
