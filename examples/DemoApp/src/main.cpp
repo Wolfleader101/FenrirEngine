@@ -132,17 +132,13 @@ Model cube;
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
 
-Fenrir::Entity lightParent;
-
 void InitLights(Fenrir::App& app)
 {
 
     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
     Fenrir::Entity light_parent = entityList.CreateEntity();
-    light_parent.GetComponent<Fenrir::Name>().Set("Light Parent");
-
-    lightParent = light_parent;
+    light_parent.GetComponent<Fenrir::Name>().Set("Lights");
 
     Fenrir::Entity light1_ent = entityList.CreateEntity();
     Fenrir::Entity light2_ent = entityList.CreateEntity();
@@ -190,8 +186,18 @@ void InitBackpacks(Fenrir::App& app)
 {
     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
+    Fenrir::Entity backpack_parent = entityList.CreateEntity();
+
+    backpack_parent.GetComponent<Fenrir::Name>().Set("Backpacks");
+
     Fenrir::Entity backpack1_ent = entityList.CreateEntity();
     Fenrir::Entity backpack2_ent = entityList.CreateEntity();
+
+    backpack1_ent.GetComponent<Fenrir::Name>().Set("Backpack 1");
+    backpack2_ent.GetComponent<Fenrir::Name>().Set("Backpack 2");
+
+    backpack_parent.AddChild(backpack1_ent);
+    backpack_parent.AddChild(backpack2_ent);
 
     Fenrir::Transform backpackTransform(Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f),
                                         Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
@@ -729,6 +735,7 @@ class Editor
     GLRenderer& m_renderer;
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
+    Fenrir::Entity m_selectedEntity;
 
     static const ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 
@@ -745,9 +752,6 @@ class Editor
         m_app.GetActiveScene().GetEntityList().ForEachEntity([&](auto handle) {
             Fenrir::Entity entity = entityList.GetEntity(static_cast<uint32_t>(handle));
             Fenrir::Relationship& relationship = entity.GetComponent<Fenrir::Relationship>();
-            Fenrir::Name& name = entity.GetComponent<Fenrir::Name>();
-
-            m_logger.Error(name.Get());
 
             if (!relationship.parent.IsValid())
             {
@@ -761,13 +765,17 @@ class Editor
     void DisplayEntityNode(Fenrir::Entity entity)
     {
         auto& name = entity.GetComponent<Fenrir::Name>();
-        if (ImGui::TreeNode(name.Get()))
+        bool isSelected = (entity == m_selectedEntity);
+        if (ImGui::Selectable(name.Get(), isSelected))
         {
-            if (entity.HasComponent<Fenrir::Relationship>())
-            {
-                entity.ForEachChild([&](Fenrir::Entity child) { DisplayEntityNode(child); });
-            }
-            ImGui::TreePop();
+            m_selectedEntity = entity;
+        }
+
+        if (entity.HasComponent<Fenrir::Relationship>())
+        {
+            ImGui::Indent();
+            entity.ForEachChild([&](Fenrir::Entity child) { DisplayEntityNode(child); });
+            ImGui::Unindent();
         }
     }
 
@@ -787,10 +795,48 @@ class Editor
     void PropertiesWindow()
     {
         ImGui::Begin("Properties", nullptr, scene_window_flags);
-        ImGui::Text("Hello");
+        if (m_selectedEntity.IsValid())
+        {
+            auto& name = m_selectedEntity.GetComponent<Fenrir::Name>();
+            ImGui::Text("Name: %s", name.Get());
+
+            if (m_selectedEntity.HasComponent<Fenrir::Transform>())
+            {
+                auto& transform = m_selectedEntity.GetComponent<Fenrir::Transform>();
+                ImGui::Text("Transform");
+                ImGui::DragFloat3("Position", &transform.pos.x, 0.5f);
+
+                static bool flipped = false;
+                static uint32_t lastEntityID = Fenrir::Entity::Null;
+
+                if (m_selectedEntity.GetId() != lastEntityID)
+                {
+                    lastEntityID = m_selectedEntity.GetId();
+                    flipped = false;
+                }
+
+                float rotationStep = flipped ? -0.5f : 0.5f;
+
+                Fenrir::Math::Vec3 euler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(transform.rot));
+
+                if (ImGui::DragFloat3("Rotation", &euler.x, rotationStep))
+                {
+                    // flip if pitch passes through 90 degrees
+                    if (euler.y >= 90.0f || euler.y <= -90.0f)
+                    {
+                        flipped = !flipped;
+                    }
+
+                    transform.rot = Fenrir::Math::Normalized(Fenrir::Math::Quat(Fenrir::Math::DegToRad(euler)));
+                }
+
+                ImGui::DragFloat3("Scale", &transform.scale.x, 0.5f);
+            }
+        }
         ImGui::End();
     }
 };
+
 #define BIND_EDITOR_FN(fn, editorInstance) std::bind(&Editor::fn, &editorInstance, std::placeholders::_1)
 
 int main()

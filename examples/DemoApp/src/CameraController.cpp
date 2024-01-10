@@ -23,6 +23,9 @@ void CameraController::OnKeyPress(const KeyboardKeyEvent& event)
 
 void CameraController::OnMouseMove(const MouseMoveEvent& event)
 {
+    if (!m_enabled)
+        return;
+
     float xpos = static_cast<float>(event.x);
     float ypos = static_cast<float>(event.y);
 
@@ -67,6 +70,14 @@ void CameraController::Update(Fenrir::App& app)
     {
         OnMouseScroll(event);
     }
+
+    if (m_pressedKeys.count(GLFW_KEY_F1))
+    {
+        m_enabled = !m_enabled;
+    }
+
+    if (!m_enabled)
+        return;
 
     if (m_pressedKeys.count(GLFW_KEY_LEFT_SHIFT))
     {

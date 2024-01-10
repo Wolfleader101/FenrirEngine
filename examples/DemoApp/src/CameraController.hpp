@@ -30,8 +30,9 @@ class CameraController
     float m_sensitive = 0.1f;
     float m_speed = 3.0f;
     float m_sprintSpeed = 6.0f;
-    bool m_isSprinting = false;
     Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(400.0f, 300.0f);
+    bool m_isSprinting = false;
+    bool m_enabled = true;
 
     // TODO move to a custom input class
     std::unordered_set<int> m_pressedKeys;
