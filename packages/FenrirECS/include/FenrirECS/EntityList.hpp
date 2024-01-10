@@ -76,6 +76,15 @@ namespace Fenrir
         void ForEach(Func&& func);
 
         /**
+         * @brief ForEach loop for all entities
+         *
+         * @tparam Func to call on each entity
+         * @param func to call on each entity
+         */
+        template <typename Func>
+        void ForEachEntity(Func&& func);
+
+        /**
          * @brief Group ForEach loop for all entities with the given components
          *
          * @tparam Components to loop over
@@ -113,6 +122,12 @@ namespace Fenrir
     void EntityList::ForEach(Func&& func)
     {
         m_registry.view<Components...>().each(std::forward<Func>(func));
+    }
+
+    template <typename Func>
+    void EntityList::ForEachEntity(Func&& func)
+    {
+        m_registry.view<entt::entity>().each(std::forward<Func>(func));
     }
 
     template <typename... Components, typename Func>
