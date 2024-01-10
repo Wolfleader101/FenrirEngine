@@ -30,6 +30,24 @@ namespace Fenrir
         Entity(uint32_t id, EntityList* entityList);
 
         /**
+         * @brief Compare two entities
+         *
+         * @param other The other entity to compare to
+         * @return true if the entities are the same
+         * @return false if the entities are not the same
+         */
+        bool operator==(const Entity& other) const;
+
+        /**
+         * @brief Compare two entities
+         *
+         * @param other The other entity to compare to
+         * @return true if the entities are not the same
+         * @return false if the entities are the same
+         */
+        bool operator!=(const Entity& other) const;
+
+        /**
          * @brief Add a component to the entity. If the component already exists it wont add it
          *
          * @tparam T The type of component to add
@@ -92,6 +110,29 @@ namespace Fenrir
          */
         bool IsValid() const;
 
+        /**
+         * @brief Iterate over all the children of the entity and call the function on them
+         *
+         * @tparam Func The type of function to call
+         * @param func The function to call
+         */
+        template <typename Func>
+        void ForEachChild(Func&& func) const;
+
+        /**
+         * @brief Add a child to the entity
+         *
+         * @param child The child to add
+         */
+        void AddChild(Entity child) const;
+
+        /**
+         * @brief Remove a child from the entity
+         *
+         * @param child The child to remove
+         */
+        void RemoveChild(Entity child) const;
+
       private:
         entt::entity m_entityId = entt::null;
 
@@ -142,5 +183,23 @@ namespace Fenrir
     bool Entity::HasAnyComponent() const
     {
         return m_entityList->m_registry.any_of<T...>(m_entityId);
+    }
+
+    template <typename Func>
+    void Entity::ForEachChild(Func&& func) const
+    {
+        Relationship& relationship = GetComponent<Relationship>();
+
+        if (relationship.firstChild.IsValid())
+        {
+            auto child = relationship.firstChild;
+
+            while (child.IsValid())
+            {
+                func(child);
+
+                child = child.GetComponent<Relationship>().nextSibling;
+            }
+        }
     }
 } // namespace Fenrir

@@ -28,6 +28,7 @@
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
+#include <imgui_internal.h>
 
 #include <glaze/glaze.hpp>
 
@@ -282,8 +283,28 @@ class GLRenderer
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
     }
 
+    void OnWindowResize(const WindowResizeEvent& event)
+    {
+        glViewport(0, 0, event.width, event.height);
+    }
+
+    void OnWindowFrameBufferResize(const WindowFrameBufferResizeEvent& event)
+    {
+        glViewport(0, 0, event.width, event.height);
+    }
+
     void Update(Fenrir::App& app)
     {
+        for (const auto& event : app.ReadEvents<WindowResizeEvent>())
+        {
+            OnWindowResize(event);
+        }
+
+        for (const auto& event : app.ReadEvents<WindowFrameBufferResizeEvent>())
+        {
+            OnWindowFrameBufferResize(event);
+        }
+
         m_view = m_camera.GetViewMatrix();
 
         // TODO might only want to recalculate this if it changes? (could use events)
@@ -310,6 +331,82 @@ class GLRenderer
 
     void Exit(Fenrir::App& app)
     {
+    }
+
+    struct Framebuffer
+    {
+        unsigned int fbo;
+        unsigned int texture;
+        unsigned int rbo;
+        int width;
+        int height;
+    };
+
+    Framebuffer CreateFrameBuffer(int width, int height)
+    {
+        Framebuffer frameBuffer;
+        frameBuffer.width = width;
+        frameBuffer.height = height;
+
+        glGenFramebuffers(1, &frameBuffer.fbo);
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.fbo);
+
+        glGenTextures(1, &frameBuffer.texture);
+        glBindTexture(GL_TEXTURE_2D, frameBuffer.texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameBuffer.texture, 0);
+
+        glGenRenderbuffers(1, &frameBuffer.rbo);
+        glBindRenderbuffer(GL_RENDERBUFFER, frameBuffer.rbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, frameBuffer.rbo);
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            m_logger.Fatal("GLRenderer::CreateFrameBuffer - Framebuffer is not complete!");
+        }
+
+        glBindTexture(GL_TEXTURE_2D, 0);        // unbind texture
+        glBindRenderbuffer(GL_RENDERBUFFER, 0); // unbind renderbuffer
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);   // unbind framebuffer
+
+        return frameBuffer;
+    }
+
+    void DeleteFrameBuffer(unsigned int fbo)
+    {
+        glDeleteFramebuffers(1, &fbo);
+    }
+
+    void BindFrameBuffer(unsigned int fbo, int width, int height)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        // glViewport(0, 0, width, height);
+    }
+
+    void UnbindFrameBuffer()
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        // glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
+    }
+
+    void ResizeFrameBuffer(Framebuffer& frameBuffer, int width, int height)
+    {
+        frameBuffer.width = width;
+        frameBuffer.height = height;
+
+        glBindTexture(GL_TEXTURE_2D, frameBuffer.texture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameBuffer.texture, 0);
+
+        glBindRenderbuffer(GL_RENDERBUFFER, frameBuffer.rbo);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, frameBuffer.rbo);
     }
 
   private:
@@ -482,8 +579,8 @@ void Tick(Fenrir::App& app)
 class Editor
 {
   public:
-    Editor(Fenrir::ILogger& logger, Window& window, Fenrir::Camera& camera)
-        : m_logger(logger), m_window(window), m_camera(camera)
+    Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer)
+        : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer)
     {
     }
 
@@ -496,45 +593,88 @@ class Editor
         m_guiContext = ImGui::CreateContext();
 
         ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // Enable Docking
-        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-viewport
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // enable Docking
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // enable Multi-viewport
 
         ImGui::StyleColorsDark();
+        ImGuiStyle& style = ImGui::GetStyle();
+        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            style.WindowRounding = 0.0f;
+            style.WindowBorderSize = 0.0f;
+            style.Colors[ImGuiCol_WindowBg].w = 1.0f;
+        }
 
-        ImGui_ImplGlfw_InitForOpenGL(m_window.GetGlWindow(), true); // Takes in the GLFW Window
-        ImGui_ImplOpenGL3_Init("#version 460");                     // Sets the version of GLSL being used
+        ImGui_ImplGlfw_InitForOpenGL(m_window.GetGlWindow(), true); // takes in the GLFW Window
+        ImGui_ImplOpenGL3_Init("#version 460");                     // sets the version of GLSL being used
+
+        m_frameBuffer = m_renderer.CreateFrameBuffer(m_window.GetWidth(), m_window.GetHeight());
+    }
+
+    void InitDockingLayout()
+    {
+        static bool dockspace_initialized = false;
+        if (dockspace_initialized)
+            return;
+
+        // define the docking layout
+        ImGuiID dockspace_id = ImGui::GetID("FenrirDockSpace");
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::DockBuilderRemoveNode(dockspace_id);                            // clear out existing layout
+        ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace); // add empty node
+        ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->Size);
+
+        // split the dockspace into two nodes
+        ImGuiID dock_main_id = dockspace_id; // main dock space
+        ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.2f, nullptr, &dock_main_id);
+        ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.2f, nullptr, &dock_main_id);
+
+        // Dock windows into the nodes
+        ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left_id);
+        ImGui::DockBuilderDockWindow("ViewPort", dock_main_id);
+        ImGui::DockBuilderDockWindow("Properties", dock_right_id);
+
+        ImGui::DockBuilderFinish(dockspace_id);
+
+        dockspace_initialized = true;
     }
 
     void PreUpdate(Fenrir::App& app)
     {
-        ImGui_ImplOpenGL3_NewFrame();
-        ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        m_renderer.BindFrameBuffer(m_frameBuffer.fbo, m_window.GetWidth(), m_window.GetHeight());
     }
 
     void Update(Fenrir::App& app)
     {
-        static float f = 0.0f;
-        static int counter = 0;
+        m_renderer.UnbindFrameBuffer();
 
-        ImGui::Begin("Hello, world!"); // Create a window called "Hello, world!" and append into it.
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-        ImGui::Text("This is some useful text."); // Display some text (you can use a format strings too)
+        int window_width = m_window.GetWidth();
+        int window_height = m_window.GetHeight();
 
-        ImGui::SliderFloat("float", &f, 0.0f, 1.0f); // Edit 1 float using a slider from 0.0f to 1.0f
+        ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(main_viewport->Pos);
+        m_renderer.ResizeFrameBuffer(m_frameBuffer, window_width, window_height);
+        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(window_width), static_cast<float>(window_height)));
+        ImGui::SetNextWindowViewport(main_viewport->ID);
 
-        if (ImGui::Button(
-                "Button")) // Buttons return true when clicked (most widgets return true when edited/activated)
-            counter++;
-        ImGui::SameLine();
-        ImGui::Text("counter = %d", counter);
-        ImGuiIO& io = ImGui::GetIO();
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+        ImGui::Begin("FenrirDockSpace", nullptr, base_window_flags);
+
+        InitDockingLayout();
+        ImGuiID dockspace_id = ImGui::GetID("FenrirDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+
         ImGui::End();
-    }
 
-    void PostUpdate(Fenrir::App& app)
-    {
+        SceneHierarchyWindow();
+
+        ViewPortWindow();
+
+        PropertiesWindow();
+
         ImGui::Render();
 
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -547,6 +687,10 @@ class Editor
             ImGui::RenderPlatformWindowsDefault();
             glfwMakeContextCurrent(backup_current_context);
         }
+    }
+
+    void PostUpdate(Fenrir::App& app)
+    {
     }
 
     void Exit(Fenrir::App& app)
@@ -562,10 +706,47 @@ class Editor
     }
 
   private:
+    Fenrir::App& m_app;
     Fenrir::ILogger& m_logger;
     Window& m_window;
-    Fenrir::Camera& m_camera;
+    GLRenderer& m_renderer;
     ImGuiContext* m_guiContext;
+    GLRenderer::Framebuffer m_frameBuffer;
+
+    static const ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
+
+    static const ImGuiWindowFlags base_window_flags =
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+
+    static const ImGuiWindowFlags scene_window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+
+    void SceneHierarchyWindow()
+    {
+        ImGui::Begin("Scene Hierarchy", nullptr, scene_window_flags);
+
+        ImGui::End();
+    }
+
+    void ViewPortWindow()
+    {
+        ImGui::Begin("ViewPort", nullptr, scene_window_flags);
+        ImVec2 pos = ImGui::GetCursorScreenPos();
+
+        ImGui::GetWindowDrawList()->AddImage(
+            reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)), ImVec2(pos.x, pos.y),
+            ImVec2(pos.x + static_cast<float>(m_window.GetWidth()), pos.y + static_cast<float>(m_window.GetHeight())),
+            ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+
+        ImGui::End();
+    }
+
+    void PropertiesWindow()
+    {
+        ImGui::Begin("Properties", nullptr, scene_window_flags);
+        ImGui::Text("Hello");
+        ImGui::End();
+    }
 };
 #define BIND_EDITOR_FN(fn, editorInstance) std::bind(&Editor::fn, &editorInstance, std::placeholders::_1)
 
@@ -587,7 +768,7 @@ int main()
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath);
 
-    Editor editor(*app.Logger().get(), window, camera);
+    Editor editor(app, *app.Logger().get(), window, glRenderer);
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,

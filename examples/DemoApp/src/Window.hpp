@@ -18,7 +18,7 @@ namespace Fenrir
 class Window
 {
   public:
-    Window(std::string title = "FenrirEngine Window", int width = 800, int height = 600);
+    Window(std::string title = "FenrirEngine Window", int width = 1920, int height = 1080);
 
     ~Window();
 
