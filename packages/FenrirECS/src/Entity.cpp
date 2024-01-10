@@ -6,6 +6,8 @@
 
 namespace Fenrir
 {
+
+    uint32_t Entity::Null = static_cast<uint32_t>(entt::null);
     Entity::Entity(uint32_t id, EntityList* entityList)
         : m_entityId(static_cast<entt::entity>(id)), m_entityList(entityList)
     {

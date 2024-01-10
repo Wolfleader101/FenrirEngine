@@ -133,6 +133,8 @@ namespace Fenrir
          */
         void RemoveChild(Entity child) const;
 
+        static uint32_t Null;
+
       private:
         entt::entity m_entityId = entt::null;
 
