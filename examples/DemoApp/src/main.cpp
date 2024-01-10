@@ -132,15 +132,32 @@ Model cube;
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
 
+Fenrir::Entity lightParent;
+
 void InitLights(Fenrir::App& app)
 {
 
     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
+    Fenrir::Entity light_parent = entityList.CreateEntity();
+    light_parent.GetComponent<Fenrir::Name>().Set("Light Parent");
+
+    lightParent = light_parent;
+
     Fenrir::Entity light1_ent = entityList.CreateEntity();
     Fenrir::Entity light2_ent = entityList.CreateEntity();
     Fenrir::Entity light3_ent = entityList.CreateEntity();
     Fenrir::Entity light4_ent = entityList.CreateEntity();
+
+    light1_ent.GetComponent<Fenrir::Name>().Set("Light 1");
+    light2_ent.GetComponent<Fenrir::Name>().Set("Light 2");
+    light3_ent.GetComponent<Fenrir::Name>().Set("Light 3");
+    light4_ent.GetComponent<Fenrir::Name>().Set("Light 4");
+
+    light_parent.AddChild(light1_ent);
+    light_parent.AddChild(light2_ent);
+    light_parent.AddChild(light3_ent);
+    light_parent.AddChild(light4_ent);
 
     Fenrir::Transform light1_trans = {Fenrir::Math::Vec3(0.7f, 0.2f, 2.0f), Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
                                       Fenrir::Math::Vec3(0.2f, 0.2f, 0.2f)};
@@ -724,8 +741,34 @@ class Editor
     void SceneHierarchyWindow()
     {
         ImGui::Begin("Scene Hierarchy", nullptr, scene_window_flags);
+        Fenrir::EntityList& entityList = m_app.GetActiveScene().GetEntityList();
+        m_app.GetActiveScene().GetEntityList().ForEachEntity([&](auto handle) {
+            Fenrir::Entity entity = entityList.GetEntity(static_cast<uint32_t>(handle));
+            Fenrir::Relationship& relationship = entity.GetComponent<Fenrir::Relationship>();
+            Fenrir::Name& name = entity.GetComponent<Fenrir::Name>();
+
+            m_logger.Error(name.Get());
+
+            if (!relationship.parent.IsValid())
+            {
+                DisplayEntityNode(entity);
+            }
+        });
 
         ImGui::End();
+    }
+
+    void DisplayEntityNode(Fenrir::Entity entity)
+    {
+        auto& name = entity.GetComponent<Fenrir::Name>();
+        if (ImGui::TreeNode(name.Get()))
+        {
+            if (entity.HasComponent<Fenrir::Relationship>())
+            {
+                entity.ForEachChild([&](Fenrir::Entity child) { DisplayEntityNode(child); });
+            }
+            ImGui::TreePop();
+        }
     }
 
     void ViewPortWindow()

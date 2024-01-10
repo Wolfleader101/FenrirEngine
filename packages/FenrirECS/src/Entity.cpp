@@ -2,6 +2,8 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 
+#include <string>
+
 namespace Fenrir
 {
     Entity::Entity(uint32_t id, EntityList* entityList)
@@ -10,6 +12,9 @@ namespace Fenrir
         AddComponent<Transform>();
         AddComponent<Name>();
         AddComponent<Relationship>();
+
+        std::string name = "Entity " + std::to_string(id);
+        GetComponent<Name>().Set(name.c_str());
     }
 
     bool Entity::operator==(const Entity& other) const
@@ -34,7 +39,6 @@ namespace Fenrir
 
     void Entity::AddChild(Entity child) const
     {
-
         // if the child is not valid return
         if (!child.IsValid())
         {

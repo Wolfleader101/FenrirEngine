@@ -15,7 +15,14 @@ namespace Fenrir
     {
         if (m_registry.valid(static_cast<entt::entity>(id)))
         {
-            return Entity(id, this);
+            // cannot use the constructor as it will create new components for the entity
+            // return Entity(id, this);
+
+            Entity newEntity;
+            newEntity.m_entityId = static_cast<entt::entity>(id);
+            newEntity.m_entityList = this;
+
+            return newEntity;
         }
 
         return Entity();
