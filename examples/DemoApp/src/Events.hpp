@@ -1,6 +1,6 @@
 #pragma once
 
-struct FrameBufferResizeEvent
+struct WindowFrameBufferResizeEvent
 {
     int width, height;
 };

@@ -47,7 +47,7 @@ void Window::PreInit(Fenrir::App& app)
     // glfwSwapInterval(0);
 
     // cursor mode
-    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (!gladLoadGLLoader(Glad_GLFW_GetProcAddr))
     {
@@ -68,10 +68,10 @@ void Window::PreInit(Fenrir::App& app)
     glfwSetFramebufferSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
         auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-        // TODO remove this as its render specific
-        glViewport(0, 0, width, height);
+        win.m_width = width;
+        win.m_height = height;
 
-        FrameBufferResizeEvent event{width, height};
+        WindowFrameBufferResizeEvent event{width, height};
         win.m_appPtr->SendEvent(event);
     });
 
@@ -79,8 +79,8 @@ void Window::PreInit(Fenrir::App& app)
     glfwSetWindowSizeCallback(m_window, [](GLFWwindow* window, int width, int height) {
         auto& win = *static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-        // TODO remove this as its render specific
-        glViewport(0, 0, width, height);
+        win.m_width = width;
+        win.m_height = height;
 
         WindowResizeEvent event{width, height};
         win.m_appPtr->SendEvent(event);
