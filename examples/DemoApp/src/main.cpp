@@ -29,7 +29,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
-// #include <glaze/glaze.hpp>
+#include <glaze/glaze.hpp>
 
 struct ProjectSettings
 {
@@ -41,13 +41,13 @@ struct ProjectSettings
     std::string assetPath = "";
 };
 
-// template <>
-// struct glz::meta<ProjectSettings>
-// {
-//     using T = ProjectSettings;
-//     static constexpr auto value =
-//         object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
-// };
+template <>
+struct glz::meta<ProjectSettings>
+{
+    using T = ProjectSettings;
+    static constexpr auto value =
+        object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
+};
 
 // template <>
 // struct glz::meta<Fenrir::Math::Vec3>
@@ -572,16 +572,10 @@ class Editor
 int main()
 {
     ProjectSettings projectSettings{};
-    // auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
-    //! HARDCODED WHILE GLZ DOENST WORK
-    projectSettings.identity = "fenrir.examples.demo.app";
-    projectSettings.name = "Demo App";
-    projectSettings.version = "0.1.0";
-    projectSettings.description = "";
-    projectSettings.author = "";
-    projectSettings.assetPath = "assets/";
+    auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
 
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
+
     Fenrir::App app(std::move(logger));
 
     Fenrir::Camera camera;
