@@ -601,6 +601,19 @@ void Tick(Fenrir::App& app)
     //         });
 }
 
+Fenrir::Math::Mat4 TransformToMat4(const Fenrir::Transform& transform)
+{
+    Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
+
+    mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
+
+    mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
+
+    mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+
+    return mdl_mat;
+}
+
 class Editor
 {
   public:
@@ -669,8 +682,34 @@ class Editor
         m_renderer.BindFrameBuffer(m_frameBuffer.fbo, m_window.GetWidth(), m_window.GetHeight());
     }
 
+    void OnMouseClick(const MouseButtonEvent& event)
+    {
+        if (event.button == MouseButton::Left && event.state == InputState::Pressed)
+        {
+            Fenrir::EntityList& entityList = m_app.GetActiveScene().GetEntityList();
+
+            Fenrir::Math::Vec2 screenPoint = Fenrir::Math::Vec2(event.x, event.y);
+
+            Fenrir::Math::Vec2 normalisedCoords = ScreenToDeviceCoords(screenPoint);
+
+            Fenrir::Math::Ray ray = ScreenToPointRay(normalisedCoords);
+
+            Fenrir::Entity clickedEntity = SelectEntity(ray, entityList);
+
+            if (clickedEntity.IsValid())
+            {
+                m_selectedEntity = clickedEntity;
+            }
+        }
+    }
+
     void Update(Fenrir::App& app)
     {
+        for (const auto& event : app.ReadEvents<MouseButtonEvent>())
+        {
+            OnMouseClick(event);
+        }
+
         m_renderer.UnbindFrameBuffer();
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -749,6 +788,84 @@ class Editor
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
 
     static const ImGuiWindowFlags scene_window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
+
+    Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
+    {
+        return Fenrir::Math::Vec2((2.0f * screenPoint.x) / m_window.GetWidth() - 1.0f,
+                                  1.0f - (2.0f * screenPoint.y) / m_window.GetHeight());
+    }
+
+    Fenrir::Math::Ray ScreenToPointRay(const Fenrir::Math::Vec2& normalisedCoords)
+    {
+        Fenrir::Math::Vec4 clipCoords = Fenrir::Math::Vec4(normalisedCoords.x, normalisedCoords.y, -1.0f, 1.0f);
+
+        Fenrir::Math::Mat4 projection =
+            Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
+                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
+
+        Fenrir::Math::Mat4 invProjection = Fenrir::Math::Inverse(projection);
+
+        Fenrir::Math::Vec4 eyeCoords = invProjection * clipCoords;
+
+        eyeCoords = Fenrir::Math::Vec4(eyeCoords.x, eyeCoords.y, -1.0f, 0.0f);
+
+        Fenrir::Math::Mat4 view = m_camera.GetViewMatrix();
+        Fenrir::Math::Mat4 invView = Fenrir::Math::Inverse(view);
+
+        Fenrir::Math::Vec4 worldCoords = invView * eyeCoords;
+
+        Fenrir::Math::Vec3 rayDir =
+            Fenrir::Math::Normalized(Fenrir::Math::Vec3(worldCoords.x, worldCoords.y, worldCoords.z));
+
+        return Fenrir::Math::Ray(m_camera.pos, rayDir);
+    }
+
+    void ScreenToWorldPoint(const Fenrir::Math::Vec2& screenPoint, Fenrir::Math::Vec3& worldPoint)
+    {
+        Fenrir::Math::Mat4 view = m_camera.GetViewMatrix();
+        Fenrir::Math::Mat4 projection =
+            Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
+                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
+
+        Fenrir::Math::Mat4 viewProjection = projection * view;
+
+        Fenrir::Math::Mat4 invViewProjection = Fenrir::Math::Inverse(viewProjection);
+
+        Fenrir::Math::Vec4 screenPoint4 = Fenrir::Math::Vec4(screenPoint.x, screenPoint.y, 0.0f, 1.0f);
+
+        Fenrir::Math::Vec4 worldPoint4 = invViewProjection * screenPoint4;
+
+        worldPoint = Fenrir::Math::Vec3(worldPoint4.x, worldPoint4.y, worldPoint4.z);
+    }
+
+    Fenrir::Entity SelectEntity(const Fenrir::Math::Ray& ray, Fenrir::EntityList& entityList)
+    {
+        Fenrir::Entity selectedEntity;
+        float closestDistance = std::numeric_limits<float>::max();
+
+        entityList.ForEachEntity([&](auto handle) {
+            Fenrir::Entity entity = entityList.GetEntity(static_cast<uint32_t>(handle));
+            auto& transform = entity.GetComponent<Fenrir::Transform>();
+
+            if (entity.HasComponent<Model>())
+            {
+                auto& model = entity.GetComponent<Model>();
+
+                Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
+                if (Fenrir::Math::RayAABBIntersect(ray, model.boundingBox, mdl_mat))
+                {
+                    float distance = Fenrir::Math::CalculateDistance(ray.origin, model.boundingBox, mdl_mat);
+                    if (distance < closestDistance)
+                    {
+                        closestDistance = distance;
+                        selectedEntity = entity;
+                    }
+                }
+            }
+        });
+
+        return selectedEntity;
+    }
 
     void SceneHierarchyWindow()
     {
@@ -861,7 +978,7 @@ class Editor
             static bool boundSizing = false;
             static bool boundSizingSnap = false;
 
-            if (ImGui::IsKeyPressed(ImGuiKey_T))
+            if (ImGui::IsKeyPressed(ImGuiKey_W))
                 mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
             if (ImGui::IsKeyPressed(ImGuiKey_E))
                 mCurrentGizmoOperation = ImGuizmo::ROTATE;
@@ -872,13 +989,7 @@ class Editor
                 Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
                                           static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
 
-            Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
-
-            mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
-
-            mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
-
-            mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+            Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
 
             float* mat = Fenrir::Math::AsArray(mdl_mat);
 

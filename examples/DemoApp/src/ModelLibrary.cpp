@@ -82,7 +82,8 @@ bool ModelLibrary::HasModel(const std::string& path) const
 void ModelLibrary::LoadModel(const std::string& path, Model& model)
 {
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+    const aiScene* scene =
+        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenBoundingBoxes);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
     {
@@ -93,6 +94,10 @@ void ModelLibrary::LoadModel(const std::string& path, Model& model)
     model.directory = path.substr(0, path.find_last_of('/'));
 
     ProcessNode(scene->mRootNode, scene, model);
+
+    auto aiAABB = scene->mMeshes[0]->mAABB;
+    model.boundingBox = Fenrir::Math::AABB({aiAABB.mMin.x, aiAABB.mMin.y, aiAABB.mMin.z},
+                                           {aiAABB.mMax.x, aiAABB.mMax.y, aiAABB.mMax.z});
 }
 
 void ModelLibrary::ProcessNode(aiNode* node, const aiScene* scene, Model& model)

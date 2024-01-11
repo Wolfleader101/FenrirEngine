@@ -371,4 +371,41 @@ namespace Fenrir::Math
     {
         return glm::conjugate(quat);
     }
+
+    bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix)
+    {
+        Vec3 minWorld = MultiplyPoint(aabb.min, transformMatrix);
+        Vec3 maxWorld = MultiplyPoint(aabb.max, transformMatrix);
+
+        Vec3 invDir;
+        invDir.x = 1.0f / (ray.dir.x == 0.0f ? EPSILON : ray.dir.x);
+        invDir.y = 1.0f / (ray.dir.y == 0.0f ? EPSILON : ray.dir.y);
+        invDir.z = 1.0f / (ray.dir.z == 0.0f ? EPSILON : ray.dir.z);
+
+        float t1 = (minWorld.x - ray.origin.x) * invDir.x;
+        float t2 = (maxWorld.x - ray.origin.x) * invDir.x;
+        float t3 = (minWorld.y - ray.origin.y) * invDir.y;
+        float t4 = (maxWorld.y - ray.origin.y) * invDir.y;
+        float t5 = (minWorld.z - ray.origin.z) * invDir.z;
+        float t6 = (maxWorld.z - ray.origin.z) * invDir.z;
+
+        float tmin = std::max(std::max(std::min(t1, t2), std::min(t3, t4)), std::min(t5, t6));
+        float tmax = std::min(std::min(std::max(t1, t2), std::max(t3, t4)), std::max(t5, t6));
+
+        if (tmax < 0 || tmin > tmax)
+            return false;
+
+        return true;
+    }
+
+    float CalculateDistance(const Fenrir::Math::Vec3& rayOrigin, const AABB& aabb,
+                            const Fenrir::Math::Mat4& transformMatrix)
+    {
+        Vec3 minWorld = MultiplyPoint(aabb.min, transformMatrix);
+        Vec3 maxWorld = MultiplyPoint(aabb.max, transformMatrix);
+
+        Vec3 clampedOrigin = glm::clamp(rayOrigin, minWorld, maxWorld);
+
+        return Distance(clampedOrigin, rayOrigin);
+    }
 } // namespace Fenrir::Math

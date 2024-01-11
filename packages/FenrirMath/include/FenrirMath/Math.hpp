@@ -5,7 +5,7 @@
 
 #include "Math_fwd.hpp"
 
-constexpr const float EPSILON = 1e-6f;
+constexpr const float EPSILON = std::numeric_limits<float>::epsilon();
 
 namespace Fenrir::Math
 {
@@ -479,4 +479,10 @@ namespace Fenrir::Math
      * @return The normalized quaternion.
      */
     Quat Normalized(const Quat& x);
+
+    bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix);
+
+    float CalculateDistance(const Fenrir::Math::Vec3& rayOrigin, const AABB& aabb,
+                            const Fenrir::Math::Mat4& transformMatrix);
+
 } // namespace Fenrir::Math

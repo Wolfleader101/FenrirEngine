@@ -46,8 +46,8 @@ class Model
 {
   public:
     std::vector<Mesh> meshes;
-
     std::string directory;
+    Fenrir::Math::AABB boundingBox;
 };
 
 class ModelLibrary
@@ -74,6 +74,8 @@ class ModelLibrary
     void ProcessNode(aiNode* node, const aiScene* scene, Model& model);
 
     Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, std::string& directory);
+
+    // AABB CalculateAABB(Model& model);
 
     std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, TextureType textureType,
                                               const std::string& directory);
