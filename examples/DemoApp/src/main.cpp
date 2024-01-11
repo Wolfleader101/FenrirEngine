@@ -126,6 +126,7 @@ struct Material
 
 Shader myShader;
 Shader lightShader;
+Shader aabbShader;
 
 Model backpack;
 
@@ -133,6 +134,19 @@ Model cube;
 
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
+
+Fenrir::Math::Mat4 TransformToMat4(const Fenrir::Transform& transform)
+{
+    Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
+
+    mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
+
+    mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
+
+    mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+
+    return mdl_mat;
+}
 
 void InitLights(Fenrir::App& app)
 {
@@ -494,13 +508,7 @@ class GLRenderer
 
     void DrawModel(Fenrir::Transform& transform, Model& model, Shader& shader)
     {
-        Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
-
-        mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
-
-        mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
-
-        mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+        Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
 
         shader.Use();
         shader.SetMat4("view", m_view);
@@ -511,6 +519,8 @@ class GLRenderer
         {
             DrawMesh(mesh, shader);
         }
+
+        DrawAABB(model, mdl_mat);
     }
 
     void DrawMesh(Mesh& mesh, Shader& shader)
@@ -548,7 +558,58 @@ class GLRenderer
 
         glActiveTexture(GL_TEXTURE0);
     }
+
+    void DrawAABB(const Model& model, const Fenrir::Math::Mat4& modelMatrix)
+    {
+        std::vector<Fenrir::Math::Vec3> vertices = {
+            // 8 corners of the AABB
+            model.boundingBox.min,
+            Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.min.y, model.boundingBox.min.z),
+            Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.max.y, model.boundingBox.min.z),
+            Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.max.y, model.boundingBox.min.z),
+            Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.min.y, model.boundingBox.max.z),
+            Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.min.y, model.boundingBox.max.z),
+            Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.max.y, model.boundingBox.max.z),
+            model.boundingBox.max};
+
+        // AABB lines
+        std::vector<unsigned int> indices = {0, 1, 1, 3, 3, 2, 2, 0, 4, 5, 5, 7, 7, 6, 6, 4, 0, 4, 1, 5, 3, 7, 2, 6};
+
+        // Create and bind VAO, VBO, and EBO
+        unsigned int VAO, VBO, EBO;
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+        glGenBuffers(1, &EBO);
+
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Fenrir::Math::Vec3), &vertices[0], GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+
+        // Position attribute
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Fenrir::Math::Vec3), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        // Use your AABB shader here
+        aabbShader.Use();
+        aabbShader.SetMat4("model", modelMatrix); // Convert Transform to model matrix
+        aabbShader.SetMat4("view", m_view);
+        aabbShader.SetMat4("projection", m_projection);
+        aabbShader.SetVec3("color", Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f)); // Red color for AABB
+
+        // Draw the AABB
+        glBindVertexArray(VAO);
+        glDrawElements(GL_LINES, indices.size(), GL_UNSIGNED_INT, 0);
+
+        // Cleanup
+        glBindVertexArray(0);
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        glDeleteBuffers(1, &EBO);
+    }
 };
+
 #define BIND_GL_RENDERER_FN(fn, glRendererInstance) \
     std::bind(&GLRenderer::fn, &glRendererInstance, std::placeholders::_1)
 
@@ -567,9 +628,12 @@ class AssetLoader
                                   m_assetPath + "shaders/lighted_fragment.glsl");
         m_shaderLibrary.AddShader("light", m_assetPath + "shaders/light_vertex.glsl",
                                   m_assetPath + "shaders/light_fragment.glsl");
+        m_shaderLibrary.AddShader("debug", m_assetPath + "shaders/debug_vertex.glsl",
+                                  m_assetPath + "shaders/debug_fragment.glsl");
 
         myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
+        aabbShader = m_shaderLibrary.GetShader("debug");
 
         m_modelLibrary.AddModel(m_assetPath + "models/backpack/backpack.obj");
 
@@ -599,19 +663,6 @@ void Tick(Fenrir::App& app)
     //                 transform.pos + Fenrir::Math::Vec3(0.0f, 1.f, 0.0f) * static_cast<float>(app.GetTime().tickRate);
     //             transform.pos = newPos;
     //         });
-}
-
-Fenrir::Math::Mat4 TransformToMat4(const Fenrir::Transform& transform)
-{
-    Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
-
-    mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
-
-    mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
-
-    mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
-
-    return mdl_mat;
 }
 
 class Editor

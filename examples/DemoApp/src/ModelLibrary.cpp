@@ -82,7 +82,8 @@ bool ModelLibrary::HasModel(const std::string& path) const
 void ModelLibrary::LoadModel(const std::string& path, Model& model)
 {
     Assimp::Importer importer;
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
+    const aiScene* scene =
+        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenBoundingBoxes);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
     {
@@ -93,6 +94,7 @@ void ModelLibrary::LoadModel(const std::string& path, Model& model)
     model.directory = path.substr(0, path.find_last_of('/'));
 
     ProcessNode(scene->mRootNode, scene, model);
+
     CalculateAABB(model);
 }
 
@@ -106,8 +108,6 @@ void ModelLibrary::CalculateAABB(Model& model)
 
     for (auto& mesh : model.meshes)
     {
-        UpdateMeshAABB(mesh); // get the mesh's AABB
-
         globalMin.x = std::min(globalMin.x, mesh.boundingBox.min.x);
         globalMin.y = std::min(globalMin.y, mesh.boundingBox.min.y);
         globalMin.z = std::min(globalMin.z, mesh.boundingBox.min.z);
@@ -231,6 +231,10 @@ Mesh ModelLibrary::ProcessMesh(aiMesh* mesh, const aiScene* scene, std::string& 
     }
 
     Mesh returnMesh(vertices, indices, textures);
+
+    auto& aiAABB = mesh->mAABB;
+    returnMesh.boundingBox = Fenrir::Math::AABB({aiAABB.mMin.x, aiAABB.mMin.y, aiAABB.mMin.z},
+                                                {aiAABB.mMax.x, aiAABB.mMax.y, aiAABB.mMax.z});
 
     SetupMesh(returnMesh);
 

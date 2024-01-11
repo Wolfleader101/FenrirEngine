@@ -23,8 +23,6 @@ void CameraController::OnKeyPress(const KeyboardKeyEvent& event)
 
 void CameraController::OnMouseMove(const MouseMoveEvent& event)
 {
-    if (!m_enabled)
-        return;
 
     float xpos = static_cast<float>(event.x);
     float ypos = static_cast<float>(event.y);
@@ -34,6 +32,9 @@ void CameraController::OnMouseMove(const MouseMoveEvent& event)
 
     m_lastMousePos.x = xpos;
     m_lastMousePos.y = ypos;
+
+    if (!m_enabled || !m_rotEnabled)
+        return;
 
     Fenrir::Math::Vec2 deltaWithSens = m_deltaMousePos * m_sensitive;
 
@@ -54,11 +55,28 @@ void CameraController::OnMouseScroll(const MouseScrollEvent& event)
         m_camera.fov = 1.0f;
 }
 
+void CameraController::OnMouseButton(const MouseButtonEvent& event)
+{
+    if (event.button == MouseButton::Right && (event.state == InputState::Pressed || event.state == InputState::Held))
+    {
+        m_rotEnabled = true;
+    }
+    else
+    {
+        m_rotEnabled = false;
+    }
+}
+
 void CameraController::Update(Fenrir::App& app)
 {
     for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
     {
         OnKeyPress(event);
+    }
+
+    for (const auto& event : app.ReadEvents<MouseButtonEvent>())
+    {
+        OnMouseButton(event);
     }
 
     for (const auto& event : app.ReadEvents<MouseMoveEvent>())
