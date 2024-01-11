@@ -20,11 +20,11 @@ namespace Fenrir::Math
 
     struct AABB
     {
-        Fenrir::Math::Vec3 min;
-        Fenrir::Math::Vec3 max;
+        Vec3 min;
+        Vec3 max;
 
         AABB() = default;
-        AABB(const Fenrir::Math::Vec3& min, const Fenrir::Math::Vec3& max) : min(min), max(max)
+        AABB(const Vec3& min, const Vec3& max) : min(min), max(max)
         {
         }
     };

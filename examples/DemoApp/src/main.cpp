@@ -791,6 +791,7 @@ class Editor
 
     Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
     {
+
         return Fenrir::Math::Vec2((2.0f * screenPoint.x) / m_window.GetWidth() - 1.0f,
                                   1.0f - (2.0f * screenPoint.y) / m_window.GetHeight());
     }

@@ -33,6 +33,7 @@ class Mesh
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     std::vector<Texture> textures;
+    Fenrir::Math::AABB boundingBox;
 
     Mesh() = default;
     Mesh(std::vector<Vertex> verts, std::vector<unsigned int> ind, std::vector<Texture> texts);
@@ -75,7 +76,9 @@ class ModelLibrary
 
     Mesh ProcessMesh(aiMesh* mesh, const aiScene* scene, std::string& directory);
 
-    // AABB CalculateAABB(Model& model);
+    void CalculateAABB(Model& model);
+
+    void UpdateMeshAABB(Mesh& mesh);
 
     std::vector<Texture> LoadMaterialTextures(aiMaterial* mat, aiTextureType type, TextureType textureType,
                                               const std::string& directory);
