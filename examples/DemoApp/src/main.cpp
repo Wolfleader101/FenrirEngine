@@ -32,6 +32,8 @@
 
 #include <ImGuizmo.h>
 
+#include "firaCode.hpp"
+
 #include <glaze/glaze.hpp>
 
 struct ProjectSettings
@@ -694,6 +696,9 @@ class Editor
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;   // enable Docking
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // enable Multi-viewport
 
+        io.Fonts->AddFontFromMemoryCompressedBase85TTF(FiraCode_compressed_data_base85, 16.0f, nullptr,
+                                                       io.Fonts->GetGlyphRangesDefault());
+
         ImGui::StyleColorsDark();
         ImGuiStyle& style = ImGui::GetStyle();
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
@@ -726,11 +731,14 @@ class Editor
         ImGuiID dock_main_id = dockspace_id; // main dock space
         ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.2f, nullptr, &dock_main_id);
         ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.2f, nullptr, &dock_main_id);
+        ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.2f, nullptr, &dock_main_id);
 
         // Dock windows into the nodes
         ImGui::DockBuilderDockWindow("Scene Hierarchy", dock_left_id);
-        ImGui::DockBuilderDockWindow("ViewPort", dock_main_id);
+        ImGui::DockBuilderDockWindow("Scene View", dock_main_id);
         ImGui::DockBuilderDockWindow("Properties", dock_right_id);
+        ImGui::DockBuilderDockWindow("Asset Browser", dock_bottom_id);
+        ImGui::DockBuilderDockWindow("Console", dock_bottom_id);
 
         ImGui::DockBuilderFinish(dockspace_id);
 
@@ -777,14 +785,19 @@ class Editor
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
-        int window_width = m_window.GetWidth();
-        int window_height = m_window.GetHeight();
+        // MenuBar();
 
         ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(main_viewport->Pos);
-        m_renderer.ResizeFrameBuffer(m_frameBuffer, window_width, window_height);
-        ImGui::SetNextWindowSize(ImVec2(static_cast<float>(window_width), static_cast<float>(window_height)));
+        ImVec2 mainPanelPos = ImVec2(main_viewport->Pos.x, main_viewport->Pos.y + m_menuBarHeight);
+        ImVec2 mainPanelSize = ImVec2(main_viewport->Size.x, main_viewport->Size.y - m_menuBarHeight);
+
+        // set the next window position and size, accounting for the menu bar height
+        ImGui::SetNextWindowPos(mainPanelPos);
+        ImGui::SetNextWindowSize(mainPanelSize);
+
         ImGui::SetNextWindowViewport(main_viewport->ID);
+
+        m_renderer.ResizeFrameBuffer(m_frameBuffer, mainPanelSize.x, mainPanelSize.y);
 
         ImGui::Begin("FenrirDockSpace", nullptr, base_window_flags);
 
@@ -796,9 +809,13 @@ class Editor
 
         SceneHierarchyWindow();
 
-        ViewPortWindow();
+        SceneViewWindow();
 
         PropertiesWindow();
+
+        AssetBrowserWindow();
+
+        ConsoleWindow();
 
         ImGui::Render();
 
@@ -836,8 +853,9 @@ class Editor
     Window& m_window;
     GLRenderer& m_renderer;
     Fenrir::Camera& m_camera;
-    ImVec2 m_viewportSize;
-    ImVec2 m_viewportPos;
+    ImVec2 m_sceneViewSize;
+    ImVec2 m_SceneViewPos;
+    float m_menuBarHeight = 0.0f;
 
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
@@ -854,13 +872,14 @@ class Editor
     Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
     {
         Fenrir::Math::Vec2 adjustedPoint;
-        adjustedPoint.x = screenPoint.x - m_viewportPos.x;
-        adjustedPoint.y = screenPoint.y - m_viewportPos.y;
+        adjustedPoint.x = screenPoint.x - m_SceneViewPos.x;
+
+        adjustedPoint.y = (screenPoint.y - m_menuBarHeight) - m_SceneViewPos.y;
 
         // normalize the coords
         Fenrir::Math::Vec2 normalizedCoords;
-        normalizedCoords.x = (2.0f * adjustedPoint.x) / m_viewportSize.x - 1.0f;
-        normalizedCoords.y = 1.0f - (2.0f * adjustedPoint.y) / m_viewportSize.y;
+        normalizedCoords.x = (2.0f * adjustedPoint.x) / m_sceneViewSize.x - 1.0f;
+        normalizedCoords.y = 1.0f - (2.0f * adjustedPoint.y) / m_sceneViewSize.y;
 
         return normalizedCoords;
     }
@@ -919,6 +938,48 @@ class Editor
         return selectedEntity;
     }
 
+    void MenuBar()
+    {
+        ImGui::BeginMainMenuBar();
+
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("New Scene"))
+            {
+                // m_app.NewScene();
+            }
+
+            if (ImGui::MenuItem("Open Scene"))
+            {
+                // m_app.OpenScene();
+            }
+
+            if (ImGui::MenuItem("Save Scene"))
+            {
+                // m_app.SaveScene();
+            }
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Edit"))
+        {
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("View"))
+        {
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Window"))
+        {
+            ImGui::EndMenu();
+        }
+        m_menuBarHeight = ImGui::GetWindowSize().y;
+        ImGui::EndMainMenuBar();
+    }
+
     void SceneHierarchyWindow()
     {
         ImGui::Begin("Scene Hierarchy", nullptr, scene_window_flags);
@@ -953,14 +1014,14 @@ class Editor
         }
     }
 
-    void ViewPortWindow()
+    void SceneViewWindow()
     {
-        ImGui::Begin("ViewPort", nullptr, scene_window_flags);
+        ImGui::Begin("Scene View", nullptr, scene_window_flags);
         ImVec2 pos = ImGui::GetCursorScreenPos();
         ImVec2 size = ImGui::GetWindowSize();
 
-        m_viewportPos = ImGui::GetWindowPos();
-        m_viewportSize = size;
+        m_SceneViewPos = ImGui::GetWindowPos();
+        m_sceneViewSize = size;
 
         ImGui::GetWindowDrawList()->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)),
                                              ImVec2(pos.x, pos.y), ImVec2(pos.x + size.x, pos.y + size.y),
@@ -1016,6 +1077,20 @@ class Editor
                 ImGui::DragFloat3("Scale", &transform.scale.x, 0.5f);
             }
         }
+        ImGui::End();
+    }
+
+    void AssetBrowserWindow()
+    {
+        ImGui::Begin("Asset Browser", nullptr, scene_window_flags);
+        ImGui::Text("Assets");
+        ImGui::End();
+    }
+
+    void ConsoleWindow()
+    {
+        ImGui::Begin("Console", nullptr, scene_window_flags);
+        ImGui::Text("Console");
         ImGui::End();
     }
 
