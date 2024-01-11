@@ -30,6 +30,7 @@ target_link_libraries(DemoApp PRIVATE FenrirApp FenrirCamera FenrirMath)
 
 target_link_libraries(DemoApp PRIVATE
     imgui
+    imguizmo
     glad
     glfw
     assimp

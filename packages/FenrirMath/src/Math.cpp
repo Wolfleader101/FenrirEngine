@@ -1,6 +1,8 @@
 #include "FenrirMath/Math.hpp"
 
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/norm.hpp>
 
 namespace Fenrir::Math
@@ -283,9 +285,26 @@ namespace Fenrir::Math
         return glm::value_ptr(m);
     }
 
+    float* AsArray(Mat4& m)
+    {
+        return glm::value_ptr(m);
+    }
+
     const float* AsArray(const Quat& q)
     {
         return glm::value_ptr(q);
+    }
+
+    Mat4 MakeMat4(const float* arr)
+    {
+        return glm::make_mat4(arr);
+    }
+
+    void Decompose(const Mat4& mat, Vec3& pos, Quat& rotation, Vec3& scale)
+    {
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(mat, scale, rotation, pos, skew, perspective);
     }
 
     float Cos(const float val)

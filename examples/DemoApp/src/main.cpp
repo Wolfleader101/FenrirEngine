@@ -30,6 +30,8 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
 
+#include <ImGuizmo.h>
+
 #include <glaze/glaze.hpp>
 
 struct ProjectSettings
@@ -602,8 +604,8 @@ void Tick(Fenrir::App& app)
 class Editor
 {
   public:
-    Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer)
-        : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer)
+    Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera)
+        : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer), m_camera(camera)
     {
     }
 
@@ -674,6 +676,7 @@ class Editor
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        ImGuizmo::BeginFrame();
 
         int window_width = m_window.GetWidth();
         int window_height = m_window.GetHeight();
@@ -733,6 +736,8 @@ class Editor
     Fenrir::ILogger& m_logger;
     Window& m_window;
     GLRenderer& m_renderer;
+    Fenrir::Camera& m_camera;
+
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
     Fenrir::Entity m_selectedEntity;
@@ -783,11 +788,17 @@ class Editor
     {
         ImGui::Begin("ViewPort", nullptr, scene_window_flags);
         ImVec2 pos = ImGui::GetCursorScreenPos();
+        ImVec2 size = ImGui::GetWindowSize();
 
-        ImGui::GetWindowDrawList()->AddImage(
-            reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)), ImVec2(pos.x, pos.y),
-            ImVec2(pos.x + static_cast<float>(m_window.GetWidth()), pos.y + static_cast<float>(m_window.GetHeight())),
-            ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+        ImGui::GetWindowDrawList()->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)),
+                                             ImVec2(pos.x, pos.y), ImVec2(pos.x + size.x, pos.y + size.y),
+                                             ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+
+        // This is needed to make the guizmo work
+        ImGuizmo::SetDrawlist(ImGui::GetCurrentWindow()->DrawList);
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetRect(pos.x, pos.y, size.x, size.y);
+        DrawGuizmo();
 
         ImGui::End();
     }
@@ -835,16 +846,67 @@ class Editor
         }
         ImGui::End();
     }
+
+    void DrawGuizmo()
+    {
+        if (m_selectedEntity.IsValid())
+        {
+            auto& transform = m_selectedEntity.GetComponent<Fenrir::Transform>();
+            static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
+            static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::WORLD);
+            static bool useSnap = false;
+            static float snap[3] = {1.f, 1.f, 1.f};
+            static float bounds[] = {-0.5f, -0.5f, -0.5f, 0.5f, 0.5f, 0.5f};
+            static float boundsSnap[] = {0.1f, 0.1f, 0.1f};
+            static bool boundSizing = false;
+            static bool boundSizingSnap = false;
+
+            if (ImGui::IsKeyPressed(ImGuiKey_T))
+                mCurrentGizmoOperation = ImGuizmo::TRANSLATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_E))
+                mCurrentGizmoOperation = ImGuizmo::ROTATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_R))
+                mCurrentGizmoOperation = ImGuizmo::SCALE;
+
+            auto projection =
+                Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
+                                          static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
+
+            Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
+
+            mdl_mat = Fenrir::Math::Translate(mdl_mat, transform.pos);
+
+            mdl_mat *= Fenrir::Math::Mat4Cast(transform.rot);
+
+            mdl_mat = Fenrir::Math::Scale(mdl_mat, transform.scale);
+
+            float* mat = Fenrir::Math::AsArray(mdl_mat);
+
+            ImGuizmo::Manipulate(Fenrir::Math::AsArray(m_camera.GetViewMatrix()), Fenrir::Math::AsArray(projection),
+                                 mCurrentGizmoOperation, mCurrentGizmoMode, mat, nullptr, useSnap ? &snap[0] : nullptr,
+                                 boundSizing ? bounds : nullptr, boundSizingSnap ? boundsSnap : nullptr);
+
+            Fenrir::Math::Mat4 newMat = Fenrir::Math::MakeMat4(mat);
+
+            Fenrir::Math::Decompose(newMat, transform.pos, transform.rot, transform.scale);
+        }
+    }
 };
 
 #define BIND_EDITOR_FN(fn, editorInstance) std::bind(&Editor::fn, &editorInstance, std::placeholders::_1)
 
 int main()
 {
-    ProjectSettings projectSettings{};
-    auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", std::string{}); // TODO error handling
-
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
+
+    ProjectSettings projectSettings{};
+    std::string fileContents;
+    auto ec = glz::read_file_json(projectSettings, "assets/demoApp.feproj", fileContents); // TODO error handling
+    if (ec)
+    {
+        logger->Fatal("Failed to load project settings: {0}", glz::format_error(ec, fileContents));
+        return -1;
+    }
 
     Fenrir::App app(std::move(logger));
 
@@ -857,7 +919,7 @@ int main()
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath);
 
-    Editor editor(app, *app.Logger().get(), window, glRenderer);
+    Editor editor(app, *app.Logger().get(), window, glRenderer, camera);
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init,

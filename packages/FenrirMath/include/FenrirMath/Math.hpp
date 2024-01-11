@@ -417,7 +417,12 @@ namespace Fenrir::Math
     const float* AsArray(const Vec4& v);
     const float* AsArray(const Mat3& m);
     const float* AsArray(const Mat4& m);
+    float* AsArray(Mat4& m);
     const float* AsArray(const Quat& q);
+
+    Mat4 MakeMat4(const float* arr);
+
+    void Decompose(const Mat4& mat, Vec3& pos, Quat& rotation, Vec3& scale);
 
     /**
      * @brief Calculates the cosine of the value.
