@@ -82,8 +82,7 @@ bool ModelLibrary::HasModel(const std::string& path) const
 void ModelLibrary::LoadModel(const std::string& path, Model& model)
 {
     Assimp::Importer importer;
-    const aiScene* scene =
-        importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_GenBoundingBoxes);
+    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_FlipUVs);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
     {
@@ -94,10 +93,52 @@ void ModelLibrary::LoadModel(const std::string& path, Model& model)
     model.directory = path.substr(0, path.find_last_of('/'));
 
     ProcessNode(scene->mRootNode, scene, model);
+    CalculateAABB(model);
+}
 
-    auto aiAABB = scene->mMeshes[0]->mAABB;
-    model.boundingBox = Fenrir::Math::AABB({aiAABB.mMin.x, aiAABB.mMin.y, aiAABB.mMin.z},
-                                           {aiAABB.mMax.x, aiAABB.mMax.y, aiAABB.mMax.z});
+void ModelLibrary::CalculateAABB(Model& model)
+{
+    if (model.meshes.empty())
+        return;
+
+    Fenrir::Math::Vec3 globalMin = model.meshes[0].boundingBox.min;
+    Fenrir::Math::Vec3 globalMax = model.meshes[0].boundingBox.max;
+
+    for (auto& mesh : model.meshes)
+    {
+        UpdateMeshAABB(mesh); // get the mesh's AABB
+
+        globalMin.x = std::min(globalMin.x, mesh.boundingBox.min.x);
+        globalMin.y = std::min(globalMin.y, mesh.boundingBox.min.y);
+        globalMin.z = std::min(globalMin.z, mesh.boundingBox.min.z);
+
+        globalMax.x = std::max(globalMax.x, mesh.boundingBox.max.x);
+        globalMax.y = std::max(globalMax.y, mesh.boundingBox.max.y);
+        globalMax.z = std::max(globalMax.z, mesh.boundingBox.max.z);
+    }
+
+    model.boundingBox = Fenrir::Math::AABB(globalMin, globalMax);
+}
+void ModelLibrary::UpdateMeshAABB(Mesh& mesh)
+{
+    if (mesh.vertices.empty())
+        return;
+
+    Fenrir::Math::Vec3 min = mesh.vertices[0].pos;
+    Fenrir::Math::Vec3 max = min;
+
+    for (const auto& vertex : mesh.vertices)
+    {
+        min.x = std::min(min.x, vertex.pos.x);
+        min.y = std::min(min.y, vertex.pos.y);
+        min.z = std::min(min.z, vertex.pos.z);
+
+        max.x = std::max(max.x, vertex.pos.x);
+        max.y = std::max(max.y, vertex.pos.y);
+        max.z = std::max(max.z, vertex.pos.z);
+    }
+
+    mesh.boundingBox = Fenrir::Math::AABB(min, max);
 }
 
 void ModelLibrary::ProcessNode(aiNode* node, const aiScene* scene, Model& model)
