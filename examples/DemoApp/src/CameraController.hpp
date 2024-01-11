@@ -23,6 +23,8 @@ class CameraController
 
     void OnMouseScroll(const MouseScrollEvent& event);
 
+    void OnMouseButton(const MouseButtonEvent& event);
+
     void Update(Fenrir::App& app);
 
   private:
@@ -32,7 +34,8 @@ class CameraController
     float m_sprintSpeed = 6.0f;
     Fenrir::Math::Vec2 m_lastMousePos = Fenrir::Math::Vec2(400.0f, 300.0f);
     bool m_isSprinting = false;
-    bool m_enabled = true;
+    bool m_enabled = false;
+    bool m_rotEnabled = false;
 
     // TODO move to a custom input class
     std::unordered_set<int> m_pressedKeys;
