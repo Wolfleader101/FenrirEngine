@@ -43,6 +43,7 @@ struct MouseButtonEvent
     MouseButton button;
     InputState state;
     int mods;
+    double x, y;
 };
 
 struct KeyboardKeyEvent

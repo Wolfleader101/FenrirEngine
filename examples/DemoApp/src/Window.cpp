@@ -118,8 +118,10 @@ void Window::PreInit(Fenrir::App& app)
                           : (button == GLFW_MOUSE_BUTTON_RIGHT)  ? MouseButton::Right
                           : (button == GLFW_MOUSE_BUTTON_MIDDLE) ? MouseButton::Middle
                                                                  : MouseButton::Left;
+        double x = 0.0, y = 0.0;
+        glfwGetCursorPos(window, &x, &y);
 
-        MouseButtonEvent event{btn, state, mods};
+        MouseButtonEvent event{btn, state, mods, x, y};
         win.m_appPtr->SendEvent(event);
     });
 
