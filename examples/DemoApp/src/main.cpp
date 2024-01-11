@@ -355,12 +355,12 @@ class GLRenderer
 
         Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
-        entityList.ForEach<Fenrir::Transform, Model, Material>(
-            [&](Fenrir::Transform& transform, Model& model, Material& material) {
+        entityList.ForEach<Fenrir::Transform, Fenrir::Relationship, Model, Material>(
+            [&](Fenrir::Transform& transform, Fenrir::Relationship& relationship, Model& model, Material& material) {
                 material.properties["spotLight.pos"] = m_camera.pos;
                 material.properties["spotLight.direction"] = m_camera.front;
                 SetMatProps(material.shader, material);
-                DrawModel(transform, model, material.shader);
+                DrawModel(transform, relationship, model, material.shader);
             });
     }
 
@@ -506,16 +506,25 @@ class GLRenderer
         }
     }
 
-    void DrawModel(Fenrir::Transform& transform, Model& model, Shader& shader)
+    void DrawModel(const Fenrir::Transform& transform, const Fenrir::Relationship& relationship, const Model& model,
+                   const Shader& shader)
     {
-        Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
+        Fenrir::Transform tempTran = transform;
+        if (relationship.parent.IsValid())
+        {
+            Fenrir::Transform& parentTransform = relationship.parent.GetComponent<Fenrir::Transform>();
+            tempTran.pos += parentTransform.pos;
+            tempTran.rot *= parentTransform.rot;
+            tempTran.scale *= parentTransform.scale;
+        }
+        Fenrir::Math::Mat4 mdl_mat = TransformToMat4(tempTran);
 
         shader.Use();
         shader.SetMat4("view", m_view);
         shader.SetMat4("projection", m_projection);
         shader.SetMat4("model", mdl_mat);
 
-        for (auto& mesh : model.meshes)
+        for (const auto& mesh : model.meshes)
         {
             DrawMesh(mesh, shader);
         }
@@ -523,7 +532,7 @@ class GLRenderer
         DrawAABB(model, mdl_mat);
     }
 
-    void DrawMesh(Mesh& mesh, Shader& shader)
+    void DrawMesh(const Mesh& mesh, const Shader& shader)
     {
         unsigned int diffuseNr = 1;
         unsigned int specularNr = 1;
