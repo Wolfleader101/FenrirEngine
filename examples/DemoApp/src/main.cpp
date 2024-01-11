@@ -827,6 +827,8 @@ class Editor
     Window& m_window;
     GLRenderer& m_renderer;
     Fenrir::Camera& m_camera;
+    ImVec2 m_viewportSize;
+    ImVec2 m_viewportPos;
 
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
@@ -842,9 +844,16 @@ class Editor
 
     Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
     {
+        Fenrir::Math::Vec2 adjustedPoint;
+        adjustedPoint.x = screenPoint.x - m_viewportPos.x;
+        adjustedPoint.y = screenPoint.y - m_viewportPos.y;
 
-        return Fenrir::Math::Vec2((2.0f * screenPoint.x) / m_window.GetWidth() - 1.0f,
-                                  1.0f - (2.0f * screenPoint.y) / m_window.GetHeight());
+        // normalize the coords
+        Fenrir::Math::Vec2 normalizedCoords;
+        normalizedCoords.x = (2.0f * adjustedPoint.x) / m_viewportSize.x - 1.0f;
+        normalizedCoords.y = 1.0f - (2.0f * adjustedPoint.y) / m_viewportSize.y;
+
+        return normalizedCoords;
     }
 
     Fenrir::Math::Ray ScreenToPointRay(const Fenrir::Math::Vec2& normalisedCoords)
@@ -870,24 +879,6 @@ class Editor
             Fenrir::Math::Normalized(Fenrir::Math::Vec3(worldCoords.x, worldCoords.y, worldCoords.z));
 
         return Fenrir::Math::Ray(m_camera.pos, rayDir);
-    }
-
-    void ScreenToWorldPoint(const Fenrir::Math::Vec2& screenPoint, Fenrir::Math::Vec3& worldPoint)
-    {
-        Fenrir::Math::Mat4 view = m_camera.GetViewMatrix();
-        Fenrir::Math::Mat4 projection =
-            Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
-                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
-
-        Fenrir::Math::Mat4 viewProjection = projection * view;
-
-        Fenrir::Math::Mat4 invViewProjection = Fenrir::Math::Inverse(viewProjection);
-
-        Fenrir::Math::Vec4 screenPoint4 = Fenrir::Math::Vec4(screenPoint.x, screenPoint.y, 0.0f, 1.0f);
-
-        Fenrir::Math::Vec4 worldPoint4 = invViewProjection * screenPoint4;
-
-        worldPoint = Fenrir::Math::Vec3(worldPoint4.x, worldPoint4.y, worldPoint4.z);
     }
 
     Fenrir::Entity SelectEntity(const Fenrir::Math::Ray& ray, Fenrir::EntityList& entityList)
@@ -958,6 +949,9 @@ class Editor
         ImGui::Begin("ViewPort", nullptr, scene_window_flags);
         ImVec2 pos = ImGui::GetCursorScreenPos();
         ImVec2 size = ImGui::GetWindowSize();
+
+        m_viewportPos = ImGui::GetWindowPos();
+        m_viewportSize = size;
 
         ImGui::GetWindowDrawList()->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)),
                                              ImVec2(pos.x, pos.y), ImVec2(pos.x + size.x, pos.y + size.y),
