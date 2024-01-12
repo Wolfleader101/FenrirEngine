@@ -300,6 +300,7 @@ void InitBackpacks(Fenrir::App& app)
 class GLRenderer
 {
   public:
+    // TODO get rid of m_window depedency
     GLRenderer(Fenrir::ILogger& logger, Window& window, Fenrir::Camera& camera)
         : m_logger(logger), m_window(window), m_camera(camera)
     {
@@ -309,10 +310,11 @@ class GLRenderer
     {
         m_logger.Info("GLRenderer::Init - Initializing GLRenderer");
 
-        //? GL SPECIFIC CODE FOR TESTING
         glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
 
         glEnable(GL_DEPTH_TEST);
+
+        SetAspectRatio(m_window.GetWidth() / m_window.GetHeight());
     }
 
     void PreUpdate(Fenrir::App& app)
@@ -324,11 +326,6 @@ class GLRenderer
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL); // fill mode
     }
 
-    void OnWindowResize(const WindowResizeEvent& event)
-    {
-        glViewport(0, 0, event.width, event.height);
-    }
-
     void OnWindowFrameBufferResize(const WindowFrameBufferResizeEvent& event)
     {
         glViewport(0, 0, event.width, event.height);
@@ -336,22 +333,12 @@ class GLRenderer
 
     void Update(Fenrir::App& app)
     {
-        for (const auto& event : app.ReadEvents<WindowResizeEvent>())
-        {
-            OnWindowResize(event);
-        }
-
         for (const auto& event : app.ReadEvents<WindowFrameBufferResizeEvent>())
         {
             OnWindowFrameBufferResize(event);
         }
 
         m_view = m_camera.GetViewMatrix();
-
-        // TODO might only want to recalculate this if it changes? (could use events)
-        m_projection =
-            Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
-                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
 
         // TODO above needs to be moved somehow
 
@@ -372,6 +359,12 @@ class GLRenderer
 
     void Exit(Fenrir::App& app)
     {
+    }
+
+    void SetAspectRatio(float aspectRatio)
+    {
+        m_aspecRatio = aspectRatio;
+        m_projection = Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov), m_aspecRatio, 0.1f, 100.0f);
     }
 
     struct Framebuffer
@@ -421,33 +414,52 @@ class GLRenderer
         glDeleteFramebuffers(1, &fbo);
     }
 
-    void BindFrameBuffer(unsigned int fbo, int width, int height)
+    void BindFrameBuffer(const Framebuffer& frameBuffer)
     {
-        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-        // glViewport(0, 0, width, height);
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer.fbo);
+        glViewport(0, 0, frameBuffer.width, frameBuffer.height);
     }
 
     void UnbindFrameBuffer()
     {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        // glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
+        SetAspectRatio(static_cast<float>(m_window.GetWidth()) / static_cast<float>(m_window.GetHeight()));
+        glViewport(0, 0, m_window.GetWidth(), m_window.GetHeight());
     }
 
     void ResizeFrameBuffer(Framebuffer& frameBuffer, int width, int height)
     {
+        if (frameBuffer.width == width && frameBuffer.height == height)
+            return;
+
         frameBuffer.width = width;
         frameBuffer.height = height;
 
         glBindTexture(GL_TEXTURE_2D, frameBuffer.texture);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
-
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, frameBuffer.texture, 0);
 
         glBindRenderbuffer(GL_RENDERBUFFER, frameBuffer.rbo);
         glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, frameBuffer.rbo);
+        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, frameBuffer.fbo);
+
+        SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            m_logger.Fatal("GLRenderer::ResizeFrameBuffer - Framebuffer is not complete!");
+        }
+
+        glBindTexture(GL_TEXTURE_2D, 0);        // unbind texture
+        glBindRenderbuffer(GL_RENDERBUFFER, 0); // unbind renderbuffer
+    }
+
+    Fenrir::Math::Mat4 GetProjectionMatrix() const
+    {
+        return m_projection;
     }
 
   private:
@@ -457,6 +469,7 @@ class GLRenderer
 
     Fenrir::Math::Mat4 m_view;
     Fenrir::Math::Mat4 m_projection;
+    float m_aspecRatio;
 
     void SetMatProps(const Shader& shader, const Material& mat)
     {
@@ -747,7 +760,12 @@ class Editor
 
     void PreUpdate(Fenrir::App& app)
     {
-        m_renderer.BindFrameBuffer(m_frameBuffer.fbo, m_window.GetWidth(), m_window.GetHeight());
+        // resize the framebuffer to that of the sceneView size
+        m_renderer.ResizeFrameBuffer(m_frameBuffer, static_cast<int>(m_sceneViewSize.x),
+                                     static_cast<int>(m_sceneViewSize.y));
+
+        // bind the framebuffer to draw the scene to
+        m_renderer.BindFrameBuffer(m_frameBuffer);
     }
 
     void OnMouseClick(const MouseButtonEvent& event)
@@ -778,6 +796,7 @@ class Editor
             OnMouseClick(event);
         }
 
+        // unbind the framebuffer to draw the imgui windows
         m_renderer.UnbindFrameBuffer();
 
         ImGui_ImplOpenGL3_NewFrame();
@@ -785,19 +804,15 @@ class Editor
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
 
-        // MenuBar();
+        MenuBar();
 
         ImGuiViewport* main_viewport = ImGui::GetMainViewport();
-        ImVec2 mainPanelPos = ImVec2(main_viewport->Pos.x, main_viewport->Pos.y + m_menuBarHeight);
-        ImVec2 mainPanelSize = ImVec2(main_viewport->Size.x, main_viewport->Size.y - m_menuBarHeight);
-
-        // set the next window position and size, accounting for the menu bar height
-        ImGui::SetNextWindowPos(mainPanelPos);
-        ImGui::SetNextWindowSize(mainPanelSize);
-
         ImGui::SetNextWindowViewport(main_viewport->ID);
 
-        m_renderer.ResizeFrameBuffer(m_frameBuffer, mainPanelSize.x, mainPanelSize.y);
+        ImVec2 dockspace_pos = ImVec2(0.0f, m_menuBarHeight);
+        ImVec2 dockspace_size = ImVec2(main_viewport->Size.x, main_viewport->Size.y - m_menuBarHeight);
+        ImGui::SetNextWindowPos(dockspace_pos);
+        ImGui::SetNextWindowSize(dockspace_size);
 
         ImGui::Begin("FenrirDockSpace", nullptr, base_window_flags);
 
@@ -853,7 +868,7 @@ class Editor
     Window& m_window;
     GLRenderer& m_renderer;
     Fenrir::Camera& m_camera;
-    ImVec2 m_sceneViewSize;
+    ImVec2 m_sceneViewSize = ImVec2(1.0f, 1.0f);
     ImVec2 m_SceneViewPos;
     float m_menuBarHeight = 0.0f;
 
@@ -871,17 +886,19 @@ class Editor
 
     Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
     {
-        Fenrir::Math::Vec2 adjustedPoint;
-        adjustedPoint.x = screenPoint.x - m_SceneViewPos.x;
+        Fenrir::Math::Vec2 pointRelativeToSceneView;
+        pointRelativeToSceneView.x = (screenPoint.x - m_SceneViewPos.x) / m_sceneViewSize.x;
+        pointRelativeToSceneView.y = (screenPoint.y - (m_SceneViewPos.y + m_menuBarHeight)) / m_sceneViewSize.y;
 
-        adjustedPoint.y = (screenPoint.y - m_menuBarHeight) - m_SceneViewPos.y;
+        // Convert to NDC [-1, 1]
+        Fenrir::Math::Vec2 ndc;
+        ndc.x = pointRelativeToSceneView.x * 2.0f - 1.0f;
+        ndc.y = pointRelativeToSceneView.y * 2.0f - 1.0f;
 
-        // normalize the coords
-        Fenrir::Math::Vec2 normalizedCoords;
-        normalizedCoords.x = (2.0f * adjustedPoint.x) / m_sceneViewSize.x - 1.0f;
-        normalizedCoords.y = 1.0f - (2.0f * adjustedPoint.y) / m_sceneViewSize.y;
+        // inver the Y axis for gl as bottom-left is (-1, -1),
+        ndc.y = -ndc.y;
 
-        return normalizedCoords;
+        return ndc;
     }
 
     Fenrir::Math::Ray ScreenToPointRay(const Fenrir::Math::Vec2& normalisedCoords)
@@ -1017,20 +1034,19 @@ class Editor
     void SceneViewWindow()
     {
         ImGui::Begin("Scene View", nullptr, scene_window_flags);
-        ImVec2 pos = ImGui::GetCursorScreenPos();
-        ImVec2 size = ImGui::GetWindowSize();
 
-        m_SceneViewPos = ImGui::GetWindowPos();
-        m_sceneViewSize = size;
+        m_SceneViewPos = ImGui::GetCursorScreenPos();
+        m_sceneViewSize = ImGui::GetWindowSize();
 
-        ImGui::GetWindowDrawList()->AddImage(reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)),
-                                             ImVec2(pos.x, pos.y), ImVec2(pos.x + size.x, pos.y + size.y),
-                                             ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
+        ImGui::GetWindowDrawList()->AddImage(
+            reinterpret_cast<void*>(static_cast<intptr_t>(m_frameBuffer.texture)), m_SceneViewPos,
+            ImVec2(m_SceneViewPos.x + m_sceneViewSize.x, m_SceneViewPos.y + m_sceneViewSize.y), ImVec2(0.0f, 1.0f),
+            ImVec2(1.0f, 0.0f));
 
-        // This is needed to make the guizmo work
         ImGuizmo::SetDrawlist(ImGui::GetCurrentWindow()->DrawList);
         ImGuizmo::SetOrthographic(false);
-        ImGuizmo::SetRect(pos.x, pos.y, size.x, size.y);
+        ImGuizmo::SetRect(m_SceneViewPos.x, m_SceneViewPos.y, m_sceneViewSize.x, m_sceneViewSize.y);
+
         DrawGuizmo();
 
         ImGui::End();
@@ -1115,9 +1131,7 @@ class Editor
             if (ImGui::IsKeyPressed(ImGuiKey_R))
                 mCurrentGizmoOperation = ImGuizmo::SCALE;
 
-            auto projection =
-                Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
-                                          static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
+            auto projection = m_renderer.GetProjectionMatrix();
 
             Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
 
