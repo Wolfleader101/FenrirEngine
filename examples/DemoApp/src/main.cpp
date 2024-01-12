@@ -886,19 +886,16 @@ class Editor
 
     Fenrir::Math::Vec2 ScreenToDeviceCoords(const Fenrir::Math::Vec2& screenPoint)
     {
-        Fenrir::Math::Vec2 pointRelativeToSceneView;
-        pointRelativeToSceneView.x = (screenPoint.x - m_SceneViewPos.x) / m_sceneViewSize.x;
-        pointRelativeToSceneView.y = (screenPoint.y - (m_SceneViewPos.y + m_menuBarHeight)) / m_sceneViewSize.y;
+        Fenrir::Math::Vec2 adjustedPoint;
+        adjustedPoint.x = screenPoint.x - m_SceneViewPos.x;
+        adjustedPoint.y = screenPoint.y - m_SceneViewPos.y;
+        // adjustedPoint.y = (screenPoint.y - (m_SceneViewPos.y + m_menuBarHeight));
 
-        // Convert to NDC [-1, 1]
-        Fenrir::Math::Vec2 ndc;
-        ndc.x = pointRelativeToSceneView.x * 2.0f - 1.0f;
-        ndc.y = pointRelativeToSceneView.y * 2.0f - 1.0f;
+        Fenrir::Math::Vec2 normalizedCoords;
+        normalizedCoords.x = (2.0f * adjustedPoint.x) / m_sceneViewSize.x - 1.0f;
+        normalizedCoords.y = 1.0f - (2.0f * adjustedPoint.y) / m_sceneViewSize.y;
 
-        // inver the Y axis for gl as bottom-left is (-1, -1),
-        ndc.y = -ndc.y;
-
-        return ndc;
+        return normalizedCoords;
     }
 
     Fenrir::Math::Ray ScreenToPointRay(const Fenrir::Math::Vec2& normalisedCoords)
@@ -907,7 +904,7 @@ class Editor
 
         Fenrir::Math::Mat4 projection =
             Fenrir::Math::Perspective(Fenrir::Math::DegToRad(m_camera.fov),
-                                      static_cast<float>(m_window.GetWidth() / m_window.GetHeight()), 0.1f, 100.0f);
+                                      static_cast<float>(m_sceneViewSize.x / m_sceneViewSize.y), 0.1f, 100.0f);
 
         Fenrir::Math::Mat4 invProjection = Fenrir::Math::Inverse(projection);
 
