@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 namespace Fenrir
 {
     class ILogger;
@@ -18,12 +19,26 @@ enum class TextureType
 class Texture
 {
   public:
-    // std::string path;
+    std::string path;
     unsigned int Id;
     TextureType type;
     int width;
     int height;
     int nrChannels;
+};
+
+class Skybox
+{
+  public:
+    unsigned int Id;
+    std::string name = "";
+
+    std::string top = "";
+    std::string bottom = "";
+    std::string left = "";
+    std::string right = "";
+    std::string front = "";
+    std::string back = "";
 };
 
 class TextureLibrary
@@ -60,10 +75,18 @@ class TextureLibrary
      */
     bool HasTexture(const std::string& path) const;
 
+    void AddSkybox(const std::string& name, const std::string& top, const std::string& bottom, const std::string& left,
+                   const std::string& right, const std::string& front, const std::string& back);
+
+    const Skybox& GetSkybox(const std::string& name);
+
+    bool HasSkybox(const std::string& name) const;
+
   private:
     Fenrir::ILogger& m_logger;
 
     std::unordered_map<std::string, Texture> m_textures;
+    std::unordered_map<std::string, Skybox> m_skyboxes;
 
     /**
      * @brief Load a texture from a file
@@ -71,4 +94,6 @@ class TextureLibrary
      * @param path to the texture
      */
     Texture LoadTexture(const std::string& path);
+
+    void LoadSkybox(Skybox& outSkybox);
 };
