@@ -129,10 +129,33 @@ struct Material
 Shader myShader;
 Shader lightShader;
 Shader aabbShader;
+Shader skyboxShader;
+
+Skybox skybox;
 
 Model backpack;
 
 Model cube;
+
+float skyboxVertices[] = {
+    // positions
+    -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
+    1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
+
+    -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f,
+    -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,
+
+    1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f,
+
+    -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,
+
+    -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,
+    1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f,
+
+    -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f,
+    1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
 
 const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                           glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
@@ -315,6 +338,21 @@ class GLRenderer
         glEnable(GL_DEPTH_TEST);
 
         SetAspectRatio(m_window.GetWidth() / m_window.GetHeight());
+
+        // create skybox vao based on skybox vertices
+
+        glGenVertexArrays(1, &skyboxVAO);
+        glBindVertexArray(skyboxVAO);
+
+        unsigned int skyboxVBO = 0;
+        glGenBuffers(1, &skyboxVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+
+        glBindVertexArray(0);
     }
 
     void PreUpdate(Fenrir::App& app)
@@ -351,6 +389,8 @@ class GLRenderer
                 SetMatProps(material.shader, material);
                 DrawModel(transform, relationship, model, material.shader);
             });
+
+        DrawSkybox();
     }
 
     void PostUpdate(Fenrir::App& app)
@@ -470,6 +510,7 @@ class GLRenderer
     Fenrir::Math::Mat4 m_view;
     Fenrir::Math::Mat4 m_projection;
     float m_aspecRatio;
+    unsigned int skyboxVAO;
 
     void SetMatProps(const Shader& shader, const Material& mat)
     {
@@ -632,6 +673,24 @@ class GLRenderer
         glDeleteBuffers(1, &VBO);
         glDeleteBuffers(1, &EBO);
     }
+
+    void DrawSkybox()
+    {
+        glDepthFunc(GL_LEQUAL);
+        skyboxShader.Use();
+        auto skyBoxView = Fenrir::Math::Mat4(Fenrir::Math::Mat3(m_view));
+
+        skyboxShader.SetMat4("view", skyBoxView);
+        skyboxShader.SetMat4("projection", m_projection);
+
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skybox.Id);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        glBindVertexArray(0);
+        glDepthFunc(GL_LESS);
+    }
 };
 
 #define BIND_GL_RENDERER_FN(fn, glRendererInstance) \
@@ -654,10 +713,13 @@ class AssetLoader
                                   m_assetPath + "shaders/light_fragment.glsl");
         m_shaderLibrary.AddShader("debug", m_assetPath + "shaders/debug_vertex.glsl",
                                   m_assetPath + "shaders/debug_fragment.glsl");
+        m_shaderLibrary.AddShader("skybox", m_assetPath + "shaders/skybox_vertex.glsl",
+                                  m_assetPath + "shaders/skybox_fragment.glsl");
 
         myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
         aabbShader = m_shaderLibrary.GetShader("debug");
+        skyboxShader = m_shaderLibrary.GetShader("skybox");
 
         m_modelLibrary.AddModel(m_assetPath + "models/backpack/backpack.obj");
 
@@ -665,6 +727,13 @@ class AssetLoader
 
         m_modelLibrary.AddModel(m_assetPath + "models/cube/cube.obj");
         cube = m_modelLibrary.GetModel(m_assetPath + "models/cube/cube.obj");
+
+        std::string skyboxPath = m_assetPath + "textures/skybox/";
+        m_textureLibrary.AddSkybox(skyboxPath, skyboxPath + "top.png", skyboxPath + "bottom.png",
+                                   skyboxPath + "left.png", skyboxPath + "right.png", skyboxPath + "front.png",
+                                   skyboxPath + "back.png");
+
+        skybox = m_textureLibrary.GetSkybox(skyboxPath);
     }
 
   private:
