@@ -44,7 +44,8 @@ void Window::PreInit(Fenrir::App& app)
 
     GLFWimage icon;
     int channels = 0;
-    TextureLibrary::ImportTexture("assets/textures/icons/fenrir.png", icon.width, icon.height, channels, icon.pixels);
+    TextureLibrary::ImportTexture("assets/textures/icons/fenrir.png", icon.width, icon.height, channels, icon.pixels,
+                                  false);
 
     if (icon.pixels)
     {

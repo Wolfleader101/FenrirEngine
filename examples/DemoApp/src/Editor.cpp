@@ -413,35 +413,108 @@ void Editor::PropertiesWindow()
     ImGui::End();
 }
 
+enum class ClipboardType
+{
+    None,
+    Cut,
+    Copy
+};
+
+static std::optional<std::filesystem::path> selectedItem = std::nullopt;
+static std::optional<std::filesystem::path> clipboardItem = std::nullopt;
+static ClipboardType clipboardType = ClipboardType::None;
+
+std::filesystem::path GenerateNewFilename(const std::filesystem::path& originalPath)
+{
+    if (!std::filesystem::exists(originalPath))
+        return originalPath;
+
+    std::filesystem::path directory = originalPath.parent_path();
+    std::filesystem::path filenameWithoutExtension = originalPath.stem();
+    std::filesystem::path extension = originalPath.extension();
+
+    int count = 1;
+    std::filesystem::path newPath = originalPath;
+
+    while (std::filesystem::exists(newPath))
+    {
+        newPath =
+            directory / (filenameWithoutExtension.string() + " (" + std::to_string(count) + ")" + extension.string());
+        count++;
+    }
+    return newPath;
+}
+
+void Editor::PasteFile(const std::filesystem::path& targetDir)
+{
+    if (!clipboardItem.has_value())
+        return;
+
+    std::filesystem::path targetPath = targetDir / clipboardItem.value().filename();
+
+    try
+    {
+        if (clipboardType == ClipboardType::Cut)
+        {
+            std::filesystem::rename(clipboardItem.value(), targetPath);
+        }
+        else if (clipboardType == ClipboardType::Copy)
+        {
+            targetPath = GenerateNewFilename(targetPath);
+
+            if (std::filesystem::is_directory(clipboardItem.value()))
+                std::filesystem::copy(clipboardItem.value(), targetPath, std::filesystem::copy_options::recursive);
+            else if (std::filesystem::is_regular_file(clipboardItem.value()))
+                std::filesystem::copy(clipboardItem.value(), targetPath);
+        }
+    }
+    catch (const std::filesystem::filesystem_error& e)
+    {
+        m_logger.Error("Editor::AssetBrowserWindow - {}", e.what());
+    }
+
+    clipboardItem = std::nullopt;
+    clipboardType = ClipboardType::None;
+}
+
 void Editor::AssetBrowserWindow()
 {
     ImGui::Begin("Asset Browser", nullptr, scene_window_flags);
-
-    static std::optional<std::filesystem::path> selectedItem = std::nullopt;
 
     if (ImGui::IsWindowFocused())
     {
         ImGuiIO& io = ImGui::GetIO();
 
-        // Check if an item is selected
-        if (selectedItem.has_value()) // Assuming selectedItem is an std::optional or similar
+        // if an item is selected
+        if (selectedItem.has_value())
         {
             // Cut (CTRL + X)
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_X)))
             {
                 // CutFile(selectedItem.value());
+                clipboardItem = selectedItem.value();
+                clipboardType = ClipboardType::Cut;
             }
 
             // Copy (CTRL + C)
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_C)))
             {
                 // CopyFile(selectedItem.value());
+                clipboardItem = selectedItem.value();
+                clipboardType = ClipboardType::Copy;
             }
 
             // Paste (CTRL + V)
             if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_V)))
             {
-                // PasteFile(m_currentPath);
+                PasteFile(m_currentPath);
+            }
+
+            // Delete (DEL)
+            if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete)))
+            {
+                // show a popup to confirm deletion
+                ImGui::OpenPopup("Delete Item?");
             }
         }
 
@@ -450,6 +523,35 @@ void Editor::AssetBrowserWindow()
         {
             // UndoLastCommand();
         }
+    }
+
+    if (ImGui::BeginPopupModal("Delete Item?", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Are you sure you want to delete this item?");
+        ImGui::Separator();
+
+        if (ImGui::Button("OK", ImVec2(120, 0)))
+        {
+            if (std::filesystem::exists(selectedItem.value()))
+            {
+                if (std::filesystem::is_directory(selectedItem.value()))
+                    std::filesystem::remove_all(selectedItem.value());
+                else if (std::filesystem::is_regular_file(selectedItem.value()))
+                    std::filesystem::remove(selectedItem.value());
+            }
+
+            // clear the selected item
+            selectedItem = std::nullopt;
+
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SetItemDefaultFocus();
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 
     if (m_currentPath.compare(m_projectPath) != 0)
@@ -497,11 +599,22 @@ void Editor::AssetBrowserWindow()
         const auto& path = entry.path();
         const auto& filename = path.filename().string();
 
+        if (clipboardType == ClipboardType::Cut && clipboardItem.has_value() && clipboardItem.value() == path)
+            continue;
+
         ImGui::PushID(filename.c_str());
         Texture icon = path.extension().string() == ".feproj" ? m_fenrirIconTexture
                        : entry.is_directory()                 ? m_folderIconTexture
                                                               : m_fileIconTexture;
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
+        if (selectedItem.has_value() && selectedItem.value() == path)
+        {
+            ImVec4 tintCol = ImGui::GetStyle().Colors[ImGuiCol_ButtonActive];
+            ImGui::PushStyleColor(ImGuiCol_Button, tintCol);
+        }
+        else
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+
         ImGui::ImageButton(reinterpret_cast<void*>(static_cast<intptr_t>(icon.Id)),
                            ImVec2(thumbnailSize, thumbnailSize), ImVec2(0, 1), ImVec2(1, 0));
 
@@ -512,17 +625,8 @@ void Editor::AssetBrowserWindow()
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
         {
-            ImGui::OpenPopup("Asset Browser Context Menu");
+            ImGui::OpenPopup("Item Context Menu");
             selectedItem = path;
-
-            if (ImGui::BeginPopup("Asset Browser Context Menu"))
-            {
-                if (ImGui::MenuItem("Delete"))
-                {
-                    // DeleteFile(selectedItem.value());
-                }
-                ImGui::EndPopup();
-            }
         }
 
         static std::string draggedPath;
@@ -572,24 +676,22 @@ void Editor::AssetBrowserWindow()
     }
     ImGui::Columns(1);
 
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    if (ImGui::BeginPopupContextWindow("Item Context Menu"))
     {
-        selectedItem = std::nullopt;
-    }
-
-    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-    {
-        selectedItem = std::nullopt;
-    }
-
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered())
-    {
-        selectedItem = std::nullopt;
-    }
-
-    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
-    {
-        selectedItem = std::nullopt;
+        if (ImGui::MenuItem("Rename"))
+        {
+        }
+        if (ImGui::MenuItem("Cut"))
+        {
+        }
+        if (ImGui::MenuItem("Copy"))
+        {
+        }
+        if (ImGui::MenuItem("Delete"))
+        {
+            // DeleteFile(selectedItem.value());
+        }
+        ImGui::EndPopup();
     }
 
     ImGui::End();
