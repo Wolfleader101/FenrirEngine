@@ -21,6 +21,14 @@ add_executable(DemoApp
 
     src/CameraController.hpp
     src/CameraController.cpp
+
+    src/Editor.hpp
+    src/Editor.cpp
+
+    src/GLRenderer.hpp
+    src/GLRenderer.cpp
+
+    src/Material.hpp
 )
 
 add_subdirectory(libs)

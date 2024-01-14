@@ -15,10 +15,23 @@ namespace Fenrir
         {
         }
 
-        Fenrir::Math::Vec3 pos = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
-        Fenrir::Math::Quat rot = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
-        Fenrir::Math::Vec3 scale = Fenrir::Math::Vec3(1.0f, 1.0f, 1.0f);
+        Math::Vec3 pos = Math::Vec3(0.0f, 0.0f, 0.0f);
+        Math::Quat rot = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        Math::Vec3 scale = Math::Vec3(1.0f, 1.0f, 1.0f);
     };
+
+    inline Math::Mat4 TransformToMat4(const Transform& transform)
+    {
+        Math::Mat4 mdl_mat = Math::Mat4(1.0f);
+
+        mdl_mat = Math::Translate(mdl_mat, transform.pos);
+
+        mdl_mat *= Math::Mat4Cast(transform.rot);
+
+        mdl_mat = Math::Scale(mdl_mat, transform.scale);
+
+        return mdl_mat;
+    }
 
     struct Name
     {
