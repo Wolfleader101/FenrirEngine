@@ -25,9 +25,9 @@ void TextureLibrary::AddTexture(const std::string& path)
 }
 
 void TextureLibrary::ImportTexture(const std::string& path, int& width, int& height, int& nrChannels,
-                                   unsigned char*& data)
+                                   unsigned char*& data, bool flipVertically)
 {
-    stbi_set_flip_vertically_on_load(true);
+    stbi_set_flip_vertically_on_load(flipVertically);
     data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
 }
 

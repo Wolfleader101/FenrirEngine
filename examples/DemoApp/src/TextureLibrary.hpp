@@ -66,7 +66,8 @@ class TextureLibrary
      */
     const Texture& GetTexture(const std::string& path);
 
-    static void ImportTexture(const std::string& path, int& width, int& height, int& nrChannels, unsigned char*& data);
+    static void ImportTexture(const std::string& path, int& width, int& height, int& nrChannels, unsigned char*& data,
+                              bool flipVertically);
     static void FreeTexture(unsigned char* data);
 
     /**

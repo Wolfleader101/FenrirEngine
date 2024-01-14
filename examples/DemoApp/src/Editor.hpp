@@ -97,6 +97,8 @@ class Editor
     void AssetBrowserWindow();
     void ConsoleWindow();
     void DrawGuizmo();
+
+    void PasteFile(const std::filesystem::path& targetDir);
 };
 
 #define BIND_EDITOR_FN(fn, editorInstance) std::bind(&Editor::fn, &editorInstance, std::placeholders::_1)
