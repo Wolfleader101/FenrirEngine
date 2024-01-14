@@ -1,6 +1,7 @@
 #include "Window.hpp"
 
 #include "FenrirApp/App.hpp"
+#include "TextureLibrary.hpp"
 
 // Wrapper function that matches the GLADloadproc signature
 static void* Glad_GLFW_GetProcAddr(const char* name)
@@ -40,6 +41,16 @@ void Window::PreInit(Fenrir::App& app)
         return;
     }
     glfwMakeContextCurrent(m_window);
+
+    GLFWimage icon;
+    int channels = 0;
+    TextureLibrary::ImportTexture("assets/textures/icons/fenrir.png", icon.width, icon.height, channels, icon.pixels);
+
+    if (icon.pixels)
+    {
+        glfwSetWindowIcon(m_window, 1, &icon);
+        TextureLibrary::FreeTexture(icon.pixels);
+    }
 
     // Not calling: driver default
     // 0: do not wait for vsync (may be overridden by driver/driver settings)

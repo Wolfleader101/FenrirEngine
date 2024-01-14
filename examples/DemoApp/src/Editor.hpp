@@ -1,9 +1,12 @@
 #pragma once
 
+#include <filesystem>
+
 #include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Math.hpp"
 
 #include "GLRenderer.hpp"
+#include "TextureLibrary.hpp"
 
 namespace Fenrir
 {
@@ -21,10 +24,22 @@ struct MouseButtonEvent;
 // TODO dont include imgui, instead use forward decleration
 #include <imgui.h>
 
+// TODO move this to a project settings file
+struct ProjectSettings
+{
+    std::string identity = "";
+    std::string name = "New Project";
+    std::string version = "0.1.0";
+    std::string description = "";
+    std::string author = "";
+    std::string assetPath = "";
+};
+
 class Editor
 {
   public:
-    Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera);
+    Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera,
+           TextureLibrary& textureLibrary);
 
     void Init(Fenrir::App& app);
 
@@ -37,12 +52,22 @@ class Editor
 
     void Exit(Fenrir::App& app);
 
+    void SetProjectSettings(const ProjectSettings& settings);
+
   private:
     Fenrir::App& m_app;
     Fenrir::ILogger& m_logger;
     Window& m_window;
     GLRenderer& m_renderer;
     Fenrir::Camera& m_camera;
+    TextureLibrary& m_textureLibrary;
+    ProjectSettings m_projectSettings;
+    std::filesystem::path m_projectPath;
+    std::filesystem::path m_currentPath;
+
+    Texture m_fileIconTexture;
+    Texture m_folderIconTexture;
+    Texture m_fenrirIconTexture;
     ImVec2 m_sceneViewSize = ImVec2(1.0f, 1.0f);
     ImVec2 m_SceneViewPos;
     float m_menuBarHeight = 0.0f;
