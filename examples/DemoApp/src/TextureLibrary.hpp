@@ -66,6 +66,9 @@ class TextureLibrary
      */
     const Texture& GetTexture(const std::string& path);
 
+    static void ImportTexture(const std::string& path, int& width, int& height, int& nrChannels, unsigned char*& data);
+    static void FreeTexture(unsigned char* data);
+
     /**
      * @brief Check if the texture is loaded
      *

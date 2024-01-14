@@ -24,6 +24,18 @@ void TextureLibrary::AddTexture(const std::string& path)
     m_textures[path] = LoadTexture(path);
 }
 
+void TextureLibrary::ImportTexture(const std::string& path, int& width, int& height, int& nrChannels,
+                                   unsigned char*& data)
+{
+    stbi_set_flip_vertically_on_load(true);
+    data = stbi_load(path.c_str(), &width, &height, &nrChannels, 0);
+}
+
+void TextureLibrary::FreeTexture(unsigned char* data)
+{
+    stbi_image_free(data);
+}
+
 Texture TextureLibrary::LoadTexture(const std::string& path)
 {
     Texture texture;
@@ -45,7 +57,14 @@ Texture TextureLibrary::LoadTexture(const std::string& path)
     {
         // generate the texture
         // TODO move this sort of code to renderer, and also RGB should be channels
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texture.width, texture.height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        if (texture.nrChannels == 4)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+        }
+        else if (texture.nrChannels == 3)
+        {
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, texture.width, texture.height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        }
         glGenerateMipmap(GL_TEXTURE_2D);
     }
     else

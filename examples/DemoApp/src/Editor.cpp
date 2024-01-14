@@ -1,5 +1,7 @@
 #include "Editor.hpp"
 
+#include <optional>
+
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
@@ -22,12 +24,23 @@
 #include "ModelLibrary.hpp"
 #include "Window.hpp"
 
-Editor::Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera)
-    : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer), m_camera(camera)
+Editor::Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera,
+               TextureLibrary& textureLibrary)
+    : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer), m_camera(camera),
+      m_textureLibrary(textureLibrary)
 {
 }
+void Editor::SetProjectSettings(const ProjectSettings& settings)
+{
+    m_projectSettings = settings;
+    m_projectPath = std::filesystem::path(settings.assetPath);
+    m_currentPath = std::filesystem::path(settings.assetPath);
 
-void Editor::Init(Fenrir::App& app)
+    m_projectPath = std::filesystem::canonical(m_projectPath);
+    m_currentPath = std::filesystem::canonical(m_currentPath);
+}
+
+void Editor::Init(Fenrir::App&)
 {
     m_logger.Info("Editor::Init - Initializing Editor");
 
@@ -55,6 +68,10 @@ void Editor::Init(Fenrir::App& app)
     ImGui_ImplOpenGL3_Init("#version 460");                     // sets the version of GLSL being used
 
     m_frameBuffer = m_renderer.CreateFrameBuffer(m_window.GetWidth(), m_window.GetHeight());
+
+    m_fenrirIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/fenrir.png");
+    m_fileIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/file.png");
+    m_folderIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/folder.png");
 }
 
 void Editor::InitDockingLayout()
@@ -399,7 +416,182 @@ void Editor::PropertiesWindow()
 void Editor::AssetBrowserWindow()
 {
     ImGui::Begin("Asset Browser", nullptr, scene_window_flags);
-    ImGui::Text("Assets");
+
+    static std::optional<std::filesystem::path> selectedItem = std::nullopt;
+
+    if (ImGui::IsWindowFocused())
+    {
+        ImGuiIO& io = ImGui::GetIO();
+
+        // Check if an item is selected
+        if (selectedItem.has_value()) // Assuming selectedItem is an std::optional or similar
+        {
+            // Cut (CTRL + X)
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_X)))
+            {
+                // CutFile(selectedItem.value());
+            }
+
+            // Copy (CTRL + C)
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_C)))
+            {
+                // CopyFile(selectedItem.value());
+            }
+
+            // Paste (CTRL + V)
+            if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_V)))
+            {
+                // PasteFile(m_currentPath);
+            }
+        }
+
+        // Undo (CTRL + Z)
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Z)))
+        {
+            // UndoLastCommand();
+        }
+    }
+
+    if (m_currentPath.compare(m_projectPath) != 0)
+    {
+
+        if (ImGui::Button("<-"))
+            m_currentPath = m_currentPath.parent_path();
+
+        // the back button is a drag and drop target
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const char* droppedPathStr = static_cast<const char*>(payload->Data);
+                std::filesystem::path droppedAbsolutePath(droppedPathStr);
+                std::filesystem::path parentPath = m_currentPath.parent_path();
+                std::filesystem::path targetAbsolutePath = parentPath / droppedAbsolutePath.filename();
+
+                try
+                {
+                    std::filesystem::rename(droppedAbsolutePath, targetAbsolutePath);
+                }
+                catch (const std::filesystem::filesystem_error& e)
+                {
+                    m_logger.Error("Editor::AssetBrowserWindow - {}", e.what());
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+    }
+
+    static float padding = 24.0f;
+    static float thumbnailSize = 64.0f;
+    static float cellSize = thumbnailSize + padding;
+
+    float panelWidth = ImGui::GetContentRegionAvail().x;
+    int columnCount = static_cast<int>(panelWidth / cellSize);
+    if (columnCount < 1)
+        columnCount = 1;
+
+    ImGui::Columns(columnCount, nullptr, false);
+
+    for (auto& entry : std::filesystem::directory_iterator(m_currentPath))
+    {
+        const auto& path = entry.path();
+        const auto& filename = path.filename().string();
+
+        ImGui::PushID(filename.c_str());
+        Texture icon = path.extension().string() == ".feproj" ? m_fenrirIconTexture
+                       : entry.is_directory()                 ? m_folderIconTexture
+                                                              : m_fileIconTexture;
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::ImageButton(reinterpret_cast<void*>(static_cast<intptr_t>(icon.Id)),
+                           ImVec2(thumbnailSize, thumbnailSize), ImVec2(0, 1), ImVec2(1, 0));
+
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        {
+            selectedItem = path;
+        }
+
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Right))
+        {
+            ImGui::OpenPopup("Asset Browser Context Menu");
+            selectedItem = path;
+
+            if (ImGui::BeginPopup("Asset Browser Context Menu"))
+            {
+                if (ImGui::MenuItem("Delete"))
+                {
+                    // DeleteFile(selectedItem.value());
+                }
+                ImGui::EndPopup();
+            }
+        }
+
+        static std::string draggedPath;
+
+        if (ImGui::BeginDragDropSource())
+        {
+            draggedPath = path.string();
+
+            ImGui::SetDragDropPayload("CONTENT_BROWSER_ITEM", draggedPath.c_str(), draggedPath.length() + 1);
+
+            ImGui::Text("%s", filename.c_str());
+            ImGui::EndDragDropSource();
+        }
+
+        if (entry.is_directory() && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const char* droppedPathStr = static_cast<const char*>(payload->Data);
+                std::filesystem::path droppedAbsolutePath(droppedPathStr);
+                std::filesystem::path targetAbsolutePath = entry / droppedAbsolutePath.filename();
+
+                try
+                {
+                    std::filesystem::rename(droppedAbsolutePath, targetAbsolutePath);
+                }
+                catch (const std::filesystem::filesystem_error& e)
+                {
+                    m_logger.Error("Editor::AssetBrowserWindow - {}", e.what());
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
+        ImGui::PopStyleColor();
+
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            if (entry.is_directory())
+            {
+                m_currentPath /= path.filename();
+            }
+        }
+        ImGui::TextWrapped(filename.c_str());
+        ImGui::NextColumn();
+        ImGui::PopID();
+    }
+    ImGui::Columns(1);
+
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        selectedItem = std::nullopt;
+    }
+
+    if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        selectedItem = std::nullopt;
+    }
+
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered())
+    {
+        selectedItem = std::nullopt;
+    }
+
+    if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Escape)))
+    {
+        selectedItem = std::nullopt;
+    }
+
     ImGui::End();
 }
 

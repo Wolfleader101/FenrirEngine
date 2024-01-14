@@ -27,16 +27,6 @@
 
 #include <glaze/glaze.hpp>
 
-struct ProjectSettings
-{
-    std::string identity = "";
-    std::string name = "";
-    std::string version = "0.1.0";
-    std::string description = "";
-    std::string author = "";
-    std::string assetPath = "";
-};
-
 template <>
 struct glz::meta<ProjectSettings>
 {
@@ -306,6 +296,15 @@ class AssetLoader
                                    skyboxPath + "back.png");
 
         skybox = m_textureLibrary.GetSkybox(skyboxPath);
+
+        m_textureLibrary.AddTexture(m_assetPath + "textures/icons/file.png");
+        m_textureLibrary.AddTexture(m_assetPath + "textures/icons/folder.png");
+        m_textureLibrary.AddTexture(m_assetPath + "textures/icons/fenrir.png");
+    }
+
+    TextureLibrary& GetTextureLibrary()
+    {
+        return m_textureLibrary;
     }
 
   private:
@@ -345,12 +344,13 @@ int main()
     glRenderer.SetSkybox(skybox);
     glRenderer.SetSkyboxShader(skyboxShader);
 
-    Editor editor(app, *app.Logger().get(), window, glRenderer, camera);
+    Editor editor(app, *app.Logger().get(), window, glRenderer, camera, assetLoader.GetTextureLibrary());
+    editor.SetProjectSettings(projectSettings);
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
-        .AddSystems(Fenrir::SchedulePriority::Init,
-                    {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer), BIND_EDITOR_FN(Editor::Init, editor),
-                     BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader), InitLights, InitBackpacks})
+        .AddSystems(Fenrir::SchedulePriority::Init, {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
+                                                     BIND_ASSET_LOADER_FN(AssetLoader::Init, assetLoader),
+                                                     BIND_EDITOR_FN(Editor::Init, editor), InitLights, InitBackpacks})
         // .AddSystems(Fenrir::SchedulePriority::PostInit, {PostInit})
         .AddSequentialSystems(
             Fenrir::SchedulePriority::PreUpdate,
