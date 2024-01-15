@@ -1,5 +1,6 @@
 #include "Editor.hpp"
 
+#include <functional>
 #include <optional>
 
 #include <imgui.h>
@@ -23,6 +24,83 @@
 #include "GLRenderer.hpp"
 #include "ModelLibrary.hpp"
 #include "Window.hpp"
+
+static bool DrawVec3Input(const std::string& name, Fenrir::Math::Vec3& vec)
+{
+    bool changed = false;
+    ImGui::PushID(name.c_str());
+
+    ImGui::Columns(2);
+    ImGui::SetColumnWidth(0, 100.0f);
+
+    ImGui::Text(name.c_str());
+    ImGui::NextColumn();
+
+    ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.89f, 0.13f, 0.34f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.93f, 0.15f, 0.40f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.89f, 0.13f, 0.34f, 1.0f));
+
+    if (ImGui::Button("X"))
+    {
+        vec.x = 0.0f;
+        changed = true;
+    }
+
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+    if (ImGui::DragFloat("##X", &vec.x, 0.1f, 0.0f, 0.0f, "%.2f"))
+        changed = true;
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.52f, 0.88f, 0.11f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.55f, 0.95f, 0.15f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.52f, 0.88f, 0.11f, 1.0f));
+
+    if (ImGui::Button("Y"))
+    {
+        vec.y = 0.0f;
+        changed = true;
+    }
+
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+    if (ImGui::DragFloat("##Y", &vec.y, 0.1f, 0.0f, 0.0f, "%.2f"))
+        changed = true;
+    ImGui::PopItemWidth();
+    ImGui::SameLine();
+
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.22f, 0.52f, 0.91f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.55f, 0.95f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.22f, 0.52f, 0.91f, 1.0f));
+
+    if (ImGui::Button("Z"))
+    {
+        vec.z = 0.0f;
+        changed = true;
+    }
+
+    ImGui::PopStyleColor(3);
+
+    ImGui::SameLine();
+    if (ImGui::DragFloat("##Z", &vec.z, 0.1f, 0.0f, 0.0f, "%.2f"))
+        changed = true;
+
+    ImGui::PopItemWidth();
+
+    ImGui::PopStyleVar();
+
+    ImGui::Columns(1);
+
+    ImGui::PopID();
+
+    return changed;
+}
 
 Editor::Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera,
                TextureLibrary& textureLibrary)
@@ -369,6 +447,10 @@ void Editor::SceneViewWindow()
     ImGui::End();
 }
 
+static Fenrir::Math::Quat cachedQuat = Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f);
+static Fenrir::Math::Vec3 cachedEuler = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+static uint32_t lastEntityId = Fenrir::Entity::Null;
+
 void Editor::PropertiesWindow()
 {
     ImGui::Begin("Properties", nullptr, scene_window_flags);
@@ -380,34 +462,22 @@ void Editor::PropertiesWindow()
         if (m_selectedEntity.HasComponent<Fenrir::Transform>())
         {
             auto& transform = m_selectedEntity.GetComponent<Fenrir::Transform>();
+
             ImGui::Text("Transform");
-            ImGui::DragFloat3("Position", &transform.pos.x, 0.5f);
 
-            static bool flipped = false;
-            static uint32_t lastEntityID = Fenrir::Entity::Null;
+            DrawVec3Input("Position", transform.pos);
 
-            if (m_selectedEntity.GetId() != lastEntityID)
+            if (cachedQuat != transform.rot || lastEntityId != m_selectedEntity.GetId())
             {
-                lastEntityID = m_selectedEntity.GetId();
-                flipped = false;
+                cachedQuat = transform.rot;
+                cachedEuler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(transform.rot));
+                lastEntityId = m_selectedEntity.GetId();
             }
 
-            float rotationStep = flipped ? -0.5f : 0.5f;
+            if (DrawVec3Input("Rotation", cachedEuler))
+                transform.rot = Fenrir::Math::Normalized(Fenrir::Math::Quat(Fenrir::Math::DegToRad(cachedEuler)));
 
-            Fenrir::Math::Vec3 euler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(transform.rot));
-
-            if (ImGui::DragFloat3("Rotation", &euler.x, rotationStep))
-            {
-                // flip if pitch passes through 90 degrees
-                if (euler.y >= 90.0f || euler.y <= -90.0f)
-                {
-                    flipped = !flipped;
-                }
-
-                transform.rot = Fenrir::Math::Normalized(Fenrir::Math::Quat(Fenrir::Math::DegToRad(euler)));
-            }
-
-            ImGui::DragFloat3("Scale", &transform.scale.x, 0.5f);
+            DrawVec3Input("Scale", transform.scale);
         }
     }
     ImGui::End();
@@ -704,6 +774,20 @@ void Editor::ConsoleWindow()
     ImGui::End();
 }
 
+static Fenrir::Math::Mat4 TransformVecsToMat4(const Fenrir::Math::Vec3 pos, const Fenrir::Math::Vec3 eulerRot,
+                                              const Fenrir::Math::Vec3 scale)
+{
+    Fenrir::Math::Mat4 mdl_mat = Fenrir::Math::Mat4(1.0f);
+
+    mdl_mat = Fenrir::Math::Translate(mdl_mat, pos);
+
+    mdl_mat *= Fenrir::Math::Mat4Cast(Fenrir::Math::Normalized(Fenrir::Math::Quat(Fenrir::Math::DegToRad(eulerRot))));
+
+    mdl_mat = Fenrir::Math::Scale(mdl_mat, scale);
+
+    return mdl_mat;
+}
+
 void Editor::DrawGuizmo()
 {
     if (m_selectedEntity.IsValid())
@@ -731,12 +815,16 @@ void Editor::DrawGuizmo()
 
         float* mat = Fenrir::Math::AsArray(mdl_mat);
 
-        ImGuizmo::Manipulate(Fenrir::Math::AsArray(m_camera.GetViewMatrix()), Fenrir::Math::AsArray(projection),
-                             mCurrentGizmoOperation, mCurrentGizmoMode, mat, nullptr, useSnap ? &snap[0] : nullptr,
-                             boundSizing ? bounds : nullptr, boundSizingSnap ? boundsSnap : nullptr);
+        if (ImGuizmo::Manipulate(Fenrir::Math::AsArray(m_camera.GetViewMatrix()), Fenrir::Math::AsArray(projection),
+                                 mCurrentGizmoOperation, mCurrentGizmoMode, mat, nullptr, useSnap ? &snap[0] : nullptr,
+                                 boundSizing ? bounds : nullptr, boundSizingSnap ? boundsSnap : nullptr))
+        {
 
-        Fenrir::Math::Mat4 newMat = Fenrir::Math::MakeMat4(mat);
+            Fenrir::Math::Mat4 newMat = Fenrir::Math::MakeMat4(mat);
 
-        Fenrir::Math::Decompose(newMat, transform.pos, transform.rot, transform.scale);
+            Fenrir::Math::Decompose(newMat, transform.pos, transform.rot, transform.scale);
+
+            cachedEuler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(transform.rot));
+        }
     }
 }
