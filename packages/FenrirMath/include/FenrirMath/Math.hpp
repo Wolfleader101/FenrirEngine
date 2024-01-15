@@ -460,6 +460,14 @@ namespace Fenrir::Math
      */
     Mat4 Rotate(const Mat4& mat, float angle, const Vec3& axis);
 
+    /**
+     * @brief Creates a rotation matrix from euler angles
+     *
+     * @param euler in radians
+     * @return Mat4
+     */
+    Mat4 EulerToMat4(const Vec3& euler);
+
     Quat Rotate(const Quat& quat, float angle, const Vec3& axis);
 
     /**
@@ -479,6 +487,12 @@ namespace Fenrir::Math
      * @return The normalized quaternion.
      */
     Quat Normalized(const Quat& x);
+
+    Quat Mat4ToQuat(const Mat4& mat);
+
+    Mat4 QuatToMat4(const Quat& quat);
+
+    Vec3 EulerFromMat4(const Mat4& mat);
 
     bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix);
 

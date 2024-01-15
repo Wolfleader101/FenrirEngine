@@ -2,6 +2,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/norm.hpp>
 
@@ -407,5 +408,25 @@ namespace Fenrir::Math
         Vec3 clampedOrigin = glm::clamp(rayOrigin, minWorld, maxWorld);
 
         return Distance(clampedOrigin, rayOrigin);
+    }
+
+    Mat4 EulerToMat4(const Vec3& vec)
+    {
+        return glm::eulerAngleXYZ(vec.x, vec.y, vec.z);
+    }
+
+    Quat Mat4ToQuat(const Mat4& mat)
+    {
+        return glm::quat_cast(mat);
+    }
+
+    Mat4 QuatToMat4(const Quat& quat)
+    {
+        return glm::mat4_cast(quat);
+    }
+
+    Vec3 EulerFromMat4(const Mat4& mat)
+    {
+        return glm::eulerAngles(glm::quat_cast(mat));
     }
 } // namespace Fenrir::Math
