@@ -346,6 +346,7 @@ int main()
 
     Editor editor(app, *app.Logger().get(), window, glRenderer, camera, assetLoader.GetTextureLibrary());
     editor.SetProjectSettings(projectSettings);
+    app.Logger()->AddLogger(editor.GetLogger());
 
     app.AddSystems(Fenrir::SchedulePriority::PreInit, {BIND_WINDOW_SYSTEM_FN(Window::PreInit, window)})
         .AddSystems(Fenrir::SchedulePriority::Init, {BIND_GL_RENDERER_FN(GLRenderer::Init, glRenderer),
