@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "FenrirECS/Entity.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "FenrirMath/Math.hpp"
 
 #include "GLRenderer.hpp"
@@ -33,6 +34,19 @@ struct ProjectSettings
     std::string description = "";
     std::string author = "";
     std::string assetPath = "";
+};
+
+class EditorConsoleLogger : public Fenrir::ILogger
+{
+  public:
+    EditorConsoleLogger(Fenrir::ILogger& logger) = default;
+
+  protected:
+    void LogImpl(const std::string& message) override;
+    void InfoImpl(const std::string& message) override;
+    void WarnImpl(const std::string& message) override;
+    void ErrorImpl(const std::string& message) override;
+    void FatalImpl(const std::string& message) override;
 };
 
 class Editor
@@ -75,6 +89,8 @@ class Editor
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
     Fenrir::Entity m_selectedEntity;
+
+    std::shared_ptr<EditorConsoleLogger> m_consoleLogger;
 
     static const ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 

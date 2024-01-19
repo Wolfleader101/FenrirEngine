@@ -5,6 +5,7 @@
 
 namespace Fenrir
 {
+
     /**
      * @brief Interface for logging
      *
