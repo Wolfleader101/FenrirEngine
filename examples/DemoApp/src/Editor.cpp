@@ -7,6 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <imgui_internal.h>
+#include <imgui_stdlib.h>
 
 #include <ImGuizmo.h>
 
@@ -24,6 +25,41 @@
 #include "GLRenderer.hpp"
 #include "ModelLibrary.hpp"
 #include "Window.hpp"
+
+#include <iostream>
+
+// EditorConsoleLogger::EditorConsoleLogger()
+// {
+// }
+
+void EditorConsoleLogger::LogImpl(const std::string& message)
+{
+    std::cout << message << std::endl;
+}
+
+void EditorConsoleLogger::InfoImpl(const std::string& message)
+{
+
+    std::cout << message << std::endl;
+}
+
+void EditorConsoleLogger::WarnImpl(const std::string& message)
+{
+
+    std::cout << message << std::endl;
+}
+
+void EditorConsoleLogger::ErrorImpl(const std::string& message)
+{
+
+    std::cout << message << std::endl;
+}
+
+void EditorConsoleLogger::FatalImpl(const std::string& message)
+{
+
+    std::cout << message << std::endl;
+}
 
 static bool DrawVec3Input(const std::string& name, Fenrir::Math::Vec3& vec)
 {
@@ -105,7 +141,7 @@ static bool DrawVec3Input(const std::string& name, Fenrir::Math::Vec3& vec)
 Editor::Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera,
                TextureLibrary& textureLibrary)
     : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer), m_camera(camera),
-      m_textureLibrary(textureLibrary)
+      m_textureLibrary(textureLibrary), m_consoleLogger(std::make_shared<EditorConsoleLogger>(logger))
 {
 }
 void Editor::SetProjectSettings(const ProjectSettings& settings)
@@ -451,13 +487,37 @@ static Fenrir::Math::Quat cachedQuat = Fenrir::Math::Quat(0.0f, 0.0f, 0.0f, 1.0f
 static Fenrir::Math::Vec3 cachedEuler = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
 static uint32_t lastEntityId = Fenrir::Entity::Null;
 
+static std::string cachedName = "";
+
 void Editor::PropertiesWindow()
 {
     ImGui::Begin("Properties", nullptr, scene_window_flags);
     if (m_selectedEntity.IsValid())
     {
+
+        ImGui::PushID(m_selectedEntity.GetId());
         auto& name = m_selectedEntity.GetComponent<Fenrir::Name>();
         ImGui::Text("Name: %s", name.Get());
+
+        ImGui::Columns(2);
+        ImGui::SetColumnWidth(0, 100.0f);
+
+        ImGui::Text("Name");
+        ImGui::NextColumn();
+
+        if (lastEntityId != m_selectedEntity.GetId() || cachedName != name.Get())
+        {
+            cachedName = name.Get();
+            lastEntityId = m_selectedEntity.GetId();
+        }
+
+        if (ImGui::InputText("##Name", &cachedName, ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            if (!cachedName.empty())
+                name.Set(cachedName.c_str());
+        }
+
+        ImGui::Columns(1);
 
         if (m_selectedEntity.HasComponent<Fenrir::Transform>())
         {
@@ -479,6 +539,8 @@ void Editor::PropertiesWindow()
 
             DrawVec3Input("Scale", transform.scale);
         }
+
+        ImGui::PopID();
     }
     ImGui::End();
 }
