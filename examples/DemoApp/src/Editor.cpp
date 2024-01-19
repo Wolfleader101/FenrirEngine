@@ -28,10 +28,6 @@
 
 #include <iostream>
 
-// EditorConsoleLogger::EditorConsoleLogger()
-// {
-// }
-
 void EditorConsoleLogger::LogImpl(const std::string& message)
 {
     std::cout << message << std::endl;
@@ -141,7 +137,7 @@ static bool DrawVec3Input(const std::string& name, Fenrir::Math::Vec3& vec)
 Editor::Editor(Fenrir::App& app, Fenrir::ILogger& logger, Window& window, GLRenderer& renderer, Fenrir::Camera& camera,
                TextureLibrary& textureLibrary)
     : m_app(app), m_logger(logger), m_window(window), m_renderer(renderer), m_camera(camera),
-      m_textureLibrary(textureLibrary), m_consoleLogger(std::make_shared<EditorConsoleLogger>(logger))
+      m_textureLibrary(textureLibrary), m_consoleLogger(std::make_shared<EditorConsoleLogger>())
 {
 }
 void Editor::SetProjectSettings(const ProjectSettings& settings)
@@ -186,6 +182,11 @@ void Editor::Init(Fenrir::App&)
     m_fenrirIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/fenrir.png");
     m_fileIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/file.png");
     m_folderIconTexture = m_textureLibrary.GetTexture(m_projectSettings.assetPath + "textures/icons/folder.png");
+}
+
+std::shared_ptr<EditorConsoleLogger> Editor::GetLogger()
+{
+    return m_consoleLogger;
 }
 
 void Editor::InitDockingLayout()

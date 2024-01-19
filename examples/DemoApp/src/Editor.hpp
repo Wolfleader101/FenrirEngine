@@ -39,7 +39,15 @@ struct ProjectSettings
 class EditorConsoleLogger : public Fenrir::ILogger
 {
   public:
-    EditorConsoleLogger(Fenrir::ILogger& logger) = default;
+    EditorConsoleLogger() = default;
+
+    void AddLogger(std::shared_ptr<ILogger> logger) override
+    {
+    }
+
+    void RemoveLogger(std::shared_ptr<ILogger> logger) override
+    {
+    }
 
   protected:
     void LogImpl(const std::string& message) override;
@@ -67,6 +75,8 @@ class Editor
     void Exit(Fenrir::App& app);
 
     void SetProjectSettings(const ProjectSettings& settings);
+
+    std::shared_ptr<EditorConsoleLogger> GetLogger();
 
   private:
     Fenrir::App& m_app;

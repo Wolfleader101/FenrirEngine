@@ -18,19 +18,9 @@ namespace Fenrir
       public:
         ConsoleLogger();
 
-        /**
-         * @brief Add a logger to the console logger, this are used to log to multiple places, and equivalent to sinks
-         *
-         * @param logger the logger to add
-         */
-        void AddLogger(std::shared_ptr<ILogger> logger);
+        void AddLogger(std::shared_ptr<ILogger> logger) override;
 
-        /**
-         * @brief Remove a logger from the console logger
-         *
-         * @param logger the logger to remove
-         */
-        void RemoveLogger(std::shared_ptr<ILogger> logger);
+        void RemoveLogger(std::shared_ptr<ILogger> logger) override;
 
       protected:
         void LogImpl(const std::string& message) override;
