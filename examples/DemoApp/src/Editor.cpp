@@ -28,33 +28,45 @@
 
 #include <iostream>
 
+static std::string FormatTimestamp(const std::chrono::system_clock::time_point& timestamp)
+{
+    auto timeT = std::chrono::system_clock::to_time_t(timestamp);
+    std::tm tm = *std::localtime(&timeT);
+    std::stringstream ss;
+    ss << std::put_time(&tm, "%H:%M:%S"); // format as "HH:MM:SS"
+    return ss.str();
+}
+
 void EditorConsoleLogger::LogImpl(const std::string& message)
 {
-    std::cout << message << std::endl;
+    AddMessage(LogLevel::LOG, message);
 }
 
 void EditorConsoleLogger::InfoImpl(const std::string& message)
 {
-
-    std::cout << message << std::endl;
+    AddMessage(LogLevel::INFO, message);
 }
 
 void EditorConsoleLogger::WarnImpl(const std::string& message)
 {
-
-    std::cout << message << std::endl;
+    AddMessage(LogLevel::WARN, message);
 }
 
 void EditorConsoleLogger::ErrorImpl(const std::string& message)
 {
-
-    std::cout << message << std::endl;
+    AddMessage(LogLevel::ERROR, message);
 }
 
 void EditorConsoleLogger::FatalImpl(const std::string& message)
 {
 
-    std::cout << message << std::endl;
+    AddMessage(LogLevel::FATAL, message);
+}
+
+void EditorConsoleLogger::AddMessage(LogLevel level, const std::string& message)
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_messages.emplace_back(level, message);
 }
 
 static bool DrawVec3Input(const std::string& name, Fenrir::Math::Vec3& vec)
@@ -833,7 +845,35 @@ void Editor::AssetBrowserWindow()
 void Editor::ConsoleWindow()
 {
     ImGui::Begin("Console", nullptr, scene_window_flags);
-    ImGui::Text("Console");
+
+    std::lock_guard<std::mutex> lock(m_consoleLogger->GetMutex());
+    for (const auto& msg : m_consoleLogger->GetMessages())
+    {
+        ImVec4 color;
+        switch (msg.level)
+        {
+        case LogLevel::LOG:
+            color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+            break;
+        case LogLevel::INFO:
+            color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
+            break;
+        case LogLevel::WARN:
+            color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
+            break;
+        case LogLevel::ERROR:
+            color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+            break;
+        case LogLevel::FATAL:
+            color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
+            break;
+        }
+
+        std::string message = "[" + FormatTimestamp(msg.time) + "] " + msg.message;
+
+        ImGui::TextColored(color, "%s", message.c_str());
+    }
+
     ImGui::End();
 }
 

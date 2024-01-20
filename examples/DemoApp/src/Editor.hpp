@@ -9,6 +9,11 @@
 #include "GLRenderer.hpp"
 #include "TextureLibrary.hpp"
 
+#include <chrono>
+#include <deque>
+#include <mutex>
+#include <utility>
+
 namespace Fenrir
 {
     class App;
@@ -36,6 +41,27 @@ struct ProjectSettings
     std::string assetPath = "";
 };
 
+enum class LogLevel
+{
+    LOG,
+    INFO,
+    WARN,
+    ERROR,
+    FATAL
+};
+
+struct MessageEntry
+{
+    LogLevel level;
+    std::chrono::system_clock::time_point time;
+    std::string message;
+
+    MessageEntry(LogLevel level, const std::string& message)
+        : level(level), message(message), time(std::chrono::system_clock::now())
+    {
+    }
+};
+
 class EditorConsoleLogger : public Fenrir::ILogger
 {
   public:
@@ -49,12 +75,28 @@ class EditorConsoleLogger : public Fenrir::ILogger
     {
     }
 
+    const std::deque<MessageEntry>& GetMessages() const
+    {
+        return m_messages;
+    }
+
+    std::mutex& GetMutex()
+    {
+        return m_mutex;
+    }
+
   protected:
     void LogImpl(const std::string& message) override;
     void InfoImpl(const std::string& message) override;
     void WarnImpl(const std::string& message) override;
     void ErrorImpl(const std::string& message) override;
     void FatalImpl(const std::string& message) override;
+
+  private:
+    std::mutex m_mutex;
+    std::deque<MessageEntry> m_messages;
+
+    void AddMessage(LogLevel level, const std::string& message);
 };
 
 class Editor

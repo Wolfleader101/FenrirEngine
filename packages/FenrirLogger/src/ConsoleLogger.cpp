@@ -8,7 +8,7 @@ namespace Fenrir
     ConsoleLogger::ConsoleLogger() : m_logger(), m_loggers()
     {
         m_logger = spdlog::stdout_color_mt("FENRIR");
-        m_logger->set_pattern("%^[%T] %n: %v%$");
+        m_logger->set_pattern("%^[%T] %v%$");
         m_logger->set_level(spdlog::level::trace);
     }
 
