@@ -8,6 +8,7 @@
 
 namespace Fenrir
 {
+
     /**
      * @brief Entity class that is used to interact with the entity list. This forms the basis of the ECS
      *
@@ -141,6 +142,17 @@ namespace Fenrir
         EntityList* m_entityList = nullptr;
 
         friend class EntityList;
+    };
+
+    // this needs to be here because it needs to know about entity
+    struct Relationship
+    {
+        Relationship() = default;
+
+        Entity parent = Entity();
+        Entity firstChild = Entity();
+        Entity nextSibling = Entity();
+        Entity prevSibling = Entity();
     };
 
     template <typename T, typename... Args>
