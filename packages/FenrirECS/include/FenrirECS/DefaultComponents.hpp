@@ -2,8 +2,6 @@
 
 #include "FenrirMath/Math.hpp"
 
-#include "Entity.hpp"
-
 namespace Fenrir
 {
     struct Transform
@@ -93,16 +91,6 @@ namespace Fenrir
       private:
         // max name length is 255 characters
         char name[256] = {0};
-    };
-
-    struct Relationship
-    {
-        Relationship() = default;
-
-        Entity parent = Entity();
-        Entity firstChild = Entity();
-        Entity nextSibling = Entity();
-        Entity prevSibling = Entity();
     };
 
 } // namespace Fenrir
