@@ -85,6 +85,11 @@ class EditorConsoleLogger : public Fenrir::ILogger
         return m_mutex;
     }
 
+    void Clear()
+    {
+        m_messages.clear();
+    }
+
   protected:
     void LogImpl(const std::string& message) override;
     void InfoImpl(const std::string& message) override;

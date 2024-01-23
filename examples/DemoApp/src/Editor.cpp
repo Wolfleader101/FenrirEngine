@@ -846,33 +846,67 @@ void Editor::ConsoleWindow()
 {
     ImGui::Begin("Console", nullptr, scene_window_flags);
 
+    ImGui::Columns(2);
+
+    ImGui::SetColumnWidth(0, ImGui::GetWindowWidth() * 0.75f);
+
+    static bool filterLog = true;
+    static bool filterInfo = true;
+    static bool filterWarn = true;
+    static bool filterError = true;
+    static bool filterFatal = true;
+
     std::lock_guard<std::mutex> lock(m_consoleLogger->GetMutex());
     for (const auto& msg : m_consoleLogger->GetMessages())
     {
         ImVec4 color;
+        bool showMessage = false;
         switch (msg.level)
         {
         case LogLevel::LOG:
+            showMessage = filterLog;
             color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
             break;
         case LogLevel::INFO:
+            showMessage = filterInfo;
             color = ImVec4(0.0f, 1.0f, 0.0f, 1.0f);
             break;
         case LogLevel::WARN:
+            showMessage = filterWarn;
             color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f);
             break;
         case LogLevel::ERROR:
+            showMessage = filterError;
             color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
             break;
         case LogLevel::FATAL:
+            showMessage = filterFatal;
             color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f);
             break;
         }
+
+        if (!showMessage)
+            continue;
 
         std::string message = "[" + FormatTimestamp(msg.time) + "] " + msg.message;
 
         ImGui::TextColored(color, "%s", message.c_str());
     }
+
+    ImGui::NextColumn();
+
+    if (ImGui::Button("Clear"))
+    {
+        m_consoleLogger->Clear();
+    }
+
+    ImGui::Checkbox("Log", &filterLog);
+    ImGui::Checkbox("Info", &filterInfo);
+    ImGui::Checkbox("Warn", &filterWarn);
+    ImGui::Checkbox("Error", &filterError);
+    ImGui::Checkbox("Fatal", &filterFatal);
+
+    ImGui::Columns(1);
 
     ImGui::End();
 }
