@@ -9,7 +9,8 @@ static void* Glad_GLFW_GetProcAddr(const char* name)
     return reinterpret_cast<void*>(glfwGetProcAddress(name));
 }
 
-Window::Window(std::string title, int width, int height) : m_title(std::move(title)), m_width(width), m_height(height)
+Window::Window(std::string title, int width, int height, WindowType type)
+    : m_title(std::move(title)), m_width(width), m_height(height), m_type(type)
 {
 }
 
@@ -30,7 +31,26 @@ void Window::PreInit(Fenrir::App& app)
                    GLFW_OPENGL_CORE_PROFILE); // core profile only, no fixed pipeline functionality
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // MacOS
 
-    m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+
+    switch (m_type)
+    {
+    case WindowType::Windowed:
+        m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), NULL, NULL);
+        break;
+    case WindowType::Fullscreen:
+        m_window = glfwCreateWindow(mode->width, mode->height, m_title.c_str(), monitor, NULL);
+        break;
+    case WindowType::BorderlessWindow:
+        glfwWindowHint(GLFW_DECORATED, GLFW_FALSE);
+        m_window = glfwCreateWindow(mode->width, mode->height, m_title.c_str(), NULL, NULL);
+        break;
+    case WindowType::MaximizedWindow:
+        m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), NULL, NULL);
+        glfwMaximizeWindow(m_window);
+        break;
+    }
 
     if (m_window == nullptr)
     {

@@ -141,7 +141,6 @@ class Editor
     Texture m_fenrirIconTexture;
     ImVec2 m_sceneViewSize = ImVec2(1.0f, 1.0f);
     ImVec2 m_SceneViewPos;
-    float m_menuBarHeight = 0.0f;
 
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
@@ -151,9 +150,10 @@ class Editor
 
     static const ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 
-    static const ImGuiWindowFlags base_window_flags =
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse |
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+    static const ImGuiWindowFlags base_window_flags = ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                                      ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+                                                      ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                                      ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_MenuBar;
 
     static const ImGuiWindowFlags scene_window_flags = ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse;
 
@@ -162,6 +162,9 @@ class Editor
     Fenrir::Math::Ray ScreenToPointRay(const Fenrir::Math::Vec2& normalisedCoords);
 
     Fenrir::Entity SelectEntity(const Fenrir::Math::Ray& ray, Fenrir::EntityList& entityList);
+
+    void SetupImGuiStyle();
+
     void MenuBar();
     void SceneHierarchyWindow();
     void DisplayEntityNode(Fenrir::Entity entity);

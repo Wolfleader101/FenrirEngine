@@ -15,10 +15,19 @@ namespace Fenrir
     class Camera;
 } // namespace Fenrir
 
+enum class WindowType
+{
+    Windowed,
+    Fullscreen,
+    BorderlessWindow,
+    MaximizedWindow
+};
+
 class Window
 {
   public:
-    Window(std::string title = "FenrirEngine Window", int width = 1920, int height = 1080);
+    Window(std::string title = "FenrirEngine Window", int width = 1920, int height = 1080,
+           WindowType type = WindowType::MaximizedWindow);
 
     ~Window();
 
@@ -42,6 +51,7 @@ class Window
     std::string m_title = "";
     int m_width = 0;
     int m_height = 0;
+    WindowType m_type;
 };
 
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
