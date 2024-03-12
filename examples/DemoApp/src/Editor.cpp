@@ -389,6 +389,7 @@ void Editor::Update(Fenrir::App& app)
 
     ImVec2 dockspace_size = ImVec2(main_viewport->Size.x, main_viewport->Size.y);
     ImGui::SetNextWindowSize(dockspace_size);
+    ImGui::SetNextWindowPos(main_viewport->Pos);
 
     ImGui::Begin("FenrirDockSpace", nullptr, base_window_flags);
 
