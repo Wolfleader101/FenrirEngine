@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(DemoApp)
 
-# Set the executable for the demo app
+add_subdirectory(src/ScriptEngine)
+
 add_executable(DemoApp
     src/main.cpp
 
@@ -29,11 +30,11 @@ add_executable(DemoApp
     src/GLRenderer.cpp
 
     src/Material.hpp
+    ${SCRIPT_ENGINE_SRC}
 )
 
 add_subdirectory(libs)
 
-# Link against the modules from your engine
 target_link_libraries(DemoApp PRIVATE FenrirApp FenrirCamera FenrirMath)
 
 target_link_libraries(DemoApp PRIVATE
@@ -43,6 +44,7 @@ target_link_libraries(DemoApp PRIVATE
     glfw
     assimp
     glaze::glaze
+    duktape 
 )
 
 # symlink the assets folder to the build directory

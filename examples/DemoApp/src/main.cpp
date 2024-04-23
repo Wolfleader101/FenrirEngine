@@ -27,6 +27,8 @@
 
 #include <glaze/glaze.hpp>
 
+#include "ScriptEngine/ScriptEngine.hpp"
+
 template <>
 struct glz::meta<ProjectSettings>
 {
@@ -332,6 +334,8 @@ int main()
 
     Fenrir::App app(std::move(logger));
 
+    Fenrir::ScriptEngine scriptEngine(*app.Logger().get(), app.GetTime());
+
     Fenrir::Camera camera;
     Window window(projectSettings.name + " v" + projectSettings.version);
 
@@ -358,7 +362,8 @@ int main()
             {BIND_EDITOR_FN(Editor::PreUpdate, editor), BIND_GL_RENDERER_FN(GLRenderer::PreUpdate, glRenderer)})
 
         .AddSystems(Fenrir::SchedulePriority::Update,
-                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
+                    {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController),
+                     BIND_SCRIPT_ENGINE_FN(ScriptEngine::Update, scriptEngine)})
         .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
                                                                  BIND_EDITOR_FN(Editor::Update, editor)})
         // .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})

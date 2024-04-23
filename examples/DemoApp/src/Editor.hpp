@@ -39,6 +39,10 @@ struct ProjectSettings
     std::string description = "";
     std::string author = "";
     std::string assetPath = "";
+
+    // TODO add more settings
+
+    // todo include an array of systems to be used by the project
 };
 
 enum class LogLevel
