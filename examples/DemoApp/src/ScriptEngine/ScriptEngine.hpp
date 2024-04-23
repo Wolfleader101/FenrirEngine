@@ -15,6 +15,85 @@ namespace Fenrir
 {
     class App;
 
+    class DukContext
+
+    {
+      public:
+        /**
+         * @brief Construct a new Duk Context object by creating a new heap
+         *
+         * It creates a new heap and pushes context onto it
+         */
+        DukContext() : m_ctx(duk_create_heap(NULL, NULL, NULL, NULL, fatal_callback))
+        {
+            // TODO error handling
+            // if (!m_ctx)
+            // {
+            //     m_logger.Fatal("Failed to create Duktape context");
+            //     return;
+            // }
+        }
+
+        /**
+         * @brief Copy constructor for Duk Context
+         *
+         * It creates a new heap and pushes context onto it (deep copy of global context)
+         *
+         * @param other the other Duk Context to deeply copy.
+         */
+        DukContext(const DukContext& other)
+        {
+            // TODO look into if cojntext sharing the same global object is needed
+
+            // To create a new context inside the same heap, but with a fresh set of global object
+            duk_idx_t thread_index = duk_push_thread_new_globalenv(other.m_ctx);
+            m_ctx = duk_require_context(other.m_ctx, thread_index);
+        };
+
+        /**
+         * @brief Move constructor for Duk Context
+         *
+         * It moves the context from the other Duk Context to this one
+         *
+         * @param other the other Duk Context to move from
+         */
+        DukContext(DukContext&& other) : m_ctx(other.m_ctx)
+        {
+            other.m_ctx = nullptr;
+        }
+
+        ~DukContext()
+        {
+            if (m_ctx != nullptr)
+                duk_destroy_heap(m_ctx);
+        }
+
+        template <typename RetType, typename... Ts>
+        void SetFunction(const std::string& funcName, RetType (*funcToCall)(Ts...))
+        {
+            dukglue_register_function(m_ctx, funcToCall, funcName.c_str());
+        }
+
+        template <typename T>
+        DukType<T> CreateType(const std::string& typeName)
+        {
+            return DukType<T>(m_ctx, typeName);
+        }
+
+        template <typename T>
+        void SetVar(const std::string& varName, T* value)
+        {
+            // Push the object to Duktape stack
+            dukglue_push(m_ctx, value);
+
+            // Stash the object in the global object
+            duk_put_global_string(m_ctx, varName.c_str());
+        }
+
+      protected:
+        duk_context* m_ctx;
+    };
+
     struct JSScript
     {
         duk_context* env_ctx;
@@ -89,26 +168,11 @@ namespace Fenrir
         }
     };
 
-    template <typename ClassType, typename PropType, PropType ClassType::*Prop>
-    class PropertyWrapper
-    {
-      public:
-        static PropType Get(const ClassType* obj)
-        {
-            return obj->*Prop;
-        }
-
-        static void Set(ClassType* obj, PropType value)
-        {
-            obj->*Prop = value;
-        }
-    };
-
     template <typename T>
     class DukType
     {
       public:
-        /**
+        /**-
          * @brief Construct a new Duk Type object
          *
          * @param ctx duk context to use
@@ -116,128 +180,52 @@ namespace Fenrir
          */
         DukType(duk_context* ctx, const std::string& typeName) : m_ctx(ctx), m_typeName(typeName)
         {
-            dukglue_register_constructor<T>(m_ctx, m_typeName.c_str());
+            // dukglue_register_constructor<T>(m_ctx, m_typeName.c_str());
+            dukglue_register_function
         }
 
         /**
-         * @brief Set a property on the object based on a member pointer
+         * @brief Set the Constructor object
          *
-         * @tparam T type of the object
-         * @tparam V member pointer type
-         * @param propName name of the property
-         * @param memberPtr pointer to the member
+         * @tparam Args arguments to the constructor
          */
-        template <typename T, typename V>
-        void SetProperty(const std::string& propName, V T::*memberPtr)
+        template <typename... Args>
+        void SetConstructor()
         {
-            // std::string hiddenPropName = "\xff\xff" + propName; // hidden property name
+            dukglue_register_constructor<T, Args...>(m_ctx, m_typeName.c_str());
+        }
 
-            // push the property name
-            duk_push_string(m_ctx, propName.c_str());
+        /**
+         * @brief Set the Method object
+         *
+         * @tparam RetType the return type of the method
+         * @tparam Ts the arguments of the method
+         * @param methodName the name of the method
+         * @param methodPtr the pointer to the method
+         */
+        template <typename RetType, typename... Ts>
+        void SetMethod(const std::string& methodName, RetType (T::*methodPtr)(Ts...))
+        {
+            dukglue_register_method(m_ctx, &T::methodName, methodName.c_str());
+        }
 
-            // // push the getter function (which gets the member value)
-            // duk_push_c_function(m_ctx, &TemplateMemberGetter<T, V>, 1);
-
-            // // alloc a buffer to store the member pointer (so it can be retrieved in the getter function)
-            // V T::** ptrStore = static_cast<V T::**>(duk_push_fixed_buffer(m_ctx, sizeof(memberPtr)));
-            // *ptrStore = memberPtr; // store the member pointer in the buffer
-
-            // // Store the buffer in the function's "\xff\xff<prop>"" property that isnt exposed to JS
-            // // duk_put_prop_string(m_ctx, -2, hiddenPropName.c_str());
-            // duk_put_prop_string(m_ctx, -2,
-            //                     "\xff"
-            //                     "\xff"
-            //                     "data");
-
-            // // Define the property with the getter
-            // duk_def_prop(m_ctx, m_objIdx, DUK_DEFPROP_HAVE_GETTER | DUK_DEFPROP_SET_CONFIGURABLE);
-
-            // push the getter function (which gets the member value)
-            duk_push_c_function(m_ctx, TemplateMemberGetter<T, V>,
-                                1); // nargs is 1 because the getter takes one argument: 'this'
-
-            // alloc a buffer to store the member pointer (so it can be retrieved in the getter function)
-            void* buffer = duk_push_fixed_buffer(m_ctx, sizeof(memberPtr));
-            std::memcpy(buffer, &memberPtr, sizeof(memberPtr)); // store the member pointer in the buffer
-            // duk_put_prop_string(m_ctx, -2, propName.c_str());
-            duk_put_prop_string(m_ctx, -2,
-                                "\xff"
-                                "\xff"
-                                "data");
-
-            duk_def_prop(m_ctx, m_objIdx, DUK_DEFPROP_HAVE_GETTER | DUK_DEFPROP_SET_CONFIGURABLE);
+        /**
+         * @brief Set the Method object
+         *
+         * @tparam RetType the return type of the method
+         * @tparam Ts the arguments of the method
+         * @param methodName the name of the method
+         * @param methodPtr the pointer to the method
+         */
+        template <typename RetType, typename... Ts>
+        void SetMethod(const std::string& methodName, RetType (T::*methodPtr)(Ts...) const)
+        {
+            dukglue_register_method(m_ctx, &T::methodName, methodName.c_str());
         }
 
       private:
         duk_context* m_ctx;
         std::string m_typeName;
-        duk_idx_t m_objIdx;
-
-        template <typename T, typename V>
-        static duk_ret_t TemplateMemberGetter(duk_context* ctx)
-        {
-            duk_push_current_function(ctx);
-            duk_get_prop_string(ctx, -1,
-                                "\xff"
-                                "\xff"
-                                "data");
-            V T::*memberPtr;
-            std::memcpy(&memberPtr, duk_get_buffer_data(ctx, -1, nullptr), sizeof(memberPtr));
-            duk_pop_2(ctx); // Pop off the function and the buffer from the stack
-
-            T* obj = static_cast<T*>(duk_get_heapptr(ctx, 0)); // Get the 'this' pointer from the top of the stack
-            if (!obj)
-                return DUK_RET_TYPE_ERROR; // Return an error if the object is not found
-
-            V value = obj->*memberPtr; // Access the property value
-            if constexpr (std::is_same<V, std::string>::value)
-            {
-                duk_push_string(ctx, value.c_str());
-            }
-            else
-            {
-                duk_push_number(ctx, static_cast<double>(value)); // Push the property value as a number
-            }
-            return 1; // Return one value (the property value)
-
-            // auto ptr = static_cast<T*>(duk_to_pointer(ctx, 0));
-            // V T::*memberPtr;
-            // std::memcpy(&memberPtr, duk_get_buffer_data(ctx, -1, nullptr), sizeof(memberPtr));
-
-            // if constexpr (std::is_same<V, std::string>::value)
-            // {
-            //     duk_push_string(ctx, (ptr->*memberPtr).c_str());
-            // }
-            // else
-            // {
-            //     duk_push_number(ctx, ptr->*memberPtr);
-            // }
-            // return 1;
-
-            // duk_push_current_function(ctx);
-            // duk_get_prop_string(ctx, -1,
-            //                     "\xff"
-            //                     "\xff"
-            //                     "data");
-            // V T::** ptrStore = static_cast<V T::**>(duk_get_buffer_data(ctx, -1, nullptr));
-            // V T::*memberPtr = *ptrStore;
-            // duk_pop_2(ctx);
-
-            // T* obj = static_cast<T*>(duk_get_heapptr(ctx, 0));
-            // if (!obj)
-            //     return DUK_RET_TYPE_ERROR;
-
-            // V value = obj->*memberPtr;
-            // if constexpr (std::is_same<V, std::string>::value)
-            // {
-            //     duk_push_string(ctx, value.c_str());
-            // }
-            // else
-            // {
-            //     duk_push_number(ctx, static_cast<double>(value));
-            // }
-            // return 1;
-        }
     };
 
 } // namespace Fenrir

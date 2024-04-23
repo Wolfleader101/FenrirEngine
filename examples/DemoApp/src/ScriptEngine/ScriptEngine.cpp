@@ -318,7 +318,7 @@ namespace Fenrir
         // TODO figure out where to put this so there isnt a mmeory leak
         MyTime* time = new MyTime(const_cast<Time*>(&m_time));
 
-        dukglue_register_constructor<MyTime>(ctx, "Time");
+        // dukglue_register_constructor<MyTime>(ctx, "Time");
 
         dukglue_register_property(ctx, &MyTime::deltaTime, nullptr, "deltaTime");
 
