@@ -23,9 +23,11 @@ add_subdirectory(imguizmo)
 add_subdirectory(assimp)
 add_subdirectory(glaze)
 add_subdirectory(duktape)
+# add_subdirectory(dukglue)
 
 target_include_directories(imgui PUBLIC glfw/include)
 target_include_directories(imguizmo PUBLIC imgui/imgui)
+# target_include_directories(dukglue PUBLIC duktape/src)
 
 target_include_directories(DemoApp SYSTEM PUBLIC
     glad/include
@@ -35,4 +37,5 @@ target_include_directories(DemoApp SYSTEM PUBLIC
     glaze/include
     imGuizmo/
     duktape/src
+    dukglue/include
 )

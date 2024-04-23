@@ -3,19 +3,10 @@
 #include "DukUtils.hpp"
 
 #include "NativeFunctions.hpp"
+#include "dukglue/dukglue.h"
 
 namespace Fenrir
 {
-
-    void duk_copy_element_reference(duk_context* src, duk_context* dst, const char* element)
-    {
-        duk_get_global_string(src, element);
-        duk_require_stack(dst, 1);
-        duk_xcopy_top(dst, src, 1);
-        duk_put_global_string(dst, element);
-        duk_pop(src);
-    }
-
     ScriptEngine::ScriptEngine(Fenrir::ILogger& logger, const Time& time)
         : m_ctx(nullptr), m_logger(logger), m_time(time)
     {
@@ -35,10 +26,7 @@ namespace Fenrir
         this->RegisterVars(m_ctx);
 
         auto ts = CreateScript("assets/scripts/test.js");
-        CreateScript("assets/scripts/test1.js");
-
-        std::vector<JSType> args = {123, "hello", true, 3.14};
-        this->RunFunction(ts.env_ctx, "testArgs", args);
+        // CreateScript("assets/scripts/test1.js");
     }
 
     ScriptEngine::~ScriptEngine()
@@ -91,12 +79,6 @@ namespace Fenrir
 
         //! run using the scripts own context, (you probably dont want to run every script on creation tho?)
         this->RunFile(script.env_ctx, scriptPath);
-
-        // TODO -  remove this code, only have it for testing
-        JSType age = this->GetScriptVariable(script, "age");
-
-        if (std::holds_alternative<int>(age))
-            m_logger.Info("Age: {0}", std::get<int>(age));
 
         // Store the new context so that we can destroy it later
         //! this might be doubling handling, may not need to store a list of contexts
@@ -310,15 +292,37 @@ namespace Fenrir
 
     void ScriptEngine::RegisterVars(duk_context* ctx)
     {
-        //! TODO MOVE THESE INTO SEPERATE FILE
-        duk_push_string(ctx, "Hello World!");
-        duk_put_global_string(ctx, "hello");
+        struct MyTime
+        {
+          public:
+            MyTime() : m_time(nullptr)
+            {
+            }
 
-        DukType timeType(ctx, "Time");
-        timeType.SetProperty("deltaTime", &Time::deltaTime);
-        timeType.SetProperty("tickRate", &Time::tickRate);
+            MyTime(Time* time) : m_time(time)
+            {
+            }
 
-        SetGlobal("Time", &m_time);
+            double deltaTime() const
+            {
+                if (m_time != nullptr)
+                    return m_time->deltaTime;
+                else
+                    return 0;
+            }
+
+          private:
+            Time* m_time;
+        };
+
+        // TODO figure out where to put this so there isnt a mmeory leak
+        MyTime* time = new MyTime(const_cast<Time*>(&m_time));
+
+        dukglue_register_constructor<MyTime>(ctx, "Time");
+
+        dukglue_register_property(ctx, &MyTime::deltaTime, nullptr, "deltaTime");
+
+        SetGlobal("Time", time);
     }
 
 } // namespace Fenrir
