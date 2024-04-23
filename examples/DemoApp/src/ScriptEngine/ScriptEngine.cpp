@@ -7,82 +7,35 @@
 
 namespace Fenrir
 {
-    ScriptEngine::ScriptEngine(Fenrir::ILogger& logger, const Time& time)
-        : m_ctx(nullptr), m_logger(logger), m_time(time)
+    ScriptEngine::ScriptEngine(Fenrir::ILogger& logger, const Time& time) : m_ctx(), m_logger(logger), m_time(time)
     {
         // TODO FIX THIS LATER
         g_logger = &logger;
 
-        m_ctx = duk_create_heap(NULL, NULL, NULL, NULL, fatal_callback);
-
-        if (!m_ctx)
-        {
-            m_logger.Fatal("Failed to create Duktape context");
-            return;
-        }
-
-        this->RegisterFunctions(m_ctx);
+        this->RegisterFunctions(m_ctx.GetContext());
         // TODO - register global vars
-        this->RegisterVars(m_ctx);
+        this->RegisterVars(m_ctx.GetContext());
 
-        auto ts = CreateScript("assets/scripts/test.js");
+        CreateScript("assets/scripts/test.js");
         // CreateScript("assets/scripts/test1.js");
-    }
-
-    ScriptEngine::~ScriptEngine()
-    {
-        // for (auto ctx : m_scriptCtxs) {
-        //     duk_destroy_heap(ctx);
-        // }
-        duk_destroy_heap(m_ctx);
     }
 
     JSScript ScriptEngine::CreateScript(const std::string& scriptPath)
     {
-        JSScript script;
-        // duk_idx_t thread_index = duk_push_thread(m_ctx);  //! pushes a context onto existing heap, and copies the
-        //! global context (issue is that setting a global variable affects all scripts), i.e s1.js age = 10, s2.js age
-        //! is then 10
+        JSScript script(m_ctx, scriptPath);
 
-        duk_idx_t thread_index = duk_push_thread_new_globalenv(
-            m_ctx); //! creates a new heap and pushes a context onto it (does not copy global context)
-        script.env_ctx = duk_require_context(m_ctx, thread_index);
-        script.path = scriptPath;
-
-        if (!script.env_ctx)
+        if (!script.env.IsValid())
         {
             m_logger.Fatal("Failed to create Duktape context");
             return script;
         }
 
-        //! register the global vars and functions
-        duk_push_global_object(m_ctx);
-        duk_enum(m_ctx, -1, DUK_ENUM_OWN_PROPERTIES_ONLY);
-
-        while (duk_next(m_ctx, -1, 0))
-        {
-            // Here, the top of the stack contains the property key
-            const char* key = duk_safe_to_string(m_ctx, -1);
-
-            // Fetch the associated value
-            duk_get_global_string(m_ctx, key);
-
-            // Move it to the new context
-            duk_xmove_top(script.env_ctx, m_ctx, 1);
-
-            // And set it as a global in the new context
-            duk_put_global_string(script.env_ctx, key);
-
-            // Clean up the key
-            duk_pop(m_ctx);
-        }
-
+        // TODO make context have run file function
         //! run using the scripts own context, (you probably dont want to run every script on creation tho?)
-        this->RunFile(script.env_ctx, scriptPath);
+        this->RunFile(script.env.GetContext(), scriptPath);
 
         // Store the new context so that we can destroy it later
         //! this might be doubling handling, may not need to store a list of contexts
-        m_scriptCtxs.push_back(script.env_ctx);
 
         m_scripts.push_back(script); //! just for testing - remove later
 
@@ -93,28 +46,28 @@ namespace Fenrir
     {
         for (JSScript& script : m_scripts)
         {
-            RunFunction(script.env_ctx, "update", {});
+            RunFunction(script.env.GetContext(), "update", {});
         }
     }
 
     JSType ScriptEngine::GetGlobal(const std::string& name)
     {
-        return GetVariable(m_ctx, name);
+        return GetVariable(m_ctx.GetContext(), name);
     }
 
     void ScriptEngine::SetGlobal(const std::string& name, const JSType& value)
     {
-        SetVariable(m_ctx, name, value);
+        SetVariable(m_ctx.GetContext(), name, value);
     }
 
     JSType ScriptEngine::GetScriptVariable(const JSScript& script, const std::string& varName)
     {
-        return GetVariable(script.env_ctx, varName);
+        return GetVariable(script.env.GetContext(), varName);
     }
 
     void ScriptEngine::SetScriptVariable(const JSScript& script, const std::string& name, const JSType& value)
     {
-        SetVariable(script.env_ctx, name, value);
+        SetVariable(script.env.GetContext(), name, value);
     }
 
     void ScriptEngine::RunFunction(duk_context* ctx, const std::string& funcName, const std::vector<JSType>& args)

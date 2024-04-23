@@ -13,5 +13,5 @@ function tick() {
 }
 
 function update() {
-  // print(Time.deltaTime);
+  print(Time.deltaTime);
 }
