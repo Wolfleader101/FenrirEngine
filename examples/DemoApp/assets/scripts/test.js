@@ -30,5 +30,6 @@ function tick() {
 
 function update() {
   print(Time.deltaTime);
+  print_warn(Time.tickRate);
   print_err(age);
 }

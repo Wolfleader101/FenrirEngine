@@ -316,6 +316,7 @@ namespace Fenrir
 
         DukType timeType(ctx, "Time");
         timeType.SetProperty("deltaTime", &Time::deltaTime);
+        timeType.SetProperty("tickRate", &Time::tickRate);
 
         SetGlobal("Time", &m_time);
     }

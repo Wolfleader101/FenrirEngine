@@ -92,23 +92,46 @@ namespace Fenrir
     class DukType
     {
       public:
+        /**
+         * @brief Construct a new Duk Type object
+         *
+         * @param ctx duk context to use
+         * @param typeName of the object
+         */
         DukType(duk_context* ctx, const std::string& typeName) : m_ctx(ctx), m_typeName(typeName)
         {
+            // push the object related to the type onto the stack
             m_objIdx = duk_push_object(m_ctx);
         }
 
+        /**
+         * @brief Set a property on the object based on a member pointer
+         *
+         * @tparam T type of the object
+         * @tparam V member pointer type
+         * @param propName name of the property
+         * @param memberPtr pointer to the member
+         */
         template <typename T, typename V>
-        void SetProperty(const std::string& propName, V T::*value)
+        void SetProperty(const std::string& propName, V T::*memberPtr)
         {
-            duk_push_c_function(m_ctx, getProp<T, V>, 2);
-            void* buffer = duk_push_fixed_buffer(m_ctx, sizeof(value));
-            std::memcpy(buffer, &value, sizeof(value));
-            duk_put_prop_string(m_ctx, -2, propName.c_str());
-        }
+            std::string hiddenPropName = "\xff\xff" + propName; // hidden property name
 
-        ~DukType()
-        {
-            duk_put_global_string(m_ctx, m_typeName.c_str());
+            // push the property name
+            duk_push_string(m_ctx, propName.c_str());
+
+            // push the getter function (the magic that gets the member value)
+            duk_push_c_function(m_ctx, &TemplateMemberGetter<T, V>, 1);
+
+            // alloc a buffer to store the member pointer (so it can be retrieved in the getter function)
+            V T::** ptrStore = static_cast<V T::**>(duk_push_fixed_buffer(m_ctx, sizeof(memberPtr)));
+            *ptrStore = memberPtr; // store the member pointer in the buffer
+
+            // Store the buffer in the function's "\xff\xff<prop>"" property that isnt exposed to JS
+            duk_put_prop_string(m_ctx, -2, hiddenPropName.c_str());
+
+            // Define the property with the getter
+            duk_def_prop(m_ctx, m_objIdx, DUK_DEFPROP_HAVE_GETTER | DUK_DEFPROP_SET_CONFIGURABLE);
         }
 
       private:
@@ -117,19 +140,30 @@ namespace Fenrir
         duk_idx_t m_objIdx;
 
         template <typename T, typename V>
-        static duk_ret_t getProp(duk_context* ctx)
+        static duk_ret_t TemplateMemberGetter(duk_context* ctx)
         {
-            auto ptr = static_cast<T*>(duk_to_pointer(ctx, 0));
-            V T::*memberPtr;
-            std::memcpy(&memberPtr, duk_get_buffer_data(ctx, -1, nullptr), sizeof(memberPtr));
+            // Get the hidden property name from the function's second argument
+            const char* hiddenPropName = duk_require_string(ctx, 0);
 
+            // Retrieve the member pointer using the hidden property name
+            duk_push_current_function(ctx);
+            duk_get_prop_string(ctx, -1, hiddenPropName);
+            V T::** ptrStore = static_cast<V T::**>(duk_get_buffer_data(ctx, -1, nullptr));
+            V T::*memberPtr = *ptrStore;
+            duk_pop_2(ctx); // Clean up the stack
+
+            T* obj = static_cast<T*>(duk_get_heapptr(ctx, 0));
+            if (!obj)
+                return DUK_RET_TYPE_ERROR;
+
+            V value = obj->*memberPtr;
             if constexpr (std::is_same<V, std::string>::value)
             {
-                duk_push_string(ctx, (ptr->*memberPtr).c_str());
+                duk_push_string(ctx, value.c_str());
             }
             else
             {
-                duk_push_number(ctx, ptr->*memberPtr);
+                duk_push_number(ctx, static_cast<double>(value));
             }
             return 1;
         }
