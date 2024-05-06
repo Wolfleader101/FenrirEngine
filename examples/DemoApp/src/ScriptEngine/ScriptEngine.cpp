@@ -7,22 +7,30 @@
 
 namespace Fenrir
 {
-    ScriptEngine::ScriptEngine(Fenrir::ILogger& logger, const Time& time) : m_ctx(), m_logger(logger), m_time(time)
+    ScriptEngine::ScriptEngine(Fenrir::ILogger& logger, const Time& time) : m_heap(), m_logger(logger), m_time(time)
     {
         // TODO FIX THIS LATER
         g_logger = &logger;
 
-        this->RegisterFunctions(m_ctx.GetContext());
+        this->RegisterFunctions(m_heap.GetContext());
         // TODO - register global vars
-        this->RegisterVars(m_ctx.GetContext());
+        this->RegisterVars(m_heap.GetContext());
 
         CreateScript("assets/scripts/test.js");
+
+        DukTie::DukFunction<void, int> func(m_heap.GetContext(), "testFunc");
+
+        auto fn = [](int a) { g_logger->Fatal("Function called with {0}", a); };
+
+        func.Set(fn);
+
+        func.Call(10);
         // CreateScript("assets/scripts/test1.js");
     }
 
     JSScript ScriptEngine::CreateScript(const std::string& scriptPath)
     {
-        JSScript script(m_ctx, scriptPath);
+        JSScript script(m_heap, scriptPath);
 
         if (!script.env.IsValid())
         {
@@ -52,12 +60,12 @@ namespace Fenrir
 
     JSType ScriptEngine::GetGlobal(const std::string& name)
     {
-        return GetVariable(m_ctx.GetContext(), name);
+        return GetVariable(m_heap.GetContext(), name);
     }
 
     void ScriptEngine::SetGlobal(const std::string& name, const JSType& value)
     {
-        SetVariable(m_ctx.GetContext(), name, value);
+        SetVariable(m_heap.GetContext(), name, value);
     }
 
     JSType ScriptEngine::GetScriptVariable(const JSScript& script, const std::string& varName)
