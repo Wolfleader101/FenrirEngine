@@ -261,9 +261,9 @@ static void InitBackpacks(Fenrir::App& app)
 class AssetLoader
 {
   public:
-    AssetLoader(Fenrir::ILogger& logger, std::string& assetPath)
+    AssetLoader(Fenrir::ILogger& logger, std::string& assetPath, GLRenderer& renderer)
         : m_assetPath(assetPath), m_shaderLibrary(logger), m_textureLibrary(logger),
-          m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary)
+          m_modelLibrary(logger, m_textureLibrary, m_shaderLibrary), m_renderer(renderer)
     {
     }
 
@@ -300,6 +300,9 @@ class AssetLoader
         m_textureLibrary.AddTexture(m_assetPath + "textures/icons/file.png");
         m_textureLibrary.AddTexture(m_assetPath + "textures/icons/folder.png");
         m_textureLibrary.AddTexture(m_assetPath + "textures/icons/fenrir.png");
+
+        m_renderer.SetSkybox(skybox);
+        m_renderer.SetSkyboxShader(skyboxShader);
     }
 
     TextureLibrary& GetTextureLibrary()
@@ -312,6 +315,7 @@ class AssetLoader
     ShaderLibrary m_shaderLibrary;
     TextureLibrary m_textureLibrary;
     ModelLibrary m_modelLibrary;
+    GLRenderer& m_renderer;
 };
 
 #define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
@@ -339,10 +343,7 @@ int main()
 
     GLRenderer glRenderer(*app.Logger().get(), window, camera);
 
-    AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath);
-
-    glRenderer.SetSkybox(skybox);
-    glRenderer.SetSkyboxShader(skyboxShader);
+    AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
 
     Editor editor(app, *app.Logger().get(), window, glRenderer, camera, assetLoader.GetTextureLibrary());
     editor.SetProjectSettings(projectSettings);
