@@ -37,33 +37,33 @@ static std::string FormatTimestamp(const std::chrono::system_clock::time_point& 
     return ss.str();
 }
 
-void EditorConsoleLogger::LogImpl(const std::string& message)
+void EditorConsoleLogger::LogImpl(std::string_view message)
 {
     AddMessage(LogLevel::LOG, message);
 }
 
-void EditorConsoleLogger::InfoImpl(const std::string& message)
+void EditorConsoleLogger::InfoImpl(std::string_view message)
 {
     AddMessage(LogLevel::INFO, message);
 }
 
-void EditorConsoleLogger::WarnImpl(const std::string& message)
+void EditorConsoleLogger::WarnImpl(std::string_view message)
 {
     AddMessage(LogLevel::WARN, message);
 }
 
-void EditorConsoleLogger::ErrorImpl(const std::string& message)
+void EditorConsoleLogger::ErrorImpl(std::string_view message)
 {
     AddMessage(LogLevel::ERROR, message);
 }
 
-void EditorConsoleLogger::FatalImpl(const std::string& message)
+void EditorConsoleLogger::FatalImpl(std::string_view message)
 {
 
     AddMessage(LogLevel::FATAL, message);
 }
 
-void EditorConsoleLogger::AddMessage(LogLevel level, const std::string& message)
+void EditorConsoleLogger::AddMessage(LogLevel level, std::string_view message)
 {
     std::lock_guard<std::mutex> lock(m_mutex);
     m_messages.emplace_back(level, message);
