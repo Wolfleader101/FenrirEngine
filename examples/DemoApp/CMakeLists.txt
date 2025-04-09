@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(DemoApp)
 
+
 # Set the executable for the demo app
 add_executable(DemoApp
     src/main.cpp
@@ -43,6 +44,21 @@ target_link_libraries(DemoApp PRIVATE
     glfw
     assimp
     glaze::glaze
+    v8lib
+)
+
+target_compile_definitions(DemoApp PRIVATE 
+V8_COMPRESS_POINTERS # WHAT A FUCKING STUPID FUCKING DUMB FUCKING FEATURE -- https://stackoverflow.com/questions/62921373/embedder-side-pointer-compression-is-disabled
+V8_ENABLE_SANDBOX # SHITTY FUCKING DEFINITION NEEDED -- https://github.com/CauldronDevelopmentLLC/cbang/issues/117
+V8_ENABLE_CHECKS  # FUCKING OBSECURE AS FUCK BUG CRASHING ON Isolate::Scope  destructor --- https://groups.google.com/g/v8-users/c/bt5QiMDIqzk/m/5x4wq4bUAAAJ?pli=1
+)
+
+
+add_custom_command(TARGET DemoApp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/libs/v8/v8/lib/Debug,${CMAKE_CURRENT_SOURCE_DIR}/libs/v8/v8/lib/Release>
+    $<TARGET_FILE_DIR:DemoApp>
+    COMMENT "Copying V8 runtime DLLs to output directory"
 )
 
 # symlink the assets folder to the build directory
