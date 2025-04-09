@@ -12,7 +12,7 @@ namespace Fenrir
         m_logger->set_level(spdlog::level::trace);
     }
 
-    void ConsoleLogger::LogImpl(const std::string& message)
+    void ConsoleLogger::LogImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::trace, message);
 
@@ -22,7 +22,7 @@ namespace Fenrir
         }
     }
 
-    void ConsoleLogger::InfoImpl(const std::string& message)
+    void ConsoleLogger::InfoImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::info, message);
 
@@ -32,7 +32,7 @@ namespace Fenrir
         }
     }
 
-    void ConsoleLogger::WarnImpl(const std::string& message)
+    void ConsoleLogger::WarnImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::warn, message);
 
@@ -42,7 +42,7 @@ namespace Fenrir
         }
     }
 
-    void ConsoleLogger::ErrorImpl(const std::string& message)
+    void ConsoleLogger::ErrorImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::err, message);
 
@@ -52,7 +52,7 @@ namespace Fenrir
         }
     }
 
-    void ConsoleLogger::FatalImpl(const std::string& message)
+    void ConsoleLogger::FatalImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::critical, message);
 

@@ -56,7 +56,7 @@ struct MessageEntry
     std::chrono::system_clock::time_point time;
     std::string message;
 
-    MessageEntry(LogLevel level, const std::string& message)
+    MessageEntry(LogLevel level, std::string_view message)
         : level(level), message(message), time(std::chrono::system_clock::now())
     {
     }
@@ -91,17 +91,17 @@ class EditorConsoleLogger : public Fenrir::ILogger
     }
 
   protected:
-    void LogImpl(const std::string& message) override;
-    void InfoImpl(const std::string& message) override;
-    void WarnImpl(const std::string& message) override;
-    void ErrorImpl(const std::string& message) override;
-    void FatalImpl(const std::string& message) override;
+    void LogImpl(std::string_view message) override;
+    void InfoImpl(std::string_view message) override;
+    void WarnImpl(std::string_view message) override;
+    void ErrorImpl(std::string_view message) override;
+    void FatalImpl(std::string_view message) override;
 
   private:
     std::mutex m_mutex;
     std::deque<MessageEntry> m_messages;
 
-    void AddMessage(LogLevel level, const std::string& message);
+    void AddMessage(LogLevel level, std::string_view message);
 };
 
 class Editor
