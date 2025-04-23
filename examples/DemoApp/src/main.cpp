@@ -27,194 +27,47 @@
 
 #include <glaze/glaze.hpp>
 
-#include <libplatform/libplatform.h>
-#include <v8.h>
+#include "ScriptEngine/ScriptEngine.hpp"
 
-v8::MaybeLocal<v8::String> ReadFile(v8::Isolate* isolate, const std::string& name)
+void Log(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
-    FILE* file = fopen(name.c_str(), "rb");
-    if (file == NULL)
-        return v8::MaybeLocal<v8::String>();
-
-    fseek(file, 0, SEEK_END);
-    size_t size = ftell(file);
-    rewind(file);
-
-    std::unique_ptr<char[]> chars(new char[size + 1]);
-    chars.get()[size] = '\0';
-    for (size_t i = 0; i < size;)
-    {
-        i += fread(&chars.get()[i], 1, size - i, file);
-        if (ferror(file))
-        {
-            fclose(file);
-            return v8::MaybeLocal<v8::String>();
-        }
-    }
-    fclose(file);
-    v8::MaybeLocal<v8::String> result =
-        v8::String::NewFromUtf8(isolate, chars.get(), v8::NewStringType::kNormal, static_cast<int>(size));
-    return result;
-}
-
-static void LogCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
-{
+    // if no arguments are passed, return
     if (info.Length() < 1)
         return;
-    v8::Isolate* isolate = info.GetIsolate();
-    v8::HandleScope scope(isolate);
-    v8::Local<v8::Value> arg = info[0];
-    v8::String::Utf8Value value(isolate, arg);
-    printf("%s\n", *value);
-}
 
-static bool HasFunction(v8::Isolate* isolate, v8::Local<v8::Context> context, const char* name)
-{
-    v8::HandleScope handle_scope(isolate);
+    // create a handle scope for the current isolate
+    v8::HandleScope handle_scope(info.GetIsolate());
 
-    v8::Context::Scope context_scope(context);
-
-    v8::Local<v8::String> functionName = v8::String::NewFromUtf8(isolate, name).ToLocalChecked();
-    v8::Local<v8::Value> functionValue;
-    if (!context->Global()->Get(context, functionName).ToLocal(&functionValue))
-        return false;
-    return functionValue->IsFunction();
-}
-
-static v8::Local<v8::Function> GetFunction(v8::Isolate* isolate, v8::Local<v8::Context> context, const char* name)
-{
-    v8::EscapableHandleScope handle_scope(isolate);
-
-    v8::Context::Scope context_scope(context);
-
-    v8::Local<v8::String> functionName = v8::String::NewFromUtf8(isolate, name).ToLocalChecked();
-    v8::Local<v8::Value> functionValue;
-    if (!context->Global()->Get(context, functionName).ToLocal(&functionValue))
-        return v8::Local<v8::Function>();
-
-    if (!functionValue->IsFunction())
+    for (int i = 0; i < info.Length(); ++i)
     {
-        v8::String::Utf8Value error(isolate, functionValue);
-        fprintf(stderr, "Error: %s is not a function\n", *error);
-        return v8::Local<v8::Function>();
+        if (i > 0)
+            std::cout << ' ';
+        v8::String::Utf8Value str(info.GetIsolate(), info[i]);
+        std::cout << *str;
     }
-
-    return handle_scope.Escape(functionValue.As<v8::Function>());
-}
-
-static void SetFunction(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> global, const char* name,
-                        v8::FunctionCallback fn)
-{
-    v8::HandleScope handle_scope(isolate);
-
-    global->Set(isolate, name, v8::FunctionTemplate::New(isolate, fn));
+    std::cout << std::endl;
 }
 
 void TestV8()
 {
     // ------ Initialize V8. ------ //
-    v8::V8::InitializeICUDefaultLocation(".");
-    v8::V8::InitializeExternalStartupData(".");
-    std::unique_ptr<v8::Platform> platform = v8::platform::NewDefaultPlatform();
-    v8::V8::InitializePlatform(platform.get());
-    v8::V8::Initialize();
+    JSEngine jsEngine;
+    jsEngine.Init();
     // ------------------------ //
 
-    // Create a new Isolate and make it the current one.
-    v8::Isolate::CreateParams create_params;
-    create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
-    v8::Isolate* isolate = v8::Isolate::New(create_params);
+    // Create a new environment and make it the current one.
     {
-        v8::Isolate::Scope isolate_scope(isolate);
-        // Create a stack-allocated handle scope.
-        v8::HandleScope scope(isolate);
+        JSEnvironment jsEnv;
+        jsEnv.SetFunction("log", Log);
 
-        v8::Local<v8::String> sourceCode;
+        JSScript script = jsEnv.CreateScript("assets/scripts/test.js");
 
-        if (!ReadFile(isolate, "assets/scripts/test.js").ToLocal(&sourceCode))
-        {
-            fprintf(stderr, "Error reading '%s'.\n", "assets/scripts/test.js");
-            return;
-        }
-
-        // Create a template for the global object where we set the
-        // built-in global functions.
-        v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(isolate);
-        SetFunction(isolate, global, "log", LogCallback);
-
-        {
-            // Create a new context (this should be per script)
-            v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global);
-
-            // Enter the context for compiling and running the script
-            v8::Context::Scope context_scope(context);
-
-            {
-                // Create a stack-allocated handle scope.
-                // This is important for memory management in V8.
-                v8::HandleScope handle_scope(isolate);
-
-                // Create a try-catch block to handle exceptions.
-                // This is important for debugging and error handling.
-                v8::TryCatch try_catch(isolate);
-
-                // make sure the script is compiled and run in the correct context
-                v8::Local<v8::Context> ctx = isolate->GetCurrentContext();
-
-                // compile the script and check for errors
-                v8::Local<v8::Script> script;
-                if (!v8::Script::Compile(ctx, sourceCode).ToLocal(&script))
-                {
-                    // If there was an error, print it and return.
-                    v8::String::Utf8Value error(isolate, try_catch.Exception());
-                    fprintf(stderr, "Error compiling script: %s\n", *error);
-                    return;
-                }
-
-                // Run the script and check for errors
-                v8::Local<v8::Value> result;
-                if (!script->Run(ctx).ToLocal(&result))
-                {
-                    // If there was an error, print it and return.
-                    v8::String::Utf8Value error(isolate, try_catch.Exception());
-                    fprintf(stderr, "Error running script: %s\n", *error);
-                    return;
-                }
-
-                // check if the init function is defined and is a function
-                if (!HasFunction(isolate, ctx, "init"))
-                {
-                    fprintf(stderr, "Error: init function not found in script.\n");
-                    return;
-                }
-
-                // if the init function exists then cast it to a function
-                v8::Local<v8::Function> initFunction = GetFunction(isolate, ctx, "init");
-                if (initFunction.IsEmpty())
-                {
-                    fprintf(stderr, "Error: init function is not a function.\n");
-                    return;
-                }
-
-                // call the init function with no arguments
-                v8::Local<v8::Value> argv[] = {};
-
-                v8::Local<v8::Value> fn_result;
-                if (!initFunction->Call(ctx, ctx->Global(), 0, argv).ToLocal(&fn_result))
-                {
-                    // If there was an error, print it and return.
-                    v8::String::Utf8Value error(isolate, try_catch.Exception());
-                    fprintf(stderr, "Error calling init function: %s\n", *error);
-                    return;
-                }
-            }
-        }
+        script.RunInitFunction();
+        script.RunFunction("test");
     }
+
     // Dispose the isolate and tear down V8.
-    isolate->Dispose();
-    v8::V8::Dispose();
-    v8::V8::DisposePlatform();
-    delete create_params.array_buffer_allocator;
+    jsEngine.Shutdown();
 }
 
 template <>

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 project(DemoApp)
 
 
+add_subdirectory(src/ScriptEngine)
+
 # Set the executable for the demo app
 add_executable(DemoApp
     src/main.cpp
@@ -30,6 +32,8 @@ add_executable(DemoApp
     src/GLRenderer.cpp
 
     src/Material.hpp
+    
+    ${SCRIPT_ENGINE_SRC}
 )
 
 add_subdirectory(libs)
