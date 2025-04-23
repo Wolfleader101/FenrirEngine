@@ -30,14 +30,96 @@
 #include <libplatform/libplatform.h>
 #include <v8.h>
 
-void TestV8(char* argv[])
+v8::MaybeLocal<v8::String> ReadFile(v8::Isolate* isolate, const std::string& name)
 {
-    // Initialize V8.
-    v8::V8::InitializeICUDefaultLocation(argv[0]);
-    v8::V8::InitializeExternalStartupData(argv[0]);
+    FILE* file = fopen(name.c_str(), "rb");
+    if (file == NULL)
+        return v8::MaybeLocal<v8::String>();
+
+    fseek(file, 0, SEEK_END);
+    size_t size = ftell(file);
+    rewind(file);
+
+    std::unique_ptr<char[]> chars(new char[size + 1]);
+    chars.get()[size] = '\0';
+    for (size_t i = 0; i < size;)
+    {
+        i += fread(&chars.get()[i], 1, size - i, file);
+        if (ferror(file))
+        {
+            fclose(file);
+            return v8::MaybeLocal<v8::String>();
+        }
+    }
+    fclose(file);
+    v8::MaybeLocal<v8::String> result =
+        v8::String::NewFromUtf8(isolate, chars.get(), v8::NewStringType::kNormal, static_cast<int>(size));
+    return result;
+}
+
+static void LogCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    if (info.Length() < 1)
+        return;
+    v8::Isolate* isolate = info.GetIsolate();
+    v8::HandleScope scope(isolate);
+    v8::Local<v8::Value> arg = info[0];
+    v8::String::Utf8Value value(isolate, arg);
+    printf("%s\n", *value);
+}
+
+static bool HasFunction(v8::Isolate* isolate, v8::Local<v8::Context> context, const char* name)
+{
+    v8::HandleScope handle_scope(isolate);
+
+    v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::String> functionName = v8::String::NewFromUtf8(isolate, name).ToLocalChecked();
+    v8::Local<v8::Value> functionValue;
+    if (!context->Global()->Get(context, functionName).ToLocal(&functionValue))
+        return false;
+    return functionValue->IsFunction();
+}
+
+static v8::Local<v8::Function> GetFunction(v8::Isolate* isolate, v8::Local<v8::Context> context, const char* name)
+{
+    v8::EscapableHandleScope handle_scope(isolate);
+
+    v8::Context::Scope context_scope(context);
+
+    v8::Local<v8::String> functionName = v8::String::NewFromUtf8(isolate, name).ToLocalChecked();
+    v8::Local<v8::Value> functionValue;
+    if (!context->Global()->Get(context, functionName).ToLocal(&functionValue))
+        return v8::Local<v8::Function>();
+
+    if (!functionValue->IsFunction())
+    {
+        v8::String::Utf8Value error(isolate, functionValue);
+        fprintf(stderr, "Error: %s is not a function\n", *error);
+        return v8::Local<v8::Function>();
+    }
+
+    return handle_scope.Escape(functionValue.As<v8::Function>());
+}
+
+static void SetFunction(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> global, const char* name,
+                        v8::FunctionCallback fn)
+{
+    v8::HandleScope handle_scope(isolate);
+
+    global->Set(isolate, name, v8::FunctionTemplate::New(isolate, fn));
+}
+
+void TestV8()
+{
+    // ------ Initialize V8. ------ //
+    v8::V8::InitializeICUDefaultLocation(".");
+    v8::V8::InitializeExternalStartupData(".");
     std::unique_ptr<v8::Platform> platform = v8::platform::NewDefaultPlatform();
     v8::V8::InitializePlatform(platform.get());
     v8::V8::Initialize();
+    // ------------------------ //
+
     // Create a new Isolate and make it the current one.
     v8::Isolate::CreateParams create_params;
     create_params.array_buffer_allocator = v8::ArrayBuffer::Allocator::NewDefaultAllocator();
@@ -45,52 +127,87 @@ void TestV8(char* argv[])
     {
         v8::Isolate::Scope isolate_scope(isolate);
         // Create a stack-allocated handle scope.
-        v8::HandleScope handle_scope(isolate);
-        // Create a new context.
-        v8::Local<v8::Context> context = v8::Context::New(isolate);
-        // Enter the context for compiling and running the hello world script.
-        v8::Context::Scope context_scope(context);
+        v8::HandleScope scope(isolate);
+
+        v8::Local<v8::String> sourceCode;
+
+        if (!ReadFile(isolate, "assets/scripts/test.js").ToLocal(&sourceCode))
         {
-            // Create a string containing the JavaScript source code.
-            v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(isolate, "'Hello' + ', World!'");
-            // Compile the source code.
-            v8::Local<v8::Script> script = v8::Script::Compile(context, source).ToLocalChecked();
-            // Run the script to get the result.
-            v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
-            // Convert the result to an UTF8 string and print it.
-            v8::String::Utf8Value utf8(isolate, result);
-            printf("%s\n", *utf8);
+            fprintf(stderr, "Error reading '%s'.\n", "assets/scripts/test.js");
+            return;
         }
+
+        // Create a template for the global object where we set the
+        // built-in global functions.
+        v8::Local<v8::ObjectTemplate> global = v8::ObjectTemplate::New(isolate);
+        SetFunction(isolate, global, "log", LogCallback);
+
         {
-            // Use the JavaScript API to generate a WebAssembly module.
-            //
-            // |bytes| contains the binary format for the following module:
-            //
-            //     (func (export "add") (param i32 i32) (result i32)
-            //       get_local 0
-            //       get_local 1
-            //       i32.add)
-            //
-            const char csource[] = R"(
-            let bytes = new Uint8Array([
-              0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x01,
-              0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x03, 0x02, 0x01, 0x00, 0x07,
-              0x07, 0x01, 0x03, 0x61, 0x64, 0x64, 0x00, 0x00, 0x0a, 0x09, 0x01,
-              0x07, 0x00, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b
-            ]);
-            let module = new WebAssembly.Module(bytes);
-            let instance = new WebAssembly.Instance(module);
-            instance.exports.add(3, 4);
-          )";
-            // Create a string containing the JavaScript source code.
-            v8::Local<v8::String> source = v8::String::NewFromUtf8Literal(isolate, csource);
-            // Compile the source code.
-            v8::Local<v8::Script> script = v8::Script::Compile(context, source).ToLocalChecked();
-            // Run the script to get the result.
-            v8::Local<v8::Value> result = script->Run(context).ToLocalChecked();
-            // Convert the result to a uint32 and print it.
-            uint32_t number = result->Uint32Value(context).ToChecked();
-            printf("3 + 4 = %u\n", number);
+            // Create a new context (this should be per script)
+            v8::Local<v8::Context> context = v8::Context::New(isolate, nullptr, global);
+
+            // Enter the context for compiling and running the script
+            v8::Context::Scope context_scope(context);
+
+            {
+                // Create a stack-allocated handle scope.
+                // This is important for memory management in V8.
+                v8::HandleScope handle_scope(isolate);
+
+                // Create a try-catch block to handle exceptions.
+                // This is important for debugging and error handling.
+                v8::TryCatch try_catch(isolate);
+
+                // make sure the script is compiled and run in the correct context
+                v8::Local<v8::Context> ctx = isolate->GetCurrentContext();
+
+                // compile the script and check for errors
+                v8::Local<v8::Script> script;
+                if (!v8::Script::Compile(ctx, sourceCode).ToLocal(&script))
+                {
+                    // If there was an error, print it and return.
+                    v8::String::Utf8Value error(isolate, try_catch.Exception());
+                    fprintf(stderr, "Error compiling script: %s\n", *error);
+                    return;
+                }
+
+                // Run the script and check for errors
+                v8::Local<v8::Value> result;
+                if (!script->Run(ctx).ToLocal(&result))
+                {
+                    // If there was an error, print it and return.
+                    v8::String::Utf8Value error(isolate, try_catch.Exception());
+                    fprintf(stderr, "Error running script: %s\n", *error);
+                    return;
+                }
+
+                // check if the init function is defined and is a function
+                if (!HasFunction(isolate, ctx, "init"))
+                {
+                    fprintf(stderr, "Error: init function not found in script.\n");
+                    return;
+                }
+
+                // if the init function exists then cast it to a function
+                v8::Local<v8::Function> initFunction = GetFunction(isolate, ctx, "init");
+                if (initFunction.IsEmpty())
+                {
+                    fprintf(stderr, "Error: init function is not a function.\n");
+                    return;
+                }
+
+                // call the init function with no arguments
+                v8::Local<v8::Value> argv[] = {};
+
+                v8::Local<v8::Value> fn_result;
+                if (!initFunction->Call(ctx, ctx->Global(), 0, argv).ToLocal(&fn_result))
+                {
+                    // If there was an error, print it and return.
+                    v8::String::Utf8Value error(isolate, try_catch.Exception());
+                    fprintf(stderr, "Error calling init function: %s\n", *error);
+                    return;
+                }
+            }
         }
     }
     // Dispose the isolate and tear down V8.
@@ -394,12 +511,12 @@ class AssetLoader
 #define BIND_ASSET_LOADER_FN(fn, assetLoaderInstance) \
     std::bind(&AssetLoader::fn, &assetLoaderInstance, std::placeholders::_1)
 
-int main(int argc, char* argv[])
+int main()
 {
 
     auto logger = std::make_unique<Fenrir::ConsoleLogger>();
 
-    TestV8(argv);
+    TestV8();
 
     ProjectSettings projectSettings{};
     std::string fileContents;
