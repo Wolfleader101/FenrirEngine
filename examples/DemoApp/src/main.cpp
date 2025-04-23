@@ -62,7 +62,7 @@ void TestV8()
 
         JSScript script = jsEnv.CreateScript("assets/scripts/test.js");
 
-        script.RunInitFunction();
+        script.RunFunction("init");
         script.RunFunction("test");
     }
 

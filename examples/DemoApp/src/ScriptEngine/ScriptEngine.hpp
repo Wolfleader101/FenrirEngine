@@ -107,41 +107,6 @@ class JSScript
         return fnValue->IsFunction();
     }
 
-    void RunInitFunction()
-    {
-        v8::Isolate::Scope isolate_scope(_isolate.get());
-        v8::HandleScope handle_scope(_isolate.get());
-
-        v8::Local<v8::Context> ctx = _context.Get(_isolate.get());
-
-        // create a context scope for the current context
-        v8::Context::Scope context_scope(ctx);
-
-        // create try-catch block to handle exceptions
-        v8::TryCatch try_catch(_isolate.get());
-
-        // check if the init function exists and is a function
-        if (!HasFunction("init"))
-            return;
-
-        // get the init function from the global object
-        v8::Local<v8::Function> initFunction = GetFunction("init");
-        if (initFunction.IsEmpty())
-            return;
-
-        // call the init function with no arguments
-        v8::Local<v8::Value> argv[] = {};
-
-        v8::Local<v8::Value> fn_result;
-        if (!initFunction->Call(ctx, ctx->Global(), 0, argv).ToLocal(&fn_result))
-        {
-            // If there was an error, print it and return.
-            v8::String::Utf8Value error(_isolate.get(), try_catch.Exception());
-            std::cerr << "Error calling init function: " << *error << std::endl;
-            return;
-        }
-    }
-
     void RunFunction(const char* name, const std::vector<v8::Local<v8::Value>>& args = {})
     {
         v8::Isolate::Scope isolate_scope(_isolate.get());
