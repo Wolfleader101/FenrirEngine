@@ -52,22 +52,16 @@ void TestV8()
 {
     // ------ Initialize V8. ------ //
     JSEngine jsEngine;
-    jsEngine.Init();
     // ------------------------ //
 
     // Create a new environment and make it the current one.
-    {
-        JSEnvironment jsEnv;
-        jsEnv.SetFunction("log", Log);
+    JSEnvironment jsEnv;
+    jsEnv.SetFunction("log", Log);
 
-        JSScript script = jsEnv.CreateScript("assets/scripts/test.js");
+    JSScript script = jsEnv.CreateScript("assets/scripts/test.js");
 
-        script.RunFunction("init");
-        script.RunFunction("test");
-    }
-
-    // Dispose the isolate and tear down V8.
-    jsEngine.Shutdown();
+    script.RunFunction("init");
+    script.RunFunction("test");
 }
 
 template <>

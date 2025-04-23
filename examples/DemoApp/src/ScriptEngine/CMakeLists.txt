@@ -1,5 +1,9 @@
 SET(SCRIPT_ENGINE_SRC
 src/ScriptEngine/ScriptEngine.hpp
 src/ScriptEngine/ScriptEngine.cpp
+src/ScriptEngine/JSScript.hpp
+src/ScriptEngine/JSScript.cpp
+src/ScriptENgine/JSEnvironment.hpp
+src/ScriptEngine/JSEnvironment.cpp
     PARENT_SCOPE
 )
