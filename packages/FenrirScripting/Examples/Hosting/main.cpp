@@ -18,19 +18,16 @@ int main(int argc, char* argv[])
     }
 
     const int pathArgumentCount = argc - firstPathArgument;
-    if (pathArgumentCount != 1 && pathArgumentCount != 2)
+    if (pathArgumentCount != 2)
     {
-        std::cerr << "Usage: FenrirHostingExample [--dotnet-root absolute-directory] runtimeconfig.json [bridge.dll]\n";
+        std::cerr << "Usage: FenrirHostingExample [--dotnet-root absolute-directory] runtimeconfig.json bridge.dll\n";
         return EXIT_FAILURE;
     }
 
     Fenrir::Scripting::HostConfiguration configuration;
     configuration.dotnetRoot = dotnetRoot;
     configuration.runtimeConfigPath = argv[firstPathArgument];
-    if (pathArgumentCount == 2)
-    {
-        configuration.bridgeAssemblyPath = argv[firstPathArgument + 1];
-    }
+    configuration.bridgeAssemblyPath = argv[firstPathArgument + 1];
 
     Fenrir::Scripting::DotNetHost host;
     std::cout << std::boolalpha << "Initialized before discovery: " << host.IsInitialized() << '\n';
@@ -55,12 +52,14 @@ int main(int argc, char* argv[])
     std::cout << "Runtime configuration initialized: " << result.runtimeConfigInitialized << '\n';
     std::cout << "Runtime delegate obtained: " << result.runtimeDelegateObtained << '\n';
     std::cout << "Host context closed: " << result.hostContextClosed << '\n';
+    std::cout << "Bridge method resolved: " << result.bridgeMethodResolved << '\n';
+    if (result.bridgeVersion.has_value())
+    {
+        std::cout << "Bridge version: " << *result.bridgeVersion << '\n';
+    }
     std::cout << "Initialization succeeded: " << result.success << '\n';
     std::cout << "Diagnostic: " << result.diagnostic << '\n';
     std::cout << "Initialized after attempt: " << host.IsInitialized() << '\n';
 
-    // Runtime delegate acquisition succeeded; managed bridge access is still pending.
-    return result.runtimeDelegateObtained && result.hostContextClosed && !result.success && !host.IsInitialized()
-               ? EXIT_SUCCESS
-               : EXIT_FAILURE;
+    return result.success && host.IsInitialized() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
