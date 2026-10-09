@@ -6,4 +6,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ManagedDiagnostics" />
+  </ItemGroup>
 </Project>

@@ -1,7 +1,9 @@
 #include "FenrirDotNetHost/DotNetHost.hpp"
 
-#include "HostFxrLibrary.hpp"
 #include "HostFxrDiagnostics.hpp"
+#include "HostFxrLibrary.hpp"
+#include "ManagedComponentState.hpp"
+#include "ManagedDiagnosticBuffer.hpp"
 #include "Utf8Buffer.hpp"
 
 #include <coreclr_delegates.h>
@@ -20,9 +22,13 @@ namespace Fenrir::Scripting
     {
 #if defined(_WIN32)
         using GetBridgeVersionFn = std::int32_t(__cdecl*)();
-        using TryAddInt32Fn = std::int32_t(__cdecl*)(std::int32_t, std::int32_t, std::int32_t*);
-        using CopyGreetingUtf8Fn = std::int32_t(__cdecl*)(std::uint8_t*, std::int32_t, std::int32_t*);
-        using EchoUtf8Fn = std::int32_t(__cdecl*)(const std::uint8_t*, std::int32_t, std::uint8_t*, std::int32_t, std::int32_t*);
+        using TryAddInt32Fn = std::int32_t(__cdecl*)(std::int32_t, std::int32_t, std::int32_t*, std::uint8_t*,
+                                                     std::int32_t, std::int32_t*, std::int32_t*);
+        using CopyGreetingUtf8Fn = std::int32_t(__cdecl*)(std::uint8_t*, std::int32_t, std::int32_t*, std::uint8_t*,
+                                                          std::int32_t, std::int32_t*, std::int32_t*);
+        using EchoUtf8Fn = std::int32_t(__cdecl*)(const std::uint8_t*, std::int32_t, std::uint8_t*, std::int32_t,
+                                                  std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*,
+                                                  std::int32_t*);
         constexpr char_t BridgeTypeName[] = L"Fenrir.ManagedHost.Bootstrap, Fenrir.ManagedHost";
         constexpr char_t BridgeVersionMethod[] = L"GetBridgeVersion";
         constexpr char_t BridgeAddMethod[] = L"TryAddInt32";
@@ -30,16 +36,19 @@ namespace Fenrir::Scripting
         constexpr char_t BridgeEchoMethod[] = L"EchoUtf8";
 #else
         using GetBridgeVersionFn = std::int32_t (*)();
-        using TryAddInt32Fn = std::int32_t (*)(std::int32_t, std::int32_t, std::int32_t*);
-        using CopyGreetingUtf8Fn = std::int32_t (*)(std::uint8_t*, std::int32_t, std::int32_t*);
-        using EchoUtf8Fn = std::int32_t (*)(const std::uint8_t*, std::int32_t, std::uint8_t*, std::int32_t, std::int32_t*);
+        using TryAddInt32Fn = std::int32_t (*)(std::int32_t, std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
+                                               std::int32_t*, std::int32_t*);
+        using CopyGreetingUtf8Fn = std::int32_t (*)(std::uint8_t*, std::int32_t, std::int32_t*, std::uint8_t*,
+                                                    std::int32_t, std::int32_t*, std::int32_t*);
+        using EchoUtf8Fn = std::int32_t (*)(const std::uint8_t*, std::int32_t, std::uint8_t*, std::int32_t,
+                                            std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         constexpr char_t BridgeTypeName[] = "Fenrir.ManagedHost.Bootstrap, Fenrir.ManagedHost";
         constexpr char_t BridgeVersionMethod[] = "GetBridgeVersion";
         constexpr char_t BridgeAddMethod[] = "TryAddInt32";
         constexpr char_t BridgeGreetingMethod[] = "CopyGreetingUtf8";
         constexpr char_t BridgeEchoMethod[] = "EchoUtf8";
 #endif
-        constexpr std::int32_t ExpectedBridgeVersion = 1;
+        constexpr std::int32_t ExpectedBridgeVersion = 4;
 
         std::string StatusDiagnostic(const char* operation, std::int32_t status)
         {
@@ -88,6 +97,7 @@ namespace Fenrir::Scripting
         TryAddInt32Fn tryAddInt32 = nullptr;
         CopyGreetingUtf8Fn copyGreetingUtf8 = nullptr;
         EchoUtf8Fn echoUtf8 = nullptr;
+        std::shared_ptr<const Detail::ComponentBridge> componentBridge;
     };
 
     DotNetHost::DotNetHost() noexcept = default;
@@ -105,6 +115,7 @@ namespace Fenrir::Scripting
             state->tryAddInt32 = nullptr;
             state->copyGreetingUtf8 = nullptr;
             state->echoUtf8 = nullptr;
+            state->componentBridge.reset();
         }
         if (configuration.runtimeConfigPath.empty())
         {
@@ -147,14 +158,13 @@ namespace Fenrir::Scripting
         InitializationResult result{false, {}, true, true};
         // Declared before HostContext so unwind cleanup runs while capture is active.
         Detail::HostFxrDiagnostics diagnostics(loaded.library->setErrorWriter);
-        const auto finish = [&diagnostics](InitializationResult outcome)
-        {
+        const auto finish = [&diagnostics](InitializationResult outcome) {
             outcome.diagnostic = diagnostics.AppendTo(std::move(outcome.diagnostic));
             return outcome;
         };
         hostfxr_handle handle = nullptr;
-        const hostfxr_initialize_parameters parameters{
-            sizeof(hostfxr_initialize_parameters), nullptr, configuration.dotnetRoot.c_str()};
+        const hostfxr_initialize_parameters parameters{sizeof(hostfxr_initialize_parameters), nullptr,
+                                                       configuration.dotnetRoot.c_str()};
         const auto* initializationParameters = configuration.dotnetRoot.empty() ? nullptr : &parameters;
         const std::int32_t status =
             loaded.library->initializeForRuntimeConfig(runtimeConfig.c_str(), initializationParameters, &handle);
@@ -167,8 +177,8 @@ namespace Fenrir::Scripting
         {
             result.runtimeConfigInitialized = true;
             void* delegate = nullptr;
-            const std::int32_t delegateStatus = loaded.library->getRuntimeDelegate(
-                handle, hdt_load_assembly_and_get_function_pointer, &delegate);
+            const std::int32_t delegateStatus =
+                loaded.library->getRuntimeDelegate(handle, hdt_load_assembly_and_get_function_pointer, &delegate);
             if (delegateStatus == 0 && delegate != nullptr)
             {
                 assemblyLoader = reinterpret_cast<load_assembly_and_get_function_pointer_fn>(delegate);
@@ -220,11 +230,11 @@ namespace Fenrir::Scripting
 
         void* method = nullptr;
         const int bridgeStatus = state->loadAssemblyAndGetFunctionPointer(
-            bridgeAssembly.c_str(), BridgeTypeName, BridgeVersionMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr,
-            &method);
+            bridgeAssembly.c_str(), BridgeTypeName, BridgeVersionMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr, &method);
         if (bridgeStatus != 0 || method == nullptr)
         {
-            result.diagnostic = StatusDiagnostic("load_assembly_and_get_function_pointer(GetBridgeVersion)", bridgeStatus);
+            result.diagnostic =
+                StatusDiagnostic("load_assembly_and_get_function_pointer(GetBridgeVersion)", bridgeStatus);
             if (bridgeStatus == 0)
             {
                 result.diagnostic += " No managed method pointer was returned.";
@@ -244,8 +254,7 @@ namespace Fenrir::Scripting
         }
         void* addMethod = nullptr;
         const int addStatus = state->loadAssemblyAndGetFunctionPointer(
-            bridgeAssembly.c_str(), BridgeTypeName, BridgeAddMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr,
-            &addMethod);
+            bridgeAssembly.c_str(), BridgeTypeName, BridgeAddMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr, &addMethod);
         if (addStatus != 0 || addMethod == nullptr)
         {
             result.diagnostic = StatusDiagnostic("load_assembly_and_get_function_pointer(TryAddInt32)", addStatus);
@@ -257,12 +266,13 @@ namespace Fenrir::Scripting
         }
         result.interopMethodResolved = true;
         void* greetingMethod = nullptr;
-        const int greetingStatus = state->loadAssemblyAndGetFunctionPointer(
-            bridgeAssembly.c_str(), BridgeTypeName, BridgeGreetingMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr,
-            &greetingMethod);
+        const int greetingStatus =
+            state->loadAssemblyAndGetFunctionPointer(bridgeAssembly.c_str(), BridgeTypeName, BridgeGreetingMethod,
+                                                     UNMANAGEDCALLERSONLY_METHOD, nullptr, &greetingMethod);
         if (greetingStatus != 0 || greetingMethod == nullptr)
         {
-            result.diagnostic = StatusDiagnostic("load_assembly_and_get_function_pointer(CopyGreetingUtf8)", greetingStatus);
+            result.diagnostic =
+                StatusDiagnostic("load_assembly_and_get_function_pointer(CopyGreetingUtf8)", greetingStatus);
             if (greetingStatus == 0)
             {
                 result.diagnostic += " No managed method pointer was returned.";
@@ -271,9 +281,9 @@ namespace Fenrir::Scripting
         }
         result.greetingMethodResolved = true;
         void* echoMethod = nullptr;
-        const int echoStatus = state->loadAssemblyAndGetFunctionPointer(
-            bridgeAssembly.c_str(), BridgeTypeName, BridgeEchoMethod, UNMANAGEDCALLERSONLY_METHOD, nullptr,
-            &echoMethod);
+        const int echoStatus =
+            state->loadAssemblyAndGetFunctionPointer(bridgeAssembly.c_str(), BridgeTypeName, BridgeEchoMethod,
+                                                     UNMANAGEDCALLERSONLY_METHOD, nullptr, &echoMethod);
         if (echoStatus != 0 || echoMethod == nullptr)
         {
             result.diagnostic = StatusDiagnostic("load_assembly_and_get_function_pointer(EchoUtf8)", echoStatus);
@@ -284,6 +294,32 @@ namespace Fenrir::Scripting
             return finish(std::move(result));
         }
         result.echoMethodResolved = true;
+        auto componentBridge = std::make_shared<Detail::ComponentBridge>();
+        const char_t* componentNames[] = {
+#if defined(_WIN32)
+            L"LoadComponent", L"CopyComponentNameUtf8", L"ReleaseComponent"
+#else
+            "LoadComponent", "CopyComponentNameUtf8", "ReleaseComponent"
+#endif
+        };
+        void* componentMethods[3]{};
+        for (std::size_t index = 0; index < 3; ++index)
+        {
+            const auto componentStatus = state->loadAssemblyAndGetFunctionPointer(
+                bridgeAssembly.c_str(), BridgeTypeName, componentNames[index], UNMANAGEDCALLERSONLY_METHOD, nullptr,
+                &componentMethods[index]);
+            if (componentStatus != 0 || componentMethods[index] == nullptr)
+            {
+                result.diagnostic = StatusDiagnostic("Component bridge method resolution", componentStatus) +
+                                    " Method: " + Detail::HostStringToUtf8(componentNames[index]);
+                return finish(std::move(result));
+            }
+        }
+        componentBridge->load = reinterpret_cast<Detail::ComponentBridge::LoadFn>(componentMethods[0]);
+        componentBridge->copyName = reinterpret_cast<Detail::ComponentBridge::NameFn>(componentMethods[1]);
+        componentBridge->release = reinterpret_cast<Detail::ComponentBridge::ReleaseFn>(componentMethods[2]);
+        result.componentMethodsResolved = true;
+        state->componentBridge = std::move(componentBridge);
         state->getBridgeVersion = getBridgeVersion;
         state->tryAddInt32 = reinterpret_cast<TryAddInt32Fn>(addMethod);
         state->copyGreetingUtf8 = reinterpret_cast<CopyGreetingUtf8Fn>(greetingMethod);
@@ -296,7 +332,7 @@ namespace Fenrir::Scripting
     bool DotNetHost::IsInitialized() const noexcept
     {
         return state != nullptr && state->getBridgeVersion != nullptr && state->tryAddInt32 != nullptr &&
-               state->copyGreetingUtf8 != nullptr && state->echoUtf8 != nullptr;
+               state->copyGreetingUtf8 != nullptr && state->echoUtf8 != nullptr && state->componentBridge != nullptr;
     }
 
     Int32CallResult DotNetHost::AddInt32(std::int32_t left, std::int32_t right) const
@@ -306,22 +342,30 @@ namespace Fenrir::Scripting
             return {ManagedCallStatus::NotInitialized, {}, "The managed bridge is not initialized."};
         }
         std::int32_t value = 0;
-        const std::int32_t status = state->tryAddInt32(left, right, &value);
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        const std::int32_t status = state->tryAddInt32(left, right, &value, diagnostic.bytes.data(),
+                                                       diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+        Int32CallResult result;
         // Positive bridge error codes are distinct from hostfxr/HRESULT conventions.
         switch (static_cast<ManagedCallStatus>(status))
         {
         case ManagedCallStatus::Success:
-            return {ManagedCallStatus::Success, value, {}};
+            return diagnostic.ApplyTo(Int32CallResult{ManagedCallStatus::Success, value, {}});
         case ManagedCallStatus::InvalidArgument:
-            return {ManagedCallStatus::InvalidArgument, {}, "The managed call rejected an argument."};
+            result = {ManagedCallStatus::InvalidArgument, {}, "The managed call rejected an argument."};
+            break;
         case ManagedCallStatus::Overflow:
-            return {ManagedCallStatus::Overflow, {}, "The managed addition overflowed a 32-bit integer."};
+            result = {ManagedCallStatus::Overflow, {}, "The managed addition overflowed a 32-bit integer."};
+            break;
         case ManagedCallStatus::ManagedException:
-            return {ManagedCallStatus::ManagedException, {}, "The managed call caught an exception."};
+            result = {ManagedCallStatus::ManagedException, {}, "The managed call caught an exception."};
+            break;
         default:
-            return {ManagedCallStatus::UnexpectedStatus, {},
+            return {ManagedCallStatus::UnexpectedStatus,
+                    {},
                     "The managed call returned an unknown status: " + std::to_string(status) + '.'};
         }
+        return diagnostic.ApplyTo(std::move(result));
     }
 
     Utf8StringResult DotNetHost::GetGreeting() const
@@ -341,14 +385,72 @@ namespace Fenrir::Scripting
         }
         if (input.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
         {
-            return {ManagedCallStatus::InvalidArgument, {}, "The UTF-8 input exceeds the bridge's 32-bit byte length limit."};
+            return {ManagedCallStatus::InvalidArgument,
+                    {},
+                    "The UTF-8 input exceeds the bridge's 32-bit byte length limit."};
         }
         const auto* bytes = reinterpret_cast<const std::uint8_t*>(input.data());
         const auto length = static_cast<std::int32_t>(input.size());
         return Detail::ReadUtf8Buffer([this, bytes, length](std::uint8_t* destination, std::int32_t capacity,
-                                                          std::int32_t* requiredBytes)
-        {
-            return state->echoUtf8(bytes, length, destination, capacity, requiredBytes);
+                                                            std::int32_t* requiredBytes, std::uint8_t* diagnostic,
+                                                            std::int32_t diagnosticCapacity, std::int32_t* written,
+                                                            std::int32_t* truncated) {
+            return state->echoUtf8(bytes, length, destination, capacity, requiredBytes, diagnostic, diagnosticCapacity,
+                                   written, truncated);
         });
+    }
+    ComponentLoadResult DotNetHost::LoadComponent(const std::filesystem::path& assemblyPath) const
+    {
+        if (!IsInitialized())
+            return {ManagedCallStatus::NotInitialized, {}, "The managed bridge is not initialized."};
+        if (assemblyPath.empty())
+            return {ManagedCallStatus::InvalidArgument, {}, "A component assembly path is required."};
+        std::error_code error;
+        const auto absolute = std::filesystem::absolute(assemblyPath, error);
+        if (error)
+            return {ManagedCallStatus::InvalidArgument,
+                    {},
+                    "Cannot resolve the component assembly path: " + error.message()};
+        const auto path = Detail::HostStringToUtf8(absolute.native());
+        if (path.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+            return {ManagedCallStatus::InvalidArgument,
+                    {},
+                    "Component path exceeds the bridge's 32-bit byte length limit."};
+
+        // Allocate all ownership storage before entering managed code. The owner
+        // immediately guards any returned token, including malformed responses.
+        auto componentState = std::make_unique<ManagedComponent::State>();
+        componentState->bridge = state->componentBridge;
+        auto component = std::unique_ptr<ManagedComponent>(new ManagedComponent(std::move(componentState)));
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::int32_t collectible = 0;
+        const auto status = state->componentBridge->load(
+            reinterpret_cast<const std::uint8_t*>(path.data()), static_cast<std::int32_t>(path.size()),
+            &component->state->token, &collectible, diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written,
+            &diagnostic.truncated);
+        ComponentLoadResult result;
+        switch (static_cast<ManagedCallStatus>(status))
+        {
+        case ManagedCallStatus::Success:
+            if (component->state->token == 0 || collectible != 1)
+                return {ManagedCallStatus::InvalidResponse,
+                        {},
+                        "Component load returned an invalid token or collectible flag."};
+            component->state->isCollectible = true;
+            result = {ManagedCallStatus::Success, std::move(component), {}};
+            break;
+        case ManagedCallStatus::InvalidArgument:
+            result = {ManagedCallStatus::InvalidArgument, {}, "The managed component loader rejected an argument."};
+            break;
+        case ManagedCallStatus::ManagedException:
+            result = {ManagedCallStatus::ManagedException, {}, "The managed component loader caught an exception."};
+            break;
+        default:
+            result = {ManagedCallStatus::UnexpectedStatus,
+                      {},
+                      "Component load returned an unexpected status: " + std::to_string(status)};
+            break;
+        }
+        return diagnostic.ApplyTo(std::move(result));
     }
 } // namespace Fenrir::Scripting

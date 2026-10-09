@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Fenrir.ManagedHost</AssemblyName>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefineConstants Condition="'$(LegacyBridge)' == 'true'">$(DefineConstants);LEGACY_BRIDGE</DefineConstants>
+    <DefineConstants Condition="'$(MissingComponentMethods)' == 'true'">$(DefineConstants);MISSING_COMPONENT_METHODS</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Managed/Fenrir.ManagedHost/ManagedDiagnostic.cs" Link="ManagedDiagnostic.cs" />
+  </ItemGroup>
+</Project>
