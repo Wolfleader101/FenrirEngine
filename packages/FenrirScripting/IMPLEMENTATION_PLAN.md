@@ -63,6 +63,17 @@ Start with:
 
 ## Current baseline, inspected 2026-10-09
 
+Progress update: milestone 1 is implemented, and milestone 2 now loads the
+separate `Fenrir.HostingComponent` fixture through a collectible context.
+Bridge ABI version 4 adds private load/name/release exports. Move-only native
+owners retain their cleanup functions after host reset/destruction. Tokens are
+never reused, explicit release is idempotent, failed loads roll back, and native
+results own their metadata/diagnostics. All five reusable checks pass on Windows.
+Release requests unloading but does not yet verify collection. The snapshot
+below describes the earlier version-1 starting point. The next small step after
+oversight is the separate dependency fixture/resolution check from milestone 2;
+component method invocation follows it in milestone 3.
+
 The native library is `FenrirDotNetHost`, with example target
 `FenrirHostingExample`. C++20 and CMake 3.20 or later are used. The engine root
 defaults `FENRIR_ENABLE_SCRIPTING` to OFF; configuring this package directly
@@ -326,6 +337,9 @@ fixtures and verification targets are added.
 - [Assembly unloading and troubleshooting retained roots](https://learn.microsoft.com/en-us/dotnet/standard/assembly/unloadability)
 - [GCHandle](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.gchandle)
 
-First assignment for the new agent: inspect the baseline, implement only the
-`AddInt32` managed-diagnostic step from milestone 1, verify it, and present the
-result for oversight.
+First assignment for the new agent: inspect the actual source and the progress
+update, inspect the completed loading/ownership implementation, then continue
+milestone 2 after oversight with a separate dependency fixture and focused
+resolution/shared-contract checks. Verify the step before beginning component
+invocation or managed objects. Preserve explicit release versus observed
+collection as separate concepts.

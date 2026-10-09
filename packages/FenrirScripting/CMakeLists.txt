@@ -10,6 +10,7 @@ if(DEFINED FENRIR_ENABLE_SCRIPTING AND NOT FENRIR_ENABLE_SCRIPTING)
 endif()
 
 option(FENRIR_SCRIPTING_BUILD_EXAMPLES "Build the standalone hosting example" ON)
+option(FENRIR_SCRIPTING_BUILD_TESTS "Build hosting contract checks" OFF)
 
 # Hosting dependencies are inspected only after the scripting enablement check.
 include(cmake/Nethost.cmake)
@@ -19,4 +20,9 @@ add_subdirectory(Native/DotNetHost)
 
 if(FENRIR_SCRIPTING_BUILD_EXAMPLES)
     add_subdirectory(Examples/Hosting)
+endif()
+
+if(FENRIR_SCRIPTING_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(Tests)
 endif()

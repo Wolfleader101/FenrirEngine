@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ManagedComponent.hpp"
+
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -39,37 +41,7 @@ namespace Fenrir::Scripting
         bool interopMethodResolved = false;
         bool greetingMethodResolved = false;
         bool echoMethodResolved = false;
-    };
-
-    enum class ManagedCallStatus : std::int32_t
-    {
-        // 0..4 match the managed bridge's BridgeStatus wire contract.
-        Success = 0,
-        InvalidArgument = 1,
-        Overflow = 2,
-        ManagedException = 3,
-        BufferTooSmall = 4,
-        // Wrapper-only statuses, never returned by the managed bridge.
-        NotInitialized = -1,
-        UnexpectedStatus = -2,
-        InvalidResponse = -3
-    };
-
-    struct Int32CallResult
-    {
-        ManagedCallStatus status = ManagedCallStatus::NotInitialized;
-        // Present only on Success; failure never exposes the output buffer.
-        std::optional<std::int32_t> value;
-        std::string diagnostic;
-    };
-
-    struct Utf8StringResult
-    {
-        ManagedCallStatus status = ManagedCallStatus::NotInitialized;
-        // Owning UTF-8 bytes, present only on Success. No BOM or payload terminator.
-        // Remains valid after subsequent calls and wrapper destruction.
-        std::optional<std::string> value;
-        std::string diagnostic;
+        bool componentMethodsResolved = false;
     };
 
     struct HostFxrDiscoveryResult
@@ -120,7 +92,7 @@ namespace Fenrir::Scripting
          * @brief Prepare this wrapper to use the configured managed bridge.
          *
          * Success means the runtime delegate is ready and Bootstrap.GetBridgeVersion
-         * was resolved, called, and returned the supported version (currently 1).
+         * was resolved, called, and returned the supported version (currently 4).
          * Bootstrap.TryAddInt32, CopyGreetingUtf8, and EchoUtf8 must also resolve before readiness.
          * Both configuration paths must name existing files;
          * relative paths are resolved against the current working directory.
@@ -144,6 +116,10 @@ namespace Fenrir::Scripting
          *
          * Checked managed addition catches overflow and returns a status. The output
          * storage belongs to this native call and is never retained by managed code.
+         * Managed exception details are copied during this one invocation, using a
+         * 4096-byte buffer. Truncation preserves UTF-8 scalar boundaries; failure
+         * to produce valid details uses a native fallback without changing the
+         * operation's status. Success requires empty diagnostic metadata.
          * Calls on the same wrapper must be externally serialized with initialization.
          */
         [[nodiscard]] Int32CallResult AddInt32(std::int32_t left, std::int32_t right) const;
@@ -154,6 +130,9 @@ namespace Fenrir::Scripting
          * Queries the byte count, allocates native storage, then copies the payload.
          * Managed code borrows that storage only during the copy. Invalid lengths
          * become InvalidResponse; failure never exposes a partial string.
+         * Each invocation provides a separate 4096-byte diagnostic buffer. Failures
+         * return owning details with the same truncation/fallback rules as AddInt32.
+         * A failed query prevents the copy; a failed copy is never retried.
          * Native allocation failures follow normal C++ exception behavior.
          * Calls must be externally serialized with initialization on this wrapper.
          */
@@ -165,11 +144,19 @@ namespace Fenrir::Scripting
          * Input is borrowed and must remain valid and unchanged throughout both calls.
          * Explicit byte lengths preserve empty input and embedded nulls. Strict decoding
          * rejects malformed UTF-8 with InvalidArgument; no normalization is performed.
+         * Decoding failures include managed exception details. Query and copy use
+         * separate diagnostic buffers; only the failing invocation supplies details.
          * Input lengths above INT32_MAX are rejected before entering managed code.
          * Only success exposes an owning string; a call failure does not clear readiness.
          * Allocations may throw C++ exceptions. Serialize calls with initialization.
          */
         [[nodiscard]] Utf8StringResult EchoUtf8(std::string_view input) const;
+
+        // Loads a separate assembly into a collectible context. Relative paths are
+        // resolved against the current directory; path text is strict UTF-8 at the
+        // managed interface. Returned ownership survives host destruction/reinitialization.
+        // Failures leave readiness intact. Native allocation failures may throw.
+        [[nodiscard]] ComponentLoadResult LoadComponent(const std::filesystem::path& assemblyPath) const;
 
       private:
         struct State;

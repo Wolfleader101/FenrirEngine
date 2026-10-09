@@ -1,0 +1,65 @@
+if(FENRIR_DOTNET_EXECUTABLE)
+    set(fenrir_checks_dotnet "${FENRIR_DOTNET_EXECUTABLE}")
+else()
+    find_program(fenrir_checks_dotnet NAMES dotnet REQUIRED)
+endif()
+# Single-configuration generators may have an empty CMAKE_BUILD_TYPE.
+set(fenrir_checks_configuration "$<IF:$<BOOL:$<CONFIG>>,$<CONFIG>,Debug>")
+set(fenrir_checks_managed "${CMAKE_CURRENT_BINARY_DIR}/managed/${fenrir_checks_configuration}")
+add_custom_target(FenrirManagedDiagnosticChecksBuild ALL
+    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Hosting/ManagedComponent/Fenrir.HostingComponent.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/component"
+    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/ManagedDiagnostics/ManagedDiagnostics.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/checks"
+    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/fixture"
+    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/legacy" -p:LegacyBridge=true
+    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/incomplete" -p:MissingComponentMethods=true
+    VERBATIM
+)
+
+add_executable(FenrirDiagnosticChecks diagnostics.cpp)
+target_link_libraries(FenrirDiagnosticChecks PRIVATE FenrirDotNetHost)
+add_dependencies(FenrirDiagnosticChecks FenrirManagedDiagnosticChecksBuild)
+add_custom_command(TARGET FenrirDiagnosticChecks POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:FenrirScriptingNethost>" "$<TARGET_FILE_DIR:FenrirDiagnosticChecks>"
+    VERBATIM
+)
+if(APPLE)
+    set_target_properties(FenrirDiagnosticChecks PROPERTIES BUILD_RPATH "@loader_path")
+elseif(UNIX)
+    set_target_properties(FenrirDiagnosticChecks PROPERTIES BUILD_RPATH "$ORIGIN")
+endif()
+
+add_test(NAME ManagedDiagnosticContract
+    COMMAND "${fenrir_checks_dotnet}" "${fenrir_checks_managed}/checks/ManagedDiagnostics.dll" "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")
+foreach(fenrir_checks_mode IN ITEMS real fixture legacy)
+    if(fenrir_checks_mode STREQUAL "real")
+        set(fenrir_checks_bridge "${fenrir_checks_managed}/checks/Fenrir.ManagedHost.dll")
+    else()
+        set(fenrir_checks_bridge "${fenrir_checks_managed}/${fenrir_checks_mode}/Fenrir.ManagedHost.dll")
+    endif()
+    add_test(NAME "NativeDiagnostics-${fenrir_checks_mode}"
+        COMMAND FenrirDiagnosticChecks "${fenrir_checks_mode}"
+            "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json" "${fenrir_checks_bridge}")
+endforeach()
+
+add_executable(FenrirComponentChecks components.cpp)
+target_link_libraries(FenrirComponentChecks PRIVATE FenrirDotNetHost)
+add_dependencies(FenrirComponentChecks FenrirManagedDiagnosticChecksBuild)
+add_custom_command(TARGET FenrirComponentChecks POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:FenrirScriptingNethost>" "$<TARGET_FILE_DIR:FenrirComponentChecks>"
+    VERBATIM
+)
+if(APPLE)
+    set_target_properties(FenrirComponentChecks PROPERTIES BUILD_RPATH "@loader_path")
+elseif(UNIX)
+    set_target_properties(FenrirComponentChecks PROPERTIES BUILD_RPATH "$ORIGIN")
+endif()
+add_test(NAME NativeComponentOwnership COMMAND FenrirComponentChecks
+    "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json"
+    "${fenrir_checks_managed}/checks/Fenrir.ManagedHost.dll"
+    "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll"
+    "${fenrir_checks_managed}/incomplete/Fenrir.ManagedHost.dll")

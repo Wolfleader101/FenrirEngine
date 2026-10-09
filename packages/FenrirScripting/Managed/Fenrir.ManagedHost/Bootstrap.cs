@@ -5,7 +5,7 @@ using System.Text;
 
 namespace Fenrir.ManagedHost;
 
-public static class Bootstrap
+public static partial class Bootstrap
 {
     private const string Greeting = "Hello from .NET \u2014 \u03C0 \U0001F43A";
 
@@ -14,30 +14,36 @@ public static class Bootstrap
     // The native function pointer must use the matching int32_t(), Cdecl signature.
     // Keep this handshake free of exceptions; unmanaged callers cannot catch managed exceptions.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static int GetBridgeVersion() => 1;
+    public static int GetBridgeVersion() => 4;
 
-    // result must point to writable int32 native storage for the duration of this call.
-    // No pointer is retained, and ordinary managed exceptions become wire statuses.
+    // All output storage is writable, non-overlapping, and borrowed only
+    // during this call. Counts exclude a terminator. Null diagnostic is allowed
+    // only for zero capacity; written/truncated are mandatory int32 outputs.
+    // Truncation is 0 or 1 and never changes the operation's status.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int TryAddInt32(int left, int right, int* result)
+    public static unsafe int TryAddInt32(int left, int right, int* result,
+                                       byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (result == null)
+        if (result != null) *result = 0;
+        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
+        if (result == null || !diagnosticValid)
         {
             return (int)BridgeStatus.InvalidArgument;
         }
 
-        *result = 0;
         try
         {
             *result = checked(left + right);
             return (int)BridgeStatus.Success;
         }
-        catch (OverflowException)
+        catch (OverflowException exception)
         {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
             return (int)BridgeStatus.Overflow;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
             return (int)BridgeStatus.ManagedException;
         }
     }
@@ -45,11 +51,15 @@ public static class Bootstrap
     // Sizes count UTF-8 bytes, excluding any BOM or terminator. A null destination
     // with zero capacity queries the size. Insufficient capacity writes no payload.
     // requiredBytes and destination must refer to valid, non-overlapping native storage.
-    // Neither pointer is retained. The immutable greeting is stable between calls.
+    // No pointer is retained. All storage, including diagnostic metadata, must not
+    // overlap. The immutable greeting is stable between query and copy.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes)
+    public static unsafe int CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes,
+                                             byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
-        if (!ValidateUtf8Output(destination, capacity, requiredBytes))
+        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
+        bool outputValid = ValidateUtf8Output(destination, capacity, requiredBytes);
+        if (!diagnosticValid || !outputValid)
         {
             return (int)BridgeStatus.InvalidArgument;
         }
@@ -58,9 +68,10 @@ public static class Bootstrap
         {
             return (int)CopyUtf8Payload(Greeting, Encoding.UTF8, destination, capacity, requiredBytes);
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             *requiredBytes = 0;
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, diagnosticCapacity), out *written, out *truncated);
             return (int)BridgeStatus.ManagedException;
         }
     }
@@ -69,9 +80,12 @@ public static class Bootstrap
     // Null input is valid only for length zero. Input, destination, and count storage
     // must not overlap. The caller must keep input unchanged between query and copy.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int EchoUtf8(byte* input, int inputLength, byte* destination, int capacity, int* requiredBytes)
+    public static unsafe int EchoUtf8(byte* input, int inputLength, byte* destination, int capacity, int* requiredBytes,
+                                     byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
-        if (!ValidateUtf8Output(destination, capacity, requiredBytes))
+        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
+        bool outputValid = ValidateUtf8Output(destination, capacity, requiredBytes);
+        if (!diagnosticValid || !outputValid)
         {
             return (int)BridgeStatus.InvalidArgument;
         }
@@ -88,14 +102,16 @@ public static class Bootstrap
             string text = encoding.GetString(new ReadOnlySpan<byte>(input, inputLength));
             return (int)CopyUtf8Payload(text, encoding, destination, capacity, requiredBytes);
         }
-        catch (DecoderFallbackException)
+        catch (DecoderFallbackException exception)
         {
             *requiredBytes = 0;
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, diagnosticCapacity), out *written, out *truncated);
             return (int)BridgeStatus.InvalidArgument;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
             *requiredBytes = 0;
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, diagnosticCapacity), out *written, out *truncated);
             return (int)BridgeStatus.ManagedException;
         }
     }
