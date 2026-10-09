@@ -5,6 +5,8 @@ project(FenrirEngine)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(FENRIR_ENABLE_SCRIPTING "Build the optional native .NET hosting package" OFF)
+
 
 # Compiler-specific flags
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang" OR
@@ -20,6 +22,10 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     add_compile_options(-Wall -Wextra -Wpedantic -fdiagnostics-color=always)
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options(/W4)
+endif()
+
+if(FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirScripting)
 endif()
 
 add_subdirectory(packages/FenrirMath)
