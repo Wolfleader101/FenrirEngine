@@ -3,8 +3,13 @@ find_package(Threads REQUIRED)
 add_library(FenrirDotNetHost STATIC
     src/DotNetHost.cpp
     src/HostFxrDiscovery.cpp
+    src/HostFxrDiagnostics.cpp
+    src/HostFxrDiagnostics.hpp
     src/HostFxrLibrary.cpp
     src/HostFxrLibrary.hpp
+    src/StringEncoding.cpp
+    src/StringEncoding.hpp
+    src/Utf8Buffer.hpp
     include/FenrirDotNetHost/DotNetHost.hpp
 )
 

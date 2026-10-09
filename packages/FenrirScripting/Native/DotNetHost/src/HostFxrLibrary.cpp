@@ -151,7 +151,8 @@ namespace Fenrir::Scripting::Detail
                           entry.diagnostic) &&
             ResolveExport(entry.module, "hostfxr_get_runtime_delegate", library->getRuntimeDelegate,
                           entry.diagnostic) &&
-            ResolveExport(entry.module, "hostfxr_close", library->close, entry.diagnostic))
+            ResolveExport(entry.module, "hostfxr_close", library->close, entry.diagnostic) &&
+            ResolveExport(entry.module, "hostfxr_set_error_writer", library->setErrorWriter, entry.diagnostic))
         {
             entry.library = std::move(library);
         }

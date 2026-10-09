@@ -5,12 +5,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace Fenrir::Scripting
 {
     struct HostConfiguration
     {
         std::filesystem::path runtimeConfigPath;
+        // Assembly identity Fenrir.ManagedHost, exposing the required Bootstrap methods.
         std::filesystem::path bridgeAssemblyPath;
         // Guides initial discovery and framework resolution. Empty uses the defaults; an override
         // must be absolute. nethost may reuse hostfxr once it is loaded in the process.
@@ -21,6 +23,7 @@ namespace Fenrir::Scripting
     {
         bool success = false;
         // Owning text: remains valid independently of the host and subsequent calls.
+        // Includes hostfxr's captured explanation in UTF-8 when one is emitted.
         std::string diagnostic;
         // Progress of this attempt, independent of full initialization success.
         bool hostFxrLoaded = false;
@@ -33,6 +36,40 @@ namespace Fenrir::Scripting
         bool bridgeMethodResolved = false;
         // Populated only after the managed method returns, including a version mismatch.
         std::optional<std::int32_t> bridgeVersion;
+        bool interopMethodResolved = false;
+        bool greetingMethodResolved = false;
+        bool echoMethodResolved = false;
+    };
+
+    enum class ManagedCallStatus : std::int32_t
+    {
+        // 0..4 match the managed bridge's BridgeStatus wire contract.
+        Success = 0,
+        InvalidArgument = 1,
+        Overflow = 2,
+        ManagedException = 3,
+        BufferTooSmall = 4,
+        // Wrapper-only statuses, never returned by the managed bridge.
+        NotInitialized = -1,
+        UnexpectedStatus = -2,
+        InvalidResponse = -3
+    };
+
+    struct Int32CallResult
+    {
+        ManagedCallStatus status = ManagedCallStatus::NotInitialized;
+        // Present only on Success; failure never exposes the output buffer.
+        std::optional<std::int32_t> value;
+        std::string diagnostic;
+    };
+
+    struct Utf8StringResult
+    {
+        ManagedCallStatus status = ManagedCallStatus::NotInitialized;
+        // Owning UTF-8 bytes, present only on Success. No BOM or payload terminator.
+        // Remains valid after subsequent calls and wrapper destruction.
+        std::optional<std::string> value;
+        std::string diagnostic;
     };
 
     struct HostFxrDiscoveryResult
@@ -54,7 +91,7 @@ namespace Fenrir::Scripting
      * nethost is a native dependency. Discovery locates hostfxr without loading it.
      * Initialize currently starts or reuses CoreCLR, obtains an assembly-loading
      * runtime delegate, closes its temporary hostfxr context, and loads the bridge.
-     * Readiness requires the bridge's version handshake to match the native contract.
+     * Readiness requires a matching version handshake and the required interop methods.
      * This bridge is process-resident; collectible component unloading is separate.
      */
     class DotNetHost
@@ -84,10 +121,11 @@ namespace Fenrir::Scripting
          *
          * Success means the runtime delegate is ready and Bootstrap.GetBridgeVersion
          * was resolved, called, and returned the supported version (currently 1).
+         * Bootstrap.TryAddInt32, CopyGreetingUtf8, and EchoUtf8 must also resolve before readiness.
          * Both configuration paths must name existing files;
          * relative paths are resolved against the current working directory.
-         * Different runtime properties
-         * in an existing runtime are rejected until we can verify compatibility.
+         * Different runtime properties in an existing runtime are rejected until
+         * we can verify compatibility.
          * Calls on the same wrapper must be externally serialized.
          * Each attempt resets readiness; a failed attempt leaves it false. Loaded
          * managed assemblies and CoreCLR remain resident regardless of the result.
@@ -100,6 +138,38 @@ namespace Fenrir::Scripting
          * Does not report whether another component has already started CoreCLR.
          */
         [[nodiscard]] bool IsInitialized() const noexcept;
+
+        /**
+         * @brief Exercise the bridge's status-plus-output interop contract.
+         *
+         * Checked managed addition catches overflow and returns a status. The output
+         * storage belongs to this native call and is never retained by managed code.
+         * Calls on the same wrapper must be externally serialized with initialization.
+         */
+        [[nodiscard]] Int32CallResult AddInt32(std::int32_t left, std::int32_t right) const;
+
+        /**
+         * @brief Copy a fixed managed greeting into an owning native UTF-8 string.
+         *
+         * Queries the byte count, allocates native storage, then copies the payload.
+         * Managed code borrows that storage only during the copy. Invalid lengths
+         * become InvalidResponse; failure never exposes a partial string.
+         * Native allocation failures follow normal C++ exception behavior.
+         * Calls must be externally serialized with initialization on this wrapper.
+         */
+        [[nodiscard]] Utf8StringResult GetGreeting() const;
+
+        /**
+         * @brief Decode native UTF-8 into a managed string and copy it back as UTF-8.
+         *
+         * Input is borrowed and must remain valid and unchanged throughout both calls.
+         * Explicit byte lengths preserve empty input and embedded nulls. Strict decoding
+         * rejects malformed UTF-8 with InvalidArgument; no normalization is performed.
+         * Input lengths above INT32_MAX are rejected before entering managed code.
+         * Only success exposes an owning string; a call failure does not clear readiness.
+         * Allocations may throw C++ exceptions. Serialize calls with initialization.
+         */
+        [[nodiscard]] Utf8StringResult EchoUtf8(std::string_view input) const;
 
       private:
         struct State;
