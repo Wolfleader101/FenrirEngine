@@ -14,6 +14,7 @@ namespace Fenrir::Scripting::Detail
         hostfxr_initialize_for_runtime_config_fn initializeForRuntimeConfig = nullptr;
         hostfxr_get_runtime_delegate_fn getRuntimeDelegate = nullptr;
         hostfxr_close_fn close = nullptr;
+        hostfxr_set_error_writer_fn setErrorWriter = nullptr;
     };
 
     struct HostFxrLoadResult

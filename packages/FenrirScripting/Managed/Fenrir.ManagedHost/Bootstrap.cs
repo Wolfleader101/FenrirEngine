@@ -1,14 +1,131 @@
+using System;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Fenrir.ManagedHost;
 
 public static class Bootstrap
 {
+    private const string Greeting = "Hello from .NET \u2014 \u03C0 \U0001F43A";
+
     // The native host resolves this method through its assembly-loading runtime delegate.
     // This is not a native DLL export and must not be called directly from C#.
     // The native function pointer must use the matching int32_t(), Cdecl signature.
     // Keep this handshake free of exceptions; unmanaged callers cannot catch managed exceptions.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetBridgeVersion() => 1;
+
+    // result must point to writable int32 native storage for the duration of this call.
+    // No pointer is retained, and ordinary managed exceptions become wire statuses.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int TryAddInt32(int left, int right, int* result)
+    {
+        if (result == null)
+        {
+            return (int)BridgeStatus.InvalidArgument;
+        }
+
+        *result = 0;
+        try
+        {
+            *result = checked(left + right);
+            return (int)BridgeStatus.Success;
+        }
+        catch (OverflowException)
+        {
+            return (int)BridgeStatus.Overflow;
+        }
+        catch (Exception)
+        {
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
+    // Sizes count UTF-8 bytes, excluding any BOM or terminator. A null destination
+    // with zero capacity queries the size. Insufficient capacity writes no payload.
+    // requiredBytes and destination must refer to valid, non-overlapping native storage.
+    // Neither pointer is retained. The immutable greeting is stable between calls.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes)
+    {
+        if (!ValidateUtf8Output(destination, capacity, requiredBytes))
+        {
+            return (int)BridgeStatus.InvalidArgument;
+        }
+
+        try
+        {
+            return (int)CopyUtf8Payload(Greeting, Encoding.UTF8, destination, capacity, requiredBytes);
+        }
+        catch (Exception)
+        {
+            *requiredBytes = 0;
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
+    // Native input is read-only and borrowed during this call. Lengths count bytes.
+    // Null input is valid only for length zero. Input, destination, and count storage
+    // must not overlap. The caller must keep input unchanged between query and copy.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int EchoUtf8(byte* input, int inputLength, byte* destination, int capacity, int* requiredBytes)
+    {
+        if (!ValidateUtf8Output(destination, capacity, requiredBytes))
+        {
+            return (int)BridgeStatus.InvalidArgument;
+        }
+        if (inputLength < 0 || (input == null && inputLength != 0))
+        {
+            return (int)BridgeStatus.InvalidArgument;
+        }
+
+        try
+        {
+            // Construct inside the try: encoding initialization failures must also
+            // remain inside the native-callable export's exception handling.
+            Encoding encoding = new UTF8Encoding(false, true);
+            string text = encoding.GetString(new ReadOnlySpan<byte>(input, inputLength));
+            return (int)CopyUtf8Payload(text, encoding, destination, capacity, requiredBytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            *requiredBytes = 0;
+            return (int)BridgeStatus.InvalidArgument;
+        }
+        catch (Exception)
+        {
+            *requiredBytes = 0;
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
+    private static unsafe bool ValidateUtf8Output(byte* destination, int capacity, int* requiredBytes)
+    {
+        if (requiredBytes == null)
+        {
+            return false;
+        }
+        *requiredBytes = 0;
+        return capacity >= 0 && (destination != null || capacity == 0);
+    }
+
+    // Called only after pointer/capacity validation, inside an export's try block.
+    private static unsafe BridgeStatus CopyUtf8Payload(string text, Encoding encoding, byte* destination,
+                                                      int capacity, int* requiredBytes)
+    {
+        int byteCount = encoding.GetByteCount(text);
+        *requiredBytes = byteCount;
+        if (destination == null)
+        {
+            return BridgeStatus.Success;
+        }
+        if (capacity < byteCount)
+        {
+            return BridgeStatus.BufferTooSmall;
+        }
+        // The span borrows caller-owned memory and covers only the payload.
+        encoding.GetBytes(text.AsSpan(), new Span<byte>(destination, byteCount));
+        return BridgeStatus.Success;
+    }
 }
