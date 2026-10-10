@@ -22,8 +22,7 @@ namespace Fenrir::Scripting::Detail
     struct BridgeFunctions
     {
         using LoadFn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint64_t*,
-                                                         std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*,
-                                                         std::int32_t*);
+                                                         std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using NameFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
                                                          std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using TokenFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
@@ -44,7 +43,7 @@ namespace Fenrir::Scripting::Detail
     };
 #undef FENRIR_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 8;
+    inline constexpr std::int32_t BridgeVersion = 9;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
     inline constexpr std::array<const char*, 6> BridgeFunctionNames = {

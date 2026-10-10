@@ -7,34 +7,35 @@ namespace Fenrir.ManagedHost;
 
 public static partial class Bootstrap
 {
-    // Token/flags and diagnostic storage are writable and non-overlapping.
-    // No pointer is retained. A token is published only after registration succeeds.
+    // The token and diagnostic storage are writable and non-overlapping. No pointer is retained.
+    // A token is published only after registration succeeds.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    internal static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
+    internal static unsafe int LoadComponent(byte* path, int length, ulong* token,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (token != null) *token = 0;
-        if (collectible != null) *collectible = 0;
         bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
-        if (!diagnosticValid || token == null || collectible == null || path == null || length <= 0)
+        if (!diagnosticValid || token == null || path == null || length <= 0)
             return (int)BridgeStatus.InvalidArgument;
+        string assemblyPath;
         try
         {
-            string assemblyPath = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(path, length));
-            ulong ownedToken = ComponentRegistry.Load(assemblyPath);
-            *token = ownedToken;
-            *collectible = 1; // Registry verified the actual assembly and context before publication.
-            return (int)BridgeStatus.Success;
-        }
-        catch (ArgumentException exception)
-        {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.InvalidArgument;
+            assemblyPath = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(path, length));
         }
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+        try
+        {
+            *token = ComponentRegistry.Load(assemblyPath);
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
         }
     }
 
@@ -130,7 +131,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is ArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
         }
         try
         {

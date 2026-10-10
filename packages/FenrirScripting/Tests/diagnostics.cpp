@@ -28,8 +28,8 @@ int main(int argc, char* argv[])
     {
         Check(argc == 4 || argc == 5, "Expected mode, runtime configuration, bridge, and optional second bridge");
         const auto mode = std::filesystem::path(argv[1]);
-        Int32CallResult retained;
-        ComponentInfoResult retainedString;
+        ManagedCallResult<std::int32_t> retained;
+        ManagedCallResult<ComponentInfo> retainedString;
         {
             DotNetHost host;
             Check(host.LoadComponent(argv[3]).status == ManagedCallStatus::NotInitialized, "Unready call accepted");
@@ -44,22 +44,22 @@ int main(int argc, char* argv[])
             };
             if (mode == "legacy")
             {
-                Check(initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 7,
+                Check(initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 8,
                       "Mismatched version was not reported");
-                checkRejected("expected 8, received 7", "Version mismatch accepted or undiagnosed");
+                checkRejected("expected 9, received 8", "Version mismatch accepted or undiagnosed");
                 std::cout << "Mismatched bridge version rejected before any table entry was used.\n";
                 return EXIT_SUCCESS;
             }
             if (mode == "oversized")
             {
-                Check(initialized.bridgeVersion == 8, "Matching version was not reported");
+                Check(initialized.bridgeVersion == 9, "Matching version was not reported");
                 checkRejected("table size", "Table size mismatch accepted or undiagnosed");
                 std::cout << "Mismatched bridge table size rejected.\n";
                 return EXIT_SUCCESS;
             }
             if (mode == "missing")
             {
-                Check(initialized.bridgeVersion == 8, "Matching version was not reported");
+                Check(initialized.bridgeVersion == 9, "Matching version was not reported");
                 checkRejected("GetComponentUnloadState", "Null table entry accepted or not named");
                 std::cout << "Bridge table with a missing entry rejected.\n";
                 return EXIT_SUCCESS;
@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
                 std::cout << "Assembly without the bridge entry point rejected.\n";
                 return EXIT_SUCCESS;
             }
-            Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 8,
+            Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 9,
                   initialized.diagnostic.c_str());
             if (mode == "real")
             {
@@ -213,7 +213,7 @@ int main(int argc, char* argv[])
             // registration. The fixture's load clears its released flag; modes 22 and 26 set the
             // observed unload state explicitly, so the checks below do not depend on that flag.
             auto control = host.LoadComponent(argv[3]);
-            Check(control.value != nullptr, "Control fixture load failed");
+            Check(control.value.has_value(), "Control fixture load failed");
             const auto controlInvoke = [&control](std::int32_t left) {
                 return control.value->InvokeInt32("Fixture", "Method", left, 0);
             };
@@ -235,7 +235,7 @@ int main(int argc, char* argv[])
             Check(controlCounter(102) == releaseCount && controlCounter(103) == forgetCount + 1,
                   "Released owner destruction repeated release or leaked observation");
             auto scoped = host.LoadComponent(argv[3]);
-            Check(scoped.value != nullptr, "Scoped cleanup fixture load failed");
+            Check(scoped.value.has_value(), "Scoped cleanup fixture load failed");
             scoped.value.reset();
             Check(controlCounter(102) == releaseCount + 1 && controlCounter(103) == forgetCount + 2,
                   "Live owner destruction omitted release or observation cleanup");

@@ -12,7 +12,7 @@ static class ComponentChecks
 
     internal static unsafe void Run(string componentPath)
     {
-        delegate* unmanaged[Cdecl]<byte*, int, ulong*, int*, byte*, int, int*, int*, int> load = &Bootstrap.LoadComponent;
+        delegate* unmanaged[Cdecl]<byte*, int, ulong*, byte*, int, int*, int*, int> load = &Bootstrap.LoadComponent;
         delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, byte*, int, int*, int*, int> name = &Bootstrap.CopyComponentNameUtf8;
         delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> release = &Bootstrap.ReleaseComponent;
         byte[] path = Encoding.UTF8.GetBytes(Path.GetFullPath(componentPath));
@@ -27,9 +27,9 @@ static class ComponentChecks
             fixed (byte* pathPointer = path, error = diagnostic, payload = output)
             {
                 ulong token = 99;
-                int collectible = 99, written = 99, truncated = 99, required = 99;
-                Check(load(pathPointer, path.Length, &token, &collectible, error, diagnostic.Length, &written, &truncated) == 0 &&
-                      token != 0 && collectible == 1 && written == 0 && truncated == 0 && ComponentRegistry.Count == baseline + 1,
+                int written = 99, truncated = 99, required = 99;
+                Check(load(pathPointer, path.Length, &token, error, diagnostic.Length, &written, &truncated) == 0 &&
+                      token != 0 && written == 0 && truncated == 0 && ComponentRegistry.Count == baseline + 1,
                       "Load did not publish exactly one collectible registration");
                 ulong oldToken = token;
                 Check(name(token, null, 0, &required, error, diagnostic.Length, &written, &truncated) == 0 && required > 0,
@@ -50,18 +50,16 @@ static class ComponentChecks
                 Check(name(0, null, 0, &required, error, diagnostic.Length, &written, &truncated) == 5,
                       "Invalid token zero accepted");
                 Check(ComponentRegistry.ForgetUnload(oldToken), "First unload observation cleanup failed");
-                Check(load(pathPointer, path.Length, &token, &collectible, error, diagnostic.Length, &written, &truncated) == 0 &&
+                Check(load(pathPointer, path.Length, &token, error, diagnostic.Length, &written, &truncated) == 0 &&
                       token > oldToken, "Token was reused");
                 Check(release(token, error, diagnostic.Length, &written, &truncated) == 0, "Second registration release failed");
                 Check(ComponentRegistry.ForgetUnload(token), "Second unload observation cleanup failed");
 
-                Check(load(pathPointer, path.Length, null, &collectible, error, diagnostic.Length, &written, &truncated) == 1 &&
-                      collectible == 0 && written == 0 && truncated == 0, "Null token output accepted");
-                Check(load(pathPointer, path.Length, &token, null, error, diagnostic.Length, &written, &truncated) == 1 && token == 0,
-                      "Null collectible output accepted");
-                Check(load(null, 0, &token, &collectible, error, diagnostic.Length, &written, &truncated) == 1 && token == 0,
+                Check(load(pathPointer, path.Length, null, error, diagnostic.Length, &written, &truncated) == 1 &&
+                      written == 0 && truncated == 0, "Null token output accepted");
+                Check(load(null, 0, &token, error, diagnostic.Length, &written, &truncated) == 1 && token == 0,
                       "Empty path accepted");
-                Check(load(pathPointer, path.Length, &token, &collectible, null, 1, &written, &truncated) == 1 && token == 0,
+                Check(load(pathPointer, path.Length, &token, null, 1, &written, &truncated) == 1 && token == 0,
                       "Invalid diagnostic pointer accepted");
             }
 
@@ -77,9 +75,9 @@ static class ComponentChecks
                 fixed (byte* pathPointer = bytes, error = diagnostic)
                 {
                     ulong token = 99;
-                    int collectible = 99, written = 99, truncated = 99;
-                    Check(load(pathPointer, bytes.Length, &token, &collectible, error, diagnostic.Length, &written, &truncated) == expectedStatus &&
-                          token == 0 && collectible == 0 && ComponentRegistry.Count == baseline &&
+                    int written = 99, truncated = 99;
+                    Check(load(pathPointer, bytes.Length, &token, error, diagnostic.Length, &written, &truncated) == expectedStatus &&
+                          token == 0 && ComponentRegistry.Count == baseline &&
                           strictUtf8.GetString(diagnostic.AsSpan(0, written)).Contains(exceptionName),
                           "Failed load leaked a registration, published output, or omitted diagnostics");
                 }
@@ -90,9 +88,9 @@ static class ComponentChecks
             fixed (byte* pathPointer = coreLibrary, error = diagnostic)
             {
                 ulong token = 99;
-                int collectible = 99, written = 99, truncated = 99;
-                Check(load(pathPointer, coreLibrary.Length, &token, &collectible, error, diagnostic.Length, &written, &truncated) == 3 &&
-                      token == 0 && collectible == 0 && written > 0 && ComponentRegistry.Count == baseline,
+                int written = 99, truncated = 99;
+                Check(load(pathPointer, coreLibrary.Length, &token, error, diagnostic.Length, &written, &truncated) == 3 &&
+                      token == 0 && written > 0 && ComponentRegistry.Count == baseline,
                       "Failure after context creation did not roll back registration");
             }
         }

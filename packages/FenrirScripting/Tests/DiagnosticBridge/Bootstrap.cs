@@ -89,14 +89,14 @@ public static class Bootstrap
         }
     }
 
-    // Controlled diagnostic fixture, not a collectible loader. Every load returns the same synthetic
+    // Controlled diagnostic fixture, not a real loader. Every load returns the same synthetic
     // registration. InvokeComponentInt32 serves scripted integer responses selected by `left`;
     // CopyComponentNameUtf8 serves scripted UTF-8 query/copy responses selected by the string mode.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
+    public static unsafe int LoadComponent(byte* path, int length, ulong* token,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        componentReleased = false; *token = 1; *collectible = 1; *written = 0; *truncated = 0; return 0;
+        componentReleased = false; *token = 1; *written = 0; *truncated = 0; return 0;
     }
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int CopyComponentNameUtf8(ulong token, byte* output, int capacity, int* required,

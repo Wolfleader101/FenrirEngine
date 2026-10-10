@@ -39,13 +39,13 @@ static class UnloadChecks
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static unsafe Observation LoadInvokeRelease(string path, bool retain)
     {
-        delegate* unmanaged[Cdecl]<byte*, int, ulong*, int*, byte*, int, int*, int*, int> load = &Bootstrap.LoadComponent;
+        delegate* unmanaged[Cdecl]<byte*, int, ulong*, byte*, int, int*, int*, int> load = &Bootstrap.LoadComponent;
         delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> release = &Bootstrap.ReleaseComponent;
         byte[] bytes = Encoding.UTF8.GetBytes(path);
         ulong token = 0;
-        int collectible = 0, written = 0, truncated = 0;
+        int written = 0, truncated = 0;
         fixed (byte* pointer = bytes)
-            Check(load(pointer, bytes.Length, &token, &collectible, null, 0, &written, &truncated) == 0 && token != 0 && collectible == 1,
+            Check(load(pointer, bytes.Length, &token, null, 0, &written, &truncated) == 0 && token != 0,
                   "Unload fixture load failed");
         Check(State(token) == 0, "Live registration did not report NotRequested");
         Forget(token, 5); // A weak observer cannot be forgotten while it owns a live registration.

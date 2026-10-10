@@ -36,9 +36,9 @@ internal static class ComponentRegistry
     internal static ulong Load(string path)
     {
         if (!Path.IsPathFullyQualified(path) || path.Contains('\0'))
-            throw new ArgumentException("A component path must be absolute and contain no null characters.");
+            throw new BridgeArgumentException("A component path must be absolute and contain no null characters.");
         if (string.Equals(AssemblyName.GetAssemblyName(path).Name, typeof(Bootstrap).Assembly.GetName().Name, StringComparison.OrdinalIgnoreCase))
-            throw new ArgumentException("The resident bridge cannot be loaded as a collectible component.");
+            throw new BridgeArgumentException("The resident bridge cannot be loaded as a collectible component.");
 
         // Resolver creation can fail. Do it before creating a collectible context.
         var resolver = new AssemblyDependencyResolver(path);

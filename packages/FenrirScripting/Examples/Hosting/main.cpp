@@ -4,7 +4,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     configuration.bridgeAssemblyPath = argv[firstPath + 1];
     const std::filesystem::path componentPath = argv[firstPath + 2];
 
-    std::unique_ptr<ManagedComponent> component;
+    std::optional<ManagedComponent> component;
     {
         DotNetHost host;
         const auto initialized = host.Initialize(configuration);

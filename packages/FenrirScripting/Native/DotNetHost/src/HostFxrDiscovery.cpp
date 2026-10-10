@@ -24,7 +24,7 @@ namespace Fenrir::Scripting
         }
     } // namespace
 
-    HostFxrDiscoveryResult DotNetHost::DiscoverHostFxr(const std::filesystem::path& dotnetRoot) const
+    HostFxrDiscoveryResult DotNetHost::DiscoverHostFxr(const std::filesystem::path& dotnetRoot)
     {
         // Windows uses wchar_t; Unix uses char. Do not narrow native Windows paths.
         static_assert(std::is_same_v<std::filesystem::path::value_type, char_t>);
