@@ -199,21 +199,6 @@ internal static class ComponentRegistry
         return true;
     }
 
-    internal static bool TryInvokeInt32(ulong token, string typeName, string methodName, int left, int right, out int result)
-    {
-        result = 0;
-        Assembly assembly;
-        lock (Gate)
-        {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry) return false;
-            assembly = entry.Assembly;
-        }
-        // No registry lock is held while resolving types or executing user code.
-        // This local assembly/delegate roots an accepted in-flight call until it returns.
-        result = ComponentInvocation.InvokeInt32(assembly, typeName, methodName, left, right);
-        return true;
-    }
-
     internal static bool Release(ulong token)
     {
         Entry? entry;

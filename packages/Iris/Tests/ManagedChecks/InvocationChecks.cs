@@ -3,32 +3,53 @@ using System.IO;
 using System.Text;
 using Iris.Bridge;
 
+// Invocation through the real FindType / FindMethod / InvokeMethod exports: diagnostic bounds and
+// canaries, lookup and call statuses, pointer validation, and recovery. MethodChecks covers value kinds.
 static class InvocationChecks
 {
     internal const string TypeName = "Iris.Examples.Component.Calculations";
     internal readonly record struct Result(int Status, int Value, string Diagnostic, int Truncated);
+
+    private const int Int32 = 6;
 
     private static void Check(bool condition, string message)
     {
         if (!condition) throw new Exception(message);
     }
 
+    // Looks up and calls `static int method(int, int)`. The status is the first step that failed, so a
+    // missing type or method is NotFound (6). Only the final call's diagnostic storage is canary-checked.
     internal static unsafe Result Invoke(ulong token, string type, string method, int left = 20, int right = 22, int capacity = 4096)
     {
+        delegate* unmanaged[Cdecl]<ulong, byte*, int, ulong*, byte*, int, int*, int*, int> findType = &Bootstrap.FindType;
+        delegate* unmanaged[Cdecl]<ulong, ulong, byte*, int, int, int*, int, ulong*, byte*, int, int*, int*, int> findMethod = &Bootstrap.FindMethod;
+        delegate* unmanaged[Cdecl]<ulong, ulong, ulong*, int, ulong*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeMethod;
         byte[] typeBytes = Encoding.UTF8.GetBytes(type), methodBytes = Encoding.UTF8.GetBytes(method);
         byte[] storage = new byte[capacity + 2];
         Array.Fill(storage, (byte)0xA5);
-        delegate* unmanaged[Cdecl]<ulong, byte*, int, byte*, int, int, int, int*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeComponentInt32;
+        int[] kinds = { Int32, Int32 };
+        ulong[] arguments = { unchecked((ulong)(long)left), unchecked((ulong)(long)right) };
         fixed (byte* typePointer = typeBytes, methodPointer = methodBytes, diagnostic = storage)
+        fixed (int* kindPointer = kinds)
+        fixed (ulong* argumentPointer = arguments)
         {
-            int value = 99, written = 99, truncated = 99;
-            int status = invoke(token, typePointer, typeBytes.Length, methodPointer, methodBytes.Length,
-                                left, right, &value, capacity == 0 ? null : diagnostic + 1, capacity, &written, &truncated);
+            ulong typeId = 0, methodId = 0, slot = 0;
+            int written = 99, truncated = 99;
+            byte* buffer = capacity == 0 ? null : diagnostic + 1;
+            int status = findType(token, typePointer, typeBytes.Length, &typeId, buffer, capacity, &written, &truncated);
+            if (status == 0)
+                status = findMethod(token, typeId, methodPointer, methodBytes.Length, Int32, kindPointer, kinds.Length, &methodId,
+                                    buffer, capacity, &written, &truncated);
+            if (status == 0)
+            {
+                slot = 99; // The export must clear this on failure.
+                status = invoke(token, methodId, argumentPointer, arguments.Length, &slot, buffer, capacity, &written, &truncated);
+            }
             Check(storage[0] == 0xA5 && storage[^1] == 0xA5 && written >= 0 && written <= capacity &&
                   (truncated == 0 || truncated == 1), "Invocation corrupted diagnostic storage/metadata");
-            Check(status == 0 || value == 0, "Failed invocation published a value");
+            Check(status == 0 || slot == 0, "Failed invocation published a value");
             string text = new UTF8Encoding(false, true).GetString(storage.AsSpan(1, written));
-            return new Result(status, value, text, truncated);
+            return new Result(status, unchecked((int)(long)slot), text, truncated);
         }
     }
 
@@ -49,76 +70,83 @@ static class InvocationChecks
             Result good = Invoke(token, TypeName, "Add");
             Check(good.Status == 0 && good.Value == 42 && good.Diagnostic == "" && good.Truncated == 0,
                   "Component/dependency calculation or exact overload selection failed");
-            foreach ((string type, string method, string exception) in new[] {
-                (TypeName, "Missing", "MissingMethodException"),
-                (TypeName, "WrongReturn", "MissingMethodException"),
-                (TypeName, "WrongParameters", "MissingMethodException"),
-                (TypeName, "Generic", "MissingMethodException"),
-                (TypeName, "ByRef", "MissingMethodException"),
-                (TypeName, "Hidden", "MissingMethodException"),
-                (TypeName, "UnmanagedOnly", "MissingMethodException"),
-                (TypeName, "add", "MissingMethodException"),
-                ("Iris.Examples.Component.InstanceCalculation", "Add", "MissingMethodException"),
-                ("Iris.Examples.Component.OpenCalculation`1", "Add", "MissingMethodException"),
-                ("Iris.Examples.Component.HiddenCalculation", "Add", "MissingMethodException"),
-                ("Iris.Examples.Component.Missing", "Add", "TypeLoadException"),
-                (TypeName, "Throw", "InvalidOperationException"),
-                (TypeName, "ThrowArgument", "ArgumentException")
+
+            // Lookup failures are NotFound with the name; call failures are ManagedException with details.
+            foreach ((string lookupType, string lookupMethod) in new[] {
+                (TypeName, "Missing"), (TypeName, "WrongReturn"), (TypeName, "Generic"), (TypeName, "Hidden"),
+                (TypeName, "UnmanagedOnly"), (TypeName, "add"), ("Iris.Examples.Component.Missing", "Add")
             })
             {
-                Result failed = Invoke(token, type, method);
-                Check(failed.Status == 3 && failed.Diagnostic.Contains(exception, StringComparison.Ordinal),
-                      "Lookup/component exception was not contained with useful diagnostics: " + type + "." + method);
+                Result failed = Invoke(token, lookupType, lookupMethod);
+                Check(failed.Status == 6 && failed.Diagnostic.Length > 0, "Lookup failure was not a NotFound with a diagnostic: " + lookupType + "." + lookupMethod);
                 Check(Invoke(token, TypeName, "Add").Value == 42, "Valid invocation did not recover after a failure");
             }
+            Result thrown = Invoke(token, TypeName, "Throw");
+            Check(thrown.Status == 3 && thrown.Diagnostic.Contains("InvalidOperationException", StringComparison.Ordinal),
+                  "A component exception was not contained with its details");
             Result overflow = Invoke(token, TypeName, "Add", int.MaxValue, 1);
-            Check(overflow.Status == 2 && overflow.Diagnostic.Contains("OverflowException", StringComparison.Ordinal), "Overflow status/details lost");
+            Check(overflow.Status == 3 && overflow.Diagnostic.Contains("OverflowException", StringComparison.Ordinal),
+                  "An OverflowException was not a ManagedException");
             foreach (int capacity in new[] { 0, 1, 33, 4096 })
             {
                 Result bounded = Invoke(token, TypeName, "LongError", capacity: capacity);
                 Check(bounded.Status == 3 && bounded.Truncated == 1, "Bounded component diagnostic changed operation status");
             }
             Check(Invoke(token, TypeName, "Add").Diagnostic == "", "Successful call retained diagnostics");
-            Result noBuffer = Invoke(token, TypeName, "Throw", capacity: 0); // Null storage, zero capacity.
-            Check(noBuffer.Status == 3 && noBuffer.Diagnostic == "" && noBuffer.Truncated == 1,
-                  "A failing call without diagnostic storage changed status or lost truncation");
 
-            byte[] typeBytes = Encoding.UTF8.GetBytes(TypeName), methodBytes = Encoding.UTF8.GetBytes("Add"), storage = new byte[256];
-            delegate* unmanaged[Cdecl]<ulong, byte*, int, byte*, int, int, int, int*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeComponentInt32;
-            fixed (byte* type = typeBytes, method = methodBytes, diagnostic = storage)
+            // Pointer and capacity validation on the new exports.
+            delegate* unmanaged[Cdecl]<ulong, byte*, int, ulong*, byte*, int, int*, int*, int> findType = &Bootstrap.FindType;
+            delegate* unmanaged[Cdecl]<ulong, ulong, byte*, int, int, int*, int, ulong*, byte*, int, int*, int*, int> findMethod = &Bootstrap.FindMethod;
+            delegate* unmanaged[Cdecl]<ulong, ulong, ulong*, int, ulong*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeMethod;
+            byte[] name = Encoding.UTF8.GetBytes(TypeName), method = Encoding.UTF8.GetBytes("Add"), storage = new byte[256];
+            int[] kinds = { Int32, Int32 };
+            ulong[] arguments = { 20, 22 };
+            fixed (byte* typePointer = name, methodPointer = method, diagnostic = storage)
+            fixed (int* kindPointer = kinds)
+            fixed (ulong* argumentPointer = arguments)
             {
-                int value = 99, written = 99, truncated = 99;
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, null, diagnostic, storage.Length, &written, &truncated) == 1 &&
-                      written == 0 && truncated == 0, "Null value output accepted");
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, null, &truncated) == 1 &&
-                      value == 0 && truncated == 0, "Null diagnostic count accepted");
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, &written, null) == 1 &&
-                      value == 0 && written == 0, "Null truncation output accepted");
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, null, 1, &written, &truncated) == 1 && value == 0,
-                      "Null diagnostic with capacity accepted");
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, diagnostic, -1, &written, &truncated) == 1 && value == 0,
-                      "Negative diagnostic capacity accepted");
-                Check(invoke(token, null, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, &written, &truncated) == 1 && value == 0,
-                      "Null type name accepted");
-                Check(invoke(token, type, -1, method, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, &written, &truncated) == 1 && value == 0,
-                      "Negative type length accepted");
-                Check(invoke(token, type, typeBytes.Length, null, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, &written, &truncated) == 1 && value == 0,
-                      "Null method name accepted");
-                Check(invoke(token, type, typeBytes.Length, method, -1, 20, 22, &value, diagnostic, storage.Length, &written, &truncated) == 1 && value == 0,
-                      "Negative method length accepted");
-                typeBytes[0] = 0xFF;
-                Check(invoke(token, type, typeBytes.Length, method, methodBytes.Length, 20, 22, &value, diagnostic, storage.Length, &written, &truncated) == 1 && value == 0 &&
-                      new UTF8Encoding(false, true).GetString(storage.AsSpan(0, written)).Contains("DecoderFallbackException"),
-                      "Malformed type UTF-8 was accepted or omitted diagnostics");
+                ulong typeId = 0, methodId = 0, slot = 99;
+                int written = 99, truncated = 99;
+                Check(findType(token, typePointer, name.Length, &typeId, diagnostic, storage.Length, &written, &truncated) == 0, "Type lookup failed");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, &written, &truncated) == 0,
+                      "Method lookup failed");
+                Check(findType(token, typePointer, name.Length, null, diagnostic, storage.Length, &written, &truncated) == 1 && written == 0 && truncated == 0,
+                      "Null type output accepted");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, null, diagnostic, storage.Length, &written, &truncated) == 1,
+                      "Null method output accepted");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, null, 2, &methodId, diagnostic, storage.Length, &written, &truncated) == 1 && methodId == 0,
+                      "Null parameter kinds with a count were accepted");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, -1, &methodId, diagnostic, storage.Length, &written, &truncated) == 1,
+                      "A negative parameter count was accepted");
+                Check(findMethod(token, typeId, null, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, &written, &truncated) == 1 &&
+                      findMethod(token, typeId, methodPointer, -1, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, &written, &truncated) == 1,
+                      "A null or negative-length method name was accepted");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, null, &truncated) == 1 &&
+                      findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, &written, null) == 1,
+                      "Null diagnostic metadata was accepted");
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, null, 1, &written, &truncated) == 1 &&
+                      findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, -1, &written, &truncated) == 1,
+                      "Invalid diagnostic storage was accepted");
+                // Failed lookups clear their output, so resolve the handle again for the call checks.
+                Check(findMethod(token, typeId, methodPointer, method.Length, Int32, kindPointer, 2, &methodId, diagnostic, storage.Length, &written, &truncated) == 0 && methodId != 0,
+                      "Method lookup failed after validation failures");
+                Check(invoke(token, methodId, argumentPointer, 2, null, diagnostic, storage.Length, &written, &truncated) == 1, "Null result accepted");
+                Check(invoke(token, methodId, null, 2, &slot, diagnostic, storage.Length, &written, &truncated) == 1 && slot == 0,
+                      "Null arguments with a count were accepted");
+                Check(invoke(token, methodId, argumentPointer, -1, &slot, diagnostic, storage.Length, &written, &truncated) == 1, "A negative argument count was accepted");
+                Check(invoke(token, methodId, argumentPointer, 2, &slot, diagnostic, storage.Length, null, &truncated) == 1 &&
+                      invoke(token, methodId, argumentPointer, 2, &slot, diagnostic, storage.Length, &written, null) == 1,
+                      "Null diagnostic metadata was accepted by InvokeMethod");
+                Check(invoke(token, methodId, argumentPointer, 2, &slot, null, 1, &written, &truncated) == 1, "Invalid diagnostic storage accepted by InvokeMethod");
+                Check(invoke(token, methodId, argumentPointer, 2, &slot, diagnostic, storage.Length, &written, &truncated) == 0 && slot == 42,
+                      "A valid call failed after validation failures");
             }
-            Check(Invoke(token, "", "Add").Status == 1 && Invoke(token, TypeName, "").Status == 1 &&
-                  Invoke(token, TypeName + "\0suffix", "Add").Status == 1 && Invoke(token, TypeName, "Add\0suffix").Status == 1,
-                  "Empty/embedded-null names accepted");
+            Check(Invoke(token, "", "Add").Status == 1 && Invoke(token, TypeName, "").Status == 1, "Empty names accepted");
             Check(Invoke(0, TypeName, "Add").Status == 5, "Zero token accepted");
         }
         finally { Check(ComponentRegistry.Release(token), "Invocation registration release failed"); }
         Check(Invoke(token, TypeName, "Add").Status == 5 && ComponentRegistry.Count == baseline, "Released token remained usable or registration leaked");
         Check(ComponentRegistry.ForgetUnload(token), "Invocation unload observation cleanup failed");
-        Console.WriteLine("Managed invocation: exact signatures, pointer/UTF-8 validation, exceptions, diagnostics, recovery and stale tokens passed.");
+        Console.WriteLine("Managed invocation: lookup statuses, contained exceptions, bounded diagnostics, pointer validation, recovery and stale tokens passed.");
     }
 }

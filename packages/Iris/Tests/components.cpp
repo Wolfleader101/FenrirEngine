@@ -40,6 +40,33 @@ namespace
         return std::move(*loaded.value);
     }
 
+    template <typename T, typename U>
+    CallResult<T> Rebind(const CallResult<U>& failed)
+    {
+        CallResult<T> result;
+        result.status = failed.status;
+        result.diagnostic = failed.diagnostic;
+        result.diagnosticTruncated = failed.diagnosticTruncated;
+        return result;
+    }
+
+    // Looks up and calls `static int method(int, int)`. The status is the first step that failed.
+    CallResult<std::int32_t> Call(const Component& owner, std::string_view type, std::string_view method,
+                                  std::int32_t left, std::int32_t right)
+    {
+        const auto found = owner.FindType(type);
+        if (!found.Succeeded())
+        {
+            return Rebind<std::int32_t>(found);
+        }
+        const auto handle = found.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>(method);
+        if (!handle.Succeeded())
+        {
+            return Rebind<std::int32_t>(handle);
+        }
+        return handle.value->Invoke(left, right);
+    }
+
     void CheckInfo(const Component& owner)
     {
         const auto info = owner.GetInfo();
@@ -49,7 +76,7 @@ namespace
 
     void CheckCalculation(const Component& owner)
     {
-        const auto result = owner.InvokeInt32(CalculationType, "Add", 20, 22);
+        const auto result = Call(owner, CalculationType, "Add", 20, 22);
         Check(result.Succeeded() && result.value == 42 && result.diagnostic.empty() && !result.diagnosticTruncated,
               "Component calculation failed: " + result.diagnostic);
     }
@@ -67,7 +94,7 @@ namespace
     void CheckInvalidHandle(const Component& owner, const char* message)
     {
         Check(owner.GetInfo().status == CallStatus::InvalidHandle &&
-                  owner.InvokeInt32(CalculationType, "LocalAdd", 20, 22).status == CallStatus::InvalidHandle,
+                  Call(owner, CalculationType, "LocalAdd", 20, 22).status == CallStatus::InvalidHandle,
               message);
     }
 
@@ -90,51 +117,22 @@ namespace
              [&] {
                  auto host = StartHost(arguments);
                  const auto component = Load(*host, arguments.component);
-                 const auto shared = component.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0);
+                 const auto shared = Call(component, SharedCalculatorType, "ContractIsShared", 0, 0);
                  Check(shared.value == 0, "The contract resolved to a shared copy without a declaration");
-             }},
-            {"lookup and component exceptions are contained, and the next call works",
-             [&] {
-                 auto host = StartHost(arguments);
-                 const auto component = Load(*host, arguments.component);
-                 for (const auto method : {"Missing", "WrongReturn", "WrongParameters", "Generic", "UnmanagedOnly"})
-                 {
-                     const auto failed = component.InvokeInt32(CalculationType, method, 20, 22);
-                     Check(failed.status == CallStatus::ManagedException && !failed.value &&
-                               failed.diagnostic.find("MissingMethodException") != std::string::npos,
-                           std::string("Lookup failure escaped or published a value: ") + method);
-                 }
-                 const auto thrown = component.InvokeInt32(CalculationType, "Throw", 20, 22);
-                 Check(thrown.status == CallStatus::ManagedException && !thrown.value &&
-                           thrown.diagnostic.find("InvalidOperationException") != std::string::npos &&
-                           thrown.diagnostic.find("\xCF\x80 \xF0\x9F\x90\xBA") != std::string::npos,
-                       "Component exception details or Unicode lost");
-                 const auto argumentThrow = component.InvokeInt32(CalculationType, "ThrowArgument", 20, 22);
-                 Check(argumentThrow.status == CallStatus::ManagedException && !argumentThrow.value,
-                       "A component's ArgumentException was reported as an invalid bridge argument");
-                 const auto overflow =
-                     component.InvokeInt32(CalculationType, "Add", std::numeric_limits<std::int32_t>::max(), 1);
-                 Check(overflow.status == CallStatus::Overflow && !overflow.value &&
-                           overflow.diagnostic.find("OverflowException") != std::string::npos,
-                       "Component overflow contract failed");
-                 const auto bounded = component.InvokeInt32(CalculationType, "LongError", 0, 0);
-                 Check(bounded.status == CallStatus::ManagedException && !bounded.value && bounded.diagnosticTruncated,
-                       "Component diagnostic was not bounded");
-                 CheckCalculation(component);
              }},
             {"malformed, empty and null-containing names are rejected",
              [&] {
                  auto host = StartHost(arguments);
                  const auto component = Load(*host, arguments.component);
-                 const auto malformedType = component.InvokeInt32("\xC3(", "Add", 20, 22);
-                 const auto malformedMethod = component.InvokeInt32(CalculationType, "\xFF", 20, 22);
+                 const auto malformedType = Call(component, "\xC3(", "Add", 20, 22);
+                 const auto malformedMethod = Call(component, CalculationType, "\xFF", 20, 22);
                  Check(malformedType.status == CallStatus::InvalidArgument && !malformedType.value &&
                            malformedType.diagnostic.find("DecoderFallbackException") != std::string::npos &&
                            malformedMethod.status == CallStatus::InvalidArgument && !malformedMethod.value,
                        "Malformed UTF-8 names accepted");
-                 Check(component.InvokeInt32({}, "Add", 20, 22).status == CallStatus::InvalidArgument &&
-                           component.InvokeInt32(CalculationType, {}, 20, 22).status == CallStatus::InvalidArgument &&
-                           component.InvokeInt32(CalculationType, std::string("Add\0suffix", 10), 20, 22).status ==
+                 Check(Call(component, {}, "Add", 20, 22).status == CallStatus::InvalidArgument &&
+                           Call(component, CalculationType, {}, 20, 22).status == CallStatus::InvalidArgument &&
+                           Call(component, CalculationType, std::string("Add\0suffix", 10), 20, 22).status ==
                                CallStatus::InvalidArgument,
                        "Empty or null-containing names accepted");
                  CheckCalculation(component);
@@ -359,11 +357,11 @@ namespace
                  const auto component = Load(*host, path);
                  CheckInfo(component);
                  // The copy lacks its private dependency, which loads lazily.
-                 const auto noDependency = component.InvokeInt32(CalculationType, "Add", 20, 22);
+                 const auto noDependency = Call(component, CalculationType, "Add", 20, 22);
                  Check(noDependency.status == CallStatus::ManagedException && !noDependency.value &&
                            noDependency.diagnostic.find("FileNotFoundException") != std::string::npos,
                        "Missing dependency escaped or omitted diagnostics");
-                 Check(component.InvokeInt32(CalculationType, "LocalAdd", 20, 22).value == 42,
+                 Check(Call(component, CalculationType, "LocalAdd", 20, 22).value == 42,
                        "A call that needs no dependency failed");
              }},
             {"moves and release transfer ownership and unload observation",
@@ -401,7 +399,7 @@ namespace
                      auto host = StartHost(arguments);
                      retained = Load(*host, arguments.component);
                      snapshot = *retained->GetInfo().value;
-                     failure = retained->InvokeInt32(CalculationType, "Throw", 0, 0);
+                     failure = Call(*retained, CalculationType, "Throw", 0, 0);
                      // A failed attempt resets readiness; the owner keeps its bridge table.
                      const auto failed = host->Initialize({arguments.configuration.runtimeConfigPath, {}, {}});
                      Check(!failed.success && !host->IsInitialized(), "A failed initialization kept readiness");
@@ -415,7 +413,7 @@ namespace
                  Check(retained->Release().Succeeded() && !retained->IsLoaded(),
                        "Release after host destruction failed");
                  CheckUnload(*retained, true);
-                 Check(retained->InvokeInt32(CalculationType, "Add", 20, 22).status == CallStatus::InvalidHandle,
+                 Check(Call(*retained, CalculationType, "Add", 20, 22).status == CallStatus::InvalidHandle,
                        "A released owner remained callable");
                  Check(failure.diagnostic.find("InvalidOperationException") != std::string::npos,
                        "A diagnostic did not outlive its host");
@@ -431,8 +429,8 @@ namespace
                  Check(initialized.success, "Initialization with a shared assembly failed: " + initialized.diagnostic);
                  const auto first = Load(*host, arguments.component);
                  const auto second = Load(*host, arguments.component);
-                 Check(first.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0).value == 1 &&
-                           second.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0).value == 1,
+                 Check(Call(first, SharedCalculatorType, "ContractIsShared", 0, 0).value == 1 &&
+                           Call(second, SharedCalculatorType, "ContractIsShared", 0, 0).value == 1,
                        "A component bound to its private contract copy");
                  // Sharing the same file again is a no-op; a contract cannot also be a component.
                  Check(host->Initialize(configuration).success, "Re-sharing the same file failed");

@@ -101,11 +101,12 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 11.
+Managed bridge initialized; bridge version 13.
 Loaded Iris.Examples.Component
-Calculations.Add(20, 22) = 42
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
+Calculations.Add(20, 22) = 42
+Calculations.Scale(2.5, 4) = 10
 Calculations.Throw: status 3
 System.InvalidOperationException: Component failure — π 🐺.
 Release: status 0, unload Pending
@@ -130,7 +131,9 @@ auto loaded = host.LoadComponent("MyComponent.dll");
 if (loaded.Succeeded())
 {
     Component component = std::move(*loaded.value);
-    const auto sum = component.InvokeInt32("MyComponent.Calculations", "Add", 20, 22);
+    const auto type = component.FindType("MyComponent.Calculations");
+    const auto add = type.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+    const auto sum = add.value->Invoke(20, 22);
     if (sum.Succeeded()) { /* *sum.value == 42 */ }
     (void)component.Release(); // Or let the owner's destructor release it.
 }
@@ -149,6 +152,26 @@ if (type.Succeeded()) { const auto info = type.value->GetInfo(); /* info.value->
 A `Type` is a cheap value: copying it is fine and it holds no managed reference. It is valid while its
 component is loaded, never reused, and only works with the component it came from; after `Release`
 every call returns `InvalidHandle`. It does not keep the component from unloading.
+
+### Methods
+
+`Type::FindMethod<Signature>(name)` finds a public static method by name and exact signature, and
+`Method::Invoke(arguments...)` calls it. The managed parameter and return types come from the C++
+signature at compile time, so overloads are told apart by their exact parameter types:
+
+```cpp
+const auto add  = type.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");   // int Add(int, int)
+const auto addL = type.value->FindMethod<std::int64_t(std::int64_t, std::int64_t)>("Add");   // long Add(long, long)
+const auto scale = type.value->FindMethod<double(double, float)>("Scale");
+const auto touch = type.value->FindMethod<void()>("Touch");
+```
+
+Only `PrimitiveValue` types compile: `bool`, 8/16/32/64-bit integers, `float`, `double`, and `void` for
+a return. A method that doesn't match (other name, return type, parameter types or count, generic,
+`UnmanagedCallersOnly`, not public, an instance method) is `NotFound`. Any exception the method throws,
+including `OverflowException` and `ArgumentException`, is `ManagedException` with its own details; the
+status is never derived from the exception's type. A `Method` is a cheap value like `Type`, stops
+working (`InvalidHandle`) when its component is released, and does not keep it from unloading.
 
 ### Lifetime rules
 
@@ -177,7 +200,6 @@ and an owning UTF-8 `diagnostic`.
 | --- | --- |
 | `Success` (0) | The call succeeded. |
 | `InvalidArgument` (1) | The bridge rejected an argument (a malformed name or path, for example). |
-| `Overflow` (2) | Component code threw `OverflowException` (to become `ManagedException` in ticket 07). |
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
 | `BufferTooSmall` (4) | An output buffer was too small. |
 | `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
@@ -228,7 +250,7 @@ hostfxr's own messages, and flags recording how far the attempt got.
 | `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` against it. |
 
 Each check program runs named cases and reports every failure. The fixture bridge
-(`Tests/FixtureBridge`) is driven through its component's `InvokeInt32` by scenario names.
+(`Tests/FixtureBridge`) is driven by method name (`Scenario:<name>`, `Select:<mode>`, `Counter:<name>`) through the same `FindMethod` and `Invoke`.
 
 ## References
 

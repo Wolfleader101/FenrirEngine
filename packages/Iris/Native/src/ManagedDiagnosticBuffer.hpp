@@ -104,8 +104,6 @@ namespace Iris::Detail
             return diagnostic.ApplyTo(Success<T>(std::forward<Value>(value)...));
         case CallStatus::InvalidArgument:
             return diagnostic.ApplyTo(Failure<T>(CallStatus::InvalidArgument, name + " rejected an argument."));
-        case CallStatus::Overflow:
-            return diagnostic.ApplyTo(Failure<T>(CallStatus::Overflow, name + " overflowed."));
         case CallStatus::ManagedException:
             return diagnostic.ApplyTo(Failure<T>(CallStatus::ManagedException, name + " caught a managed exception."));
         case CallStatus::BufferTooSmall:

@@ -8,10 +8,9 @@ namespace Iris
 {
     enum class CallStatus : std::int32_t
     {
-        // 0..6 are the managed bridge's wire statuses (BridgeStatus); negative values are native-only.
+        // 0..6 are the managed bridge's wire statuses (BridgeStatus; 2 is unused); negative values are native-only.
         Success = 0,
         InvalidArgument = 1,
-        Overflow = 2,
         ManagedException = 3,
         BufferTooSmall = 4,
         InvalidHandle = 5,

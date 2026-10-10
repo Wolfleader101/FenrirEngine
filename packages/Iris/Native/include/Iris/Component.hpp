@@ -58,13 +58,6 @@ namespace Iris
         // component's dependencies are not found through it.
         [[nodiscard]] CallResult<Type> FindType(std::string_view fullName) const;
 
-        // Calls a public, non-generic, static `int Method(int, int)` declared on a public closed type
-        // in this component. Names are case-sensitive UTF-8 without null characters, borrowed for
-        // the call. Exceptions thrown by the lookup or the method return ManagedException
-        // (OverflowException returns Overflow) with their details.
-        [[nodiscard]] CallResult<std::int32_t> InvokeInt32(std::string_view typeName, std::string_view methodName,
-                                                           std::int32_t left, std::int32_t right) const;
-
         // Idempotent. Invalidates this owner even when the unload request reports an error.
         [[nodiscard]] CallResult<void> Release();
 
