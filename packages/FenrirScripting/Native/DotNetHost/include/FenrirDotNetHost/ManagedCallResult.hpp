@@ -8,7 +8,7 @@ namespace Fenrir::Scripting
 {
     enum class ManagedCallStatus : std::int32_t
     {
-        // 0..5 match the managed BridgeStatus wire contract.
+        // 0..5 are the managed bridge's wire statuses (BridgeStatus); negative values are native-only.
         Success = 0,
         InvalidArgument = 1,
         Overflow = 2,
@@ -20,22 +20,38 @@ namespace Fenrir::Scripting
         InvalidResponse = -3
     };
 
-    struct Int32CallResult
+    /**
+     * @brief The outcome of one call into managed code.
+     *
+     * `value` is present only on Success. `diagnostic` owns UTF-8 text: the managed exception's
+     * ToString(), at most 4096 bytes and cut on a scalar boundary (`diagnosticTruncated`), or a
+     * native fallback when managed details are missing or invalid. A call is never repeated to
+     * produce its diagnostic. Results reference no host or owner storage.
+     */
+    template <typename T>
+    struct ManagedCallResult
     {
         ManagedCallStatus status = ManagedCallStatus::NotInitialized;
-        // Present only on Success; failure never exposes the output buffer.
-        std::optional<std::int32_t> value;
-        // Owning UTF-8 exception details, or a native fallback.
+        std::optional<T> value;
         std::string diagnostic;
         bool diagnosticTruncated = false;
+
+        [[nodiscard]] bool Succeeded() const noexcept
+        {
+            return status == ManagedCallStatus::Success;
+        }
     };
 
-    struct Utf8StringResult
+    template <>
+    struct ManagedCallResult<void>
     {
         ManagedCallStatus status = ManagedCallStatus::NotInitialized;
-        // Owning UTF-8 bytes, present only on Success. No added BOM or terminator.
-        std::optional<std::string> value;
         std::string diagnostic;
         bool diagnosticTruncated = false;
+
+        [[nodiscard]] bool Succeeded() const noexcept
+        {
+            return status == ManagedCallStatus::Success;
+        }
     };
 } // namespace Fenrir::Scripting

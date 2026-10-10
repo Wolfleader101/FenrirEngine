@@ -15,6 +15,7 @@
 #include <iomanip>
 #include <limits>
 #include <sstream>
+#include <stdexcept>
 #include <system_error>
 #include <type_traits>
 #include <utility>
@@ -161,36 +162,43 @@ namespace Fenrir::Scripting
             // A failed new attempt must not keep the bridge from an earlier configuration.
             state->bridge.reset();
         }
+        const auto failed = [](std::string diagnostic) {
+            InitializationResult result;
+            result.diagnostic = std::move(diagnostic);
+            return result;
+        };
         if (configuration.runtimeConfigPath.empty())
         {
-            return {false, "A runtime configuration path is required."};
+            return failed("A runtime configuration path is required.");
         }
         std::error_code pathError;
         const auto runtimeConfig = std::filesystem::absolute(configuration.runtimeConfigPath, pathError);
         if (pathError || !std::filesystem::is_regular_file(runtimeConfig, pathError))
         {
-            return {false, "The runtime configuration must name an accessible regular file."};
+            return failed("The runtime configuration must name an accessible regular file.");
         }
         if (configuration.bridgeAssemblyPath.empty())
         {
-            return {false, "A managed bridge assembly path is required."};
+            return failed("A managed bridge assembly path is required.");
         }
         const auto bridgeAssembly = std::filesystem::absolute(configuration.bridgeAssemblyPath, pathError);
         if (pathError || !std::filesystem::is_regular_file(bridgeAssembly, pathError))
         {
-            return {false, "The managed bridge assembly must name an accessible regular file."};
+            return failed("The managed bridge assembly must name an accessible regular file.");
         }
 
         const auto discovery = DiscoverHostFxr(configuration.dotnetRoot);
         if (!discovery.success)
         {
-            return {false, discovery.diagnostic};
+            return failed(discovery.diagnostic);
         }
 
         const auto loaded = Detail::LoadHostFxr(discovery.hostFxrPath);
         if (loaded.library == nullptr)
         {
-            return {false, loaded.diagnostic, loaded.moduleLoaded, false};
+            auto result = failed(loaded.diagnostic);
+            result.hostFxrLoaded = loaded.moduleLoaded;
+            return result;
         }
 
         if (state == nullptr)
@@ -199,7 +207,9 @@ namespace Fenrir::Scripting
         }
         state->hostFxr = loaded.library;
 
-        InitializationResult result{false, {}, true, true};
+        InitializationResult result;
+        result.hostFxrLoaded = true;
+        result.requiredExportsResolved = true;
         // Declared before HostContext so unwind cleanup runs while capture is active.
         Detail::HostFxrDiagnostics diagnostics(loaded.library->setErrorWriter);
         const auto finish = [&diagnostics](InitializationResult outcome) {
@@ -286,58 +296,56 @@ namespace Fenrir::Scripting
         return state != nullptr && state->bridge != nullptr;
     }
 
-    ComponentLoadResult DotNetHost::LoadComponent(const std::filesystem::path& assemblyPath) const
+    ManagedCallResult<ManagedComponent> DotNetHost::LoadComponent(const std::filesystem::path& assemblyPath) const
     {
         if (!IsInitialized())
-            return {ManagedCallStatus::NotInitialized, {}, "The managed bridge is not initialized."};
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::NotInitialized,
+                                                     "The managed bridge is not initialized.");
+        }
         if (assemblyPath.empty())
-            return {ManagedCallStatus::InvalidArgument, {}, "A component assembly path is required."};
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
+                                                     "A component assembly path is required.");
+        }
         std::error_code error;
         const auto absolute = std::filesystem::absolute(assemblyPath, error);
         if (error)
-            return {ManagedCallStatus::InvalidArgument,
-                    {},
-                    "Cannot resolve the component assembly path: " + error.message()};
-        const auto path = Detail::HostStringToUtf8(absolute.native());
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
+                                                     "Cannot resolve the component assembly path: " + error.message());
+        }
+        std::string path;
+        try
+        {
+            path = Detail::HostStringToUtf8(absolute.native());
+        }
+        catch (const std::invalid_argument&)
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
+                                                     "The component path is not valid Unicode text.");
+        }
         if (path.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
-            return {ManagedCallStatus::InvalidArgument,
-                    {},
-                    "Component path exceeds the bridge's 32-bit byte length limit."};
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
+                                                     "Component path exceeds the bridge's 32-bit byte length limit.");
+        }
 
-        // Allocate all ownership storage before entering managed code. The owner
-        // immediately guards any returned token, including malformed responses.
+        // The owner exists before managed code runs, so it releases any token the bridge returns,
+        // including one that arrives with a malformed response.
         auto componentState = std::make_unique<ManagedComponent::State>();
         componentState->bridge = state->bridge;
-        auto component = std::unique_ptr<ManagedComponent>(new ManagedComponent(std::move(componentState)));
+        ManagedComponent component(std::move(componentState));
         Detail::ManagedDiagnosticBuffer diagnostic;
-        std::int32_t collectible = 0;
         const auto status = state->bridge->load(reinterpret_cast<const std::uint8_t*>(path.data()),
-                                                static_cast<std::int32_t>(path.size()), &component->state->token,
-                                                &collectible, diagnostic.bytes.data(), diagnostic.Capacity,
-                                                &diagnostic.written, &diagnostic.truncated);
-        ComponentLoadResult result;
-        switch (static_cast<ManagedCallStatus>(status))
+                                                static_cast<std::int32_t>(path.size()), &component.state->token,
+                                                diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written,
+                                                &diagnostic.truncated);
+        if (status == 0 && component.state->token == 0)
         {
-        case ManagedCallStatus::Success:
-            if (component->state->token == 0 || collectible != 1)
-                return {ManagedCallStatus::InvalidResponse,
-                        {},
-                        "Component load returned an invalid token or collectible flag."};
-            component->state->isCollectible = true;
-            result = {ManagedCallStatus::Success, std::move(component), {}};
-            break;
-        case ManagedCallStatus::InvalidArgument:
-            result = {ManagedCallStatus::InvalidArgument, {}, "The managed component loader rejected an argument."};
-            break;
-        case ManagedCallStatus::ManagedException:
-            result = {ManagedCallStatus::ManagedException, {}, "The managed component loader caught an exception."};
-            break;
-        default:
-            result = {ManagedCallStatus::UnexpectedStatus,
-                      {},
-                      "Component load returned an unexpected status: " + std::to_string(status)};
-            break;
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidResponse,
+                                                     "Component load returned the invalid token 0.");
         }
-        return diagnostic.ApplyTo(std::move(result));
+        return Detail::CompleteCall<ManagedComponent>(status, "LoadComponent", diagnostic, std::move(component));
     }
 } // namespace Fenrir::Scripting

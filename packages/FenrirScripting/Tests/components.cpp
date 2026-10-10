@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
@@ -20,8 +21,8 @@ namespace
     {
         const auto info = owner.GetInfo();
         Check(info.status == Fenrir::Scripting::ManagedCallStatus::Success && info.value &&
-                  info.value->assemblyName == "Fenrir.HostingComponent" && info.value->isCollectible,
-              "Component identity/collectibility incorrect");
+                  info.value->assemblyName == "Fenrir.HostingComponent",
+              "Component identity incorrect");
     }
     void CheckCalculation(const Fenrir::Scripting::ManagedComponent& owner)
     {
@@ -57,9 +58,9 @@ int main(int argc, char* argv[])
         Check(argc == 4, "Expected runtimeconfig, bridge, and component");
         HostConfiguration configuration{argv[1], argv[2], {}};
         const auto componentPath = std::filesystem::absolute(argv[3]);
-        std::unique_ptr<ManagedComponent> retained;
+        std::optional<ManagedComponent> retained;
         ComponentInfo snapshot;
-        Int32CallResult retainedFailure;
+        ManagedCallResult<std::int32_t> retainedFailure;
         {
             DotNetHost host;
             Check(host.LoadComponent(componentPath).status == ManagedCallStatus::NotInitialized,
@@ -192,8 +193,7 @@ int main(int argc, char* argv[])
         Check(stale.status == ManagedCallStatus::InvalidHandle && !stale.value &&
                   retainedFailure.diagnostic.find("InvalidOperationException") != std::string::npos,
               "Released owner remained callable or native diagnostic ownership ended");
-        Check(snapshot.assemblyName == "Fenrir.HostingComponent" && snapshot.isCollectible,
-              "Native snapshot lifetime ended with owner");
+        Check(snapshot.assemblyName == "Fenrir.HostingComponent", "Native snapshot lifetime ended with owner");
         std::cout << "Native component loading, invocation, failures, moves, release/unload observation, host "
                      "reset/destruction and snapshot "
                      "ownership passed.\n";
