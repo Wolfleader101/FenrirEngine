@@ -9,5 +9,7 @@
     <Compile Include="../../Managed/Iris.Bridge/ManagedDiagnostic.cs" Link="ManagedDiagnostic.cs" />
     <Compile Include="../../Managed/Iris.Bridge/BridgeFunctions.cs" Link="BridgeFunctions.cs" />
     <Compile Include="../../Managed/Iris.Bridge/BridgeStatus.cs" Link="BridgeStatus.cs" />
+    <Compile Include="../../Managed/Iris.Bridge/BridgeLog.cs" Link="BridgeLog.cs" />
+    <Compile Include="../../Managed/Iris.Bridge/BridgeArgumentException.cs" Link="BridgeArgumentException.cs" />
   </ItemGroup>
 </Project>

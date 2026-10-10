@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 13.
+Managed bridge initialized; bridge version 14.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -172,6 +172,22 @@ a return. A method that doesn't match (other name, return type, parameter types 
 including `OverflowException` and `ArgumentException`, is `ManagedException` with its own details; the
 status is never derived from the exception's type. A `Method` is a cheap value like `Type`, stops
 working (`InvalidHandle`) when its component is released, and does not keep it from unloading.
+
+### Logging
+
+`Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink):
+
+```cpp
+host.SetLogSink([](const Iris::LogMessage& message) { std::cerr << static_cast<int>(message.level) << ": " << message.text << '\n'; });
+```
+
+Messages arrive with a `LogLevel`. Bridge events (a component loaded or released, an assembly shared) are
+`Info`. A managed exception caught at a bridge boundary is reported with its full `ToString()`: `Error` for
+exceptions from component code, `Warning` for the bridge's own argument validation. The call that raised
+it still returns the same details in its result. A lookup that finds nothing (`NotFound`) is not an
+exception and is not logged. The sink runs synchronously on the calling thread. It may throw (the exception
+is swallowed) or clear itself, and it stays registered after the host that set it is destroyed, so what it
+captures must outlive it. `text` is only valid during the call.
 
 ### Lifetime rules
 

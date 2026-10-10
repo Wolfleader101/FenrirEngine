@@ -24,7 +24,8 @@ public static partial class Bootstrap
                 FindType = &FindType,
                 CopyTypeNameUtf8 = &CopyTypeNameUtf8,
                 FindMethod = &FindMethod,
-                InvokeMethod = &InvokeMethod
+                InvokeMethod = &InvokeMethod,
+                SetLogSink = &SetLogSink
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

@@ -39,6 +39,17 @@ public static partial class Bootstrap
         }
     }
 
+    // Registers (or, with a null callback, clears) the process-wide log sink. The callback receives the
+    // context, a LogLevel, and explicit-length UTF-8 text borrowed for the call. It runs synchronously on
+    // the thread making the bridge call and must not throw. The context must stay valid until cleared.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int SetLogSink(void* callback, void* context, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
+        BridgeLog.Set((IntPtr)callback, (IntPtr)context);
+        return (int)BridgeStatus.Success;
+    }
+
     // Shares an assembly with every component (see SharedAssemblies). The path is explicit-length UTF-8.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int RegisterSharedAssembly(byte* path, int length,
@@ -161,7 +172,7 @@ public static partial class Bootstrap
                     return (int)BridgeStatus.InvalidHandle;
                 default:
                     ManagedDiagnostic.Write(new TypeLoadException($"No public, closed type named '{typeName}' is defined in the component assembly."),
-                        new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
                     return (int)BridgeStatus.NotFound;
             }
         }
@@ -238,7 +249,7 @@ public static partial class Bootstrap
                     return (int)BridgeStatus.InvalidHandle;
                 default:
                     ManagedDiagnostic.Write(new MissingMethodException($"No public static, non-generic method '{methodName}' with the requested return and parameter types was found."),
-                        new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
                     return (int)BridgeStatus.NotFound;
             }
         }

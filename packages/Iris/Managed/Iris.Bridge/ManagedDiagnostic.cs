@@ -15,10 +15,11 @@ internal static class ManagedDiagnostic
 
     // Called with validated storage from inside an export's catch block. Reporting
     // must itself contain ordinary exceptions, including user-overridden ToString.
-    internal static void Write(Exception exception, Span<byte> destination, out int written, out int truncated)
+    internal static void Write(Exception exception, Span<byte> destination, out int written, out int truncated, bool report = true)
     {
         written = 0;
         truncated = 0;
+        if (report) BridgeLog.Report(exception);
         try
         {
             foreach (Rune rune in exception.ToString().EnumerateRunes())

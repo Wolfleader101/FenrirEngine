@@ -38,6 +38,7 @@ internal static class SharedAssemblies
             }
             ByName.Add(name, AssemblyLoadContext.Default.LoadFromAssemblyPath(path));
         }
+        BridgeLog.Write(LogLevel.Info, $"Sharing assembly '{name}' with every component.");
     }
 
     internal static bool IsShared(string? name)
