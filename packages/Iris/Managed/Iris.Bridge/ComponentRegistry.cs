@@ -9,7 +9,7 @@ namespace Iris.Bridge;
 internal static class ComponentRegistry
 {
     // A method resolved by exact signature, with the wire kinds of its parameters and return value.
-    private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, int ReturnKind, bool IsStatic);
+    private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, Type[] ParameterTypes, int ReturnKind, bool IsStatic);
 
     // Handles to types and methods looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
@@ -143,9 +143,34 @@ internal static class ComponentRegistry
         }
     }
 
-    // Finds a public static, non-generic method on a looked-up type by name and exact parameter and
-    // return kinds. Looking the same method up again returns the same handle. UnmanagedCallersOnly
-    // methods are excluded.
+    // Class and interface types an object handle can stand for. string and arrays are separate kinds.
+    private static bool IsObjectType(Type type) =>
+        (type.IsClass || type.IsInterface) && type != typeof(string) && !type.IsArray && !type.IsByRef && !type.IsPointer &&
+        !type.ContainsGenericParameters;
+
+    private static bool KindMatches(Type type, int kind, bool isReturn)
+    {
+        switch ((ValueKind)kind)
+        {
+            case ValueKind.Object: return IsObjectType(type);
+            case ValueKind.Void: return isReturn && type == typeof(void);
+            default: return type == ValueKinds.ToType(kind, allowVoid: false);
+        }
+    }
+
+    private static bool SignatureMatches(ParameterInfo[] parameters, int[] kinds)
+    {
+        if (parameters.Length != kinds.Length) return false;
+        for (int index = 0; index < kinds.Length; ++index)
+            if (!KindMatches(parameters[index].ParameterType, kinds[index], isReturn: false)) return false;
+        return true;
+    }
+
+    // Finds a public, non-generic method on a looked-up type by name and signature: by-value kinds must
+    // match exactly, and an Object kind matches any class or interface type. Static methods must be
+    // declared on the type; instance methods may be inherited, and a call through a base type's method
+    // dispatches virtually. UnmanagedCallersOnly methods are excluded. Looking the same method up again
+    // returns the same handle. A signature that matches more than one overload is ambiguous.
     internal static FindResult TryFindMethod(ulong token, ulong typeId, string name, int returnKind, int[] parameterKinds, bool isStatic, out ulong methodId)
     {
         methodId = 0;
@@ -158,25 +183,21 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
-        Type returnType = ValueKinds.ToType(returnKind, allowVoid: true);
-        var parameterTypes = new Type[parameterKinds.Length];
-        for (int index = 0; index < parameterTypes.Length; ++index)
-            parameterTypes[index] = ValueKinds.ToType(parameterKinds[index], allowVoid: false);
-
-        // No registry lock is held while reflecting, which can load assemblies.
-        // Static methods must be declared on the type; instance methods may be inherited, and a call
-        // through a base type's method dispatches virtually to the object's override.
         BindingFlags flags = isStatic ? BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly
                                       : BindingFlags.Public | BindingFlags.Instance;
-        MethodInfo? method = type.GetMethod(name, flags, binder: null, types: parameterTypes, modifiers: null);
-        if (method == null || method.ReturnType != returnType || method.IsGenericMethod ||
-            method.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false))
-            return FindResult.NotFound;
-        // The default binder accepts widening conversions (an int argument for a long parameter), but
-        // the native types name the managed signature exactly, so every parameter must match.
-        ParameterInfo[] declared = method.GetParameters();
-        for (int index = 0; index < declared.Length; ++index)
-            if (declared[index].ParameterType != parameterTypes[index]) return FindResult.NotFound;
+        // No registry lock is held while reflecting, which can load assemblies.
+        MethodInfo? method = null;
+        foreach (MethodInfo candidate in type.GetMethods(flags))
+        {
+            if (candidate.Name != name || candidate.IsGenericMethod ||
+                candidate.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false) ||
+                !KindMatches(candidate.ReturnType, returnKind, isReturn: true) || !SignatureMatches(candidate.GetParameters(), parameterKinds))
+                continue;
+            if (method != null)
+                throw new BridgeArgumentException($"The signature matches more than one overload of '{name}'; object parameters match any class, so overloads that differ only by them are ambiguous.");
+            method = candidate;
+        }
+        if (method == null) return FindResult.NotFound;
         lock (Gate)
         {
             if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
@@ -184,22 +205,24 @@ internal static class ComponentRegistry
             if (!entry.Handles.MethodIds.TryGetValue(method, out methodId))
             {
                 methodId = checked(++lastMethodId);
+                Type[] parameterTypes = Array.ConvertAll(method.GetParameters(), parameter => parameter.ParameterType);
                 entry.Handles.MethodIds.Add(method, methodId);
-                entry.Handles.Methods.Add(methodId, new MethodRecord(method, (int[])parameterKinds.Clone(), returnKind, isStatic));
+                entry.Handles.Methods.Add(methodId, new MethodRecord(method, (int[])parameterKinds.Clone(), parameterTypes, returnKind, isStatic));
             }
             return FindResult.Found;
         }
     }
 
     // Runs a found static method. False for an unknown component or method handle. Throws
-    // BridgeArgumentException for a wrong argument count or an instance method; component exceptions
-    // propagate unwrapped.
+    // BridgeArgumentException for a wrong argument count, an instance method or an object argument of the
+    // wrong type, and BridgeHandleException for an object argument that is not held; component
+    // exceptions propagate unwrapped.
     internal static bool TryInvokeMethod(ulong token, ulong methodId, ReadOnlySpan<ulong> arguments, out ulong result)
     {
         result = 0;
-        if (!TryGetMethod(token, methodId, requireObject: false, 0, out MethodRecord? method, out _)) return false;
+        if (!TryGetMethod(token, methodId, requireObject: false, 0, out Entry? entry, out MethodRecord? method, out _)) return false;
         if (!method!.IsStatic) throw new BridgeArgumentException("An instance method needs an object.");
-        result = Run(method, null, arguments);
+        result = Run(token, entry!, method, null, arguments);
         return true;
     }
 
@@ -209,45 +232,89 @@ internal static class ComponentRegistry
     internal static bool TryInvokeInstanceMethod(ulong token, ulong methodId, ulong objectId, ReadOnlySpan<ulong> arguments, out ulong result)
     {
         result = 0;
-        if (!TryGetMethod(token, methodId, requireObject: true, objectId, out MethodRecord? method, out object? target)) return false;
+        if (!TryGetMethod(token, methodId, requireObject: true, objectId, out Entry? entry, out MethodRecord? method, out object? target)) return false;
         if (method!.IsStatic) throw new BridgeArgumentException("A static method cannot be invoked on an object.");
         if (!method.Method.DeclaringType!.IsInstanceOfType(target))
             throw new BridgeArgumentException("The object is not an instance of the method's declaring type.");
-        result = Run(method, target, arguments);
+        result = Run(token, entry!, method, target, arguments);
         return true;
     }
 
-    private static bool TryGetMethod(ulong token, ulong methodId, bool requireObject, ulong objectId, out MethodRecord? method, out object? target)
+    private static bool TryGetMethod(ulong token, ulong methodId, bool requireObject, ulong objectId,
+        out Entry? entry, out MethodRecord? method, out object? target)
     {
+        entry = null;
         method = null;
         target = null;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
-                !entry.Handles.Methods.TryGetValue(methodId, out MethodRecord? found)) return false;
-            if (requireObject && !entry.Handles.Objects.TryGetValue(objectId, out target)) return false;
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Methods.TryGetValue(methodId, out MethodRecord? found)) return false;
+            if (requireObject && !active.Handles.Objects.TryGetValue(objectId, out target)) return false;
+            entry = active;
             method = found;
             return true;
         }
     }
 
-    private static ulong Run(MethodRecord method, object? target, ReadOnlySpan<ulong> arguments)
+    // Turns wire slots into managed arguments. An Object slot is looked up in the component's table and
+    // must be an instance of the parameter type, which is the only place the real type can be checked.
+    private static object?[] ConvertArguments(Entry entry, int[] kinds, Type[] types, ReadOnlySpan<ulong> arguments)
+    {
+        var values = new object?[arguments.Length];
+        for (int index = 0; index < values.Length; ++index)
+        {
+            if ((ValueKind)kinds[index] != ValueKind.Object)
+            {
+                values[index] = ValueKinds.ToObject(kinds[index], arguments[index]);
+                continue;
+            }
+            object? argument;
+            lock (Gate)
+            {
+                if (!entry.Handles.Objects.TryGetValue(arguments[index], out argument))
+                    throw new BridgeHandleException($"Argument {index} is not an object this component holds.");
+            }
+            if (!types[index].IsInstanceOfType(argument))
+                throw new BridgeArgumentException($"Argument {index} is not an instance of {types[index]}.");
+            values[index] = argument;
+        }
+        return values;
+    }
+
+    // Roots a returned object under a new handle, so each return is independently owned even when it is
+    // the same managed object. Null is the zero handle.
+    private static ulong ReturnSlot(ulong token, Entry entry, int kind, object? returned)
+    {
+        if ((ValueKind)kind != ValueKind.Object) return ValueKinds.ToSlot(kind, returned);
+        if (returned == null) return 0;
+        lock (Gate)
+        {
+            // The component may have been released while the method ran; then the object is dropped.
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                throw new BridgeHandleException("The component was released during the call.");
+            ulong id = checked(++lastObjectId);
+            entry.Handles.Objects.Add(id, returned);
+            return id;
+        }
+    }
+
+    private static ulong Run(ulong token, Entry entry, MethodRecord method, object? target, ReadOnlySpan<ulong> arguments)
     {
         if (arguments.Length != method.ParameterKinds.Length)
             throw new BridgeArgumentException($"The method takes {method.ParameterKinds.Length} arguments, not {arguments.Length}.");
-        var values = new object[arguments.Length];
-        for (int index = 0; index < values.Length; ++index)
-            values[index] = ValueKinds.ToObject(method.ParameterKinds[index], arguments[index]);
-        // No registry lock is held while user code runs. The locals root the method and target for the call.
+        object?[] values = ConvertArguments(entry, method.ParameterKinds, method.ParameterTypes, arguments);
+        // No registry lock is held while user code runs. The locals root the method, target and arguments
+        // for the call.
         object? returned = method.Method.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);
-        return ValueKinds.ToSlot(method.ReturnKind, returned);
+        return ReturnSlot(token, entry, method.ReturnKind, returned);
     }
 
     internal enum CreateResult { Created, NotFound, InvalidHandle }
 
-    // Constructs an object of a looked-up type with the public constructor whose parameters match the
-    // kinds exactly, and roots it in the component. A constructor exception propagates unwrapped and
-    // roots nothing.
+    // Constructs an object of a looked-up type with the public constructor whose signature matches (see
+    // TryFindMethod for the matching rules) and roots it in the component. A constructor exception
+    // propagates unwrapped and roots nothing.
     internal static CreateResult TryCreateObject(ulong token, ulong typeId, int[] parameterKinds, ReadOnlySpan<ulong> arguments, out ulong objectId)
     {
         objectId = 0;
@@ -260,18 +327,18 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
-        var parameterTypes = new Type[parameterKinds.Length];
-        for (int index = 0; index < parameterTypes.Length; ++index)
-            parameterTypes[index] = ValueKinds.ToType(parameterKinds[index], allowVoid: false);
         if (type.IsAbstract || type.IsInterface) return CreateResult.NotFound;
-        ConstructorInfo? constructor = type.GetConstructor(BindingFlags.Public | BindingFlags.Instance, binder: null, types: parameterTypes, modifiers: null);
+        ConstructorInfo? constructor = null;
+        foreach (ConstructorInfo candidate in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        {
+            if (!SignatureMatches(candidate.GetParameters(), parameterKinds)) continue;
+            if (constructor != null)
+                throw new BridgeArgumentException("The signature matches more than one constructor; object parameters match any class, so constructors that differ only by them are ambiguous.");
+            constructor = candidate;
+        }
         if (constructor == null) return CreateResult.NotFound;
-        ParameterInfo[] declared = constructor.GetParameters();
-        for (int index = 0; index < declared.Length; ++index)
-            if (declared[index].ParameterType != parameterTypes[index]) return CreateResult.NotFound;
-        var values = new object[arguments.Length];
-        for (int index = 0; index < values.Length; ++index)
-            values[index] = ValueKinds.ToObject(parameterKinds[index], arguments[index]);
+        Type[] parameterTypes = Array.ConvertAll(constructor.GetParameters(), parameter => parameter.ParameterType);
+        object?[] values = ConvertArguments(entry, parameterKinds, parameterTypes, arguments);
 
         // No registry lock is held while the constructor runs.
         object instance = constructor.Invoke(BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);

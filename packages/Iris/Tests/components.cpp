@@ -22,6 +22,7 @@ namespace
     constexpr std::string_view StepCounterType = "Iris.Examples.Component.StepCounter";
     constexpr std::string_view ShapeType = "Iris.Examples.Component.Shape";
     constexpr std::string_view OtherType = "Iris.Examples.Component.Other";
+    constexpr std::string_view FactoryType = "Iris.Examples.Component.Factory";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -654,6 +655,106 @@ namespace
                  const auto ping = *other.FindInstanceMethod<std::int32_t()>("Ping").value;
                  Check(ping.Invoke(*object.value).status == CallStatus::InvalidArgument,
                        "An object of the wrong type was accepted");
+             }},
+            {"methods return objects, and null is an empty optional",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto factory = *component.FindType(FactoryType).value;
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 const auto make = factory.FindMethod<std::optional<Object>(std::int32_t)>("Make");
+                 Check(make.Succeeded(), "Lookup of a method returning an object failed: " + make.diagnostic);
+                 auto made = make.value->Invoke(7);
+                 Check(made.Succeeded() && made.value->has_value() && (*made.value)->IsValid(),
+                       "A returned object was not delivered");
+                 Check(value.Invoke(**made.value).value == 7, "A returned object lost its state");
+                 const auto nothing = factory.FindMethod<std::optional<Object>()>("Nothing").value->Invoke();
+                 Check(nothing.Succeeded() && nothing.value.has_value() && !nothing.value->has_value(),
+                       "A null return was not an explicit empty optional");
+                 // A returned object is owned, so it keeps its component from being released.
+                 Check(component.Release().status == CallStatus::InUse,
+                       "A component with a returned object was released");
+                 Check((*made.value)->Release().Succeeded() && component.Release().Succeeded(),
+                       "Releasing the returned object failed");
+             }},
+            {"returning one managed object twice gives independent handles",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto self = *counter.FindInstanceMethod<std::optional<Object>()>("Self").value;
+                 const auto add = *counter.FindInstanceMethod<void(std::int32_t)>("Add").value;
+                 const auto value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 auto origin = counter.CreateObject(std::int32_t{3});
+                 auto first = self.Invoke(*origin.value);
+                 auto second = self.Invoke(*origin.value);
+                 Check(first.Succeeded() && second.Succeeded() && first.value->has_value() && second.value->has_value(),
+                       "Self did not return objects");
+                 Check(add.Invoke(**first.value, 4).Succeeded() && value.Invoke(**second.value).value == 7 &&
+                           value.Invoke(*origin.value).value == 7,
+                       "The handles did not refer to the same managed object");
+                 Check((*first.value)->Release().Succeeded(), "Releasing a returned handle failed");
+                 Check(value.Invoke(**second.value).value == 7 && value.Invoke(*origin.value).value == 7,
+                       "Releasing one handle affected another");
+                 Check(component.Release().status == CallStatus::InUse,
+                       "Handles still alive did not hold the component");
+                 Check((*second.value)->Release().Succeeded() && origin.value->Release().Succeeded() &&
+                           component.Release().Succeeded(),
+                       "The component was not releasable after every handle");
+             }},
+            {"objects are passed as arguments and checked before the call",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 auto other = Load(*host, arguments.component);
+                 const auto factory = *component.FindType(FactoryType).value;
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto total = factory.FindMethod<std::int32_t(const Object&, const Object&)>("Total");
+                 const auto combine = counter.FindInstanceMethod<std::int32_t(const Object&)>("Combine");
+                 Check(total.Succeeded() && combine.Succeeded(),
+                       "Lookup of methods taking objects failed: " + total.diagnostic);
+                 auto a = counter.CreateObject(std::int32_t{3});
+                 auto b = counter.CreateObject(std::int32_t{4});
+                 Check(total.value->Invoke(*a.value, *b.value).value == 7 &&
+                           combine.value->Invoke(*a.value, *b.value).value == 7,
+                       "Object arguments were not passed");
+
+                 // The managed parameter type is checked before the call runs.
+                 auto wrong = component.FindType(OtherType).value->CreateObject();
+                 const auto mismatch = total.value->Invoke(*a.value, *wrong.value);
+                 Check(mismatch.status == CallStatus::InvalidArgument && !mismatch.value &&
+                           mismatch.diagnostic.find("instance of") != std::string::npos,
+                       "An object of the wrong type was passed");
+
+                 // Released, moved-from and foreign objects are rejected.
+                 auto released = counter.CreateObject(std::int32_t{1});
+                 Check(released.value->Release().Succeeded(), "Release failed");
+                 Check(total.value->Invoke(*a.value, *released.value).status == CallStatus::InvalidHandle,
+                       "A released object was passed");
+                 auto foreign = other.FindType(CounterType).value->CreateObject();
+                 Check(total.value->Invoke(*a.value, *foreign.value).status == CallStatus::InvalidArgument,
+                       "An object from another component was passed");
+                 Check(total.value->Invoke(*a.value, *b.value).value == 7,
+                       "A call did not recover after rejected arguments");
+
+                 // Constructors take objects too.
+                 auto copy = counter.CreateObject(*a.value);
+                 Check(copy.Succeeded() &&
+                           counter.FindInstanceMethod<std::int32_t()>("Value").value->Invoke(*copy.value).value == 3,
+                       "A constructor did not receive an object argument");
+             }},
+            {"overloads that differ only by object parameter types are ambiguous",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto factory = *component.FindType(FactoryType).value;
+                 const auto describe = factory.FindMethod<std::int32_t(const Object&)>("Describe");
+                 Check(describe.status == CallStatus::InvalidArgument &&
+                           describe.diagnostic.find("ambiguous") != std::string::npos,
+                       "An ambiguous object signature was not InvalidArgument");
+                 Check(factory.FindMethod<std::int32_t(std::int32_t)>("Describe").status == CallStatus::NotFound,
+                       "A by-value signature matched an object overload");
              }},
             {"a Unicode path loads, and a missing dependency fails only when used",
              [&] {

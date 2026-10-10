@@ -89,4 +89,4 @@ target_link_libraries(IrisUnsupportedTypeShouldNotCompile PRIVATE Iris::Iris)
 add_test(NAME UnsupportedTypeDoesNotCompile
     COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG> --target IrisUnsupportedTypeShouldNotCompile)
 set_tests_properties(UnsupportedTypeDoesNotCompile PROPERTIES
-    PASS_REGULAR_EXPRESSION "Only bool, sized integers, float and double cross the boundary by value")
+    PASS_REGULAR_EXPRESSION "Only bool, sized integers, float, double and Object cross the boundary by value")

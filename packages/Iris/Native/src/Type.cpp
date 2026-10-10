@@ -75,8 +75,13 @@ namespace Iris
     }
 
     CallResult<Object> Type::CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
-                                             std::span<const std::uint64_t> arguments) const
+                                             std::span<std::uint64_t> slots,
+                                             std::span<const Object* const> objects) const
     {
+        if (const auto problem = Detail::RawMethod::ResolveObjects(state->component, slots, objects))
+        {
+            return Detail::Failure<Object>(problem->first, problem->second);
+        }
         std::vector<std::int32_t> kinds;
         kinds.reserve(parameterKinds.size());
         for (const auto kind : parameterKinds)
@@ -86,7 +91,7 @@ namespace Iris
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t objectId = 0;
         const auto status = state->bridge->createObject(
-            state->component, state->type, kinds.data(), arguments.data(), static_cast<std::int32_t>(kinds.size()),
+            state->component, state->type, kinds.data(), slots.data(), static_cast<std::int32_t>(kinds.size()),
             &objectId, diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
         if (static_cast<CallStatus>(status) == CallStatus::Success && objectId == 0)
         {
