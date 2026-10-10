@@ -31,3 +31,10 @@ From the ticket 03 review (review 01, O5): the fixture bridge still selects beha
 - **N2:** the public headers state each contract once.
 
 9/9 CTests pass in Debug and Release on Windows.
+
+Deliberate behaviour changes, found by the ticket 04 review:
+- Every native call site now accepts any bridge status 1–5. Previously each call accepted only the statuses its export returns, and turned the rest into `UnexpectedStatus`.
+- Fallback messages are now uniform, in the form "`<Export>` caught a managed exception.".
+- The bridge table moved to version 9, because the `collectible` output was removed.
+
+Managed check groups still stop at their first failing check within a group; the groups themselves are independent. Fixture cases reset the fixture's process-wide mode when they load it.

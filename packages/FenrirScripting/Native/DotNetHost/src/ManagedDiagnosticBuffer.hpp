@@ -69,18 +69,30 @@ namespace Fenrir::Scripting::Detail
         return result;
     }
 
+    template <typename T, typename... Value>
+    [[nodiscard]] ManagedCallResult<T> Success(Value&&... value)
+    {
+        ManagedCallResult<T> result;
+        result.status = ManagedCallStatus::Success;
+        if constexpr (!std::is_void_v<T>)
+        {
+            result.value.emplace(std::forward<Value>(value)...);
+        }
+        return result;
+    }
+
     // Carries a failure's status and diagnostic over to a result of another type.
     template <typename T, typename U>
-    [[nodiscard]] ManagedCallResult<T> Failure(const ManagedCallResult<U>& failed)
+    [[nodiscard]] ManagedCallResult<T> PropagateFailure(const ManagedCallResult<U>& failed)
     {
         auto result = Failure<T>(failed.status, failed.diagnostic);
         result.diagnosticTruncated = failed.diagnosticTruncated;
         return result;
     }
 
-    // Builds the result of one bridge call from its wire status. Success carries `value`; a bridge
-    // failure carries the managed diagnostic or a fallback naming `operation`; any other status
-    // becomes UnexpectedStatus.
+    // Builds the result of one bridge call from its wire status. Success carries `value`. Any bridge
+    // status 1..5 is passed through with the managed diagnostic, or a fallback naming `operation`;
+    // any other status becomes UnexpectedStatus without managed details.
     template <typename T, typename... Value>
     [[nodiscard]] ManagedCallResult<T> CompleteCall(std::int32_t status, const char* operation,
                                                     const ManagedDiagnosticBuffer& diagnostic, Value&&... value)
@@ -88,15 +100,8 @@ namespace Fenrir::Scripting::Detail
         const std::string name(operation);
         switch (static_cast<ManagedCallStatus>(status))
         {
-        case ManagedCallStatus::Success: {
-            ManagedCallResult<T> result;
-            result.status = ManagedCallStatus::Success;
-            if constexpr (!std::is_void_v<T>)
-            {
-                result.value.emplace(std::forward<Value>(value)...);
-            }
-            return diagnostic.ApplyTo(std::move(result));
-        }
+        case ManagedCallStatus::Success:
+            return diagnostic.ApplyTo(Success<T>(std::forward<Value>(value)...));
         case ManagedCallStatus::InvalidArgument:
             return diagnostic.ApplyTo(Failure<T>(ManagedCallStatus::InvalidArgument, name + " rejected an argument."));
         case ManagedCallStatus::Overflow:
