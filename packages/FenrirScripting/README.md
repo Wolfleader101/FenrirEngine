@@ -89,7 +89,7 @@ Visual Studio build with tests enabled:
 
 ```powershell
 $managed = 'out/build/scripting/Tests/managed/Debug'
-.\out\build\scripting\Examples\Hosting\Debug\FenrirHostingExample.exe "$managed/checks/ManagedDiagnostics.runtimeconfig.json" "$managed/checks/Fenrir.ManagedHost.dll" "$managed/component/Fenrir.HostingComponent.dll"
+.\out\build\scripting\Examples\Hosting\Debug\FenrirHostingExample.exe "$managed/checks/ManagedChecks.runtimeconfig.json" "$managed/checks/Fenrir.ManagedHost.dll" "$managed/component/Fenrir.HostingComponent.dll"
 ```
 
 Expected output and exit code zero:

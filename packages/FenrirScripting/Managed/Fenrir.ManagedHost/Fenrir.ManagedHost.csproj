@@ -7,6 +7,6 @@
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="ManagedDiagnostics" />
+    <InternalsVisibleTo Include="ManagedChecks" />
   </ItemGroup>
 </Project>
