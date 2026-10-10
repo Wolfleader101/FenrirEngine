@@ -10,7 +10,7 @@ public static partial class Bootstrap
     // ABI v6. Token/flags and diagnostic storage are writable and non-overlapping.
     // No pointer is retained. A token is published only after registration succeeds.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
+    internal static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (token != null) *token = 0;
@@ -39,7 +39,7 @@ public static partial class Bootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int CopyComponentNameUtf8(ulong token, byte* destination, int capacity, int* required,
+    internal static unsafe int CopyComponentNameUtf8(ulong token, byte* destination, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
         bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
@@ -60,7 +60,7 @@ public static partial class Bootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+    internal static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
         try
@@ -75,7 +75,7 @@ public static partial class Bootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int GetComponentUnloadState(ulong token, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
+    internal static unsafe int GetComponentUnloadState(ulong token, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (state != null) *state = -1;
         bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
@@ -94,7 +94,7 @@ public static partial class Bootstrap
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+    internal static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
         try
@@ -111,7 +111,7 @@ public static partial class Bootstrap
     // Names are explicit-length UTF-8, borrowed only for this call. All caller
     // storage must be valid and non-overlapping. Only success publishes a value.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
+    internal static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
         int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (value != null) *value = 0;

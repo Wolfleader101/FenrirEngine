@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
                   std::is_nothrow_move_constructible_v<ManagedComponent>);
     try
     {
-        Check(argc == 5, "Expected runtimeconfig, real bridge, component, and incomplete bridge");
+        Check(argc == 4, "Expected runtimeconfig, bridge, and component");
         HostConfiguration configuration{argv[1], argv[2], {}};
         const auto componentPath = std::filesystem::absolute(argv[3]);
         std::unique_ptr<ManagedComponent> retained;
@@ -168,12 +168,10 @@ int main(int argc, char* argv[])
             Check(observation.GetUnloadStatus().status == ManagedCallStatus::InvalidHandle,
                   "Move-assignment retained the old observation");
 
-            const auto incomplete = host.Initialize({argv[1], argv[4], {}});
-            Check(!incomplete.success && !incomplete.componentMethodsResolved && !host.IsInitialized() &&
-                      incomplete.echoMethodResolved &&
-                      incomplete.diagnostic.find("GetComponentUnloadState") != std::string::npos,
-                  "Missing component exports published readiness");
-            CheckInfo(*retained); // Captured functions survive host reset/reinitialization.
+            // A failed attempt resets readiness; owners keep their captured bridge functions.
+            const auto failed = host.Initialize({configuration.runtimeConfigPath, {}, {}});
+            Check(!failed.success && !host.IsInitialized(), "A failed initialization kept readiness");
+            CheckInfo(*retained);
             CheckUnload(*retained, false);
             CheckCalculation(*retained);
             Check(host.Initialize(configuration).success, "Host did not recover after incomplete bridge");

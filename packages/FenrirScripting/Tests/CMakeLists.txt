@@ -15,10 +15,6 @@ add_custom_target(FenrirManagedDiagnosticChecksBuild ALL
         --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/checks"
     COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
         --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/fixture"
-    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
-        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/legacy" -p:LegacyBridge=true
-    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
-        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/incomplete" -p:MissingComponentMethods=true
     VERBATIM
 )
 
@@ -40,15 +36,21 @@ add_test(NAME ManagedDiagnosticContract
 add_test(NAME ManagedUnloadContract
     COMMAND "${fenrir_checks_dotnet}" "${fenrir_checks_managed}/checks/ManagedDiagnostics.dll" --unload "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")
 set_tests_properties(ManagedUnloadContract PROPERTIES TIMEOUT 30)
-foreach(fenrir_checks_mode IN ITEMS real fixture legacy)
+# The bridge is loaded into the default load context, so each bridge variant needs its own process.
+# The fixture bridge selects its handshake response from FENRIR_TEST_BRIDGE_MODE.
+foreach(fenrir_checks_mode IN ITEMS real fixture legacy oversized missing notbridge)
     if(fenrir_checks_mode STREQUAL "real")
         set(fenrir_checks_bridge "${fenrir_checks_managed}/checks/Fenrir.ManagedHost.dll")
+    elseif(fenrir_checks_mode STREQUAL "notbridge")
+        set(fenrir_checks_bridge "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")
     else()
-        set(fenrir_checks_bridge "${fenrir_checks_managed}/${fenrir_checks_mode}/Fenrir.ManagedHost.dll")
+        set(fenrir_checks_bridge "${fenrir_checks_managed}/fixture/Fenrir.ManagedHost.dll")
     endif()
     add_test(NAME "NativeDiagnostics-${fenrir_checks_mode}"
         COMMAND FenrirDiagnosticChecks "${fenrir_checks_mode}"
             "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json" "${fenrir_checks_bridge}")
+    set_tests_properties("NativeDiagnostics-${fenrir_checks_mode}" PROPERTIES
+        ENVIRONMENT "FENRIR_TEST_BRIDGE_MODE=${fenrir_checks_mode}")
 endforeach()
 
 add_executable(FenrirComponentChecks components.cpp)
@@ -66,5 +68,4 @@ endif()
 add_test(NAME NativeComponentOwnership COMMAND FenrirComponentChecks
     "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json"
     "${fenrir_checks_managed}/checks/Fenrir.ManagedHost.dll"
-    "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll"
-    "${fenrir_checks_managed}/incomplete/Fenrir.ManagedHost.dll")
+    "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")

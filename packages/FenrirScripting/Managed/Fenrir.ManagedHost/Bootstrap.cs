@@ -9,19 +9,31 @@ public static partial class Bootstrap
 {
     private const string Greeting = "Hello from .NET \u2014 \u03C0 \U0001F43A";
 
-    // The native host resolves this method through its assembly-loading runtime delegate.
-    // This is not a native DLL export and must not be called directly from C#.
-    // The native function pointer must use the matching int32_t(), Cdecl signature.
-    // Keep this handshake free of exceptions; unmanaged callers cannot catch managed exceptions.
+    // The only public entry point. The native host resolves it by name through the runtime's
+    // get_function_pointer delegate, then obtains every other export from the filled table.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static int GetBridgeVersion() => 6;
+    public static unsafe int GetBridgeFunctions(int version, void* table, int size,
+        int* reportedVersion, int* reportedSize)
+        => BridgeFunctions.Handshake(version, (BridgeFunctions*)table, size, reportedVersion, reportedSize,
+            BridgeFunctions.Version, sizeof(BridgeFunctions), new BridgeFunctions
+            {
+                TryAddInt32 = &TryAddInt32,
+                CopyGreetingUtf8 = &CopyGreetingUtf8,
+                EchoUtf8 = &EchoUtf8,
+                LoadComponent = &LoadComponent,
+                CopyComponentNameUtf8 = &CopyComponentNameUtf8,
+                ReleaseComponent = &ReleaseComponent,
+                InvokeComponentInt32 = &InvokeComponentInt32,
+                GetComponentUnloadState = &GetComponentUnloadState,
+                ForgetComponentUnload = &ForgetComponentUnload
+            });
 
     // All output storage is writable, non-overlapping, and borrowed only
     // during this call. Counts exclude a terminator. Null diagnostic is allowed
     // only for zero capacity; written/truncated are mandatory int32 outputs.
     // Truncation is 0 or 1 and never changes the operation's status.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int TryAddInt32(int left, int right, int* result,
+    internal static unsafe int TryAddInt32(int left, int right, int* result,
                                        byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (result != null) *result = 0;
@@ -54,7 +66,7 @@ public static partial class Bootstrap
     // No pointer is retained. All storage, including diagnostic metadata, must not
     // overlap. The immutable greeting is stable between query and copy.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes,
+    internal static unsafe int CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes,
                                              byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
         bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
@@ -80,7 +92,7 @@ public static partial class Bootstrap
     // Null input is valid only for length zero. Input, destination, and count storage
     // must not overlap. The caller must keep input unchanged between query and copy.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int EchoUtf8(byte* input, int inputLength, byte* destination, int capacity, int* requiredBytes,
+    internal static unsafe int EchoUtf8(byte* input, int inputLength, byte* destination, int capacity, int* requiredBytes,
                                      byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
         bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);

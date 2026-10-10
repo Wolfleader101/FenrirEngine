@@ -5,14 +5,12 @@ on ECS, rendering, the editor, or other Fenrir modules.
 
 The current step discovers and loads `hostfxr`, prepares a hosting context using
 a `.runtimeconfig.json`, obtains the assembly-loading runtime delegate, and closes
-the context. Obtaining the delegate starts or reuses CoreCLR. The native library
-then loads the managed bridge, resolves `Bootstrap.GetBridgeVersion`, and calls it.
-It also resolves `Bootstrap.TryAddInt32` for a small status-plus-output interop call
-and `Bootstrap.CopyGreetingUtf8` for a caller-owned UTF-8 buffer. `Bootstrap.EchoUtf8`
-decodes arbitrary native UTF-8 into a managed string and returns it through the same
-buffer contract.
-The bridge also exposes component loading, identity copying, integer invocation,
-release and weak unload observation.
+the context. Obtaining the delegates starts or reuses CoreCLR. The native library
+then loads the managed bridge into the default load context and calls its single
+public entry point, `Bootstrap.GetBridgeFunctions`, which fills a versioned table of
+function pointers. The table holds the demo interop calls (`TryAddInt32`,
+`CopyGreetingUtf8`, `EchoUtf8`) and the component operations: loading, identity
+copying, integer invocation, release and weak unload observation.
 `IsInitialized` becomes true only when the returned bridge version matches `6`
 and all ten required entry points have resolved.
 
@@ -116,7 +114,7 @@ Echo method resolved: true
 Component methods resolved: true
 Bridge version: 6
 Initialization succeeded: true
-Diagnostic: Managed bridge initialized; bridge version 6.
+Diagnostic: Managed bridge initialized; bridge version 7.
 Initialized after attempt: true
 Add(20, 22): status=0, value=42
 Add(INT32_MAX, 1): status=2, value=none
@@ -261,65 +259,49 @@ still completes the bridge handshake with version `6`.
 
 ## Runtime delegate acquisition
 
-Before closing an accepted context, `Initialize` calls `hostfxr_get_runtime_delegate`
-with `hdt_load_assembly_and_get_function_pointer`. This starts CoreCLR if necessary,
-or uses the already active compatible runtime. A zero return status and a non-null
-pointer are both required. Failure diagnostics identify this API and its status;
-a success status with a null pointer is also rejected.
+Before closing an accepted context, `Initialize` obtains two runtime delegates with
+`hostfxr_get_runtime_delegate`: `hdt_load_assembly` and `hdt_get_function_pointer`
+(both .NET 8+). This starts CoreCLR if necessary, or uses the already active
+compatible runtime. Each requires a zero status and a non-null pointer. The runtime
+owns the delegates; closing the host context does not invalidate them.
 
-The returned pointer is converted to the SDK's
-`load_assembly_and_get_function_pointer_fn` type and retained in private wrapper
-state after successful context closure. Its platform-specific ABI stays outside
-the public header. The runtime owns the delegate; closing its host context does
-not invalidate it. If delegate acquisition or closure fails, no new delegate is
-published to wrapper state. Each new initialization attempt clears the previously
-retained delegate, so a failed configuration cannot leave stale wrapper state.
-
-`runtimeDelegateObtained` reports successful acquisition during this attempt. It
-does not mean that a managed bridge method has been resolved. A false flag does
-not prove CoreCLR is absent: another host may have started it, or runtime startup
-may have partially progressed before an error. A successful delegate request is
-an irreversible process-level step; there is no CLR unload when the wrapper dies.
+`runtimeDelegateObtained` reports that both were obtained during this attempt. A
+false flag does not prove CoreCLR is absent: another host may have started it, or
+startup may have partly progressed before an error. Starting the runtime is an
+irreversible process-level step; there is no CLR unload when the wrapper dies.
 
 ## Managed bridge handshake
 
-After closing the context successfully, `Initialize` calls the retained assembly
-loader with the absolute bridge path, assembly-qualified type
-`Fenrir.ManagedHost.Bootstrap, Fenrir.ManagedHost`, and method name
-`GetBridgeVersion`. The delegate-type argument is `UNMANAGEDCALLERSONLY_METHOD`
-and the reserved argument is null. This obtains a native-callable pointer to the
-attributed static method rather than the SDK's default component entry point.
+See [ADR-0002](../../docs/adr/0002-bridge-in-default-load-context-with-function-table.md).
 
-The SDK assembly loader uses its own `CORECLR_DELEGATE_CALLTYPE` convention.
-The bridge method instead uses Cdecl and takes no parameters, returning a 32-bit
-integer. Its native function-pointer type explicitly matches the managed
-`CallConvCdecl` declaration; platform details remain private.
+1. `load_assembly` loads the bridge into the **default** load context
+   (`bridgeAssemblyLoaded`). A process holds one bridge assembly: loading a
+   different file with the same assembly name fails and is reported.
+2. `get_function_pointer` resolves `Fenrir.ManagedHost.Bootstrap.GetBridgeFunctions`
+   with `UNMANAGEDCALLERSONLY_METHOD`. This is the only public bridge entry point.
+3. Native code calls it with its expected version (currently `7`), a table buffer
+   and the table size. The bridge always reports its own version and table size
+   (`bridgeVersion`), and fills the table only if both match.
+4. A version mismatch, size mismatch or null table entry fails initialization with
+   a diagnostic naming the problem. No table entry is called before this check.
 
-A zero assembly-loader status and non-null method pointer are required before
-calling the method. `bridgeMethodResolved` reports resolution, and the optional
-`bridgeVersion` contains the returned value, even on a version mismatch. Version
-`6` is the current contract. Any other value fails with expected/received diagnostics.
-After a matching version, initialization also resolves `TryAddInt32` and
-`CopyGreetingUtf8` and `EchoUtf8` using the same loader and UCO marker. `interopMethodResolved`
-reports addition resolution; `greetingMethodResolved` reports greeting resolution.
-`echoMethodResolved` reports echo resolution. Initialization also resolves
-`LoadComponent`, `CopyComponentNameUtf8`, `ReleaseComponent`, `InvokeComponentInt32`,
-`GetComponentUnloadState` and `ForgetComponentUnload`;
-`componentMethodsResolved` reports resolution of all six. Only after all ten methods resolve
-are their pointers published to wrapper state and
-`success` and `IsInitialized` set to true. Each new attempt clears readiness first;
-a failed attempt leaves it false even if a previous attempt succeeded.
+Only then is the table published and `IsInitialized` true. Each new attempt clears
+readiness first. Component owners keep a shared reference to the table they were
+loaded with, so they work after the host is reset or destroyed.
 
-The handshake returns a constant and must remain free of exceptions escaping the
-managed method. Native C++ exception handling does not make that boundary safe.
-The addition export uses the error-reporting contract described below.
+The table is a sequence of Cdecl function pointers. Its field order, count and
+signatures are declared twice: in the managed `BridgeFunctions` struct, where
+assigning `&Method` type-checks each signature, and in the private native
+`Detail::BridgeFunctions`. Size assertions on both sides catch a different slot
+count, and the behaviour checks call every slot. Adding an export means adding a
+field on both sides and bumping the version.
 
 The example exits with zero only when initialization and its interop checks succeed.
-The deliberate overflow is an expected check. Configuration, hosting, method-resolution, and version failures exit with
-one. A bridge failure can occur after CoreCLR and the assembly have loaded; resetting
-wrapper state does not undo those process-resident resources. The bootstrap bridge
-has process lifetime. Separate collectible components can be loaded and invoked;
-unload status observes collection separately from release.
+The deliberate overflow is an expected check. Configuration, hosting, handshake and
+version failures exit with one. A bridge failure can occur after CoreCLR and the
+assembly have loaded; resetting wrapper state does not undo those process-resident
+resources. The bridge has process lifetime. Separate collectible components can be
+loaded and invoked; unload status observes collection separately from release.
 
 ## Integer interop and managed errors
 
@@ -391,9 +373,12 @@ cmake --build out/build/scripting --config Debug
 ctest --test-dir out/build/scripting -C Debug --output-on-failure
 ```
 
-The check target builds the managed bridge, a managed contract executable, and
-three test bridges, and publishes the example component with its private dependency
-under the CMake build directory. The six checks cover actual
+The check target builds the managed bridge, a managed contract executable and one
+fixture bridge, and publishes the example component with its private dependency
+under the CMake build directory. Each native bridge variant runs in its own process
+because the bridge lives in the default load context; the fixture selects its
+handshake response from `FENRIR_TEST_BRIDGE_MODE` (`legacy` version, `oversized`
+table, `missing` entry). `notbridge` passes a non-bridge assembly. The nine checks cover actual
 UCO pointer calls, every UTF-8 truncation boundary, buffer canaries, a throwing
 exception formatter, real native calls, owning diagnostics, malformed bridge
 responses, query/copy failures without retries or partial results, recovery,
@@ -408,8 +393,8 @@ types, missing types/methods, component exceptions (including ArgumentException)
 overflow, UTF-8 and pointer validation, bounded diagnostics, recovery, and stale
 tokens. Native fixture checks reject invalid diagnostic metadata and unknown
 statuses, and count failed invocations to verify they are never repeated to obtain
-diagnostics. An otherwise matching bridge missing only the unload-state export
-fails initialization before publishing readiness.
+diagnostics. A bridge whose table lacks only the unload-state entry fails
+initialization before publishing readiness.
 Dependency checks use the real registry and loader with isolated temporary
 deployments. They resolve a derived type to trigger loading, verify distinct private
 dependency assemblies in two collectible contexts, and verify resident bridge and
@@ -422,7 +407,7 @@ after eight load/invoke/release cycles, including component and private dependen
 assemblies. A retained `Type` keeps unloading pending; dropping it permits
 collection. Forgetting a pending observer does not retain the assemblies. Native
 checks cover state validation, moved/released observations, and destructor cleanup.
-All six checks have been executed in Debug on Windows. The isolated managed
+All nine checks have been executed in Debug on Windows. The isolated managed
 unload check also passes in Release with optimized JIT lifetimes. Linux and macOS
 execution is pending.
 With scripting disabled, test configuration is also skipped before .NET discovery.
@@ -606,10 +591,10 @@ manifest, and generated runtime configuration. There are no external package
 references. CMake may invoke `dotnet --list-sdks` for native pack discovery, but
 does not build the managed bridge.
 
-`Fenrir.ManagedHost.Bootstrap.GetBridgeVersion` is invoked by the native host
-with `UnmanagedCallersOnly` and an explicit Cdecl calling convention. It returns
-bridge version `6`. The attribute does not make this ordinary managed DLL a native
-exported library; the runtime delegate resolves the method.
+`Fenrir.ManagedHost.Bootstrap.GetBridgeFunctions` is invoked by the native host
+with `UnmanagedCallersOnly` and an explicit Cdecl calling convention. It fills the
+version-7 function table. The attribute does not make this ordinary managed DLL a
+native exported library; the runtime delegate resolves the method.
 
 ## Lifetime contract
 
@@ -771,7 +756,7 @@ Results and diagnostics remain valid after release and host destruction.
 The fixture's `Calculations.Add` executes `DependencyMath.Add` in the private
 dependency. The example checks 42, a missing method, a thrown exception, recovery
 to 4, invocation after host destruction, and rejection after release. Rebuild both
-the bridge and native example for ABI version 6.
+the bridge and native example for ABI version 7.
 
 ## Observing cooperative unloading
 

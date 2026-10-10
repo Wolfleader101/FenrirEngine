@@ -32,16 +32,13 @@ namespace Fenrir::Scripting
         bool requiredExportsResolved = false;
         bool runtimeConfigInitialized = false;
         bool hostContextClosed = false;
-        // This attempt obtained a non-null assembly-loading delegate from CoreCLR.
+        // This attempt obtained CoreCLR's load_assembly and get_function_pointer delegates.
         // False does not prove that the process runtime is absent (startup can fail partway).
         bool runtimeDelegateObtained = false;
-        bool bridgeMethodResolved = false;
-        // Populated only after the managed method returns, including a version mismatch.
+        // The bridge assembly is loaded into the default load context.
+        bool bridgeAssemblyLoaded = false;
+        // The version the bridge reported during the handshake, including a mismatch.
         std::optional<std::int32_t> bridgeVersion;
-        bool interopMethodResolved = false;
-        bool greetingMethodResolved = false;
-        bool echoMethodResolved = false;
-        bool componentMethodsResolved = false;
     };
 
     struct HostFxrDiscoveryResult
@@ -91,10 +88,10 @@ namespace Fenrir::Scripting
         /**
          * @brief Prepare this wrapper to use the configured managed bridge.
          *
-         * Success means the runtime delegate is ready and Bootstrap.GetBridgeVersion
-         * was resolved, called, and returned the supported version (currently 6).
-         * Bootstrap.TryAddInt32, CopyGreetingUtf8, and EchoUtf8 must also resolve before readiness.
-         * All six component exports, including unload observation/cleanup, must resolve too.
+         * Loads the bridge into the default load context, resolves Bootstrap.GetBridgeFunctions
+         * and fills the bridge function table. Success requires a matching table version
+         * (currently 7) and size, and a non-null entry in every slot. The process can hold only
+         * one bridge assembly; a different bridge path in the same process fails to load.
          * Both configuration paths must name existing files;
          * relative paths are resolved against the current working directory.
          * Different runtime properties in an existing runtime are rejected until

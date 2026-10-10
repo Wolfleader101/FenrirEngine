@@ -34,18 +34,46 @@ int main(int argc, char* argv[])
             DotNetHost host;
             Check(host.AddInt32(1, 2).status == ManagedCallStatus::NotInitialized, "Unready call accepted");
             const auto initialized = host.Initialize({argv[2], argv[3], {}});
+            // Handshake failures: the fixture selects its response from FENRIR_TEST_BRIDGE_MODE.
+            const auto checkRejected = [&](const char* expectedText, const char* message) {
+                Check(!initialized.success && !host.IsInitialized() &&
+                          initialized.diagnostic.find(expectedText) != std::string::npos,
+                      message);
+                Check(host.AddInt32(1, 2).status == ManagedCallStatus::NotInitialized &&
+                          host.LoadComponent(argv[3]).status == ManagedCallStatus::NotInitialized,
+                      "A rejected bridge published readiness");
+            };
             if (mode == "legacy")
             {
-                Check(!initialized.success && initialized.bridgeVersion == 5 && !initialized.interopMethodResolved &&
-                          !host.IsInitialized(),
-                      "Old ABI was resolved or published");
-                Check(initialized.diagnostic.find("expected 6, received 5") != std::string::npos,
-                      "Version diagnostic missing");
-                Check(host.AddInt32(1, 2).status == ManagedCallStatus::NotInitialized, "Old ABI was invoked");
-                std::cout << "Legacy bridge rejected before addition resolution.\n";
+                Check(initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 6,
+                      "Mismatched version was not reported");
+                checkRejected("expected 7, received 6", "Version mismatch accepted or undiagnosed");
+                std::cout << "Mismatched bridge version rejected before any table entry was used.\n";
                 return EXIT_SUCCESS;
             }
-            Check(initialized.success && initialized.bridgeVersion == 6 && initialized.componentMethodsResolved,
+            if (mode == "oversized")
+            {
+                Check(initialized.bridgeVersion == 7, "Matching version was not reported");
+                checkRejected("table size", "Table size mismatch accepted or undiagnosed");
+                std::cout << "Mismatched bridge table size rejected.\n";
+                return EXIT_SUCCESS;
+            }
+            if (mode == "missing")
+            {
+                Check(initialized.bridgeVersion == 7, "Matching version was not reported");
+                checkRejected("GetComponentUnloadState", "Null table entry accepted or not named");
+                std::cout << "Bridge table with a missing entry rejected.\n";
+                return EXIT_SUCCESS;
+            }
+            if (mode == "notbridge")
+            {
+                Check(initialized.runtimeDelegateObtained && !initialized.bridgeVersion,
+                      "A non-bridge assembly reported a handshake");
+                checkRejected("GetBridgeFunctions", "Non-bridge assembly accepted or undiagnosed");
+                std::cout << "Assembly without the bridge entry point rejected.\n";
+                return EXIT_SUCCESS;
+            }
+            Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 7,
                   initialized.diagnostic.c_str());
             if (mode == "real")
             {
