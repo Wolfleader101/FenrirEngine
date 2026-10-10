@@ -78,8 +78,9 @@ namespace Iris
          * constructor, is NotFound; an exception from the constructor is ManagedException and leaves
          * nothing rooted. The returned Object owns the new instance.
          */
-        template <PrimitiveValue... Args>
-        [[nodiscard]] CallResult<Object> CreateObject(Args... arguments) const;
+        template <typename... Args>
+            requires(Argument<Args> && ...)
+        [[nodiscard]] CallResult<Object> CreateObject(const Args&... arguments) const;
 
       private:
         friend class Component;
@@ -89,7 +90,8 @@ namespace Iris
                                                                   std::span<const Detail::ValueKind> parameterKinds,
                                                                   bool isStatic) const;
         [[nodiscard]] CallResult<Object> CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
-                                                         std::span<const std::uint64_t> arguments) const;
+                                                         std::span<std::uint64_t> slots,
+                                                         std::span<const Object* const> objects) const;
         std::shared_ptr<const State> state;
     };
 
@@ -128,12 +130,17 @@ namespace Iris
         return result;
     }
 
-    template <PrimitiveValue... Args>
-    CallResult<Object> Type::CreateObject(Args... arguments) const
+    template <typename... Args>
+        requires(Argument<Args> && ...)
+    CallResult<Object> Type::CreateObject(const Args&... arguments) const
     {
         const std::array<Detail::ValueKind, sizeof...(Args)> kinds = {Detail::KindOf<Args>()...};
-        const std::uint64_t slots[sizeof...(Args) + 1] = {Detail::ToSlot<Args>(arguments)..., 0};
+        std::uint64_t slots[sizeof...(Args) + 1] = {};
+        const Object* objects[sizeof...(Args) + 1] = {};
+        std::size_t index = 0;
+        ((Detail::PackArgument(slots[index], objects[index], arguments), ++index), ...);
         return CreateObjectRaw(std::span<const Detail::ValueKind>(kinds),
-                               std::span<const std::uint64_t>(slots, sizeof...(Args)));
+                               std::span<std::uint64_t>(slots, sizeof...(Args)),
+                               std::span<const Object* const>(objects, sizeof...(Args)));
     }
 } // namespace Iris

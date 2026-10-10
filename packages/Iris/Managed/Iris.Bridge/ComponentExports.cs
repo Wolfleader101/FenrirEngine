@@ -35,7 +35,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+            return (int)StatusFor(exception);
         }
     }
 
@@ -193,7 +193,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return (int)StatusFor(exception);
         }
     }
 
@@ -254,7 +254,7 @@ public static partial class Bootstrap
             for (int index = 0; index < paramCount; ++index)
             {
                 kinds[index] = paramKinds[index];
-                ValueKinds.ToType(kinds[index], allowVoid: false);
+                ValueKinds.ValidateParameter(kinds[index]);
             }
         }
         catch (Exception exception)
@@ -281,7 +281,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return (int)StatusFor(exception);
         }
     }
 
@@ -306,7 +306,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+            return (int)StatusFor(exception);
         }
     }
 
@@ -330,7 +330,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+            return (int)StatusFor(exception);
         }
     }
 
@@ -353,7 +353,7 @@ public static partial class Bootstrap
             for (int index = 0; index < count; ++index)
             {
                 kinds[index] = paramKinds[index];
-                ValueKinds.ToType(kinds[index], allowVoid: false);
+                ValueKinds.ValidateParameter(kinds[index]);
             }
             switch (ComponentRegistry.TryCreateObject(token, typeId, kinds, new ReadOnlySpan<ulong>(arguments, count), out ulong created))
             {
@@ -371,7 +371,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+            return (int)StatusFor(exception);
         }
     }
 
@@ -391,4 +391,13 @@ public static partial class Bootstrap
             return (int)BridgeStatus.ManagedException;
         }
     }
+
+    // Bridge validation is InvalidArgument and a stale handle is InvalidHandle; anything else, including
+    // every exception from component code, is ManagedException.
+    private static BridgeStatus StatusFor(Exception exception) => exception switch
+    {
+        BridgeArgumentException => BridgeStatus.InvalidArgument,
+        BridgeHandleException => BridgeStatus.InvalidHandle,
+        _ => BridgeStatus.ManagedException
+    };
 }

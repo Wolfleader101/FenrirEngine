@@ -201,6 +201,30 @@ destroyed safely in any order. An object only works with methods from its own co
 destruction is not. Only classes are constructed: a type with no public constructor of the requested
 signature, including a struct (which has no explicit parameterless constructor), is `NotFound`.
 
+### Objects as arguments and returns
+
+An `Object` can be passed to a method or constructor by declaring the parameter as `const Object&`, and a
+method can return one by declaring `std::optional<Object>`:
+
+```cpp
+const auto make  = factory.FindMethod<std::optional<Object>(std::int32_t)>("Make").value;  // static Counter Make(int)
+const auto total = factory.FindMethod<std::int32_t(const Object&, const Object&)>("Total").value;
+auto a = make->Invoke(3);                                  // CallResult<std::optional<Object>>
+auto b = make->Invoke(4);
+const auto sum = total->Invoke(**a.value, **b.value);      // 7
+```
+
+- **Matching.** C++ cannot name the managed type, so an `Object` parameter or return matches any class or
+  interface type (not `string` or arrays), and the object's real type is checked when the call is made: an
+  object that is not an instance of the parameter's type is `InvalidArgument` and the method does not run.
+  Overloads that differ only by such types are ambiguous; looking one up is `InvalidArgument`.
+- **Returns.** Each call that returns an object gets a **new, independently owned handle**, even if the
+  method returns the same managed object again. Releasing one handle never affects another, and the
+  component stays unreleasable until every returned `Object` is released. A `null` return is an empty
+  `std::optional`, not an error.
+- **Arguments** are rejected before the call if they are released or moved-from (`InvalidHandle`) or belong
+  to another component (`InvalidArgument`).
+
 ### Logging
 
 `Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink):

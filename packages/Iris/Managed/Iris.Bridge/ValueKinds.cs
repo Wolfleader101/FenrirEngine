@@ -18,14 +18,26 @@ internal enum ValueKind : int
     Int64 = 8,
     UInt64 = 9,
     Float = 10,
-    Double = 11
+    Double = 11,
+    // An object handle in the slot. It matches any class or interface parameter or return type (but not
+    // string or arrays), since the native signature cannot name the managed type; the real type is
+    // checked when the call is made. Zero is null.
+    Object = 12
 }
 
 internal static class ValueKinds
 {
-    internal static bool IsValid(int kind) => kind >= (int)ValueKind.Void && kind <= (int)ValueKind.Double;
+    internal static bool IsValid(int kind) => kind >= (int)ValueKind.Void && kind <= (int)ValueKind.Object;
 
-    // Throws BridgeArgumentException for an unknown kind, or Void where a value is required.
+    // Throws BridgeArgumentException for a kind that is unknown, or that names no single type: Object
+    // matches many, and Void is a return type only.
+    internal static void ValidateParameter(int kind)
+    {
+        if (!IsValid(kind) || (ValueKind)kind == ValueKind.Void)
+            throw new BridgeArgumentException($"Unsupported parameter kind {kind}.");
+    }
+
+    // The one managed type of a by-value kind. Object has none; callers match it with IsObjectType.
     internal static Type ToType(int kind, bool allowVoid)
     {
         return (ValueKind)kind switch

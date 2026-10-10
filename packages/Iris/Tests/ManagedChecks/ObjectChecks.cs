@@ -120,6 +120,107 @@ static unsafe class ObjectChecks
         GC.Collect();
     }
 
+    // Objects as arguments and returns: kind 12 is an object handle in a slot.
+    internal static void RunPassing(string componentPath)
+    {
+        const int Obj = 12;
+        string path = System.IO.Path.GetFullPath(componentPath);
+        ulong token = ComponentRegistry.Load(path), other = ComponentRegistry.Load(path);
+        try
+        {
+            ulong counter = TypeId(token, "Counter"), factory = TypeId(token, "Factory"), otherType = TypeId(token, "Other");
+            delegate* unmanaged[Cdecl]<ulong, ulong, byte*, int, int, int*, int, ulong*, byte*, int, int*, int*, int> find = &Bootstrap.FindMethod;
+            delegate* unmanaged[Cdecl]<ulong, ulong, ulong*, int, ulong*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeMethod;
+
+            ulong Static(ulong t, string name, int ret, params int[] kinds)
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(name);
+                ulong id = 0;
+                int written = 0, truncated = 0;
+                byte[] storage = new byte[1024];
+                fixed (byte* n = bytes, d = storage)
+                fixed (int* k = kinds)
+                {
+                    int status = find(token, t, n, bytes.Length, ret, k, kinds.Length, &id, d, storage.Length, &written, &truncated);
+                    Check(status == 0 || status == 1 || status == 6, "Unexpected lookup status " + status);
+                    if (status != 0) throw new Exception("status " + status + ": " + Encoding.UTF8.GetString(storage, 0, written));
+                }
+                return id;
+            }
+            int Call(ulong method, ulong[] args, out ulong result)
+            {
+                ulong value = 99;
+                int written = 0, truncated = 0;
+                fixed (ulong* a = args)
+                {
+                    int status = invoke(token, method, a, args.Length, &value, null, 0, &written, &truncated);
+                    result = value;
+                    return status;
+                }
+            }
+
+            // A static method returning an object publishes a new handle each time, even for the same managed object.
+            ulong make = Static(factory, "Make", Obj, Int32);
+            ulong made, madeAgain;
+            Check(Call(make, new ulong[] { 7 }, out made) == 0 && made != 0, "A static method did not return an object");
+            Check(Call(make, new ulong[] { 7 }, out madeAgain) == 0 && madeAgain != 0 && madeAgain != made, "A returned object did not get its own handle");
+            ulong value = InstanceMethod(token, counter, "Value", Int32);
+            Check(Call2(token, value, made) == 7, "A returned object lost its state");
+
+            // A null return is a success with a zero handle.
+            ulong nothing = Static(factory, "Nothing", Obj);
+            Check(Call(nothing, Array.Empty<ulong>(), out ulong none) == 0 && none == 0, "A null return was not an empty handle");
+
+            // The same managed object returned twice has two independent handles.
+            ulong self = InstanceMethod(token, counter, "Self", Obj);
+            ulong a1 = Call2(token, self, made), a2 = Call2(token, self, made);
+            Check(a1 != 0 && a2 != 0 && a1 != a2 && a1 != made, "Returning the same object twice reused a handle");
+            Check(ReleaseObject(token, a1) == 0 && Call2(token, value, a2) == 7 && Call2(token, value, made) == 7, "Releasing one handle affected another");
+            Check(ReleaseObject(token, a2) == 0 && ReleaseObject(token, a2) == 5, "A returned handle was not released independently");
+
+            // Object arguments: any class parameter matches; the real type is checked at call time.
+            ulong total = Static(factory, "Total", Int32, Obj, Obj);
+            Check(Call(total, new ulong[] { made, madeAgain }, out ulong sum) == 0 && sum == 14, "Object arguments were not passed");
+            ulong otherObject = New(token, otherType, Array.Empty<int>());
+            Check(Call(total, new ulong[] { made, otherObject }, out _) == 1, "An object of the wrong type was passed");
+            Check(Call(total, new ulong[] { made, 0 }, out _) == 5 && Call(total, new ulong[] { made, madeAgain + 1000 }, out _) == 5, "An unknown object argument was accepted");
+            ulong foreign = New(other, TypeId(other, "Counter"), Array.Empty<int>());
+            Check(Call(total, new ulong[] { made, foreign }, out _) == 5, "An object from another component was passed");
+            Check(ReleaseObject(token, madeAgain) == 0 && Call(total, new ulong[] { made, madeAgain }, out _) == 5, "A released object was still accepted as an argument");
+
+            // A signature that cannot name the managed type is ambiguous when overloads differ only by it.
+            bool ambiguous = false;
+            try { Static(factory, "Describe", Int32, Obj); }
+            catch (Exception exception) { ambiguous = exception.Message.StartsWith("status 1", StringComparison.Ordinal); }
+            Check(ambiguous, "An ambiguous object signature was not InvalidArgument");
+
+            // Constructors take objects too.
+            ulong copy = New(token, counter, new[] { Obj }, made);
+            Check(Call2(token, value, copy) == 7, "A constructor did not receive an object argument");
+
+            // Returned and passed objects are rooted until released, so the component cannot be released.
+            Check(ReleaseComponent(token) == InUse, "A component with returned objects was released");
+            Check(ReleaseObject(token, made) == 0 && ReleaseObject(token, copy) == 0 && ReleaseObject(token, otherObject) == 0, "Releasing objects failed");
+            Check(ReleaseComponent(token) == 0, "A component was not releasable after its objects");
+            ReleaseObject(other, foreign);
+        }
+        finally
+        {
+            ForceReleaseComponent(token);
+            ForceReleaseComponent(other);
+            ComponentRegistry.ForgetUnload(token);
+            ComponentRegistry.ForgetUnload(other);
+        }
+        Console.WriteLine("Object passing: returned objects get independent handles, null is an empty handle, arguments are type- and handle-checked, and signatures that cannot name a type are ambiguous.");
+    }
+
+    // Calls a parameterless instance method returning an int or an object handle.
+    private static ulong Call2(ulong token, ulong method, ulong obj)
+    {
+        Check(Invoke(token, method, obj, Array.Empty<ulong>(), out ulong result, out string diagnostic) == 0, "Instance call failed: " + diagnostic);
+        return result;
+    }
+
     internal static void Run(string componentPath)
     {
         string path = System.IO.Path.GetFullPath(componentPath);

@@ -41,6 +41,7 @@ static class Checks
             ("type handles", () => TypeChecks.Run(component)),
             ("method handles", () => MethodChecks.Run(component)),
             ("objects", () => ObjectChecks.Run(component)),
+            ("object passing", () => ObjectChecks.RunPassing(component)),
             ("log sink", () => LogChecks.Run(component)),
             ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)),
             // Last: sharing is process-wide and permanent.
