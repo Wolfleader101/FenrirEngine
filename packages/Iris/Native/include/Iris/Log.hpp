@@ -33,9 +33,10 @@ namespace Iris
     /**
      * @brief Receives bridge messages. Registered with Host::SetLogSink.
      *
-     * The sink runs synchronously on the thread making the bridge call, so it needs no synchronization of
-     * its own beyond what that thread's calls already require. It may throw (the exception is swallowed)
-     * and may clear or replace the sink, but must not call into Iris for anything else.
+     * The sink runs synchronously on the thread making the bridge call. Bridge calls may come from
+     * several threads, so the sink must be safe to run concurrently. It may throw (the exception is
+     * swallowed) and may call Host::SetLogSink to clear or replace itself. Messages raised by calls the
+     * sink makes into Iris are dropped rather than delivered, so it cannot recurse.
      */
     using LogSink = std::function<void(const LogMessage&)>;
 } // namespace Iris

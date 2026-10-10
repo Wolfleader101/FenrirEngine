@@ -415,7 +415,9 @@ namespace
                  messages.clear();
                  Check(component.FindType("Iris.Examples.Component.Missing").status == CallStatus::NotFound,
                        "Expected NotFound");
-                 Check(!has(LogLevel::Error, ""), "A NotFound was reported as an error");
+                 Check(!std::any_of(messages.begin(), messages.end(),
+                                    [](const Logged& message) { return message.level == LogLevel::Error; }),
+                       "A NotFound was reported as an error");
 
                  // Releasing is logged too, and replacing the sink redirects messages.
                  messages.clear();
@@ -447,12 +449,35 @@ namespace
                            messages.empty(),
                        "Messages arrived after the sink was cleared");
              }},
+            {"a sink that triggers more failing calls does not recurse",
+             [&] {
+                 int deliveries = 0;
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const SinkGuard guard(arguments);
+                 Check(host->SetLogSink([&](const LogMessage&) {
+                               // Each failing call would log again; nested messages are dropped.
+                               if (++deliveries == 1)
+                               {
+                                   (void)Call(component, CalculationType, "Throw", 0, 0);
+                               }
+                           })
+                           .Succeeded(),
+                       "Registering failed");
+                 Check(Call(component, CalculationType, "Throw", 0, 0).status == CallStatus::ManagedException &&
+                           deliveries == 1,
+                       "A sink that made another failing call recursed or lost the original message");
+                 Check(Call(component, CalculationType, "Throw", 0, 0).status == CallStatus::ManagedException &&
+                           deliveries == 2,
+                       "Delivery did not resume after a nested call");
+             }},
             {"a sink that throws, or clears itself, cannot break a call",
              [&] {
-                 auto host = StartHost(arguments);
-                 const SinkGuard guard(arguments);
-                 const auto component = Load(*host, arguments.component);
                  int delivered = 0;
+                 int clearing = 0;
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const SinkGuard guard(arguments);
                  Check(host->SetLogSink([&](const LogMessage&) {
                                ++delivered;
                                throw std::runtime_error("a sink failure");
@@ -467,7 +492,6 @@ namespace
                        "A call did not recover after a throwing sink");
 
                  Host* hostPointer = host.get();
-                 int clearing = 0;
                  Check(hostPointer
                            ->SetLogSink([&](const LogMessage&) {
                                ++clearing;

@@ -26,6 +26,10 @@ internal static unsafe class BridgeLog
 
     private static Sink? current;
 
+    // Set while this thread is inside the sink. A sink that makes another failing call would log
+    // again and recurse without bound, so messages raised from inside the sink are dropped.
+    [ThreadStatic] private static bool delivering;
+
     internal static void Set(IntPtr callback, IntPtr context) =>
         Volatile.Write(ref current, callback == IntPtr.Zero ? null : new Sink(callback, context));
 
@@ -34,7 +38,8 @@ internal static unsafe class BridgeLog
     internal static void Write(LogLevel level, string text)
     {
         Sink? sink = Volatile.Read(ref current);
-        if (sink == null) return;
+        if (sink == null || delivering) return;
+        delivering = true;
         try
         {
             byte[] bytes = Encoding.UTF8.GetBytes(text);
@@ -44,6 +49,10 @@ internal static unsafe class BridgeLog
         catch (Exception)
         {
             // A sink problem never changes the outcome of the call being logged.
+        }
+        finally
+        {
+            delivering = false;
         }
     }
 
