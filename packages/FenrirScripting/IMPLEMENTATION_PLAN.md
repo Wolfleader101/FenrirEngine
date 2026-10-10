@@ -14,7 +14,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 - **Phase A, review and prefactor (01–05):**
   - 01: review and scope decision (done; see `review-01.md`)
-  - 02: bridge function table
+  - 02: bridge function table (done; ADR-0002)
   - 03: move demo calls out of the bridge
   - 04: cleanup
   - 05: standalone library boundary
@@ -78,12 +78,12 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 01)
+## Current state (after ticket 02)
 
-Implemented and tested (6 CTests; Windows Debug re-verified in ticket 01):
+Implemented and tested (9 CTests; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
-- the bridge handshake (ABI version 6)
+- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-7 function table
 - bounded managed diagnostics
 - collectible component loading with private dependency resolution
 - `int(int,int)` static invocation

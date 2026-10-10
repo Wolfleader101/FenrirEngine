@@ -89,11 +89,7 @@ int main(int argc, char* argv[])
         std::cout << "Runtime configuration initialized: " << result.runtimeConfigInitialized << '\n';
         std::cout << "Runtime delegate obtained: " << result.runtimeDelegateObtained << '\n';
         std::cout << "Host context closed: " << result.hostContextClosed << '\n';
-        std::cout << "Bridge method resolved: " << result.bridgeMethodResolved << '\n';
-        std::cout << "Interop method resolved: " << result.interopMethodResolved << '\n';
-        std::cout << "Greeting method resolved: " << result.greetingMethodResolved << '\n';
-        std::cout << "Echo method resolved: " << result.echoMethodResolved << '\n';
-        std::cout << "Component methods resolved: " << result.componentMethodsResolved << '\n';
+        std::cout << "Bridge assembly loaded: " << result.bridgeAssemblyLoaded << '\n';
         if (result.bridgeVersion.has_value())
         {
             std::cout << "Bridge version: " << *result.bridgeVersion << '\n';

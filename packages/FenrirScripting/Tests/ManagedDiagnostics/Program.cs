@@ -26,6 +26,7 @@ static class Checks
             UnloadChecks.Run(args[1]);
             return;
         }
+        HandshakeChecks.Run();
         var strictUtf8 = new UTF8Encoding(false, true);
         // Every possible boundary, including capacities too small for the first scalar.
         foreach (string text in new[] { "", "ASCII", "\u03C0\U0001F43A\u20AC!", "A\0B", "\uD800X" })

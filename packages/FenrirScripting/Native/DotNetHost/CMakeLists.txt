@@ -2,7 +2,7 @@ find_package(Threads REQUIRED)
 
 add_library(FenrirDotNetHost STATIC
     src/DotNetHost.cpp
-    src/ComponentBridge.hpp
+    src/BridgeFunctions.hpp
     src/ManagedComponent.cpp
     src/ManagedComponentState.hpp
     src/HostFxrDiscovery.cpp

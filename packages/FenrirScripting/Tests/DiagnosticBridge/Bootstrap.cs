@@ -22,14 +22,28 @@ public static class Bootstrap
     private static int componentReleaseCount;
     private static int componentForgetCount;
 
+    // FENRIR_TEST_BRIDGE_MODE selects a deliberately incompatible handshake:
+    // "legacy" reports an older version, "oversized" a larger table, "missing" a null entry.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static int GetBridgeVersion()
+    public static unsafe int GetBridgeFunctions(int version, void* table, int size, int* reportedVersion, int* reportedSize)
     {
-#if LEGACY_BRIDGE
-        return 5;
-#else
-        return 6;
-#endif
+        string? mode = Environment.GetEnvironmentVariable("FENRIR_TEST_BRIDGE_MODE");
+        var functions = new BridgeFunctions
+        {
+            TryAddInt32 = &TryAddInt32,
+            CopyGreetingUtf8 = &CopyGreetingUtf8,
+            EchoUtf8 = &EchoUtf8,
+            LoadComponent = &LoadComponent,
+            CopyComponentNameUtf8 = &CopyComponentNameUtf8,
+            ReleaseComponent = &ReleaseComponent,
+            InvokeComponentInt32 = &InvokeComponentInt32,
+            GetComponentUnloadState = mode == "missing" ? null : &GetComponentUnloadState,
+            ForgetComponentUnload = &ForgetComponentUnload
+        };
+        int answerVersion = mode == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
+        int answerSize = mode == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
+        return BridgeFunctions.Handshake(version, (BridgeFunctions*)table, size, reportedVersion, reportedSize,
+            answerVersion, answerSize, functions);
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -110,11 +124,9 @@ public static class Bootstrap
     public static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
         int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
         => RespondInteger(left, right, value, diagnostic, capacity, written, truncated);
-#if !MISSING_COMPONENT_METHODS
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int GetComponentUnloadState(ulong token, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
         => RespondUnloadState(state, written, truncated);
-#endif
     private static unsafe int RespondUnloadState(int* state, int* written, int* truncated)
     {
         *state = componentReleased ? 1 : 0; *written = 0; *truncated = 0;
