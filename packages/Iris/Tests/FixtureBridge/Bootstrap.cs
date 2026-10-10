@@ -65,7 +65,9 @@ public static class Bootstrap
             InvokeComponentInt32 = &InvokeComponentInt32,
             GetComponentUnloadState = handshake == "missing" ? null : &GetComponentUnloadState,
             ForgetComponentUnload = &ForgetComponentUnload,
-            RegisterSharedAssembly = &RegisterSharedAssembly
+            RegisterSharedAssembly = &RegisterSharedAssembly,
+            FindType = &FindType,
+            CopyTypeNameUtf8 = &CopyTypeNameUtf8
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -91,6 +93,17 @@ public static class Bootstrap
     {
         *written = 0; *truncated = 0; return 0;
     }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int FindType(ulong token, byte* name, int length, ulong* typeId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *typeId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int CopyTypeNameUtf8(ulong token, ulong typeId, int field, byte* output, int capacity, int* required,
+        byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
+        => CopyName(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
@@ -179,6 +192,10 @@ public static class Bootstrap
     // Serves the name "A\0B" (3 bytes) unless the mode scripts a failure.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int CopyComponentNameUtf8(ulong token, byte* output, int capacity, int* required,
+        byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
+        => CopyName(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
+
+    private static unsafe int CopyName(byte* output, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
         try

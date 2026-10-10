@@ -91,7 +91,7 @@ namespace Iris::Detail
     }
 
     // Builds the result of one bridge call from its wire status. Success carries `value`. Any bridge
-    // status 1..5 is passed through with the managed diagnostic, or a fallback naming `operation`;
+    // status 1..6 is passed through with the managed diagnostic, or a fallback naming `operation`;
     // any other status becomes UnexpectedStatus without managed details.
     template <typename T, typename... Value>
     [[nodiscard]] CallResult<T> CompleteCall(std::int32_t status, const char* operation,
@@ -113,6 +113,8 @@ namespace Iris::Detail
         case CallStatus::InvalidHandle:
             return diagnostic.ApplyTo(
                 Failure<T>(CallStatus::InvalidHandle, name + " received an invalid or released handle."));
+        case CallStatus::NotFound:
+            return diagnostic.ApplyTo(Failure<T>(CallStatus::NotFound, name + " found nothing."));
         default:
             return Failure<T>(CallStatus::UnexpectedStatus,
                               name + " returned an unknown status: " + std::to_string(status) + '.');

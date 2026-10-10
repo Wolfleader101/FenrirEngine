@@ -38,6 +38,7 @@ static class Checks
             ("components", () => ComponentChecks.Run(component)),
             ("invocation", () => InvocationChecks.Run(component)),
             ("dependencies", () => DependencyChecks.Run(component)),
+            ("type handles", () => TypeChecks.Run(component)),
             ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)),
             // Last: sharing is process-wide and permanent.
             ("shared assemblies", () => SharedAssemblyChecks.Run(component)));

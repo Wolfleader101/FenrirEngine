@@ -8,7 +8,7 @@ namespace Iris.Bridge;
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct BridgeFunctions
 {
-    internal const int Version = 10;
+    internal const int Version = 11;
 
     internal delegate* unmanaged[Cdecl]<byte*, int, ulong*, byte*, int, int*, int*, int> LoadComponent;
     internal delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, byte*, int, int*, int*, int> CopyComponentNameUtf8;
@@ -17,6 +17,8 @@ internal unsafe struct BridgeFunctions
     internal delegate* unmanaged[Cdecl]<ulong, int*, byte*, int, int*, int*, int> GetComponentUnloadState;
     internal delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> ForgetComponentUnload;
     internal delegate* unmanaged[Cdecl]<byte*, int, byte*, int, int*, int*, int> RegisterSharedAssembly;
+    internal delegate* unmanaged[Cdecl]<ulong, byte*, int, ulong*, byte*, int, int*, int*, int> FindType;
+    internal delegate* unmanaged[Cdecl]<ulong, ulong, int, byte*, int, int*, byte*, int, int*, int*, int> CopyTypeNameUtf8;
 
     // Writes the reported version and table size, then fills the table only if both match the
     // caller's. Never throws: native code cannot catch a managed exception from this entry point.

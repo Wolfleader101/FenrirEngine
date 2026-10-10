@@ -134,6 +134,20 @@ if (loaded.Succeeded())
 }
 ```
 
+### Types
+
+`Component::FindType("My.Namespace.Calculator")` returns a `Type` handle for a public, closed type defined
+in the component's assembly (nested types use `+`). `Type::GetInfo()` reports its full and assembly names.
+
+```cpp
+const auto type = component.FindType("MyComponent.Calculations");
+if (type.Succeeded()) { const auto info = type.value->GetInfo(); /* info.value->fullName */ }
+```
+
+A `Type` is a cheap value: copying it is fine and it holds no managed reference. It is valid while its
+component is loaded, never reused, and only works with the component it came from; after `Release`
+every call returns `InvalidHandle`. It does not keep the component from unloading.
+
 ### Lifetime rules
 
 - **Process-lifetime runtime.** Constructing `Host` does not start .NET; `Initialize` starts or
@@ -165,6 +179,7 @@ and an owning UTF-8 `diagnostic`.
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
 | `BufferTooSmall` (4) | An output buffer was too small. |
 | `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
+| `NotFound` (6) | A lookup found nothing (for example a type name that is missing, not public or a generic definition). |
 | `NotInitialized` (-1) | The host is not initialized. No managed code ran. |
 | `UnexpectedStatus` (-2) | The bridge returned an unknown status. |
 | `InvalidResponse` (-3) | The bridge returned a malformed response. |

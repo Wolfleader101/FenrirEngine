@@ -129,6 +129,71 @@ public static partial class Bootstrap
         }
     }
 
+    // Looks up a public type by full name. Success publishes a nonzero handle; NotFound (6) means no
+    // such public, closed type is defined in the component assembly. The name is explicit-length UTF-8.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int FindType(ulong token, byte* name, int length, ulong* typeId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (typeId != null) *typeId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || typeId == null || name == null || length <= 0)
+            return (int)BridgeStatus.InvalidArgument;
+        string typeName;
+        try
+        {
+            typeName = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, length));
+            if (typeName.Contains('\0')) throw new BridgeArgumentException("A type name cannot contain null characters.");
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException or BridgeArgumentException
+                ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+        try
+        {
+            switch (ComponentRegistry.TryFindType(token, typeName, out ulong found))
+            {
+                case ComponentRegistry.FindResult.Found:
+                    *typeId = found;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.FindResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new TypeLoadException($"No public, closed type named '{typeName}' is defined in the component assembly."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
+    // Copies a type's full name (field 0) or assembly name (field 1) with the size-query/copy contract of
+    // CopyComponentNameUtf8. An unknown handle, or one from another component, is InvalidHandle.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int CopyTypeNameUtf8(ulong token, ulong typeId, int field, byte* destination, int capacity, int* required,
+        byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
+    {
+        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
+        bool outputValid = ValidateUtf8Output(destination, capacity, required);
+        if (!diagnosticValid || !outputValid || (field != 0 && field != 1)) return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryGetTypeName(token, typeId, field, out string? name)) return (int)BridgeStatus.InvalidHandle;
+            return (int)CopyUtf8Payload(name!, Encoding.UTF8, destination, capacity, required);
+        }
+        catch (Exception exception)
+        {
+            *required = 0;
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, diagnosticCapacity), out *written, out *truncated);
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
     // Names are explicit-length UTF-8, borrowed only for this call. All caller
     // storage must be valid and non-overlapping. Only success publishes a value.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

@@ -52,6 +52,9 @@ static class UnloadChecks
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Add").Value == 42, "Unload fixture invocation failed");
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Throw").Status == 3, "Unload fixture exception was not contained");
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Add").Value == 42, "Unload fixture recovery failed");
+        // A type handle is only an id in the registry's table; it must not keep the released context alive.
+        Check(ComponentRegistry.TryFindType(token, InvocationChecks.TypeName, out ulong typeId) == ComponentRegistry.FindResult.Found && typeId != 0,
+              "Unload fixture type lookup failed");
         Assembly assembly = AssemblyLoadContext.All.SelectMany(context => context.Assemblies).Single(item => item.Location == path);
         AssemblyLoadContext context = AssemblyLoadContext.GetLoadContext(assembly)!;
         Assembly dependency = context.Assemblies.Single(item => item.GetName().Name == "Iris.Examples.Dependency");
@@ -60,6 +63,7 @@ static class UnloadChecks
         Check(release(token, null, 0, &written, &truncated) == 0 && written == 0 && truncated == 0,
               "Unload request failed");
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Add").Status == 5, "Release did not invalidate invocation");
+        Check(!ComponentRegistry.TryGetTypeName(token, typeId, 0, out _), "Release did not invalidate the type handle");
         Check(State(token) == 1, "A context still rooted in the helper did not report Pending");
         GC.KeepAlive(context);
         return observation;

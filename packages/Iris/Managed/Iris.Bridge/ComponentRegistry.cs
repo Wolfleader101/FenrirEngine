@@ -8,7 +8,17 @@ namespace Iris.Bridge;
 
 internal static class ComponentRegistry
 {
-    private sealed record Entry(ComponentLoadContext Context, Assembly Assembly, string Name);
+    // Handles to types looked up in one component. They live in the active entry, so releasing the
+    // component drops every Type reference with it; no handle outlives its component.
+    private sealed class TypeTable
+    {
+        internal readonly Dictionary<Type, ulong> ByType = new();
+        internal readonly Dictionary<ulong, Type> ById = new();
+    }
+    private sealed record Entry(ComponentLoadContext Context, Assembly Assembly, string Name)
+    {
+        internal TypeTable Types { get; } = new();
+    }
     private sealed class Registration(Entry entry)
     {
         internal Entry? Active = entry;
@@ -17,6 +27,9 @@ internal static class ComponentRegistry
     private static readonly object Gate = new();
     private static readonly Dictionary<ulong, Registration> Registrations = new();
     private static ulong lastToken;
+    private static ulong lastTypeId; // Shared by all components, so a type handle is never reused.
+
+    internal enum FindResult { Found, NotFound, InvalidHandle }
 
     // Internal verification seam; never a native/public diagnostic API.
     internal static int Count
@@ -67,6 +80,52 @@ internal static class ComponentRegistry
     internal static string? GetName(ulong token)
     {
         lock (Gate) return Registrations.TryGetValue(token, out Registration? record) ? record.Active?.Name : null;
+    }
+
+    // Looks up a public, closed type defined in the component assembly and returns its handle. Looking
+    // up the same type again returns the same handle.
+    internal static FindResult TryFindType(ulong token, string typeName, out ulong typeId)
+    {
+        typeId = 0;
+        Entry entry;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active)
+                return FindResult.InvalidHandle;
+            entry = active;
+        }
+        // No registry lock is held while resolving a type, which can load assemblies.
+        Type? type = entry.Assembly.GetType(typeName, throwOnError: false, ignoreCase: false);
+        if (type == null || type.Assembly != entry.Assembly || !type.IsVisible || type.ContainsGenericParameters)
+            return FindResult.NotFound;
+        lock (Gate)
+        {
+            // The component may have been released while the type was resolved.
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                return FindResult.InvalidHandle;
+            if (!entry.Types.ByType.TryGetValue(type, out typeId))
+            {
+                typeId = checked(++lastTypeId);
+                entry.Types.ByType.Add(type, typeId);
+                entry.Types.ById.Add(typeId, type);
+            }
+            return FindResult.Found;
+        }
+    }
+
+    // field 0 is the type's full name, 1 its assembly's simple name. False for an unknown component or
+    // type handle, including a handle that belongs to another component.
+    internal static bool TryGetTypeName(ulong token, ulong typeId, int field, out string? text)
+    {
+        text = null;
+        if (field != 0 && field != 1) throw new BridgeArgumentException("Unknown type name field.");
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
+                !entry.Types.ById.TryGetValue(typeId, out Type? type)) return false;
+            text = field == 0 ? type.FullName ?? type.Name : type.Assembly.GetName().Name ?? "";
+            return true;
+        }
     }
 
     internal static bool TryInvokeInt32(ulong token, string typeName, string methodName, int left, int right, out int result)

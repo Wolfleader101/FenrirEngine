@@ -2,6 +2,7 @@
 
 #include "ComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
+#include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
 #include <limits>
@@ -60,6 +61,38 @@ namespace Iris
             return Detail::PropagateFailure<ComponentInfo>(name);
         }
         return Detail::Success<ComponentInfo>(ComponentInfo{std::move(*name.value)});
+    }
+
+    CallResult<Type> Component::FindType(std::string_view fullName) const
+    {
+        if (!IsLoaded())
+        {
+            return Detail::Failure<Type>(CallStatus::InvalidHandle, ReleasedOwner);
+        }
+        if (fullName.empty() || fullName.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        {
+            return Detail::Failure<Type>(CallStatus::InvalidArgument,
+                                         "A type name must contain 1..INT32_MAX UTF-8 bytes.");
+        }
+        if (fullName.find('\0') != std::string_view::npos)
+        {
+            return Detail::Failure<Type>(CallStatus::InvalidArgument, "A type name cannot contain null characters.");
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::uint64_t typeId = 0;
+        const auto status =
+            state->bridge->findType(state->token, reinterpret_cast<const std::uint8_t*>(fullName.data()),
+                                    static_cast<std::int32_t>(fullName.size()), &typeId, diagnostic.bytes.data(),
+                                    diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && typeId == 0)
+        {
+            return Detail::Failure<Type>(CallStatus::InvalidResponse, "FindType returned the invalid handle 0.");
+        }
+        auto handle = std::make_shared<Type::State>();
+        handle->bridge = state->bridge;
+        handle->component = state->token;
+        handle->type = typeId;
+        return Detail::CompleteCall<Type>(status, "FindType", diagnostic, Type(std::move(handle)));
     }
 
     CallResult<std::int32_t> Component::InvokeInt32(std::string_view typeName, std::string_view methodName,
