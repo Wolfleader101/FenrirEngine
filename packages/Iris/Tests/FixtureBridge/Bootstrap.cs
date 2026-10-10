@@ -64,7 +64,8 @@ public static class Bootstrap
             ReleaseComponent = &ReleaseComponent,
             InvokeComponentInt32 = &InvokeComponentInt32,
             GetComponentUnloadState = handshake == "missing" ? null : &GetComponentUnloadState,
-            ForgetComponentUnload = &ForgetComponentUnload
+            ForgetComponentUnload = &ForgetComponentUnload,
+            RegisterSharedAssembly = &RegisterSharedAssembly
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -83,6 +84,12 @@ public static class Bootstrap
     public static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         ++releases; released = true; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int RegisterSharedAssembly(byte* path, int length, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

@@ -15,6 +15,7 @@ namespace
     using Iris::Tests::Check;
 
     constexpr std::string_view CalculationType = "Iris.Examples.Component.Calculations";
+    constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
 
@@ -83,6 +84,14 @@ namespace
                  CheckInfo(component);
                  CheckUnload(component, false);
                  CheckCalculation(component);
+             }},
+            // Must run before the shared-assembly case: sharing is process-wide and permanent.
+            {"without a shared declaration, a component uses its private contract copy",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto shared = component.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0);
+                 Check(shared.value == 0, "The contract resolved to a shared copy without a declaration");
              }},
             {"lookup and component exceptions are contained, and the next call works",
              [&] {
@@ -228,6 +237,33 @@ namespace
                        "A diagnostic did not outlive its host");
                  Check(snapshot.assemblyName == "Iris.Examples.Component",
                        "An info snapshot did not outlive its owner");
+             }},
+            {"a declared shared assembly binds every component to one copy",
+             [&] {
+                 auto configuration = arguments.configuration;
+                 configuration.sharedAssemblies = {arguments.component.parent_path() / "Iris.Examples.Contracts.dll"};
+                 auto host = std::make_unique<Host>();
+                 const auto initialized = host->Initialize(configuration);
+                 Check(initialized.success, "Initialization with a shared assembly failed: " + initialized.diagnostic);
+                 const auto first = Load(*host, arguments.component);
+                 const auto second = Load(*host, arguments.component);
+                 Check(first.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0).value == 1 &&
+                           second.InvokeInt32(SharedCalculatorType, "ContractIsShared", 0, 0).value == 1,
+                       "A component bound to its private contract copy");
+                 // Sharing the same file again is a no-op; a contract cannot also be a component.
+                 Check(host->Initialize(configuration).success, "Re-sharing the same file failed");
+                 const auto asComponent = host->LoadComponent(configuration.sharedAssemblies.front());
+                 Check(asComponent.status == CallStatus::InvalidArgument, "A shared assembly loaded as a component");
+             }},
+            {"sharing a missing assembly fails initialization",
+             [&] {
+                 auto configuration = arguments.configuration;
+                 configuration.sharedAssemblies = {arguments.component.parent_path() / "Missing.Contracts.dll"};
+                 Host host;
+                 const auto initialized = host.Initialize(configuration);
+                 Check(!initialized.success && !host.IsInitialized() &&
+                           initialized.diagnostic.find("Sharing assembly failed") != std::string::npos,
+                       "A missing shared assembly was accepted or undiagnosed");
              }},
             {"repeated scoped loads release on destruction",
              [&] {

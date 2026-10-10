@@ -141,6 +141,62 @@ namespace Iris
             }
             return table;
         }
+
+        // Converts a path to the bridge's UTF-8 form. Relative paths resolve against the current
+        // directory. Conversion failures are argument errors; allocation failures still throw.
+        CallResult<std::string> BridgePath(const std::filesystem::path& path, const char* what)
+        {
+            if (path.empty())
+            {
+                return Detail::Failure<std::string>(CallStatus::InvalidArgument,
+                                                    std::string("A ") + what + " path is required.");
+            }
+            std::error_code error;
+            const auto absolute = std::filesystem::absolute(path, error);
+            if (error)
+            {
+                return Detail::Failure<std::string>(CallStatus::InvalidArgument, std::string("Cannot resolve the ") +
+                                                                                     what +
+                                                                                     " path: " + error.message());
+            }
+            std::string text;
+            try
+            {
+                text = Detail::HostStringToUtf8(absolute.native());
+            }
+            catch (const std::invalid_argument&)
+            {
+                return Detail::Failure<std::string>(CallStatus::InvalidArgument,
+                                                    std::string("The ") + what + " path is not valid Unicode text.");
+            }
+            catch (const std::length_error&)
+            {
+                return Detail::Failure<std::string>(CallStatus::InvalidArgument,
+                                                    std::string("The ") + what + " path is too long to convert.");
+            }
+            if (text.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+            {
+                return Detail::Failure<std::string>(CallStatus::InvalidArgument,
+                                                    std::string("The ") + what +
+                                                        " path exceeds the bridge's 32-bit byte length limit.");
+            }
+            return Detail::Success<std::string>(std::move(text));
+        }
+
+        CallResult<void> ShareAssembly(const Detail::BridgeFunctions& bridge, const std::filesystem::path& path)
+        {
+            const auto text = BridgePath(path, "shared assembly");
+            if (!text.Succeeded())
+            {
+                return Detail::PropagateFailure<void>(text);
+            }
+            Detail::ManagedDiagnosticBuffer diagnostic;
+            const auto status =
+                bridge.registerShared(reinterpret_cast<const std::uint8_t*>(text.value->data()),
+                                      static_cast<std::int32_t>(text.value->size()), diagnostic.bytes.data(),
+                                      diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+            return Detail::CompleteCall<void>(status, "RegisterSharedAssembly", diagnostic);
+        }
     } // namespace
 
     struct Host::State
@@ -285,6 +341,15 @@ namespace Iris
         {
             return finish(std::move(result));
         }
+        for (const auto& shared : configuration.sharedAssemblies)
+        {
+            auto registered = ShareAssembly(*bridge, shared);
+            if (!registered.Succeeded())
+            {
+                result.diagnostic = "Sharing assembly failed: " + registered.diagnostic;
+                return finish(std::move(result));
+            }
+        }
         state->bridge = std::move(bridge);
         result.success = true;
         result.diagnostic = "Managed bridge initialized; bridge version " + std::to_string(*result.bridgeVersion) + '.';
@@ -302,37 +367,12 @@ namespace Iris
         {
             return Detail::Failure<Component>(CallStatus::NotInitialized, "The managed bridge is not initialized.");
         }
-        if (assemblyPath.empty())
+        const auto pathResult = BridgePath(assemblyPath, "component assembly");
+        if (!pathResult.Succeeded())
         {
-            return Detail::Failure<Component>(CallStatus::InvalidArgument, "A component assembly path is required.");
+            return Detail::PropagateFailure<Component>(pathResult);
         }
-        std::error_code error;
-        const auto absolute = std::filesystem::absolute(assemblyPath, error);
-        if (error)
-        {
-            return Detail::Failure<Component>(CallStatus::InvalidArgument,
-                                              "Cannot resolve the component assembly path: " + error.message());
-        }
-        std::string path;
-        try
-        {
-            path = Detail::HostStringToUtf8(absolute.native());
-        }
-        catch (const std::invalid_argument&)
-        {
-            return Detail::Failure<Component>(CallStatus::InvalidArgument,
-                                              "The component path is not valid Unicode text.");
-        }
-        catch (const std::length_error&)
-        {
-            return Detail::Failure<Component>(CallStatus::InvalidArgument,
-                                              "The component path is too long to convert to UTF-8.");
-        }
-        if (path.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
-        {
-            return Detail::Failure<Component>(CallStatus::InvalidArgument,
-                                              "Component path exceeds the bridge's 32-bit byte length limit.");
-        }
+        const std::string& path = *pathResult.value;
 
         // The owner exists before managed code runs, so it releases any token the bridge returns,
         // including one that arrives with a malformed response.

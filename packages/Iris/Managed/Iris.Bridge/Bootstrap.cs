@@ -20,7 +20,8 @@ public static partial class Bootstrap
                 ReleaseComponent = &ReleaseComponent,
                 InvokeComponentInt32 = &InvokeComponentInt32,
                 GetComponentUnloadState = &GetComponentUnloadState,
-                ForgetComponentUnload = &ForgetComponentUnload
+                ForgetComponentUnload = &ForgetComponentUnload,
+                RegisterSharedAssembly = &RegisterSharedAssembly
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

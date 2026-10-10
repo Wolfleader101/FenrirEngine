@@ -37,8 +37,8 @@ internal static class ComponentRegistry
     {
         if (!Path.IsPathFullyQualified(path) || path.Contains('\0'))
             throw new BridgeArgumentException("A component path must be absolute and contain no null characters.");
-        if (string.Equals(AssemblyName.GetAssemblyName(path).Name, typeof(Bootstrap).Assembly.GetName().Name, StringComparison.OrdinalIgnoreCase))
-            throw new BridgeArgumentException("The resident bridge cannot be loaded as a collectible component.");
+        if (SharedAssemblies.IsShared(AssemblyName.GetAssemblyName(path).Name))
+            throw new BridgeArgumentException("A shared assembly, such as the bridge, cannot be loaded as a collectible component.");
 
         // Resolver creation can fail. Do it before creating a collectible context.
         var resolver = new AssemblyDependencyResolver(path);
