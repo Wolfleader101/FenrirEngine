@@ -3,6 +3,7 @@
 #include "ManagedCallResult.hpp"
 
 #include <memory>
+#include <string_view>
 
 namespace Fenrir::Scripting
 {
@@ -28,6 +29,21 @@ namespace Fenrir::Scripting
         bool diagnosticTruncated = false;
     };
 
+    enum class ComponentUnloadState : std::int32_t
+    {
+        NotRequested = 0,
+        Pending = 1,
+        Collected = 2
+    };
+
+    struct ComponentUnloadResult
+    {
+        ManagedCallStatus status = ManagedCallStatus::InvalidHandle;
+        std::optional<ComponentUnloadState> value;
+        std::string diagnostic;
+        bool diagnosticTruncated = false;
+    };
+
     // Owns a registration in the resident managed bridge. May outlive DotNetHost.
     // Destruction releases the registration and requests cooperative unloading;
     // it does not prove collection has completed or stop CoreCLR. Explicit Release
@@ -44,8 +60,24 @@ namespace Fenrir::Scripting
 
         [[nodiscard]] bool IsLoaded() const noexcept;
         [[nodiscard]] ComponentInfoResult GetInfo() const;
+        // Observes a long weak reference without forcing GC or retrieving the target.
+        // Remains usable after Release and host destruction. Pending has no deadline;
+        // Collected is a snapshot that the released context was observed collected.
+        // Destruction/move-assignment forgets the private weak tracking record,
+        // without cancelling unloading. A moved-from owner returns InvalidHandle.
+        [[nodiscard]] ComponentUnloadResult GetUnloadStatus() const;
+        // Names are case-sensitive, explicit-length UTF-8 with no null characters.
+        // Borrows them only during this call; each must be nonempty and <= INT32_MAX bytes.
+        // Selects a public, non-generic static int(int, int), declared on a public closed
+        // type in this assembly. UCO methods are excluded. Lookup/ordinary exceptions
+        // produce ManagedException; overflow produces Overflow. Only success has a value.
+        // Uses the same owning 4096-byte diagnostic contract as DotNetHost::AddInt32.
+        // May outlive the host. A released/moved owner returns InvalidHandle first.
+        [[nodiscard]] Int32CallResult InvokeInt32(std::string_view typeName, std::string_view methodName,
+                                                  std::int32_t left, std::int32_t right) const;
         // Idempotent. Invalidates this owner even if requesting unload reports an
-        // error; managed registration removal precedes the unload request.
+        // error; managed strong-reference removal precedes the unload request.
+        // GetUnloadStatus remains available afterward; release itself does not force GC.
         [[nodiscard]] ComponentReleaseResult Release();
 
       private:

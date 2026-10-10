@@ -92,8 +92,9 @@ namespace Fenrir::Scripting
          * @brief Prepare this wrapper to use the configured managed bridge.
          *
          * Success means the runtime delegate is ready and Bootstrap.GetBridgeVersion
-         * was resolved, called, and returned the supported version (currently 4).
+         * was resolved, called, and returned the supported version (currently 6).
          * Bootstrap.TryAddInt32, CopyGreetingUtf8, and EchoUtf8 must also resolve before readiness.
+         * All six component exports, including unload observation/cleanup, must resolve too.
          * Both configuration paths must name existing files;
          * relative paths are resolved against the current working directory.
          * Different runtime properties in an existing runtime are rejected until

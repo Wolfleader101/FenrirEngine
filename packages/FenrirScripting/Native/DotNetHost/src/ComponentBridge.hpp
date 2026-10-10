@@ -19,9 +19,18 @@ namespace Fenrir::Scripting::Detail
                                                             std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using ReleaseFn = std::int32_t(FENRIR_COMPONENT_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t,
                                                                std::int32_t*, std::int32_t*);
+        using InvokeFn = std::int32_t(FENRIR_COMPONENT_CALL*)(std::uint64_t, const std::uint8_t*, std::int32_t,
+                                                              const std::uint8_t*, std::int32_t, std::int32_t,
+                                                              std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
+                                                              std::int32_t*, std::int32_t*);
+        using UnloadStateFn = std::int32_t(FENRIR_COMPONENT_CALL*)(std::uint64_t, std::int32_t*, std::uint8_t*,
+                                                                   std::int32_t, std::int32_t*, std::int32_t*);
         LoadFn load = nullptr;
+        UnloadStateFn getUnloadState = nullptr;
+        ReleaseFn forgetUnload = nullptr;
         NameFn copyName = nullptr;
         ReleaseFn release = nullptr;
+        InvokeFn invokeInt32 = nullptr;
     };
 #undef FENRIR_COMPONENT_CALL
 } // namespace Fenrir::Scripting::Detail

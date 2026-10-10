@@ -11,9 +11,10 @@ It also resolves `Bootstrap.TryAddInt32` for a small status-plus-output interop 
 and `Bootstrap.CopyGreetingUtf8` for a caller-owned UTF-8 buffer. `Bootstrap.EchoUtf8`
 decodes arbitrary native UTF-8 into a managed string and returns it through the same
 buffer contract.
-The bridge also exposes component loading, identity copying and release.
-`IsInitialized` becomes true only when the returned bridge version matches `4`
-and all seven required entry points have resolved.
+The bridge also exposes component loading, identity copying, integer invocation,
+release and weak unload observation.
+`IsInitialized` becomes true only when the returned bridge version matches `6`
+and all ten required entry points have resolved.
 
 ## Select the target hosting SDK files
 
@@ -113,9 +114,9 @@ Interop method resolved: true
 Greeting method resolved: true
 Echo method resolved: true
 Component methods resolved: true
-Bridge version: 4
+Bridge version: 6
 Initialization succeeded: true
-Diagnostic: Managed bridge initialized; bridge version 4.
+Diagnostic: Managed bridge initialized; bridge version 6.
 Initialized after attempt: true
 Add(20, 22): status=0, value=42
 Add(INT32_MAX, 1): status=2, value=none
@@ -256,7 +257,7 @@ $bridgeDir = 'packages/FenrirScripting/Managed/Fenrir.ManagedHost/bin/Debug/net1
 
 The example exits with one and prints a diagnostic containing status `0x80008093`
 plus the JSON parsing explanation. Running again with the valid configuration
-still completes the bridge handshake with version `4`.
+still completes the bridge handshake with version `6`.
 
 ## Runtime delegate acquisition
 
@@ -297,13 +298,14 @@ integer. Its native function-pointer type explicitly matches the managed
 A zero assembly-loader status and non-null method pointer are required before
 calling the method. `bridgeMethodResolved` reports resolution, and the optional
 `bridgeVersion` contains the returned value, even on a version mismatch. Version
-`4` is the current contract. Any other value fails with expected/received diagnostics.
+`6` is the current contract. Any other value fails with expected/received diagnostics.
 After a matching version, initialization also resolves `TryAddInt32` and
 `CopyGreetingUtf8` and `EchoUtf8` using the same loader and UCO marker. `interopMethodResolved`
 reports addition resolution; `greetingMethodResolved` reports greeting resolution.
 `echoMethodResolved` reports echo resolution. Initialization also resolves
-`LoadComponent`, `CopyComponentNameUtf8` and `ReleaseComponent`;
-`componentMethodsResolved` reports resolution of all three. Only after all seven methods resolve
+`LoadComponent`, `CopyComponentNameUtf8`, `ReleaseComponent`, `InvokeComponentInt32`,
+`GetComponentUnloadState` and `ForgetComponentUnload`;
+`componentMethodsResolved` reports resolution of all six. Only after all ten methods resolve
 are their pointers published to wrapper state and
 `success` and `IsInitialized` set to true. Each new attempt clears readiness first;
 a failed attempt leaves it false even if a previous attempt succeeded.
@@ -316,8 +318,8 @@ The example exits with zero only when initialization and its interop checks succ
 The deliberate overflow is an expected check. Configuration, hosting, method-resolution, and version failures exit with
 one. A bridge failure can occur after CoreCLR and the assembly have loaded; resetting
 wrapper state does not undo those process-resident resources. The bootstrap bridge
-has process lifetime. Separate collectible components are now loadable; invoking
-their methods and verifying completion of unloading remain future steps.
+has process lifetime. Separate collectible components can be loaded and invoked;
+unload status observes collection separately from release.
 
 ## Integer interop and managed errors
 
@@ -375,9 +377,9 @@ clears readiness and all method pointers before attempting a new configuration.
 Calls must be serialized with initialization on the same wrapper.
 
 Rebuild the managed bridge as well as the native example for this step. A previous
-version-1, version-2 or version-3 bridge is rejected during the handshake before interop resolution. The bridge
+version-1 through version-5 bridge is rejected during the handshake before interop resolution. The bridge
 project enables unsafe blocks for explicit output pointers. Object handles,
-callbacks, and verification of component unload completion remain future steps.
+and callbacks remain future steps.
 
 ## Reusable diagnostic checks
 
@@ -390,7 +392,8 @@ ctest --test-dir out/build/scripting -C Debug --output-on-failure
 ```
 
 The check target builds the managed bridge, a managed contract executable, and
-three test bridges and the example component under the CMake build directory. The five checks cover actual
+three test bridges, and publishes the example component with its private dependency
+under the CMake build directory. The six checks cover actual
 UCO pointer calls, every UTF-8 truncation boundary, buffer canaries, a throwing
 exception formatter, real native calls, owning diagnostics, malformed bridge
 responses, query/copy failures without retries or partial results, recovery,
@@ -399,7 +402,29 @@ count calls to ensure failed queries never copy and failed copies never retry.
 Component checks cover private registration counts, collectible identity, token
 reuse prevention, failed-load cleanup, missing component exports, Unicode paths,
 move/release behavior, and ownership after host reset/destruction.
-These checks have been executed on Windows; Linux and macOS execution is pending.
+Invocation checks exercise the actual Cdecl export and public native owner:
+exact overload selection, wrong/generic/private/instance/UCO methods, open/nonpublic
+types, missing types/methods, component exceptions (including ArgumentException),
+overflow, UTF-8 and pointer validation, bounded diagnostics, recovery, and stale
+tokens. Native fixture checks reject invalid diagnostic metadata and unknown
+statuses, and count failed invocations to verify they are never repeated to obtain
+diagnostics. An otherwise matching bridge missing only the unload-state export
+fails initialization before publishing readiness.
+Dependency checks use the real registry and loader with isolated temporary
+deployments. They resolve a derived type to trigger loading, verify distinct private
+dependency assemblies in two collectible contexts, and verify resident bridge and
+framework identity. A redundant bridge DLL does not override sharing; a newer
+bridge reference, different culture, or different public-key token is rejected
+by the loader. Missing dependency resolution fails
+on type use, explicit release removes its registration, and a complete deployment
+works afterward. A separate `ManagedUnloadContract` process observes collection
+after eight load/invoke/release cycles, including component and private dependency
+assemblies. A retained `Type` keeps unloading pending; dropping it permits
+collection. Forgetting a pending observer does not retain the assemblies. Native
+checks cover state validation, moved/released observations, and destructor cleanup.
+All six checks have been executed in Debug on Windows. The isolated managed
+unload check also passes in Release with optimized JIT lifetimes. Linux and macOS
+execution is pending.
 With scripting disabled, test configuration is also skipped before .NET discovery.
 
 ## UTF-8 strings and buffer ownership
@@ -583,7 +608,7 @@ does not build the managed bridge.
 
 `Fenrir.ManagedHost.Bootstrap.GetBridgeVersion` is invoked by the native host
 with `UnmanagedCallersOnly` and an explicit Cdecl calling convention. It returns
-bridge version `4`. The attribute does not make this ordinary managed DLL a native
+bridge version `6`. The attribute does not make this ordinary managed DLL a native
 exported library; the runtime delegate resolves the method.
 
 ## Lifetime contract
@@ -604,8 +629,12 @@ Platform handles and hosting API types stay within the native implementation.
 ## Separate collectible components
 
 Build the example component independently of the bridge. It targets `net10.0`
-and uses the bridge's already initialized runtime; it needs no separate runtime
-configuration and has no engine or bridge dependency:
+and uses the bridge's already initialized runtime; the host does not initialize
+the component's generated runtime configuration. The component references the
+separate `ManagedDependency/Fenrir.HostingDependency.csproj` and compiles against
+the resident bridge. The bridge reference uses `Private=false` and
+`ExcludeAssets=runtime` so a normal component build does not copy a private bridge.
+It has no engine dependency:
 
 ```powershell
 dotnet build packages/FenrirScripting/Managed/Fenrir.ManagedHost/Fenrir.ManagedHost.csproj --configuration Debug
@@ -625,9 +654,17 @@ With it, the example additionally reports:
 Component load: status=0
 Component assembly: Fenrir.HostingComponent
 Component collectible: true
+Component Add(20, 22): status=0, value=42
+Component missing method: status=3, value=none
+Component thrown exception: status=3, value=none
+Component after failures: status=0, value=4
 Component after host destruction: true
+Component invocation after host destruction: status=0, value=42
 Component release: status=0
 Component still owned: false
+Component unload state: Pending
+Component invocation after release: status=5
+Component diagnostic after release: true
 ```
 
 `LoadComponent(path)` returns a `ComponentLoadResult` containing an owning
@@ -636,7 +673,8 @@ before crossing the UTF-8 managed interface. Missing and invalid assemblies
 produce owning managed diagnostics; failure leaves host readiness intact. Native
 allocations and path conversion retain normal C++ exception behavior.
 
-The move-only component provides `IsLoaded()`, `GetInfo()` and `Release()`.
+The move-only component provides `IsLoaded()`, `GetInfo()`, `InvokeInt32()`,
+`Release()` and `GetUnloadStatus()`.
 Information is a native-owned snapshot of the assembly name and actual verified
 collectibility. Both ownership and metadata can outlive `DotNetHost`. Component
 owners retain immutable resident bridge functions independently of subsequent
@@ -646,7 +684,7 @@ on each owner. The internal registry is synchronized across separate owners.
 The managed registry assigns nonzero uint64 tokens that are never reused.
 Neither these tokens nor managed addresses appear in the public interface.
 Stale token access returns `InvalidHandle` (`5`); native moved-from/released
-owners also reject information queries. Native `Release()` is idempotent and
+owners also reject information queries and invocations. Native `Release()` is idempotent and
 invalidates ownership. Managed removal precedes the unload request, even if that
 request throws. Destruction and move-assignment of a live owner perform
 best-effort release without throwing; use explicit release to observe errors.
@@ -659,22 +697,138 @@ be loaded as a collectible component. SDK types and platform handles remain priv
 `ComponentLoadContext` uses `AssemblyDependencyResolver` for managed/native
 dependency paths and normal runtime fallback for unresolved assemblies. A
 reference to the resident bridge shares that existing assembly. The fixture has
-no private dependencies; a separate dependency fixture and shared-contract
-compatibility tests are the next loading step.
+a separate private dependency: resolving `ComponentMarker` resolves its base
+type from `Fenrir.HostingDependency` in that same collectible context. Framework
+assemblies remain shared. Sharing a resident bridge assembly preserves type
+identity; the loader explicitly rejects a requested version newer than the
+resident bridge, or a different culture/public-key token, before sharing it.
+Bridge assembly versions and the native bridge ABI handshake are separate checks.
 
-Release requests cooperative unloading. It proves registration removal, not
-garbage collection of the context. This implementation does not force GC or
-report unload completion. Context collection, method invocation, managed object
-ownership and reload will be verified in later steps; CoreCLR and the bridge
-remain resident throughout.
+Deploy the component DLL, `Fenrir.HostingComponent.deps.json`, and its private
+dependency DLL together. `EnableDynamicLoading` copies private dependencies to
+the normal build output. To prepare a deployment directory, use:
+
+```powershell
+dotnet publish packages/FenrirScripting/Examples/Hosting/ManagedComponent/Fenrir.HostingComponent.csproj --configuration Debug --output out/components/hosting
+```
+
+`AssemblyDependencyResolver` uses the component's dependency manifest to find
+managed and native libraries. Loading the primary DLL does not eagerly validate
+every dependency or type. A missing private dependency can fail later when a
+type is resolved or code executes. The owner must still release that component;
+a dependency failure does not automatically invalidate its registration. The
+invocation export contains these failures and transfers owning diagnostic text;
+other methods whose dependencies remain available can still be invoked.
+
+## Constrained component invocation
+
+```cpp
+auto result = component.InvokeInt32("Fenrir.HostingComponent.Calculations", "Add", 20, 22);
+```
+
+`ManagedComponent::InvokeInt32(typeName, methodName, left, right)` returns
+`Int32CallResult`. Names are case-sensitive UTF-8, borrowed only during this one
+call and never retained. They must remain valid/unchanged throughout the call,
+contain 1..INT32_MAX bytes, and contain no null characters. Native code checks
+lengths/nulls before narrowing; managed code performs strict UTF-8 decoding.
+Malformed names return `InvalidArgument` (`1`). A moved/released native owner
+returns `InvalidHandle` (`5`) before argument validation or a managed call.
+
+The resident bridge validates the nonzero component token and snapshots its
+assembly under the registry lock. It releases that lock before type resolution
+or user code runs. The named type must be public, closed, and defined in that
+assembly. The method must be declared on it, public, static, non-generic, and
+have exactly two by-value `System.Int32` parameters and a `System.Int32` return.
+Inherited methods, varargs and `UnmanagedCallersOnly` methods are excluded.
+Lookup does not use numeric conversions or select an incompatible overload.
+
+`ComponentInvocation` resolves reflection metadata and creates a temporary
+`Func<int,int,int>` delegate, then calls it as managed code. C++ receives no
+function pointer into the collectible assembly. There is no resident cache of
+component `Type`, `MethodInfo` or delegate objects. An accepted in-flight call
+retains its assembly/delegate while executing; cooperative unloading must wait
+for those roots/call frames to disappear. Calls, moves, release and destruction
+on the same native owner still require external serialization.
+
+The private Cdecl export takes, in order: uint64 token, type byte pointer/int32
+length, method byte pointer/int32 length, two int32 inputs, int32 output pointer,
+diagnostic byte pointer/int32 capacity, int32 written pointer, and int32 truncation
+pointer. All pointers are borrowed; caller storage must be valid and non-overlapping.
+Output and available diagnostic metadata are cleared before validation. Null
+diagnostic storage is allowed only with zero capacity; value and both metadata
+pointers are required. The output is published only after successful execution.
+
+Missing types/methods and wrong signatures return `ManagedException` (`3`) with
+exception details. Ordinary component exceptions also return `3`, including an
+`ArgumentException` thrown by component code; it is distinct from malformed ABI
+arguments. An `OverflowException` from invocation returns `Overflow` (`2`). A
+stale raw token returns `5`. Typed delegate invocation keeps the original exception
+instead of adding `TargetInvocationException`. Calls use the existing 4096-byte
+owning diagnostic contract, preserving UTF-8 boundaries, truncation, fallback and
+success-metadata checks. Failure exposes no integer and never retries execution.
+Results and diagnostics remain valid after release and host destruction.
+
+The fixture's `Calculations.Add` executes `DependencyMath.Add` in the private
+dependency. The example checks 42, a missing method, a thrown exception, recovery
+to 4, invocation after host destruction, and rejection after release. Rebuild both
+the bridge and native example for ABI version 6.
+
+## Observing cooperative unloading
+
+`Release()` invalidates component access, clears the registry's strong references,
+and requests cooperative unloading. `GetUnloadStatus()` returns a
+`ComponentUnloadResult` with a status, optional `ComponentUnloadState`, and owning
+diagnostics. The states are:
+
+| State | Observation |
+| --- | --- |
+| `NotRequested` | The registration still owns its component. |
+| `Pending` | Ownership was released; the context's long weak reference remains alive. |
+| `Collected` | The released context's long weak reference is no longer alive. |
+
+The same owner retains its private weak tracking token after release. It may be
+moved, queried repeatedly, and queried after host destruction. A moved-from owner
+returns `InvalidHandle` without a managed call. Native code rejects unknown states,
+states inconsistent with its active/released lifecycle, and malformed success
+diagnostic metadata without exposing a value. Release remains idempotent.
+
+The managed record holds the component strongly only while active. After release
+it holds only a long weak reference (`trackResurrection: true`) to the context.
+Queries read `IsAlive` without retrieving the target or creating a strong root.
+Destruction/move-assignment of an owner forgets its weak record after best-effort
+release; forgetting a live registration is rejected. Forgetting an observation
+does not cancel unloading. Raw stale/forgotten tokens return `InvalidHandle` (`5`).
+
+The private Cdecl query takes uint64 token, int32 state output, and the usual
+diagnostic byte pointer/int32 capacity/int32 written/int32 truncation pointers.
+Failure leaves state `-1`. Forgetting takes the token and diagnostic arguments.
+All pointers are borrowed, valid and non-overlapping; null diagnostic storage
+requires zero capacity. Query output and both metadata pointers are required.
+
+Neither release, query nor cleanup forces GC or promises a collection deadline.
+`Pending` is expected immediately after release; the example also accepts
+`Collected` if normal GC has already completed. An executing call, component
+instance, reflected `Type`, delegate or other strong reference can delay collection.
+CoreCLR and the bootstrap bridge remain resident throughout.
+
+`ManagedUnloadContract` alone forces bounded GC/finalizer cycles as verification.
+Its non-inlined load/invoke/release helper keeps assembly, context, delegate and
+exception locals off the GC-loop frame. It observes long weak references to the
+context, component assembly and private dependency, checks retained-reference
+behavior, removes tracking records, rejects stale tokens, and invokes the resident
+bridge afterward. The check is isolated with a 30-second CTest timeout. Managed
+object ownership and reload are the next lifetime steps.
 
 ## References
 
 - [Microsoft native hosting tutorial](https://learn.microsoft.com/en-us/dotnet/core/tutorials/netcore-hosting)
 - [Microsoft hosting sample](https://github.com/dotnet/samples/tree/main/core/hosting)
 - [Collectible contexts and cooperative unloading](https://learn.microsoft.com/en-us/dotnet/standard/assembly/unloadability)
+- [Weak references and resurrection tracking](https://learn.microsoft.com/en-us/dotnet/api/system.weakreference?view=net-10.0)
 - [Loading an assembly by absolute path](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.loader.assemblyloadcontext.loadfromassemblypath)
 - [Component dependency resolution](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.loader.assemblydependencyresolver)
+- [Creating typed managed delegates](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.methodinfo.createdelegate)
+- [Reflection lookup flags](https://learn.microsoft.com/en-us/dotnet/api/system.reflection.bindingflags)
 - [nethost discovery contract](https://github.com/dotnet/runtime/blob/main/src/native/corehost/nethost/nethost.h)
 - [hostfxr API declarations](https://github.com/dotnet/runtime/blob/main/src/native/corehost/hostfxr.h)
 - [Windows UTF-8 conversion](https://learn.microsoft.com/en-us/windows/win32/api/stringapiset/nf-stringapiset-widechartomultibyte)
