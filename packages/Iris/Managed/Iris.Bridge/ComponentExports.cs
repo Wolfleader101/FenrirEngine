@@ -91,13 +91,27 @@ public static partial class Bootstrap
         }
     }
 
+    // Releases a component and requests cooperative unloading. InUse (7) means it still has live objects
+    // and stays loaded; ForceReleaseComponent releases it anyway and invalidates those objects.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+        => ReleaseCore(token, force: false, diagnostic, capacity, written, truncated);
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int ForceReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+        => ReleaseCore(token, force: true, diagnostic, capacity, written, truncated);
+
+    private static unsafe int ReleaseCore(ulong token, bool force, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
         try
         {
-            return (int)(ComponentRegistry.Release(token) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
+            return (int)(ComponentRegistry.TryRelease(token, force) switch
+            {
+                ComponentRegistry.ReleaseResult.Released => BridgeStatus.Success,
+                ComponentRegistry.ReleaseResult.InUse => BridgeStatus.InUse,
+                _ => BridgeStatus.InvalidHandle
+            });
         }
         catch (Exception exception)
         {
@@ -211,6 +225,17 @@ public static partial class Bootstrap
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int FindMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
         int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
+        => FindMethodCore(token, typeId, name, nameLength, returnKind, paramKinds, paramCount, isStatic: true, methodId, diagnostic, capacity, written, truncated);
+
+    // Like FindMethod, for a public instance method, which may be inherited. Call it with
+    // InvokeInstanceMethod on an object that is an instance of the declaring type.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int FindInstanceMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
+        int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
+        => FindMethodCore(token, typeId, name, nameLength, returnKind, paramKinds, paramCount, isStatic: false, methodId, diagnostic, capacity, written, truncated);
+
+    private static unsafe int FindMethodCore(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
+        int* paramKinds, int paramCount, bool isStatic, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (methodId != null) *methodId = 0;
         if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || methodId == null ||
@@ -240,7 +265,7 @@ public static partial class Bootstrap
         }
         try
         {
-            switch (ComponentRegistry.TryFindMethod(token, typeId, methodName, returnKind, kinds, out ulong found))
+            switch (ComponentRegistry.TryFindMethod(token, typeId, methodName, returnKind, kinds, isStatic, out ulong found))
             {
                 case ComponentRegistry.FindResult.Found:
                     *methodId = found;
@@ -283,5 +308,79 @@ public static partial class Bootstrap
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
             return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
         }
+    }
+
+    // Runs an instance method on an owned object. Like InvokeMethod, except the object handle must belong
+    // to this component and be an instance of the method's declaring type (else InvalidArgument).
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int InvokeInstanceMethod(ulong token, ulong methodId, ulong objectId, ulong* arguments, int argCount, ulong* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (result != null) *result = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+            argCount < 0 || (argCount > 0 && arguments == null))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryInvokeInstanceMethod(token, methodId, objectId, new ReadOnlySpan<ulong>(arguments, argCount), out ulong returned))
+                return (int)BridgeStatus.InvalidHandle;
+            *result = returned;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+    }
+
+    // Constructs an object of a looked-up type with the public constructor whose parameter kinds match
+    // exactly; paramKinds and arguments both hold count entries. Success publishes a nonzero object handle
+    // that stays rooted until ReleaseObject (or until the component is released). NotFound (6): no such
+    // constructor, or the type is abstract. A constructor exception is ManagedException and roots nothing.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int CreateObject(ulong token, ulong typeId, int* paramKinds, ulong* arguments, int count, ulong* objectId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (objectId != null) *objectId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || objectId == null ||
+            count < 0 || (count > 0 && (paramKinds == null || arguments == null)))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (count > 255) throw new BridgeArgumentException("A constructor cannot have more than 255 parameters.");
+            int[] kinds = new int[count];
+            for (int index = 0; index < count; ++index)
+            {
+                kinds[index] = paramKinds[index];
+                ValueKinds.ToType(kinds[index], allowVoid: false);
+            }
+            switch (ComponentRegistry.TryCreateObject(token, typeId, kinds, new ReadOnlySpan<ulong>(arguments, count), out ulong created))
+            {
+                case ComponentRegistry.CreateResult.Created:
+                    *objectId = created;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.CreateResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new MissingMethodException("No public constructor with the requested parameter types was found on a concrete type."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+    }
+
+    // Unroots an owned object. An unknown or already released handle, including one from another
+    // component, is InvalidHandle.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int ReleaseObject(ulong token, ulong objectId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
+        return (int)(ComponentRegistry.ReleaseObject(token, objectId) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
     }
 }

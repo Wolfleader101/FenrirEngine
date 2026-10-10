@@ -37,10 +37,11 @@ static class UnloadChecks
 
     // Keep all context/assembly/type/delegate/exception locals off the GC-loop stack.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static unsafe Observation LoadInvokeRelease(string path, bool retain)
+    private static unsafe Observation LoadInvokeRelease(string path, bool retain, bool leakObject = false)
     {
         delegate* unmanaged[Cdecl]<byte*, int, ulong*, byte*, int, int*, int*, int> load = &Bootstrap.LoadComponent;
         delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> release = &Bootstrap.ReleaseComponent;
+        delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> forceRelease = &Bootstrap.ForceReleaseComponent;
         byte[] bytes = Encoding.UTF8.GetBytes(path);
         ulong token = 0;
         int written = 0, truncated = 0;
@@ -60,7 +61,19 @@ static class UnloadChecks
         Assembly dependency = context.Assemblies.Single(item => item.GetName().Name == "Iris.Examples.Dependency");
         var observation = new Observation(token, new WeakReference(assembly, true), new WeakReference(dependency, true));
         if (retain) retainedType = assembly.GetType("Iris.Examples.Component.ComponentMarker", throwOnError: true);
-        Check(release(token, null, 0, &written, &truncated) == 0 && written == 0 && truncated == 0,
+        // An owned object roots its component's state. Releasing the component is rejected while an object
+        // is live; once the last object is released the component unloads and is collected as before. A
+        // leaked object only survives a forced release, which drops it with the component.
+        ulong counterType = 0, objectId = 0;
+        Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Counter", out counterType) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryCreateObject(token, counterType, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out objectId) == ComponentRegistry.CreateResult.Created,
+              "Unload fixture object construction failed");
+        if (!leakObject)
+        {
+            Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with a live object was released");
+            Check(ComponentRegistry.ReleaseObject(token, objectId), "Unload fixture object release failed");
+        }
+        Check((leakObject ? forceRelease(token, null, 0, &written, &truncated) : release(token, null, 0, &written, &truncated)) == 0 && written == 0 && truncated == 0,
               "Unload request failed");
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Add").Status == 5, "Release did not invalidate invocation");
         Check(!ComponentRegistry.TryGetTypeName(token, typeId, 0, out _), "Release did not invalidate the type handle");
@@ -107,6 +120,12 @@ static class UnloadChecks
                   "Collection/forget cycle leaked registrations or weak tracking records");
         }
         Console.WriteLine("Managed unloading: eight load/invoke/release cycles collected contexts, component assemblies and private dependencies.");
+
+        // A leaked object is dropped by a forced release and does not keep the component alive.
+        Observation leaked = LoadInvokeRelease(path, false, leakObject: true);
+        WaitForCollection(leaked);
+        Forget(leaked.Token);
+        Console.WriteLine("Managed unloading: a component collects after its last object is released, or after a forced release drops a leaked object.");
 
         Observation held = LoadInvokeRelease(path, true);
         try

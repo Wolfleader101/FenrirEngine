@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -16,11 +17,14 @@ static class SharedAssemblyChecks
         if (!condition) throw new Exception(message);
     }
 
-    private static Type ContractTypeSeenBy(string componentPath, out AssemblyLoadContext context)
+    // The contract type as seen by the component loaded since `known` was taken. Contexts from earlier
+    // checks may still be waiting for collection, so the new one is identified by being new.
+    private static Type ContractTypeSeenBy(string componentPath, HashSet<AssemblyLoadContext> known, out AssemblyLoadContext context)
     {
-        Assembly component = AssemblyLoadContext.All.SelectMany(candidate => candidate.Assemblies)
-            .Last(assembly => assembly.Location == componentPath);
-        context = AssemblyLoadContext.GetLoadContext(component)!;
+        context = AssemblyLoadContext.All.Single(candidate => !known.Contains(candidate) &&
+            candidate.Assemblies.Any(assembly => assembly.Location == componentPath));
+        known.Add(context);
+        Assembly component = context.Assemblies.Single(assembly => assembly.Location == componentPath);
         return component.GetType(CalculatorType, throwOnError: true)!.BaseType!;
     }
 
@@ -32,10 +36,11 @@ static class SharedAssemblyChecks
         SharedAssemblies.Register(contract);
         SharedAssemblies.Register(contract); // The same file again is a no-op.
 
+        var known = new HashSet<AssemblyLoadContext>(AssemblyLoadContext.All);
         ulong first = ComponentRegistry.Load(path);
-        Type firstContract = ContractTypeSeenBy(path, out AssemblyLoadContext firstContext);
+        Type firstContract = ContractTypeSeenBy(path, known, out AssemblyLoadContext firstContext);
         ulong second = ComponentRegistry.Load(path);
-        Type secondContract = ContractTypeSeenBy(path, out AssemblyLoadContext secondContext);
+        Type secondContract = ContractTypeSeenBy(path, known, out AssemblyLoadContext secondContext);
         try
         {
             Check(firstContext != secondContext, "The two loads shared a component context");

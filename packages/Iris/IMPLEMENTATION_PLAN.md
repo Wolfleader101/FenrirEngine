@@ -22,7 +22,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 06: type handles (done)
   - 07: method handles and typed invocation (done)
   - 08: host exception and log sink (done)
-  - 09: managed objects and ownership
+  - 09: managed objects and ownership (done)
   - 10: objects as arguments
   - 11: fields and properties
   - 12: strings
@@ -78,16 +78,17 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 08)
+## Current state (after ticket 09)
 
 Implemented and tested (10 CTests of named cases; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
-- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-14 function table of eleven operations
+- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-15 function table of sixteen operations
 - bounded managed diagnostics
 - collectible component loading with private dependency resolution
 - typed static invocation: `Type::FindMethod<R(Args...)>` and `Method::Invoke` for bool, sized integers, float and double
 - release, and observation of the unload (NotRequested, Pending or Collected)
+- managed objects with explicit ownership: constructors by exact signature, instance and virtual methods, a live-object release policy
 - a process-wide log sink for bridge events and exception reports, with severity
 - type handles: look up a public type by name and read its names; invalidated by release
 - shared contract assemblies with one type identity across components

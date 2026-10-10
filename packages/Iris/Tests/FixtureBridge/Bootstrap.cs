@@ -71,7 +71,12 @@ public static class Bootstrap
             CopyTypeNameUtf8 = &CopyTypeNameUtf8,
             FindMethod = &FindMethod,
             InvokeMethod = &InvokeMethod,
-            SetLogSink = &SetLogSink
+            SetLogSink = &SetLogSink,
+            ForceReleaseComponent = &ForceReleaseComponent,
+            FindInstanceMethod = &FindInstanceMethod,
+            InvokeInstanceMethod = &InvokeInstanceMethod,
+            CreateObject = &CreateObject,
+            ReleaseObject = &ReleaseObject
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -166,6 +171,39 @@ public static class Bootstrap
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int SetLogSink(void* callback, void* context, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ForceReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        ++releases; released = true; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int FindInstanceMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
+        int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *methodId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int InvokeInstanceMethod(ulong token, ulong methodId, ulong objectId, ulong* arguments, int argCount, ulong* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *result = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int CreateObject(ulong token, ulong typeId, int* paramKinds, ulong* arguments, int count, ulong* objectId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *objectId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ReleaseObject(ulong token, ulong objectId, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *written = 0; *truncated = 0; return 0;
     }

@@ -9,5 +9,6 @@ internal enum BridgeStatus : int
     ManagedException = 3,
     BufferTooSmall = 4,
     InvalidHandle = 5,
-    NotFound = 6
+    NotFound = 6,
+    InUse = 7
 }

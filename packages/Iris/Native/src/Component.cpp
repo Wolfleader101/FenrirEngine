@@ -24,7 +24,9 @@ namespace Iris
         std::int32_t truncated = 0;
         if (token != 0)
         {
-            bridge->release(token, nullptr, 0, &written, &truncated);
+            // Destroying an owner always releases, even with live objects, so a leaked object can
+            // never pin the registration. Explicit Release is the call that refuses.
+            bridge->forceRelease(token, nullptr, 0, &written, &truncated);
         }
         if (observedToken != 0)
         {
@@ -123,12 +125,16 @@ namespace Iris
         {
             return Detail::Success<void>();
         }
-        // Invalidate this owner first; it keeps the token only to observe unloading.
-        const auto token = std::exchange(state->token, 0);
-        state->trackingToken = token;
         Detail::ManagedDiagnosticBuffer diagnostic;
-        const auto status = state->bridge->release(token, diagnostic.bytes.data(), diagnostic.Capacity,
+        const auto status = state->bridge->release(state->token, diagnostic.bytes.data(), diagnostic.Capacity,
                                                    &diagnostic.written, &diagnostic.truncated);
-        return Detail::CompleteCall<void>(status, "ReleaseComponent", diagnostic);
+        auto result = Detail::CompleteCall<void>(status, "ReleaseComponent", diagnostic);
+        // A refused release (live objects) leaves the component loaded and usable. Any other outcome
+        // invalidates this owner, which keeps the token only to observe unloading.
+        if (result.status != CallStatus::InUse)
+        {
+            state->trackingToken = std::exchange(state->token, 0);
+        }
+        return result;
     }
 } // namespace Iris
