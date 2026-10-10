@@ -185,8 +185,9 @@ Messages arrive with a `LogLevel`. Bridge events (a component loaded or released
 `Info`. A managed exception caught at a bridge boundary is reported with its full `ToString()`: `Error` for
 exceptions from component code, `Warning` for the bridge's own argument validation. The call that raised
 it still returns the same details in its result. A lookup that finds nothing (`NotFound`) is not an
-exception and is not logged. The sink runs synchronously on the calling thread. It may throw (the exception
-is swallowed) or clear itself, and it stays registered after the host that set it is destroyed, so what it
+exception and is not logged. The sink runs synchronously on the calling thread and must be safe to run concurrently if calls come
+from several threads. It may throw (the exception is swallowed) or clear itself; messages raised by calls it
+makes into Iris are dropped, and it stays registered after the host that set it is destroyed, so what it
 captures must outlive it. `text` is only valid during the call.
 
 ### Lifetime rules
