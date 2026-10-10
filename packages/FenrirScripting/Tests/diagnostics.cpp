@@ -2,6 +2,7 @@
 
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -91,11 +92,17 @@ int main(int argc, char* argv[])
             // name) to the string query/copy responses. Values 100+ read counters; 200+ select a mode.
             auto loaded = host.LoadComponent(argv[3]);
             Check(loaded.status == ManagedCallStatus::Success && loaded.value, "Fixture component load failed");
-            auto& fixture = *loaded.value;
+            // Optional so the released owner can be destroyed explicitly below; the lambdas
+            // must not be used after that.
+            std::optional<ManagedComponent> fixture(std::move(*loaded.value));
             const auto invoke = [&fixture](std::int32_t left, std::int32_t right = 0) {
-                return fixture.InvokeInt32("Fixture", "Method", left, right);
+                return fixture->InvokeInt32("Fixture", "Method", left, right);
             };
-            const auto counter = [&invoke](std::int32_t which) { return *invoke(which).value; };
+            const auto counter = [&invoke](std::int32_t which) {
+                const auto result = invoke(which);
+                Check(result.value.has_value(), "Fixture counter unavailable");
+                return *result.value;
+            };
             const auto selectMode = [&invoke](std::int32_t selector) {
                 Check(invoke(200 + selector).status == ManagedCallStatus::Success, "Selecting a fixture mode failed");
             };
@@ -122,9 +129,11 @@ int main(int argc, char* argv[])
                           !invalid.diagnosticTruncated,
                       "Invalid diagnostic trusted or changed operation status");
             }
-            Check(invoke(7).status == ManagedCallStatus::InvalidResponse && !invoke(7).value,
+            const auto successWithMetadata = invoke(7);
+            Check(successWithMetadata.status == ManagedCallStatus::InvalidResponse && !successWithMetadata.value,
                   "Success with diagnostic metadata accepted");
-            Check(invoke(8).status == ManagedCallStatus::UnexpectedStatus && !invoke(8).value,
+            const auto unknownStatus = invoke(8);
+            Check(unknownStatus.status == ManagedCallStatus::UnexpectedStatus && !unknownStatus.value,
                   "Unknown status accepted");
             const auto noSpace = invoke(9);
             Check(noSpace.status == ManagedCallStatus::ManagedException && noSpace.diagnosticTruncated &&
@@ -132,7 +141,8 @@ int main(int argc, char* argv[])
                   "Empty truncated diagnostic lost fallback/flag");
             Check(invoke(10).diagnostic == std::string("A\0B", 3), "Embedded null lost");
             Check(invoke(11).status == ManagedCallStatus::InvalidHandle, "Managed invalid token status lost");
-            Check(invoke(20, 22).value == 42 && invoke(20, 22).diagnostic.empty(), "Fixture recovery failed");
+            const auto recoveredCall = invoke(20, 22);
+            Check(recoveredCall.value == 42 && recoveredCall.diagnostic.empty(), "Fixture recovery failed");
 
             // String adapter: query then copy, each with its own diagnostics. `calls` counts how many
             // managed invocations ran, proving failed queries never copy and failed copies never retry.
@@ -156,7 +166,7 @@ int main(int argc, char* argv[])
             for (const auto& entry : cases)
             {
                 selectMode(entry.mode);
-                const auto failed = fixture.GetInfo();
+                const auto failed = fixture->GetInfo();
                 Check(failed.status == entry.status && !failed.value && !failed.diagnostic.empty(),
                       "String failure status, diagnostic or partial output incorrect");
                 Check(counter(101) == entry.calls, "Failed string operation was retried or query failure copied");
@@ -177,17 +187,17 @@ int main(int argc, char* argv[])
                     Check(failed.diagnostic == std::string("A\0B", 3), "String error lost embedded null");
             }
             selectMode(0);
-            const auto recovered = fixture.GetInfo();
+            const auto recovered = fixture->GetInfo();
             Check(recovered.value && recovered.value->assemblyName == std::string("A\0B", 3) &&
                       recovered.diagnostic.empty() && !recovered.diagnosticTruncated && counter(101) == 2,
                   "String recovery retained diagnostics or changed call count");
 
-            Check(fixture.GetUnloadStatus().value == ComponentUnloadState::NotRequested,
+            Check(fixture->GetUnloadStatus().value == ComponentUnloadState::NotRequested,
                   "Live observation did not report NotRequested");
             for (int selector : {20, 21, 22, 23, 24, 25})
             {
                 selectMode(selector);
-                const auto query = fixture.GetUnloadStatus();
+                const auto query = fixture->GetUnloadStatus();
                 const auto expectedStatus = selector == 24   ? ManagedCallStatus::UnexpectedStatus
                                             : selector == 25 ? ManagedCallStatus::InvalidHandle
                                                              : ManagedCallStatus::InvalidResponse;
@@ -195,32 +205,39 @@ int main(int argc, char* argv[])
                       "Malformed unload state/status/diagnostic metadata accepted");
             }
             selectMode(0);
-            Check(fixture.Release().status == ManagedCallStatus::Success &&
-                      fixture.GetUnloadStatus().value == ComponentUnloadState::Pending,
+            Check(fixture->Release().status == ManagedCallStatus::Success &&
+                      fixture->GetUnloadStatus().value == ComponentUnloadState::Pending,
                   "Released owner lost its observation");
 
-            // A released owner can no longer invoke, so counters come from a second fixture registration.
+            // A released owner can no longer invoke, so modes and counters go through a second
+            // registration. The fixture's load clears its released flag; modes 22 and 26 set the
+            // observed unload state explicitly, so the checks below do not depend on that flag.
             auto control = host.LoadComponent(argv[3]);
             Check(control.value != nullptr, "Control fixture load failed");
             const auto controlInvoke = [&control](std::int32_t left) {
                 return control.value->InvokeInt32("Fixture", "Method", left, 0);
             };
+            const auto controlCounter = [&controlInvoke](std::int32_t which) {
+                const auto result = controlInvoke(which);
+                Check(result.value.has_value(), "Fixture counter unavailable");
+                return *result.value;
+            };
             Check(controlInvoke(222).status == ManagedCallStatus::Success &&
-                      fixture.GetUnloadStatus().value == ComponentUnloadState::Collected,
+                      fixture->GetUnloadStatus().value == ComponentUnloadState::Collected,
                   "Collected observation was rejected");
             Check(controlInvoke(226).status == ManagedCallStatus::Success &&
-                      fixture.GetUnloadStatus().status == ManagedCallStatus::InvalidResponse,
+                      fixture->GetUnloadStatus().status == ManagedCallStatus::InvalidResponse,
                   "Released owner accepted NotRequested");
             Check(controlInvoke(200).status == ManagedCallStatus::Success, "Resetting unload fixture failed");
-            const auto releaseCount = *controlInvoke(102).value;
-            const auto forgetCount = *controlInvoke(103).value;
-            loaded.value.reset();
-            Check(*controlInvoke(102).value == releaseCount && *controlInvoke(103).value == forgetCount + 1,
+            const auto releaseCount = controlCounter(102);
+            const auto forgetCount = controlCounter(103);
+            fixture.reset(); // Destroys the released owner.
+            Check(controlCounter(102) == releaseCount && controlCounter(103) == forgetCount + 1,
                   "Released owner destruction repeated release or leaked observation");
             auto scoped = host.LoadComponent(argv[3]);
             Check(scoped.value != nullptr, "Scoped cleanup fixture load failed");
             scoped.value.reset();
-            Check(*controlInvoke(102).value == releaseCount + 1 && *controlInvoke(103).value == forgetCount + 2,
+            Check(controlCounter(102) == releaseCount + 1 && controlCounter(103) == forgetCount + 2,
                   "Live owner destruction omitted release or observation cleanup");
             Check(host.IsInitialized(), "Call failure reset readiness");
         }

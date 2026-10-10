@@ -11,3 +11,7 @@
 - [ ] The README is a concise usage guide: build, configure, run, and core lifetime rules. Design rationale moves to ADRs or the plan.
 - [ ] Comments state contracts once, at the declaration, and are not repeated at every call site.
 - [ ] There are no behaviour changes beyond the listed bug fixes. All CTests pass, and the Release unload checks still pass.
+
+## Comments
+
+From the ticket 03 review (review 01, O5): the fixture bridge still selects behaviour by magic numbers. `left` values 1–12 pick integer responses, 100–103 read counters, and 200+ select string or unload modes. Replace them with named scenarios as part of this cleanup.

@@ -12,3 +12,7 @@
 - [ ] Managed exceptions return `ManagedException` (and `Overflow` where applicable) with diagnostics, and the next call succeeds.
 - [ ] Method handles are cached, generation-bound and stale-checked. The handle and its cache do not keep the component alive (verified with the unload check).
 - [ ] `InvokeInt32` is removed, and its tests migrate to the new API.
+
+## Comments
+
+From review 01 (D3 and C3): `InvokeComponentInt32` maps any `OverflowException` thrown by component code to `ManagedCallStatus::Overflow`, and `LoadComponent` maps `ArgumentException` to `InvalidArgument`. When typed invocation replaces `InvokeInt32`, component exceptions should all report `ManagedException`. Statuses should come only from the bridge's own validation.

@@ -23,7 +23,7 @@ static class InvocationChecks
         {
             int value = 99, written = 99, truncated = 99;
             int status = invoke(token, typePointer, typeBytes.Length, methodPointer, methodBytes.Length,
-                                left, right, &value, diagnostic + 1, capacity, &written, &truncated);
+                                left, right, &value, capacity == 0 ? null : diagnostic + 1, capacity, &written, &truncated);
             Check(storage[0] == 0xA5 && storage[^1] == 0xA5 && written >= 0 && written <= capacity &&
                   (truncated == 0 || truncated == 1), "Invocation corrupted diagnostic storage/metadata");
             Check(status == 0 || value == 0, "Failed invocation published a value");
@@ -79,6 +79,9 @@ static class InvocationChecks
                 Check(bounded.Status == 3 && bounded.Truncated == 1, "Bounded component diagnostic changed operation status");
             }
             Check(Invoke(token, TypeName, "Add").Diagnostic == "", "Successful call retained diagnostics");
+            Result noBuffer = Invoke(token, TypeName, "Throw", capacity: 0); // Null storage, zero capacity.
+            Check(noBuffer.Status == 3 && noBuffer.Diagnostic == "" && noBuffer.Truncated == 1,
+                  "A failing call without diagnostic storage changed status or lost truncation");
 
             byte[] typeBytes = Encoding.UTF8.GetBytes(TypeName), methodBytes = Encoding.UTF8.GetBytes("Add"), storage = new byte[256];
             delegate* unmanaged[Cdecl]<ulong, byte*, int, byte*, int, int, int, int*, byte*, int, int*, int*, int> invoke = &Bootstrap.InvokeComponentInt32;

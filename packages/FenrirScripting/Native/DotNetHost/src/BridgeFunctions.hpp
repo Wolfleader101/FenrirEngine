@@ -10,16 +10,15 @@ namespace Fenrir::Scripting::Detail
 #else
 #define FENRIR_BRIDGE_CALL
 #endif
-    // The bridge ABI: a table of Cdecl function pointers filled by the managed
-    // Bootstrap.GetBridgeFunctions. Field order, count and signatures must match the managed
-    // BridgeFunctions struct; any change bumps BridgeVersion on both sides.
-    // All pointer arguments are borrowed for one call. Tokens are uint64; flags, counts and statuses are int32.
-
     // The bridge's only public entry point: (expected version, table, table size, reported version,
     // reported size). Always reports; fills the table only when version and size match.
     using GetBridgeFunctionsFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, void*, std::int32_t, std::int32_t*,
                                                                    std::int32_t*);
 
+    // The bridge ABI: a table of Cdecl function pointers filled by the managed
+    // Bootstrap.GetBridgeFunctions. Field order, count and signatures must match the managed
+    // BridgeFunctions struct; any change bumps BridgeVersion on both sides.
+    // All pointer arguments are borrowed for one call. Tokens are uint64; flags, counts and statuses are int32.
     struct BridgeFunctions
     {
         using LoadFn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint64_t*,

@@ -261,9 +261,8 @@ assigning `&Method` type-checks each signature, and in the private native
 count, and the behaviour checks call every slot. Adding an export means adding a
 field on both sides and bumping the version.
 
-The example exits with zero only when initialization and its interop checks succeed.
-The deliberate overflow is an expected check. Configuration, hosting, handshake and
-version failures exit with one. A bridge failure can occur after CoreCLR and the
+The example exits with zero only when initialization and its component checks succeed.
+Configuration, hosting, handshake and version failures exit with one. A bridge failure can occur after CoreCLR and the
 assembly have loaded; resetting wrapper state does not undo those process-resident
 resources. The bridge has process lifetime. Separate collectible components can be
 loaded and invoked; unload status observes collection separately from release.
@@ -318,7 +317,7 @@ because the bridge lives in the default load context; the fixture selects its
 handshake response from `FENRIR_TEST_BRIDGE_MODE` (`legacy` version, `oversized`
 table, `missing` entry). `notbridge` passes a non-bridge assembly. The nine checks cover actual
 UCO pointer calls, every UTF-8 truncation boundary, buffer canaries, a throwing
-exception formatter, real native calls, owning diagnostics, malformed bridge
+exception formatter, the real bridge handshake, owning diagnostics, malformed bridge
 responses, query/copy failures without retries or partial results, recovery,
 and ABI version rejection. String fixture checks exercise the UTF-8 adapter through `GetInfo` and
 count calls to ensure failed queries never copy and failed copies never retry.
@@ -394,8 +393,7 @@ ownership, and the existing hostfxr diagnostic capture checks. The UTF-8-host
 branch was also compiled and exercised on Windows with a `char_t = char` test
 stub. This branch check does not replace execution on Linux or macOS.
 
-The hosting example's existing byte comparison and malformed-runtimeconfig
-diagnostic remain observable completion checks. Console display is a separate
+The hosting example prints a managed exception containing non-ASCII text. Console display is a separate
 boundary. In PowerShell, explicitly setting the output encoding also updates
 the shell's cached encoding before it decodes native output:
 
@@ -446,38 +444,8 @@ the component's generated runtime configuration. The component references the
 separate `ManagedDependency/Fenrir.HostingDependency.csproj` and compiles against
 the resident bridge. The bridge reference uses `Private=false` and
 `ExcludeAssets=runtime` so a normal component build does not copy a private bridge.
-It has no engine dependency:
-
-```powershell
-dotnet build packages/FenrirScripting/Managed/Fenrir.ManagedHost/Fenrir.ManagedHost.csproj --configuration Debug
-dotnet build packages/FenrirScripting/Examples/Hosting/ManagedComponent/Fenrir.HostingComponent.csproj --configuration Debug
-cmake --build out/build/scripting --config Debug --target FenrirHostingExample
-
-[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
-$bridgeDir = 'packages/FenrirScripting/Managed/Fenrir.ManagedHost/bin/Debug/net10.0'
-$componentDir = 'packages/FenrirScripting/Examples/Hosting/ManagedComponent/bin/Debug/net10.0'
-.\out\build\scripting\Examples\Hosting\Debug\FenrirHostingExample.exe "$bridgeDir/Fenrir.ManagedHost.runtimeconfig.json" "$bridgeDir/Fenrir.ManagedHost.dll" "$componentDir/Fenrir.HostingComponent.dll" | Out-Host
-```
-
-The component argument is optional; omitting it runs the existing interop checks.
-With it, the example additionally reports:
-
-```text
-Component load: status=0
-Component assembly: Fenrir.HostingComponent
-Component collectible: true
-Component Add(20, 22): status=0, value=42
-Component missing method: status=3, value=none
-Component thrown exception: status=3, value=none
-Component after failures: status=0, value=4
-Component after host destruction: true
-Component invocation after host destruction: status=0, value=42
-Component release: status=0
-Component still owned: false
-Component unload state: Pending
-Component invocation after release: status=5
-Component diagnostic after release: true
-```
+It has no engine dependency. The test build publishes it with its dependency; see
+"Build the native library and example" for running the example against it.
 
 `LoadComponent(path)` returns a `ComponentLoadResult` containing an owning
 `unique_ptr<ManagedComponent>` only on success. Relative paths become absolute
@@ -581,9 +549,9 @@ success-metadata checks. Failure exposes no integer and never retries execution.
 Results and diagnostics remain valid after release and host destruction.
 
 The fixture's `Calculations.Add` executes `DependencyMath.Add` in the private
-dependency. The example checks 42, a missing method, a thrown exception, recovery
-to 4, invocation after host destruction, and rejection after release. Rebuild both
-the bridge and native example for ABI version 8.
+dependency. The example checks 42, a thrown exception, invocation after host
+destruction, and rejection after release. Rebuild both the bridge and native
+example for ABI version 8.
 
 ## Observing cooperative unloading
 
