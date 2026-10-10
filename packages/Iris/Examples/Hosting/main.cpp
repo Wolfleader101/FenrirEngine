@@ -87,6 +87,13 @@ int main(int argc, char* argv[])
     const auto sum = component->InvokeInt32(calculations, "Add", 20, 22);
     std::cout << "Calculations.Add(20, 22) = " << (sum.value ? std::to_string(*sum.value) : sum.diagnostic) << '\n';
 
+    // Types are found by name; a missing one is NotFound, and handles stop working after release.
+    const auto type = component->FindType(calculations);
+    const auto typeInfo = type.Succeeded() ? type.value->GetInfo() : Iris::CallResult<Iris::TypeInfo>{};
+    std::cout << "FindType: " << (typeInfo.value ? typeInfo.value->fullName : type.diagnostic) << '\n';
+    const auto missingType = component->FindType("Iris.Examples.Component.Missing");
+    std::cout << "FindType(missing): status " << static_cast<std::int32_t>(missingType.status) << '\n';
+
     // Failures return a status and the managed exception's details; the next call still works.
     const auto thrown = component->InvokeInt32(calculations, "Throw", 0, 0);
     std::cout << "Calculations.Throw: status " << static_cast<std::int32_t>(thrown.status) << '\n'

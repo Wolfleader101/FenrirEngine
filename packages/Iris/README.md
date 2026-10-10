@@ -101,9 +101,11 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 10.
+Managed bridge initialized; bridge version 11.
 Loaded Iris.Examples.Component
 Calculations.Add(20, 22) = 42
+FindType: Iris.Examples.Component.Calculations
+FindType(missing): status 6
 Calculations.Throw: status 3
 System.InvalidOperationException: Component failure — π 🐺.
 Release: status 0, unload Pending
