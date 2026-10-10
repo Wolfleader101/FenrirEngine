@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 15.
+Managed bridge initialized; bridge version 16.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -224,6 +224,35 @@ const auto sum = total->Invoke(**a.value, **b.value);      // 7
   `std::optional`, not an error.
 - **Arguments** are rejected before the call if they are released or moved-from (`InvalidHandle`) or belong
   to another component (`InvalidArgument`).
+
+### Fields and properties
+
+`Type::FindField<T>(name)` and `Type::FindProperty<T>(name)` find a public field or property of exactly
+type `T`, static or instance (declared or inherited), and return a `Member<T>`:
+
+```cpp
+const auto settings = *component.FindType("MyComponent.Settings").value;
+const auto count   = *settings.FindField<std::int32_t>("Count").value;         // instance field
+const auto enabled = *settings.FindProperty<bool>("Enabled").value;            // instance property
+const auto limit   = *settings.FindField<std::int32_t>("StaticCount").value;   // static field
+auto object = settings.CreateObject();
+
+(void)count.Set(*object.value, 5);                 // instance: pass the object
+const auto n = count.Get(*object.value);           // CallResult<std::int32_t>
+(void)limit.Set(41);                               // static: no object
+```
+
+`T` is a `PrimitiveValue` matched exactly, or `std::optional<Object>` for a class- or interface-typed
+member: `Get` returns a new, independently owned handle (empty for null) and `Set` takes a `const Object*`
+(`nullptr` stores null; the object must be an instance of the member's type). A missing, private or
+differently typed member, and indexers, are `NotFound`.
+
+Misuse is a diagnostic, not undefined behaviour: using a static member with an object or an instance member
+without one, writing a read-only member (a `readonly` field, a constant, a property with no public
+setter) and reading a write-only property are `InvalidArgument`. Properties run their accessors, so an
+exception from a getter or setter is `ManagedException` with its own details and leaves the object usable.
+Like `Type`, a `Member` is a cheap value that holds no managed reference and stops working
+(`InvalidHandle`) when its component is released.
 
 ### Logging
 

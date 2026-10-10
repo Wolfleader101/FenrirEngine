@@ -7,6 +7,8 @@ add_library(Iris STATIC
     src/ComponentState.hpp
     src/LogSink.cpp
     src/LogSink.hpp
+    src/Member.cpp
+    src/MemberState.hpp
     src/Method.cpp
     src/Object.cpp
     src/ObjectState.hpp
@@ -27,6 +29,7 @@ add_library(Iris STATIC
     include/Iris/CallResult.hpp
     include/Iris/Component.hpp
     include/Iris/Log.hpp
+    include/Iris/Member.hpp
     include/Iris/Method.hpp
     include/Iris/Object.hpp
     include/Iris/Type.hpp

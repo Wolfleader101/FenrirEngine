@@ -9,7 +9,8 @@ namespace Iris
     namespace Detail
     {
         class RawMethod;
-    }
+        class RawMember;
+    } // namespace Detail
 
     /**
      * @brief Owns one managed object created with Type::CreateObject.
@@ -44,6 +45,7 @@ namespace Iris
       private:
         friend class Type;
         friend class Detail::RawMethod;
+        friend class Detail::RawMember;
         struct State;
         explicit Object(std::unique_ptr<State> state) noexcept;
         std::unique_ptr<State> state;

@@ -165,8 +165,8 @@ namespace Iris
             std::shared_ptr<const State> state;
         };
 
-        template <typename Result>
-        CallResult<Result> ToTyped(const RawMethod& method, CallResult<std::uint64_t> raw)
+        template <typename Result, typename Handle>
+        CallResult<Result> ToTyped(const Handle& method, CallResult<std::uint64_t> raw)
         {
             CallResult<Result> result;
             result.status = raw.status;

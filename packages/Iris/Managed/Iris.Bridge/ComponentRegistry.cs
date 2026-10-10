@@ -11,7 +11,12 @@ internal static class ComponentRegistry
     // A method resolved by exact signature, with the wire kinds of its parameters and return value.
     private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, Type[] ParameterTypes, int ReturnKind, bool IsStatic);
 
-    // Handles to types and methods looked up in one component. They live in the active entry, so
+    // A public field or property of a looked-up type. Properties go through their public accessors, so an
+    // exception thrown by one is the component's own and is not wrapped.
+    private sealed record MemberRecord(FieldInfo? Field, PropertyInfo? Property, MethodInfo? Getter, MethodInfo? Setter,
+        Type ValueType, int ValueKind, bool IsStatic, Type DeclaringType);
+
+    // Handles to types, methods and members looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
     // its component.
     private sealed class HandleTable
@@ -20,6 +25,8 @@ internal static class ComponentRegistry
         internal readonly Dictionary<ulong, Type> Types = new();
         internal readonly Dictionary<MethodInfo, ulong> MethodIds = new();
         internal readonly Dictionary<ulong, MethodRecord> Methods = new();
+        internal readonly Dictionary<MemberInfo, ulong> MemberIds = new();
+        internal readonly Dictionary<ulong, MemberRecord> Members = new();
         // Objects the native side owns. These are the only strong references to them, so releasing the
         // component (which drops the entry) or the object (which removes it here) is what unroots them.
         internal readonly Dictionary<ulong, object> Objects = new();
@@ -39,6 +46,7 @@ internal static class ComponentRegistry
     private static ulong lastTypeId; // Type and method ids come from process-wide counters,
     private static ulong lastMethodId; // so a handle is never reused.
     private static ulong lastObjectId;
+    private static ulong lastMemberId;
 
     internal enum FindResult { Found, NotFound, InvalidHandle }
     internal enum ReleaseResult { Released, InvalidHandle, InUse }
@@ -365,6 +373,143 @@ internal static class ComponentRegistry
             entry.Handles.Objects.Add(objectId, instance);
             return CreateResult.Created;
         }
+    }
+
+    // Finds a public field (memberKind 0) or property (memberKind 1) of a looked-up type by name and value
+    // kind, static or instance, declared or inherited. By-value kinds must match exactly; Object matches any
+    // class or interface type. Indexers are not properties here. Looking the same member up again returns
+    // the same handle.
+    internal static FindResult TryFindMember(ulong token, ulong typeId, string name, int memberKind, int valueKind, out ulong memberId)
+    {
+        memberId = 0;
+        Entry entry;
+        Type type;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Types.TryGetValue(typeId, out Type? found)) return FindResult.InvalidHandle;
+            entry = active;
+            type = found;
+        }
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.FlattenHierarchy;
+        MemberRecord? member = null;
+        MemberInfo? info = null;
+        if (memberKind == 0)
+        {
+            FieldInfo? field = type.GetField(name, flags);
+            if (field != null && KindMatches(field.FieldType, valueKind, isReturn: false))
+            {
+                info = field;
+                member = new MemberRecord(field, null, null, null, field.FieldType, valueKind, field.IsStatic, field.DeclaringType!);
+            }
+        }
+        else
+        {
+            PropertyInfo? property = type.GetProperty(name, flags);
+            if (property != null && property.GetIndexParameters().Length == 0 && KindMatches(property.PropertyType, valueKind, isReturn: false))
+            {
+                MethodInfo? getter = property.GetGetMethod(), setter = property.GetSetMethod();
+                if (getter != null || setter != null)
+                {
+                    info = property;
+                    member = new MemberRecord(null, property, getter, setter, property.PropertyType, valueKind, (getter ?? setter)!.IsStatic, property.DeclaringType!);
+                }
+            }
+        }
+        if (member == null || info == null) return FindResult.NotFound;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                return FindResult.InvalidHandle;
+            if (!entry.Handles.MemberIds.TryGetValue(info, out memberId))
+            {
+                memberId = checked(++lastMemberId);
+                entry.Handles.MemberIds.Add(info, memberId);
+                entry.Handles.Members.Add(memberId, member);
+            }
+            return FindResult.Found;
+        }
+    }
+
+    // Resolves a member handle and the object it is used on. False for an unknown component, member or
+    // object handle. Throws BridgeArgumentException for static/instance misuse or an object of the wrong type.
+    private static bool TryGetMember(ulong token, ulong memberId, ulong objectId, out Entry? entry, out MemberRecord? member, out object? target)
+    {
+        entry = null;
+        member = null;
+        target = null;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Members.TryGetValue(memberId, out MemberRecord? found)) return false;
+            if (found.IsStatic)
+            {
+                if (objectId != 0) throw new BridgeArgumentException("A static member cannot be used with an object.");
+            }
+            else
+            {
+                if (objectId == 0) throw new BridgeArgumentException("An instance member needs an object.");
+                if (!active.Handles.Objects.TryGetValue(objectId, out target)) return false;
+                if (!found.DeclaringType.IsInstanceOfType(target))
+                    throw new BridgeArgumentException("The object is not an instance of the member's declaring type.");
+            }
+            entry = active;
+            member = found;
+            return true;
+        }
+    }
+
+    // Reads a member. The result slot holds the value, or a new object handle for an Object member.
+    internal static bool TryGetMemberValue(ulong token, ulong memberId, ulong objectId, out ulong value)
+    {
+        value = 0;
+        if (!TryGetMember(token, memberId, objectId, out Entry? entry, out MemberRecord? member, out object? target)) return false;
+        object? read;
+        if (member!.Field != null)
+        {
+            read = member.Field.GetValue(target);
+        }
+        else
+        {
+            if (member.Getter == null) throw new BridgeArgumentException("The property is write-only.");
+            read = member.Getter.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, parameters: null, culture: null);
+        }
+        value = ReturnSlot(token, entry!, member.ValueKind, read);
+        return true;
+    }
+
+    // Writes a member. An Object member takes an object handle or zero for null.
+    internal static bool TrySetMemberValue(ulong token, ulong memberId, ulong objectId, ulong value)
+    {
+        if (!TryGetMember(token, memberId, objectId, out Entry? entry, out MemberRecord? member, out object? target)) return false;
+        if (member!.Field != null && (member.Field.IsInitOnly || member.Field.IsLiteral))
+            throw new BridgeArgumentException("The field is read-only.");
+        if (member.Property != null && member.Setter == null)
+            throw new BridgeArgumentException("The property is read-only.");
+        object? converted;
+        if ((ValueKind)member.ValueKind == ValueKind.Object)
+        {
+            converted = null;
+            if (value != 0)
+            {
+                lock (Gate)
+                {
+                    if (!entry!.Handles.Objects.TryGetValue(value, out converted))
+                        throw new BridgeHandleException("The value is not an object this component holds.");
+                }
+                if (!member.ValueType.IsInstanceOfType(converted))
+                    throw new BridgeArgumentException($"The value is not an instance of {member.ValueType}.");
+            }
+        }
+        else
+        {
+            converted = ValueKinds.ToObject(member.ValueKind, value);
+        }
+        if (member.Field != null)
+            member.Field.SetValue(target, converted);
+        else
+            member.Setter!.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, new[] { converted }, culture: null);
+        return true;
     }
 
     // Unroots an owned object. False for an unknown component or object, including one already released.

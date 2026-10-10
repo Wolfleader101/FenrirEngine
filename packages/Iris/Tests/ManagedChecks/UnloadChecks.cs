@@ -68,6 +68,13 @@ static class UnloadChecks
         Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Counter", out counterType) == ComponentRegistry.FindResult.Found &&
               ComponentRegistry.TryCreateObject(token, counterType, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out objectId) == ComponentRegistry.CreateResult.Created,
               "Unload fixture object construction failed");
+        // A member handle is only an id in the registry's table; it must not keep the context alive.
+        ulong settingsType = 0, memberId = 0, memberValue = 0;
+        Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Settings", out settingsType) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryFindMember(token, settingsType, "StaticCount", 0, 6, out memberId) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TrySetMemberValue(token, memberId, 0, 5) && ComponentRegistry.TryGetMemberValue(token, memberId, 0, out memberValue) && memberValue == 5,
+              "Unload fixture member access failed");
+
         // A returned object is rooted like a constructed one: Factory.Make returns a new Counter.
         ulong factoryType = 0, makeMethod = 0, returnedId = 0;
         Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Factory", out factoryType) == ComponentRegistry.FindResult.Found &&
@@ -85,6 +92,7 @@ static class UnloadChecks
               "Unload request failed");
         Check(InvocationChecks.Invoke(token, InvocationChecks.TypeName, "Add").Status == 5, "Release did not invalidate invocation");
         Check(!ComponentRegistry.TryGetTypeName(token, typeId, 0, out _), "Release did not invalidate the type handle");
+        Check(!ComponentRegistry.TryGetMemberValue(token, memberId, 0, out _), "Release did not invalidate the member handle");
         Check(State(token) == 1, "A context still rooted in the helper did not report Pending");
         GC.KeepAlive(context);
         return observation;

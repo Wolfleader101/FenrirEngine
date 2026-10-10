@@ -1,6 +1,7 @@
 #include "Iris/Type.hpp"
 
 #include "ManagedDiagnosticBuffer.hpp"
+#include "MemberState.hpp"
 #include "MethodState.hpp"
 #include "Names.hpp"
 #include "ObjectState.hpp"
@@ -104,5 +105,31 @@ namespace Iris
         owned->component = state->component;
         owned->object = objectId;
         return Detail::CompleteCall<Object>(status, "CreateObject", diagnostic, Object(std::move(owned)));
+    }
+
+    CallResult<Detail::RawMember> Type::FindMemberRaw(std::string_view name, bool isProperty,
+                                                      Detail::ValueKind kind) const
+    {
+        if (const auto problem = Detail::NameProblem(name, "member"))
+        {
+            return Detail::Failure<Detail::RawMember>(CallStatus::InvalidArgument, *problem);
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::uint64_t memberId = 0;
+        const auto status = state->bridge->findMember(
+            state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
+            static_cast<std::int32_t>(name.size()), isProperty ? 1 : 0, static_cast<std::int32_t>(kind), &memberId,
+            diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && memberId == 0)
+        {
+            return Detail::Failure<Detail::RawMember>(CallStatus::InvalidResponse,
+                                                      "FindMember returned the invalid handle 0.");
+        }
+        auto handle = std::make_shared<Detail::RawMember::State>();
+        handle->bridge = state->bridge;
+        handle->component = state->component;
+        handle->member = memberId;
+        return Detail::CompleteCall<Detail::RawMember>(status, "FindMember", diagnostic,
+                                                       Detail::RawMember(std::move(handle)));
     }
 } // namespace Iris
