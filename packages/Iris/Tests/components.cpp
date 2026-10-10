@@ -25,6 +25,7 @@ namespace
     constexpr std::string_view FactoryType = "Iris.Examples.Component.Factory";
     constexpr std::string_view HidingCounterType = "Iris.Examples.Component.HidingCounter";
     constexpr std::string_view SettingsType = "Iris.Examples.Component.Settings";
+    constexpr std::string_view HidingSettingsType = "Iris.Examples.Component.HidingSettings";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -841,6 +842,50 @@ namespace
                  const auto otherObject = component.FindType(OtherType).value->CreateObject();
                  Check(count.Get(*otherObject.value).status == CallStatus::InvalidArgument,
                        "An object of the wrong type was accepted");
+                 // An init-only property is read-only once the object exists.
+                 const auto initOnly = *settings.FindProperty<std::int32_t>("InitOnly").value;
+                 Check(initOnly.Get(*object.value).value == 11 &&
+                           initOnly.Set(*object.value, 1).status == CallStatus::InvalidArgument,
+                       "An init-only property was writable");
+                 // Released and foreign objects are rejected before the call.
+                 auto released = settings.CreateObject();
+                 Check(released.value->Release().Succeeded() &&
+                           count.Get(*released.value).status == CallStatus::InvalidHandle,
+                       "A released object was accepted by a member");
+                 const auto second = Load(*host, arguments.component);
+                 const auto foreign = second.FindType(SettingsType).value->CreateObject();
+                 Check(count.Get(*foreign.value).status == CallStatus::InvalidArgument,
+                       "An object from another component was accepted by a member");
+             }},
+            {"every primitive kind round-trips through a member",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto object = settings.CreateObject();
+                 const auto big = *settings.FindField<std::uint64_t>("Big").value;
+                 const auto single = *settings.FindField<float>("Single").value;
+                 const auto small = *settings.FindField<std::int8_t>("Small").value;
+                 Check(big.Set(*object.value, std::numeric_limits<std::uint64_t>::max()).Succeeded() &&
+                           big.Get(*object.value).value == std::numeric_limits<std::uint64_t>::max(),
+                       "ulong did not round-trip");
+                 Check(single.Set(*object.value, 1.5f).Succeeded() && single.Get(*object.value).value == 1.5f,
+                       "float did not round-trip");
+                 Check(small.Set(*object.value, -7).Succeeded() && small.Get(*object.value).value == -7,
+                       "sbyte did not round-trip");
+             }},
+            {"a field hidden with new resolves to the most-derived declaration",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto hiding = *component.FindType(HidingSettingsType).value;
+                 const auto object = hiding.CreateObject();
+                 const auto count = hiding.FindField<double>("Count");
+                 Check(count.Succeeded(), "A hidden field was unreachable: " + count.diagnostic);
+                 Check(count.value->Set(*object.value, 2.5).Succeeded() && count.value->Get(*object.value).value == 2.5,
+                       "The hiding field was not the one used");
+                 Check(hiding.FindField<std::int32_t>("Count").status == CallStatus::NotFound,
+                       "The hidden base field was still reachable by name");
              }},
             {"member lookup failures are NotFound with a diagnostic",
              [&] {

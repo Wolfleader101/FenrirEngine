@@ -12,6 +12,9 @@ public class Settings
     public int Count;
     public double Ratio;
     public bool Flag;
+    public ulong Big;
+    public float Single;
+    public sbyte Small;
     public readonly int Id = 7;
     public Counter? Child;
     private int secret = 99;
@@ -19,6 +22,7 @@ public class Settings
     // Properties.
     public bool Enabled { get; set; }
     public int ReadOnly { get; } = 3;
+    public int InitOnly { get; init; } = 11;
     public static int StaticProperty { get; set; }
     public Counter? ChildProperty { get; set; }
 
@@ -41,4 +45,10 @@ public class Settings
 
     // Indexers are not properties the member API can name.
     public int this[int index] => index;
+}
+
+// Hides Settings.Count with a different type: the most-derived declaration is the one a name means.
+public class HidingSettings : Settings
+{
+    public new double Count;
 }

@@ -405,10 +405,13 @@ internal static class ComponentRegistry
         }
         else
         {
-            PropertyInfo? property = type.GetProperty(name, flags);
+            PropertyInfo? property = FindProperty(type, name, flags);
             if (property != null && property.GetIndexParameters().Length == 0 && KindMatches(property.PropertyType, valueKind, isReturn: false))
             {
                 MethodInfo? getter = property.GetGetMethod(), setter = property.GetSetMethod();
+                // An init-only setter is public to reflection but only valid while the object is constructed.
+                if (setter != null && Array.IndexOf(setter.ReturnParameter.GetRequiredCustomModifiers(), typeof(System.Runtime.CompilerServices.IsExternalInit)) >= 0)
+                    setter = null;
                 if (getter != null || setter != null)
                 {
                     info = property;
@@ -429,6 +432,19 @@ internal static class ComponentRegistry
             }
             return FindResult.Found;
         }
+    }
+
+    // GetProperty throws when a derived type hides a base property with another type; the most-derived
+    // declaration is the one a name means, so pick it directly.
+    private static PropertyInfo? FindProperty(Type type, string name, BindingFlags flags)
+    {
+        PropertyInfo? best = null;
+        foreach (PropertyInfo candidate in type.GetProperties(flags))
+        {
+            if (candidate.Name != name || candidate.GetIndexParameters().Length != 0) continue;
+            if (best == null || candidate.DeclaringType!.IsSubclassOf(best.DeclaringType!)) best = candidate;
+        }
+        return best;
     }
 
     // Resolves a member handle and the object it is used on. False for an unknown component, member or
