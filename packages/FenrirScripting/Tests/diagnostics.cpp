@@ -36,16 +36,16 @@ int main(int argc, char* argv[])
             const auto initialized = host.Initialize({argv[2], argv[3], {}});
             if (mode == "legacy")
             {
-                Check(!initialized.success && initialized.bridgeVersion == 3 && !initialized.interopMethodResolved &&
+                Check(!initialized.success && initialized.bridgeVersion == 5 && !initialized.interopMethodResolved &&
                           !host.IsInitialized(),
                       "Old ABI was resolved or published");
-                Check(initialized.diagnostic.find("expected 4, received 3") != std::string::npos,
+                Check(initialized.diagnostic.find("expected 6, received 5") != std::string::npos,
                       "Version diagnostic missing");
                 Check(host.AddInt32(1, 2).status == ManagedCallStatus::NotInitialized, "Old ABI was invoked");
                 std::cout << "Legacy bridge rejected before addition resolution.\n";
                 return EXIT_SUCCESS;
             }
-            Check(initialized.success && initialized.bridgeVersion == 4 && initialized.componentMethodsResolved,
+            Check(initialized.success && initialized.bridgeVersion == 6 && initialized.componentMethodsResolved,
                   initialized.diagnostic.c_str());
             if (mode == "real")
             {
@@ -160,6 +160,69 @@ int main(int argc, char* argv[])
                               !recovered.diagnosticTruncated && host.AddInt32(101, 0).value == 2,
                           "String recovery retained diagnostics or changed call count");
                 }
+                auto loaded = host.LoadComponent(argv[3]); // Controlled synthetic registration in the fixture.
+                Check(loaded.status == ManagedCallStatus::Success && loaded.value, "Invocation fixture load failed");
+                const auto before = host.AddInt32(100, 0).value;
+                const auto invokeOnce = loaded.value->InvokeInt32("Fixture", "Method", 12, 0);
+                Check(invokeOnce.status == ManagedCallStatus::ManagedException && !invokeOnce.value && before &&
+                          host.AddInt32(100, 0).value == *before + 1,
+                      "Component operation was repeated to obtain diagnostics");
+                Check(loaded.value->InvokeInt32("Fixture", "Method", 1, 0).diagnostic == expected &&
+                          loaded.value->InvokeInt32("Fixture", "Method", 1, 0).diagnosticTruncated,
+                      "Component fixture truncation failed");
+                for (int input : {3, 4, 5, 6})
+                {
+                    const auto bad = loaded.value->InvokeInt32("Fixture", "Method", input, 0);
+                    Check(bad.status == ManagedCallStatus::ManagedException && !bad.value &&
+                              bad.diagnostic.find("Managed diagnostic") != std::string::npos,
+                          "Malformed component diagnostic trusted");
+                }
+                const auto badSuccess = loaded.value->InvokeInt32("Fixture", "Method", 7, 0);
+                Check(badSuccess.status == ManagedCallStatus::InvalidResponse && !badSuccess.value,
+                      "Component success with diagnostics accepted");
+                const auto unknown = loaded.value->InvokeInt32("Fixture", "Method", 8, 0);
+                Check(unknown.status == ManagedCallStatus::UnexpectedStatus && !unknown.value,
+                      "Unknown component status accepted");
+                Check(loaded.value->InvokeInt32("Fixture", "Method", 11, 0).status == ManagedCallStatus::InvalidHandle,
+                      "Managed invalid token status lost");
+                Check(loaded.value->InvokeInt32("Fixture", "Method", 20, 22).value == 42,
+                      "Component fixture recovery failed");
+                Check(loaded.value->GetUnloadStatus().value == ComponentUnloadState::NotRequested,
+                      "Live observation did not report NotRequested");
+                for (int selector : {20, 21, 22, 23, 24, 25})
+                {
+                    Check(host.AddInt32(200 + selector, 0).status == ManagedCallStatus::Success,
+                          "Selecting unload fixture mode failed");
+                    const auto query = loaded.value->GetUnloadStatus();
+                    const auto expectedStatus = selector == 24   ? ManagedCallStatus::UnexpectedStatus
+                                                : selector == 25 ? ManagedCallStatus::InvalidHandle
+                                                                 : ManagedCallStatus::InvalidResponse;
+                    Check(query.status == expectedStatus && !query.value && !query.diagnostic.empty(),
+                          "Malformed unload state/status/diagnostic metadata accepted");
+                }
+                Check(host.AddInt32(200, 0).status == ManagedCallStatus::Success, "Resetting unload fixture failed");
+                Check(loaded.value->Release().status == ManagedCallStatus::Success &&
+                          loaded.value->GetUnloadStatus().value == ComponentUnloadState::Pending,
+                      "Released owner lost its observation");
+                Check(host.AddInt32(222, 0).status == ManagedCallStatus::Success &&
+                          loaded.value->GetUnloadStatus().value == ComponentUnloadState::Collected,
+                      "Collected observation was rejected");
+                Check(host.AddInt32(226, 0).status == ManagedCallStatus::Success &&
+                          loaded.value->GetUnloadStatus().status == ManagedCallStatus::InvalidResponse,
+                      "Released owner accepted NotRequested");
+                Check(host.AddInt32(200, 0).status == ManagedCallStatus::Success, "Resetting unload fixture failed");
+                const auto releaseCount = host.AddInt32(102, 0).value;
+                const auto forgetCount = host.AddInt32(103, 0).value;
+                Check(releaseCount && forgetCount, "Cleanup counters missing");
+                loaded.value.reset();
+                Check(host.AddInt32(102, 0).value == *releaseCount && host.AddInt32(103, 0).value == *forgetCount + 1,
+                      "Released owner destruction repeated release or leaked observation");
+                auto scoped = host.LoadComponent(argv[3]);
+                Check(scoped.value != nullptr, "Scoped cleanup fixture load failed");
+                scoped.value.reset();
+                Check(host.AddInt32(102, 0).value == *releaseCount + 1 &&
+                          host.AddInt32(103, 0).value == *forgetCount + 2,
+                      "Live owner destruction omitted release or observation cleanup");
             }
             Check(host.IsInitialized(), "Call failure reset readiness");
         }

@@ -36,6 +36,8 @@ int main(int argc, char* argv[])
     Fenrir::Scripting::Utf8StringResult echo;
     Fenrir::Scripting::Int32CallResult retainedOverflow;
     Fenrir::Scripting::Utf8StringResult retainedInvalidEcho;
+    Fenrir::Scripting::Int32CallResult retainedComponentFailure;
+    constexpr std::string_view calculationType = "Fenrir.HostingComponent.Calculations";
     std::unique_ptr<Fenrir::Scripting::ManagedComponent> component;
     std::optional<Fenrir::Scripting::ComponentInfo> componentSnapshot;
     {
@@ -124,6 +126,24 @@ int main(int argc, char* argv[])
             componentSnapshot = info.value;
             std::cout << "Component assembly: " << info.value->assemblyName << '\n';
             std::cout << "Component collectible: " << info.value->isCollectible << '\n';
+            const auto calculated = component->InvokeInt32(calculationType, "Add", 20, 22);
+            printCall("Component Add(20, 22)", calculated);
+            const auto missing = component->InvokeInt32(calculationType, "Missing", 20, 22);
+            printCall("Component missing method", missing);
+            retainedComponentFailure = component->InvokeInt32(calculationType, "Throw", 20, 22);
+            printCall("Component thrown exception", retainedComponentFailure);
+            const auto recoveredCall = component->InvokeInt32(calculationType, "Add", 7, -3);
+            printCall("Component after failures", recoveredCall);
+            using Fenrir::Scripting::ManagedCallStatus;
+            if (calculated.status != ManagedCallStatus::Success || calculated.value != 42 ||
+                missing.status != ManagedCallStatus::ManagedException || missing.value ||
+                missing.diagnostic.find("MissingMethodException") == std::string::npos ||
+                retainedComponentFailure.status != ManagedCallStatus::ManagedException ||
+                retainedComponentFailure.value ||
+                retainedComponentFailure.diagnostic.find("InvalidOperationException") == std::string::npos ||
+                recoveredCall.status != ManagedCallStatus::Success || recoveredCall.value != 4 ||
+                !recoveredCall.diagnostic.empty())
+                return EXIT_FAILURE;
         }
 
         const auto sum = host.AddInt32(20, 22);
@@ -198,11 +218,33 @@ int main(int argc, char* argv[])
         const bool survived = info.value && componentSnapshot &&
                               info.value->assemblyName == componentSnapshot->assemblyName && info.value->isCollectible;
         std::cout << "Component after host destruction: " << survived << '\n';
+        const auto calculated = component->InvokeInt32(calculationType, "Add", 20, 22);
+        std::cout << "Component invocation after host destruction: status="
+                  << static_cast<std::int32_t>(calculated.status) << ", value=" << calculated.value.value_or(0) << '\n';
         const auto released = component->Release();
         std::cout << "Component release: status=" << static_cast<std::int32_t>(released.status) << '\n';
         std::cout << "Component still owned: " << component->IsLoaded() << '\n';
+        const auto unloading = component->GetUnloadStatus();
+        const bool validUnloadObservation = unloading.status == Fenrir::Scripting::ManagedCallStatus::Success &&
+                                            (unloading.value == Fenrir::Scripting::ComponentUnloadState::Pending ||
+                                             unloading.value == Fenrir::Scripting::ComponentUnloadState::Collected);
+        std::cout << "Component unload state: "
+                  << (unloading.value == Fenrir::Scripting::ComponentUnloadState::Pending     ? "Pending"
+                      : unloading.value == Fenrir::Scripting::ComponentUnloadState::Collected ? "Collected"
+                                                                                              : "Invalid")
+                  << '\n';
+        if (!validUnloadObservation)
+            std::cerr << "Unload diagnostic: " << unloading.diagnostic << '\n';
+        const auto stale = component->InvokeInt32(calculationType, "Add", 20, 22);
+        std::cout << "Component invocation after release: status=" << static_cast<std::int32_t>(stale.status) << '\n';
+        const bool failureRetained =
+            retainedComponentFailure.diagnostic.find("InvalidOperationException") != std::string::npos;
+        std::cout << "Component diagnostic after release: " << failureRetained << '\n';
         componentChecksPassed =
-            survived && released.status == Fenrir::Scripting::ManagedCallStatus::Success && !component->IsLoaded();
+            survived && released.status == Fenrir::Scripting::ManagedCallStatus::Success && !component->IsLoaded() &&
+            calculated.status == Fenrir::Scripting::ManagedCallStatus::Success && calculated.value == 42 &&
+            stale.status == Fenrir::Scripting::ManagedCallStatus::InvalidHandle && !stale.value && failureRetained &&
+            validUnloadObservation;
     }
     const bool diagnosticRetained = retainedOverflow.diagnostic.find("OverflowException") != std::string::npos;
     std::cout << "Diagnostic after wrapper destruction: " << diagnosticRetained << '\n';

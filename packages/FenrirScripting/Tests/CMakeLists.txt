@@ -7,8 +7,10 @@ endif()
 set(fenrir_checks_configuration "$<IF:$<BOOL:$<CONFIG>>,$<CONFIG>,Debug>")
 set(fenrir_checks_managed "${CMAKE_CURRENT_BINARY_DIR}/managed/${fenrir_checks_configuration}")
 add_custom_target(FenrirManagedDiagnosticChecksBuild ALL
-    COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Hosting/ManagedComponent/Fenrir.HostingComponent.csproj"
-        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/component"
+    # Publish a deployment, including its private dependency and .deps.json.
+    # --output on build would also redirect referenced projects into this directory.
+    COMMAND "${fenrir_checks_dotnet}" publish "${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Hosting/ManagedComponent/Fenrir.HostingComponent.csproj"
+        --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/component" -m:1
     COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/ManagedDiagnostics/ManagedDiagnostics.csproj"
         --configuration "${fenrir_checks_configuration}" --output "${fenrir_checks_managed}/checks"
     COMMAND "${fenrir_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/DiagnosticBridge/DiagnosticBridge.csproj"
@@ -35,6 +37,9 @@ endif()
 
 add_test(NAME ManagedDiagnosticContract
     COMMAND "${fenrir_checks_dotnet}" "${fenrir_checks_managed}/checks/ManagedDiagnostics.dll" "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")
+add_test(NAME ManagedUnloadContract
+    COMMAND "${fenrir_checks_dotnet}" "${fenrir_checks_managed}/checks/ManagedDiagnostics.dll" --unload "${fenrir_checks_managed}/component/Fenrir.HostingComponent.dll")
+set_tests_properties(ManagedUnloadContract PROPERTIES TIMEOUT 30)
 foreach(fenrir_checks_mode IN ITEMS real fixture legacy)
     if(fenrir_checks_mode STREQUAL "real")
         set(fenrir_checks_bridge "${fenrir_checks_managed}/checks/Fenrir.ManagedHost.dll")

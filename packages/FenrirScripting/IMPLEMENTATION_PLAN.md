@@ -61,18 +61,36 @@ Start with:
   `BridgeStatus.cs`.
 - `Examples/Hosting/main.cpp` and its `CMakeLists.txt`.
 
-## Current baseline, inspected 2026-10-09
+## Current baseline, inspected 2026-10-10
 
 Progress update: milestone 1 is implemented, and milestone 2 now loads the
 separate `Fenrir.HostingComponent` fixture through a collectible context.
-Bridge ABI version 4 adds private load/name/release exports. Move-only native
+Bridge ABI version 6 provides private load/name/release/invocation and weak unload
+observation/cleanup exports. Move-only native
 owners retain their cleanup functions after host reset/destruction. Tokens are
 never reused, explicit release is idempotent, failed loads roll back, and native
-results own their metadata/diagnostics. All five reusable checks pass on Windows.
-Release requests unloading but does not yet verify collection. The snapshot
-below describes the earlier version-1 starting point. The next small step after
-oversight is the separate dependency fixture/resolution check from milestone 2;
-component method invocation follows it in milestone 3.
+results own their metadata/diagnostics. Release and observed collection are separate
+operations. Milestone 2 also
+has a separate private dependency fixture and checks against real registrations:
+dependency assemblies stay in their component contexts, bridge/framework
+assemblies remain shared, incompatible bridge versions/cultures/public-key tokens are rejected,
+and a missing dependency fails on type resolution. Explicit release removes that
+registration; a complete deployment succeeds afterward. Milestone 3 adds
+`ManagedComponent::InvokeInt32` for an exact public static non-generic int(int,int)
+method. A resident export validates tokens, confines reflection/delegates to the
+call, and catches lookup/dependency/component exceptions with owning diagnostics.
+Success, incompatible signatures, overflow, malformed inputs, missing invocation
+exports, host reset/destruction, release and recovery have reusable Windows checks.
+Milestone 4 adds `GetUnloadStatus()` on the same owner, reporting NotRequested,
+Pending or Collected through a long weak context reference. Release drops strong
+roots; owner destruction forgets tracking records. Library operations never force
+GC. An isolated check performs eight load/invoke/release/collection cycles and
+tracks the component and private dependency assemblies too. A deliberately retained
+Type keeps unloading Pending; dropping it permits collection. The resident bridge
+remains usable. Six CTests cover these contracts; managed unload checks also run
+in Release to exercise optimized JIT lifetimes.
+The snapshot below describes the earlier version-1 starting point. The next small
+step after oversight is the first explicit managed object owner in milestone 5.
 
 The native library is `FenrirDotNetHost`, with example target
 `FenrirHostingExample`. C++20 and CMake 3.20 or later are used. The engine root
@@ -338,8 +356,8 @@ fixtures and verification targets are added.
 - [GCHandle](https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.gchandle)
 
 First assignment for the new agent: inspect the actual source and the progress
-update, inspect the completed loading/ownership implementation, then continue
-milestone 2 after oversight with a separate dependency fixture and focused
-resolution/shared-contract checks. Verify the step before beginning component
-invocation or managed objects. Preserve explicit release versus observed
-collection as separate concepts.
+update, inspect the completed loading/ownership, dependency, invocation and unload
+checks, then start milestone 5 after oversight with one fixture type and explicit
+managed object ownership. Keep the scope small and define the object/component
+release policy before adding roots. Preserve explicit release versus observed
+collection as separate concepts; do not add gameplay integration yet.

@@ -48,7 +48,7 @@ namespace Fenrir::Scripting
         constexpr char_t BridgeGreetingMethod[] = "CopyGreetingUtf8";
         constexpr char_t BridgeEchoMethod[] = "EchoUtf8";
 #endif
-        constexpr std::int32_t ExpectedBridgeVersion = 4;
+        constexpr std::int32_t ExpectedBridgeVersion = 6;
 
         std::string StatusDiagnostic(const char* operation, std::int32_t status)
         {
@@ -297,13 +297,15 @@ namespace Fenrir::Scripting
         auto componentBridge = std::make_shared<Detail::ComponentBridge>();
         const char_t* componentNames[] = {
 #if defined(_WIN32)
-            L"LoadComponent", L"CopyComponentNameUtf8", L"ReleaseComponent"
+            L"LoadComponent",           L"CopyComponentNameUtf8", L"ReleaseComponent", L"InvokeComponentInt32",
+            L"GetComponentUnloadState", L"ForgetComponentUnload"
 #else
-            "LoadComponent", "CopyComponentNameUtf8", "ReleaseComponent"
+            "LoadComponent",           "CopyComponentNameUtf8", "ReleaseComponent", "InvokeComponentInt32",
+            "GetComponentUnloadState", "ForgetComponentUnload"
 #endif
         };
-        void* componentMethods[3]{};
-        for (std::size_t index = 0; index < 3; ++index)
+        void* componentMethods[6]{};
+        for (std::size_t index = 0; index < 6; ++index)
         {
             const auto componentStatus = state->loadAssemblyAndGetFunctionPointer(
                 bridgeAssembly.c_str(), BridgeTypeName, componentNames[index], UNMANAGEDCALLERSONLY_METHOD, nullptr,
@@ -318,6 +320,9 @@ namespace Fenrir::Scripting
         componentBridge->load = reinterpret_cast<Detail::ComponentBridge::LoadFn>(componentMethods[0]);
         componentBridge->copyName = reinterpret_cast<Detail::ComponentBridge::NameFn>(componentMethods[1]);
         componentBridge->release = reinterpret_cast<Detail::ComponentBridge::ReleaseFn>(componentMethods[2]);
+        componentBridge->invokeInt32 = reinterpret_cast<Detail::ComponentBridge::InvokeFn>(componentMethods[3]);
+        componentBridge->getUnloadState = reinterpret_cast<Detail::ComponentBridge::UnloadStateFn>(componentMethods[4]);
+        componentBridge->forgetUnload = reinterpret_cast<Detail::ComponentBridge::ReleaseFn>(componentMethods[5]);
         result.componentMethodsResolved = true;
         state->componentBridge = std::move(componentBridge);
         state->getBridgeVersion = getBridgeVersion;

@@ -21,6 +21,11 @@ static class Checks
 
     static unsafe void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--unload")
+        {
+            UnloadChecks.Run(args[1]);
+            return;
+        }
         var strictUtf8 = new UTF8Encoding(false, true);
         // Every possible boundary, including capacities too small for the first scalar.
         foreach (string text in new[] { "", "ASCII", "\u03C0\U0001F43A\u20AC!", "A\0B", "\uD800X" })
@@ -152,5 +157,14 @@ static class Checks
         Console.WriteLine("Managed diagnostics: UTF-8 boundaries, canaries, formatting failure, integer/string ABI validation and recovery passed.");
         Check(args.Length == 1, "Expected the component fixture path");
         ComponentChecks.Run(args[0]);
+        InvocationChecks.Run(args[0]);
+        DependencyChecks.Run(args[0]);
+        fixed (byte* destination = buffer)
+        {
+            int value = 99, written = 99, truncated = 99;
+            Check(add(20, 22, &value, destination, buffer.Length, &written, &truncated) == 0 &&
+                  value == 42 && written == 0 && truncated == 0,
+                  "Resident bridge did not recover after dependency resolution/release checks");
+        }
     }
 }

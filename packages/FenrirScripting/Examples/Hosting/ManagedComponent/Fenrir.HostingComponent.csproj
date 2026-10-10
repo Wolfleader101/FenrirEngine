@@ -4,4 +4,12 @@
     <Nullable>enable</Nullable>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../ManagedDependency/Fenrir.HostingDependency.csproj" />
+    <!-- Compile against the resident bridge, but do not deploy a private copy. -->
+    <ProjectReference Include="../../../Managed/Fenrir.ManagedHost/Fenrir.ManagedHost.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

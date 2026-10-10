@@ -14,7 +14,7 @@ public static partial class Bootstrap
     // The native function pointer must use the matching int32_t(), Cdecl signature.
     // Keep this handshake free of exceptions; unmanaged callers cannot catch managed exceptions.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static int GetBridgeVersion() => 4;
+    public static int GetBridgeVersion() => 6;
 
     // All output storage is writable, non-overlapping, and borrowed only
     // during this call. Counts exclude a terminator. Null diagnostic is allowed

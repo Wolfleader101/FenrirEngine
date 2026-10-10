@@ -19,6 +19,7 @@ static class ComponentChecks
         byte[] diagnostic = new byte[4096], output = new byte[128];
         var strictUtf8 = new UTF8Encoding(false, true);
         int baseline = ComponentRegistry.Count;
+        int trackingBaseline = ComponentRegistry.TrackingCount;
         string invalidFile = Path.GetTempFileName();
         File.WriteAllText(invalidFile, "This is not an assembly.");
         try
@@ -48,9 +49,11 @@ static class ComponentChecks
                       "Released token remained usable");
                 Check(name(0, null, 0, &required, error, diagnostic.Length, &written, &truncated) == 5,
                       "Invalid token zero accepted");
+                Check(ComponentRegistry.ForgetUnload(oldToken), "First unload observation cleanup failed");
                 Check(load(pathPointer, path.Length, &token, &collectible, error, diagnostic.Length, &written, &truncated) == 0 &&
                       token > oldToken, "Token was reused");
                 Check(release(token, error, diagnostic.Length, &written, &truncated) == 0, "Second registration release failed");
+                Check(ComponentRegistry.ForgetUnload(token), "Second unload observation cleanup failed");
 
                 Check(load(pathPointer, path.Length, null, &collectible, error, diagnostic.Length, &written, &truncated) == 1 &&
                       collectible == 0 && written == 0 && truncated == 0, "Null token output accepted");
@@ -94,7 +97,7 @@ static class ComponentChecks
             }
         }
         finally { File.Delete(invalidFile); }
-        Check(ComponentRegistry.Count == baseline, "Component checks leaked registrations");
+        Check(ComponentRegistry.Count == baseline && ComponentRegistry.TrackingCount == trackingBaseline, "Component checks leaked registrations/observations");
         Console.WriteLine("Managed components: collectible loading, identity, token validation, release and failure cleanup passed.");
     }
 }

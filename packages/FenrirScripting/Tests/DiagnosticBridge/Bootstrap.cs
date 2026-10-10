@@ -18,20 +18,27 @@ public static class Bootstrap
     private static int invocationCount;
     private static int stringMode;
     private static int stringInvocations;
+    private static bool componentReleased;
+    private static int componentReleaseCount;
+    private static int componentForgetCount;
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static int GetBridgeVersion()
     {
 #if LEGACY_BRIDGE
-        return 3;
+        return 5;
 #else
-        return 4;
+        return 6;
 #endif
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int TryAddInt32(int left, int right, int* value, byte* diagnostic,
                                        int capacity, int* written, int* truncated)
+        => RespondInteger(left, right, value, diagnostic, capacity, written, truncated);
+
+    private static unsafe int RespondInteger(int left, int right, int* value, byte* diagnostic,
+                                            int capacity, int* written, int* truncated)
     {
         *value = 99; *written = 0; *truncated = 0;
         try
@@ -55,11 +62,14 @@ public static class Bootstrap
                 case 10:
                     ManagedDiagnostic.Write(new TextException("A\0B"), new Span<byte>(diagnostic, capacity), out *written, out *truncated);
                     return 3;
+                case 11: return 5;
                 case 12:
                     ++invocationCount;
                     return 3;
                 case 100: *value = invocationCount; return 0;
                 case 101: *value = stringInvocations; return 0;
+                case 102: *value = componentReleaseCount; return 0;
+                case 103: *value = componentForgetCount; return 0;
                 case >= 200 and <= 240:
                     stringMode = left - 200; stringInvocations = 0; *value = 0; return 0;
                 default: *value = checked(left + right); return 0;
@@ -80,17 +90,51 @@ public static class Bootstrap
                                      byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
         => Respond(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
 
-#if !MISSING_COMPONENT_METHODS
-    // Diagnostic-only fixture: these entry points are resolved but never invoked.
+    // Controlled diagnostic fixture, not a collectible loader. Native invocation
+    // checks own this synthetic registration and exercise malformed responses.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
-        byte* diagnostic, int capacity, int* written, int* truncated) => 1;
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        componentReleased = false; *token = 1; *collectible = 1; *written = 0; *truncated = 0; return 0;
+    }
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int CopyComponentNameUtf8(ulong token, byte* output, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated) => 1;
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated) => 1;
+    public static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        ++componentReleaseCount; componentReleased = true; *written = 0; *truncated = 0; return 0;
+    }
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
+        int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
+        => RespondInteger(left, right, value, diagnostic, capacity, written, truncated);
+#if !MISSING_COMPONENT_METHODS
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int GetComponentUnloadState(ulong token, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
+        => RespondUnloadState(state, written, truncated);
 #endif
+    private static unsafe int RespondUnloadState(int* state, int* written, int* truncated)
+    {
+        *state = componentReleased ? 1 : 0; *written = 0; *truncated = 0;
+        switch (stringMode)
+        {
+            case 20: *state = 99; break;
+            case 21: *state = -1; break;
+            case 22: *state = 2; break;
+            case 23: *written = 1; break;
+            case 24: return 987;
+            case 25: return 5;
+            case 26: *state = 0; break;
+        }
+        return 0;
+    }
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        ++componentForgetCount; *written = 0; *truncated = 0; return 0;
+    }
 
     private static unsafe int Respond(byte* output, int capacity, int* required,
                                       byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)

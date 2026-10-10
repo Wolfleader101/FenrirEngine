@@ -1,4 +1,12 @@
+using System;
+using Fenrir.HostingDependency;
+using Fenrir.ManagedHost;
+
 namespace Fenrir.HostingComponent;
 
-// A separate assembly to load and own. Method invocation is the next step.
-public sealed class ComponentMarker { }
+// Resolving this type exercises private dependency loading without constructing an object.
+public sealed class ComponentMarker : DependencyMarker
+{
+    // Keep an actual assembly reference to the shared resident bridge for resolution checks.
+    public static Type BridgeType => typeof(Bootstrap);
+}
