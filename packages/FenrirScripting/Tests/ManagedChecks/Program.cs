@@ -2,6 +2,9 @@ using System;
 using System.Text;
 using Fenrir.ManagedHost;
 
+// In-process checks of the bridge's managed code and exports. Each group runs and reports
+// separately; a failing group does not stop the others. "--unload" runs the unload checks alone,
+// in their own process, so nothing else roots the contexts they collect.
 static class Checks
 {
     private sealed class TextException(string text) : Exception
@@ -19,17 +22,51 @@ static class Checks
         if (!condition) throw new Exception(message);
     }
 
-    static unsafe void Main(string[] args)
+    static int Main(string[] args)
     {
         if (args.Length == 2 && args[0] == "--unload")
+            return RunGroups(("unloading", () => UnloadChecks.Run(args[1])));
+        if (args.Length != 1)
         {
-            UnloadChecks.Run(args[1]);
-            return;
+            Console.Error.WriteLine("Usage: ManagedChecks [--unload] component.dll");
+            return 1;
         }
-        HandshakeChecks.Run();
+        string component = args[0];
+        return RunGroups(
+            ("handshake", HandshakeChecks.Run),
+            ("diagnostic text", DiagnosticTextChecks),
+            ("components", () => ComponentChecks.Run(component)),
+            ("invocation", () => InvocationChecks.Run(component)),
+            ("dependencies", () => DependencyChecks.Run(component)),
+            ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)));
+    }
+
+    private static int RunGroups(params (string Name, Action Run)[] groups)
+    {
+        int failures = 0;
+        foreach ((string name, Action run) in groups)
+        {
+            try
+            {
+                run();
+                Console.WriteLine($"PASS {name}");
+            }
+            catch (Exception exception)
+            {
+                ++failures;
+                Console.WriteLine($"FAIL {name}: {exception}");
+            }
+        }
+        Console.WriteLine(failures == 0 ? "All groups passed." : $"{failures} group(s) failed.");
+        return failures == 0 ? 0 : 1;
+    }
+
+    // ManagedDiagnostic.Write at every capacity boundary, and with a throwing formatter.
+    private static void DiagnosticTextChecks()
+    {
         var strictUtf8 = new UTF8Encoding(false, true);
         // Every possible boundary, including capacities too small for the first scalar.
-        foreach (string text in new[] { "", "ASCII", "\u03C0\U0001F43A\u20AC!", "A\0B", "\uD800X" })
+        foreach (string text in new[] { "", "ASCII", "π\U0001F43A€!", "A\0B", "\uD800X" })
         {
             byte[] expected = Encoding.UTF8.GetBytes(text);
             for (int capacity = 0; capacity <= expected.Length + 1; ++capacity)
@@ -56,12 +93,5 @@ static class Checks
         byte[] buffer = new byte[512];
         ManagedDiagnostic.Write(new BrokenException(), buffer, out int bytes, out int cut);
         Check(bytes == 0 && cut == 0, "Formatting exception escaped or stale metadata retained");
-
-        Console.WriteLine("Managed diagnostics: UTF-8 boundaries, canaries and formatting failure passed.");
-        Check(args.Length == 1, "Expected the component fixture path");
-        ComponentChecks.Run(args[0]);
-        InvocationChecks.Run(args[0]);
-        DependencyChecks.Run(args[0]);
-        InvocationChecks.CheckResidentBridge(args[0]);
     }
 }
