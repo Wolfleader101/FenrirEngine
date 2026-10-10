@@ -5,6 +5,9 @@ add_library(Iris STATIC
     src/BridgeFunctions.hpp
     src/Component.cpp
     src/ComponentState.hpp
+    src/Method.cpp
+    src/MethodState.hpp
+    src/Names.hpp
     src/Type.cpp
     src/TypeState.hpp
     src/HostFxrDiscovery.cpp
@@ -19,6 +22,7 @@ add_library(Iris STATIC
     include/Iris/Host.hpp
     include/Iris/CallResult.hpp
     include/Iris/Component.hpp
+    include/Iris/Method.hpp
     include/Iris/Type.hpp
 )
 

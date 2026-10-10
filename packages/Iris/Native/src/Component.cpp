@@ -2,6 +2,7 @@
 
 #include "ComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
+#include "Names.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
@@ -69,14 +70,9 @@ namespace Iris
         {
             return Detail::Failure<Type>(CallStatus::InvalidHandle, ReleasedOwner);
         }
-        if (fullName.empty() || fullName.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
+        if (const auto problem = Detail::NameProblem(fullName, "type"))
         {
-            return Detail::Failure<Type>(CallStatus::InvalidArgument,
-                                         "A type name must contain 1..INT32_MAX UTF-8 bytes.");
-        }
-        if (fullName.find('\0') != std::string_view::npos)
-        {
-            return Detail::Failure<Type>(CallStatus::InvalidArgument, "A type name cannot contain null characters.");
+            return Detail::Failure<Type>(CallStatus::InvalidArgument, *problem);
         }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t typeId = 0;

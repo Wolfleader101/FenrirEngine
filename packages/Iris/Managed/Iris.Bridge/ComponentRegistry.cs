@@ -8,16 +8,22 @@ namespace Iris.Bridge;
 
 internal static class ComponentRegistry
 {
-    // Handles to types looked up in one component. They live in the active entry, so releasing the
-    // component drops every Type reference with it; no handle outlives its component.
-    private sealed class TypeTable
+    // A method resolved by exact signature, with the wire kinds of its parameters and return value.
+    private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, int ReturnKind);
+
+    // Handles to types and methods looked up in one component. They live in the active entry, so
+    // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
+    // its component.
+    private sealed class HandleTable
     {
-        internal readonly Dictionary<Type, ulong> ByType = new();
-        internal readonly Dictionary<ulong, Type> ById = new();
+        internal readonly Dictionary<Type, ulong> TypeIds = new();
+        internal readonly Dictionary<ulong, Type> Types = new();
+        internal readonly Dictionary<MethodInfo, ulong> MethodIds = new();
+        internal readonly Dictionary<ulong, MethodRecord> Methods = new();
     }
     private sealed record Entry(ComponentLoadContext Context, Assembly Assembly, string Name)
     {
-        internal TypeTable Types { get; } = new();
+        internal HandleTable Handles { get; } = new();
     }
     private sealed class Registration(Entry entry)
     {
@@ -27,7 +33,8 @@ internal static class ComponentRegistry
     private static readonly object Gate = new();
     private static readonly Dictionary<ulong, Registration> Registrations = new();
     private static ulong lastToken;
-    private static ulong lastTypeId; // Shared by all components, so a type handle is never reused.
+    private static ulong lastTypeId; // Type and method ids come from process-wide counters,
+    private static ulong lastMethodId; // so a handle is never reused.
 
     internal enum FindResult { Found, NotFound, InvalidHandle }
 
@@ -103,11 +110,11 @@ internal static class ComponentRegistry
             // The component may have been released while the type was resolved.
             if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
                 return FindResult.InvalidHandle;
-            if (!entry.Types.ByType.TryGetValue(type, out typeId))
+            if (!entry.Handles.TypeIds.TryGetValue(type, out typeId))
             {
                 typeId = checked(++lastTypeId);
-                entry.Types.ByType.Add(type, typeId);
-                entry.Types.ById.Add(typeId, type);
+                entry.Handles.TypeIds.Add(type, typeId);
+                entry.Handles.Types.Add(typeId, type);
             }
             return FindResult.Found;
         }
@@ -122,10 +129,74 @@ internal static class ComponentRegistry
         lock (Gate)
         {
             if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
-                !entry.Types.ById.TryGetValue(typeId, out Type? type)) return false;
+                !entry.Handles.Types.TryGetValue(typeId, out Type? type)) return false;
             text = field == 0 ? type.FullName ?? type.Name : type.Assembly.GetName().Name ?? "";
             return true;
         }
+    }
+
+    // Finds a public static, non-generic method on a looked-up type by name and exact parameter and
+    // return kinds. Looking the same method up again returns the same handle. UnmanagedCallersOnly
+    // methods are excluded.
+    internal static FindResult TryFindMethod(ulong token, ulong typeId, string name, int returnKind, int[] parameterKinds, out ulong methodId)
+    {
+        methodId = 0;
+        Entry entry;
+        Type type;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Types.TryGetValue(typeId, out Type? found)) return FindResult.InvalidHandle;
+            entry = active;
+            type = found;
+        }
+        Type returnType = ValueKinds.ToType(returnKind, allowVoid: true);
+        var parameterTypes = new Type[parameterKinds.Length];
+        for (int index = 0; index < parameterTypes.Length; ++index)
+            parameterTypes[index] = ValueKinds.ToType(parameterKinds[index], allowVoid: false);
+
+        // No registry lock is held while reflecting, which can load assemblies.
+        MethodInfo? method = type.GetMethod(name, BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly,
+            binder: null, types: parameterTypes, modifiers: null);
+        if (method == null || method.ReturnType != returnType || method.IsGenericMethod ||
+            method.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false))
+            return FindResult.NotFound;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                return FindResult.InvalidHandle;
+            if (!entry.Handles.MethodIds.TryGetValue(method, out methodId))
+            {
+                methodId = checked(++lastMethodId);
+                entry.Handles.MethodIds.Add(method, methodId);
+                entry.Handles.Methods.Add(methodId, new MethodRecord(method, (int[])parameterKinds.Clone(), returnKind));
+            }
+            return FindResult.Found;
+        }
+    }
+
+    // Runs a found method. False for an unknown component or method handle. Throws
+    // BridgeArgumentException for a wrong argument count; component exceptions propagate unwrapped.
+    internal static bool TryInvokeMethod(ulong token, ulong methodId, ReadOnlySpan<ulong> arguments, out ulong result)
+    {
+        result = 0;
+        MethodRecord method;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
+                !entry.Handles.Methods.TryGetValue(methodId, out MethodRecord? found)) return false;
+            method = found;
+        }
+        if (arguments.Length != method.ParameterKinds.Length)
+            throw new BridgeArgumentException($"The method takes {method.ParameterKinds.Length} arguments, not {arguments.Length}.");
+        var values = new object[arguments.Length];
+        for (int index = 0; index < values.Length; ++index)
+            values[index] = ValueKinds.ToObject(method.ParameterKinds[index], arguments[index]);
+        // No registry lock is held while user code runs. The local MethodRecord roots an accepted
+        // in-flight call until it returns.
+        object? returned = method.Method.Invoke(null, BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);
+        result = ValueKinds.ToSlot(method.ReturnKind, returned);
+        return true;
     }
 
     internal static bool TryInvokeInt32(ulong token, string typeName, string methodName, int left, int right, out int result)

@@ -67,7 +67,9 @@ public static class Bootstrap
             ForgetComponentUnload = &ForgetComponentUnload,
             RegisterSharedAssembly = &RegisterSharedAssembly,
             FindType = &FindType,
-            CopyTypeNameUtf8 = &CopyTypeNameUtf8
+            CopyTypeNameUtf8 = &CopyTypeNameUtf8,
+            FindMethod = &FindMethod,
+            InvokeMethod = &InvokeMethod
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -104,6 +106,20 @@ public static class Bootstrap
     public static unsafe int CopyTypeNameUtf8(ulong token, ulong typeId, int field, byte* output, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
         => CopyName(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int FindMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
+        int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *methodId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int InvokeMethod(ulong token, ulong methodId, ulong* arguments, int argCount, ulong* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *result = 0; *written = 0; *truncated = 0; return 0;
+    }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)

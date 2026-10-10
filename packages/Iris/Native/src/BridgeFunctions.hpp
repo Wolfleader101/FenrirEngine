@@ -40,6 +40,13 @@ namespace Iris::Detail
         using TypeNameFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
                                                            std::int32_t*, std::int32_t*);
+        using FindMethodFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, const std::uint8_t*,
+                                                             std::int32_t, std::int32_t, const std::int32_t*,
+                                                             std::int32_t, std::uint64_t*, std::uint8_t*, std::int32_t,
+                                                             std::int32_t*, std::int32_t*);
+        using InvokeMethodFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, const std::uint64_t*,
+                                                               std::int32_t, std::uint64_t*, std::uint8_t*,
+                                                               std::int32_t, std::int32_t*, std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -52,16 +59,25 @@ namespace Iris::Detail
         RegisterFn registerShared;
         FindTypeFn findType;
         TypeNameFn copyTypeName;
+        FindMethodFn findMethod;
+        InvokeMethodFn invokeMethod;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 11;
+    inline constexpr std::int32_t BridgeVersion = 12;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 9> BridgeFunctionNames = {
-        "LoadComponent",           "CopyComponentNameUtf8", "ReleaseComponent",       "InvokeComponentInt32",
-        "GetComponentUnloadState", "ForgetComponentUnload", "RegisterSharedAssembly", "FindType",
-        "CopyTypeNameUtf8"};
+    inline constexpr std::array<const char*, 11> BridgeFunctionNames = {"LoadComponent",
+                                                                        "CopyComponentNameUtf8",
+                                                                        "ReleaseComponent",
+                                                                        "InvokeComponentInt32",
+                                                                        "GetComponentUnloadState",
+                                                                        "ForgetComponentUnload",
+                                                                        "RegisterSharedAssembly",
+                                                                        "FindType",
+                                                                        "CopyTypeNameUtf8",
+                                                                        "FindMethod",
+                                                                        "InvokeMethod"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

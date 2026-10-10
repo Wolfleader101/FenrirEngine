@@ -196,6 +196,83 @@ public static partial class Bootstrap
 
     // Names are explicit-length UTF-8, borrowed only for this call. All caller
     // storage must be valid and non-overlapping. Only success publishes a value.
+    // Finds a public static method on a looked-up type by name, return kind and exact parameter kinds
+    // (see ValueKind). Success publishes a nonzero handle; NotFound (6) means no such method exists.
+    // The name is explicit-length UTF-8; paramKinds holds paramCount int32 kinds and may be null for none.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int FindMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
+        int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (methodId != null) *methodId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || methodId == null ||
+            name == null || nameLength <= 0 || paramCount < 0 || (paramCount > 0 && paramKinds == null))
+            return (int)BridgeStatus.InvalidArgument;
+        string methodName;
+        int[] kinds = new int[paramCount];
+        try
+        {
+            methodName = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength));
+            if (methodName.Contains('\0')) throw new BridgeArgumentException("A method name cannot contain null characters.");
+            if (!ValueKinds.IsValid(returnKind)) throw new BridgeArgumentException($"Unsupported return kind {returnKind}.");
+            for (int index = 0; index < paramCount; ++index)
+            {
+                kinds[index] = paramKinds[index];
+                ValueKinds.ToType(kinds[index], allowVoid: false);
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException or BridgeArgumentException
+                ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+        try
+        {
+            switch (ComponentRegistry.TryFindMethod(token, typeId, methodName, returnKind, kinds, out ulong found))
+            {
+                case ComponentRegistry.FindResult.Found:
+                    *methodId = found;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.FindResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new MissingMethodException($"No public static, non-generic method '{methodName}' with the requested return and parameter types was found."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
+    // Runs a found method. arguments holds argCount 64-bit slots, one per parameter; the result slot is
+    // zero for void. Component exceptions (including OverflowException and ArgumentException) are
+    // ManagedException; only the bridge's own validation is InvalidArgument.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int InvokeMethod(ulong token, ulong methodId, ulong* arguments, int argCount, ulong* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (result != null) *result = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+            argCount < 0 || (argCount > 0 && arguments == null))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryInvokeMethod(token, methodId, new ReadOnlySpan<ulong>(arguments, argCount), out ulong returned))
+                return (int)BridgeStatus.InvalidHandle;
+            *result = returned;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+    }
+
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
         int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
