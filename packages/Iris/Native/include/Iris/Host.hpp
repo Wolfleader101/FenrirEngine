@@ -22,8 +22,9 @@ namespace Iris
         std::filesystem::path dotnetRoot;
         // Assemblies every component shares as one copy in the default load context, such as an API
         // that components compile against. A component's reference to one always binds to the shared
-        // copy, even when it deploys its own. Sharing is process-wide and permanent; sharing a
-        // different file under an already shared assembly name fails initialization.
+        // copy, even when it deploys its own. Sharing is process-wide and permanent, including for
+        // assemblies shared before a later one fails; sharing a different file under an already
+        // shared assembly name fails initialization.
         std::vector<std::filesystem::path> sharedAssemblies;
     };
 

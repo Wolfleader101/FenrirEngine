@@ -8,10 +8,10 @@ if(NOT IRIS_DOTNET_EXECUTABLE)
 endif()
 if(NOT IRIS_DOTNET_EXECUTABLE)
     message(FATAL_ERROR "dotnet was not found. Install the .NET 10 SDK, set IRIS_DOTNET_EXECUTABLE, "
-        "or set IRIS_BUILD_BRIDGE=OFF and provide the bridge yourself.")
+        "or set IRIS_BUILD_BRIDGE=OFF and IRIS_PREBUILT_BRIDGE_DIR to a directory holding a built bridge.")
 endif()
 
-set(IRIS_BRIDGE_DIR "${CMAKE_BINARY_DIR}/iris/bridge" CACHE INTERNAL "Directory holding the built Iris bridge")
+set(IRIS_BRIDGE_DIR "${CMAKE_BINARY_DIR}/iris/bridge")
 set(iris_bridge_project "${CMAKE_CURRENT_LIST_DIR}/../Managed/Iris.Bridge/Iris.Bridge.csproj")
 file(GLOB iris_bridge_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/../Managed/Iris.Bridge/*.cs")
 

@@ -144,7 +144,7 @@ namespace Iris
 
         // Converts a path to the bridge's UTF-8 form. Relative paths resolve against the current
         // directory. Conversion failures are argument errors; allocation failures still throw.
-        CallResult<std::string> BridgePath(const std::filesystem::path& path, const char* what)
+        CallResult<std::string> ToBridgeUtf8Path(const std::filesystem::path& path, const char* what)
         {
             if (path.empty())
             {
@@ -185,7 +185,7 @@ namespace Iris
 
         CallResult<void> ShareAssembly(const Detail::BridgeFunctions& bridge, const std::filesystem::path& path)
         {
-            const auto text = BridgePath(path, "shared assembly");
+            const auto text = ToBridgeUtf8Path(path, "shared assembly");
             if (!text.Succeeded())
             {
                 return Detail::PropagateFailure<void>(text);
@@ -367,7 +367,7 @@ namespace Iris
         {
             return Detail::Failure<Component>(CallStatus::NotInitialized, "The managed bridge is not initialized.");
         }
-        const auto pathResult = BridgePath(assemblyPath, "component assembly");
+        const auto pathResult = ToBridgeUtf8Path(assemblyPath, "component assembly");
         if (!pathResult.Succeeded())
         {
             return Detail::PropagateFailure<Component>(pathResult);

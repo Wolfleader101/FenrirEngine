@@ -4,7 +4,7 @@ set_target_properties(IrisHostingExample PROPERTIES CXX_EXTENSIONS OFF)
 iris_deploy(IrisHostingExample)
 
 # Publish the example component (with its private dependency and contracts) into a `component`
-# directory next to the example, so the example runs without arguments.
+# directory next to the example, so the example runs without arguments. Needs the .NET SDK.
 if(IRIS_BUILD_BRIDGE)
     set(iris_example_component_dir "${CMAKE_BINARY_DIR}/iris/examples/component")
     file(GLOB iris_example_component_sources CONFIGURE_DEPENDS

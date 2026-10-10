@@ -64,6 +64,22 @@ static class SharedAssemblyChecks
         }
         finally { Directory.Delete(Path.GetDirectoryName(copy)!, recursive: true); }
 
+        // References the shared copy cannot satisfy fail instead of binding to it.
+        foreach (string reference in new[]
+        {
+            ContractName + ", Version=99.0.0.0",
+            ContractName + ", Culture=fr",
+            ContractName + ", PublicKeyToken=b77a5c561934e089"
+        })
+        {
+            bool mismatchRejected = false;
+            try { SharedAssemblies.Resolve(new AssemblyName(reference)); }
+            catch (FileLoadException) { mismatchRejected = true; }
+            Check(mismatchRejected, "An incompatible reference bound to the shared copy: " + reference);
+        }
+        Check(SharedAssemblies.Resolve(new AssemblyName(ContractName)) == firstContract.Assembly,
+              "A compatible reference did not bind to the shared copy");
+
         bool componentRejected = false;
         try { ComponentRegistry.Load(contract); }
         catch (BridgeArgumentException) { componentRejected = true; }

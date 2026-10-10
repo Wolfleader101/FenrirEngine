@@ -32,6 +32,7 @@ ctest --test-dir out/build/iris -C Debug --output-on-failure
 | Option | Default | Effect |
 | --- | --- | --- |
 | `IRIS_BUILD_BRIDGE` | `ON` | Builds the managed bridge with `dotnet` (always in Release). |
+| `IRIS_PREBUILT_BRIDGE_DIR` | empty | With `IRIS_BUILD_BRIDGE=OFF`: a directory holding a built bridge to deploy and install. |
 | `IRIS_BUILD_EXAMPLES` | `ON` when Iris is the top-level project | Builds `IrisHostingExample` and its component. |
 | `IRIS_BUILD_TESTS` | `OFF` | Builds the checks and their managed projects. |
 | `IRIS_INSTALL` | `ON` when Iris is the top-level project | Generates install rules and the `find_package(Iris)` package. |
@@ -72,7 +73,8 @@ target_link_libraries(MyApp PRIVATE Iris::Iris)
 iris_deploy(MyApp)                        # copies nethost and the bridge next to MyApp
 ```
 
-The install holds the static library and headers, `nethost` (`bin`, plus `nethost.lib` on Windows),
+The install holds the static library and headers, `nethost` (in `bin` with `nethost.lib` on Windows, in
+`lib` elsewhere),
 the bridge in `share/Iris/bridge`, and the CMake package. `Examples/Consumer` is a complete project
 using it; the `ConsumerPackage` check builds and runs it against a fresh install. Build the consumer in
 the same configuration as the installed library.
