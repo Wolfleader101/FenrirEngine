@@ -14,9 +14,10 @@ CMake logic but have not been run yet.
 | --- | --- |
 | `Native` | The C++ library `Iris` (public headers in `include/Iris`). |
 | `Managed/Iris.Bridge` | The managed bridge (`net10.0`), resident for the life of the process. |
-| `Examples/Hosting` | A small example program, plus an example component and its private dependency. |
+| `Examples/Hosting` | A small example program, plus an example component, its private dependency and a contracts assembly. |
+| `Examples/Consumer` | A standalone project that uses an installed Iris through `find_package(Iris)`. |
 | `Tests` | Native and managed checks, run through CTest. |
-| `cmake` | .NET host pack discovery. |
+| `cmake` | Host pack discovery, the bridge build, `iris_deploy` and the package config. |
 
 ## Requirements and build
 
@@ -30,11 +31,16 @@ ctest --test-dir out/build/iris -C Debug --output-on-failure
 
 | Option | Default | Effect |
 | --- | --- | --- |
-| `IRIS_BUILD_EXAMPLES` | `ON` | Builds `IrisHostingExample`. |
-| `IRIS_BUILD_TESTS` | `OFF` | Builds the checks, and the bridge, fixture and example component with `dotnet`. |
+| `IRIS_BUILD_BRIDGE` | `ON` | Builds the managed bridge with `dotnet` (always in Release). |
+| `IRIS_BUILD_EXAMPLES` | `ON` when Iris is the top-level project | Builds `IrisHostingExample` and its component. |
+| `IRIS_BUILD_TESTS` | `OFF` | Builds the checks and their managed projects. |
+| `IRIS_INSTALL` | `ON` when Iris is the top-level project | Generates install rules and the `find_package(Iris)` package. |
 | `IRIS_DOTNET_NATIVE_DIR` | empty | Use this exact host pack `native` directory instead of discovering one. |
 | `IRIS_DOTNET_TARGET_RID` | empty | Override the target runtime identifier, for example `linux-musl-x64`. |
-| `IRIS_DOTNET_EXECUTABLE` | found on `PATH` | The `dotnet` used for pack discovery and test builds. |
+| `IRIS_DOTNET_EXECUTABLE` | found on `PATH` | The `dotnet` used for pack discovery and managed builds. |
+
+In FenrirEngine, `FENRIR_ENABLE_SCRIPTING` decides whether the root build adds Iris at all; with it
+off, nothing looks for .NET.
 
 ### Host pack selection
 
@@ -51,13 +57,31 @@ Windows, `libnethost.so` on Linux, `libnethost.dylib` on macOS). Cross-compiling
 explicit `IRIS_DOTNET_NATIVE_DIR`, and macOS universal builds need one hosting build per
 architecture. Set the directory explicitly for reproducible builds.
 
-### Deployment
+### Using Iris from another project
 
-An application using the library ships:
+Either add the source tree with `add_subdirectory(path/to/Iris)`, or install it and use
+`find_package`:
 
-- the `nethost` shared library next to the executable (the example and checks copy it; on Unix they
-  also set an `$ORIGIN`/`@loader_path` run path);
-- the bridge's `Iris.Bridge.dll` and a `.runtimeconfig.json` targeting `net10.0`;
+```sh
+cmake --install out/build/iris --config Debug --prefix out/install/iris
+```
+
+```cmake
+find_package(Iris 0.1 CONFIG REQUIRED)    # with CMAKE_PREFIX_PATH including the install prefix
+target_link_libraries(MyApp PRIVATE Iris::Iris)
+iris_deploy(MyApp)                        # copies nethost and the bridge next to MyApp
+```
+
+The install holds the static library and headers, `nethost` (`bin`, plus `nethost.lib` on Windows),
+the bridge in `share/Iris/bridge`, and the CMake package. `Examples/Consumer` is a complete project
+using it; the `ConsumerPackage` check builds and runs it against a fresh install. Build the consumer in
+the same configuration as the installed library.
+
+At run time an application needs:
+
+- `nethost` next to the executable (on Unix `iris_deploy` also sets an `$ORIGIN`/`@loader_path` run path);
+- `Iris.Bridge.dll`, `Iris.Bridge.runtimeconfig.json` and `Iris.Bridge.deps.json`; the bridge's own
+  runtime configuration is a valid `HostConfiguration::runtimeConfigPath`;
 - each component with its `.deps.json` and private dependencies (`dotnet publish` produces this);
 - an installed .NET 10 runtime, found by nethost or given as `HostConfiguration::dotnetRoot`.
 
@@ -66,17 +90,16 @@ a private copy of it.
 
 ## Running the example
 
-The test build produces everything the example needs. From the repository root in PowerShell, after
-a Visual Studio build:
+The example build deploys the bridge and publishes the example component next to the executable, so
+it runs without arguments. From the repository root in PowerShell, after a Visual Studio build:
 
 ```powershell
-$managed = 'out/build/iris/Tests/managed/Debug'
-.\out\build\scripting\Examples\Hosting\Debug\IrisHostingExample.exe "$managed/checks/ManagedChecks.runtimeconfig.json" "$managed/checks/Iris.Bridge.dll" "$managed/component/Iris.Examples.Component.dll"
+.\out\build\iris\Examples\Hosting\Debug\IrisHostingExample.exe
 ```
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 9.
+Managed bridge initialized; bridge version 10.
 Loaded Iris.Examples.Component
 Calculations.Add(20, 22) = 42
 Calculations.Throw: status 3
@@ -85,8 +108,9 @@ Release: status 0, unload Pending
 Call after release: status 5
 ```
 
-Pass `--dotnet-root <absolute-directory>` first to choose a .NET installation. In PowerShell, set
-`[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)` to display non-ASCII output.
+It also accepts `[--dotnet-root <absolute-directory>] [runtimeconfig.json bridge.dll component.dll]`.
+In PowerShell, set `[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)` to display
+non-ASCII output.
 
 ## Using the library
 
@@ -122,6 +146,8 @@ if (loaded.Succeeded())
   `GetUnloadStatus` reports `NotRequested`, `Pending` or `Collected`. The library never forces GC.
 - **Handles are never reused.** After release, an owner's calls return `InvalidHandle`; a new load
   gets a new handle.
+- **Shared assemblies are permanent.** Assemblies listed in `HostConfiguration::sharedAssemblies` load
+  once into the default context and stay shared for the life of the process.
 - **External serialization.** Calls on one host, or on one owner, must not run concurrently.
 
 ### Results and diagnostics
@@ -161,21 +187,26 @@ hostfxr's own messages, and flags recording how far the attempt got.
    caller's version and table size. See
    [ADR-0002](../../docs/adr/0002-bridge-in-default-load-context-with-function-table.md).
 4. **Components.** Each `LoadComponent` creates a collectible `AssemblyLoadContext` that resolves
-   private dependencies with `AssemblyDependencyResolver`. The bridge is shared with components;
-   a component referencing a newer bridge, another culture or another public key is rejected.
-5. **Unloading.** Release removes the registry's strong references and calls `Unload`. The registry
+   private dependencies with `AssemblyDependencyResolver`.
+5. **Shared assemblies.** The bridge, and any assembly in `HostConfiguration::sharedAssemblies`, is
+   loaded once into the default context. A component's reference to one always binds to that copy,
+   even if the component deploys its own, so types such as a scripting API keep one identity across
+   components. A reference the shared copy cannot satisfy (a newer version, another culture or public
+   key) is rejected. See [ADR-0004](../../docs/adr/0004-shared-contract-assemblies.md).
+6. **Unloading.** Release removes the registry's strong references and calls `Unload`. The registry
    then holds only a long weak reference, which `GetUnloadStatus` reads.
 
 ## Checks
 
 | CTest | What it checks |
 | --- | --- |
-| `ManagedContracts` | The bridge's exports called directly in-process: diagnostic text bounds, component loading, invocation, dependency resolution. |
+| `ManagedContracts` | The bridge's exports called directly in-process: diagnostic text bounds, component loading, invocation, dependency resolution, shared assemblies. |
 | `ManagedUnload` | Repeated load/invoke/release cycles collect the context and its assemblies; a retained `Type` keeps unloading pending. Runs alone, with forced GC. |
 | `Bridge-real` | The handshake with the real bridge, and rejection of a second bridge file in the same process. |
 | `Bridge-fixture` | How the native host handles scripted bridge responses: bounded and invalid diagnostics, malformed results, no repeated calls, string reads, unload observation, cleanup on destruction. |
 | `Bridge-legacy`, `-oversized`, `-missing`, `-notbridge` | Rejection of a mismatched version, table size, missing entry, or an assembly without the bridge. |
-| `Components` | Component owners against the real bridge: identity, failures, names, paths, moves, release, outliving the host. |
+| `Components` | Component owners against the real bridge: identity, failures, names, paths, moves, release, outliving the host, shared assemblies. |
+| `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` against it. |
 
 Each check program runs named cases and reports every failure. The fixture bridge
 (`Tests/FixtureBridge`) is driven through its component's `InvokeInt32` by scenario names.

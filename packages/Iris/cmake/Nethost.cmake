@@ -30,8 +30,8 @@ foreach(iris_nethost_file IN ITEMS
     endif()
 endforeach()
 
-add_library(IrisNethost SHARED IMPORTED)
-set_target_properties(IrisNethost PROPERTIES
+add_library(Iris::Nethost SHARED IMPORTED)
+set_target_properties(Iris::Nethost PROPERTIES
     IMPORTED_LOCATION "${iris_nethost_runtime}"
     INTERFACE_INCLUDE_DIRECTORIES "${iris_dotnet_native_dir}"
 )
@@ -42,7 +42,7 @@ if(WIN32)
     if(NOT EXISTS "${iris_nethost_import_library}" OR IS_DIRECTORY "${iris_nethost_import_library}")
         message(FATAL_ERROR "Required nethost import library is missing: ${iris_nethost_import_library}")
     endif()
-    set_target_properties(IrisNethost PROPERTIES
+    set_target_properties(Iris::Nethost PROPERTIES
         IMPORTED_IMPLIB "${iris_nethost_import_library}"
     )
 endif()

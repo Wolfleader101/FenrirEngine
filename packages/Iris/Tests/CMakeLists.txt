@@ -1,3 +1,6 @@
+if(NOT IRIS_BUILD_BRIDGE)
+    message(FATAL_ERROR "IRIS_BUILD_TESTS requires IRIS_BUILD_BRIDGE.")
+endif()
 if(IRIS_DOTNET_EXECUTABLE)
     set(iris_checks_dotnet "${IRIS_DOTNET_EXECUTABLE}")
 else()
@@ -22,20 +25,17 @@ add_custom_target(IrisManagedBuild ALL
         --configuration "${iris_checks_configuration}" --output "${iris_checks_managed}/fixture"
     VERBATIM
 )
+if(TARGET IrisBridge)
+    # Serialize .NET builds that share the bridge project's obj directory.
+    add_dependencies(IrisManagedBuild IrisBridge)
+endif()
 
 function(iris_add_native_checks target source)
     add_executable(${target} ${source} TestHarness.hpp)
-    target_link_libraries(${target} PRIVATE Iris)
+    target_link_libraries(${target} PRIVATE Iris::Iris)
     add_dependencies(${target} IrisManagedBuild)
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "$<TARGET_FILE:IrisNethost>" "$<TARGET_FILE_DIR:${target}>"
-        VERBATIM
-    )
-    if(APPLE)
-        set_target_properties(${target} PROPERTIES BUILD_RPATH "@loader_path")
-    elseif(UNIX)
-        set_target_properties(${target} PROPERTIES BUILD_RPATH "$ORIGIN")
-    endif()
+    # The checks pass bridge paths explicitly; this deploys nethost (and a bridge they do not use).
+    iris_deploy(${target})
 endfunction()
 
 # Managed checks call the bridge's exports directly, in-process.
@@ -66,3 +66,18 @@ endforeach()
 iris_add_native_checks(IrisComponentChecks components.cpp)
 add_test(NAME Components
     COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}")
+
+# Install this build and use it from the standalone consumer project, through find_package(Iris).
+if(IRIS_INSTALL)
+    add_test(NAME ConsumerPackage
+        COMMAND "${CMAKE_COMMAND}"
+            "-DIRIS_BUILD_DIR=${CMAKE_BINARY_DIR}"
+            "-DIRIS_CONFIG=${iris_checks_configuration}"
+            "-DCONSUMER_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Consumer"
+            "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/consumer/${iris_checks_configuration}"
+            "-DGENERATOR=${CMAKE_GENERATOR}"
+            "-DPLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+            "-DCOMPONENT=${iris_checks_component}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/ConsumerPackage.cmake")
+    set_tests_properties(ConsumerPackage PROPERTIES TIMEOUT 300)
+endif()
