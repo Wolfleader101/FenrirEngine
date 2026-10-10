@@ -273,7 +273,7 @@ public static partial class Bootstrap
                 case ComponentRegistry.FindResult.InvalidHandle:
                     return (int)BridgeStatus.InvalidHandle;
                 default:
-                    ManagedDiagnostic.Write(new MissingMethodException($"No public static, non-generic method '{methodName}' with the requested return and parameter types was found."),
+                    ManagedDiagnostic.Write(new MissingMethodException($"No public {(isStatic ? "static" : "instance")}, non-generic method '{methodName}' with the requested return and parameter types was found."),
                         new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
                     return (int)BridgeStatus.NotFound;
             }

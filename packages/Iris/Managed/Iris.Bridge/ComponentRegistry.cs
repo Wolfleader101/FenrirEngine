@@ -158,6 +158,15 @@ internal static class ComponentRegistry
         }
     }
 
+    private static bool SameParameters(MethodBase first, MethodBase second)
+    {
+        ParameterInfo[] left = first.GetParameters(), right = second.GetParameters();
+        if (left.Length != right.Length) return false;
+        for (int index = 0; index < left.Length; ++index)
+            if (left[index].ParameterType != right[index].ParameterType) return false;
+        return true;
+    }
+
     private static bool SignatureMatches(ParameterInfo[] parameters, int[] kinds)
     {
         if (parameters.Length != kinds.Length) return false;
@@ -194,7 +203,12 @@ internal static class ComponentRegistry
                 !KindMatches(candidate.ReturnType, returnKind, isReturn: true) || !SignatureMatches(candidate.GetParameters(), parameterKinds))
                 continue;
             if (method != null)
-                throw new BridgeArgumentException($"The signature matches more than one overload of '{name}'; object parameters match any class, so overloads that differ only by them are ambiguous.");
+            {
+                if (!SameParameters(method, candidate))
+                    throw new BridgeArgumentException($"The signature matches more than one overload of '{name}'; object parameters match any class, so overloads that differ only by them are ambiguous.");
+                // The same signature declared on a base and a derived type is `new` hiding: take the derived one.
+                if (!candidate.DeclaringType!.IsSubclassOf(method.DeclaringType!)) continue;
+            }
             method = candidate;
         }
         if (method == null) return FindResult.NotFound;

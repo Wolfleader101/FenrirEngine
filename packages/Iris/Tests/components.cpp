@@ -23,6 +23,7 @@ namespace
     constexpr std::string_view ShapeType = "Iris.Examples.Component.Shape";
     constexpr std::string_view OtherType = "Iris.Examples.Component.Other";
     constexpr std::string_view FactoryType = "Iris.Examples.Component.Factory";
+    constexpr std::string_view HidingCounterType = "Iris.Examples.Component.HidingCounter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -743,6 +744,16 @@ namespace
                  Check(copy.Succeeded() &&
                            counter.FindInstanceMethod<std::int32_t()>("Value").value->Invoke(*copy.value).value == 3,
                        "A constructor did not receive an object argument");
+             }},
+            {"a method hidden with new resolves to the most-derived declaration",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto hiding = *component.FindType(HidingCounterType).value;
+                 const auto value = hiding.FindInstanceMethod<std::int32_t()>("Value");
+                 Check(value.Succeeded(), "A hidden method was ambiguous: " + value.diagnostic);
+                 const auto object = hiding.CreateObject();
+                 Check(value.value->Invoke(*object.value).value == 42, "The hiding method was not the one called");
              }},
             {"overloads that differ only by object parameter types are ambiguous",
              [&] {

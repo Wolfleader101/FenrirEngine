@@ -36,6 +36,13 @@ namespace Iris
     concept Argument = PrimitiveValue<std::remove_cvref_t<T>> || std::same_as<std::remove_cvref_t<T>, Object>;
 
     /**
+     * @brief An argument as declared in a method signature: a PrimitiveValue by value, or an Object as
+     * `const Object&` (an Object cannot be copied, so a by-value Object is not a signature argument).
+     */
+    template <typename T>
+    concept SignatureArgument = PrimitiveValue<T> || std::same_as<T, const Object&>;
+
+    /**
      * @brief What a managed method can return: void, a PrimitiveValue, or `std::optional<Object>`, where
      * an empty optional is a null return.
      */
@@ -204,7 +211,7 @@ namespace Iris
      * a null return.
      */
     template <typename... Args, typename Result>
-        requires((Argument<Args> && ...) && Returnable<Result>)
+        requires((SignatureArgument<Args> && ...) && Returnable<Result>)
     class Method<Result(Args...)>
     {
       public:
@@ -240,7 +247,7 @@ namespace Iris
      * rules of Method.
      */
     template <typename... Args, typename Result>
-        requires((Argument<Args> && ...) && Returnable<Result>)
+        requires((SignatureArgument<Args> && ...) && Returnable<Result>)
     class InstanceMethod<Result(Args...)>
     {
       public:

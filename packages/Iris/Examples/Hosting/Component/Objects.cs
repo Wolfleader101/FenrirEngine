@@ -41,6 +41,12 @@ public sealed class StepCounter : Counter
     }
 }
 
+// Hides Counter.Value with `new`: reflection sees both, and the most-derived one must win.
+public class HidingCounter : Counter
+{
+    public new int Value() => 42;
+}
+
 public abstract class Shape
 {
     public abstract int Sides();
