@@ -10,7 +10,7 @@ The core library must be usable from **any** C++ project, not just FenrirEngine.
 
 ## Starting point
 
-`packages/FenrirScripting/IMPLEMENTATION_PLAN.md` describes milestones 1–4 as done: managed diagnostics, collectible component loading with dependency resolution, a single `int(int,int)` invocation path, and unload observation. That work was produced by an LLM that was not strong at code or decomposition, so the first tickets review and clean it up before building further.
+`packages/Iris/IMPLEMENTATION_PLAN.md` describes milestones 1–4 as done: managed diagnostics, collectible component loading with dependency resolution, a single `int(int,int)` invocation path, and unload observation. That work was produced by an LLM that was not strong at code or decomposition, so the first tickets review and clean it up before building further.
 
 ## Phases
 

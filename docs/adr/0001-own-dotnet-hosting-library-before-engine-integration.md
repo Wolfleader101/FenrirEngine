@@ -4,7 +4,7 @@ status: accepted
 
 # Build our own engine-independent .NET hosting library before engine integration
 
-FenrirScripting will become a general-purpose C++/CoreCLR hosting library, comparable in scope to Mono's embedding API and Coral. It will offer type and method handles, typed invocation, managed objects with explicit ownership, fields, strings, structs, arrays, internal calls, attributes, and collectible reload. Its core must be usable from any C++ project, not just FenrirEngine. Gameplay/ECS integration starts only once that API is stable, so engine requirements can't bend the hosting lifetime model before it has been proven.
+FenrirScripting (renamed Iris in ADR-0003) will become a general-purpose C++/CoreCLR hosting library, comparable in scope to Mono's embedding API and Coral. It will offer type and method handles, typed invocation, managed objects with explicit ownership, fields, strings, structs, arrays, internal calls, attributes, and collectible reload. Its core must be usable from any C++ project, not just FenrirEngine. Gameplay/ECS integration starts only once that API is stable, so engine requirements can't bend the hosting lifetime model before it has been proven.
 
 We write it ourselves rather than adopting Coral or Mono:
 
