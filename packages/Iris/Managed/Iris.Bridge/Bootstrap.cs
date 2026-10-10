@@ -23,7 +23,9 @@ public static partial class Bootstrap
                 ForgetComponentUnload = &ForgetComponentUnload,
                 RegisterSharedAssembly = &RegisterSharedAssembly,
                 FindType = &FindType,
-                CopyTypeNameUtf8 = &CopyTypeNameUtf8
+                CopyTypeNameUtf8 = &CopyTypeNameUtf8,
+                FindMethod = &FindMethod,
+                InvokeMethod = &InvokeMethod
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

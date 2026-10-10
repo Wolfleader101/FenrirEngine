@@ -213,6 +213,140 @@ namespace
                  host.reset(); // A type handle outlives its host while its component is alive.
                  Check(live.GetInfo().Succeeded(), "A type handle did not outlive the host");
              }},
+            {"typed methods round-trip every supported value kind",
+             [&] {
+                 static_assert(PrimitiveValue<std::int32_t> && PrimitiveValue<bool> && PrimitiveValue<double> &&
+                               !PrimitiveValue<std::string> && !PrimitiveValue<char> && !PrimitiveValue<void*>);
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto type = *component.FindType(CalculationType).value;
+                 const auto find = [&type](auto signature, std::string_view name) {
+                     using Signature = typename decltype(signature)::type;
+                     auto found = type.FindMethod<Signature>(name);
+                     Check(found.Succeeded(),
+                           "Method lookup failed for " + std::string(name) + ": " + found.diagnostic);
+                     return *found.value;
+                 };
+                 Check(
+                     find(std::type_identity<std::int32_t(std::int32_t, std::int32_t)>{}, "Add").Invoke(20, 22).value ==
+                         42,
+                     "Add(int, int) returned the wrong value");
+                 Check(
+                     find(std::type_identity<std::int32_t(std::int32_t, std::int32_t)>{}, "Add").Invoke(-5, 2).value ==
+                         -3,
+                     "A negative int did not round-trip");
+                 Check(find(std::type_identity<std::int64_t(std::int64_t, std::int64_t)>{}, "Add")
+                               .Invoke(5'000'000'000LL, 7)
+                               .value == 5'000'000'007LL,
+                       "The long overload was not selected");
+                 Check(find(std::type_identity<double(double, float)>{}, "Scale").Invoke(2.5, 4.0f).value == 10.0,
+                       "double and float did not round-trip");
+                 Check(find(std::type_identity<bool(bool)>{}, "Not").Invoke(true).value == false &&
+                           find(std::type_identity<bool(bool)>{}, "Not").Invoke(false).value == true,
+                       "bool did not round-trip");
+                 Check(find(std::type_identity<std::uint8_t(std::uint8_t)>{}, "WrapByte").Invoke(255).value == 0,
+                       "byte did not round-trip");
+                 Check(find(std::type_identity<std::int8_t(std::int8_t)>{}, "NegateSByte").Invoke(-7).value == 7 &&
+                           find(std::type_identity<std::int16_t(std::int16_t)>{}, "NegateShort").Invoke(300).value ==
+                               -300,
+                       "Signed small integers did not round-trip");
+                 Check(
+                     find(std::type_identity<std::uint16_t(std::uint16_t)>{}, "IncrementUShort").Invoke(65535).value ==
+                             0 &&
+                         find(std::type_identity<std::uint32_t(std::uint32_t)>{}, "IncrementUInt")
+                                 .Invoke(std::numeric_limits<std::uint32_t>::max())
+                                 .value == 0,
+                     "Unsigned integers did not round-trip");
+                 Check(find(std::type_identity<std::uint64_t(std::uint64_t, std::uint64_t)>{}, "Sum64")
+                               .Invoke(std::numeric_limits<std::uint64_t>::max(), 2)
+                               .value == 1,
+                       "ulong did not round-trip");
+                 Check(find(std::type_identity<float(float)>{}, "Halve").Invoke(5.0f).value == 2.5f,
+                       "float did not round-trip");
+
+                 // A void method really runs, and the same lookup returns an equivalent handle.
+                 const auto touch = find(std::type_identity<void()>{}, "Touch");
+                 const auto touches = find(std::type_identity<std::int32_t()>{}, "Touches");
+                 const auto before = *touches.Invoke().value;
+                 Check(touch.Invoke().Succeeded() && touch.Invoke().Succeeded() && touches.Invoke().value == before + 2,
+                       "A void method did not run once per call");
+             }},
+            {"method lookup failures are NotFound or InvalidArgument with diagnostics",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto type = *component.FindType(CalculationType).value;
+                 const auto notFound = [](const auto& result, const char* what) {
+                     Check(result.status == CallStatus::NotFound && !result.value && !result.diagnostic.empty(),
+                           std::string("Not a NotFound with a diagnostic: ") + what);
+                 };
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Missing"), "missing name");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("WrongReturn"),
+                          "wrong return type");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int64_t)>("Add"), "wrong parameter types");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t)>("Add"), "wrong parameter count");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Generic"), "generic method");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("UnmanagedOnly"),
+                          "unmanaged-only method");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Hidden"), "non-public method");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("add"), "wrong case");
+                 Check(type.FindMethod<void()>({}).status == CallStatus::InvalidArgument &&
+                           type.FindMethod<void()>(std::string("A\0B", 3)).status == CallStatus::InvalidArgument &&
+                           type.FindMethod<void()>("\xFF").status == CallStatus::InvalidArgument,
+                       "An empty, null-containing or malformed name was accepted");
+                 const auto add = type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+                 Check(add.Succeeded() && add.value->Invoke(20, 22).value == 42,
+                       "Lookup did not recover after failures");
+             }},
+            {"component exceptions in typed calls are ManagedException and the next call works",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto type = *component.FindType(CalculationType).value;
+                 const auto add = *type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add").value;
+                 const auto thrown =
+                     type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Throw").value->Invoke(0, 0);
+                 Check(thrown.status == CallStatus::ManagedException && !thrown.value &&
+                           thrown.diagnostic.find("InvalidOperationException") != std::string::npos &&
+                           thrown.diagnostic.find("\xCF\x80 \xF0\x9F\x90\xBA") != std::string::npos,
+                       "Component exception details or Unicode lost");
+                 const auto argument =
+                     type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("ThrowArgument").value->Invoke(0, 0);
+                 Check(argument.status == CallStatus::ManagedException && !argument.value,
+                       "A component's ArgumentException was reported as an invalid bridge argument");
+                 const auto overflow = add.Invoke(std::numeric_limits<std::int32_t>::max(), 1);
+                 Check(overflow.status == CallStatus::ManagedException && !overflow.value &&
+                           overflow.diagnostic.find("OverflowException") != std::string::npos,
+                       "A component's OverflowException was not a ManagedException");
+                 const auto bounded =
+                     type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("LongError").value->Invoke(0, 0);
+                 Check(bounded.status == CallStatus::ManagedException && bounded.diagnosticTruncated,
+                       "Component diagnostic was not bounded");
+                 Check(add.Invoke(20, 22).value == 42, "A call did not recover after exceptions");
+             }},
+            {"method handles stop working when their component is released",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto released = Load(*host, arguments.component);
+                 const auto other = Load(*host, arguments.component);
+                 const auto stale = *(*released.FindType(CalculationType).value)
+                                         .FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add")
+                                         .value;
+                 const auto live = *(*other.FindType(CalculationType).value)
+                                        .FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add")
+                                        .value;
+                 const auto staleType = *released.FindType(CalculationType).value;
+                 Check(released.Release().Succeeded(), "Release failed");
+                 const auto result = stale.Invoke(20, 22);
+                 Check(result.status == CallStatus::InvalidHandle && !result.value,
+                       "A released component's method still ran");
+                 Check(staleType.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add").status ==
+                           CallStatus::InvalidHandle,
+                       "A released component's type still resolved methods");
+                 Check(live.Invoke(20, 22).value == 42, "Releasing one component invalidated another's method");
+                 host.reset();
+                 Check(live.Invoke(20, 22).value == 42, "A method handle did not outlive the host");
+             }},
             {"a Unicode path loads, and a missing dependency fails only when used",
              [&] {
                  auto host = StartHost(arguments);

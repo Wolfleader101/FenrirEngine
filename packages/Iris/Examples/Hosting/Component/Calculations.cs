@@ -13,6 +13,22 @@ public static class Calculations
     public static int ThrowArgument(int left, int right) => throw new ArgumentException("An exception inside component code is not an ABI argument failure.");
     public static int LongError(int left, int right) => throw new InvalidOperationException(new string('\u03C0', 3000));
 
+    // One method per supported value kind, for checking typed invocation and marshalling.
+    public static double Scale(double value, float factor) => value * factor;
+    public static bool Not(bool value) => !value;
+    public static byte WrapByte(byte value) => unchecked((byte)(value + 1));
+    public static sbyte NegateSByte(sbyte value) => unchecked((sbyte)-value);
+    public static short NegateShort(short value) => unchecked((short)-value);
+    public static ushort IncrementUShort(ushort value) => unchecked((ushort)(value + 1));
+    public static uint IncrementUInt(uint value) => unchecked(value + 1);
+    public static ulong Sum64(ulong left, ulong right) => unchecked(left + right);
+    public static float Halve(float value) => value / 2;
+
+    // Static state, to show that a void method really ran.
+    private static int touches;
+    public static void Touch() => ++touches;
+    public static int Touches() => touches;
+
     // Wrong signatures and unmanaged-only entry points must never be invoked here.
     public static long WrongReturn(int left, int right) => left + (long)right;
     public static int WrongParameters(long left, long right) => throw new Exception("Wrong signature was invoked.");

@@ -1,6 +1,8 @@
 #include "Iris/Type.hpp"
 
 #include "ManagedDiagnosticBuffer.hpp"
+#include "MethodState.hpp"
+#include "Names.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
@@ -34,5 +36,35 @@ namespace Iris
             return Detail::PropagateFailure<TypeInfo>(assemblyName);
         }
         return Detail::Success<TypeInfo>(TypeInfo{std::move(*fullName.value), std::move(*assemblyName.value)});
+    }
+
+    CallResult<Detail::RawMethod> Type::FindMethodRaw(std::string_view name, Detail::ValueKind returnKind,
+                                                      std::span<const Detail::ValueKind> parameterKinds) const
+    {
+        if (const auto problem = Detail::NameProblem(name, "method"))
+        {
+            return Detail::Failure<Detail::RawMethod>(CallStatus::InvalidArgument, *problem);
+        }
+        // ValueKind is a std::int32_t enum, so the kinds can be sent as they are.
+        static_assert(sizeof(Detail::ValueKind) == sizeof(std::int32_t));
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::uint64_t methodId = 0;
+        const auto status = state->bridge->findMethod(
+            state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
+            static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind),
+            reinterpret_cast<const std::int32_t*>(parameterKinds.data()),
+            static_cast<std::int32_t>(parameterKinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
+            &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && methodId == 0)
+        {
+            return Detail::Failure<Detail::RawMethod>(CallStatus::InvalidResponse,
+                                                      "FindMethod returned the invalid handle 0.");
+        }
+        auto handle = std::make_shared<Detail::RawMethod::State>();
+        handle->bridge = state->bridge;
+        handle->component = state->component;
+        handle->method = methodId;
+        return Detail::CompleteCall<Detail::RawMethod>(status, "FindMethod", diagnostic,
+                                                       Detail::RawMethod(std::move(handle)));
     }
 } // namespace Iris
