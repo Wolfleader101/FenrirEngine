@@ -56,7 +56,7 @@ For a Coral-style API this matters. Script assemblies will compile against a pub
 ### D2. Every new export costs an ABI bump, a by-name lookup and a readiness flag. **High.** Fix ticket: 02.
 
 - `Initialize` (`DotNetHost.cpp:107–335`) is roughly 230 lines.
-- It contains five near-identical blocks that resolve, check and format one method each (`:233–296`), then a separate loop for the six component exports (`:298–321`).
+- It contains four near-identical blocks that resolve, check and format one method each (`:233–296`: GetBridgeVersion, TryAddInt32, CopyGreetingUtf8, EchoUtf8), then a separate loop for the six component exports (`:298–321`).
 - Method names are written out twice under `#if defined(_WIN32)` because `char_t` differs per platform (`:24–49`, `:298–306`).
 - `InitializationResult` has a bool for each method (`DotNetHost.hpp:38–44`).
 - The version number 6 is hard-coded in three places: the managed `GetBridgeVersion`, the native `ExpectedBridgeVersion` (`:51`), and the fixture.
@@ -81,6 +81,18 @@ This needs a deliberate design before internal calls (15) or attributes (16) dep
 
 `LoadFromAssemblyPath` (`ComponentRegistry.cs:49`, `ComponentLoadContext.cs:26`) maps the file. On Windows, the file can't be overwritten while it is loaded. Ticket 17 uses separate fixture paths, so this doesn't block it. Any later replace-in-place reload will need stream or shadow-copy loading, which the spec currently lists as out of scope.
 
+### D6a. Invocation only supports `int(int,int)`. **High.** Fix ticket: 07.
+
+`ManagedComponent::InvokeInt32`, `InvokeComponentInt32` and `ComponentInvocation.InvokeInt32` hard-code one signature end to end:
+- a native wrapper taking two `int32` arguments
+- a 12-parameter wire signature
+- a reflection filter that checks `int` return and parameter types
+- `CreateDelegate<Func<int,int,int>>`
+
+Each call resolves the type and method by name and builds a fresh delegate, with no caching. None of this generalises: every new signature would need a new export, a new ABI bump and a new wrapper (see D2). Ticket 07 replaces it with method handles resolved once and called many times, plus a typed argument and return-value buffer. Keep the useful parts:
+- the lookup rules (public, static, non-generic, declared on a closed type in the component, UnmanagedCallersOnly methods excluded)
+- the "no resident cache roots the component" rule, which must still hold once method handles are cached
+
 ### D6. Component results are wrapped in a pointer twice. **Low.** Fix ticket: 04.
 
 `ComponentLoadResult::value` is a `std::unique_ptr<ManagedComponent>` (`ManagedComponent.hpp:94`). But `ManagedComponent` is already a movable pimpl around a `unique_ptr<State>`. Returning it by value (an optional or result type) removes one heap allocation and one layer of null checks.
@@ -93,9 +105,9 @@ The plan asked for tokens to be "associated with their owning session". In pract
 
 ## Correctness / lifetime
 
-### C1. `LoadComponent` throws on Windows paths that aren't valid UTF-16. **Low.** Fix ticket: 04.
+### C1. `LoadComponent` throws on paths that can't be converted to UTF-8. **Low.** Fix ticket: 04.
 
-`Detail::HostStringToUtf8(absolute.native())` (`DotNetHost.cpp:419`) throws `std::invalid_argument` when a path contains an unpaired surrogate. The documented contract only allows allocation failures to throw. The fix is to return `InvalidArgument` with a diagnostic.
+`Detail::HostStringToUtf8(absolute.native())` (`DotNetHost.cpp:419`) throws `std::invalid_argument` when the path can't be converted. That happens on every platform: on Windows for an unpaired surrogate, and on POSIX for non-UTF-8 path bytes, which Linux allows. The documented contract only allows allocation failures to throw. The fix is to return `InvalidArgument` with a diagnostic.
 
 ### C2. Owner destructors call into managed code, including at process exit. **Low.** Fix ticket: 04 (document).
 
@@ -210,6 +222,7 @@ It forbade reflection and marshalling, and its "next step" pointed at milestone 
 | Ticket | Findings |
 | --- | --- |
 | 02 | D1, D2, O5 (partly), T1 |
+| 07 | D6a |
 | 03 | D3, C5 (partly), O5, N3 |
 | 04 | D6, C1, C2, C3, C4, O1, O2, O3, O4, T2, T3, N1, N2 |
 | 05 | B1, B2, B3, D4 (or a new ticket) |

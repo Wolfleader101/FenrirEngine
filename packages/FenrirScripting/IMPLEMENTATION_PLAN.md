@@ -55,7 +55,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 ## Contracts to preserve
 
-- **Host lifetime.** `DotNetHost` is non-copyable and non-movable. Construction does not start .NET. Each initialization attempt resets readiness. A failed managed call does not invalidate an initialized host.
+- **Host lifetime.** `HostConfiguration` names a runtime configuration, a bridge assembly and an optional .NET root. `DotNetHost` is non-copyable and non-movable. Construction does not start .NET. Readiness belongs to the wrapper, and each initialization attempt resets it. A failed managed call does not invalidate an initialized host.
 - **Process lifetime.** CoreCLR and the loaded hosting libraries live for the whole process. Closing a hostfxr context or destroying `DotNetHost` does not unload CoreCLR. The bridge stays resident; components are collectible.
 - **Ownership.** Public results own their storage. Borrowed inputs and outputs are only used for the duration the operation documents.
 - **Handles.** Handles are opaque, validated on every use, and never reused. They are never CLR addresses, OS handles or raw `GCHandle` values. Owners may outlive the host and must release safely after it is gone.
