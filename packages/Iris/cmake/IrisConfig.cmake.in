@@ -13,7 +13,7 @@ if(NOT TARGET Iris::Nethost)
         IMPORTED_LOCATION "@PACKAGE_IRIS_INSTALL_NETHOST_RUNTIME@")
     if(WIN32)
         set_target_properties(Iris::Nethost PROPERTIES
-            IMPORTED_IMPLIB "@PACKAGE_IRIS_INSTALL_NETHOST_IMPLIB@")
+            IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@IRIS_INSTALL_NETHOST_IMPLIB@")
     endif()
 endif()
 

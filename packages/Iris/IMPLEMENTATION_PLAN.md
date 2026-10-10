@@ -55,7 +55,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 ## Contracts to preserve
 
-- **Host lifetime.** `HostConfiguration` names a runtime configuration, a bridge assembly and an optional .NET root. `Host` is non-copyable and non-movable. Construction does not start .NET. Readiness belongs to the wrapper, and each initialization attempt resets it. A failed managed call does not invalidate an initialized host.
+- **Host lifetime.** `HostConfiguration` names a runtime configuration, a bridge assembly, an optional .NET root and any shared assemblies. `Host` is non-copyable and non-movable. Construction does not start .NET. Readiness belongs to the wrapper, and each initialization attempt resets it. A failed managed call does not invalidate an initialized host.
 - **Process lifetime.** CoreCLR and the loaded hosting libraries live for the whole process. Closing a hostfxr context or destroying `Host` does not unload CoreCLR. The bridge stays resident; components are collectible.
 - **Ownership.** Public results own their storage. Borrowed inputs and outputs are only used for the duration the operation documents.
 - **Handles.** Handles are opaque, validated on every use, and never reused. They are never CLR addresses, OS handles or raw `GCHandle` values. Owners may outlive the host and must release safely after it is gone.
@@ -96,7 +96,6 @@ Linux and macOS are untested. `review-01.md` lists the known problems and assign
 ## Build and run (Windows, PowerShell, from the repository root)
 
 ```powershell
-dotnet build packages/Iris/Managed/Iris.Bridge/Iris.Bridge.csproj --configuration Debug
 cmake -S packages/Iris -B out/build/iris -DIRIS_BUILD_TESTS=ON
 cmake --build out/build/iris --config Debug
 ctest --test-dir out/build/iris -C Debug --output-on-failure

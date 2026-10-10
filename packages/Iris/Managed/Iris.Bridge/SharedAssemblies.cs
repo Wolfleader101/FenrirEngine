@@ -31,7 +31,8 @@ internal static class SharedAssemblies
         {
             if (ByName.TryGetValue(name, out Assembly? existing))
             {
-                if (string.Equals(Path.GetFullPath(existing.Location), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+                StringComparison paths = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+                if (string.Equals(Path.GetFullPath(existing.Location), Path.GetFullPath(path), paths))
                     return;
                 throw new BridgeArgumentException($"An assembly named '{name}' is already shared from '{existing.Location}'.");
             }

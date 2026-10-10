@@ -32,4 +32,13 @@
   - Both root configures needed `-DASSIMP_BUILD_TESTS=OFF`. The vendored assimp is missing its `test/` directory, which is unrelated to Iris.
 - 10/10 CTests pass in Debug and Release on Windows.
 
-Instead of an unusable `dotnet` on `PATH`, the scripting-OFF check removed `dotnet` from `PATH` entirely. That is the stronger test: Iris fails to configure without `dotnet`, so a passing configure proves nothing looked for it.
+**Scripting-OFF verification, as the criterion asks:** a stub `dotnet.exe` that records every invocation and exits 1 was placed first on `PATH`, with `DOTNET_ROOT` pointing at it. A fresh full engine configure and Debug build (`-DFENRIR_ENABLE_SCRIPTING=OFF -DASSIMP_BUILD_TESTS=OFF`) both succeeded, and the stub was never invoked.
+
+The ticket 05 review then found:
+- `IRIS_BUILD_BRIDGE=OFF` broke both the installed package and the top-level configure. It now requires `IRIS_PREBUILT_BRIDGE_DIR`, and fails clearly when that is missing.
+- `nethost` installed to `bin` on Unix; it now goes to `lib`.
+- Shared assemblies compared paths case-insensitively on case-sensitive file systems.
+- There were no checks for shared-reference version, culture or public-key mismatches; they are added.
+- The plan had a stale build command and a stale `HostConfiguration` contract.
+
+All of these are fixed.
