@@ -630,6 +630,8 @@ namespace
                      value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
                  }
                  Check(value->Invoke(*object).Succeeded(), "An object stopped working when its host was destroyed");
+                 Check(component->FindType(CounterType).value->CreateObject().value->Release().Succeeded(),
+                       "Releasing an object after its host was destroyed failed");
                  component.reset(); // Destroying a component force-releases it, dropping the object it still owned.
                  Check(value->Invoke(*object).status == CallStatus::InvalidHandle, "An object survived its component");
                  Check(object->Release().status == CallStatus::InvalidHandle && !object->IsValid(),

@@ -153,6 +153,7 @@ static unsafe class ObjectChecks
             Check(Create(token, TypeId(token, "Shape"), Array.Empty<int>(), Array.Empty<ulong>(), out _, out _) == 6, "An abstract type was constructed");
             Check(Create(token, TypeId(token, "Calculations"), Array.Empty<int>(), Array.Empty<ulong>(), out _, out _) == 6, "A static type was constructed");
             Check(Create(token, counter, new[] { 8 }, new ulong[] { 1 }, out _, out _) == 6, "A constructor matched by widening");
+            Check(Create(token, counter, new int[300], new ulong[300], out _, out _) == 1, "More than 255 constructor parameters were accepted");
             Check(Create(token, counter, new[] { 99 }, new ulong[] { 1 }, out _, out _) == 1 && Create(token, 0, Array.Empty<int>(), Array.Empty<ulong>(), out _, out _) == 5,
                   "Invalid kinds or type handles were accepted");
 
