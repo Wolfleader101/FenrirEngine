@@ -1,8 +1,12 @@
 #include "FenrirDotNetHost/DotNetHost.hpp"
 
+#include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <memory>
+#include <string>
+#include <string_view>
 
 namespace
 {

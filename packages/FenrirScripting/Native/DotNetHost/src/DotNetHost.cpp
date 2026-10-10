@@ -6,7 +6,6 @@
 #include "ManagedComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "StringEncoding.hpp"
-#include "Utf8Buffer.hpp"
 
 #include <coreclr_delegates.h>
 

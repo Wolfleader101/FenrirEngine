@@ -11,3 +11,7 @@
 - [ ] A null managed string is distinguishable from an empty one on the native side.
 - [ ] String fields and properties work once ticket 11 is complete (a follow-up note is acceptable if 11 is not yet done).
 - [ ] Any UTF-8 coverage that ticket 03 kept fixture-only is now covered here, and that fixture path is removed.
+
+## Comments
+
+From the ticket 03 review: removing `GetGreeting` and `EchoUtf8` lost the only real-bridge checks of *returned* non-ASCII and embedded-null UTF-8 payloads. Only the fixture covers them now. String returns here must restore that coverage against the real bridge: multi-byte scalars, empty, and embedded null.
