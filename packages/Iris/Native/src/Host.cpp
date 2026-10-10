@@ -4,6 +4,7 @@
 #include "ComponentState.hpp"
 #include "HostFxrDiagnostics.hpp"
 #include "HostFxrLibrary.hpp"
+#include "LogSink.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "StringEncoding.hpp"
 
@@ -359,6 +360,15 @@ namespace Iris
     bool Host::IsInitialized() const noexcept
     {
         return state != nullptr && state->bridge != nullptr;
+    }
+
+    CallResult<void> Host::SetLogSink(LogSink sink)
+    {
+        if (!IsInitialized())
+        {
+            return Detail::Failure<void>(CallStatus::NotInitialized, "The managed bridge is not initialized.");
+        }
+        return Detail::InstallLogSink(*state->bridge, std::move(sink));
     }
 
     CallResult<Component> Host::LoadComponent(const std::filesystem::path& assemblyPath) const

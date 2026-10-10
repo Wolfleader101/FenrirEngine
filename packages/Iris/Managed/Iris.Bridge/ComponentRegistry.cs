@@ -69,14 +69,17 @@ internal static class ComponentRegistry
             Assembly assembly = context.LoadFromAssemblyPath(path);
             if (!context.IsCollectible || !assembly.IsCollectible || AssemblyLoadContext.GetLoadContext(assembly) != context)
                 throw new InvalidOperationException("Component loading did not produce a collectible assembly in its own context.");
-            var record = new Registration(new Entry(context, assembly, assembly.GetName().Name ?? throw new InvalidOperationException("Assembly has no name.")));
+            string name = assembly.GetName().Name ?? throw new InvalidOperationException("Assembly has no name.");
+            var record = new Registration(new Entry(context, assembly, name));
+            ulong token;
             lock (Gate)
             {
-                ulong token = checked(++lastToken); // Never reuse IDs, even after a failed registration.
+                token = checked(++lastToken); // Never reuse IDs, even after a failed registration.
                 Registrations.Add(token, record);
                 registered = true;
-                return token;
             }
+            BridgeLog.Write(LogLevel.Info, $"Loaded component '{name}' (handle {token}).");
+            return token;
         }
         finally
         {
@@ -215,6 +218,7 @@ internal static class ComponentRegistry
             record.Active = null;
         }
         // No permanent registry root remains, even if an unload handler throws.
+        BridgeLog.Write(LogLevel.Info, $"Releasing component '{entry.Name}' (handle {token}); unloading is cooperative.");
         entry.Context.Unload();
         return true;
     }

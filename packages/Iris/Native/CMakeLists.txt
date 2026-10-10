@@ -5,6 +5,8 @@ add_library(Iris STATIC
     src/BridgeFunctions.hpp
     src/Component.cpp
     src/ComponentState.hpp
+    src/LogSink.cpp
+    src/LogSink.hpp
     src/Method.cpp
     src/MethodState.hpp
     src/Names.hpp
@@ -22,6 +24,7 @@ add_library(Iris STATIC
     include/Iris/Host.hpp
     include/Iris/CallResult.hpp
     include/Iris/Component.hpp
+    include/Iris/Log.hpp
     include/Iris/Method.hpp
     include/Iris/Type.hpp
 )

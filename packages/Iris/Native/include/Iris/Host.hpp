@@ -2,6 +2,7 @@
 
 #include "CallResult.hpp"
 #include "Component.hpp"
+#include "Log.hpp"
 
 #include <cstdint>
 #include <filesystem>
@@ -89,6 +90,16 @@ namespace Iris
         [[nodiscard]] InitializationResult Initialize(const HostConfiguration& configuration);
 
         [[nodiscard]] bool IsInitialized() const noexcept;
+
+        /**
+         * @brief Registers the process-wide sink for bridge messages, or clears it when `sink` is empty.
+         *
+         * There is one bridge and one sink per process, so this replaces whatever any host registered. The
+         * sink survives the host that set it and stays registered until cleared or replaced; its captured
+         * state must outlive that. Needs an initialized host; messages sent before the sink is set,
+         * including during Initialize, are not delivered. See LogSink for what the sink may do.
+         */
+        [[nodiscard]] CallResult<void> SetLogSink(LogSink sink);
 
         // Loads an assembly and its private dependencies into a new collectible load context.
         // Relative paths resolve against the current directory. A failure leaves the host ready.

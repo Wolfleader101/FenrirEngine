@@ -2,12 +2,15 @@
 #include "Iris/Host.hpp"
 #include "TestHarness.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 namespace
 {
@@ -66,6 +69,33 @@ namespace
         }
         return handle.value->Invoke(left, right);
     }
+
+    // A logged message, copied: LogMessage::text is only valid during the sink call.
+    struct Logged
+    {
+        LogLevel level;
+        std::string text;
+    };
+
+    // Clears the process-wide sink when a case ends, however it ends, through a fresh host so a sink
+    // set by a host that no longer exists is cleared too.
+    struct SinkGuard
+    {
+        explicit SinkGuard(const Arguments& arguments) : configuration(arguments.configuration)
+        {
+        }
+        ~SinkGuard()
+        {
+            Host host;
+            if (host.Initialize(configuration).success)
+            {
+                (void)host.SetLogSink({});
+            }
+        }
+        SinkGuard(const SinkGuard&) = delete;
+        SinkGuard& operator=(const SinkGuard&) = delete;
+        HostConfiguration configuration;
+    };
 
     void CheckInfo(const Component& owner)
     {
@@ -347,6 +377,131 @@ namespace
                  Check(live.Invoke(20, 22).value == 42, "Releasing one component invalidated another's method");
                  host.reset();
                  Check(live.Invoke(20, 22).value == 42, "A method handle did not outlive the host");
+             }},
+            {"the log sink receives bridge events and exception reports with severity",
+             [&] {
+                 std::vector<Logged> messages;
+                 auto host = StartHost(arguments);
+                 const SinkGuard guard(arguments);
+                 Check(host->SetLogSink([&](const LogMessage& message) {
+                               messages.push_back(Logged{message.level, std::string(message.text)});
+                           })
+                           .Succeeded(),
+                       "Registering a sink failed");
+                 const auto has = [&messages](LogLevel level, std::string_view text) {
+                     return std::any_of(messages.begin(), messages.end(), [&](const Logged& message) {
+                         return message.level == level && message.text.find(text) != std::string::npos;
+                     });
+                 };
+                 auto component = Load(*host, arguments.component);
+                 Check(has(LogLevel::Info, "Iris.Examples.Component"), "Loading a component was not logged at Info");
+                 messages.clear();
+
+                 // A component exception reaches the sink at Error, and the call still returns its own details.
+                 const auto thrown = Call(component, CalculationType, "Throw", 0, 0);
+                 Check(thrown.status == CallStatus::ManagedException &&
+                           thrown.diagnostic.find("InvalidOperationException") != std::string::npos,
+                       "The call lost its own diagnostic");
+                 Check(has(LogLevel::Error, "InvalidOperationException") &&
+                           has(LogLevel::Error, "\xCF\x80 \xF0\x9F\x90\xBA"),
+                       "A component exception was not reported at Error with its details");
+
+                 // Bridge validation is a Warning; a NotFound is not an exception report.
+                 messages.clear();
+                 Check(component.FindType("\xFF").status == CallStatus::InvalidArgument,
+                       "Malformed UTF-8 was accepted");
+                 Check(has(LogLevel::Warning, "DecoderFallbackException"),
+                       "A validation failure was not reported at Warning");
+                 messages.clear();
+                 Check(component.FindType("Iris.Examples.Component.Missing").status == CallStatus::NotFound,
+                       "Expected NotFound");
+                 Check(!has(LogLevel::Error, ""), "A NotFound was reported as an error");
+
+                 // Releasing is logged too, and replacing the sink redirects messages.
+                 messages.clear();
+                 std::vector<Logged> replaced;
+                 Check(host->SetLogSink([&](const LogMessage& message) {
+                               replaced.push_back(Logged{message.level, std::string(message.text)});
+                           })
+                           .Succeeded(),
+                       "Replacing the sink failed");
+                 Check(component.Release().Succeeded(), "Release failed");
+                 Check(messages.empty() && !replaced.empty() && replaced.front().level == LogLevel::Info,
+                       "The replaced sink still received messages, or the new one received none");
+             }},
+            {"calls work without a sink and after it is cleared",
+             [&] {
+                 std::vector<Logged> messages;
+                 auto host = StartHost(arguments);
+                 const SinkGuard guard(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 Check(Call(component, CalculationType, "Throw", 0, 0).status == CallStatus::ManagedException,
+                       "A call failed without a sink");
+                 Check(host->SetLogSink([&](const LogMessage& message) {
+                               messages.push_back(Logged{message.level, std::string(message.text)});
+                           })
+                           .Succeeded(),
+                       "Registering failed");
+                 Check(host->SetLogSink({}).Succeeded(), "Clearing failed");
+                 Check(Call(component, CalculationType, "Throw", 0, 0).status == CallStatus::ManagedException &&
+                           messages.empty(),
+                       "Messages arrived after the sink was cleared");
+             }},
+            {"a sink that throws, or clears itself, cannot break a call",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const SinkGuard guard(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 int delivered = 0;
+                 Check(host->SetLogSink([&](const LogMessage&) {
+                               ++delivered;
+                               throw std::runtime_error("a sink failure");
+                           })
+                           .Succeeded(),
+                       "Registering failed");
+                 const auto thrown = Call(component, CalculationType, "Throw", 0, 0);
+                 Check(thrown.status == CallStatus::ManagedException &&
+                           thrown.diagnostic.find("InvalidOperationException") != std::string::npos && delivered > 0,
+                       "A throwing sink changed the call's result");
+                 Check(Call(component, CalculationType, "Add", 20, 22).value == 42,
+                       "A call did not recover after a throwing sink");
+
+                 Host* hostPointer = host.get();
+                 int clearing = 0;
+                 Check(hostPointer
+                           ->SetLogSink([&](const LogMessage&) {
+                               ++clearing;
+                               (void)hostPointer->SetLogSink({});
+                           })
+                           .Succeeded(),
+                       "Registering failed");
+                 (void)Call(component, CalculationType, "Throw", 0, 0);
+                 (void)Call(component, CalculationType, "Throw", 0, 0);
+                 Check(clearing >= 1 && Call(component, CalculationType, "Add", 20, 22).value == 42,
+                       "A sink that cleared itself broke a call");
+                 const int afterClear = clearing;
+                 (void)Call(component, CalculationType, "Throw", 0, 0);
+                 Check(clearing == afterClear, "A cleared sink was called again");
+             }},
+            {"the sink needs an initialized host and survives the host that set it",
+             [&] {
+                 Host unready;
+                 Check(unready.SetLogSink([](const LogMessage&) {}).status == CallStatus::NotInitialized,
+                       "An uninitialized host accepted a sink");
+                 std::vector<Logged> messages;
+                 const SinkGuard guard(arguments);
+                 std::optional<Component> component;
+                 {
+                     auto host = StartHost(arguments);
+                     component = Load(*host, arguments.component);
+                     Check(host->SetLogSink([&](const LogMessage& message) {
+                                   messages.push_back(Logged{message.level, std::string(message.text)});
+                               })
+                               .Succeeded(),
+                           "Registering failed");
+                 }
+                 Check(component->Release().Succeeded() && !messages.empty(),
+                       "A sink did not outlive the host that registered it");
              }},
             {"a Unicode path loads, and a missing dependency fails only when used",
              [&] {

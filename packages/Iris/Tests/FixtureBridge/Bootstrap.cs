@@ -70,7 +70,8 @@ public static class Bootstrap
             FindType = &FindType,
             CopyTypeNameUtf8 = &CopyTypeNameUtf8,
             FindMethod = &FindMethod,
-            InvokeMethod = &InvokeMethod
+            InvokeMethod = &InvokeMethod,
+            SetLogSink = &SetLogSink
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -161,6 +162,12 @@ public static class Bootstrap
         {
             *result = 0; *written = 0; *truncated = 0; return 3;
         }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int SetLogSink(void* callback, void* context, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

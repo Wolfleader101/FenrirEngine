@@ -56,8 +56,8 @@ namespace Iris
         std::uint64_t methodId = 0;
         const auto status = state->bridge->findMethod(
             state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
-            static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind),
-            kinds.data(), static_cast<std::int32_t>(kinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
+            static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind), kinds.data(),
+            static_cast<std::int32_t>(kinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
             &diagnostic.written, &diagnostic.truncated);
         if (static_cast<CallStatus>(status) == CallStatus::Success && methodId == 0)
         {
