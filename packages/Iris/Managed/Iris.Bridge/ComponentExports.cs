@@ -194,8 +194,6 @@ public static partial class Bootstrap
         }
     }
 
-    // Names are explicit-length UTF-8, borrowed only for this call. All caller
-    // storage must be valid and non-overlapping. Only success publishes a value.
     // Finds a public static method on a looked-up type by name, return kind and exact parameter kinds
     // (see ValueKind). Success publishes a nonzero handle; NotFound (6) means no such method exists.
     // The name is explicit-length UTF-8; paramKinds holds paramCount int32 kinds and may be null for none.
@@ -270,42 +268,6 @@ public static partial class Bootstrap
         {
             ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
             return (int)(exception is BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
-        }
-    }
-
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    internal static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
-        int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
-    {
-        if (value != null) *value = 0;
-        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
-        if (!diagnosticValid || value == null || typeName == null || typeLength <= 0 || methodName == null || methodLength <= 0)
-            return (int)BridgeStatus.InvalidArgument;
-
-        string type, method;
-        try
-        {
-            var utf8 = new UTF8Encoding(false, true);
-            type = utf8.GetString(new ReadOnlySpan<byte>(typeName, typeLength));
-            method = utf8.GetString(new ReadOnlySpan<byte>(methodName, methodLength));
-            if (type.Contains('\0') || method.Contains('\0')) return (int)BridgeStatus.InvalidArgument;
-        }
-        catch (Exception exception)
-        {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
-        }
-        try
-        {
-            if (!ComponentRegistry.TryInvokeInt32(token, type, method, left, right, out int result))
-                return (int)BridgeStatus.InvalidHandle;
-            *value = result;
-            return (int)BridgeStatus.Success;
-        }
-        catch (Exception exception)
-        {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is OverflowException ? BridgeStatus.Overflow : BridgeStatus.ManagedException);
         }
     }
 }

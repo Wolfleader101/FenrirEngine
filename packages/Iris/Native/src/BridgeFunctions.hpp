@@ -27,10 +27,6 @@ namespace Iris::Detail
                                                        std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using TokenFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
                                                         std::int32_t*);
-        using InvokeFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, const std::uint8_t*, std::int32_t,
-                                                         const std::uint8_t*, std::int32_t, std::int32_t, std::int32_t,
-                                                         std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*,
-                                                         std::int32_t*);
         using UnloadStateFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::int32_t*, std::uint8_t*, std::int32_t,
                                                               std::int32_t*, std::int32_t*);
 
@@ -53,7 +49,6 @@ namespace Iris::Detail
         LoadFn load;
         NameFn copyName;
         TokenFn release;
-        InvokeFn invokeInt32;
         UnloadStateFn getUnloadState;
         TokenFn forgetUnload;
         RegisterFn registerShared;
@@ -64,13 +59,12 @@ namespace Iris::Detail
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 12;
+    inline constexpr std::int32_t BridgeVersion = 13;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 11> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 10> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
-                                                                        "InvokeComponentInt32",
                                                                         "GetComponentUnloadState",
                                                                         "ForgetComponentUnload",
                                                                         "RegisterSharedAssembly",

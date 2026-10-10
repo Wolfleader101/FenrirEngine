@@ -29,18 +29,27 @@ namespace
         return host;
     }
 
-    // The fixture's control channel; see FixtureBridge/Bootstrap.cs.
+    // The fixture's control channel is a method name; see FixtureBridge/Bootstrap.cs.
+    CallResult<std::int32_t> Channel(const Component& fixture, const std::string& name, std::int32_t left = 0,
+                                     std::int32_t right = 0)
+    {
+        const auto type = fixture.FindType("Fixture");
+        Check(type.Succeeded(), "Fixture type lookup failed");
+        const auto method = type.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>(name);
+        Check(method.Succeeded(), "Fixture method lookup failed: " + name);
+        return method.value->Invoke(left, right);
+    }
     CallResult<std::int32_t> Scenario(const Component& fixture, std::string_view name)
     {
-        return fixture.InvokeInt32("Scenario", name, 0, 0);
+        return Channel(fixture, "Scenario:" + std::string(name));
     }
     void Select(const Component& fixture, std::string_view mode)
     {
-        Check(fixture.InvokeInt32("Select", mode, 0, 0).Succeeded(), "Selecting fixture mode failed");
+        Check(Channel(fixture, "Select:" + std::string(mode)).Succeeded(), "Selecting fixture mode failed");
     }
     std::int32_t Counter(const Component& fixture, std::string_view name)
     {
-        const auto result = fixture.InvokeInt32("Counter", name, 0, 0);
+        const auto result = Channel(fixture, "Counter:" + std::string(name));
         Check(result.value.has_value(), "Fixture counter unavailable");
         return *result.value;
     }
@@ -91,7 +100,7 @@ namespace
                  Check(host.LoadComponent(arguments.bridge).status == CallStatus::NotInitialized,
                        "An uninitialized host loaded a component");
                  const auto initialized = host.Initialize({arguments.runtimeConfig, arguments.bridge, {}});
-                 Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 12,
+                 Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 13,
                        initialized.diagnostic);
              }},
             {"a second bridge file is rejected in the same process",
@@ -128,7 +137,7 @@ namespace
                  auto host = StartHost(arguments);
                  const auto fixture = LoadFixture(*host, arguments);
                  const auto broken = Scenario(fixture, "BrokenFormatter");
-                 Check(broken.status == CallStatus::Overflow && !broken.value && !broken.diagnostic.empty() &&
+                 Check(broken.status == CallStatus::InvalidArgument && !broken.value && !broken.diagnostic.empty() &&
                            !broken.diagnosticTruncated,
                        "A throwing formatter replaced the original status");
                  for (const char* scenario : {"NegativeCount", "OversizedCount", "InvalidFlag", "InvalidUtf8"})
@@ -157,7 +166,7 @@ namespace
                  Check(unknown.status == CallStatus::UnexpectedStatus && !unknown.value, "Unknown status accepted");
                  Check(Scenario(fixture, "InvalidHandle").status == CallStatus::InvalidHandle,
                        "The bridge's invalid-handle status was lost");
-                 const auto recovered = fixture.InvokeInt32("Fixture", "Add", 20, 22);
+                 const auto recovered = Channel(fixture, "Add", 20, 22);
                  Check(recovered.value == 42 && recovered.diagnostic.empty(), "The next call did not recover");
              }},
             {"a failing call is never repeated to produce its diagnostic",
@@ -307,11 +316,11 @@ int main(int argc, char* argv[])
     if (mode == "fixture")
         return RunFixture(arguments);
     if (mode == "legacy")
-        return RunRejected(arguments, "an older bridge version is rejected", "expected 12, received 11", 11, true);
+        return RunRejected(arguments, "an older bridge version is rejected", "expected 13, received 12", 12, true);
     if (mode == "oversized")
-        return RunRejected(arguments, "a bridge table of another size is rejected", "table size", 12, true);
+        return RunRejected(arguments, "a bridge table of another size is rejected", "table size", 13, true);
     if (mode == "missing")
-        return RunRejected(arguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 12,
+        return RunRejected(arguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 13,
                            true);
     if (mode == "notbridge")
         return RunRejected(arguments, "an assembly without the bridge entry point is rejected", "GetBridgeFunctions",

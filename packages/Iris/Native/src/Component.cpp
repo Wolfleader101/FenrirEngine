@@ -91,35 +91,6 @@ namespace Iris
         return Detail::CompleteCall<Type>(status, "FindType", diagnostic, Type(std::move(handle)));
     }
 
-    CallResult<std::int32_t> Component::InvokeInt32(std::string_view typeName, std::string_view methodName,
-                                                    std::int32_t left, std::int32_t right) const
-    {
-        if (!IsLoaded())
-        {
-            return Detail::Failure<std::int32_t>(CallStatus::InvalidHandle, ReleasedOwner);
-        }
-        const auto maxLength = static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max());
-        if (typeName.empty() || methodName.empty() || typeName.size() > maxLength || methodName.size() > maxLength)
-        {
-            return Detail::Failure<std::int32_t>(CallStatus::InvalidArgument,
-                                                 "Type and method names must contain 1..INT32_MAX UTF-8 bytes.");
-        }
-        if (typeName.find('\0') != std::string_view::npos || methodName.find('\0') != std::string_view::npos)
-        {
-            return Detail::Failure<std::int32_t>(CallStatus::InvalidArgument,
-                                                 "Type and method names cannot contain null characters.");
-        }
-
-        Detail::ManagedDiagnosticBuffer diagnostic;
-        std::int32_t value = 0;
-        const auto status = state->bridge->invokeInt32(
-            state->token, reinterpret_cast<const std::uint8_t*>(typeName.data()),
-            static_cast<std::int32_t>(typeName.size()), reinterpret_cast<const std::uint8_t*>(methodName.data()),
-            static_cast<std::int32_t>(methodName.size()), left, right, &value, diagnostic.bytes.data(),
-            diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
-        return Detail::CompleteCall<std::int32_t>(status, "InvokeComponentInt32", diagnostic, value);
-    }
-
     CallResult<ComponentUnloadState> Component::GetUnloadStatus() const
     {
         if (state == nullptr || (state->token == 0 && state->trackingToken == 0))

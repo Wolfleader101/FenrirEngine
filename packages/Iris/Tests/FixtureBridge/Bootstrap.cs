@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -8,11 +9,12 @@ namespace Iris.Bridge;
 // A scripted stand-in for the bridge, built as Iris.Bridge, for checking how the native host
 // handles every kind of bridge response. Every load returns the same synthetic registration.
 //
-// The component's InvokeInt32(typeName, methodName, left, right) is the control channel:
-//   ("Scenario", <IntegerScenario>) answers with that scripted integer response;
-//   ("Select", <Mode>)              selects the response for later name copies and unload queries;
-//   ("Counter", <Counter>)          returns a call counter;
-//   anything else                   returns left + right.
+// The control channel is a method name. FindMethod remembers the name it was asked for and returns a
+// handle to it; InvokeMethod then behaves according to the name:
+//   "Scenario:<IntegerScenario>"  answers with that scripted response;
+//   "Select:<Mode>"               selects the response for later name copies and unload queries;
+//   "Counter:<Counter>"           returns a call counter;
+//   anything else                 returns the sum of its two arguments.
 public static class Bootstrap
 {
     private enum IntegerScenario
@@ -62,7 +64,6 @@ public static class Bootstrap
             LoadComponent = &LoadComponent,
             CopyComponentNameUtf8 = &CopyComponentNameUtf8,
             ReleaseComponent = &ReleaseComponent,
-            InvokeComponentInt32 = &InvokeComponentInt32,
             GetComponentUnloadState = handshake == "missing" ? null : &GetComponentUnloadState,
             ForgetComponentUnload = &ForgetComponentUnload,
             RegisterSharedAssembly = &RegisterSharedAssembly,
@@ -107,18 +108,59 @@ public static class Bootstrap
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
         => CopyName(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
 
+    private static readonly List<string> MethodNames = new();
+
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int FindMethod(ulong token, ulong typeId, byte* name, int nameLength, int returnKind,
         int* paramKinds, int paramCount, ulong* methodId, byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        *methodId = 1; *written = 0; *truncated = 0; return 0;
+        *written = 0; *truncated = 0;
+        try
+        {
+            MethodNames.Add(Encoding.UTF8.GetString(name, nameLength));
+            *methodId = (ulong)MethodNames.Count;
+            return 0;
+        }
+        catch (Exception)
+        {
+            *methodId = 0; return 3;
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int InvokeMethod(ulong token, ulong methodId, ulong* arguments, int argCount, ulong* result,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        *result = 0; *written = 0; *truncated = 0; return 0;
+        *result = 99; *written = 0; *truncated = 0;
+        try
+        {
+            string name = MethodNames[(int)methodId - 1];
+            int colon = name.IndexOf(':');
+            string channel = colon < 0 ? name : name.Substring(0, colon);
+            string argument = colon < 0 ? "" : name.Substring(colon + 1);
+            switch (channel)
+            {
+                case "Scenario":
+                    return RespondInteger(Enum.Parse<IntegerScenario>(argument), result, new Span<byte>(diagnostic, capacity), written, truncated);
+                case "Select":
+                    mode = Enum.Parse<Mode>(argument); nameCalls = 0; *result = 0; return 0;
+                case "Counter":
+                    *result = (ulong)(Enum.Parse<Counter>(argument) switch
+                    {
+                        Counter.CountedFailures => countedFailures,
+                        Counter.NameCalls => nameCalls,
+                        Counter.Releases => releases,
+                        _ => forgets
+                    });
+                    return 0;
+                default:
+                    *result = unchecked(arguments[0] + arguments[1]); return 0;
+            }
+        }
+        catch (Exception)
+        {
+            *result = 0; *written = 0; *truncated = 0; return 3;
+        }
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -127,42 +169,7 @@ public static class Bootstrap
         ++forgets; *written = 0; *truncated = 0; return 0;
     }
 
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int InvokeComponentInt32(ulong token, byte* typeName, int typeLength, byte* methodName, int methodLength,
-        int left, int right, int* value, byte* diagnostic, int capacity, int* written, int* truncated)
-    {
-        *value = 99; *written = 0; *truncated = 0;
-        try
-        {
-            string type = Encoding.UTF8.GetString(typeName, typeLength);
-            string method = Encoding.UTF8.GetString(methodName, methodLength);
-            if (type == "Scenario")
-                return RespondInteger(Enum.Parse<IntegerScenario>(method), value, new Span<byte>(diagnostic, capacity), written, truncated);
-            if (type == "Select")
-            {
-                mode = Enum.Parse<Mode>(method); nameCalls = 0; *value = 0; return 0;
-            }
-            if (type == "Counter")
-            {
-                *value = Enum.Parse<Counter>(method) switch
-                {
-                    Counter.CountedFailures => countedFailures,
-                    Counter.NameCalls => nameCalls,
-                    Counter.Releases => releases,
-                    _ => forgets
-                };
-                return 0;
-            }
-            *value = checked(left + right);
-            return 0;
-        }
-        catch (Exception)
-        {
-            *value = 0; *written = 0; *truncated = 0; return 3;
-        }
-    }
-
-    private static unsafe int RespondInteger(IntegerScenario scenario, int* value, Span<byte> diagnostic, int* written, int* truncated)
+    private static unsafe int RespondInteger(IntegerScenario scenario, ulong* value, Span<byte> diagnostic, int* written, int* truncated)
     {
         switch (scenario)
         {
@@ -171,7 +178,7 @@ public static class Bootstrap
                 return 3;
             case IntegerScenario.BrokenFormatter:
                 ManagedDiagnostic.Write(new BrokenException(), diagnostic, out *written, out *truncated);
-                return 2;
+                return 1;
             case IntegerScenario.NegativeCount: *written = -1; return 3;
             case IntegerScenario.OversizedCount: *written = diagnostic.Length + 1; return 3;
             case IntegerScenario.InvalidFlag: *truncated = 2; return 3;

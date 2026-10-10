@@ -18,7 +18,6 @@ public static partial class Bootstrap
                 LoadComponent = &LoadComponent,
                 CopyComponentNameUtf8 = &CopyComponentNameUtf8,
                 ReleaseComponent = &ReleaseComponent,
-                InvokeComponentInt32 = &InvokeComponentInt32,
                 GetComponentUnloadState = &GetComponentUnloadState,
                 ForgetComponentUnload = &ForgetComponentUnload,
                 RegisterSharedAssembly = &RegisterSharedAssembly,
