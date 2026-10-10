@@ -95,7 +95,8 @@ Pass `--dotnet-root <absolute-directory>` first to choose a .NET installation. I
 using namespace Fenrir::Scripting;
 
 DotNetHost host;
-const auto initialized = host.Initialize({"app.runtimeconfig.json", "Fenrir.ManagedHost.dll", {}});
+const auto initialized = host.Initialize({.runtimeConfigPath = "app.runtimeconfig.json",
+                                          .bridgeAssemblyPath = "Fenrir.ManagedHost.dll"});
 if (!initialized.success) { /* initialized.diagnostic explains why */ }
 
 auto loaded = host.LoadComponent("MyComponent.dll");
@@ -133,17 +134,17 @@ and an owning UTF-8 `diagnostic`.
 | --- | --- |
 | `Success` (0) | The call succeeded. |
 | `InvalidArgument` (1) | The bridge rejected an argument (a malformed name or path, for example). |
-| `Overflow` (2) | Checked arithmetic overflowed. |
+| `Overflow` (2) | Component code threw `OverflowException` (to become `ManagedException` in ticket 07). |
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
 | `BufferTooSmall` (4) | An output buffer was too small. |
-| `InvalidHandle` (5) | The owner was released or moved from. |
+| `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
 | `NotInitialized` (-1) | The host is not initialized. No managed code ran. |
 | `UnexpectedStatus` (-2) | The bridge returned an unknown status. |
 | `InvalidResponse` (-3) | The bridge returned a malformed response. |
 
 Managed exception text is at most 4096 bytes, cut on a UTF-8 scalar boundary (`diagnosticTruncated`
 says so). If managed code cannot produce valid details, the result keeps its status and a native
-fallback message. A failed call is never repeated to build its diagnostic, and it leaves the host
+fallback message. An unknown status carries only a native message. A failed call is never repeated to build its diagnostic, and it leaves the host
 ready for the next call. Native allocation failures still throw normally.
 
 `Initialize` returns an `InitializationResult` instead: `success`, an owning diagnostic that includes

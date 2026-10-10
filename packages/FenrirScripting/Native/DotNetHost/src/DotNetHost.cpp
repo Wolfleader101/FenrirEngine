@@ -325,6 +325,11 @@ namespace Fenrir::Scripting
             return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
                                                      "The component path is not valid Unicode text.");
         }
+        catch (const std::length_error&)
+        {
+            return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
+                                                     "The component path is too long to convert to UTF-8.");
+        }
         if (path.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
         {
             return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidArgument,
@@ -341,7 +346,7 @@ namespace Fenrir::Scripting
                                                 static_cast<std::int32_t>(path.size()), &component.state->token,
                                                 diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written,
                                                 &diagnostic.truncated);
-        if (status == 0 && component.state->token == 0)
+        if (static_cast<ManagedCallStatus>(status) == ManagedCallStatus::Success && component.state->token == 0)
         {
             return Detail::Failure<ManagedComponent>(ManagedCallStatus::InvalidResponse,
                                                      "Component load returned the invalid token 0.");

@@ -49,6 +49,8 @@ namespace
     {
         auto loaded = host.LoadComponent(arguments.bridge); // The fixture ignores the path.
         Check(loaded.Succeeded(), "Fixture component load failed");
+        // The fixture's mode is process-wide; reset it so an earlier failing case cannot leak into this one.
+        Select(*loaded.value, "None");
         return std::move(*loaded.value);
     }
 

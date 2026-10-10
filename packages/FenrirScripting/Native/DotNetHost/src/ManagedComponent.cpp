@@ -57,12 +57,9 @@ namespace Fenrir::Scripting
             });
         if (!name.Succeeded())
         {
-            return Detail::Failure<ComponentInfo>(name);
+            return Detail::PropagateFailure<ComponentInfo>(name);
         }
-        ManagedCallResult<ComponentInfo> result;
-        result.status = ManagedCallStatus::Success;
-        result.value = ComponentInfo{std::move(*name.value)};
-        return result;
+        return Detail::Success<ComponentInfo>(ComponentInfo{std::move(*name.value)});
     }
 
     ManagedCallResult<std::int32_t> ManagedComponent::InvokeInt32(std::string_view typeName,
@@ -109,23 +106,23 @@ namespace Fenrir::Scripting
                                                           diagnostic.bytes.data(), diagnostic.Capacity,
                                                           &diagnostic.written, &diagnostic.truncated);
         // A loaded owner can only be NotRequested; a released one only Pending or Collected.
-        const bool consistent = loaded ? observed == 0 : (observed == 1 || observed == 2);
-        if (status == 0 && !consistent)
+        const auto observedState = static_cast<ComponentUnloadState>(observed);
+        const bool consistent = loaded ? observedState == ComponentUnloadState::NotRequested
+                                       : (observedState == ComponentUnloadState::Pending ||
+                                          observedState == ComponentUnloadState::Collected);
+        if (static_cast<ManagedCallStatus>(status) == ManagedCallStatus::Success && !consistent)
         {
             return Detail::Failure<ComponentUnloadState>(ManagedCallStatus::InvalidResponse,
                                                          "The unload query returned an invalid state for this owner.");
         }
-        return Detail::CompleteCall<ComponentUnloadState>(status, "GetComponentUnloadState", diagnostic,
-                                                          static_cast<ComponentUnloadState>(observed));
+        return Detail::CompleteCall<ComponentUnloadState>(status, "GetComponentUnloadState", diagnostic, observedState);
     }
 
     ManagedCallResult<void> ManagedComponent::Release()
     {
         if (!IsLoaded())
         {
-            ManagedCallResult<void> released;
-            released.status = ManagedCallStatus::Success;
-            return released;
+            return Detail::Success<void>();
         }
         // Invalidate this owner first; it keeps the token only to observe unloading.
         const auto token = std::exchange(state->token, 0);

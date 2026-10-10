@@ -147,7 +147,8 @@ public static class Bootstrap
                 ManagedDiagnostic.Write(new TextException("A\0B"), diagnostic, out *written, out *truncated);
                 return 3;
             case IntegerScenario.InvalidHandle: return 5;
-            default: ++countedFailures; return 3;
+            case IntegerScenario.CountedFailure: ++countedFailures; return 3;
+            default: throw new ArgumentOutOfRangeException(nameof(scenario));
         }
     }
 

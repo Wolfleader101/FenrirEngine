@@ -22,7 +22,7 @@ namespace Fenrir::Scripting::Detail
                                operation, queryDiagnostic);
         if (!queried.Succeeded())
         {
-            return Failure<std::string>(queried);
+            return PropagateFailure<std::string>(queried);
         }
         if (requiredBytes < 0)
         {
@@ -39,16 +39,13 @@ namespace Fenrir::Scripting::Detail
                                                operation, copyDiagnostic);
         if (!copied.Succeeded())
         {
-            return Failure<std::string>(copied);
+            return PropagateFailure<std::string>(copied);
         }
         if (copiedBytes != requiredBytes)
         {
             return Failure<std::string>(ManagedCallStatus::InvalidResponse,
                                         std::string(operation) + " changed its byte count during the copy.");
         }
-        ManagedCallResult<std::string> result;
-        result.status = ManagedCallStatus::Success;
-        result.value = std::move(value);
-        return result;
+        return Success<std::string>(std::move(value));
     }
 } // namespace Fenrir::Scripting::Detail
