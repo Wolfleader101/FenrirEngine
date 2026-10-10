@@ -19,8 +19,10 @@ add_library(Iris STATIC
     include/Iris/Component.hpp
 )
 
-target_include_directories(Iris PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(Iris PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+    "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 target_compile_features(Iris PUBLIC cxx_std_20)
-target_link_libraries(Iris PRIVATE IrisNethost Threads::Threads ${CMAKE_DL_LIBS})
+target_link_libraries(Iris PRIVATE Iris::Nethost Threads::Threads ${CMAKE_DL_LIBS})
 set_target_properties(Iris PROPERTIES CXX_EXTENSIONS OFF)
 add_library(Iris::Iris ALIAS Iris)

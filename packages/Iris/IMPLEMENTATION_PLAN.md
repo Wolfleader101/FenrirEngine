@@ -17,7 +17,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 02: bridge function table (done; ADR-0002)
   - 03: move demo calls out of the bridge (done)
   - 04: cleanup (done)
-  - 05: standalone library boundary
+  - 05: standalone library boundary (done; renamed Iris, ADR-0003; shared assemblies, ADR-0004)
 - **Phase B, the API (06–16):**
   - 06: type handles
   - 07: method handles and typed invocation
@@ -78,16 +78,18 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 04)
+## Current state (after ticket 05)
 
-Implemented and tested (9 CTests of named cases; Windows Debug and Release):
+Implemented and tested (10 CTests of named cases; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
-- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-9 function table of six component operations
+- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-10 function table of seven operations
 - bounded managed diagnostics
 - collectible component loading with private dependency resolution
 - `int(int,int)` static invocation
 - release, and observation of the unload (NotRequested, Pending or Collected)
+- shared contract assemblies with one type identity across components
+- a CMake install/export package (`find_package(Iris)`, `iris_deploy`) verified by a standalone consumer
 
 Linux and macOS are untested. `review-01.md` lists the known problems and assigns each to a ticket.
 

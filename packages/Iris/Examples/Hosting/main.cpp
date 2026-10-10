@@ -41,15 +41,23 @@ int main(int argc, char* argv[])
         configuration.dotnetRoot = argv[2];
         firstPath = 3;
     }
-    if (argc - firstPath != 3)
+    // Without paths, use the bridge and component the build deployed next to the executable.
+    const auto here = std::filesystem::absolute(argv[0]).parent_path();
+    std::filesystem::path componentPath = here / "component" / "Iris.Examples.Component.dll";
+    configuration.runtimeConfigPath = here / "Iris.Bridge.runtimeconfig.json";
+    configuration.bridgeAssemblyPath = here / "Iris.Bridge.dll";
+    if (argc - firstPath == 3)
     {
-        std::cerr << "Usage: IrisHostingExample [--dotnet-root absolute-directory] runtimeconfig.json bridge.dll "
-                     "component.dll\n";
+        configuration.runtimeConfigPath = argv[firstPath];
+        configuration.bridgeAssemblyPath = argv[firstPath + 1];
+        componentPath = argv[firstPath + 2];
+    }
+    else if (argc != firstPath)
+    {
+        std::cerr << "Usage: IrisHostingExample [--dotnet-root absolute-directory] "
+                     "[runtimeconfig.json bridge.dll component.dll]\n";
         return EXIT_FAILURE;
     }
-    configuration.runtimeConfigPath = argv[firstPath];
-    configuration.bridgeAssemblyPath = argv[firstPath + 1];
-    const std::filesystem::path componentPath = argv[firstPath + 2];
 
     std::optional<Component> component;
     {
