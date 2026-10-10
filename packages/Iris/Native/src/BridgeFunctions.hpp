@@ -57,6 +57,13 @@ namespace Iris::Detail
                                                                std::int32_t*);
         using ReleaseObjectFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::uint8_t*,
                                                                 std::int32_t, std::int32_t*, std::int32_t*);
+        using FindMemberFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, const std::uint8_t*,
+                                                             std::int32_t, std::int32_t, std::int32_t, std::uint64_t*,
+                                                             std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
+        using GetMemberFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t*,
+                                                            std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
+        using SetMemberFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
+                                                            std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -76,13 +83,16 @@ namespace Iris::Detail
         InvokeInstanceMethodFn invokeInstanceMethod;
         CreateObjectFn createObject;
         ReleaseObjectFn releaseObject;
+        FindMemberFn findMember;
+        GetMemberFn getMember;
+        SetMemberFn setMember;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 15;
+    inline constexpr std::int32_t BridgeVersion = 16;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 16> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 19> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -97,7 +107,10 @@ namespace Iris::Detail
                                                                         "FindInstanceMethod",
                                                                         "InvokeInstanceMethod",
                                                                         "CreateObject",
-                                                                        "ReleaseObject"};
+                                                                        "ReleaseObject",
+                                                                        "FindMember",
+                                                                        "GetMember",
+                                                                        "SetMember"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

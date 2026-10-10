@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CallResult.hpp"
+#include "Member.hpp"
 #include "Method.hpp"
 #include "Object.hpp"
 
@@ -71,6 +72,23 @@ namespace Iris
             std::string_view name) const;
 
         /**
+         * @brief Finds a public field of type `T` by name, static or instance, declared or inherited.
+         *
+         * `T` is a PrimitiveValue matched exactly (`std::int32_t` for an `int` field, no widening), or
+         * `std::optional<Object>` for a class- or interface-typed field. A missing, private or
+         * differently typed field is NotFound. The name is case-sensitive UTF-8 without null characters.
+         */
+        template <MemberValue T>
+        [[nodiscard]] CallResult<Member<T>> FindField(std::string_view name) const;
+
+        /**
+         * @brief Finds a public property of type `T` by name; the same rules as FindField. Indexers are
+         * not found, and a property needs at least one public accessor.
+         */
+        template <MemberValue T>
+        [[nodiscard]] CallResult<Member<T>> FindProperty(std::string_view name) const;
+
+        /**
          * @brief Constructs an object with the public constructor whose parameters match exactly.
          *
          * `CreateObject(std::int32_t{5}, 2.5)` calls `T(int, double)`; no arguments call the parameterless
@@ -89,6 +107,8 @@ namespace Iris
         [[nodiscard]] CallResult<Detail::RawMethod> FindMethodRaw(std::string_view name, Detail::ValueKind returnKind,
                                                                   std::span<const Detail::ValueKind> parameterKinds,
                                                                   bool isStatic) const;
+        [[nodiscard]] CallResult<Detail::RawMember> FindMemberRaw(std::string_view name, bool isProperty,
+                                                                  Detail::ValueKind kind) const;
         [[nodiscard]] CallResult<Object> CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
                                                          std::span<std::uint64_t> slots,
                                                          std::span<const Object* const> objects) const;
@@ -142,5 +162,35 @@ namespace Iris
         return CreateObjectRaw(std::span<const Detail::ValueKind>(kinds),
                                std::span<std::uint64_t>(slots, sizeof...(Args)),
                                std::span<const Object* const>(objects, sizeof...(Args)));
+    }
+
+    template <MemberValue T>
+    CallResult<Member<T>> Type::FindField(std::string_view name) const
+    {
+        auto raw = FindMemberRaw(name, false, Detail::KindOf<T>());
+        CallResult<Member<T>> result;
+        result.status = raw.status;
+        result.diagnostic = std::move(raw.diagnostic);
+        result.diagnosticTruncated = raw.diagnosticTruncated;
+        if (raw.value)
+        {
+            result.value.emplace(Member<T>(std::move(*raw.value)));
+        }
+        return result;
+    }
+
+    template <MemberValue T>
+    CallResult<Member<T>> Type::FindProperty(std::string_view name) const
+    {
+        auto raw = FindMemberRaw(name, true, Detail::KindOf<T>());
+        CallResult<Member<T>> result;
+        result.status = raw.status;
+        result.diagnostic = std::move(raw.diagnostic);
+        result.diagnosticTruncated = raw.diagnosticTruncated;
+        if (raw.value)
+        {
+            result.value.emplace(Member<T>(std::move(*raw.value)));
+        }
+        return result;
     }
 } // namespace Iris

@@ -392,6 +392,90 @@ public static partial class Bootstrap
         }
     }
 
+    // Finds a public field (memberKind 0) or property (1) by name and value kind (see ValueKind; Void is
+    // not a member type). Success publishes a nonzero handle; NotFound (6): no such public member of that
+    // type, an indexer, or a property with no public accessor.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int FindMember(ulong token, ulong typeId, byte* name, int nameLength, int memberKind, int valueKind,
+        ulong* memberId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (memberId != null) *memberId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || memberId == null ||
+            name == null || nameLength <= 0 || (memberKind != 0 && memberKind != 1))
+            return (int)BridgeStatus.InvalidArgument;
+        string memberName;
+        try
+        {
+            ValueKinds.ValidateParameter(valueKind);
+            memberName = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength));
+            if (memberName.Contains('\0')) throw new BridgeArgumentException("A member name cannot contain null characters.");
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException or BridgeArgumentException ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+        try
+        {
+            switch (ComponentRegistry.TryFindMember(token, typeId, memberName, memberKind, valueKind, out ulong found))
+            {
+                case ComponentRegistry.FindResult.Found:
+                    *memberId = found;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.FindResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new MissingMemberException($"No public {(memberKind == 0 ? "field" : "property")} '{memberName}' of the requested type was found."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)StatusFor(exception);
+        }
+    }
+
+    // Reads a member. objectId is zero for a static member and an owned object for an instance member;
+    // using the wrong form is InvalidArgument. An exception thrown by a property getter is ManagedException.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int GetMember(ulong token, ulong memberId, ulong objectId, ulong* value,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (value != null) *value = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || value == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryGetMemberValue(token, memberId, objectId, out ulong read)) return (int)BridgeStatus.InvalidHandle;
+            *value = read;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)StatusFor(exception);
+        }
+    }
+
+    // Writes a member, with the same rules as GetMember. A read-only field or property is InvalidArgument.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int SetMember(ulong token, ulong memberId, ulong objectId, ulong value,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            return (int)(ComponentRegistry.TrySetMemberValue(token, memberId, objectId, value) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)StatusFor(exception);
+        }
+    }
+
     // Bridge validation is InvalidArgument and a stale handle is InvalidHandle; anything else, including
     // every exception from component code, is ManagedException.
     private static BridgeStatus StatusFor(Exception exception) => exception switch

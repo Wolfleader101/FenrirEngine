@@ -24,6 +24,7 @@ namespace
     constexpr std::string_view OtherType = "Iris.Examples.Component.Other";
     constexpr std::string_view FactoryType = "Iris.Examples.Component.Factory";
     constexpr std::string_view HidingCounterType = "Iris.Examples.Component.HidingCounter";
+    constexpr std::string_view SettingsType = "Iris.Examples.Component.Settings";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -754,6 +755,156 @@ namespace
                  Check(value.Succeeded(), "A hidden method was ambiguous: " + value.diagnostic);
                  const auto object = hiding.CreateObject();
                  Check(value.value->Invoke(*object.value).value == 42, "The hiding method was not the one called");
+             }},
+            {"fields round-trip, static and instance",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto object = settings.CreateObject();
+                 const auto staticCount = settings.FindField<std::int32_t>("StaticCount");
+                 Check(staticCount.Succeeded(), "Field lookup failed: " + staticCount.diagnostic);
+                 Check(staticCount.value->Set(41).Succeeded() && staticCount.value->Get().value == 41,
+                       "A static field did not round-trip");
+                 const auto count = *settings.FindField<std::int32_t>("Count").value;
+                 Check(count.Set(*object.value, -5).Succeeded() && count.Get(*object.value).value == -5,
+                       "An instance field did not round-trip");
+                 const auto ratio = *settings.FindField<double>("Ratio").value;
+                 Check(ratio.Set(*object.value, 2.5).Succeeded() && ratio.Get(*object.value).value == 2.5,
+                       "A double field did not round-trip");
+                 const auto flag = *settings.FindField<bool>("Flag").value;
+                 Check(flag.Set(*object.value, true).Succeeded() && flag.Get(*object.value).value == true,
+                       "A bool field did not round-trip");
+                 Check(count.Get(*object.value).value == -5, "Setting one field changed another");
+             }},
+            {"properties round-trip and accessor exceptions are contained",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto object = settings.CreateObject();
+                 const auto enabled = *settings.FindProperty<bool>("Enabled").value;
+                 Check(enabled.Set(*object.value, true).Succeeded() && enabled.Get(*object.value).value == true,
+                       "A property did not round-trip");
+                 const auto staticProperty = *settings.FindProperty<std::int32_t>("StaticProperty").value;
+                 Check(staticProperty.Set(12).Succeeded() && staticProperty.Get().value == 12,
+                       "A static property did not round-trip");
+                 const auto checkedProperty = *settings.FindProperty<std::int32_t>("Checked").value;
+                 const auto rejected = checkedProperty.Set(*object.value, -1);
+                 Check(rejected.status == CallStatus::ManagedException &&
+                           rejected.diagnostic.find("ArgumentOutOfRangeException") != std::string::npos &&
+                           rejected.diagnostic.find("TargetInvocationException") == std::string::npos,
+                       "A setter exception was not reported as itself");
+                 Check(checkedProperty.Set(*object.value, 8).Succeeded() &&
+                           checkedProperty.Get(*object.value).value == 8,
+                       "An object was unusable after a setter failed");
+                 const auto exploding = settings.FindProperty<std::int32_t>("Exploding").value->Get(*object.value);
+                 Check(exploding.status == CallStatus::ManagedException && !exploding.value &&
+                           exploding.diagnostic.find("InvalidOperationException") != std::string::npos,
+                       "A getter exception was not reported as itself");
+             }},
+            {"read-only, write-only and wrong-form uses are diagnosed",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto object = settings.CreateObject();
+                 const auto contains = [](const std::string& text, const char* word) {
+                     return text.find(word) != std::string::npos;
+                 };
+                 const auto id = *settings.FindField<std::int32_t>("Id").value;
+                 const auto readonlyWrite = id.Set(*object.value, 9);
+                 Check(readonlyWrite.status == CallStatus::InvalidArgument &&
+                           contains(readonlyWrite.diagnostic, "read-only") && id.Get(*object.value).value == 7,
+                       "A readonly field was writable");
+                 Check(settings.FindField<std::int32_t>("Limit").value->Set(1).status == CallStatus::InvalidArgument &&
+                           settings.FindField<std::int32_t>("Constant").value->Set(1).status ==
+                               CallStatus::InvalidArgument &&
+                           settings.FindField<std::int32_t>("Constant").value->Get().value == 5,
+                       "A static readonly field or constant was writable");
+                 Check(settings.FindProperty<std::int32_t>("ReadOnly").value->Set(*object.value, 1).status ==
+                           CallStatus::InvalidArgument,
+                       "A property without a setter was writable");
+                 const auto writeOnly = *settings.FindProperty<std::int32_t>("WriteOnly").value;
+                 const auto unreadable = writeOnly.Get(*object.value);
+                 Check(unreadable.status == CallStatus::InvalidArgument &&
+                           contains(unreadable.diagnostic, "write-only") && writeOnly.Set(*object.value, 4).Succeeded(),
+                       "A write-only property was readable");
+                 const auto count = *settings.FindField<std::int32_t>("Count").value;
+                 const auto staticCount = *settings.FindField<std::int32_t>("StaticCount").value;
+                 Check(count.Get().status == CallStatus::InvalidArgument &&
+                           count.Set(1).status == CallStatus::InvalidArgument,
+                       "An instance field was used without an object");
+                 Check(staticCount.Get(*object.value).status == CallStatus::InvalidArgument &&
+                           staticCount.Set(*object.value, 1).status == CallStatus::InvalidArgument,
+                       "A static field was used with an object");
+                 const auto otherObject = component.FindType(OtherType).value->CreateObject();
+                 Check(count.Get(*otherObject.value).status == CallStatus::InvalidArgument,
+                       "An object of the wrong type was accepted");
+             }},
+            {"member lookup failures are NotFound with a diagnostic",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto notFound = [](const auto& result, const char* what) {
+                     Check(result.status == CallStatus::NotFound && !result.value && !result.diagnostic.empty(),
+                           std::string("Not a NotFound with a diagnostic: ") + what);
+                 };
+                 notFound(settings.FindField<std::int32_t>("Missing"), "missing name");
+                 notFound(settings.FindField<std::int64_t>("Count"), "a field matched by widening");
+                 notFound(settings.FindProperty<std::int32_t>("Count"), "a field found as a property");
+                 notFound(settings.FindField<bool>("Enabled"), "a property found as a field");
+                 notFound(settings.FindField<std::int32_t>("secret"), "a private field");
+                 notFound(settings.FindProperty<std::int32_t>("Item"), "an indexer");
+                 Check(settings.FindField<std::int32_t>({}).status == CallStatus::InvalidArgument,
+                       "An empty name was accepted");
+             }},
+            {"object-typed members hold, return and clear objects",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 const auto owner = settings.CreateObject();
+                 const auto child = settings.FindField<std::optional<Object>>("Child");
+                 const auto childProperty = settings.FindProperty<std::optional<Object>>("ChildProperty");
+                 Check(child.Succeeded() && childProperty.Succeeded(),
+                       "Object member lookup failed: " + child.diagnostic);
+                 Check(child.value->Get(*owner.value).value && !child.value->Get(*owner.value).value->has_value(),
+                       "An unset object member was not null");
+                 const auto stored = counter.CreateObject(std::int32_t{6});
+                 Check(child.value->Set(*owner.value, &*stored.value).Succeeded() &&
+                           childProperty.value->Set(*owner.value, &*stored.value).Succeeded(),
+                       "Storing an object failed");
+                 const auto fetched = child.value->Get(*owner.value);
+                 Check(fetched.Succeeded() && fetched.value->has_value() && value.Invoke(**fetched.value).value == 6,
+                       "A stored object did not come back");
+                 const auto otherObject = component.FindType(OtherType).value->CreateObject();
+                 const auto wrong = child.value->Set(*owner.value, &*otherObject.value);
+                 Check(wrong.status == CallStatus::InvalidArgument &&
+                           wrong.diagnostic.find("instance of") != std::string::npos,
+                       "An object of the wrong type was stored");
+                 Check(child.value->Set(*owner.value, nullptr).Succeeded() &&
+                           !child.value->Get(*owner.value).value->has_value(),
+                       "Storing null did not clear the member");
+                 Check(component.Release().status == CallStatus::InUse,
+                       "Held objects did not keep the component loaded");
+             }},
+            {"member handles stop working when their component is released",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto released = Load(*host, arguments.component);
+                 const auto other = Load(*host, arguments.component);
+                 const auto stale =
+                     *released.FindType(SettingsType).value->FindField<std::int32_t>("StaticCount").value;
+                 const auto live = *other.FindType(SettingsType).value->FindField<std::int32_t>("StaticCount").value;
+                 Check(released.Release().Succeeded(), "Release failed");
+                 Check(stale.Get().status == CallStatus::InvalidHandle &&
+                           stale.Set(1).status == CallStatus::InvalidHandle,
+                       "A released component's member still worked");
+                 Check(live.Get().Succeeded(), "Releasing one component invalidated another's member");
              }},
             {"overloads that differ only by object parameter types are ambiguous",
              [&] {

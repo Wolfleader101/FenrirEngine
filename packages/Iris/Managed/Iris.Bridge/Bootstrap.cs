@@ -30,7 +30,10 @@ public static partial class Bootstrap
                 FindInstanceMethod = &FindInstanceMethod,
                 InvokeInstanceMethod = &InvokeInstanceMethod,
                 CreateObject = &CreateObject,
-                ReleaseObject = &ReleaseObject
+                ReleaseObject = &ReleaseObject,
+                FindMember = &FindMember,
+                GetMember = &GetMember,
+                SetMember = &SetMember
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

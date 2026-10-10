@@ -76,7 +76,10 @@ public static class Bootstrap
             FindInstanceMethod = &FindInstanceMethod,
             InvokeInstanceMethod = &InvokeInstanceMethod,
             CreateObject = &CreateObject,
-            ReleaseObject = &ReleaseObject
+            ReleaseObject = &ReleaseObject,
+            FindMember = &FindMember,
+            GetMember = &GetMember,
+            SetMember = &SetMember
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -204,6 +207,27 @@ public static class Bootstrap
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int ReleaseObject(ulong token, ulong objectId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int FindMember(ulong token, ulong typeId, byte* name, int nameLength, int memberKind, int valueKind,
+        ulong* memberId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *memberId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int GetMember(ulong token, ulong memberId, ulong objectId, ulong* value,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *value = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int SetMember(ulong token, ulong memberId, ulong objectId, ulong value,
+        byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *written = 0; *truncated = 0; return 0;
     }
