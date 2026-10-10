@@ -34,21 +34,25 @@ namespace Iris::Detail
         using UnloadStateFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::int32_t*, std::uint8_t*, std::int32_t,
                                                               std::int32_t*, std::int32_t*);
 
+        using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
+                                                           std::int32_t, std::int32_t*, std::int32_t*);
+
         LoadFn load;
         NameFn copyName;
         TokenFn release;
         InvokeFn invokeInt32;
         UnloadStateFn getUnloadState;
         TokenFn forgetUnload;
+        RegisterFn registerShared;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 9;
+    inline constexpr std::int32_t BridgeVersion = 10;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 6> BridgeFunctionNames = {
-        "LoadComponent",        "CopyComponentNameUtf8",   "ReleaseComponent",
-        "InvokeComponentInt32", "GetComponentUnloadState", "ForgetComponentUnload"};
+    inline constexpr std::array<const char*, 7> BridgeFunctionNames = {
+        "LoadComponent",           "CopyComponentNameUtf8", "ReleaseComponent",      "InvokeComponentInt32",
+        "GetComponentUnloadState", "ForgetComponentUnload", "RegisterSharedAssembly"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

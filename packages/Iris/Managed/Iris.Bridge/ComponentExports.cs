@@ -39,6 +39,26 @@ public static partial class Bootstrap
         }
     }
 
+    // Shares an assembly with every component (see SharedAssemblies). The path is explicit-length UTF-8.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int RegisterSharedAssembly(byte* path, int length,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || path == null || length <= 0)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            SharedAssemblies.Register(new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(path, length)));
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is BridgeArgumentException or DecoderFallbackException
+                ? BridgeStatus.InvalidArgument : BridgeStatus.ManagedException);
+        }
+    }
+
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int CopyComponentNameUtf8(ulong token, byte* destination, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)

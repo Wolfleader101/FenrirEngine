@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace Iris
 {
@@ -19,6 +20,11 @@ namespace Iris
         // Empty uses nethost's default search; otherwise an absolute .NET installation root, used
         // for discovery and framework resolution. nethost may reuse an already loaded hostfxr.
         std::filesystem::path dotnetRoot;
+        // Assemblies every component shares as one copy in the default load context, such as an API
+        // that components compile against. A component's reference to one always binds to the shared
+        // copy, even when it deploys its own. Sharing is process-wide and permanent; sharing a
+        // different file under an already shared assembly name fails initialization.
+        std::vector<std::filesystem::path> sharedAssemblies;
     };
 
     struct InitializationResult
