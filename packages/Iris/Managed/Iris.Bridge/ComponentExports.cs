@@ -381,6 +381,14 @@ public static partial class Bootstrap
     internal static unsafe int ReleaseObject(ulong token, ulong objectId, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
-        return (int)(ComponentRegistry.ReleaseObject(token, objectId) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
+        try
+        {
+            return (int)(ComponentRegistry.ReleaseObject(token, objectId) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)BridgeStatus.ManagedException;
+        }
     }
 }

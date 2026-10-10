@@ -196,7 +196,10 @@ and the component stays loaded and usable; release the objects first. Destroying
 force-releases it, so a leaked object can never pin a registration: the objects it still held then return
 `InvalidHandle`, as does releasing them. An `Object` may outlive its `Host` and `Component` object and is
 destroyed safely in any order. An object only works with methods from its own component (else
-`InvalidArgument`) and of a type it is an instance of.
+`InvalidArgument`) and of a type it is an instance of. See
+[ADR-0005](../../docs/adr/0005-component-release-with-live-objects.md) for why release is refused but
+destruction is not. Only classes are constructed: a type with no public constructor of the requested
+signature, including a struct (which has no explicit parameterless constructor), is `NotFound`.
 
 ### Logging
 
