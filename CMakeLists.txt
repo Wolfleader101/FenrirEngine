@@ -5,7 +5,7 @@ project(FenrirEngine)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-option(FENRIR_ENABLE_SCRIPTING "Build the optional native .NET hosting package" OFF)
+option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 
 
 # Compiler-specific flags
@@ -25,7 +25,7 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif()
 
 if(FENRIR_ENABLE_SCRIPTING)
-    add_subdirectory(packages/FenrirScripting)
+    add_subdirectory(packages/Iris)
 endif()
 
 add_subdirectory(packages/FenrirMath)

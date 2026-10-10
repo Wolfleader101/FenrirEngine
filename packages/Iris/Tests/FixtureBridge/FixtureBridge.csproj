@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>Iris.Bridge</AssemblyName>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Managed/Iris.Bridge/ManagedDiagnostic.cs" Link="ManagedDiagnostic.cs" />
+    <Compile Include="../../Managed/Iris.Bridge/BridgeFunctions.cs" Link="BridgeFunctions.cs" />
+    <Compile Include="../../Managed/Iris.Bridge/BridgeStatus.cs" Link="BridgeStatus.cs" />
+  </ItemGroup>
+</Project>
