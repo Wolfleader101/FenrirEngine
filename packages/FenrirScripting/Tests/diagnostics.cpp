@@ -26,7 +26,7 @@ int main(int argc, char* argv[])
     using namespace Fenrir::Scripting;
     try
     {
-        Check(argc == 4, "Expected mode, runtime configuration, and bridge");
+        Check(argc == 4 || argc == 5, "Expected mode, runtime configuration, bridge, and optional second bridge");
         const auto mode = std::filesystem::path(argv[1]);
         Int32CallResult retained;
         Utf8StringResult retainedString;
@@ -77,6 +77,13 @@ int main(int argc, char* argv[])
                   initialized.diagnostic.c_str());
             if (mode == "real")
             {
+                // The bridge lives in the default load context: one bridge assembly per process.
+                Check(argc == 5, "Real mode needs a second bridge file");
+                const auto second = host.Initialize({argv[2], argv[4], {}});
+                Check(!second.success && !host.IsInitialized() && !second.bridgeAssemblyLoaded &&
+                          second.diagnostic.find("load_assembly") != std::string::npos,
+                      "A second bridge file was loaded into the same process");
+                Check(host.Initialize({argv[2], argv[3], {}}).success, "The resident bridge did not reinitialize");
                 retained = host.AddInt32(std::numeric_limits<std::int32_t>::max(), 1);
                 Check(retained.status == ManagedCallStatus::Overflow && !retained.value &&
                           retained.diagnostic.find("OverflowException") != std::string::npos,

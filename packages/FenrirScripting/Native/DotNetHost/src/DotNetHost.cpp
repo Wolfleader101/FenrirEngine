@@ -80,7 +80,8 @@ namespace Fenrir::Scripting
             if (loadStatus != 0)
             {
                 result.diagnostic = StatusDiagnostic("load_assembly(bridge)", loadStatus) +
-                                    " Only one bridge assembly can be loaded per process.";
+                                    " The file may be missing or invalid, or a different bridge assembly may"
+                                    " already be loaded; a process holds only one.";
                 return {};
             }
             result.bridgeAssemblyLoaded = true;
@@ -88,9 +89,8 @@ namespace Fenrir::Scripting
             void* entryPoint = nullptr;
             const auto typeName = Detail::Utf8ToHostString(BridgeTypeName);
             const auto methodName = Detail::Utf8ToHostString(BridgeEntryPoint);
-            const int entryStatus = runtime.getFunctionPointer(typeName.c_str(), methodName.c_str(),
-                                                               UNMANAGEDCALLERSONLY_METHOD, nullptr, nullptr,
-                                                               &entryPoint);
+            const int entryStatus = runtime.getFunctionPointer(
+                typeName.c_str(), methodName.c_str(), UNMANAGEDCALLERSONLY_METHOD, nullptr, nullptr, &entryPoint);
             if (entryStatus != 0 || entryPoint == nullptr)
             {
                 result.diagnostic = StatusDiagnostic("get_function_pointer(GetBridgeFunctions)", entryStatus);
@@ -101,8 +101,7 @@ namespace Fenrir::Scripting
                 return {};
             }
 
-            const auto getBridgeFunctions =
-                reinterpret_cast<Detail::BridgeFunctions::GetBridgeFunctionsFn>(entryPoint);
+            const auto getBridgeFunctions = reinterpret_cast<Detail::GetBridgeFunctionsFn>(entryPoint);
             auto table = std::make_shared<Detail::BridgeFunctions>();
             constexpr auto tableSize = static_cast<std::int32_t>(sizeof(Detail::BridgeFunctions));
             std::int32_t reportedVersion = -1;
@@ -296,8 +295,9 @@ namespace Fenrir::Scripting
         }
         std::int32_t value = 0;
         Detail::ManagedDiagnosticBuffer diagnostic;
-        const std::int32_t status = state->bridge->tryAddInt32(left, right, &value, diagnostic.bytes.data(),
-                                                       diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+        const std::int32_t status =
+            state->bridge->tryAddInt32(left, right, &value, diagnostic.bytes.data(), diagnostic.Capacity,
+                                       &diagnostic.written, &diagnostic.truncated);
         Int32CallResult result;
         // Positive bridge error codes are distinct from hostfxr/HRESULT conventions.
         switch (static_cast<ManagedCallStatus>(status))
@@ -348,8 +348,8 @@ namespace Fenrir::Scripting
                                                             std::int32_t* requiredBytes, std::uint8_t* diagnostic,
                                                             std::int32_t diagnosticCapacity, std::int32_t* written,
                                                             std::int32_t* truncated) {
-            return state->bridge->echoUtf8(bytes, length, destination, capacity, requiredBytes, diagnostic, diagnosticCapacity,
-                                   written, truncated);
+            return state->bridge->echoUtf8(bytes, length, destination, capacity, requiredBytes, diagnostic,
+                                           diagnosticCapacity, written, truncated);
         });
     }
     ComponentLoadResult DotNetHost::LoadComponent(const std::filesystem::path& assemblyPath) const
@@ -377,10 +377,10 @@ namespace Fenrir::Scripting
         auto component = std::unique_ptr<ManagedComponent>(new ManagedComponent(std::move(componentState)));
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::int32_t collectible = 0;
-        const auto status = state->bridge->load(
-            reinterpret_cast<const std::uint8_t*>(path.data()), static_cast<std::int32_t>(path.size()),
-            &component->state->token, &collectible, diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written,
-            &diagnostic.truncated);
+        const auto status = state->bridge->load(reinterpret_cast<const std::uint8_t*>(path.data()),
+                                                static_cast<std::int32_t>(path.size()), &component->state->token,
+                                                &collectible, diagnostic.bytes.data(), diagnostic.Capacity,
+                                                &diagnostic.written, &diagnostic.truncated);
         ComponentLoadResult result;
         switch (static_cast<ManagedCallStatus>(status))
         {

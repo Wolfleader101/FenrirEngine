@@ -46,9 +46,11 @@ foreach(fenrir_checks_mode IN ITEMS real fixture legacy oversized missing notbri
     else()
         set(fenrir_checks_bridge "${fenrir_checks_managed}/fixture/Fenrir.ManagedHost.dll")
     endif()
+    # Real mode also tries the fixture as a second bridge in the same process.
     add_test(NAME "NativeDiagnostics-${fenrir_checks_mode}"
         COMMAND FenrirDiagnosticChecks "${fenrir_checks_mode}"
-            "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json" "${fenrir_checks_bridge}")
+            "${fenrir_checks_managed}/checks/ManagedDiagnostics.runtimeconfig.json" "${fenrir_checks_bridge}"
+            "${fenrir_checks_managed}/fixture/Fenrir.ManagedHost.dll")
     set_tests_properties("NativeDiagnostics-${fenrir_checks_mode}" PROPERTIES
         ENVIRONMENT "FENRIR_TEST_BRIDGE_MODE=${fenrir_checks_mode}")
 endforeach()
