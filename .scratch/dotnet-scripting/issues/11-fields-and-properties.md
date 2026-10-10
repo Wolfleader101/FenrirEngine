@@ -23,3 +23,9 @@
 - Object-typed members block `Component::Release` while a returned handle is held (tested).
 
 Not done, by design: strings, structs and arrays as member types arrive with tickets 12–14.
+
+Review fixes:
+- An `init`-only property is public to reflection but is now read-only (`InvalidArgument`), since it is only valid while the object is constructed.
+- Property lookup picks the most-derived declaration when a derived type hides a base property with another type (`GetProperty` would throw `AmbiguousMatchException`); a hidden field already resolved this way and is now tested.
+- More coverage: `ulong`, `float` and `sbyte` members, and released and foreign objects passed to a member.
+- Known gap, not fixed: inherited static members are found (members flatten the hierarchy) whereas static methods must be declared on the type. Both are documented as such; tell me if you want them unified.
