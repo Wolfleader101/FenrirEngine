@@ -206,9 +206,12 @@ public static partial class Bootstrap
             name == null || nameLength <= 0 || paramCount < 0 || (paramCount > 0 && paramKinds == null))
             return (int)BridgeStatus.InvalidArgument;
         string methodName;
-        int[] kinds = new int[paramCount];
+        int[] kinds;
         try
         {
+            // The CLR limits a method to 255 parameters; this also bounds the allocation below.
+            if (paramCount > 255) throw new BridgeArgumentException("A method cannot have more than 255 parameters.");
+            kinds = new int[paramCount];
             methodName = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength));
             if (methodName.Contains('\0')) throw new BridgeArgumentException("A method name cannot contain null characters.");
             if (!ValueKinds.IsValid(returnKind)) throw new BridgeArgumentException($"Unsupported return kind {returnKind}.");

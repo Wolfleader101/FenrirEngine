@@ -7,6 +7,7 @@
 #include "Utf8Buffer.hpp"
 
 #include <utility>
+#include <vector>
 
 namespace Iris
 {
@@ -45,15 +46,18 @@ namespace Iris
         {
             return Detail::Failure<Detail::RawMethod>(CallStatus::InvalidArgument, *problem);
         }
-        // ValueKind is a std::int32_t enum, so the kinds can be sent as they are.
-        static_assert(sizeof(Detail::ValueKind) == sizeof(std::int32_t));
+        std::vector<std::int32_t> kinds;
+        kinds.reserve(parameterKinds.size());
+        for (const auto kind : parameterKinds)
+        {
+            kinds.push_back(static_cast<std::int32_t>(kind));
+        }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t methodId = 0;
         const auto status = state->bridge->findMethod(
             state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
             static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind),
-            reinterpret_cast<const std::int32_t*>(parameterKinds.data()),
-            static_cast<std::int32_t>(parameterKinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
+            kinds.data(), static_cast<std::int32_t>(kinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
             &diagnostic.written, &diagnostic.truncated);
         if (static_cast<CallStatus>(status) == CallStatus::Success && methodId == 0)
         {

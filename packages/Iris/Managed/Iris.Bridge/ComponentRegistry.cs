@@ -161,6 +161,11 @@ internal static class ComponentRegistry
         if (method == null || method.ReturnType != returnType || method.IsGenericMethod ||
             method.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false))
             return FindResult.NotFound;
+        // The default binder accepts widening conversions (an int argument for a long parameter), but
+        // the native types name the managed signature exactly, so every parameter must match.
+        ParameterInfo[] declared = method.GetParameters();
+        for (int index = 0; index < declared.Length; ++index)
+            if (declared[index].ParameterType != parameterTypes[index]) return FindResult.NotFound;
         lock (Gate)
         {
             if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
