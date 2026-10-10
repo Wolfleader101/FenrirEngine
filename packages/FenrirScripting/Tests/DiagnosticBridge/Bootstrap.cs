@@ -27,7 +27,9 @@ public static class Bootstrap
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int GetBridgeFunctions(int version, void* table, int size, int* reportedVersion, int* reportedSize)
     {
-        string? mode = Environment.GetEnvironmentVariable("FENRIR_TEST_BRIDGE_MODE");
+        string? mode;
+        try { mode = Environment.GetEnvironmentVariable("FENRIR_TEST_BRIDGE_MODE"); }
+        catch (Exception) { return 3; } // Nothing may escape an unmanaged entry point.
         var functions = new BridgeFunctions
         {
             TryAddInt32 = &TryAddInt32,

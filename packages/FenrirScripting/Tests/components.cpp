@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
             CheckInfo(*retained);
             CheckUnload(*retained, false);
             CheckCalculation(*retained);
-            Check(host.Initialize(configuration).success, "Host did not recover after incomplete bridge");
+            Check(host.Initialize(configuration).success, "Host did not recover after a failed initialization");
             for (int i = 0; i < 16; ++i)
             {
                 auto scoped = host.LoadComponent(componentPath);

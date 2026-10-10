@@ -4,15 +4,15 @@ Optional, independent C++/.NET hosting package. The native library has no depend
 on ECS, rendering, the editor, or other Fenrir modules.
 
 The current step discovers and loads `hostfxr`, prepares a hosting context using
-a `.runtimeconfig.json`, obtains the assembly-loading runtime delegate, and closes
+a `.runtimeconfig.json`, obtains the assembly-loading and function-pointer runtime delegates, and closes
 the context. Obtaining the delegates starts or reuses CoreCLR. The native library
 then loads the managed bridge into the default load context and calls its single
 public entry point, `Bootstrap.GetBridgeFunctions`, which fills a versioned table of
 function pointers. The table holds the demo interop calls (`TryAddInt32`,
 `CopyGreetingUtf8`, `EchoUtf8`) and the component operations: loading, identity
 copying, integer invocation, release and weak unload observation.
-`IsInitialized` becomes true only when the returned bridge version matches `6`
-and all ten required entry points have resolved.
+`IsInitialized` becomes true only when the bridge reports version `7` and the
+expected table size, and all nine table entries are non-null.
 
 ## Select the target hosting SDK files
 
@@ -107,12 +107,8 @@ Required exports resolved: true
 Runtime configuration initialized: true
 Runtime delegate obtained: true
 Host context closed: true
-Bridge method resolved: true
-Interop method resolved: true
-Greeting method resolved: true
-Echo method resolved: true
-Component methods resolved: true
-Bridge version: 6
+Bridge assembly loaded: true
+Bridge version: 7
 Initialization succeeded: true
 Diagnostic: Managed bridge initialized; bridge version 7.
 Initialized after attempt: true

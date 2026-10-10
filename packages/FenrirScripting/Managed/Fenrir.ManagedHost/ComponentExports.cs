@@ -7,7 +7,7 @@ namespace Fenrir.ManagedHost;
 
 public static partial class Bootstrap
 {
-    // ABI v6. Token/flags and diagnostic storage are writable and non-overlapping.
+    // Token/flags and diagnostic storage are writable and non-overlapping.
     // No pointer is retained. A token is published only after registration succeeds.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,

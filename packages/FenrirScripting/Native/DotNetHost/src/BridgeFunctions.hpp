@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 
 namespace Fenrir::Scripting::Detail
@@ -15,26 +14,28 @@ namespace Fenrir::Scripting::Detail
     // Bootstrap.GetBridgeFunctions. Field order, count and signatures must match the managed
     // BridgeFunctions struct; any change bumps BridgeVersion on both sides.
     // All pointer arguments are borrowed for one call. Tokens are uint64; flags, counts and statuses are int32.
+    // The bridge's only public entry point: (expected version, table, table size, reported version,
+    // reported size). Always reports; fills the table only when version and size match.
+    using GetBridgeFunctionsFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, void*, std::int32_t, std::int32_t*,
+                                                                   std::int32_t*);
+
     struct BridgeFunctions
     {
-        using GetBridgeFunctionsFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, void*, std::int32_t,
-                                                                       std::int32_t*, std::int32_t*);
         using TryAddInt32Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, std::int32_t, std::int32_t*,
                                                                 std::uint8_t*, std::int32_t, std::int32_t*,
                                                                 std::int32_t*);
-        using CopyUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint8_t*, std::int32_t, std::int32_t*,
-                                                             std::uint8_t*, std::int32_t, std::int32_t*,
-                                                             std::int32_t*);
-        using EchoUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
-                                                             std::int32_t, std::int32_t*, std::uint8_t*,
+        using CopyUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint8_t*, std::int32_t, std::int32_t*, std::uint8_t*,
                                                              std::int32_t, std::int32_t*, std::int32_t*);
+        using EchoUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
+                                                             std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
+                                                             std::int32_t*, std::int32_t*);
         using LoadFn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint64_t*,
                                                          std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*,
                                                          std::int32_t*);
         using NameFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
                                                          std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
-        using TokenFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t,
-                                                          std::int32_t*, std::int32_t*);
+        using TokenFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
+                                                          std::int32_t*);
         using InvokeFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, const std::uint8_t*, std::int32_t,
                                                            const std::uint8_t*, std::int32_t, std::int32_t,
                                                            std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
@@ -65,6 +66,4 @@ namespace Fenrir::Scripting::Detail
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),
                   "Every bridge slot needs a name, and the table must have no padding");
-    static_assert(offsetof(BridgeFunctions, forgetUnload) == 8 * sizeof(void*),
-                  "The last slot must sit at the end of the table");
 } // namespace Fenrir::Scripting::Detail
