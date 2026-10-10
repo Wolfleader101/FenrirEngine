@@ -163,6 +163,56 @@ namespace
                  Check(host->IsInitialized(), "A load failure reset readiness");
                  CheckCalculation(Load(*host, arguments.component));
              }},
+            {"a type is found by name and reports its names",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto found = component.FindType(CalculationType);
+                 Check(found.Succeeded(), "A public type was not found: " + found.diagnostic);
+                 const auto info = found.value->GetInfo();
+                 Check(info.Succeeded() && info.value->fullName == CalculationType &&
+                           info.value->assemblyName == "Iris.Examples.Component",
+                       "Type names incorrect");
+                 // Handles are cheap values: a copy works the same.
+                 const Type copy = *found.value;
+                 Check(copy.GetInfo().value->fullName == CalculationType, "A copied type handle stopped working");
+             }},
+            {"missing and invalid type names return diagnostics",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 for (const char* name :
+                      {"Iris.Examples.Component.Missing", "Iris.Examples.Component.HiddenCalculation",
+                       "Iris.Examples.Component.OpenCalculation`1", "Iris.Examples.Dependency.DependencyMath"})
+                 {
+                     const auto missing = component.FindType(name);
+                     Check(missing.status == CallStatus::NotFound && !missing.value &&
+                               missing.diagnostic.find(name) != std::string::npos,
+                           std::string("Not a NotFound naming the type: ") + name);
+                 }
+                 Check(component.FindType({}).status == CallStatus::InvalidArgument &&
+                           component.FindType(std::string("A\0B", 3)).status == CallStatus::InvalidArgument &&
+                           component.FindType("\xFF").status == CallStatus::InvalidArgument,
+                       "An empty, null-containing or malformed name was accepted");
+                 Check(component.FindType(CalculationType).Succeeded(), "Lookup did not recover after failures");
+             }},
+            {"type handles become invalid when their component is released",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto released = Load(*host, arguments.component);
+                 const auto other = Load(*host, arguments.component);
+                 const auto stale = *released.FindType(CalculationType).value;
+                 const auto live = *other.FindType(CalculationType).value;
+                 Check(released.Release().Succeeded(), "Release failed");
+                 const auto info = stale.GetInfo();
+                 Check(info.status == CallStatus::InvalidHandle && !info.value,
+                       "A released component's type handle worked");
+                 Check(released.FindType(CalculationType).status == CallStatus::InvalidHandle,
+                       "A released owner still resolved types");
+                 Check(live.GetInfo().Succeeded(), "Releasing one component invalidated another's type handle");
+                 host.reset(); // A type handle outlives its host while its component is alive.
+                 Check(live.GetInfo().Succeeded(), "A type handle did not outlive the host");
+             }},
             {"a Unicode path loads, and a missing dependency fails only when used",
              [&] {
                  auto host = StartHost(arguments);

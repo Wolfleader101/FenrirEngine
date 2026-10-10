@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CallResult.hpp"
+#include "Type.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -49,6 +50,13 @@ namespace Iris
         // NotRequested while loaded; Pending or Collected after Release (a snapshot, with no
         // deadline for Pending). Remains available after Release and host destruction.
         [[nodiscard]] CallResult<ComponentUnloadState> GetUnloadStatus() const;
+
+        // Finds a public, closed type defined in this component's assembly by full name (for example
+        // "My.Namespace.Calculator"; nested types use '+'). The name is case-sensitive UTF-8 without
+        // null characters, borrowed for the call. Looking the same type up again returns an equivalent
+        // handle. A missing, non-public or generic-definition type is NotFound; types from the
+        // component's dependencies are not found through it.
+        [[nodiscard]] CallResult<Type> FindType(std::string_view fullName) const;
 
         // Calls a public, non-generic, static `int Method(int, int)` declared on a public closed type
         // in this component. Names are case-sensitive UTF-8 without null characters, borrowed for

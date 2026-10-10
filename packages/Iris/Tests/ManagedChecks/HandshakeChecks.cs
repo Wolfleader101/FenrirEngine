@@ -10,8 +10,8 @@ static class HandshakeChecks
 
     internal static unsafe void Run()
     {
-        // Native code declares the same seven pointer-sized slots; a different count changes the size.
-        Check(sizeof(BridgeFunctions) == 7 * IntPtr.Size, "Bridge table is not seven pointer-sized slots");
+        // Native code declares the same nine pointer-sized slots; a different count changes the size.
+        Check(sizeof(BridgeFunctions) == 9 * IntPtr.Size, "Bridge table is not nine pointer-sized slots");
 
         delegate* unmanaged[Cdecl]<int, void*, int, int*, int*, int> handshake = &Bootstrap.GetBridgeFunctions;
         int size = sizeof(BridgeFunctions);

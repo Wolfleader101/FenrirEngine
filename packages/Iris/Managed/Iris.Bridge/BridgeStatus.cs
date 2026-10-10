@@ -8,5 +8,6 @@ internal enum BridgeStatus : int
     Overflow = 2,
     ManagedException = 3,
     BufferTooSmall = 4,
-    InvalidHandle = 5
+    InvalidHandle = 5,
+    NotFound = 6
 }

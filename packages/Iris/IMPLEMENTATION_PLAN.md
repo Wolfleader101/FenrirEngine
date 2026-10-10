@@ -19,7 +19,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 04: cleanup (done)
   - 05: standalone library boundary (done; renamed Iris, ADR-0003; shared assemblies, ADR-0004)
 - **Phase B, the API (06–16):**
-  - 06: type handles
+  - 06: type handles (done)
   - 07: method handles and typed invocation
   - 08: host exception and log sink
   - 09: managed objects and ownership
@@ -78,16 +78,17 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 05)
+## Current state (after ticket 06)
 
 Implemented and tested (10 CTests of named cases; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
-- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-10 function table of seven operations
+- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-11 function table of nine operations
 - bounded managed diagnostics
 - collectible component loading with private dependency resolution
 - `int(int,int)` static invocation
 - release, and observation of the unload (NotRequested, Pending or Collected)
+- type handles: look up a public type by name and read its names; invalidated by release
 - shared contract assemblies with one type identity across components
 - a CMake install/export package (`find_package(Iris)`, `iris_deploy`) verified by a standalone consumer
 
