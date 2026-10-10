@@ -9,7 +9,7 @@
 - [x] The C++ API derives the managed parameter types from native types at compile time (for example a variadic `Invoke<R>(args...)`). Unsupported native types fail to compile.
 - [x] Overloads resolve by exact parameter types. Ambiguous or missing overloads return an owning diagnostic.
 - [x] Invocation validates argument count and types against the resolved method before calling it.
-- [x] Managed exceptions return `ManagedException` (and `Overflow` where applicable) with diagnostics, and the next call succeeds.
+- [x] Managed exceptions return `ManagedException` (the `Overflow` status was removed, see below) with diagnostics, and the next call succeeds.
 - [x] Method handles are cached, generation-bound and stale-checked. The handle and its cache do not keep the component alive (verified with the unload check).
 - [x] `InvokeInt32` is removed, and its tests migrate to the new API.
 
@@ -26,3 +26,8 @@ From review 01 (D3 and C3): `InvokeComponentInt32` maps any `OverflowException` 
 - The scripted fixture bridge's control channel is now a method name (`Scenario:<name>`, `Select:<mode>`, `Counter:<name>`), driven through the public API.
 
 Not done, by design: methods are static only. Instance methods arrive with objects in ticket 09.
+
+Review fixes:
+- The default `GetMethod` binder accepts widening, so `FindMethod<int(int,int)>("WrongParameters")` bound a `(long, long)` method. Every parameter type is now compared exactly, with tests for widening and narrowing (managed and native).
+- The `FindMethod` export now allocates and caps (at 255, the CLR limit) the parameter list inside its exception boundary, and the native side copies kinds into an `int32_t` vector instead of casting the enum array.
+- The compile-time claim is now tested: `UnsupportedTypeDoesNotCompile` builds a file that uses `std::string` and passes only when the compiler reports Iris's own `static_assert` message.

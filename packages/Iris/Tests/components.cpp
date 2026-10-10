@@ -283,6 +283,9 @@ namespace
                           "wrong return type");
                  notFound(type.FindMethod<std::int32_t(std::int32_t, std::int64_t)>("Add"), "wrong parameter types");
                  notFound(type.FindMethod<std::int32_t(std::int32_t)>("Add"), "wrong parameter count");
+                 notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("WrongParameters"),
+                          "parameters that would only match by widening");
+                 notFound(type.FindMethod<std::int32_t(std::int16_t, std::int16_t)>("Add"), "narrower parameters");
                  notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Generic"), "generic method");
                  notFound(type.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("UnmanagedOnly"),
                           "unmanaged-only method");

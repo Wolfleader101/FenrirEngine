@@ -81,3 +81,12 @@ if(IRIS_INSTALL)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/ConsumerPackage.cmake")
     set_tests_properties(ConsumerPackage PROPERTIES TIMEOUT 300)
 endif()
+
+# Unsupported native types must not compile. The target is excluded from the normal build; this test
+# builds it and passes only when the compiler output carries Iris's own static_assert message.
+add_executable(IrisUnsupportedTypeShouldNotCompile EXCLUDE_FROM_ALL compile_fail.cpp)
+target_link_libraries(IrisUnsupportedTypeShouldNotCompile PRIVATE Iris::Iris)
+add_test(NAME UnsupportedTypeDoesNotCompile
+    COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG> --target IrisUnsupportedTypeShouldNotCompile)
+set_tests_properties(UnsupportedTypeDoesNotCompile PROPERTIES
+    PASS_REGULAR_EXPRESSION "Only bool, sized integers, float and double cross the boundary by value")

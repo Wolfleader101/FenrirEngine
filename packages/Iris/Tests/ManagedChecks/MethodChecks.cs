@@ -119,6 +119,9 @@ static unsafe class MethodChecks
                 ("WrongReturn", Int32, new[] { Int32, Int32 }),
                 ("Add", Int32, new[] { Int32, Int64 }),
                 ("Add", Int32, new[] { Int32 }),
+                ("WrongParameters", Int32, new[] { Int32, Int32 }),  // declared (long, long): no widening
+                ("Add", Int32, new[] { Int16, Int16 }),              // no widening to (int, int)
+                ("Scale", Double, new[] { Float, Float }),           // declared (double, float)
                 ("Add", Int64, new[] { Int32, Int32 }),
                 ("Generic", Int32, new[] { Int32, Int32 }),
                 ("UnmanagedOnly", Int32, new[] { Int32, Int32 }),
