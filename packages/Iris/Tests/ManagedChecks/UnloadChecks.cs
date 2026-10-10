@@ -68,10 +68,18 @@ static class UnloadChecks
         Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Counter", out counterType) == ComponentRegistry.FindResult.Found &&
               ComponentRegistry.TryCreateObject(token, counterType, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out objectId) == ComponentRegistry.CreateResult.Created,
               "Unload fixture object construction failed");
+        // A returned object is rooted like a constructed one: Factory.Make returns a new Counter.
+        ulong factoryType = 0, makeMethod = 0, returnedId = 0;
+        Check(ComponentRegistry.TryFindType(token, "Iris.Examples.Component.Factory", out factoryType) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryFindMethod(token, factoryType, "Make", 12, new[] { 6 }, true, out makeMethod) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, makeMethod, new ulong[] { 3 }, out returnedId) && returnedId != 0,
+              "Unload fixture returned-object call failed");
         if (!leakObject)
         {
-            Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with a live object was released");
+            Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with live objects was released");
             Check(ComponentRegistry.ReleaseObject(token, objectId), "Unload fixture object release failed");
+            Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with a live returned object was released");
+            Check(ComponentRegistry.ReleaseObject(token, returnedId), "Unload fixture returned-object release failed");
         }
         Check((leakObject ? forceRelease(token, null, 0, &written, &truncated) : release(token, null, 0, &written, &truncated)) == 0 && written == 0 && truncated == 0,
               "Unload request failed");

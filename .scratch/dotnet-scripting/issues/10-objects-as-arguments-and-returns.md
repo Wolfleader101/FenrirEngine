@@ -23,3 +23,9 @@
 - **Overload matching is now manual** (a search over `GetMethods`/`GetConstructors` with exact kinds) rather than `GetMethod`'s binder, which also removes a source of the earlier widening bug.
 - **Status mapping:** the bridge's own validation is `InvalidArgument`, a stale handle `InvalidHandle`, everything else `ManagedException`.
 - The compile-fail check caught my change to the `static_assert` message, as designed.
+
+Review fixes:
+- A method hidden with `new` appears twice in reflection with the same signature and was reported as ambiguous; the most-derived declaration now wins, and only candidates that differ in their parameter types are ambiguous (test: `HidingCounter`).
+- `Object` in a signature must be `const Object&`; a by-value `Object` no longer satisfies the signature concept.
+- The `ManagedUnload` check now also holds a *returned* object (`Factory.Make`), sees the release refused while it is live, and sees collection once it is released.
+- The `NotFound` message now says "static" or "instance" correctly.

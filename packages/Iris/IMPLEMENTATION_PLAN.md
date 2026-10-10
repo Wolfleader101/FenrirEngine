@@ -80,7 +80,7 @@ Ask for clarification only when a consequential decision can't be settled from t
 
 ## Current state (after ticket 10)
 
-Implemented and tested (10 CTests of named cases; Windows Debug and Release):
+Implemented and tested (11 CTests of named cases; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
 - the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-15 function table of sixteen operations
