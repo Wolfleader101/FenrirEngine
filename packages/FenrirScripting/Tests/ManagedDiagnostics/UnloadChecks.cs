@@ -135,9 +135,7 @@ static class UnloadChecks
         Check(forget(0, null, 1, &written, &truncated) == 1, "Invalid forget diagnostic storage accepted");
         Forget(0, 5);
         Check(ComponentRegistry.Count == baseline && ComponentRegistry.TrackingCount == trackingBaseline, "Unload checks leaked records");
-        delegate* unmanaged[Cdecl]<int, int, int*, byte*, int, int*, int*, int> add = &Bootstrap.TryAddInt32;
-        int result = 0;
-        Check(add(20, 22, &result, null, 0, &written, &truncated) == 0 && result == 42, "Resident bridge stopped after component collection");
+        InvocationChecks.CheckResidentBridge(componentPath);
         Console.WriteLine("Managed unloading: forgotten observers do not retain assemblies; stale tokens reject access; resident bridge remains usable.");
     }
 }

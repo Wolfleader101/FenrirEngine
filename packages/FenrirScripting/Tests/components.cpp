@@ -121,9 +121,8 @@ int main(int argc, char* argv[])
             Check(invalid.status == ManagedCallStatus::ManagedException && !invalid.value &&
                       invalid.diagnostic.find("BadImageFormatException") != std::string::npos,
                   "Invalid assembly diagnostic lost");
-            Check(host.AddInt32(20, 22).value == 42 &&
-                      host.EchoUtf8("after component failures").value == "after component failures",
-                  "Component failure damaged bridge readiness");
+            Check(host.IsInitialized(), "Component failure damaged bridge readiness");
+            CheckCalculation(*retained);
 
             // UTF-8 path crossing and component metadata are independent of filename.
             const auto unicodeDirectory =

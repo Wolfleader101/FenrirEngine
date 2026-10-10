@@ -7,7 +7,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 
 namespace Fenrir::Scripting
 {
@@ -58,9 +57,9 @@ namespace Fenrir::Scripting
      * its native hosting libraries. Closing a hostfxr context is not CLR shutdown.
      *
      * nethost is a native dependency. Discovery locates hostfxr without loading it.
-     * Initialize currently starts or reuses CoreCLR, obtains an assembly-loading
-     * runtime delegate, closes its temporary hostfxr context, and loads the bridge.
-     * Readiness requires a matching version handshake and the required interop methods.
+     * Initialize starts or reuses CoreCLR, obtains the load_assembly and
+     * get_function_pointer runtime delegates, closes its temporary hostfxr context, and
+     * loads the bridge. Readiness requires a matching, complete bridge function table.
      * This bridge is process-resident; collectible component unloading is separate.
      */
     class DotNetHost
@@ -90,7 +89,7 @@ namespace Fenrir::Scripting
          *
          * Loads the bridge into the default load context, resolves Bootstrap.GetBridgeFunctions
          * and fills the bridge function table. Success requires a matching table version
-         * (currently 7) and size, and a non-null entry in every slot. The process can hold only
+         * (currently 8) and size, and a non-null entry in every slot. The process can hold only
          * one bridge assembly; a different bridge path in the same process fails to load.
          * Both configuration paths must name existing files;
          * relative paths are resolved against the current working directory.
@@ -108,47 +107,6 @@ namespace Fenrir::Scripting
          * Does not report whether another component has already started CoreCLR.
          */
         [[nodiscard]] bool IsInitialized() const noexcept;
-
-        /**
-         * @brief Exercise the bridge's status-plus-output interop contract.
-         *
-         * Checked managed addition catches overflow and returns a status. The output
-         * storage belongs to this native call and is never retained by managed code.
-         * Managed exception details are copied during this one invocation, using a
-         * 4096-byte buffer. Truncation preserves UTF-8 scalar boundaries; failure
-         * to produce valid details uses a native fallback without changing the
-         * operation's status. Success requires empty diagnostic metadata.
-         * Calls on the same wrapper must be externally serialized with initialization.
-         */
-        [[nodiscard]] Int32CallResult AddInt32(std::int32_t left, std::int32_t right) const;
-
-        /**
-         * @brief Copy a fixed managed greeting into an owning native UTF-8 string.
-         *
-         * Queries the byte count, allocates native storage, then copies the payload.
-         * Managed code borrows that storage only during the copy. Invalid lengths
-         * become InvalidResponse; failure never exposes a partial string.
-         * Each invocation provides a separate 4096-byte diagnostic buffer. Failures
-         * return owning details with the same truncation/fallback rules as AddInt32.
-         * A failed query prevents the copy; a failed copy is never retried.
-         * Native allocation failures follow normal C++ exception behavior.
-         * Calls must be externally serialized with initialization on this wrapper.
-         */
-        [[nodiscard]] Utf8StringResult GetGreeting() const;
-
-        /**
-         * @brief Decode native UTF-8 into a managed string and copy it back as UTF-8.
-         *
-         * Input is borrowed and must remain valid and unchanged throughout both calls.
-         * Explicit byte lengths preserve empty input and embedded nulls. Strict decoding
-         * rejects malformed UTF-8 with InvalidArgument; no normalization is performed.
-         * Decoding failures include managed exception details. Query and copy use
-         * separate diagnostic buffers; only the failing invocation supplies details.
-         * Input lengths above INT32_MAX are rejected before entering managed code.
-         * Only success exposes an owning string; a call failure does not clear readiness.
-         * Allocations may throw C++ exceptions. Serialize calls with initialization.
-         */
-        [[nodiscard]] Utf8StringResult EchoUtf8(std::string_view input) const;
 
         // Loads a separate assembly into a collectible context. Relative paths are
         // resolved against the current directory; path text is strict UTF-8 at the

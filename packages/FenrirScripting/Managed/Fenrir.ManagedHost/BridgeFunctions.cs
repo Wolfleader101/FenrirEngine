@@ -8,11 +8,8 @@ namespace Fenrir.ManagedHost;
 [StructLayout(LayoutKind.Sequential)]
 internal unsafe struct BridgeFunctions
 {
-    internal const int Version = 7;
+    internal const int Version = 8;
 
-    internal delegate* unmanaged[Cdecl]<int, int, int*, byte*, int, int*, int*, int> TryAddInt32;
-    internal delegate* unmanaged[Cdecl]<byte*, int, int*, byte*, int, int*, int*, int> CopyGreetingUtf8;
-    internal delegate* unmanaged[Cdecl]<byte*, int, byte*, int, int*, byte*, int, int*, int*, int> EchoUtf8;
     internal delegate* unmanaged[Cdecl]<byte*, int, ulong*, int*, byte*, int, int*, int*, int> LoadComponent;
     internal delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, byte*, int, int*, int*, int> CopyComponentNameUtf8;
     internal delegate* unmanaged[Cdecl]<ulong, byte*, int, int*, int*, int> ReleaseComponent;
