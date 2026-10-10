@@ -32,6 +32,14 @@ static class InvocationChecks
         }
     }
 
+    // A fresh load, invocation and release through the exports proves the resident bridge still works.
+    internal static void CheckResidentBridge(string componentPath)
+    {
+        ulong token = ComponentRegistry.Load(Path.GetFullPath(componentPath));
+        Check(Invoke(token, TypeName, "Add").Value == 42, "Resident bridge stopped working");
+        Check(ComponentRegistry.Release(token) && ComponentRegistry.ForgetUnload(token), "Resident bridge cleanup failed");
+    }
+
     internal static unsafe void Run(string componentPath)
     {
         int baseline = ComponentRegistry.Count;

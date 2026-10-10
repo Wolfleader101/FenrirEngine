@@ -71,7 +71,8 @@ namespace Fenrir::Scripting
         // Selects a public, non-generic static int(int, int), declared on a public closed
         // type in this assembly. UCO methods are excluded. Lookup/ordinary exceptions
         // produce ManagedException; overflow produces Overflow. Only success has a value.
-        // Uses the same owning 4096-byte diagnostic contract as DotNetHost::AddInt32.
+        // Failures carry owning managed exception details, bounded to 4096 UTF-8 bytes
+        // and cut on scalar boundaries; invalid details fall back to native text.
         // May outlive the host. A released/moved owner returns InvalidHandle first.
         [[nodiscard]] Int32CallResult InvokeInt32(std::string_view typeName, std::string_view methodName,
                                                   std::int32_t left, std::int32_t right) const;

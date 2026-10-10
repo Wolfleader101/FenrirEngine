@@ -14,6 +14,7 @@ namespace Fenrir::Scripting::Detail
     // Bootstrap.GetBridgeFunctions. Field order, count and signatures must match the managed
     // BridgeFunctions struct; any change bumps BridgeVersion on both sides.
     // All pointer arguments are borrowed for one call. Tokens are uint64; flags, counts and statuses are int32.
+
     // The bridge's only public entry point: (expected version, table, table size, reported version,
     // reported size). Always reports; fills the table only when version and size match.
     using GetBridgeFunctionsFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, void*, std::int32_t, std::int32_t*,
@@ -21,14 +22,6 @@ namespace Fenrir::Scripting::Detail
 
     struct BridgeFunctions
     {
-        using TryAddInt32Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::int32_t, std::int32_t, std::int32_t*,
-                                                                std::uint8_t*, std::int32_t, std::int32_t*,
-                                                                std::int32_t*);
-        using CopyUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint8_t*, std::int32_t, std::int32_t*, std::uint8_t*,
-                                                             std::int32_t, std::int32_t*, std::int32_t*);
-        using EchoUtf8Fn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
-                                                             std::int32_t, std::int32_t*, std::uint8_t*, std::int32_t,
-                                                             std::int32_t*, std::int32_t*);
         using LoadFn = std::int32_t(FENRIR_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint64_t*,
                                                          std::int32_t*, std::uint8_t*, std::int32_t, std::int32_t*,
                                                          std::int32_t*);
@@ -43,9 +36,6 @@ namespace Fenrir::Scripting::Detail
         using UnloadStateFn = std::int32_t(FENRIR_BRIDGE_CALL*)(std::uint64_t, std::int32_t*, std::uint8_t*,
                                                                 std::int32_t, std::int32_t*, std::int32_t*);
 
-        TryAddInt32Fn tryAddInt32;
-        CopyUtf8Fn copyGreetingUtf8;
-        EchoUtf8Fn echoUtf8;
         LoadFn load;
         NameFn copyName;
         TokenFn release;
@@ -55,11 +45,10 @@ namespace Fenrir::Scripting::Detail
     };
 #undef FENRIR_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 7;
+    inline constexpr std::int32_t BridgeVersion = 8;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 9> BridgeFunctionNames = {
-        "TryAddInt32",          "CopyGreetingUtf8",        "EchoUtf8",
+    inline constexpr std::array<const char*, 6> BridgeFunctionNames = {
         "LoadComponent",        "CopyComponentNameUtf8",   "ReleaseComponent",
         "InvokeComponentInt32", "GetComponentUnloadState", "ForgetComponentUnload"};
 

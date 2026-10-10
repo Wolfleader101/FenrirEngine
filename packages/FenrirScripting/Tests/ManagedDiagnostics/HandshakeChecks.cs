@@ -10,8 +10,8 @@ static class HandshakeChecks
 
     internal static unsafe void Run()
     {
-        // Native code declares the same nine pointer-sized slots; a different count changes the size.
-        Check(sizeof(BridgeFunctions) == 9 * IntPtr.Size, "Bridge table is not nine pointer-sized slots");
+        // Native code declares the same six pointer-sized slots; a different count changes the size.
+        Check(sizeof(BridgeFunctions) == 6 * IntPtr.Size, "Bridge table is not six pointer-sized slots");
 
         delegate* unmanaged[Cdecl]<int, void*, int, int*, int*, int> handshake = &Bootstrap.GetBridgeFunctions;
         int size = sizeof(BridgeFunctions);
@@ -30,9 +30,9 @@ static class HandshakeChecks
                   "Missing handshake storage accepted");
             Check(handshake(BridgeFunctions.Version, table, size, &version, &reported) == 0, "Matching handshake failed");
             BridgeFunctions* filled = (BridgeFunctions*)table;
-            Check(filled->TryAddInt32 != null && filled->ForgetComponentUnload != null, "Table entries missing");
-            int value = 0, written = 0, truncated = 0;
-            Check(filled->TryAddInt32(20, 22, &value, null, 0, &written, &truncated) == 0 && value == 42,
+            Check(filled->LoadComponent != null && filled->ForgetComponentUnload != null, "Table entries missing");
+            int state = 99, written = 99, truncated = 99;
+            Check(filled->GetComponentUnloadState(0, &state, null, 0, &written, &truncated) == 5 && state == -1,
                   "Table entry did not reach the export");
         }
         Console.WriteLine("Managed handshake: version/size mismatch leaves the table untouched; a match fills callable entries.");

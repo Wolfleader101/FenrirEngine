@@ -32,9 +32,6 @@ public static class Bootstrap
         catch (Exception) { return 3; } // Nothing may escape an unmanaged entry point.
         var functions = new BridgeFunctions
         {
-            TryAddInt32 = &TryAddInt32,
-            CopyGreetingUtf8 = &CopyGreetingUtf8,
-            EchoUtf8 = &EchoUtf8,
             LoadComponent = &LoadComponent,
             CopyComponentNameUtf8 = &CopyComponentNameUtf8,
             ReleaseComponent = &ReleaseComponent,
@@ -47,11 +44,6 @@ public static class Bootstrap
         return BridgeFunctions.Handshake(version, (BridgeFunctions*)table, size, reportedVersion, reportedSize,
             answerVersion, answerSize, functions);
     }
-
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int TryAddInt32(int left, int right, int* value, byte* diagnostic,
-                                       int capacity, int* written, int* truncated)
-        => RespondInteger(left, right, value, diagnostic, capacity, written, truncated);
 
     private static unsafe int RespondInteger(int left, int right, int* value, byte* diagnostic,
                                             int capacity, int* written, int* truncated)
@@ -97,17 +89,9 @@ public static class Bootstrap
         }
     }
 
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int CopyGreetingUtf8(byte* output, int capacity, int* required,
-                                             byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
-        => Respond(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
-    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
-    public static unsafe int EchoUtf8(byte* input, int length, byte* output, int capacity, int* required,
-                                     byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
-        => Respond(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
-
-    // Controlled diagnostic fixture, not a collectible loader. Native invocation
-    // checks own this synthetic registration and exercise malformed responses.
+    // Controlled diagnostic fixture, not a collectible loader. Every load returns the same synthetic
+    // registration. InvokeComponentInt32 serves scripted integer responses selected by `left`;
+    // CopyComponentNameUtf8 serves scripted UTF-8 query/copy responses selected by the string mode.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int LoadComponent(byte* path, int length, ulong* token, int* collectible,
         byte* diagnostic, int capacity, int* written, int* truncated)
@@ -116,7 +100,8 @@ public static class Bootstrap
     }
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int CopyComponentNameUtf8(ulong token, byte* output, int capacity, int* required,
-        byte* diagnostic, int diagnosticCapacity, int* written, int* truncated) => 1;
+        byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
+        => Respond(output, capacity, required, diagnostic, diagnosticCapacity, written, truncated);
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     public static unsafe int ReleaseComponent(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
     {

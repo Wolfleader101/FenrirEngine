@@ -8,11 +8,10 @@ a `.runtimeconfig.json`, obtains the assembly-loading and function-pointer runti
 the context. Obtaining the delegates starts or reuses CoreCLR. The native library
 then loads the managed bridge into the default load context and calls its single
 public entry point, `Bootstrap.GetBridgeFunctions`, which fills a versioned table of
-function pointers. The table holds the demo interop calls (`TryAddInt32`,
-`CopyGreetingUtf8`, `EchoUtf8`) and the component operations: loading, identity
-copying, integer invocation, release and weak unload observation.
-`IsInitialized` becomes true only when the bridge reports version `7` and the
-expected table size, and all nine table entries are non-null.
+function pointers: component loading, identity copying, integer invocation,
+release and weak unload observation.
+`IsInitialized` becomes true only when the bridge reports version `8` and the
+expected table size, and all six table entries are non-null.
 
 ## Select the target hosting SDK files
 
@@ -83,63 +82,33 @@ Run the example from `out/build/scripting/Examples/Hosting`. Multi-configuration
 generators such as Visual Studio place it in the `Debug` subdirectory. The executable
 is named `FenrirHostingExample` (`FenrirHostingExample.exe` on Windows).
 
-Build the managed bridge as described below, then run the example from the
-repository root, passing its generated runtime configuration and bridge DLL. For Windows PowerShell
-with a Visual Studio build:
+The example needs the bridge's runtime configuration, the bridge DLL and a published
+component. The test build produces all three under its build directory (see
+"Reusable diagnostic checks"). From the repository root in PowerShell, after a
+Visual Studio build with tests enabled:
 
 ```powershell
-.\out\build\scripting\Examples\Hosting\Debug\FenrirHostingExample.exe packages/FenrirScripting/Managed/Fenrir.ManagedHost/bin/Debug/net10.0/Fenrir.ManagedHost.runtimeconfig.json packages/FenrirScripting/Managed/Fenrir.ManagedHost/bin/Debug/net10.0/Fenrir.ManagedHost.dll
+$managed = 'out/build/scripting/Tests/managed/Debug'
+.\out\build\scripting\Examples\Hosting\Debug\FenrirHostingExample.exe "$managed/checks/ManagedDiagnostics.runtimeconfig.json" "$managed/checks/Fenrir.ManagedHost.dll" "$managed/component/Fenrir.HostingComponent.dll"
 ```
 
-Expected output and exit code zero (the path depends on the installed runtime and platform):
+Expected output and exit code zero:
 
 ```text
-Initialized before discovery: false
-Add before initialization: status=-1, value=none
-Call diagnostic: The managed bridge is not initialized.
-Greeting before initialization: status=-1
-Echo before initialization: status=-1
-Hostfxr discovered: true
-Initialized after discovery: false
-Hostfxr path: <absolute path to hostfxr>
-Hostfxr loaded: true
-Required exports resolved: true
-Runtime configuration initialized: true
-Runtime delegate obtained: true
-Host context closed: true
-Bridge assembly loaded: true
-Bridge version: 7
-Initialization succeeded: true
-Diagnostic: Managed bridge initialized; bridge version 7.
-Initialized after attempt: true
-Add(20, 22): status=0, value=42
-Add(INT32_MAX, 1): status=2, value=none
-Call diagnostic: System.OverflowException: Arithmetic operation resulted in an overflow.
-... managed stack trace (wording and paths vary) ...
-Diagnostic truncated: false
-Add after overflow: status=0, value=4
-Echo ASCII: status=0, bytes match=true
-Echo Unicode: status=0, bytes match=true
-Echo empty: status=0, bytes match=true
-Echo embedded null: status=0, bytes match=true
-Echo malformed UTF-8: status=1, value=none
-Echo diagnostic: System.Text.DecoderFallbackException: ...
-... managed stack trace (wording and paths vary) ...
-Echo diagnostic truncated: false
-Echo after invalid input: status=0, bytes match=true
-Diagnostic after wrapper destruction: true
-Echo diagnostic after wrapper destruction: true
-Echo bytes after wrapper destruction: true
-Greeting after wrapper destruction: status=0
-Greeting UTF-8 bytes: 27
-Greeting: Hello from .NET — π 🐺
-Greeting bytes match: true
+Initialize: ok
+Managed bridge initialized; bridge version 8.
+Loaded Fenrir.HostingComponent
+Calculations.Add(20, 22) = 42
+Calculations.Throw: status 3
+System.InvalidOperationException: Component failure — π 🐺.
+Release: status 0, unload Pending
+Call after release: status 5
 ```
 
 The example accepts:
 
 ```text
-FenrirHostingExample [--dotnet-root absolute-directory] runtimeconfig.json bridge.dll [component.dll]
+FenrirHostingExample [--dotnet-root absolute-directory] runtimeconfig.json bridge.dll component.dll
 ```
 
 An omitted .NET root uses `nethost`'s environment/registered-installation search.
@@ -275,7 +244,7 @@ See [ADR-0002](../../docs/adr/0002-bridge-in-default-load-context-with-function-
    different file with the same assembly name fails and is reported.
 2. `get_function_pointer` resolves `Fenrir.ManagedHost.Bootstrap.GetBridgeFunctions`
    with `UNMANAGEDCALLERSONLY_METHOD`. This is the only public bridge entry point.
-3. Native code calls it with its expected version (currently `7`), a table buffer
+3. Native code calls it with its expected version (currently `8`), a table buffer
    and the table size. The bridge always reports its own version and table size
    (`bridgeVersion`), and fills the table only if both match.
 4. A version mismatch, size mismatch or null table entry fails initialization with
@@ -299,65 +268,38 @@ assembly have loaded; resetting wrapper state does not undo those process-reside
 resources. The bridge has process lifetime. Separate collectible components can be
 loaded and invoked; unload status observes collection separately from release.
 
-## Integer interop and managed errors
+## Managed call results and diagnostics
 
-`DotNetHost::AddInt32(left, right)` exercises the actual bridge using two signed
-32-bit values. Its private native function pointer has the Cdecl signature
-`int32_t(int32_t, int32_t, int32_t*, uint8_t*, int32_t, int32_t*, int32_t*)`,
-matching the C# inputs, result, diagnostic buffer, capacity, bytes written, truncation flag,
-and `int` status returned by `Bootstrap.TryAddInt32`. The method is static and
-marked `UnmanagedCallersOnly` with `CallConvCdecl`; no automatic marshaling is involved.
-
-The output pointer refers to writable native storage for this call only. Managed
-code never retains it. A null pointer is rejected; any non-null pointer must satisfy
-the caller's storage contract. The bridge clears the output before attempting
-`checked(left + right)`, catches `OverflowException`, and catches other ordinary
-managed exceptions. Catch bodies copy `Exception.ToString()` into the supplied
-diagnostic buffer under separate exception handling. Fatal runtime failures and
-invalid native addresses are outside this contract.
+Every bridge export returns an `int` status and writes outputs only through
+caller-owned pointers, borrowed for that call and never retained.
 
 | Wire value | Meaning |
 | --- | --- |
-| `0` | Success; the output contains the sum |
-| `1` | Invalid argument, including a null output pointer |
+| `0` | Success |
+| `1` | Invalid argument |
 | `2` | Checked arithmetic overflow |
 | `3` | Another ordinary managed exception was caught |
+| `4` | Output buffer too small |
+| `5` | Invalid or released token |
 
 `BridgeStatus.cs` and the public native `ManagedCallStatus` enum mirror these wire
-values. They are not hostfxr/HRESULT statuses: positive values indicate failure,
-and only zero means success. The addition wrapper accepts only these four values.
-Unknown values become the wrapper-only `UnexpectedStatus` (`-2`), with the raw
-value in the diagnostic. Calling before initialization returns the wrapper-only
-`NotInitialized` (`-1`) without entering managed code.
+values. They are not hostfxr/HRESULT statuses. Unknown values become the
+wrapper-only `UnexpectedStatus` (`-2`), with the raw value in the diagnostic.
+Calling before initialization returns `NotInitialized` (`-1`) without entering
+managed code. A malformed response becomes `InvalidResponse` (`-3`).
 
-`Int32CallResult.value` is present only on success. Failure never exposes output
-storage, even if managed code wrote to it. The C++ diagnostic owns its UTF-8 text
-and remains valid after later calls and wrapper destruction. The operation runs
-once, with a 4096-byte diagnostic buffer; it is never repeated to size an error.
-Managed code writes complete Unicode scalars, without a BOM or terminator.
-Malformed UTF-16 in diagnostic text is replaced with U+FFFD. Byte counts preserve
-embedded nulls. `diagnosticTruncated` reports a shortened managed diagnostic.
+A result's `value` is present only on success; failure never exposes output storage.
+Each call supplies a 4096-byte diagnostic buffer. Catch blocks copy
+`Exception.ToString()` into it as complete UTF-8 scalars, with no BOM or
+terminator; `diagnosticTruncated` reports a shortened diagnostic. The operation runs
+once and is never repeated to size an error. The native diagnostic owns its text and
+outlives later calls and the host.
 
-All pointers refer to valid, non-overlapping storage and are never retained.
-The result, byte-count, and truncation pointers are required. Diagnostic storage
-may be null only with zero capacity. Negative capacity is invalid. Available
-outputs are cleared before validation; success writes zero diagnostic metadata.
-The wire truncation flag is a 32-bit integer, either 0 or 1, rather than an ABI bool.
-
-If formatting fails, the byte count and flag are zero and native code uses its
-status-specific fallback. Invalid counts, flags, or UTF-8 also produce a fallback
-with an explanation, preserving the original failure status. Success with
-nonzero diagnostic metadata becomes `InvalidResponse` (`-3`) with no value.
-Unknown operation statuses still become `UnexpectedStatus`. Native allocation
-and platform conversion failures retain normal C++ exception behavior.
-A failed addition leaves the host ready for another call. Reinitialization still
-clears readiness and all method pointers before attempting a new configuration.
-Calls must be serialized with initialization on the same wrapper.
-
-Rebuild the managed bridge as well as the native example for this step. A previous
-version-1 through version-5 bridge is rejected during the handshake before interop resolution. The bridge
-project enables unsafe blocks for explicit output pointers. Object handles,
-and callbacks remain future steps.
+If formatting fails, or the reported count, flag or UTF-8 is invalid, native code
+uses a status-specific fallback and keeps the original status. Success with
+nonzero diagnostic metadata becomes `InvalidResponse`. A failed call leaves the
+host ready. Native allocation and platform conversion failures keep normal C++
+exception behavior.
 
 ## Reusable diagnostic checks
 
@@ -378,7 +320,7 @@ table, `missing` entry). `notbridge` passes a non-bridge assembly. The nine chec
 UCO pointer calls, every UTF-8 truncation boundary, buffer canaries, a throwing
 exception formatter, real native calls, owning diagnostics, malformed bridge
 responses, query/copy failures without retries or partial results, recovery,
-and ABI version rejection. String fixture checks exercise both adapters and
+and ABI version rejection. String fixture checks exercise the UTF-8 adapter through `GetInfo` and
 count calls to ensure failed queries never copy and failed copies never retry.
 Component checks cover private registration counts, collectible identity, token
 reuse prevention, failed-load cleanup, missing component exports, Unicode paths,
@@ -408,125 +350,14 @@ unload check also passes in Release with optimized JIT lifetimes. Linux and macO
 execution is pending.
 With scripting disabled, test configuration is also skipped before .NET discovery.
 
-## UTF-8 strings and buffer ownership
+## UTF-8 output buffers
 
-`DotNetHost::GetGreeting()` returns `Utf8StringResult`: a status, an optional owning
-`std::string` of UTF-8 bytes, and an owning diagnostic. It calls the private Cdecl
-entry point `int32_t(uint8_t*, int32_t, int32_t*, uint8_t*, int32_t, int32_t*, int32_t*)`, matching
-`Bootstrap.CopyGreetingUtf8(byte* destination, int capacity, int* requiredBytes)`.
-No managed string, pointer into managed memory, or allocator ownership crosses the ABI.
-
-The payload is the fixed greeting `Hello from .NET — π 🐺`. Counts and capacities
-are signed 32-bit byte quantities, excluding any BOM or null terminator. Its 27
-UTF-8 bytes differ from its UTF-16 character count. The bridge uses
-`Encoding.UTF8.GetByteCount` to size it and the span overload of `GetBytes` to copy
-directly into borrowed native memory. The span covers only the payload, even if
-the caller supplies additional capacity. Pointers are never retained.
-
-| Arguments or condition | Result |
-| --- | --- |
-| Null destination and zero capacity, valid count pointer | `Success` (`0`); report required bytes without copying |
-| Non-null destination with enough capacity | `Success` (`0`); write the complete payload and report its byte count |
-| Non-null destination with insufficient capacity, including zero | `BufferTooSmall` (`4`); report required bytes and leave payload storage untouched |
-| Null count pointer, negative capacity, or null destination with nonzero capacity | `InvalidArgument` (`1`); no payload write; clear count when its pointer is valid |
-| Ordinary managed exception during encoding | `ManagedException` (`3`); clear count and discard any payload |
-
-Both pointers must designate valid native storage for this call and must not
-overlap. A non-null destination must cover the declared capacity; the count
-pointer must be writable. These are caller obligations, not checks that can be
-performed safely from a raw pointer. Insufficient capacity never produces a
-truncated string. The exception boundary catches ordinary managed exceptions;
-invalid memory addresses and fatal runtime failures remain outside the contract.
-
-The C++ wrapper queries the count, rejects negative lengths, allocates a native
-string, and copies into its storage. Because this greeting is immutable, the copy
-must report the same count as the query; a mismatch returns the wrapper-only
-`InvalidResponse` (`-3`). Managed errors and unexpected statuses expose no value.
-Native allocation failures retain normal C++ exception behavior. There is no
-retry loop for changing text in this step.
-
-`Utf8StringResult.value` owns the copied bytes independently of the wrapper and
-later calls. The example compares them against an explicit UTF-8 literal after
-destroying its host wrapper. `Greeting bytes match: true` and exit code zero are
-the completion checks; console rendering alone depends on terminal configuration.
-The wrapper's destruction still leaves CoreCLR and the managed bridge resident.
-Both UTF-8 exports take the same trailing diagnostic arguments as addition:
-buffer, capacity, bytes written, and an int32 truncation flag. Each query and copy
-has its own 4096-byte native diagnostic storage. All payload and diagnostic
-storage, including metadata, must be valid and non-overlapping. The diagnostic
-buffer may be null only with zero capacity; both metadata pointers are required.
-Available payload counts and diagnostic metadata are cleared before validation.
-
-The failing invocation supplies `Utf8StringResult.diagnostic` and
-`diagnosticTruncated`. Encoding/decoding exceptions use the guarded managed
-writer; invalid arguments and undersized payload buffers can use the native
-fallback without exception text. Original failure statuses survive unavailable
-or invalid diagnostics. Success requires empty diagnostic metadata; violations
-become `InvalidResponse`, with no value. Payload byte counts are independent of
-diagnostic counts and must still agree between successful query and copy.
-
-Native `ManagedDiagnosticBuffer.hpp` centralizes the owning diagnostic transfer
-and validation used by addition, greeting and echo. A query failure returns
-immediately; a copy failure discards its payload. Diagnostics never require
-another operation invocation. Successful calls return empty diagnostics and
-clear truncation. Error text remains owned after wrapper destruction.
-
-## Native input and managed string round trips
-
-`DotNetHost::EchoUtf8(std::string_view input)` borrows UTF-8 bytes for the duration
-of its two managed calls and returns the same `Utf8StringResult` as `GetGreeting`.
-The caller must keep the input valid and unchanged throughout the query and copy.
-The wrapper checks its size against `INT32_MAX` before narrowing to the bridge's
-32-bit length; excessive lengths return `InvalidArgument` without a managed call.
-An uninitialized wrapper returns `NotInitialized` first.
-
-The private Cdecl entry point is
-`int32_t(const uint8_t*, int32_t, uint8_t*, int32_t, int32_t*, uint8_t*, int32_t, int32_t*, int32_t*)`:
-input pointer, input byte count, output pointer, output capacity, required byte
-count, diagnostic pointer/capacity, bytes written, and truncation flag.
-`Bootstrap.EchoUtf8` uses the matching C# byte pointers and `int` fields.
-A null input pointer is valid only with length zero. Negative lengths, negative
-capacities, null count pointers, and null output with nonzero capacity are invalid.
-All native storage must be valid for its declared length and the input, output,
-and count storage must not overlap. Managed code never retains these pointers.
-
-Inside its exception handling, the export constructs `UTF8Encoding(false, true)`
-and calls `GetString` on a borrowed `ReadOnlySpan<byte>`. This creates a real
-managed string and rejects malformed UTF-8 rather than replacing bad sequences.
-`DecoderFallbackException` becomes `InvalidArgument` (`1`) with its exception
-details; other ordinary managed exceptions become `ManagedException` (`3`) with
-guarded diagnostics. Valid text is re-encoded without
-normalization, BOM insertion/removal, or null-termination. Embedded nulls are data.
-
-Greeting and echo share the private managed `ValidateUtf8Output` and
-`CopyUtf8Payload` methods. An undersized destination returns `BufferTooSmall` (`4`)
-and writes no payload. Invalid arguments or malformed input clear the count when
-its pointer is valid and leave payload storage untouched. The helper runs inside
-each export's exception handling; encoding initialization is also inside that
-handling. Invalid memory addresses and fatal runtime failures remain outside the
-caller-storage contract.
-
-Native `src/Utf8Buffer.hpp` shares query, allocation, status mapping, and copy-length
-checks between the two operations. It rejects negative or inconsistent counts
-with `InvalidResponse` and exposes no partial value after any failed call. It
-assumes a stable payload and does not retry. Its returned string owns its bytes;
-native allocation failures retain normal C++ exception behavior. `StringEncoding`
-continues to serve hostfxr's platform text representation; echo uses UTF-8 directly
-in its managed interface on every platform.
-
-The hosting example checks ASCII, `π 🐺`, empty text, and `A\0B` byte-for-byte. It
-then passes malformed UTF-8, expects status `1` with no value, and checks a valid
-call afterward. The last successful echo remains valid after both the input
-storage and wrapper are destroyed. A call failure leaves readiness intact; a new
-initialization attempt clears all method pointers. Rebuild both the native example
-and managed bridge, because older bridge ABIs are rejected before interop
-method resolution.
-
-Verification exercised the real managed export, additional malformed sequences,
-BOM and normalization preservation, a larger payload, raw pointer/capacity rules,
-buffer canaries, and failure/reinitialization recovery on Windows. Fixture checks
-also exercised failed copies, unexpected statuses, negative counts, and count
-mismatches for both adapters. Linux and macOS execution remains untested.
+`ManagedComponent::GetInfo` copies the component name with a two-call adapter: a
+size query (null destination, zero capacity), then a copy into native storage of
+exactly that size. Each call has its own diagnostic buffer. A failed query never
+copies, a failed copy is never retried, and a changed byte count becomes
+`InvalidResponse`. Only success exposes the owning string. Ticket 12 replaces this
+with general string returns.
 
 ## Private host-string encoding
 
@@ -589,7 +420,7 @@ does not build the managed bridge.
 
 `Fenrir.ManagedHost.Bootstrap.GetBridgeFunctions` is invoked by the native host
 with `UnmanagedCallersOnly` and an explicit Cdecl calling convention. It fills the
-version-7 function table. The attribute does not make this ordinary managed DLL a
+version-8 function table. The attribute does not make this ordinary managed DLL a
 native exported library; the runtime delegate resolves the method.
 
 ## Lifetime contract
@@ -752,7 +583,7 @@ Results and diagnostics remain valid after release and host destruction.
 The fixture's `Calculations.Add` executes `DependencyMath.Add` in the private
 dependency. The example checks 42, a missing method, a thrown exception, recovery
 to 4, invocation after host destruction, and rejection after release. Rebuild both
-the bridge and native example for ABI version 7.
+the bridge and native example for ABI version 8.
 
 ## Observing cooperative unloading
 
