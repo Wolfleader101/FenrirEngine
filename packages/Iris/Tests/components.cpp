@@ -18,6 +18,10 @@ namespace
     using Iris::Tests::Check;
 
     constexpr std::string_view CalculationType = "Iris.Examples.Component.Calculations";
+    constexpr std::string_view CounterType = "Iris.Examples.Component.Counter";
+    constexpr std::string_view StepCounterType = "Iris.Examples.Component.StepCounter";
+    constexpr std::string_view ShapeType = "Iris.Examples.Component.Shape";
+    constexpr std::string_view OtherType = "Iris.Examples.Component.Other";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -526,6 +530,128 @@ namespace
                  }
                  Check(component->Release().Succeeded() && !messages.empty(),
                        "A sink did not outlive the host that registered it");
+             }},
+            {"objects are built by constructor overload and keep their state",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 const auto add = *counter.FindInstanceMethod<void(std::int32_t)>("Add").value;
+                 const auto first = counter.CreateObject();
+                 const auto started = counter.CreateObject(std::int32_t{5});
+                 const auto scaled = counter.CreateObject(std::int32_t{4}, 2.5);
+                 Check(first.Succeeded() && started.Succeeded() && scaled.Succeeded(),
+                       "Construction failed: " + started.diagnostic);
+                 Check(value.Invoke(*first.value).value == 0 && value.Invoke(*started.value).value == 5 &&
+                           value.Invoke(*scaled.value).value == 10,
+                       "A constructor overload was not selected");
+                 Check(add.Invoke(*started.value, 3).Succeeded() && value.Invoke(*started.value).value == 8 &&
+                           value.Invoke(*first.value).value == 0,
+                       "Instance state was shared or lost between calls");
+             }},
+            {"virtual methods dispatch to the object's real type",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto step = *component.FindType(StepCounterType).value;
+                 const auto next = *counter.FindInstanceMethod<std::int32_t()>("Next").value;
+                 const auto plain = counter.CreateObject(std::int32_t{1});
+                 const auto stepper = step.CreateObject(std::int32_t{1});
+                 Check(next.Invoke(*plain.value).value == 2 && next.Invoke(*stepper.value).value == 11,
+                       "A call through the base method did not reach the override");
+             }},
+            {"construction failures and lookups are contained and leave nothing rooted",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto failed = counter.CreateObject(true);
+                 Check(failed.status == CallStatus::ManagedException && !failed.value &&
+                           failed.diagnostic.find("InvalidOperationException") != std::string::npos &&
+                           failed.diagnostic.find("\xCF\x80 \xF0\x9F\x90\xBA") != std::string::npos,
+                       "A constructor exception was not contained with its details");
+                 Check(component.FindType(ShapeType).value->CreateObject().status == CallStatus::NotFound,
+                       "An abstract type was constructed");
+                 Check(component.FindType(CalculationType).value->CreateObject().status == CallStatus::NotFound,
+                       "A static type was constructed");
+                 Check(counter.CreateObject(std::int64_t{1}).status == CallStatus::NotFound,
+                       "A constructor matched by widening");
+                 auto recovered = counter.CreateObject(false);
+                 Check(recovered.Succeeded(), "Construction did not recover after a failure");
+                 Check(recovered.value->Release().Succeeded(), "Releasing the object failed");
+                 Check(component.Release().Succeeded(), "Failed constructions left something rooted");
+                 Check(!component.IsLoaded(), "The component stayed loaded");
+             }},
+            {"a component with live objects cannot be released until they are",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 const auto value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 auto object = counter.CreateObject();
+                 Check(object.Succeeded() && object.value->IsValid(), "Construction failed");
+                 const auto rejected = component.Release();
+                 Check(rejected.status == CallStatus::InUse && component.IsLoaded() &&
+                           value.Invoke(*object.value).Succeeded(),
+                       "A rejected release damaged the component");
+                 Check(object.value->Release().Succeeded() && !object.value->IsValid(), "Releasing the object failed");
+                 Check(object.value->Release().Succeeded(), "Releasing an object twice was not idempotent");
+                 Check(value.Invoke(*object.value).status == CallStatus::InvalidHandle,
+                       "A released object still worked");
+                 Check(component.Release().Succeeded() && !component.IsLoaded(),
+                       "Releasing the component failed after its objects");
+             }},
+            {"moved objects transfer ownership and destruction releases them",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto counter = *component.FindType(CounterType).value;
+                 {
+                     auto built = counter.CreateObject();
+                     Object moved(std::move(*built.value));
+                     Check(!built.value->IsValid() && moved.IsValid(), "A move did not transfer ownership");
+                     Check(built.value->Release().Succeeded(), "A moved-from object was not a harmless release");
+                     Check(component.Release().status == CallStatus::InUse, "A moved object was not still owned");
+                 }
+                 Check(component.Release().Succeeded(), "Destroying the last object did not release its root");
+             }},
+            {"objects and components can be destroyed in any order",
+             [&] {
+                 std::optional<Component> component;
+                 std::optional<Object> object;
+                 std::optional<InstanceMethod<std::int32_t()>> value;
+                 {
+                     auto host = StartHost(arguments);
+                     component = Load(*host, arguments.component);
+                     const auto counter = *component->FindType(CounterType).value;
+                     object.emplace(std::move(*counter.CreateObject().value));
+                     value = *counter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 }
+                 Check(value->Invoke(*object).Succeeded(), "An object stopped working when its host was destroyed");
+                 component.reset(); // Destroying a component force-releases it, dropping the object it still owned.
+                 Check(value->Invoke(*object).status == CallStatus::InvalidHandle, "An object survived its component");
+                 Check(object->Release().status == CallStatus::InvalidHandle && !object->IsValid(),
+                       "Releasing an object after its component was destroyed was not InvalidHandle");
+                 object.reset();
+             }},
+            {"an object only works with methods of its own component",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto first = Load(*host, arguments.component);
+                 const auto second = Load(*host, arguments.component);
+                 const auto firstCounter = *first.FindType(CounterType).value;
+                 const auto secondCounter = *second.FindType(CounterType).value;
+                 const auto object = firstCounter.CreateObject();
+                 const auto foreign = *secondCounter.FindInstanceMethod<std::int32_t()>("Value").value;
+                 const auto result = foreign.Invoke(*object.value);
+                 Check(result.status == CallStatus::InvalidArgument && !result.value,
+                       "An object from another component was accepted");
+                 const auto other = *first.FindType(OtherType).value;
+                 const auto ping = *other.FindInstanceMethod<std::int32_t()>("Ping").value;
+                 Check(ping.Invoke(*object.value).status == CallStatus::InvalidArgument,
+                       "An object of the wrong type was accepted");
              }},
             {"a Unicode path loads, and a missing dependency fails only when used",
              [&] {

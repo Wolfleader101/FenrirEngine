@@ -9,7 +9,7 @@ namespace Iris.Bridge;
 internal static class ComponentRegistry
 {
     // A method resolved by exact signature, with the wire kinds of its parameters and return value.
-    private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, int ReturnKind);
+    private sealed record MethodRecord(MethodInfo Method, int[] ParameterKinds, int ReturnKind, bool IsStatic);
 
     // Handles to types and methods looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
@@ -20,6 +20,9 @@ internal static class ComponentRegistry
         internal readonly Dictionary<ulong, Type> Types = new();
         internal readonly Dictionary<MethodInfo, ulong> MethodIds = new();
         internal readonly Dictionary<ulong, MethodRecord> Methods = new();
+        // Objects the native side owns. These are the only strong references to them, so releasing the
+        // component (which drops the entry) or the object (which removes it here) is what unroots them.
+        internal readonly Dictionary<ulong, object> Objects = new();
     }
     private sealed record Entry(ComponentLoadContext Context, Assembly Assembly, string Name)
     {
@@ -35,8 +38,10 @@ internal static class ComponentRegistry
     private static ulong lastToken;
     private static ulong lastTypeId; // Type and method ids come from process-wide counters,
     private static ulong lastMethodId; // so a handle is never reused.
+    private static ulong lastObjectId;
 
     internal enum FindResult { Found, NotFound, InvalidHandle }
+    internal enum ReleaseResult { Released, InvalidHandle, InUse }
 
     // Internal verification seam; never a native/public diagnostic API.
     internal static int Count
@@ -141,7 +146,7 @@ internal static class ComponentRegistry
     // Finds a public static, non-generic method on a looked-up type by name and exact parameter and
     // return kinds. Looking the same method up again returns the same handle. UnmanagedCallersOnly
     // methods are excluded.
-    internal static FindResult TryFindMethod(ulong token, ulong typeId, string name, int returnKind, int[] parameterKinds, out ulong methodId)
+    internal static FindResult TryFindMethod(ulong token, ulong typeId, string name, int returnKind, int[] parameterKinds, bool isStatic, out ulong methodId)
     {
         methodId = 0;
         Entry entry;
@@ -159,8 +164,11 @@ internal static class ComponentRegistry
             parameterTypes[index] = ValueKinds.ToType(parameterKinds[index], allowVoid: false);
 
         // No registry lock is held while reflecting, which can load assemblies.
-        MethodInfo? method = type.GetMethod(name, BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly,
-            binder: null, types: parameterTypes, modifiers: null);
+        // Static methods must be declared on the type; instance methods may be inherited, and a call
+        // through a base type's method dispatches virtually to the object's override.
+        BindingFlags flags = isStatic ? BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly
+                                      : BindingFlags.Public | BindingFlags.Instance;
+        MethodInfo? method = type.GetMethod(name, flags, binder: null, types: parameterTypes, modifiers: null);
         if (method == null || method.ReturnType != returnType || method.IsGenericMethod ||
             method.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false))
             return FindResult.NotFound;
@@ -177,42 +185,141 @@ internal static class ComponentRegistry
             {
                 methodId = checked(++lastMethodId);
                 entry.Handles.MethodIds.Add(method, methodId);
-                entry.Handles.Methods.Add(methodId, new MethodRecord(method, (int[])parameterKinds.Clone(), returnKind));
+                entry.Handles.Methods.Add(methodId, new MethodRecord(method, (int[])parameterKinds.Clone(), returnKind, isStatic));
             }
             return FindResult.Found;
         }
     }
 
-    // Runs a found method. False for an unknown component or method handle. Throws
-    // BridgeArgumentException for a wrong argument count; component exceptions propagate unwrapped.
+    // Runs a found static method. False for an unknown component or method handle. Throws
+    // BridgeArgumentException for a wrong argument count or an instance method; component exceptions
+    // propagate unwrapped.
     internal static bool TryInvokeMethod(ulong token, ulong methodId, ReadOnlySpan<ulong> arguments, out ulong result)
     {
         result = 0;
-        MethodRecord method;
+        if (!TryGetMethod(token, methodId, requireObject: false, 0, out MethodRecord? method, out _)) return false;
+        if (!method!.IsStatic) throw new BridgeArgumentException("An instance method needs an object.");
+        result = Run(method, null, arguments);
+        return true;
+    }
+
+    // Runs a found instance method on an owned object. False for an unknown component, method or object
+    // handle. Throws BridgeArgumentException for a static method, an object that is not an instance of
+    // the method's declaring type, or a wrong argument count.
+    internal static bool TryInvokeInstanceMethod(ulong token, ulong methodId, ulong objectId, ReadOnlySpan<ulong> arguments, out ulong result)
+    {
+        result = 0;
+        if (!TryGetMethod(token, methodId, requireObject: true, objectId, out MethodRecord? method, out object? target)) return false;
+        if (method!.IsStatic) throw new BridgeArgumentException("A static method cannot be invoked on an object.");
+        if (!method.Method.DeclaringType!.IsInstanceOfType(target))
+            throw new BridgeArgumentException("The object is not an instance of the method's declaring type.");
+        result = Run(method, target, arguments);
+        return true;
+    }
+
+    private static bool TryGetMethod(ulong token, ulong methodId, bool requireObject, ulong objectId, out MethodRecord? method, out object? target)
+    {
+        method = null;
+        target = null;
         lock (Gate)
         {
             if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
                 !entry.Handles.Methods.TryGetValue(methodId, out MethodRecord? found)) return false;
+            if (requireObject && !entry.Handles.Objects.TryGetValue(objectId, out target)) return false;
             method = found;
+            return true;
         }
+    }
+
+    private static ulong Run(MethodRecord method, object? target, ReadOnlySpan<ulong> arguments)
+    {
         if (arguments.Length != method.ParameterKinds.Length)
             throw new BridgeArgumentException($"The method takes {method.ParameterKinds.Length} arguments, not {arguments.Length}.");
         var values = new object[arguments.Length];
         for (int index = 0; index < values.Length; ++index)
             values[index] = ValueKinds.ToObject(method.ParameterKinds[index], arguments[index]);
-        // No registry lock is held while user code runs. The local MethodRecord roots an accepted
-        // in-flight call until it returns.
-        object? returned = method.Method.Invoke(null, BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);
-        result = ValueKinds.ToSlot(method.ReturnKind, returned);
-        return true;
+        // No registry lock is held while user code runs. The locals root the method and target for the call.
+        object? returned = method.Method.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);
+        return ValueKinds.ToSlot(method.ReturnKind, returned);
     }
 
-    internal static bool Release(ulong token)
+    internal enum CreateResult { Created, NotFound, InvalidHandle }
+
+    // Constructs an object of a looked-up type with the public constructor whose parameters match the
+    // kinds exactly, and roots it in the component. A constructor exception propagates unwrapped and
+    // roots nothing.
+    internal static CreateResult TryCreateObject(ulong token, ulong typeId, int[] parameterKinds, ReadOnlySpan<ulong> arguments, out ulong objectId)
+    {
+        objectId = 0;
+        Entry entry;
+        Type type;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Types.TryGetValue(typeId, out Type? found)) return CreateResult.InvalidHandle;
+            entry = active;
+            type = found;
+        }
+        var parameterTypes = new Type[parameterKinds.Length];
+        for (int index = 0; index < parameterTypes.Length; ++index)
+            parameterTypes[index] = ValueKinds.ToType(parameterKinds[index], allowVoid: false);
+        if (type.IsAbstract || type.IsInterface) return CreateResult.NotFound;
+        ConstructorInfo? constructor = type.GetConstructor(BindingFlags.Public | BindingFlags.Instance, binder: null, types: parameterTypes, modifiers: null);
+        if (constructor == null) return CreateResult.NotFound;
+        ParameterInfo[] declared = constructor.GetParameters();
+        for (int index = 0; index < declared.Length; ++index)
+            if (declared[index].ParameterType != parameterTypes[index]) return CreateResult.NotFound;
+        var values = new object[arguments.Length];
+        for (int index = 0; index < values.Length; ++index)
+            values[index] = ValueKinds.ToObject(parameterKinds[index], arguments[index]);
+
+        // No registry lock is held while the constructor runs.
+        object instance = constructor.Invoke(BindingFlags.DoNotWrapExceptions, binder: null, values, culture: null);
+        lock (Gate)
+        {
+            // The component may have been released while the constructor ran; then the object is dropped.
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                return CreateResult.InvalidHandle;
+            objectId = checked(++lastObjectId);
+            entry.Handles.Objects.Add(objectId, instance);
+            return CreateResult.Created;
+        }
+    }
+
+    // Unroots an owned object. False for an unknown component or object, including one already released.
+    internal static bool ReleaseObject(ulong token, ulong objectId)
+    {
+        lock (Gate)
+        {
+            return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry &&
+                   entry.Handles.Objects.Remove(objectId);
+        }
+    }
+
+    // Verification seams, never native-visible.
+    internal static int LiveObjectCount(ulong token)
+    {
+        lock (Gate) return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry ? entry.Handles.Objects.Count : 0;
+    }
+
+    internal static object? PeekObject(ulong token, ulong objectId)
+    {
+        lock (Gate)
+        {
+            return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry &&
+                   entry.Handles.Objects.TryGetValue(objectId, out object? target) ? target : null;
+        }
+    }
+
+    // Releases a component. Unless forced, a component with live objects is InUse and stays loaded:
+    // dropping its roots would silently invalidate objects native code still owns. Forcing drops them.
+    internal static ReleaseResult TryRelease(ulong token, bool force)
     {
         Entry? entry;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active == null) return false;
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active == null) return ReleaseResult.InvalidHandle;
+            if (!force && record.Active.Handles.Objects.Count > 0) return ReleaseResult.InUse;
             entry = record.Active;
             // Invalidate access and drop all strong fields before running unload handlers.
             record.Active = null;
@@ -220,8 +327,10 @@ internal static class ComponentRegistry
         // No permanent registry root remains, even if an unload handler throws.
         BridgeLog.Write(LogLevel.Info, $"Releasing component '{entry.Name}' (handle {token}); unloading is cooperative.");
         entry.Context.Unload();
-        return true;
+        return ReleaseResult.Released;
     }
+
+    internal static bool Release(ulong token) => TryRelease(token, force: false) == ReleaseResult.Released;
 
     internal static bool TryGetUnloadState(ulong token, out ComponentUnloadState state)
     {

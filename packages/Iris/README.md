@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 14.
+Managed bridge initialized; bridge version 15.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -173,6 +173,31 @@ including `OverflowException` and `ArgumentException`, is `ManagedException` wit
 status is never derived from the exception's type. A `Method` is a cheap value like `Type`, stops
 working (`InvalidHandle`) when its component is released, and does not keep it from unloading.
 
+### Objects
+
+`Type::CreateObject(args...)` constructs an object with the public constructor whose parameters match
+exactly (`CreateObject(std::int32_t{5}, 2.5)` calls `T(int, double)`) and returns an `Object` that owns it.
+Instance methods are found with `Type::FindInstanceMethod<Signature>` and called on an object:
+
+```cpp
+const auto counter = *component.FindType("MyComponent.Counter").value;
+auto object = counter.CreateObject(std::int32_t{5});                       // Counter(int)
+const auto next = counter.FindInstanceMethod<std::int32_t()>("Next").value;  // virtual int Next()
+const auto result = next->Invoke(*object.value);
+```
+
+While an `Object` exists the bridge keeps the managed object alive, so it survives GC, and holds only that
+one reference; releasing the `Object` (or destroying it) unroots it. A virtual method dispatches to the
+override of the object's real type, so a `Next` found on `Counter` runs a subclass's `Next`. An exception
+from a constructor is `ManagedException` and roots nothing.
+
+**Release policy.** `Component::Release()` is refused with `InUse` while the component has live objects,
+and the component stays loaded and usable; release the objects first. Destroying a `Component` always
+force-releases it, so a leaked object can never pin a registration: the objects it still held then return
+`InvalidHandle`, as does releasing them. An `Object` may outlive its `Host` and `Component` object and is
+destroyed safely in any order. An object only works with methods from its own component (else
+`InvalidArgument`) and of a type it is an instance of.
+
 ### Logging
 
 `Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink):
@@ -220,7 +245,8 @@ and an owning UTF-8 `diagnostic`.
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
 | `BufferTooSmall` (4) | An output buffer was too small. |
 | `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
-| `NotFound` (6) | A lookup found nothing (for example a type name that is missing, not public or a generic definition). |
+| `NotFound` (6) | A lookup found nothing (a type, method or constructor that is missing, not public, generic or abstract). |
+| `InUse` (7) | `Component::Release` was refused because the component still has live objects. |
 | `NotInitialized` (-1) | The host is not initialized. No managed code ran. |
 | `UnexpectedStatus` (-2) | The bridge returned an unknown status. |
 | `InvalidResponse` (-3) | The bridge returned a malformed response. |

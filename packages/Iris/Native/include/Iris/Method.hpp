@@ -13,6 +13,7 @@
 
 namespace Iris
 {
+    class Object;
     class Type;
 
     /**
@@ -105,6 +106,8 @@ namespace Iris
         {
           public:
             [[nodiscard]] CallResult<std::uint64_t> Invoke(std::span<const std::uint64_t> arguments) const;
+            [[nodiscard]] CallResult<std::uint64_t> InvokeInstance(const Object& object,
+                                                                   std::span<const std::uint64_t> arguments) const;
 
           private:
             friend class ::Iris::Type;
@@ -157,6 +160,38 @@ namespace Iris
       private:
         friend class Type;
         explicit Method(Detail::RawMethod rawMethod) noexcept : method(std::move(rawMethod))
+        {
+        }
+        Detail::RawMethod method;
+    };
+
+    template <typename Signature>
+    class InstanceMethod;
+
+    /**
+     * @brief A handle to a public instance method, resolved by exact signature.
+     *
+     * Found with Type::FindInstanceMethod and called on an Object that is an instance of the method's
+     * declaring type (the type it was found on, or one of its subclasses). A virtual method dispatches
+     * to the object's override. The object must belong to the same component, or the call is
+     * InvalidArgument; a released object or component is InvalidHandle. Otherwise it behaves like
+     * Method: a cheap, copyable value that holds no managed reference.
+     */
+    template <PrimitiveValue... Args, typename Result>
+        requires(std::is_void_v<Result> || PrimitiveValue<Result>)
+    class InstanceMethod<Result(Args...)>
+    {
+      public:
+        [[nodiscard]] CallResult<Result> Invoke(const Object& object, Args... arguments) const
+        {
+            const std::uint64_t slots[sizeof...(Args) + 1] = {Detail::ToSlot<Args>(arguments)..., 0};
+            return Detail::ToTyped<Result>(
+                method.InvokeInstance(object, std::span<const std::uint64_t>(slots, sizeof...(Args))));
+        }
+
+      private:
+        friend class Type;
+        explicit InstanceMethod(Detail::RawMethod rawMethod) noexcept : method(std::move(rawMethod))
         {
         }
         Detail::RawMethod method;

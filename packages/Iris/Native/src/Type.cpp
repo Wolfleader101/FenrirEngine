@@ -3,6 +3,7 @@
 #include "ManagedDiagnosticBuffer.hpp"
 #include "MethodState.hpp"
 #include "Names.hpp"
+#include "ObjectState.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
@@ -40,7 +41,8 @@ namespace Iris
     }
 
     CallResult<Detail::RawMethod> Type::FindMethodRaw(std::string_view name, Detail::ValueKind returnKind,
-                                                      std::span<const Detail::ValueKind> parameterKinds) const
+                                                      std::span<const Detail::ValueKind> parameterKinds,
+                                                      bool isStatic) const
     {
         if (const auto problem = Detail::NameProblem(name, "method"))
         {
@@ -54,7 +56,7 @@ namespace Iris
         }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t methodId = 0;
-        const auto status = state->bridge->findMethod(
+        const auto status = (isStatic ? state->bridge->findMethod : state->bridge->findInstanceMethod)(
             state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
             static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind), kinds.data(),
             static_cast<std::int32_t>(kinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
@@ -70,5 +72,32 @@ namespace Iris
         handle->method = methodId;
         return Detail::CompleteCall<Detail::RawMethod>(status, "FindMethod", diagnostic,
                                                        Detail::RawMethod(std::move(handle)));
+    }
+
+    CallResult<Object> Type::CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
+                                             std::span<const std::uint64_t> arguments) const
+    {
+        std::vector<std::int32_t> kinds;
+        kinds.reserve(parameterKinds.size());
+        for (const auto kind : parameterKinds)
+        {
+            kinds.push_back(static_cast<std::int32_t>(kind));
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::uint64_t objectId = 0;
+        const auto status = state->bridge->createObject(
+            state->component, state->type, kinds.data(), arguments.data(), static_cast<std::int32_t>(kinds.size()),
+            &objectId, diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && objectId == 0)
+        {
+            return Detail::Failure<Object>(CallStatus::InvalidResponse, "CreateObject returned the invalid handle 0.");
+        }
+        // The owner exists before the result is inspected, so a handle that arrives with a malformed
+        // response is still released.
+        auto owned = std::make_unique<Object::State>();
+        owned->bridge = state->bridge;
+        owned->component = state->component;
+        owned->object = objectId;
+        return Detail::CompleteCall<Object>(status, "CreateObject", diagnostic, Object(std::move(owned)));
     }
 } // namespace Iris

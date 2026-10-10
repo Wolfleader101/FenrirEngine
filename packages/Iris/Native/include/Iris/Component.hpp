@@ -58,7 +58,10 @@ namespace Iris
         // component's dependencies are not found through it.
         [[nodiscard]] CallResult<Type> FindType(std::string_view fullName) const;
 
-        // Idempotent. Invalidates this owner even when the unload request reports an error.
+        // Releases the component and requests cooperative unloading. Idempotent. Invalidates this owner even
+        // when the unload request reports an error, except that a component with live Objects is refused
+        // with InUse and stays loaded and usable: release the objects first. Destroying the owner
+        // releases regardless, dropping any objects it still holds.
         [[nodiscard]] CallResult<void> Release();
 
       private:
