@@ -18,7 +18,7 @@ internal static class TypeQueries
 {
     internal enum Query { Base = 0, Interfaces = 1, Attributes = 2 }
 
-    private enum Tag { Null = 0, Bool = 1, Signed = 2, Unsigned = 3, Real = 4, Text = 5 }
+    private enum Tag { Null = 0, Bool = 1, Signed = 2, Unsigned = 3, Real = 4, Text = 5, Unsupported = 6 }
 
     private sealed class Writer
     {
@@ -83,7 +83,8 @@ internal static class TypeQueries
     }
 
     // name is empty for a constructor argument. Anything that is not a bool, number, string or Type is reported
-    // as a null with its type name, so the native side can tell it was not representable.
+    // as Unsupported with its type name. Reading attributes loads the assemblies of the attribute types and of
+    // any typeof() argument; one that cannot be loaded fails the whole query.
     private static void WriteArgument(Writer writer, string name, CustomAttributeTypedArgument argument)
     {
         writer.String(name);
@@ -120,7 +121,7 @@ internal static class TypeQueries
                 break;
             default:
                 // Arrays and anything else: not representable.
-                writer.Int32((int)Tag.Null);
+                writer.Int32((int)Tag.Unsupported);
                 break;
         }
     }

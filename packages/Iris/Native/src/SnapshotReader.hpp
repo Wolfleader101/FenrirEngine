@@ -53,6 +53,11 @@ namespace Iris::Detail
         {
             return ok && cursor == end;
         }
+        // Marks the data malformed (an unknown tag, say).
+        void Fail() noexcept
+        {
+            ok = false;
+        }
         [[nodiscard]] bool Ok() const noexcept
         {
             return ok;

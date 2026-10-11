@@ -410,18 +410,22 @@ for (const auto& type : *types.value)
 
 - **Listing.** `Component::GetTypes()` returns the public, non-generic types the component assembly defines,
   nested public types included, in declaration (metadata) order. These are exactly the types `FindType` can
-  find; internal and generic-definition types are not listed.
+  find; internal and generic-definition types are not listed. A type that fails to load (a base class in a
+  missing assembly, say) is left out and reported to the log sink as a warning. "Declaration order" is the
+  order the compiler emitted the types: source order for C#, with a nested type after its enclosing type.
 - **Relationships.** `GetBaseType` and `GetInterfaces` are owning snapshots naming types, which need not
   belong to the component (`System.Object`, a contract). Interfaces include inherited ones.
   `IsAssignableTo(Type)` compares two types of the same component. `IsAssignableTo("Full.Name")` resolves a
-  name in the component assembly, then the framework, then the assemblies the component references (so a
+  name in the component assembly (public types only), then the framework, then the assemblies the component references (so a
   contract assembly works whether it is shared or private); an unresolvable name is `NotFound`.
 - **Attributes.** `GetAttributes` lists the attributes on the type itself (not inherited ones) with their
   constructor arguments followed by named arguments. Arguments are read from metadata, so the attribute is
   never instantiated and no component code runs. An argument value is null/unrepresentable
   (`std::monostate`), `bool`, `std::int64_t` (signed integers and enums), `std::uint64_t` (unsigned integers
   and chars), `double`, or `std::string` (a string, or a `Type` argument's full name); `typeName` says what it
-  was declared as. Attributes on methods and fields are not available yet.
+  was declared as. Reading attributes loads the assemblies of the attribute types and of any `typeof`
+  argument into the component, and one that cannot load fails the query. Attributes on methods and fields
+  are not available yet.
 - **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
   like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 

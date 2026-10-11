@@ -59,8 +59,9 @@ namespace Iris
 
         // Lists the component's public, non-generic types as handles, in declaration order (the order they
         // appear in the assembly's metadata), nested public types included. These are exactly the types
-        // FindType finds; internal and generic-definition types are not listed. A snapshot: types are not
-        // added or removed after load, and the handles behave like those from FindType.
+        // FindType finds, except that a type that fails to load (a base class in a missing assembly) is left out and
+        // reported to the log sink as a warning; internal and generic-definition types are not listed. A snapshot:
+        // types are not added or removed after load, and the handles behave like those from FindType.
         [[nodiscard]] CallResult<std::vector<Type>> GetTypes() const;
 
         // Finds a public, closed type defined in this component's assembly by full name (for example
