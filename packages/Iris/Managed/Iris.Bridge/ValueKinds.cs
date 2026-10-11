@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Iris.Bridge;
 
@@ -22,12 +24,24 @@ internal enum ValueKind : int
     // An object handle in the slot. It matches any class or interface parameter or return type (but not
     // string or arrays), since the native signature cannot name the managed type; the real type is
     // checked when the call is made. Zero is null.
-    Object = 12
+    Object = 12,
+    // A string. An argument slot holds a pointer to a borrowed StringArgument; a return slot holds a block
+    // from EncodeString (zero is null) that the caller copies and gives back to FreeString.
+    String = 13
+}
+
+// What a string argument's slot points to. The native side owns it and keeps it alive for the call.
+[StructLayout(LayoutKind.Sequential)]
+internal unsafe struct StringArgument
+{
+    internal byte* Data;
+    internal int Length;
+    internal int IsNull; // Nonzero for null; Data and Length are then ignored.
 }
 
 internal static class ValueKinds
 {
-    internal static bool IsValid(int kind) => kind >= (int)ValueKind.Void && kind <= (int)ValueKind.Object;
+    internal static bool IsValid(int kind) => kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String;
 
     // Throws BridgeArgumentException for a kind that is unknown, or that names no single type: Object
     // matches many, and Void is a return type only.
@@ -36,6 +50,51 @@ internal static class ValueKinds
         if (!IsValid(kind) || (ValueKind)kind == ValueKind.Void)
             throw new BridgeArgumentException($"Unsupported parameter kind {kind}.");
     }
+
+    // Strict on both sides: bytes that are not UTF-8 and text with an unpaired surrogate are errors, never
+    // replacement characters.
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    // Reads a borrowed argument. Malformed UTF-8 is an argument error, found before managed code runs.
+    private static unsafe string? DecodeString(ulong slot)
+    {
+        if (slot == 0) throw new BridgeArgumentException("A string argument has no value.");
+        StringArgument* argument = (StringArgument*)slot;
+        if (argument->IsNull != 0) return null;
+        if (argument->Length < 0 || (argument->Length > 0 && argument->Data == null))
+            throw new BridgeArgumentException("A string argument has an invalid length.");
+        if (argument->Length == 0) return string.Empty;
+        try
+        {
+            return StrictUtf8.GetString(argument->Data, argument->Length);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new BridgeArgumentException("A string argument is not valid UTF-8.");
+        }
+    }
+
+    // A returned string: an eight-byte length followed by that many UTF-8 bytes, in memory the caller
+    // must give back with FreeString. Null is zero. Nothing about the size is capped or negotiated.
+    private static unsafe ulong EncodeString(string? text)
+    {
+        if (text == null) return 0;
+        int count;
+        try
+        {
+            count = StrictUtf8.GetByteCount(text);
+        }
+        catch (EncoderFallbackException)
+        {
+            throw new BridgeArgumentException("A returned string has no UTF-8 form (it has an unpaired surrogate).");
+        }
+        byte* block = (byte*)NativeMemory.Alloc((nuint)count + 8);
+        *(long*)block = count;
+        StrictUtf8.GetBytes(text, new Span<byte>(block + 8, count));
+        return (ulong)block;
+    }
+
+    internal static unsafe void FreeString(ulong block) => NativeMemory.Free((void*)block);
 
     // The one managed type of a by-value kind. Object has none; callers match it with IsObjectType.
     internal static Type ToType(int kind, bool allowVoid)
@@ -54,11 +113,12 @@ internal static class ValueKinds
             ValueKind.UInt64 => typeof(ulong),
             ValueKind.Float => typeof(float),
             ValueKind.Double => typeof(double),
+            ValueKind.String => typeof(string),
             _ => throw new BridgeArgumentException($"Unsupported value kind {kind}.")
         };
     }
 
-    internal static object ToObject(int kind, ulong slot)
+    internal static object? ToObject(int kind, ulong slot)
     {
         return (ValueKind)kind switch
         {
@@ -73,6 +133,7 @@ internal static class ValueKinds
             ValueKind.UInt64 => slot,
             ValueKind.Float => BitConverter.UInt32BitsToSingle(unchecked((uint)slot)),
             ValueKind.Double => BitConverter.UInt64BitsToDouble(slot),
+            ValueKind.String => DecodeString(slot),
             _ => throw new BridgeArgumentException($"Unsupported argument kind {kind}.")
         };
     }
@@ -94,6 +155,7 @@ internal static class ValueKinds
             ValueKind.UInt64 => (ulong)value!,
             ValueKind.Float => BitConverter.SingleToUInt32Bits((float)value!),
             ValueKind.Double => unchecked((ulong)BitConverter.DoubleToInt64Bits((double)value!)),
+            ValueKind.String => EncodeString((string?)value),
             _ => throw new BridgeArgumentException($"Unsupported return kind {kind}.")
         };
     }

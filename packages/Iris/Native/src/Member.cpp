@@ -42,6 +42,11 @@ namespace Iris
         return Object(std::move(owned));
     }
 
+    std::optional<std::string> Detail::RawMember::TakeString(std::uint64_t block) const
+    {
+        return Detail::TakeString(*state->bridge, block);
+    }
+
     CallResult<std::uint64_t> Detail::RawMember::Get(const Object* target) const
     {
         std::uint64_t targetHandle = 0;

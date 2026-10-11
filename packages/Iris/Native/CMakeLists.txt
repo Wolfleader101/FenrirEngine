@@ -10,6 +10,7 @@ add_library(Iris STATIC
     src/Member.cpp
     src/MemberState.hpp
     src/Method.cpp
+    src/StringBlock.cpp
     src/Object.cpp
     src/ObjectState.hpp
     src/MethodState.hpp

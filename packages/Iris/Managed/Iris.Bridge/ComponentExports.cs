@@ -310,6 +310,13 @@ public static partial class Bootstrap
         }
     }
 
+    // Gives back a string block returned in a result slot. Zero is ignored. Cannot fail.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static void FreeString(ulong block)
+    {
+        if (block != 0) ValueKinds.FreeString(block);
+    }
+
     // Runs an instance method on an owned object. Like InvokeMethod, except the object handle must belong
     // to this component and be an instance of the method's declaring type (else InvalidArgument).
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

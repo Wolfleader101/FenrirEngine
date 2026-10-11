@@ -9,6 +9,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -17,11 +18,13 @@ namespace Iris
     class Type;
 
     /**
-     * @brief The value types a field or property can have: a PrimitiveValue, or `std::optional<Object>`
-     * for a class- or interface-typed member, where an empty optional is null.
+     * @brief The value types a field or property can have: a PrimitiveValue, `std::optional<Object>` for a
+     * class- or interface-typed member, or `std::optional<std::string>` for a string; an empty optional is
+     * null (distinct from an empty string).
      */
     template <typename T>
-    concept MemberValue = PrimitiveValue<T> || std::same_as<T, std::optional<Object>>;
+    concept MemberValue =
+        PrimitiveValue<T> || std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>>;
 
     namespace Detail
     {
@@ -37,6 +40,8 @@ namespace Iris
                                                const Object* objectValue) const;
             // Takes ownership of an object handle the bridge returned from this member's component.
             [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
+            // Copies and releases a string block the bridge returned from this member's component.
+            [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
 
           private:
             friend class ::Iris::Type;
@@ -69,7 +74,9 @@ namespace Iris
     {
       public:
         // What Set takes: the value itself, or a pointer to the Object for an object member.
-        using Value = std::conditional_t<std::same_as<T, std::optional<Object>>, const Object*, T>;
+        using Value = std::conditional_t<
+            std::same_as<T, std::optional<Object>>, const Object*,
+            std::conditional_t<std::same_as<T, std::optional<std::string>>, std::optional<std::string_view>, T>>;
 
         [[nodiscard]] CallResult<T> Get() const
         {
@@ -81,11 +88,13 @@ namespace Iris
         }
         [[nodiscard]] CallResult<void> Set(Value value) const
         {
-            return member.Set(nullptr, SlotOf(value), ObjectOf(value));
+            Detail::StringArgumentView text;
+            return member.Set(nullptr, SlotOf(value, text), ObjectOf(value));
         }
         [[nodiscard]] CallResult<void> Set(const Object& target, Value value) const
         {
-            return member.Set(&target, SlotOf(value), ObjectOf(value));
+            Detail::StringArgumentView text;
+            return member.Set(&target, SlotOf(value, text), ObjectOf(value));
         }
 
       private:
@@ -94,10 +103,16 @@ namespace Iris
         {
         }
 
-        static std::uint64_t SlotOf(Value value) noexcept
+        // A string member's slot points at `text`, which must outlive the call.
+        static std::uint64_t SlotOf(Value value, Detail::StringArgumentView& text) noexcept
         {
             if constexpr (std::same_as<T, std::optional<Object>>)
                 return 0;
+            else if constexpr (std::same_as<T, std::optional<std::string>>)
+            {
+                text = Detail::MakeStringView(value);
+                return reinterpret_cast<std::uintptr_t>(&text);
+            }
             else
                 return Detail::ToSlot<T>(value);
         }

@@ -157,8 +157,9 @@ namespace Iris
         const std::array<Detail::ValueKind, sizeof...(Args)> kinds = {Detail::KindOf<Args>()...};
         std::uint64_t slots[sizeof...(Args) + 1] = {};
         const Object* objects[sizeof...(Args) + 1] = {};
+        Detail::StringArgumentView texts[sizeof...(Args) + 1] = {};
         std::size_t index = 0;
-        ((Detail::PackArgument(slots[index], objects[index], arguments), ++index), ...);
+        ((Detail::PackArgument(slots[index], objects[index], texts[index], arguments), ++index), ...);
         return CreateObjectRaw(std::span<const Detail::ValueKind>(kinds),
                                std::span<std::uint64_t>(slots, sizeof...(Args)),
                                std::span<const Object* const>(objects, sizeof...(Args)));

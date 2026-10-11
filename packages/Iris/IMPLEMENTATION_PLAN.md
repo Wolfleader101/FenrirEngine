@@ -25,7 +25,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 09: managed objects and ownership (done)
   - 10: objects as arguments and returns (done)
   - 11: fields and properties (done)
-  - 12: strings
+  - 12: strings (done)
   - 13: blittable structs
   - 14: arrays
   - 15: internal calls
@@ -78,16 +78,17 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 11)
+## Current state (after ticket 12)
 
 Implemented and tested (11 CTests of named cases; Windows Debug and Release):
 
 - hostfxr discovery, loading and diagnostics
-- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-16 function table of nineteen operations
+- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-17 function table of twenty operations
 - bounded managed diagnostics
 - collectible component loading with private dependency resolution
 - typed static invocation: `Type::FindMethod<R(Args...)>` and `Method::Invoke` for bool, sized integers, float and double
 - release, and observation of the unload (NotRequested, Pending or Collected)
+- strings (UTF-8, borrowed in, owned out, null distinct from empty) as arguments, returns and member values
 - fields and properties, static and instance, primitive and object-typed, with diagnosed misuse
 - objects passed to and returned from methods and constructors, with independent handles
 - managed objects with explicit ownership: constructors by exact signature, instance and virtual methods, a live-object release policy

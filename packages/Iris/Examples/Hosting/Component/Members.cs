@@ -17,6 +17,8 @@ public class Settings
     public sbyte Small;
     public readonly int Id = 7;
     public Counter? Child;
+    public string? Label;
+    public static string? StaticLabel;
     private int secret = 99;
 
     // Properties.
@@ -25,6 +27,8 @@ public class Settings
     public int InitOnly { get; init; } = 11;
     public static int StaticProperty { get; set; }
     public Counter? ChildProperty { get; set; }
+    public string? Caption { get; set; }
+    public string ReadOnlyCaption { get; } = "fixed";
 
     private int written;
     public int WriteOnly { set { written = value; } }
