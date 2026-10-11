@@ -71,6 +71,7 @@ namespace Iris
         handle->bridge = state->bridge;
         handle->component = state->component;
         handle->method = methodId;
+        handle->returnsString = returnKind == Detail::ValueKind::String;
         return Detail::CompleteCall<Detail::RawMethod>(status, "FindMethod", diagnostic,
                                                        Detail::RawMethod(std::move(handle)));
     }
@@ -129,6 +130,7 @@ namespace Iris
         handle->bridge = state->bridge;
         handle->component = state->component;
         handle->member = memberId;
+        handle->returnsString = kind == Detail::ValueKind::String;
         return Detail::CompleteCall<Detail::RawMember>(status, "FindMember", diagnostic,
                                                        Detail::RawMember(std::move(handle)));
     }

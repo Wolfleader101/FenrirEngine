@@ -7,6 +7,7 @@
 #include <bit>
 #include <concepts>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -101,8 +102,9 @@ namespace Iris
             {
                 view.data = reinterpret_cast<const std::uint8_t*>(text->data());
                 // A string too long for the wire reports a length the bridge rejects.
-                view.length =
-                    text->size() > static_cast<std::size_t>(INT32_MAX) ? -1 : static_cast<std::int32_t>(text->size());
+                view.length = text->size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max())
+                                  ? -1
+                                  : static_cast<std::int32_t>(text->size());
                 view.isNull = 0;
             }
             return view;

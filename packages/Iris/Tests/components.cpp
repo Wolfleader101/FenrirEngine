@@ -1017,6 +1017,18 @@ namespace
                                rejected.diagnostic.find("UTF-8") != std::string::npos,
                            std::string("Malformed UTF-8 was accepted: ") + bad);
                  }
+                 // A rejected call never reached managed code; an accepted one runs exactly once.
+                 const auto counted =
+                     *strings.FindMethod<std::int32_t(std::string_view, std::string_view)>("Counted").value;
+                 const auto callCount = *strings.FindField<std::int32_t>("Calls").value;
+                 Check(counted.Invoke("x", "\xFF").status == CallStatus::InvalidArgument && callCount.Get().value == 0,
+                       "Managed code ran for a malformed argument");
+                 Check(counted.Invoke("x", "y").value == 1 && callCount.Get().value == 1,
+                       "An accepted call did not run once");
+                 const auto repeatOnce =
+                     *strings.FindMethod<std::optional<std::string>(std::string_view, std::int32_t)>("Repeat").value;
+                 Check(repeatOnce.Invoke("ab", 500'000).Succeeded() && callCount.Get().value == 2,
+                       "A large return ran managed code more than once");
                  const auto unpaired = strings.FindMethod<std::optional<std::string>()>("UnpairedSurrogate");
                  Check(unpaired.value->Invoke().status == CallStatus::InvalidArgument,
                        "A return with no UTF-8 form was not diagnosed");

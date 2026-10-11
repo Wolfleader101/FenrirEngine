@@ -88,6 +88,10 @@ internal static class ValueKinds
         {
             throw new BridgeArgumentException("A returned string has no UTF-8 form (it has an unpaired surrogate).");
         }
+        catch (Exception exception) when (exception is ArgumentException or OverflowException)
+        {
+            throw new BridgeArgumentException("A returned string is too long to cross the boundary (2 GiB of UTF-8).");
+        }
         byte* block = (byte*)NativeMemory.Alloc((nuint)count + 8);
         *(long*)block = count;
         StrictUtf8.GetBytes(text, new Span<byte>(block + 8, count));
