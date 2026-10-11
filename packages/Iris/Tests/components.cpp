@@ -1296,6 +1296,26 @@ namespace
                                CallStatus::InvalidArgument,
                        "An out-of-range write or copy was accepted");
                  Check(Array<std::int32_t>::Create(component, 0).value->Length().value == 0U, "An empty array failed");
+                 Check(Array<std::int32_t>::Create(component, std::numeric_limits<std::size_t>::max()).status ==
+                           CallStatus::InvalidArgument,
+                       "An impossible length was accepted");
+                 auto emptyArray = Array<std::int32_t>::Create(component, 0);
+                 Check(emptyArray.value->CopyIn(0, std::span<const std::int32_t>()).Succeeded() &&
+                           emptyArray.value->CopyOut(0, std::span<std::int32_t>()).Succeeded(),
+                       "An empty bulk copy failed");
+                 auto flagArray = Array<bool>::Create(component, 3);
+                 const bool flagSource[] = {true, false, true};
+                 bool flagBack[3] = {};
+                 Check(flagArray.value->CopyIn(0, flagSource).Succeeded() &&
+                           flagArray.value->CopyOut(0, flagBack).Succeeded() && flagBack[0] && !flagBack[1] &&
+                           flagBack[2],
+                       "A bool bulk copy was wrong");
+                 // An object that is not an array is diagnosed, not misread.
+                 auto counter = component.FindType(CounterType).value->CreateObject();
+                 auto adopted = Array<std::int32_t>::FromObject(std::move(*counter.value));
+                 Check(adopted.Length().status == CallStatus::InvalidArgument &&
+                           adopted.Get(0).status == CallStatus::InvalidArgument,
+                       "A non-array object was used as an array");
 
                  auto doubles = Array<double>::Create(component, 2);
                  Check(doubles.value->Set(1, 2.5).Succeeded() && doubles.value->Get(1).value == 2.5,
@@ -1438,6 +1458,17 @@ namespace
                        "A foreign array was accepted");
                  Check(moved.Release().Succeeded() && sum.Invoke(moved).status == CallStatus::InvalidHandle,
                        "A released array was accepted as an argument");
+
+                 // An array outlives nothing: once its component is gone it reports InvalidHandle.
+                 std::optional<Ints> orphan;
+                 {
+                     Component dying = Load(*host, arguments.component);
+                     orphan.emplace(std::move(*Ints::Create(dying, 2).value));
+                     Check(orphan->Length().value == 2U, "An array was unusable in its own component");
+                 }
+                 Check(orphan->Length().status == CallStatus::InvalidHandle &&
+                           orphan->Get(0).status == CallStatus::InvalidHandle,
+                       "An array still worked after its component was destroyed");
 
                  // With everything freed the component releases; destroying a component force-releases arrays.
                  (void)second->Release();

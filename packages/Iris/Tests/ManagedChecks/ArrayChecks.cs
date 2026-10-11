@@ -87,6 +87,12 @@ static unsafe class ArrayChecks
             Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryCreateArray(token, 12, 1, out _)), "A non-array kind was accepted");
             Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryGetArrayElement(token, array, KindOf(Double), 0, out _)), "A wrong element type was accepted");
 
+            Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryGetArrayElement(token, array, 0, 0, out _)), "Element access with no array kind read a quiet zero");
+            Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryFindMember(token, TypeId(token, Component + "Settings"), "Count", 0, ints, out _)), "An array kind was accepted for a member");
+            ulong counterObject = 0;
+            Check(ComponentRegistry.TryCreateObject(token, TypeId(token, Component + "Counter"), Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out counterObject) == ComponentRegistry.CreateResult.Created, "setup");
+            Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryGetArrayLength(token, counterObject, out _)), "A non-array object was read as an array");
+
             // Bulk copies.
             int[] source = { 10, 20, 30 }, back = new int[4];
             fixed (int* s = source) Check(ComponentRegistry.TryCopyArray(token, array, ints, 1, 3, s, intoArray: true), "Copy in failed");

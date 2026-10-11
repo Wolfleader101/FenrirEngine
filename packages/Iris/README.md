@@ -349,6 +349,7 @@ const auto made = range.Invoke(5);                                // *made.value
   elements, and releasing one leaves the other working.
 - **Exact types.** An `Array<double>` never matches an `int[]` parameter, and `object[]` or jagged arrays are
   not supported by signature (`NotFound`). Struct elements are validated like any mapped struct.
+- A `bool` bulk copy trusts the buffer to hold 0 or 1 in each byte.
 - Arrays are not (yet) available as field or property values; hold one in an `Array<T>` and pass it.
 
 ### Logging
