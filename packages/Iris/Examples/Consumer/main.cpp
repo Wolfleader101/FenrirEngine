@@ -49,6 +49,21 @@ namespace
         return condition;
     }
 
+    // Finds `Iris.Examples.Component.<type>.<method>` with the given signature, reporting whichever step failed.
+    template <typename Signature>
+    auto FindStatic(const Iris::Component& component, std::string_view type, std::string_view method)
+        -> decltype(std::declval<const Iris::Type&>().FindMethod<Signature>(method).value)
+    {
+        const std::string typeName = "Iris.Examples.Component." + std::string(type);
+        const auto found = component.FindType(typeName);
+        if (!Ok(found, "FindType(" + typeName + ")"))
+            return std::nullopt;
+        auto handle = found->template FindMethod<Signature>(method);
+        if (!Ok(handle, "FindMethod(" + std::string(method) + ")"))
+            return std::nullopt;
+        return std::move(handle.value);
+    }
+
     bool Run(const Iris::Component& component)
     {
         using namespace Iris;
@@ -63,12 +78,16 @@ namespace
         for (const Type& type : *types)
         {
             const auto isScript = type.IsAssignableTo("Iris.Examples.Contracts.IScript");
-            if (isScript.Succeeded() && *isScript)
-            {
-                std::cout << "Script type: " << type.GetInfo()->fullName << '\n';
-                ++scripts;
-            }
+            if (!isScript.Succeeded() || !*isScript)
+                continue;
+            const auto info = type.GetInfo();
+            if (!Ok(info, "Type::GetInfo"))
+                return false;
+            std::cout << "Script type: " << info->fullName << '\n';
+            ++scripts;
         }
+        if (!Expect(scripts == 4, "four script types"))
+            return false;
 
         // Objects: construct one, then call an instance method found once and callable many times.
         const auto counterType = component.FindType(std::string(ns) + "Counter");
@@ -79,46 +98,51 @@ namespace
         if (!Ok(next, "FindInstanceMethod(Next)") || !Ok(counter, "CreateObject"))
             return false;
         const auto counted = next->Invoke(*counter);
+        if (!Ok(counted, "Counter.Next") || !Expect(*counted == 42, "Counter(41).Next() == 42"))
+            return false;
 
-        // Strings, structs and arrays as arguments and returns.
-        const auto strings = component.FindType(std::string(ns) + "Strings");
-        const auto echo = strings->FindMethod<std::optional<std::string>(std::string_view)>("Echo");
+        // A string in and out.
+        const auto echo = FindStatic<std::optional<std::string>(std::string_view)>(component, "Strings", "Echo");
+        if (!echo)
+            return false;
         const auto echoed = echo->Invoke(text);
+        if (!Ok(echoed, "Strings.Echo") || !Expect(*echoed == text, "the echoed string"))
+            return false;
 
-        const auto structs = component.FindType(std::string(ns) + "Structs");
-        const auto add = structs->FindMethod<Vec3(Vec3, Vec3)>("Add");
-        if (!Ok(add, "FindMethod(Structs.Add)"))
+        // A mapped struct by value, in and out.
+        const auto add = FindStatic<Vec3(Vec3, Vec3)>(component, "Structs", "Add");
+        if (!add)
             return false;
         const auto sum = add->Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});
+        if (!Ok(sum, "Structs.Add") || !Expect(sum->X == 11 && sum->Z == 33, "the Vec3 sum"))
+            return false;
 
-        const auto arrays = component.FindType(std::string(ns) + "Arrays");
-        const auto range = arrays->FindMethod<std::optional<Array<std::int32_t>>(std::int32_t)>("Range");
-        const auto total = arrays->FindMethod<std::int32_t(const Array<std::int32_t>&)>("Sum");
+        // An array returned from one method and passed to another.
+        const auto range = FindStatic<std::optional<Array<std::int32_t>>(std::int32_t)>(component, "Arrays", "Range");
+        const auto total = FindStatic<std::int32_t(const Array<std::int32_t>&)>(component, "Arrays", "Sum");
+        if (!range || !total)
+            return false;
         auto numbers = range->Invoke(5); // 0, 1, 2, 3, 4
-        if (!Ok(numbers, "Arrays.Range") || !Expect(numbers->has_value(), "an array, not null") ||
-            !Ok(total, "FindMethod(Arrays.Sum)"))
+        if (!Ok(numbers, "Arrays.Range") || !Expect(numbers->has_value(), "an array, not null"))
             return false;
         const auto summed = total->Invoke(**numbers);
+        if (!Ok(summed, "Arrays.Sum") || !Expect(*summed == 10, "Sum(Range(5)) == 10"))
+            return false;
 
         // Managed code calling a registered native function (Natives.Add, bound when the component loaded).
-        const auto natives = component.FindType(std::string(ns) + "Natives");
-        const auto callAdd = natives->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("CallAdd");
+        const auto callAdd = FindStatic<std::int32_t(std::int32_t, std::int32_t)>(component, "Natives", "CallAdd");
+        if (!callAdd)
+            return false;
         const auto viaNative = callAdd->Invoke(2, 3);
+        if (!Ok(viaNative, "Natives.CallAdd") || !Expect(*viaNative == 5, "native Add(2, 3) == 5"))
+            return false;
 
-        std::cout << "Script types: " << scripts << ", Counter(41).Next() = " << counted.value.value_or(-1)
-                  << ", Echo = " << (echoed.Succeeded() && *echoed ? **echoed : std::string("<failed or null>"))
-                  << ", Vec3 sum X = " << (sum.Succeeded() ? sum->X : -1.0f)
-                  << ", Sum(Range(5)) = " << summed.value.value_or(-1)
-                  << ", native Add(2, 3) = " << viaNative.value.value_or(-1) << '\n';
+        std::cout << "Script types: " << scripts << ", Counter(41).Next() = " << *counted << ", Echo ok"
+                  << ", Vec3 sum X = " << sum->X << ", Sum(Range(5)) = " << *summed
+                  << ", native Add(2, 3) = " << *viaNative << '\n';
 
         // Release what we own before the component: live objects and arrays make Component::Release refuse.
-        const bool released = (*numbers)->Release().Succeeded() && counter->Release().Succeeded();
-        return Expect(scripts == 4, "four script types") && Ok(counted, "Counter.Next") &&
-               Expect(*counted == 42, "42") && Ok(echoed, "Strings.Echo") &&
-               Expect(*echoed == text, "the echoed string") && Ok(sum, "Structs.Add") &&
-               Expect(sum->X == 11 && sum->Z == 33, "the Vec3 sum") && Ok(summed, "Arrays.Sum") &&
-               Expect(*summed == 10, "10") && Ok(viaNative, "Natives.CallAdd") && Expect(*viaNative == 5, "5") &&
-               Expect(released, "objects released");
+        return Ok((*numbers)->Release(), "Array::Release") && Ok(counter->Release(), "Object::Release");
     }
 } // namespace
 

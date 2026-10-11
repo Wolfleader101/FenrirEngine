@@ -4,12 +4,13 @@ status: accepted
 
 # Freeze the Iris public API at 0.2, and grow it only by addition
 
-After the stabilisation review (`.scratch/dotnet-scripting/review-18.md`), the public headers in `packages/Iris/Native/include/Iris` are frozen as the surface FenrirEngine and other C++ projects build on. The package version is 0.2.0, and its CMake compatibility is `SameMajorVersion`, so `find_package(Iris 0.2)` accepts any later 0.x.
+After the stabilisation review (`.scratch/dotnet-scripting/review-18.md`), the public headers in `packages/Iris/Native/include/Iris` are frozen as the surface FenrirEngine and other C++ projects build on. The package version is 0.2.0, and its CMake compatibility is `SameMajorVersion`, so `find_package(Iris 0.2)` accepts any later 0.x. (The switch from `SameMinorVersion` also means an old `find_package(Iris 0.1)` accepts 0.2, although 0.2 broke 0.1. No consumer outside this repository exists yet, so this is harmless.)
 
 From now on:
 
 - **Additive changes are allowed** in any minor release:
-  - new functions, overloads, types and statuses;
+  - new functions, overloads and types;
+  - a new status, but only for a case that previously could not happen (a new status that takes cases from an existing one changes that status's meaning, and is breaking);
   - new supported value types;
   - a default constructor;
   - a call that used to fail and now succeeds.
@@ -24,8 +25,12 @@ From now on:
 Before freezing, the review removed what would have been breaking to remove later:
 
 - the unreachable `CallStatus::BufferTooSmall`;
-- the public `Array::FromObject`;
-- private bridge helpers declared in a public header.
+- the public `Array::FromObject` and `Array::AsObject`;
+- private bridge helpers declared in a public header;
+- a `CallResult` dereference that could dangle on a temporary;
+- the `GetUnloadStatus` / `ComponentUnloadState` naming mismatch (now `GetUnloadState`).
+
+It also fixed the meaning of `InvalidArgument` as frozen: a value that cannot cross the boundary in either direction (including a returned string that cannot become UTF-8), a malformed or ambiguous name, or a misused call.
 
 It also deferred every missing feature (member enumeration, enums, empty handles, an unload wait, a faster invocation path), because each one is additive.
 

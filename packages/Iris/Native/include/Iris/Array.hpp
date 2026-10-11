@@ -15,6 +15,8 @@
 
 namespace Iris
 {
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         // The same status and diagnostic, for a different result type.
@@ -97,10 +99,6 @@ namespace Iris
         [[nodiscard]] CallResult<void> Release()
         {
             return object.Release();
-        }
-        [[nodiscard]] const Object& AsObject() const noexcept
-        {
-            return object;
         }
 
         [[nodiscard]] CallResult<std::size_t> Length() const

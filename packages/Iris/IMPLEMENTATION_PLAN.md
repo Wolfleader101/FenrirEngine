@@ -102,7 +102,7 @@ The public API is frozen at version 0.2 (ADR-0006). It has 12 CTests of named ca
 - fields and properties: static and instance, with misuse diagnosed
 - internal calls, bound by name when a component loads; an unbound one fails the load
 - `CallResult<T>` everywhere, with `*` and `->` access, plus a process-wide log sink
-- a CMake install/export package (`find_package(Iris 0.2)`, `iris_deploy`), checked by a standalone consumer that exercises every feature
+- a CMake install/export package (`find_package(Iris 0.2)`, `iris_deploy`), checked by a standalone consumer (a small script host)
 
 Linux and macOS are untested (README, "Platforms"). `review-18.md` lists the deferred, additive gaps:
 

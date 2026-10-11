@@ -22,8 +22,8 @@ namespace Iris
     class Type;
 
     /**
-     * @brief The value types that cross the boundary by value: bool, 8/16/32/64-bit integers, float
-     * and double. Character types are excluded because their managed meaning is ambiguous.
+     * @brief The primitive types: bool, 8/16/32/64-bit integers, float and double, matched exactly (no
+     * widening). Character types are excluded because their managed meaning is ambiguous.
      */
     template <typename T>
     concept PrimitiveValue = std::same_as<T, bool> || std::same_as<T, float> || std::same_as<T, double> ||
@@ -71,6 +71,8 @@ namespace Iris
     template <ArrayElement T>
     class Array;
 
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         // Array<E>, or `const Array<E>*` (a nullable array argument): `value` and the element type.
@@ -101,6 +103,23 @@ namespace Iris
             static constexpr bool value = true;
             using Element = E;
         };
+        // The library's access to an Array's internals: wrapping a returned `T[]` handle (only ever one whose
+        // element type the signature already matched), and the Object an array argument travels as.
+        struct ArrayAccess
+        {
+            template <typename ArrayType>
+            [[nodiscard]] static ArrayType Adopt(Object object)
+            {
+                return ArrayType(std::move(object), 0);
+            }
+            // The Object an array argument travels as.
+            template <typename ArrayType>
+            [[nodiscard]] static const Object& ObjectOf(const ArrayType& array) noexcept
+            {
+                return array.object;
+            }
+        };
+
         // An array as declared in a signature: `const Array<E>&` or `const Array<E>*`.
         template <typename T>
         concept ArraySignature =
@@ -150,6 +169,8 @@ namespace Iris
         std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
         std::same_as<T, std::optional<std::string>> || Detail::OptionalArrayInfo<T>::value;
 
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         // Wire values, mirrored by the managed ValueKind. Void is a return type only.
@@ -368,9 +389,9 @@ namespace Iris
             {
                 // An array travels as its object handle; a null pointer is a null array (slot zero).
                 if constexpr (std::is_pointer_v<T>)
-                    object = value != nullptr ? &value->AsObject() : nullptr;
+                    object = value != nullptr ? &ArrayAccess::ObjectOf(*value) : nullptr;
                 else
-                    object = &value.AsObject();
+                    object = &ArrayAccess::ObjectOf(value);
             }
             else
                 slot = ToSlot<T>(value);
@@ -403,17 +424,6 @@ namespace Iris
             struct State;
             explicit RawMethod(std::shared_ptr<const State> state) noexcept;
             std::shared_ptr<const State> state;
-        };
-
-        // Wraps an object handle the bridge returned for a `T[]` as an Array<T>. Not API: an Array is only ever
-        // made from a handle whose element type the signature already matched.
-        struct ArrayAccess
-        {
-            template <typename ArrayType>
-            [[nodiscard]] static ArrayType Adopt(Object object)
-            {
-                return ArrayType(std::move(object), 0);
-            }
         };
 
         template <typename Result, typename Handle>

@@ -48,6 +48,8 @@ namespace Iris
         std::vector<AttributeArgument> arguments;
     };
 
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         template <typename Signature>

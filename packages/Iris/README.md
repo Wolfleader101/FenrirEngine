@@ -149,8 +149,26 @@ if (loaded.Succeeded())
 ```
 
 Every call returns a `CallResult<T>` (see [Results and diagnostics](#results-and-diagnostics)). `*result` and
-`result->` reach the value like `std::optional`, so check `Succeeded()` first; the examples below skip the
-checks for brevity. Nothing in Iris throws except a failed native allocation.
+`result->` reach the value like `std::optional`, so check `Succeeded()` first: dereferencing a failed result is
+undefined behaviour (an `assert` in debug builds). **The examples in this guide skip those checks for
+brevity**; `Examples/Consumer/main.cpp` shows a host that checks every step. Dereferencing a temporary
+result gives the value itself, so `for (const Type& type : *component.GetTypes())` is safe. Failures are
+results, not exceptions: Iris throws only when a native allocation or an OS text conversion fails.
+
+The host itself:
+
+```cpp
+const auto hostfxr = Host::DiscoverHostFxr();   // where nethost would find hostfxr, without loading it
+HostConfiguration configuration{.runtimeConfigPath = "Iris.Bridge.runtimeconfig.json",
+                                .bridgeAssemblyPath = "Iris.Bridge.dll",
+                                .sharedAssemblies = {"MyGame.Api.dll"}};   // one copy for every component
+(void)host.Initialize(configuration);
+host.IsInitialized();                           // true once the bridge handshake succeeded
+
+const auto info = component.GetInfo();          // info->assemblyName == "MyComponent"
+(void)component.Release();
+const auto state = component.GetUnloadState();  // Pending, later Collected
+```
 
 ### What crosses the boundary
 
@@ -160,13 +178,14 @@ The C++ types in a signature decide the managed types, and anything else does no
 | --- | --- | --- | --- | --- | --- |
 | `bool`, `std::int8_t` … `std::uint64_t`, `float`, `double` | the same primitive | by value | by value | yes | yes |
 | `std::string_view`, `std::optional<std::string_view>` (empty = null) | `string` | yes | | `Set` | `Set` |
-| `std::optional<std::string>` (empty = null) | `string` | | yes | `Get` | `Get` |
+| `std::optional<std::string>` (empty = null) | `string` | | yes | `Get` | `Get` (of an `Array<std::string>`) |
 | a struct with a `StructMapping` | a blittable struct | by value | by value | yes | yes |
 | `const Object&` / `std::optional<Object>` | any class or interface | `const Object&` | `std::optional<Object>` | `std::optional<Object>` | |
 | `const Array<T>&`, `const Array<T>*` / `std::optional<Array<T>>` | `T[]` | yes (`*` may be null) | yes | | |
 
 Not supported: enums, `char`, generics, delegates, multi-dimensional or jagged arrays, `ref`/`out`
-parameters. Internal calls (managed code calling native code) have their own, smaller set of types.
+parameters, and passing null for a class parameter. Internal calls (managed code calling native code) use
+a different set: primitives other than `bool`, and raw pointers.
 
 ### Types
 
@@ -303,7 +322,7 @@ const auto b = echo.Invoke(std::nullopt);         // a null string in (for a par
   from an empty `std::string`. Members take the same `std::optional<std::string_view>` on `Set`.
 - **Decoding is strict.** Malformed UTF-8 in an argument is `InvalidArgument` and no managed code runs. A
   managed string that cannot become UTF-8 (an unpaired surrogate) is `InvalidArgument` on the way back.
-  Nothing is replaced with U+FFFD.
+  Nothing is replaced with U+FFFD (type and attribute metadata is the one exception; see below).
 - **Any size, one call.** Text may contain null characters and has no fixed buffer size (the only limit is
   2 GiB of UTF-8, in either direction, reported as `InvalidArgument`). A result is produced
   once and copied once; there is no size query that could run managed code twice.
@@ -397,7 +416,7 @@ public static unsafe class Natives
 ```cpp
 int AddImpl(int left, int right) { return left + right; }
 
-Iris::RegisterInternalCall<&AddImpl>("MyComponent.Natives.Add");   // "Namespace.Type.Field"
+const auto registered = Iris::RegisterInternalCall<&AddImpl>("MyComponent.Natives.Add");   // "Namespace.Type.Field"
 ```
 
 - **Register any time.** Registration is process-wide, needs no host, and may happen before or after
@@ -453,7 +472,8 @@ for (const Type& type : *types)
   and chars), `double`, or `std::string` (a string, or a `Type` argument's full name); `typeName` says what it
   was declared as. Reading attributes loads the assemblies of the attribute types and of any `typeof`
   argument into the component, and one that cannot load fails the query. Attributes on methods and fields
-  are not available yet.
+  are not available yet. Metadata text is read-only, so a lone surrogate in a name or attribute string
+  becomes U+FFFD rather than failing the whole query (strings passed to and from calls stay strict).
 - **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
   like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 
@@ -471,7 +491,7 @@ Component b = *host.LoadComponent("v2/MyComponent.dll");                    // n
 
 Handles from the old version (`Type`, `Method`, `Member`, `Object`, `Array`, the owner) report `InvalidHandle`
 after it is released, and are never reused, so they cannot select anything in the new version. Unloading is
-cooperative: `GetUnloadStatus` reports `Pending` until nothing in the host keeps the old code alive (a
+cooperative: `GetUnloadState` reports `Pending` until nothing in the host keeps the old code alive (a
 `Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris keeps no
 root of its own that the tests have found: handle tables, internal call bindings, type listings and attribute
 snapshots are plain data, and components that used all of them were observed to collect. A failed load
@@ -510,7 +530,7 @@ captures must outlive it. `text` is only valid during the call.
   destroyed. Destroy owners before `main` returns, never during static destruction.
 - **Release is not collection.** `Release` (or destroying the owner) drops the bridge's strong
   references and requests unloading. Collection happens later, when nothing else roots the component.
-  `GetUnloadStatus` reports `NotRequested`, `Pending` or `Collected`. The library never forces GC.
+  `GetUnloadState` reports `NotRequested`, `Pending` or `Collected`. The library never forces GC.
 - **Handles are never reused.** After release, an owner's calls return `InvalidHandle`; a new load
   gets a new handle.
 - **Shared assemblies are permanent.** Assemblies listed in `HostConfiguration::sharedAssemblies` load
@@ -526,7 +546,7 @@ and an owning UTF-8 `diagnostic`.
 | Status | Meaning |
 | --- | --- |
 | `Success` (0) | The call succeeded. |
-| `InvalidArgument` (1) | The bridge rejected an argument (a malformed name or path, for example). |
+| `InvalidArgument` (1) | A value could not cross the boundary, or the call was misused: a malformed or ambiguous name, malformed UTF-8 in, a returned string that cannot become UTF-8 or exceeds 2 GiB, an index out of range, a mismatched struct mapping, an object of the wrong type or component, writing a read-only member. |
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
 | `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
 | `NotFound` (6) | A lookup found nothing (a type, method or constructor that is missing, not public, generic or abstract). |
@@ -548,11 +568,12 @@ whether the call worked, not the answer. Write `Succeeded() && *result`.
 
 ### Threading
 
-- **Guaranteed:** calls on one `Host`, and on one owner (`Component`, `Object`, `Array`), must be serialized
+- **Required:** calls on one `Host`, and on one owner (`Component`, `Object`, `Array`), must be serialized
   by the caller. Handles (`Type`, `Method`, `Member`) are immutable values and may be copied across threads.
-- **Designed, not verified:** calls on *different* owners from different threads. The bridge takes one lock
-  per operation (never while component code runs), and the native process-wide tables (internal calls, the
-  log sink) are mutex-guarded, but no test runs Iris concurrently.
+- **Designed, not verified:** calls on *different* owners from different threads. The bridge guards its
+  tables with process-wide locks, taken briefly around each lookup and never while component code runs, and
+  the native process-wide tables (internal calls, the log sink) are mutex-guarded, but no test runs Iris
+  concurrently.
 - **Your responsibility:** the log sink and internal call functions run on whatever thread calls them, which
   includes threads component code starts. CoreCLR attaches native threads automatically; there is no
   attach call.
@@ -596,7 +617,7 @@ on members, an object's runtime type, enums, and forcing a collection.
    components. A reference the shared copy cannot satisfy (a newer version, another culture or public
    key) is rejected. See [ADR-0004](../../docs/adr/0004-shared-contract-assemblies.md).
 6. **Unloading.** Release removes the registry's strong references and calls `Unload`. The registry
-   then holds only a long weak reference, which `GetUnloadStatus` reads.
+   then holds only a long weak reference, which `GetUnloadState` reads.
 
 ## Checks
 
@@ -609,7 +630,7 @@ on members, an object's runtime type, enums, and forcing a collection.
 | `Bridge-legacy`, `-oversized`, `-missing`, `-notbridge` | Rejection of a mismatched version, table size, missing entry, or an assembly without the bridge. |
 | `Components` | Every public feature against the real bridge: owners, types, methods, objects, members, strings, structs, arrays, internal calls, discovery, replacement, release, outliving the host, shared assemblies. |
 | `Components-unbound` | The same program with no internal calls registered: loading a component that declares them fails and names them. |
-| `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host using every feature) against it. |
+| `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host: discovery, objects, strings, structs, arrays, an internal call, the log sink) against it. |
 | `UnsupportedTypeDoesNotCompile` | A signature with an unsupported C++ type fails to compile with Iris's own message. |
 
 Each check program runs named cases and reports every failure. The fixture bridge

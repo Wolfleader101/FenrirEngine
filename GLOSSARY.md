@@ -31,7 +31,7 @@ The .NET `AssemblyLoadContext` a component lives in. It is collectible, so it ca
 An assembly named in `HostConfiguration::sharedAssemblies`. It loads once into the default load context, and every component's reference to it binds to that copy, so its types have one identity across components. Typically this is an API that components compile against (a *contract*). Sharing is permanent for the process (ADR-0004).
 
 **Owner**
-A move-only C++ object that holds something alive in the bridge and releases it when destroyed. The owners are `Component`, `Object` and `Array`. They can't be copied, and a moved-from owner reports `InvalidHandle`.
+A move-only C++ object that holds something alive in the bridge and releases it when destroyed. The owners are `Component`, `Object` and `Array`. They can't be copied. A moved-from owner is empty: its calls report `InvalidHandle`, and releasing it again succeeds.
 *Avoid:* wrapper, reference.
 
 **Handle**
@@ -66,7 +66,7 @@ The garbage collector actually freeing a released component's load context and a
 *Avoid:* unload (ambiguous between release and collection).
 
 **Unload status**
-What `Component::GetUnloadStatus` observes:
+What `Component::GetUnloadState` observes:
 - `NotRequested`: still loaded.
 - `Pending`: released, not yet collected.
 - `Collected`: gone.

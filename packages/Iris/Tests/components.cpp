@@ -213,7 +213,7 @@ namespace
 
     void CheckUnload(const Component& owner, bool released)
     {
-        const auto result = owner.GetUnloadStatus();
+        const auto result = owner.GetUnloadState();
         Check(result.Succeeded() && result.diagnostic.empty() && !result.diagnosticTruncated &&
                   (released ? (*result.value == ComponentUnloadState::Pending ||
                                *result.value == ComponentUnloadState::Collected)
@@ -280,19 +280,38 @@ namespace
             {"results reach their value through * and ->, and move it out of an rvalue",
              [&] {
                  auto host = StartHost(arguments);
-                 Check(host->Initialize(arguments.configuration).Succeeded() && Host::DiscoverHostFxr().Succeeded(),
+                 const auto initialized = host->Initialize(arguments.configuration);
+                 const auto discovered = Host::DiscoverHostFxr(arguments.configuration.dotnetRoot);
+                 Check(initialized.Succeeded() && initialized.Succeeded() == initialized.success &&
+                           discovered.Succeeded() == discovered.success,
                        "Succeeded() disagreed with success");
                  auto loaded = host->LoadComponent(arguments.component);
                  Check(loaded.Succeeded() && loaded->IsLoaded(), "operator-> did not reach the component");
                  Component component = *std::move(loaded);
                  Check(component.IsLoaded() && !loaded.value->IsLoaded(), "operator* && did not move the owner out");
-                 const auto add =
-                     component.FindType(CalculationType)->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+                 const auto calculations = component.FindType(CalculationType);
+                 Check(calculations.Succeeded(), "Calculations was missing");
+                 const auto add = calculations->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+                 Check(add.Succeeded(), "Add was missing");
                  const auto sum = add->Invoke(20, 22);
-                 Check(sum.Succeeded() && *sum == 42, "operator* did not read the value");
-                 const auto settings = *component.FindType(SettingsType);
-                 Object object = *settings.CreateObject();
-                 Check(object.IsValid(), "Moving an Object out of a prvalue result failed");
+                 const auto& constSum = sum;
+                 Check(sum.Succeeded() && *sum == 42 && *constSum == 42, "operator* did not read the value");
+                 // Dereferencing a temporary result gives a value, never a reference into the dead result, so
+                 // iterating one is safe.
+                 static_assert(std::is_same_v<decltype(*component.FindType(SettingsType)), Type>);
+                 int listed = 0;
+                 for (const Type& type : *component.GetTypes())
+                 {
+                     listed += type.GetInfo().Succeeded() ? 1 : 0;
+                 }
+                 Check(listed > 10, "Iterating a dereferenced temporary result failed");
+                 const auto settingsType = component.FindType(SettingsType);
+                 Check(settingsType.Succeeded(), "Settings was missing");
+                 const Type settings = *settingsType;
+                 auto created = settings.CreateObject();
+                 Check(created.Succeeded(), "Creating Settings failed");
+                 Object object = *std::move(created);
+                 Check(object.IsValid(), "Moving an Object out of a result failed");
                  // A CallResult<bool> is not a bool: the answer and the call's success stay separate.
                  static_assert(!std::is_constructible_v<bool, CallResult<bool>>);
                  const auto assignable = settings.IsAssignableTo("System.IDisposable");
@@ -1866,7 +1885,7 @@ namespace
                  auto host = StartHost(arguments);
                  auto original = Load(*host, arguments.component);
                  Component moved(std::move(original));
-                 Check(!original.IsLoaded() && original.GetUnloadStatus().status == CallStatus::InvalidHandle,
+                 Check(!original.IsLoaded() && original.GetUnloadState().status == CallStatus::InvalidHandle,
                        "A move left the old owner usable");
                  CheckInvalidHandle(original, "A moved-from owner was callable");
                  CheckInfo(moved);
@@ -1879,12 +1898,12 @@ namespace
                  // move-assignment also releases the registration it replaces.
                  Component observation(std::move(moved));
                  CheckUnload(observation, true);
-                 Check(moved.GetUnloadStatus().status == CallStatus::InvalidHandle,
+                 Check(moved.GetUnloadState().status == CallStatus::InvalidHandle,
                        "Move construction kept the old observation");
                  auto replacement = Load(*host, arguments.component);
                  replacement = std::move(observation);
                  CheckUnload(replacement, true);
-                 Check(observation.GetUnloadStatus().status == CallStatus::InvalidHandle,
+                 Check(observation.GetUnloadState().status == CallStatus::InvalidHandle,
                        "Move assignment kept the old observation");
              }},
             {"owners and results outlive host reset and destruction",

@@ -244,7 +244,7 @@ namespace
              [&] {
                  auto host = StartHost(arguments);
                  auto fixture = LoadFixture(*host, arguments);
-                 Check(fixture.GetUnloadStatus().value == ComponentUnloadState::NotRequested,
+                 Check(fixture.GetUnloadState().value == ComponentUnloadState::NotRequested,
                        "A loaded owner did not report NotRequested");
                  const std::pair<const char*, CallStatus> cases[] = {
                      {"UnloadOutOfRange", CallStatus::InvalidResponse},
@@ -256,7 +256,7 @@ namespace
                  for (const auto& [mode, status] : cases)
                  {
                      Select(fixture, mode);
-                     const auto query = fixture.GetUnloadStatus();
+                     const auto query = fixture.GetUnloadState();
                      Check(query.status == status && !query.value && !query.diagnostic.empty(),
                            std::string("Malformed unload response accepted: ") + mode);
                  }
@@ -265,13 +265,13 @@ namespace
                  // A released owner cannot invoke, so a second registration selects modes.
                  const auto control = LoadFixture(*host, arguments);
                  Check(fixture.Release().Succeeded(), "Release failed");
-                 Check(fixture.GetUnloadStatus().value == ComponentUnloadState::Pending,
+                 Check(fixture.GetUnloadState().value == ComponentUnloadState::Pending,
                        "A released owner did not report Pending");
                  Select(control, "UnloadCollected");
-                 Check(fixture.GetUnloadStatus().value == ComponentUnloadState::Collected,
+                 Check(fixture.GetUnloadState().value == ComponentUnloadState::Collected,
                        "A collected observation was rejected");
                  Select(control, "UnloadNotRequested");
-                 Check(fixture.GetUnloadStatus().status == CallStatus::InvalidResponse,
+                 Check(fixture.GetUnloadState().status == CallStatus::InvalidResponse,
                        "A released owner accepted NotRequested");
                  Select(control, "None");
              }},

@@ -26,6 +26,8 @@ namespace Iris
     concept MemberValue = PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
                           std::same_as<T, std::optional<std::string>>;
 
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         // An untyped member handle. Use Member<T> instead.

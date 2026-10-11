@@ -11,6 +11,8 @@
 
 namespace Iris
 {
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         class RawArray;
@@ -33,7 +35,7 @@ namespace Iris
      *
      * The owner may outlive the Host that loaded it. Release (or destruction) removes the
      * bridge's strong references and requests cooperative unloading; collection happens later and is
-     * observed with GetUnloadStatus. Neither forces GC or stops CoreCLR.
+     * observed with GetUnloadState. Neither forces GC or stops CoreCLR.
      *
      * Destruction calls into the runtime, so owners must be destroyed before `main` returns, never
      * during static destruction. Calls, moves, release and destruction on one owner must be
@@ -55,7 +57,7 @@ namespace Iris
 
         // NotRequested while loaded; Pending or Collected after Release (a snapshot, with no
         // deadline for Pending). Remains available after Release and host destruction.
-        [[nodiscard]] CallResult<ComponentUnloadState> GetUnloadStatus() const;
+        [[nodiscard]] CallResult<ComponentUnloadState> GetUnloadState() const;
 
         // Lists the component's public, non-generic types as handles, in declaration order (the order they
         // appear in the assembly's metadata), nested public types included. These are exactly the types

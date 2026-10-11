@@ -6,7 +6,7 @@ Scope: everything a C++ project sees of Iris: the ten public headers in `Native/
 2. How does it compare with Mono's embedding API and Coral, the two references named in the spec?
 3. How easy is it to use for the job it is going to do first: a script system in FenrirEngine (ticket 19)?
 
-**Baseline:** a clean build passes all 12 CTests in Debug and Release on Windows x64 (MSVC 19.4x, .NET SDK 10.0.401). Linux and macOS have never been run.
+**Baseline:** a clean build passes all 12 CTests in Debug and Release on Windows x64 (MSVC 19.44, .NET SDK 10.0.401). Linux and macOS have never been run.
 
 **Severity:** as in review 01. **High** means wrong behaviour, or something that will be expensive to change once frozen. **Medium** means real friction or risk. **Low** means a smell. **Info** means context.
 
@@ -39,7 +39,7 @@ Nothing found is a correctness bug in shipped behaviour. The problems are of fou
 - **Two kinds of public object.** Owners (`Component`, `Object`, `Array`) are move-only and release on destruction. Handles (`Type`, `Method`, `InstanceMethod`, `Member`) are copyable values that root nothing. The rules are the same on every type.
 - **Release is not collection.** Release is explicit. Collection is observed (`NotRequested`, `Pending`, `Collected`) and never forced by library code.
 - **Handles are never reused, and validated on every call.** A stale handle can't select anything in a new load (proved in ticket 17).
-- **Strict text.** UTF-8 in and out, malformed input rejected rather than replaced, and null distinct from empty everywhere.
+- **Strict text.** UTF-8 in and out of every call, malformed input rejected rather than replaced, and null distinct from empty. Read-only metadata snapshots are the deliberate exception: a lone surrogate there becomes U+FFFD, so one odd attribute argument cannot fail a whole query. This is documented.
 - **Internal calls bind at load, or the load fails.** Managed code can never call a null native pointer.
 
 ---
@@ -68,7 +68,7 @@ Checked type by type:
 
 - `Release()` is idempotent on every owner.
 - Destroying an owner never throws.
-- A moved-from owner reports `InvalidHandle`.
+- A moved-from owner is empty: its calls report `InvalidHandle`, and releasing it again succeeds.
 - An argument from another component is `InvalidArgument`.
 - A released or moved-from argument is `InvalidHandle`.
 - A missing lookup is `NotFound` and is not logged.
@@ -82,7 +82,7 @@ One deliberate asymmetry: `Component::Release` refuses with `InUse`, but `Object
 - `Log.hpp` says bridge calls "may come from several threads".
 - `InternalCall.hpp` says functions must be thread-safe "if components run on several".
 
-In fact, the managed registry takes one lock per operation and both native process-wide tables are mutex-guarded. So calls on *different* owners from different threads are designed to be safe. But nothing tests that.
+In fact, the managed registry guards its tables with process-wide locks, taken briefly around each lookup and never while component code runs, and both native process-wide tables are mutex-guarded. So calls on *different* owners from different threads are designed to be safe. But nothing tests that.
 
 **Fix:** one "Threading" section in the README states what is guaranteed (serialize calls per owner and per host), what is designed but unverified (different owners on different threads), and what is unknown (scripts that start their own threads). Ticket 19 decides the engine's threading model and whether Iris needs a concurrency test suite.
 
@@ -98,7 +98,7 @@ None of `hostfxr.h`, `nethost.h`, `coreclr_delegates.h`, `char_t`, `HMODULE`, `v
 
 They are declared in `Method.hpp` with a forward-declared `Detail::BridgeFunctions`, but only `.cpp` files call them.
 
-**Fix:** moved to a private `StringBlock.hpp`. What remains in public headers under `Detail` is only what the header templates themselves need: wire kinds, `KindSpec`, the struct mapping description and the `Raw*` classes. It is marked as not API.
+**Fix:** moved to a private `StringBlock.hpp`. What remains in public headers under `Detail` is only what the header templates themselves need: wire kinds, `KindSpec`, the struct mapping description and the `Raw*` classes. After the second pass (S5), every `namespace Detail` block says it is not API. The wire-format types stay inline because the templates need them, so a consumer must build against the headers of the library it links.
 
 ### H3. `Array<T>::FromObject` is public, unchecked, and documented as "for library use". **Medium** (breaking to remove later). *Fixed.*
 
@@ -187,7 +187,7 @@ That is the same order as Coral, which also invokes through reflection. At 10,00
 
 ### P2. Every bridge call zeroed a 4 KiB diagnostic buffer. **Low.** *Fixed.*
 
-`ManagedDiagnosticBuffer` value-initialized its `std::array<uint8_t, 4096>`, which means a 4 KiB memset per call, including successful ones. The bridge writes only `written` bytes and only those are read, so it is no longer zeroed. This gave about 10–30% on the calls above.
+`ManagedDiagnosticBuffer` value-initialized its `std::array<uint8_t, 4096>`, which means a 4 KiB memset per call, including successful ones. The bridge writes only `written` bytes and only those are read, so it is no longer zeroed. The calls above got measurably cheaper. The one-off numbers are within the noise for `FindType`, so treat the size of the gain as approximate.
 
 ---
 
@@ -199,7 +199,7 @@ Coral and Mono are architectural references only (ADR-0001). The comparison is b
 | --- | --- | --- | --- |
 | Start the runtime | `mono_jit_init` | `HostInstance::Initialize` | `Host::Initialize` (hostfxr + nethost), with progress flags |
 | Isolated, unloadable code | domains (legacy) | `AssemblyLoadContext` | one collectible context per `Component`; unload observed, never forced |
-| Unload verification | none | `GC::Collect` exposed | `GetUnloadStatus` (Pending/Collected); no way to force or wait (**gap G4**) |
+| Unload verification | none | `GC::Collect` exposed | `GetUnloadState` (Pending/Collected); no way to force or wait (**gap G4**) |
 | Errors | exception out-parameter | exception callback | `CallResult` status + diagnostic, plus a log sink |
 | Find a type | `mono_class_from_name` | `GetType(name)` | `FindType(fullName)` |
 | List types | metadata tables | `GetTypes()` | `GetTypes()` |
@@ -245,7 +245,7 @@ Gameplay code uses enums a lot. They can cross as their underlying integer, matc
 
 ### G4. A host cannot wait for an unload to finish. **Medium.** *Deferred (19 decides): "Unload wait".*
 
-Reload code that wants to confirm the old version is gone, or to warn when a script leaks a root, can only poll `GetUnloadStatus`, and nothing ever triggers a collection. The library rule "never force GC" was right for implicit behaviour. An explicit, documented `Host::CollectGarbage()` or a `WaitForUnload(timeout)` is a host decision, and is additive.
+Reload code that wants to confirm the old version is gone, or to warn when a script leaks a root, can only poll `GetUnloadState`, and nothing ever triggers a collection. The library rule "never force GC" was right for implicit behaviour. An explicit, documented `Host::CollectGarbage()` or a `WaitForUnload(timeout)` is a host decision, and is additive.
 
 ---
 
@@ -295,12 +295,67 @@ A WSL Ubuntu 24.04 environment with g++ 13 and CMake 3.28 is available on the de
 
 ---
 
+## Second pass: review of the first fix commit
+
+An independent review of `00817d7` found more things the freeze would have locked in. All were fixed in the follow-up commit unless marked deferred.
+
+### S1. `Array::AsObject()` was public plumbing. **Medium.** *Fixed.*
+
+It has the same smell as H3, and it let an array be passed where an `Object` was expected. It is now private, reached through `Detail::ArrayAccess::ObjectOf`.
+
+### S2. `*result` on a temporary could dangle. **Medium.** *Fixed.*
+
+The `&&` overload returned `T&&`. In C++20, `for (const Type& t : *component.GetTypes())` binds a reference into a destroyed `CallResult` (P2718 is C++23). The rvalue overload now returns `T` by value. That costs one move, and nothing dangles. Changing it after the freeze would alter `decltype`, so it had to happen now. Every dereference also `assert`s that the value is present.
+
+### S3. `InvalidArgument` covered returns too. **Medium.** *Decided, documented.*
+
+Two cases are `InvalidArgument` although no argument was invalid:
+- a returned string that cannot become UTF-8, or exceeds 2 GiB;
+- an ambiguous object-overload lookup.
+
+Rather than splitting the status, its frozen meaning is stated (README status table, ADR-0006): a value that cannot cross the boundary in either direction, a malformed or ambiguous name, or a misused call.
+
+### S4. `GetUnloadStatus()` returned a `ComponentUnloadState`. **Low.** *Fixed.*
+
+It is renamed `GetUnloadState`, which matches the enum and the bridge's `GetComponentUnloadState`.
+
+### S5. `Detail` was not marked as not API, although H2 and ADR-0006 said it was. **Low.** *Fixed.*
+
+Every block now has a banner.
+
+### S6. The consumer dereferenced unchecked results, and "every feature" was overclaimed. **Medium.** *Fixed.*
+
+Every step is checked through small helpers. The claims now say "a small script host". The README says plainly that its examples skip the checks.
+
+### S7. Doc corrections. **Low.** *Fixed.*
+
+- the lock wording (A5);
+- the string array-element row;
+- internal-call types ("a different set", not "smaller");
+- "throws only on allocation or OS text conversion failure";
+- metadata U+FFFD;
+- the moved-from wording;
+- stale `Object` and `PrimitiveValue` comments;
+- examples for `DiscoverHostFxr`, `IsInitialized`, `sharedAssemblies`, `GetInfo` and `GetUnloadState`;
+- softer P2 numbers.
+
+### S8. More additive gaps. **Low.** *Deferred.*
+
+- **Nullable object arguments.** There is no way to pass null to a class parameter. Arrays have `const Array<T>*` and members take `const Object*`, so a `const Object*` signature argument is the natural addition.
+- **Comparison and hashing.** `operator==` and hashing on `Type` and `Method`, for engine maps keyed by type, plus object identity comparison.
+- **Exception type as data.** The managed exception's type name is available today only inside the `ToString` text.
+- **Convenience helpers.** `CallResult::value_or`, and `ToString(CallStatus)`.
+- **A movable `Host`.**
+- **A free `SetLogSink`,** like `RegisterInternalCall`. This would also fix E6.
+
+---
+
 ## Summary
 
 | Disposition | Findings |
 | --- | --- |
-| Fixed in 18 | A1, A2, A5 (docs), H2, H3, H4, H5, E1, E5, P2, D1, D2, D3, D4 |
+| Fixed in 18 | A1, A2, A5 (docs), H2, H3, H4, H5, E1, E5, P2, D1, D2, D3, D4; second pass S1–S7 |
 | Kept, by design | A3, A4, E7, H1 |
-| Deferred, additive | E3 empty handles, E6 log sink before init, P1 fast invocation, G1 member enumeration and attributes, G2 object type, G3 enums, T3 benchmark |
+| Deferred, additive | E3 empty handles, E6 log sink before init, P1 fast invocation, G1 member enumeration and attributes, G2 object type, G3 enums, T3 benchmark, S8 (nullable object arguments, equality and hashing, exception type, helpers, movable `Host`, free `SetLogSink`) |
 | For ticket 19 | A5 threading model, G1 and G4 priorities, E4 engine API wrappers, P1 call budget, T2 |
 | Platform | T1: Windows only; Linux next, macOS and CI later |
