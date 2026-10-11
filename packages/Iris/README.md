@@ -299,8 +299,8 @@ const auto add = *math.FindMethod<Vec3(Vec3, Vec3)>("Add").value;
 const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Vec3>
 ```
 
-- **Validated on first use.** The first lookup that uses a mapping with a component registers it: the
-  bridge checks the size, each field's name, offset and type, and the field order against the managed
+- **Validated at lookup.** Each lookup that uses a mapping registers it with the component (repeats are
+  cheap and idempotent): the bridge checks the size, each field's name, offset and type, and the field order against the managed
   struct. A mismatch fails the lookup (`InvalidArgument`) with a diagnostic saying what differs, and
   the call can never happen. Structs nested in a mapping are registered first, and are checked too.
 - **Blittable only.** A managed struct must hold only sized integers, `float`, `double` and other
@@ -309,7 +309,8 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
   public fields or fields you can name; auto-property backing fields do not match.
 - **Mapped structs are trivially copyable, standard-layout types.** Their bytes are borrowed for the call
   and copied once on the way back; there is no allocation per call beyond the bridge's return block.
-- A mapping is checked per component, so registering the same mapping again is cheap and idempotent.
+- Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
+  argument, return or member, since the library tests for it at compile time.
 
 ### Logging
 

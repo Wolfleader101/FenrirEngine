@@ -17,11 +17,12 @@ internal static class ComponentRegistry
     private sealed record MemberRecord(FieldInfo? Field, PropertyInfo? Property, MethodInfo? Getter, MethodInfo? Setter,
         Type ValueType, int ValueKind, bool IsStatic, Type DeclaringType);
 
+    // A blittable struct registered from native: its managed type and size in bytes.
+    private sealed record StructRecord(Type Type, int Size);
+
     // Handles to types, methods and members looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
     // its component.
-    // A blittable struct registered from native: its managed type and size in bytes.
-    private sealed record StructRecord(Type Type, int Size);
 
     private sealed class HandleTable
     {
@@ -173,6 +174,15 @@ internal static class ComponentRegistry
         }
     }
 
+    // Every struct kind a lookup mentions must be registered for this component, whatever else about the
+    // lookup would match; a foreign or unknown struct handle is an argument error, not a quiet NotFound.
+    private static void RequireStructs(Entry entry, int returnKind, int[] parameterKinds)
+    {
+        if (ValueKinds.IsStruct(returnKind)) StructOf(entry, returnKind);
+        foreach (int kind in parameterKinds)
+            if (ValueKinds.IsStruct(kind)) StructOf(entry, kind);
+    }
+
     private static bool KindMatches(Entry entry, Type type, int kind, bool isReturn)
     {
         if (ValueKinds.IsStruct(kind)) return type == StructOf(entry, kind).Type;
@@ -218,6 +228,7 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
+        RequireStructs(entry, returnKind, parameterKinds);
         BindingFlags flags = isStatic ? BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly
                                       : BindingFlags.Public | BindingFlags.Instance;
         // No registry lock is held while reflecting, which can load assemblies.
@@ -373,6 +384,7 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
+        RequireStructs(entry, 0, parameterKinds);
         if (type.IsAbstract || type.IsInterface) return CreateResult.NotFound;
         ConstructorInfo? constructor = null;
         foreach (ConstructorInfo candidate in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
@@ -415,6 +427,7 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
+        RequireStructs(entry, valueKind, Array.Empty<int>());
         const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.FlattenHierarchy;
         MemberRecord? member = null;
         MemberInfo? info = null;
@@ -632,7 +645,9 @@ internal static class ComponentRegistry
         if (type == null || type.Assembly != entry.Assembly || !type.IsVisible) return FindResult.NotFound;
         if (BlittableProblem(type) is string problem) throw new BridgeArgumentException(problem);
 
+        // Reflection does not promise declaration order; the metadata token does.
         FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Array.Sort(fields, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
         int managedSize = Marshal.SizeOf(type);
         if (managedSize != nativeSize)
             throw new BridgeArgumentException($"{type} is {managedSize} bytes but the native struct is {nativeSize}.");
