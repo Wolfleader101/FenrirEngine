@@ -33,7 +33,8 @@ public static partial class Bootstrap
                 ReleaseObject = &ReleaseObject,
                 FindMember = &FindMember,
                 GetMember = &GetMember,
-                SetMember = &SetMember
+                SetMember = &SetMember,
+                FreeString = &FreeString
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

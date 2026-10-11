@@ -11,6 +11,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
@@ -29,25 +30,39 @@ namespace Iris
                               (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8));
 
     /**
-     * @brief What can be passed to a managed method or constructor: a PrimitiveValue, or an Object
+     * @brief A string passed to managed code: `std::string_view` for a string that is never null, or
+     * `std::optional<std::string_view>` where an empty optional is a null string. The text is UTF-8,
+     * may contain null characters, and is borrowed only for the duration of the call; malformed UTF-8 is
+     * InvalidArgument and no managed code runs.
+     */
+    template <typename T>
+    concept StringArgument = std::same_as<std::remove_cvref_t<T>, std::string_view> ||
+                             std::same_as<std::remove_cvref_t<T>, std::optional<std::string_view>>;
+
+    /**
+     * @brief What can be passed to a managed method or constructor: a PrimitiveValue, a string, or an Object
      * (declared as `const Object&`), which matches any managed class or interface parameter.
      */
     template <typename T>
-    concept Argument = PrimitiveValue<std::remove_cvref_t<T>> || std::same_as<std::remove_cvref_t<T>, Object>;
+    concept Argument =
+        PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> || std::same_as<std::remove_cvref_t<T>, Object>;
 
     /**
-     * @brief An argument as declared in a method signature: a PrimitiveValue by value, or an Object as
-     * `const Object&` (an Object cannot be copied, so a by-value Object is not a signature argument).
+     * @brief An argument as declared in a method signature: a PrimitiveValue by value, a string as
+     * `std::string_view` or `std::optional<std::string_view>`, or an Object as `const Object&` (an Object
+     * cannot be copied, so a by-value Object is not a signature argument).
      */
     template <typename T>
-    concept SignatureArgument = PrimitiveValue<T> || std::same_as<T, const Object&>;
+    concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || std::same_as<T, const Object&>;
 
     /**
-     * @brief What a managed method can return: void, a PrimitiveValue, or `std::optional<Object>`, where
-     * an empty optional is a null return.
+     * @brief What a managed method can return: void, a PrimitiveValue, `std::optional<Object>`, or
+     * `std::optional<std::string>`; in both optionals an empty value is a null return, which a string
+     * keeps distinct from the empty string. A returned string is an owned copy with no size limit.
      */
     template <typename T>
-    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || std::same_as<T, std::optional<Object>>;
+    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || std::same_as<T, std::optional<Object>> ||
+                         std::same_as<T, std::optional<std::string>>;
 
     namespace Detail
     {
@@ -66,8 +81,32 @@ namespace Iris
             UInt64 = 9,
             Float = 10,
             Double = 11,
-            Object = 12
+            Object = 12,
+            String = 13
         };
+
+        // What a string argument's slot points to; mirrored by the managed StringArgument. It lives on the
+        // caller's stack for the call, and the text it points to is borrowed from the caller.
+        struct StringArgumentView
+        {
+            const std::uint8_t* data = nullptr;
+            std::int32_t length = 0;
+            std::int32_t isNull = 1;
+        };
+
+        inline StringArgumentView MakeStringView(std::optional<std::string_view> text) noexcept
+        {
+            StringArgumentView view;
+            if (text)
+            {
+                view.data = reinterpret_cast<const std::uint8_t*>(text->data());
+                // A string too long for the wire reports a length the bridge rejects.
+                view.length =
+                    text->size() > static_cast<std::size_t>(INT32_MAX) ? -1 : static_cast<std::int32_t>(text->size());
+                view.isNull = 0;
+            }
+            return view;
+        }
 
         template <typename Declared>
         constexpr ValueKind KindOf() noexcept
@@ -77,6 +116,9 @@ namespace Iris
                 return ValueKind::Void;
             else if constexpr (std::same_as<T, Object> || std::same_as<T, std::optional<Object>>)
                 return ValueKind::Object;
+            else if constexpr (std::same_as<T, std::string_view> || std::same_as<T, std::optional<std::string_view>> ||
+                               std::same_as<T, std::optional<std::string>>)
+                return ValueKind::String;
             else
             {
                 static_assert(PrimitiveValue<T>,
@@ -129,16 +171,29 @@ namespace Iris
                 return static_cast<T>(slot);
         }
 
-        // Records one argument: its slot for a primitive, or the Object whose handle the call will use.
+        // Records one argument: its slot for a primitive, the Object whose handle the call will use, or
+        // for a string a view (kept by the caller until the call returns) that the slot points to.
         template <typename Declared>
-        void PackArgument(std::uint64_t& slot, const Object*& object, const Declared& value) noexcept
+        void PackArgument(std::uint64_t& slot, const Object*& object, StringArgumentView& text,
+                          const Declared& value) noexcept
         {
             using T = std::remove_cvref_t<Declared>;
             if constexpr (std::same_as<T, Object>)
                 object = &value;
+            else if constexpr (std::same_as<T, std::string_view> || std::same_as<T, std::optional<std::string_view>>)
+            {
+                text = MakeStringView(value);
+                slot = reinterpret_cast<std::uintptr_t>(&text);
+            }
             else
                 slot = ToSlot<T>(value);
         }
+
+        struct BridgeFunctions;
+
+        // Copies a returned string block and gives it back to the bridge. A zero slot is a null string.
+        // `bridge` is the table the block came from.
+        std::optional<std::string> TakeString(const BridgeFunctions& bridge, std::uint64_t block);
 
         // An untyped method handle: arguments and result are raw slots. Use Method<Signature> instead.
         class RawMethod
@@ -153,6 +208,8 @@ namespace Iris
 
             // Takes ownership of an object handle the bridge returned from this method's component.
             [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
+            // Copies and releases a string block the bridge returned from this method's component.
+            [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
 
             // Why object arguments cannot be sent, or nothing: shared with Type::CreateObject.
             [[nodiscard]] static std::optional<std::pair<CallStatus, std::string>> ResolveObjects(
@@ -181,6 +238,11 @@ namespace Iris
                         // Zero is a null return; anything else is a new, independently owned handle.
                         result.value.emplace(*raw.value == 0 ? std::nullopt
                                                              : std::optional<Object>(method.AdoptObject(*raw.value)));
+                    }
+                    else if constexpr (std::same_as<Result, std::optional<std::string>>)
+                    {
+                        // Zero is a null return; anything else is a block to copy and give back.
+                        result.value.emplace(method.TakeString(*raw.value));
                     }
                     else
                     {
@@ -219,8 +281,9 @@ namespace Iris
         {
             std::uint64_t slots[sizeof...(Args) + 1] = {};
             const Object* objects[sizeof...(Args) + 1] = {};
+            Detail::StringArgumentView texts[sizeof...(Args) + 1] = {};
             std::size_t index = 0;
-            ((Detail::PackArgument(slots[index], objects[index], arguments), ++index), ...);
+            ((Detail::PackArgument(slots[index], objects[index], texts[index], arguments), ++index), ...);
             return Detail::ToTyped<Result>(method,
                                            method.Invoke(std::span<std::uint64_t>(slots, sizeof...(Args)),
                                                          std::span<const Object* const>(objects, sizeof...(Args))));
@@ -255,8 +318,9 @@ namespace Iris
         {
             std::uint64_t slots[sizeof...(Args) + 1] = {};
             const Object* objects[sizeof...(Args) + 1] = {};
+            Detail::StringArgumentView texts[sizeof...(Args) + 1] = {};
             std::size_t index = 0;
-            ((Detail::PackArgument(slots[index], objects[index], arguments), ++index), ...);
+            ((Detail::PackArgument(slots[index], objects[index], texts[index], arguments), ++index), ...);
             return Detail::ToTyped<Result>(
                 method, method.InvokeInstance(object, std::span<std::uint64_t>(slots, sizeof...(Args)),
                                               std::span<const Object* const>(objects, sizeof...(Args))));

@@ -47,6 +47,11 @@ namespace Iris
         return Object(std::move(owned));
     }
 
+    std::optional<std::string> Detail::RawMethod::TakeString(std::uint64_t block) const
+    {
+        return Detail::TakeString(*state->bridge, block);
+    }
+
     CallResult<std::uint64_t> Detail::RawMethod::Invoke(std::span<std::uint64_t> slots,
                                                         std::span<const Object* const> objects) const
     {

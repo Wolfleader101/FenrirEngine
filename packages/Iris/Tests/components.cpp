@@ -26,6 +26,8 @@ namespace
     constexpr std::string_view HidingCounterType = "Iris.Examples.Component.HidingCounter";
     constexpr std::string_view SettingsType = "Iris.Examples.Component.Settings";
     constexpr std::string_view HidingSettingsType = "Iris.Examples.Component.HidingSettings";
+    constexpr std::string_view StringsType = "Iris.Examples.Component.Strings";
+    constexpr std::string_view GreeterType = "Iris.Examples.Component.Greeter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
     static_assert(!std::is_copy_constructible_v<Component> && std::is_nothrow_move_constructible_v<Component>);
@@ -936,6 +938,143 @@ namespace
                        "Storing null did not clear the member");
                  Check(component.Release().status == CallStatus::InUse,
                        "Held objects did not keep the component loaded");
+             }},
+            {"strings round-trip as UTF-8 with multi-byte text and embedded nulls",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto strings = *component.FindType(StringsType).value;
+                 const auto echo =
+                     strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("EchoOrNull");
+                 Check(echo.Succeeded(), "Lookup failed: " + echo.diagnostic);
+                 const std::string wolf = "h\xC3\xA9llo \xCF\x80 \xF0\x9F\x90\xBA";
+                 for (const std::string& sample : {std::string("plain"), wolf, std::string("A\0B", 3),
+                                                   std::string("\0", 1), std::string("tail\0", 5), std::string()})
+                 {
+                     const auto echoed = echo.value->Invoke(std::string_view(sample));
+                     Check(echoed.Succeeded() && echoed.value && *echoed.value && **echoed.value == sample,
+                           "A string did not round-trip: " + sample);
+                 }
+                 const auto greeting = strings.FindMethod<std::optional<std::string>()>("Greeting");
+                 const auto text = greeting.value->Invoke();
+                 Check(text.Succeeded() && text.value && *text.value &&
+                           **text.value == "h\xC3\xA9llo \xCF\x80 \xF0\x9F\x90\xBA \xE2\x80\x94 ok",
+                       "A non-ASCII return was altered");
+                 const auto withNull = strings.FindMethod<std::optional<std::string>()>("WithNull");
+                 const auto embedded = withNull.value->Invoke();
+                 Check(embedded.Succeeded() && **embedded.value == std::string("A\0B", 3),
+                       "An embedded null in a return was lost");
+                 const auto repeat =
+                     strings.FindMethod<std::optional<std::string>(std::string_view, std::int32_t)>("Repeat");
+                 const auto large = repeat.value->Invoke(std::string_view("\xCF\x80"), 1'000'000);
+                 Check(
+                     large.Succeeded() && **large.value ==
+                                              [] {
+                                                  std::string expected;
+                                                  for (int i = 0; i < 1'000'000; ++i)
+                                                      expected += "\xCF\x80";
+                                                  return expected;
+                                              }(),
+                     "A large return was truncated");
+             }},
+            {"a null string is distinct from an empty one in both directions",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto strings = *component.FindType(StringsType).value;
+                 const auto echo =
+                     *strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("EchoOrNull")
+                          .value;
+                 const auto isNull = *strings.FindMethod<bool(std::optional<std::string_view>)>("IsNull").value;
+                 const auto fromNull = echo.Invoke(std::nullopt);
+                 const auto fromEmpty = echo.Invoke(std::string_view());
+                 Check(fromNull.Succeeded() && fromNull.value && !*fromNull.value,
+                       "A null argument did not come back null");
+                 Check(fromEmpty.Succeeded() && fromEmpty.value && *fromEmpty.value && (*fromEmpty.value)->empty(),
+                       "An empty argument did not come back empty");
+                 Check(isNull.Invoke(std::nullopt).value == true && isNull.Invoke(std::string_view()).value == false,
+                       "Managed code could not tell null from empty");
+                 const auto nullReturn = strings.FindMethod<std::optional<std::string>()>("Null");
+                 const auto emptyReturn = strings.FindMethod<std::optional<std::string>()>("Empty");
+                 const auto fromNullReturn = nullReturn.value->Invoke();
+                 const auto fromEmptyReturn = emptyReturn.value->Invoke();
+                 Check(fromNullReturn.Succeeded() && fromNullReturn.value && !*fromNullReturn.value,
+                       "A null return was not empty");
+                 Check(fromEmptyReturn.Succeeded() && fromEmptyReturn.value && *fromEmptyReturn.value,
+                       "An empty return was reported as null");
+             }},
+            {"malformed UTF-8 is rejected before managed code runs, and bad returns are diagnosed",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto strings = *component.FindType(StringsType).value;
+                 const auto join =
+                     *strings.FindMethod<std::optional<std::string>(std::string_view, std::string_view)>("Join").value;
+                 for (const char* bad : {"\xFF", "\xC3", "\xC0\x80", "\xED\xA0\x80", "\xF4\x90\x80\x80"})
+                 {
+                     const auto rejected = join.Invoke("x", bad);
+                     Check(rejected.status == CallStatus::InvalidArgument && !rejected.value &&
+                               rejected.diagnostic.find("UTF-8") != std::string::npos,
+                           std::string("Malformed UTF-8 was accepted: ") + bad);
+                 }
+                 const auto unpaired = strings.FindMethod<std::optional<std::string>()>("UnpairedSurrogate");
+                 Check(unpaired.value->Invoke().status == CallStatus::InvalidArgument,
+                       "A return with no UTF-8 form was not diagnosed");
+                 const auto throws = strings.FindMethod<std::optional<std::string>(std::string_view)>("Throws");
+                 const auto thrown = throws.value->Invoke("\xCF\x80");
+                 Check(thrown.status == CallStatus::ManagedException &&
+                           thrown.diagnostic.find("Rejected: \xCF\x80") != std::string::npos,
+                       "A managed exception with a string argument was not reported");
+                 const auto again = join.Invoke("a", "b");
+                 Check(again.Succeeded() && **again.value == "ab", "The method was unusable after a rejected call");
+             }},
+            {"strings are their own kind and work with constructors, instance methods and members",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto strings = *component.FindType(StringsType).value;
+                 Check(strings.FindMethod<std::int32_t(const Object&)>("Length").status == CallStatus::NotFound &&
+                           strings.FindMethod<std::int32_t(std::int32_t)>("Length").status == CallStatus::NotFound,
+                       "Another kind matched a string parameter");
+                 Check(strings.FindMethod<std::int32_t(std::string_view)>("Kind").value->Invoke("x").value == 1,
+                       "A string did not pick the string overload");
+                 const auto greeter = *component.FindType(GreeterType).value;
+                 const auto object = greeter.CreateObject(std::string_view("W\xC3\xB6lfe"));
+                 Check(object.Succeeded(), "A constructor with a string failed: " + object.diagnostic);
+                 const auto greet = greeter.FindInstanceMethod<std::optional<std::string>(std::string_view)>("Greet");
+                 const auto greeting = greet.value->Invoke(*object.value, "!");
+                 Check(greeting.Succeeded() && **greeting.value == "Hello, W\xC3\xB6lfe!",
+                       "An instance method with strings failed");
+
+                 const auto settings = *component.FindType(SettingsType).value;
+                 const auto label = *settings.FindField<std::optional<std::string>>("Label").value;
+                 const auto caption = *settings.FindProperty<std::optional<std::string>>("Caption").value;
+                 const auto staticLabel = *settings.FindField<std::optional<std::string>>("StaticLabel").value;
+                 const auto instance = settings.CreateObject();
+                 Check(!*label.Get(*instance.value).value, "An unset string field was not null");
+                 for (const std::string& sample : {std::string("\xCF\x80"), std::string(), std::string("A\0B", 3)})
+                 {
+                     Check(label.Set(*instance.value, std::string_view(sample)).Succeeded() &&
+                               **label.Get(*instance.value).value == sample,
+                           "A string field did not round-trip");
+                     Check(caption.Set(*instance.value, std::string_view(sample)).Succeeded() &&
+                               **caption.Get(*instance.value).value == sample,
+                           "A string property did not round-trip");
+                     Check(staticLabel.Set(std::string_view(sample)).Succeeded() && **staticLabel.Get().value == sample,
+                           "A static string field did not round-trip");
+                 }
+                 Check(label.Set(*instance.value, std::nullopt).Succeeded() && !*label.Get(*instance.value).value,
+                       "Storing null did not clear a string field");
+                 const auto readOnly = *settings.FindProperty<std::optional<std::string>>("ReadOnlyCaption").value;
+                 Check(readOnly.Set(*instance.value, "x").status == CallStatus::InvalidArgument &&
+                           **readOnly.Get(*instance.value).value == "fixed",
+                       "A read-only string property was writable");
+                 Check(label.Set(*instance.value, std::string_view("\xFF")).status == CallStatus::InvalidArgument,
+                       "Malformed UTF-8 was stored in a field");
+                 Check(settings.FindField<std::int32_t>("Label").status == CallStatus::NotFound &&
+                           settings.FindField<std::optional<Object>>("Label").status == CallStatus::NotFound &&
+                           settings.FindField<std::optional<std::string>>("Count").status == CallStatus::NotFound,
+                       "A member matched a kind it is not");
              }},
             {"member handles stop working when their component is released",
              [&] {

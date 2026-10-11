@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 16.
+Managed bridge initialized; bridge version 17.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -253,6 +253,31 @@ setter) and reading a write-only property are `InvalidArgument`. Properties run 
 exception from a getter or setter is `ManagedException` with its own details and leaves the object usable.
 Like `Type`, a `Member` is a cheap value that holds no managed reference and stops working
 (`InvalidHandle`) when its component is released.
+
+### Strings
+
+Strings cross the boundary as UTF-8. Native input is borrowed for the call; a result is an owning copy.
+
+```cpp
+const auto strings = *component.FindType("MyComponent.Strings").value;
+const auto echo = *strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("Echo").value;
+
+const auto a = echo.Invoke("hello \xCF\x80");     // CallResult<std::optional<std::string>>
+const auto b = echo.Invoke(std::nullopt);         // a null string in...
+// b.value is engaged (the call worked) and *b.value is empty: ...a null string out.
+```
+
+- **Arguments** are `std::string_view` (never null) or `std::optional<std::string_view>` (empty optional =
+  null). Pass `std::string_view` explicitly to `Type::CreateObject`, which deduces its argument types.
+- **Returns and members** are `std::optional<std::string>`: an empty optional is a null string, kept apart
+  from an empty `std::string`. Members take the same `std::optional<std::string_view>` on `Set`.
+- **Decoding is strict.** Malformed UTF-8 in an argument is `InvalidArgument` and no managed code runs. A
+  managed string that cannot become UTF-8 (an unpaired surrogate) is `InvalidArgument` on the way back.
+  Nothing is replaced with U+FFFD.
+- **Any size, one call.** Text may contain null characters and has no fixed size limit. A result is produced
+  once and copied once; there is no size query that could run managed code twice.
+- A string is its own kind: a `string` parameter is matched by `std::string_view` signatures only, never
+  by `const Object&`, and an `Object` or integer never matches it.
 
 ### Logging
 
