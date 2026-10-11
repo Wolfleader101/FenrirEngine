@@ -4,6 +4,7 @@
 #include "ComponentState.hpp"
 #include "HostFxrDiagnostics.hpp"
 #include "HostFxrLibrary.hpp"
+#include "InternalCalls.hpp"
 #include "LogSink.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "StringEncoding.hpp"
@@ -350,6 +351,11 @@ namespace Iris
                 result.diagnostic = "Sharing assembly failed: " + registered.diagnostic;
                 return finish(std::move(result));
             }
+        }
+        if (auto attached = AttachInternalCalls(bridge); !attached.Succeeded())
+        {
+            result.diagnostic = "Registering internal calls failed: " + attached.diagnostic;
+            return finish(std::move(result));
         }
         state->bridge = std::move(bridge);
         result.success = true;

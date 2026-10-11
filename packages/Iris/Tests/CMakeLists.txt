@@ -67,6 +67,10 @@ iris_add_native_checks(IrisComponentChecks components.cpp)
 add_test(NAME Components
     COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}")
 
+# The same checks' unbound mode: nothing is registered, so the component's internal calls are missing.
+add_test(NAME Components-unbound
+    COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}" --unbound)
+
 # Install this build and use it from the standalone consumer project, through find_package(Iris).
 if(IRIS_INSTALL)
     add_test(NAME ConsumerPackage

@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 19.
+Managed bridge initialized; bridge version 20.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -351,6 +351,45 @@ const auto made = range.Invoke(5);                                // *made.value
   not supported by signature (`NotFound`). Struct elements are validated like any mapped struct.
 - A `bool` bulk copy trusts the buffer to hold 0 or 1 in each byte.
 - Arrays are not (yet) available as field or property values; hold one in an `Array<T>` and pass it.
+
+### Internal calls (managed code calling native code)
+
+A host exposes native functions to components by registering them; the component reaches them through
+static unmanaged function pointer fields.
+
+```csharp
+// In the component (needs AllowUnsafeBlocks):
+public static unsafe class Natives
+{
+    public static delegate* unmanaged[Cdecl]<int, int, int> Add;     // bound by name when the component loads
+    public static int CallAdd(int a, int b) => Add(a, b);
+}
+```
+
+```cpp
+int AddImpl(int left, int right) { return left + right; }
+
+Iris::RegisterInternalCall<&AddImpl>("MyComponent.Natives.Add");   // "Namespace.Type.Field"
+```
+
+- **Register any time.** Registration is process-wide, needs no host, and may happen before or after
+  `Host::Initialize`. It applies to components loaded afterwards; a loaded component is not changed.
+  Registering the same function under a name again succeeds; a different one is `InvalidArgument`. There
+  is no unregistering, so a registered function must stay valid for the life of the process.
+- **Checked when the component loads.** The bridge binds every static function pointer field in the
+  component assembly by `Namespace.Type.Field` and checks the signature. If any field has no registration,
+  a different signature, a calling convention other than `Cdecl`, is `readonly`, or is not an unmanaged
+  pointer, **the load fails** with `InvalidArgument` and a diagnostic listing every such field. Managed code
+  can therefore never call a null pointer. A registration also makes the component require it: a host that
+  registers nothing cannot load a component that declares bindings.
+- **Signatures.** Parameters and results are `void`, sized integers, `float`, `double` or pointers. `bool`
+  and characters are rejected because their unmanaged representation is ambiguous. A string is passed as
+  a UTF-8 `const char*` and a length, a struct as a pointer to it; the pointers are valid for the call.
+- **Exceptions stop at the boundary.** The function is wrapped, so a C++ exception never unwinds through
+  managed frames. It is reported as an Error through the log sink and managed code receives a
+  value-initialized result (zero, or null for a pointer).
+- **No lifetime coupling.** A registration holds only a name, kinds and a native address, so it never
+  keeps a released component alive.
 
 ### Logging
 

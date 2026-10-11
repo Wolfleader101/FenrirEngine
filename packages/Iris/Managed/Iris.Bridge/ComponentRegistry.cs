@@ -91,6 +91,8 @@ internal static class ComponentRegistry
             if (!context.IsCollectible || !assembly.IsCollectible || AssemblyLoadContext.GetLoadContext(assembly) != context)
                 throw new InvalidOperationException("Component loading did not produce a collectible assembly in its own context.");
             string name = assembly.GetName().Name ?? throw new InvalidOperationException("Assembly has no name.");
+            // Bind internal calls before registering, so a component that cannot be bound is never visible.
+            InternalCalls.Bind(assembly);
             var record = new Registration(new Entry(context, assembly, name));
             ulong token;
             lock (Gate)

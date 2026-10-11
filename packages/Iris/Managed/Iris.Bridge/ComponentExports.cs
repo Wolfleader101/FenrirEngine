@@ -434,6 +434,30 @@ public static partial class Bootstrap
         catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
     }
 
+    // Registers a native function that component code can reach through a static function pointer field named
+    // "Namespace.Type.Field". The signature is a return kind (Void, a sized number, or Pointer) and parameter
+    // kinds. Registering the same name, signature and function again succeeds; a different one is
+    // InvalidArgument. Process-wide: it applies to components loaded afterwards.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int RegisterInternalCall(byte* name, int nameLength, int returnKind, int* kinds, int count, void* function,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || name == null || nameLength <= 0 ||
+            count < 0 || count > 255 || (count > 0 && kinds == null) || function == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            InternalCalls.Register(new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength)), returnKind,
+                new ReadOnlySpan<int>(kinds, count).ToArray(), (IntPtr)function);
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+        }
+    }
+
     // Gives back a string block returned in a result slot. Zero is ignored. Cannot fail.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static void FreeString(ulong block)

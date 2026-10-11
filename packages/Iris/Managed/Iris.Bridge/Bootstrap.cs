@@ -40,7 +40,8 @@ public static partial class Bootstrap
                 GetArrayLength = &GetArrayLength,
                 GetArrayElement = &GetArrayElement,
                 SetArrayElement = &SetArrayElement,
-                CopyArray = &CopyArray
+                CopyArray = &CopyArray,
+                RegisterInternalCall = &RegisterInternalCall
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

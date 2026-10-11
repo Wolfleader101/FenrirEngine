@@ -1,11 +1,14 @@
 // Component ownership checks against the real bridge and the published example component.
+#include "../Examples/Hosting/ExampleNatives.hpp"
 #include "Iris/Array.hpp"
 #include "Iris/Host.hpp"
 #include "TestHarness.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -112,6 +115,7 @@ namespace
     constexpr std::string_view StringsType = "Iris.Examples.Component.Strings";
     constexpr std::string_view StructsType = "Iris.Examples.Component.Structs";
     constexpr std::string_view BodyType = "Iris.Examples.Component.Body";
+    constexpr std::string_view NativesType = "Iris.Examples.Component.Natives";
     constexpr std::string_view ArraysType = "Iris.Examples.Component.Arrays";
     constexpr std::string_view GreeterType = "Iris.Examples.Component.Greeter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
@@ -1482,6 +1486,80 @@ namespace
                  }
                  Check(stale.Length().Succeeded(), "Destroying another component affected this array");
              }},
+            {"bound internal calls reach native code with arguments and results",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto natives = *component.FindType(NativesType).value;
+                 const auto add = *natives.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("CallAdd").value;
+                 Check(add.Invoke(20, 22).value == 42, "A bound function returned the wrong value");
+                 Check(natives.FindMethod<double(double)>("CallHalf").value->Invoke(5.0).value == 2.5,
+                       "A double function was wrong");
+                 Check(natives.FindMethod<std::int64_t(std::int64_t, std::uint8_t)>("CallCombine")
+                               .value->Invoke(7, 255)
+                               .value == 7255,
+                       "Mixed argument widths were wrong");
+                 Check(natives.FindMethod<std::int32_t(std::string_view)>("CallMeasure")
+                               .value->Invoke("\xCF\x80\xF0\x9F\x90\xBA")
+                               .value == 6,
+                       "A UTF-8 string did not arrive as bytes and a length");
+                 using Fixture::Vec3;
+                 const auto normalized = natives.FindMethod<Vec3(Vec3)>("CallNormalize").value->Invoke(Vec3{3, 0, 4});
+                 Check(normalized.Succeeded() && std::abs(normalized.value->X - 0.6f) < 1e-6f &&
+                           std::abs(normalized.value->Z - 0.8f) < 1e-6f,
+                       "A struct passed by pointer was not updated");
+                 Examples::recordedValue = 0;
+                 Check(natives.FindMethod<void(std::int32_t)>("CallRecord").value->Invoke(9).Succeeded() &&
+                           Examples::recordedValue == 9,
+                       "A void function was not called");
+             }},
+            {"a C++ exception in an internal call is stopped at the boundary",
+             [&] {
+                 SinkGuard guard(arguments);
+                 auto host = StartHost(arguments);
+                 std::vector<Logged> logged;
+                 std::mutex mutex;
+                 Check(host->SetLogSink([&](const LogMessage& message) {
+                               const std::lock_guard lock(mutex);
+                               logged.push_back({message.level, std::string(message.text)});
+                           })
+                           .Succeeded(),
+                       "The log sink was not set");
+                 const auto component = Load(*host, arguments.component);
+                 const auto natives = *component.FindType(NativesType).value;
+                 const auto thrown = natives.FindMethod<std::int32_t()>("CallThrows").value->Invoke();
+                 Check(thrown.Succeeded() && thrown.value == 0,
+                       "The managed caller did not get a value-initialized result");
+                 const std::lock_guard lock(mutex);
+                 const bool reported = std::any_of(logged.begin(), logged.end(), [](const Logged& entry) {
+                     return entry.level == LogLevel::Error && entry.text.find("native failure") != std::string::npos;
+                 });
+                 Check(reported, "The escaped exception was not reported through the log sink");
+                 // The runtime is intact and later calls still work.
+                 Check(natives.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("CallAdd")
+                               .value->Invoke(1, 2)
+                               .value == 3,
+                       "Internal calls stopped working after an exception");
+             }},
+            {"internal call registration is idempotent and rejects conflicts",
+             [&] {
+                 const std::string name = "Iris.Examples.Component.Natives.Add";
+                 Check(Iris::RegisterInternalCall<&Examples::Add>(name).Succeeded(),
+                       "Registering the same function again failed");
+                 Check(Iris::RegisterInternalCall<&Examples::Combine>(name).status == CallStatus::InvalidArgument,
+                       "A different function under a used name was accepted");
+                 Check(Iris::RegisterInternalCall<&Examples::Add>("").status == CallStatus::InvalidArgument,
+                       "An empty name was accepted");
+                 auto host = StartHost(arguments);
+                 // A registration made after the host is up is accepted, and harmless without a matching field.
+                 Check(
+                     Iris::RegisterInternalCall<&Examples::Half>("Iris.Examples.Component.Natives.Unused").Succeeded(),
+                     "Registering after start-up failed");
+                 Check(
+                     Iris::RegisterInternalCall<&Examples::Half>("Iris.Examples.Component.Natives.Unused").Succeeded(),
+                     "Registering twice after start-up failed");
+                 CheckCalculation(Load(*host, arguments.component));
+             }},
             {"member handles stop working when their component is released",
              [&] {
                  auto host = StartHost(arguments);
@@ -1622,6 +1700,31 @@ namespace
              }},
         });
     }
+
+    // Nothing is registered in this process: the component cannot load until its internal calls are.
+    int RunUnbound(const Arguments& arguments)
+    {
+        return Tests::RunCases({
+            {"a component with unbound internal calls fails to load, then loads once they are registered",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto missing = host->LoadComponent(arguments.component);
+                 Check(missing.status == CallStatus::InvalidArgument && !missing.value &&
+                           missing.diagnostic.find("7 internal call(s)") != std::string::npos &&
+                           missing.diagnostic.find("Iris.Examples.Component.Natives.Add") != std::string::npos &&
+                           missing.diagnostic.find("no internal call is registered") != std::string::npos,
+                       "Unbound internal calls were not diagnosed: " + missing.diagnostic);
+                 // Registering after start-up, then loading, works; the failed load left nothing behind.
+                 Check(Iris::Examples::RegisterNatives().Succeeded(), "Registering after a failed load failed");
+                 const auto component = Load(*host, arguments.component);
+                 const auto natives = *component.FindType(NativesType).value;
+                 Check(natives.FindMethod<std::int32_t(std::int32_t, std::int32_t)>("CallAdd")
+                               .value->Invoke(2, 3)
+                               .value == 5,
+                       "A function registered after start-up did not bind");
+             }},
+        });
+    }
 } // namespace
 
 #if defined(_WIN32)
@@ -1630,9 +1733,19 @@ int wmain(int argc, wchar_t* argv[])
 int main(int argc, char* argv[])
 #endif
 {
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
     {
         std::cerr << "Usage: IrisComponentChecks runtimeconfig.json bridge.dll component.dll\n";
+        return EXIT_FAILURE;
+    }
+    if (argc == 5)
+    {
+        return RunUnbound({{argv[1], argv[2], {}}, std::filesystem::absolute(argv[3])});
+    }
+    // Registered before any host exists: registrations apply to components loaded afterwards.
+    if (const auto natives = Iris::Examples::RegisterNatives(); !natives.Succeeded())
+    {
+        std::cerr << "Registering native functions failed: " << natives.diagnostic << '\n';
         return EXIT_FAILURE;
     }
     return Run({{argv[1], argv[2], {}}, std::filesystem::absolute(argv[3])});

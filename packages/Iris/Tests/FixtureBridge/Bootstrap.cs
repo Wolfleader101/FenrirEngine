@@ -86,7 +86,8 @@ public static class Bootstrap
             GetArrayLength = &GetArrayLength,
             GetArrayElement = &GetArrayElement,
             SetArrayElement = &SetArrayElement,
-            CopyArray = &CopyArray
+            CopyArray = &CopyArray,
+            RegisterInternalCall = &RegisterInternalCall
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -230,6 +231,13 @@ public static class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *value = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int RegisterInternalCall(byte* name, int nameLength, int returnKind, int* kinds, int count, void* function,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

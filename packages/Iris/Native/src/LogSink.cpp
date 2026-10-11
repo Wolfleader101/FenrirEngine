@@ -57,6 +57,25 @@ namespace Iris::Detail
         }
     } // namespace
 
+    void EmitLog(LogLevel level, std::string_view text) noexcept
+    {
+        try
+        {
+            std::shared_ptr<const LogSink> sink;
+            {
+                const std::lock_guard lock(State().mutex);
+                sink = State().sink;
+            }
+            if (sink != nullptr)
+            {
+                (*sink)(LogMessage{level, text});
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
     CallResult<void> InstallLogSink(const BridgeFunctions& bridge, LogSink sink)
     {
         const bool enable = static_cast<bool>(sink);
