@@ -10,6 +10,8 @@ add_library(Iris STATIC
     src/Member.cpp
     src/MemberState.hpp
     src/Array.cpp
+    src/InternalCalls.cpp
+    src/InternalCalls.hpp
     src/Method.cpp
     src/Object.cpp
     src/StringBlock.cpp
@@ -30,6 +32,7 @@ add_library(Iris STATIC
     src/StringEncoding.hpp
     src/Utf8Buffer.hpp
     include/Iris/Host.hpp
+    include/Iris/InternalCall.hpp
     include/Iris/CallResult.hpp
     include/Iris/Array.hpp
     include/Iris/Component.hpp

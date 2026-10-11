@@ -1,5 +1,6 @@
 // Starts .NET through an installed Iris package and calls a component's static Add(int, int).
 // Usage: IrisConsumer component.dll
+#include "../Hosting/ExampleNatives.hpp"
 #include <Iris/Host.hpp>
 
 #include <cstdint>
@@ -21,6 +22,13 @@ int main(int argc, char* argv[])
     }
     // iris_deploy put the bridge and its runtime configuration next to this executable.
     const auto here = std::filesystem::absolute(argv[0]).parent_path();
+
+    // The component calls back into native code; register those functions before loading it.
+    if (const auto natives = Iris::Examples::RegisterNatives(); !natives.Succeeded())
+    {
+        std::cerr << "Registering native functions failed: " << natives.diagnostic << '\n';
+        return EXIT_FAILURE;
+    }
 
     Iris::Host host;
     const auto initialized = host.Initialize(

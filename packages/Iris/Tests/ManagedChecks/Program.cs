@@ -24,6 +24,7 @@ static class Checks
 
     static int Main(string[] args)
     {
+        InternalCallChecks.RegisterAll();
         if (args.Length == 2 && args[0] == "--unload")
             return RunGroups(("unloading", () => UnloadChecks.Run(args[1])));
         if (args.Length != 1)
@@ -46,6 +47,7 @@ static class Checks
             ("strings", () => StringChecks.Run(component)),
             ("structs", () => StructChecks.Run(component)),
             ("arrays", () => ArrayChecks.Run(component)),
+            ("internal calls", () => InternalCallChecks.Run(component)),
             ("log sink", () => LogChecks.Run(component)),
             ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)),
             // Last: sharing is process-wide and permanent.

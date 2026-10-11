@@ -83,6 +83,10 @@ namespace Iris::Detail
         using ArrayCopyFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::int64_t,
                                                             std::int64_t, void*, std::int32_t, std::uint8_t*,
                                                             std::int32_t, std::int32_t*, std::int32_t*);
+        using RegisterInternalCallFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::int32_t,
+                                                                       const std::int32_t*, std::int32_t, void*,
+                                                                       std::uint8_t*, std::int32_t, std::int32_t*,
+                                                                       std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -112,13 +116,14 @@ namespace Iris::Detail
         ArrayGetFn arrayGet;
         ArraySetFn arraySet;
         ArrayCopyFn arrayCopy;
+        RegisterInternalCallFn registerInternalCall;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 19;
+    inline constexpr std::int32_t BridgeVersion = 20;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 26> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 27> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -143,7 +148,8 @@ namespace Iris::Detail
                                                                         "GetArrayLength",
                                                                         "GetArrayElement",
                                                                         "SetArrayElement",
-                                                                        "CopyArray"};
+                                                                        "CopyArray",
+                                                                        "RegisterInternalCall"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

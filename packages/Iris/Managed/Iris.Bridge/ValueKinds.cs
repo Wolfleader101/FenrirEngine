@@ -37,7 +37,9 @@ internal enum ValueKind : int
     // the low byte and the element's kind above it (a primitive or String), or StructArray with a struct handle
     // above it. Elements are read and written by index, or copied in bulk when they are blittable.
     Array = 15,
-    StructArray = 16
+    StructArray = 16,
+    // Any pointer. Used only in internal call signatures, never as a method or member kind.
+    Pointer = 17
 }
 
 // What a string argument's slot points to. The native side owns it and keeps it alive for the call.

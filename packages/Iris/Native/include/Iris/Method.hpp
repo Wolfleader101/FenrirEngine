@@ -167,7 +167,8 @@ namespace Iris
             Object = 12,
             String = 13,
             Struct = 14,
-            Array = 15 // Only in a KindSpec; on the wire it is combined with the element kind.
+            Array = 15,  // Only in a KindSpec; on the wire it is combined with the element kind.
+            Pointer = 17 // Only in internal call signatures.
         };
 
         struct StructInfo;

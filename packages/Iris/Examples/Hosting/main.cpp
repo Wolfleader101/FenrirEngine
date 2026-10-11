@@ -1,3 +1,4 @@
+#include "ExampleNatives.hpp"
 #include "Iris/Host.hpp"
 
 #include <cstdint>
@@ -56,6 +57,13 @@ int main(int argc, char* argv[])
     {
         std::cerr << "Usage: IrisHostingExample [--dotnet-root absolute-directory] "
                      "[runtimeconfig.json bridge.dll component.dll]\n";
+        return EXIT_FAILURE;
+    }
+
+    // The component calls back into native code; register those functions before loading it.
+    if (const auto natives = Iris::Examples::RegisterNatives(); !natives.Succeeded())
+    {
+        std::cerr << "Registering native functions failed: " << natives.diagnostic << '\n';
         return EXIT_FAILURE;
     }
 
