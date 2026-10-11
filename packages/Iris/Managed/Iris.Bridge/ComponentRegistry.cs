@@ -178,14 +178,23 @@ internal static class ComponentRegistry
     // lookup would match; a foreign or unknown struct handle is an argument error, not a quiet NotFound.
     private static void RequireStructs(Entry entry, int returnKind, int[] parameterKinds)
     {
-        if (ValueKinds.IsStruct(returnKind)) StructOf(entry, returnKind);
-        foreach (int kind in parameterKinds)
-            if (ValueKinds.IsStruct(kind)) StructOf(entry, kind);
+        RequireStruct(entry, returnKind);
+        foreach (int kind in parameterKinds) RequireStruct(entry, kind);
     }
+
+    private static void RequireStruct(Entry entry, int kind)
+    {
+        if (ValueKinds.IsStruct(kind) || (ValueKinds.IsArray(kind) && (kind & 0xFF) == (int)ValueKind.StructArray)) StructOf(entry, kind);
+    }
+
+    // The managed element type of an array kind.
+    private static Type ElementTypeOf(Entry entry, int arrayKind) =>
+        (arrayKind & 0xFF) == (int)ValueKind.StructArray ? StructOf(entry, arrayKind).Type : ValueKinds.ToType(arrayKind >> 8, allowVoid: false);
 
     private static bool KindMatches(Entry entry, Type type, int kind, bool isReturn)
     {
         if (ValueKinds.IsStruct(kind)) return type == StructOf(entry, kind).Type;
+        if (ValueKinds.IsArray(kind)) return type.IsSZArray && type.GetElementType() == ElementTypeOf(entry, kind);
         switch ((ValueKind)kind)
         {
             case ValueKind.Object: return IsObjectType(type);
@@ -320,6 +329,23 @@ internal static class ComponentRegistry
                 values[index] = StructFromSlot(entry, kinds[index], arguments[index]);
                 continue;
             }
+            if (ValueKinds.IsArray(kinds[index]))
+            {
+                // An array travels as an object handle; zero is a null array.
+                object? array = null;
+                if (arguments[index] != 0)
+                {
+                    lock (Gate)
+                    {
+                        if (!entry.Handles.Objects.TryGetValue(arguments[index], out array))
+                            throw new BridgeHandleException($"Argument {index} is not an array this component holds.");
+                    }
+                    if (!types[index].IsInstanceOfType(array))
+                        throw new BridgeArgumentException($"Argument {index} is not an instance of {types[index]}.");
+                }
+                values[index] = array;
+                continue;
+            }
             if ((ValueKind)kinds[index] != ValueKind.Object)
             {
                 values[index] = ValueKinds.ToObject(kinds[index], arguments[index]);
@@ -343,7 +369,7 @@ internal static class ComponentRegistry
     private static ulong ReturnSlot(ulong token, Entry entry, int kind, object? returned)
     {
         if (ValueKinds.IsStruct(kind)) return StructToBlock(entry, kind, returned!);
-        if ((ValueKind)kind != ValueKind.Object) return ValueKinds.ToSlot(kind, returned);
+        if ((ValueKind)kind != ValueKind.Object && !ValueKinds.IsArray(kind)) return ValueKinds.ToSlot(kind, returned);
         if (returned == null) return 0;
         lock (Gate)
         {
@@ -690,6 +716,116 @@ internal static class ComponentRegistry
             }
             return FindResult.Found;
         }
+    }
+
+    // Creates an array (kind: see ValueKind.Array) and roots it like an object, so it blocks release until
+    // freed. False for an unknown component.
+    internal static bool TryCreateArray(ulong token, int kind, long length, out ulong objectId)
+    {
+        objectId = 0;
+        Entry entry;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active) return false;
+            entry = active;
+        }
+        if (!ValueKinds.IsArray(kind)) throw new BridgeArgumentException($"Unsupported array kind {kind}.");
+        if (length < 0) throw new BridgeArgumentException("An array length cannot be negative.");
+        Array array = Array.CreateInstance(ElementTypeOf(entry, kind), length);
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return false;
+            objectId = checked(++lastObjectId);
+            entry.Handles.Objects.Add(objectId, array);
+            return true;
+        }
+    }
+
+    // Resolves a rooted one-dimensional array. A kind of zero skips the element-type check. False for an
+    // unknown component or object handle; BridgeArgumentException if the object is not an array of that element type.
+    private static bool TryGetArray(ulong token, ulong objectId, int kind, out Entry? entry, out Array? array)
+    {
+        entry = null;
+        array = null;
+        object? found;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Objects.TryGetValue(objectId, out found)) return false;
+            entry = active;
+        }
+        if (found is not Array candidate || !candidate.GetType().IsSZArray)
+            throw new BridgeArgumentException("The object is not a one-dimensional array.");
+        if (kind != 0 && candidate.GetType().GetElementType() != ElementTypeOf(entry, kind))
+            throw new BridgeArgumentException($"The array's element type is {candidate.GetType().GetElementType()}, not the requested type.");
+        array = candidate;
+        return true;
+    }
+
+    internal static bool TryGetArrayLength(ulong token, ulong objectId, out long length)
+    {
+        length = 0;
+        if (!TryGetArray(token, objectId, 0, out _, out Array? array)) return false;
+        length = array!.LongLength;
+        return true;
+    }
+
+    private static void CheckIndex(Array array, long index)
+    {
+        if (index < 0 || index >= array.LongLength)
+            throw new BridgeArgumentException($"Index {index} is outside an array of length {array.LongLength}.");
+    }
+
+    // Reads one element: a primitive's bits, or a new string or struct block for the caller to give back.
+    internal static bool TryGetArrayElement(ulong token, ulong objectId, int kind, long index, out ulong slot)
+    {
+        slot = 0;
+        if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
+        CheckIndex(array!, index);
+        object? value = array!.GetValue(index);
+        int elementKind = ValueKinds.ElementKind(kind);
+        slot = ValueKinds.IsStruct(elementKind) ? StructToBlock(entry!, elementKind, value!) : ValueKinds.ToSlot(elementKind, value);
+        return true;
+    }
+
+    internal static bool TrySetArrayElement(ulong token, ulong objectId, int kind, long index, ulong slot)
+    {
+        if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
+        CheckIndex(array!, index);
+        int elementKind = ValueKinds.ElementKind(kind);
+        object? value = ValueKinds.IsStruct(elementKind) ? StructFromSlot(entry!, elementKind, slot) : ValueKinds.ToObject(elementKind, slot);
+        array!.SetValue(value, index);
+        return true;
+    }
+
+    private static int PrimitiveSize(int kind) => (ValueKind)kind switch
+    {
+        ValueKind.Bool or ValueKind.Int8 or ValueKind.UInt8 => 1,
+        ValueKind.Int16 or ValueKind.UInt16 => 2,
+        ValueKind.Int32 or ValueKind.UInt32 or ValueKind.Float => 4,
+        ValueKind.Int64 or ValueKind.UInt64 or ValueKind.Double => 8,
+        _ => throw new BridgeArgumentException("Bulk copies need primitive or struct elements.")
+    };
+
+    // Copies count elements between the array (from start) and a caller buffer of the same layout. Only
+    // primitive and struct elements can be copied.
+    internal static unsafe bool TryCopyArray(ulong token, ulong objectId, int kind, long start, long count, void* buffer, bool intoArray)
+    {
+        if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
+        int elementKind = ValueKinds.ElementKind(kind);
+        int size = ValueKinds.IsStruct(elementKind) ? StructOf(entry!, elementKind).Size : PrimitiveSize(elementKind);
+        if (start < 0 || count < 0 || (ulong)start + (ulong)count > (ulong)array!.LongLength)
+            throw new BridgeArgumentException($"The range {start}..{(ulong)start + (ulong)count} is outside an array of length {array!.LongLength}.");
+        if (count == 0) return true;
+        if (buffer == null) throw new BridgeArgumentException("A bulk copy needs a buffer.");
+        ulong bytes = checked((ulong)count * (ulong)size);
+        fixed (byte* data = &System.Runtime.InteropServices.MemoryMarshal.GetArrayDataReference(array))
+        {
+            byte* element = data + (ulong)start * (ulong)size;
+            if (intoArray) Buffer.MemoryCopy(buffer, element, bytes, bytes);
+            else Buffer.MemoryCopy(element, buffer, bytes, bytes);
+        }
+        return true;
     }
 
     // Unroots an owned object. False for an unknown component or object, including one already released.

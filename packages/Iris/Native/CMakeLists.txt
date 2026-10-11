@@ -9,6 +9,7 @@ add_library(Iris STATIC
     src/LogSink.hpp
     src/Member.cpp
     src/MemberState.hpp
+    src/Array.cpp
     src/Method.cpp
     src/Object.cpp
     src/StringBlock.cpp
@@ -30,6 +31,7 @@ add_library(Iris STATIC
     src/Utf8Buffer.hpp
     include/Iris/Host.hpp
     include/Iris/CallResult.hpp
+    include/Iris/Array.hpp
     include/Iris/Component.hpp
     include/Iris/Log.hpp
     include/Iris/Member.hpp

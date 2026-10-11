@@ -344,6 +344,96 @@ public static partial class Bootstrap
         }
     }
 
+    // Array exports. All validate the output buffers, report the component's exceptions as ManagedException and
+    // bad input (a negative or out-of-range index, a wrong element type) as InvalidArgument; an unknown
+    // component or object handle is InvalidHandle.
+    private static unsafe int ArrayFailure(Exception exception, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+        return (int)StatusFor(exception);
+    }
+
+    // Creates an array of the element type in `kind` (see ValueKind.Array) and publishes a nonzero object
+    // handle, released with ReleaseObject.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int CreateArray(ulong token, int kind, long length, ulong* objectId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (objectId != null) *objectId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || objectId == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryCreateArray(token, kind, length, out ulong id)) return (int)BridgeStatus.InvalidHandle;
+            *objectId = id;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int GetArrayLength(ulong token, ulong objectId, long* length,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (length != null) *length = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || length == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryGetArrayLength(token, objectId, out long value)) return (int)BridgeStatus.InvalidHandle;
+            *length = value;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+    }
+
+    // Reads element `index`. The slot holds a primitive's bits, or for a string or struct element a block (or
+    // zero for a null string) that the caller copies and gives back with FreeString.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int GetArrayElement(ulong token, ulong objectId, int kind, long index, ulong* slot,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (slot != null) *slot = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || slot == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryGetArrayElement(token, objectId, kind, index, out ulong value)) return (int)BridgeStatus.InvalidHandle;
+            *slot = value;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+    }
+
+    // Writes element `index` from a slot in the layout GetArrayElement uses for input: bits, or a pointer to a
+    // borrowed string or struct.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int SetArrayElement(ulong token, ulong objectId, int kind, long index, ulong slot,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            return ComponentRegistry.TrySetArrayElement(token, objectId, kind, index, slot) ? (int)BridgeStatus.Success : (int)BridgeStatus.InvalidHandle;
+        }
+        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+    }
+
+    // Copies `count` primitive or struct elements from `start` to (intoArray 0) or from (intoArray 1) a caller buffer.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int CopyArray(ulong token, ulong objectId, int kind, long start, long count, void* buffer, int intoArray,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || (intoArray != 0 && intoArray != 1))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            return ComponentRegistry.TryCopyArray(token, objectId, kind, start, count, buffer, intoArray == 1) ? (int)BridgeStatus.Success : (int)BridgeStatus.InvalidHandle;
+        }
+        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+    }
+
     // Gives back a string block returned in a result slot. Zero is ignored. Cannot fail.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static void FreeString(ulong block)

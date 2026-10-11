@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 18.
+Managed bridge initialized; bridge version 19.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -311,6 +311,45 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
   and copied once on the way back; there is no allocation per call beyond the bridge's return block.
 - Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
   argument, return or member, since the library tests for it at compile time.
+
+### Arrays
+
+`Array<T>` owns a one-dimensional managed array `T[]`, for `T` a primitive, a mapped struct or `std::string`.
+It follows the ownership rules of an `Object`: it keeps the managed array alive, blocks `Component::Release`
+(`InUse`) until released, and moves rather than copies.
+
+```cpp
+#include <Iris/Array.hpp>
+
+auto numbers = Array<std::int32_t>::Create(component, 4).value;   // new int[4]
+(void)numbers->Set(2, 7);
+const auto n = numbers->Get(2);                                   // CallResult<std::int32_t>
+const std::int32_t more[] = {10, 20};
+(void)numbers->CopyIn(0, more);                                   // bulk copy, primitives and structs
+std::int32_t out[4];
+(void)numbers->CopyOut(0, out);
+
+const auto sum = *math.FindMethod<std::int32_t(const Array<std::int32_t>&)>("Sum").value;
+const auto total = sum.Invoke(*numbers);
+
+const auto range = *math.FindMethod<std::optional<Array<std::int32_t>>(std::int32_t)>("Range").value;
+const auto made = range.Invoke(5);                                // *made.value is the array, or empty for null
+```
+
+- **Elements.** Primitives and mapped structs are read and written by value. A string element reads as
+  `std::optional<std::string>` and writes as `std::optional<std::string_view>`, with the string contract
+  above. `CopyIn`/`CopyOut` move a range in one call and need primitive or struct elements.
+- **Ranges are checked.** An index or range outside the array is `InvalidArgument` with a diagnostic, and
+  nothing is read or written.
+- **Null versus empty.** A method returning an array is declared `std::optional<Array<T>>`: an empty optional
+  is a null array, which is not the same as an array of length 0. A parameter is `const Array<T>&` (never
+  null) or `const Array<T>*` (`nullptr` passes null).
+- **Shared elements.** An array argument is not copied: the callee sees and can change the same elements.
+  A managed method returning the same array twice gives two independently owned handles over shared
+  elements, and releasing one leaves the other working.
+- **Exact types.** An `Array<double>` never matches an `int[]` parameter, and `object[]` or jagged arrays are
+  not supported by signature (`NotFound`). Struct elements are validated like any mapped struct.
+- Arrays are not (yet) available as field or property values; hold one in an `Array<T>` and pass it.
 
 ### Logging
 

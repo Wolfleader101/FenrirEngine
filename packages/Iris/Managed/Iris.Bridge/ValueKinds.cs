@@ -32,7 +32,12 @@ internal enum ValueKind : int
     // RegisterStruct above it (id << 8). An argument slot points to the struct's bytes, borrowed from the
     // caller; a return slot holds a block of the struct's bytes that the caller copies and gives back to
     // FreeString.
-    Struct = 14
+    Struct = 14,
+    // A one-dimensional array T[], held as an object handle (zero is null). On the wire the kind is Array in
+    // the low byte and the element's kind above it (a primitive or String), or StructArray with a struct handle
+    // above it. Elements are read and written by index, or copied in bulk when they are blittable.
+    Array = 15,
+    StructArray = 16
 }
 
 // What a string argument's slot points to. The native side owns it and keeps it alive for the call.
@@ -53,8 +58,25 @@ internal static class ValueKinds
     // The wire kind of a registered struct. Ids are small positive counters.
     internal static int StructKind(ulong id) => checked((int)(id << 8) | (int)ValueKind.Struct);
 
+    // An array kind: Array with a primitive or string element, or StructArray with a struct handle.
+    internal static bool IsArray(int kind)
+    {
+        if (kind <= 0) return false;
+        int element = kind >> 8;
+        return (kind & 0xFF) switch
+        {
+            (int)ValueKind.Array => (element >= (int)ValueKind.Bool && element <= (int)ValueKind.Double) || element == (int)ValueKind.String,
+            (int)ValueKind.StructArray => element > 0,
+            _ => false
+        };
+    }
+
+    // The kind of an array's elements: a primitive, String, or the struct kind.
+    internal static int ElementKind(int arrayKind) =>
+        (arrayKind & 0xFF) == (int)ValueKind.StructArray ? StructKind((ulong)(arrayKind >> 8)) : arrayKind >> 8;
+
     internal static bool IsValid(int kind) =>
-        IsStruct(kind) || (kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String);
+        IsStruct(kind) || IsArray(kind) || (kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String);
 
     // Throws BridgeArgumentException for a kind that is unknown, or that names no single type: Object
     // matches many, and Void is a return type only.

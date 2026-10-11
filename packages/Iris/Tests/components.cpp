@@ -1,4 +1,5 @@
 // Component ownership checks against the real bridge and the published example component.
+#include "Iris/Array.hpp"
 #include "Iris/Host.hpp"
 #include "TestHarness.hpp"
 
@@ -111,6 +112,7 @@ namespace
     constexpr std::string_view StringsType = "Iris.Examples.Component.Strings";
     constexpr std::string_view StructsType = "Iris.Examples.Component.Structs";
     constexpr std::string_view BodyType = "Iris.Examples.Component.Body";
+    constexpr std::string_view ArraysType = "Iris.Examples.Component.Arrays";
     constexpr std::string_view GreeterType = "Iris.Examples.Component.Greeter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
@@ -1269,6 +1271,185 @@ namespace
                  Check(body.FindField<float>("Position").status == CallStatus::NotFound &&
                            body.FindField<std::optional<Object>>("Position").status == CallStatus::NotFound,
                        "A struct field matched another kind");
+             }},
+            {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 auto ints = Array<std::int32_t>::Create(component, 4);
+                 Check(ints.Succeeded(), "Array creation failed: " + ints.diagnostic);
+                 Check(ints.value->Length().value == 4U && ints.value->Get(2).value == 0, "A new array was wrong");
+                 Check(ints.value->Set(2, -7).Succeeded() && ints.value->Get(2).value == -7,
+                       "An element did not round-trip");
+                 const std::int32_t source[] = {10, 20, 30};
+                 std::int32_t back[4] = {};
+                 Check(ints.value->CopyIn(1, source).Succeeded() && ints.value->CopyOut(0, back).Succeeded() &&
+                           back[0] == 0 && back[1] == 10 && back[3] == 30,
+                       "A bulk copy was wrong");
+                 const auto past = ints.value->Get(4);
+                 Check(past.status == CallStatus::InvalidArgument && !past.value &&
+                           past.diagnostic.find("outside") != std::string::npos,
+                       "An out-of-range read was not diagnosed: " + past.diagnostic);
+                 Check(ints.value->Set(99, 1).status == CallStatus::InvalidArgument &&
+                           ints.value->CopyIn(2, source).status == CallStatus::InvalidArgument &&
+                           ints.value->CopyOut(5, std::span<std::int32_t>(back, 0)).status ==
+                               CallStatus::InvalidArgument,
+                       "An out-of-range write or copy was accepted");
+                 Check(Array<std::int32_t>::Create(component, 0).value->Length().value == 0U, "An empty array failed");
+
+                 auto doubles = Array<double>::Create(component, 2);
+                 Check(doubles.value->Set(1, 2.5).Succeeded() && doubles.value->Get(1).value == 2.5,
+                       "A double element failed");
+                 auto flags = Array<bool>::Create(component, 2);
+                 Check(flags.value->Set(1, true).Succeeded() && flags.value->Get(1).value == true &&
+                           flags.value->Get(0).value == false,
+                       "A bool element failed");
+
+                 auto words = Array<std::string>::Create(component, 3);
+                 Check(words.value->Get(0).Succeeded() && !*words.value->Get(0).value,
+                       "A new string element was not null");
+                 const std::string wolf = "\xCF\x80\xF0\x9F\x90\xBA";
+                 Check(words.value->Set(1, std::string_view(wolf)).Succeeded() && **words.value->Get(1).value == wolf,
+                       "A string element did not round-trip");
+                 Check(words.value->Set(2, std::string_view()).Succeeded() && **words.value->Get(2).value == "",
+                       "An empty string element came back wrong");
+                 Check(words.value->Set(1, std::nullopt).Succeeded() && !*words.value->Get(1).value,
+                       "A null string element was not null");
+                 Check(words.value->Set(0, std::string_view("\xFF")).status == CallStatus::InvalidArgument,
+                       "Malformed UTF-8 was stored in an array");
+
+                 using Fixture::Vec3;
+                 auto points = Array<Vec3>::Create(component, 3);
+                 Check(points.Succeeded(), "A struct array was not created: " + points.diagnostic);
+                 const Vec3 line[] = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+                 Vec3 readBack[3] = {};
+                 Check(points.value->CopyIn(0, line).Succeeded() && points.value->CopyOut(0, readBack).Succeeded() &&
+                           readBack[2].Z == 9 && points.value->Get(1).value->Y == 5,
+                       "A struct array did not round-trip");
+                 Check(points.value->Set(0, Vec3{9, 9, 9}).Succeeded() && points.value->Get(0).value->X == 9,
+                       "A struct element did not store");
+                 Check(Array<Fixture::WideVec3>::Create(component, 1).status == CallStatus::InvalidArgument,
+                       "A bad struct mapping created an array");
+             }},
+            {"arrays pass to and return from managed methods, and null differs from empty",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto arrays = *component.FindType(ArraysType).value;
+                 using Ints = Array<std::int32_t>;
+                 const auto range = *arrays.FindMethod<std::optional<Ints>(std::int32_t)>("Range").value;
+                 auto made = range.Invoke(5);
+                 Check(made.Succeeded() && made.value && *made.value, "A returned array was missing");
+                 Check((*made.value)->Length().value == 5U && (*made.value)->Get(4).value == 4,
+                       "A returned array was wrong");
+                 const auto sum = *arrays.FindMethod<std::int32_t(const Ints&)>("Sum").value;
+                 Check(sum.Invoke(**made.value).value == 10, "An array argument was not passed");
+
+                 // Null versus empty, in both directions.
+                 const auto isNull = *arrays.FindMethod<bool(const Ints*)>("IsNull").value;
+                 const Ints* none = nullptr;
+                 Check(isNull.Invoke(none).value == true && isNull.Invoke(&**made.value).value == false,
+                       "Managed code could not tell a null array from an array");
+                 const auto empty = *arrays.FindMethod<std::optional<Ints>()>("Empty").value;
+                 const auto nothing = *arrays.FindMethod<std::optional<Ints>()>("Null").value;
+                 const auto emptyResult = empty.Invoke();
+                 const auto nullResult = nothing.Invoke();
+                 Check(emptyResult.Succeeded() && emptyResult.value && *emptyResult.value &&
+                           (*emptyResult.value)->Length().value == 0U,
+                       "An empty array return was null or wrong");
+                 Check(nullResult.Succeeded() && nullResult.value && !*nullResult.value,
+                       "A null array return was not empty");
+                 const auto echo = *arrays.FindMethod<std::optional<Ints>(const Ints*)>("EchoOrNull").value;
+                 Check(!*echo.Invoke(none).value && *echo.Invoke(&**made.value).value,
+                       "A null array did not round-trip");
+
+                 // The managed array is shared: a callee's writes are visible through the handle.
+                 const auto fill = *arrays.FindMethod<std::optional<Ints>(const Ints&, std::int32_t)>("Fill").value;
+                 const auto filled = fill.Invoke(**made.value, 7);
+                 Check((*made.value)->Get(0).value == 7 && (*filled.value)->Get(3).value == 7,
+                       "An array was copied rather than shared");
+
+                 const auto scale =
+                     *arrays.FindMethod<std::optional<Array<double>>(const Array<double>&, double)>("Scale").value;
+                 auto doubles = Array<double>::Create(component, 2);
+                 (void)doubles.value->Set(0, 1.5);
+                 Check((*scale.Invoke(*doubles.value, 2.0).value)->Get(0).value == 3.0,
+                       "A double array did not round-trip");
+
+                 // String arrays, including a null element, and struct arrays.
+                 const auto words = *arrays.FindMethod<std::optional<Array<std::string>>()>("Words").value;
+                 const auto wordResult = words.Invoke();
+                 const auto& list = **wordResult.value;
+                 Check(list.Length().value == 4U && **list.Get(1).value == "\xCF\x80\xF0\x9F\x90\xBA" &&
+                           **list.Get(2).value == "" && **list.Get(3).value == std::string("A\0B", 3),
+                       "A string array return was wrong");
+                 const auto withNull = *arrays.FindMethod<std::optional<Array<std::string>>()>("WordsWithNull").value;
+                 const auto nullable = withNull.Invoke();
+                 Check(!*(*nullable.value)->Get(1).value && **(*nullable.value)->Get(0).value == "first",
+                       "A null string element was lost");
+                 const auto join =
+                     *arrays.FindMethod<std::optional<std::string>(const Array<std::string>&)>("Join").value;
+                 Check(**join.Invoke(**nullable.value).value == "first+<null>+third",
+                       "A string array argument was wrong");
+
+                 using Fixture::Vec3;
+                 const auto lineMethod = *arrays.FindMethod<std::optional<Array<Vec3>>(std::int32_t)>("Line").value;
+                 const auto sumX = *arrays.FindMethod<float(const Array<Vec3>&)>("SumX").value;
+                 const auto lineResult = lineMethod.Invoke(4);
+                 Check((*lineResult.value)->Get(3).value->Z == 9 && sumX.Invoke(**lineResult.value).value == 6.0f,
+                       "A struct array return or argument was wrong");
+
+                 // Signatures are exact.
+                 Check(arrays.FindMethod<std::int32_t(const Array<double>&)>("Sum").status == CallStatus::NotFound &&
+                           arrays.FindMethod<std::int32_t(std::int32_t)>("Sum").status == CallStatus::NotFound &&
+                           arrays.FindMethod<std::int32_t(const Object&)>("Count").status == CallStatus::NotFound &&
+                           arrays.FindMethod<std::int32_t(const Ints&)>("Jagged").status == CallStatus::NotFound,
+                       "An array signature matched something else");
+             }},
+            {"array handles are owned, validated and block release until freed",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto other = Load(*host, arguments.component);
+                 using Ints = Array<std::int32_t>;
+                 auto owned = Ints::Create(component, 3);
+                 Check(component.Release().status == CallStatus::InUse && component.IsLoaded(),
+                       "A component with a live array was released");
+
+                 // Moves transfer ownership; the source stops working.
+                 Ints moved = std::move(*owned.value);
+                 Check(moved.IsValid() && moved.Length().value == 3U && !owned.value->IsValid() &&
+                           owned.value->Length().status == CallStatus::InvalidHandle,
+                       "A moved array did not transfer ownership");
+
+                 // Two returns of one managed array are independent handles over shared elements.
+                 const auto arrays = *component.FindType(ArraysType).value;
+                 const auto same = *arrays.FindMethod<std::optional<Ints>()>("SameArray").value;
+                 auto first = std::move(*same.Invoke().value);
+                 auto second = std::move(*same.Invoke().value);
+                 Check(first->Set(0, 99).Succeeded() && second->Get(0).value == 99, "Handles did not share the array");
+                 Check(first->Release().Succeeded() && !first->IsValid() && second->Get(0).value == 99,
+                       "Releasing one handle affected the other");
+
+                 // An array from another component is rejected before the call.
+                 const auto sum = *arrays.FindMethod<std::int32_t(const Ints&)>("Sum").value;
+                 auto foreign = Ints::Create(other, 1);
+                 Check(sum.Invoke(*foreign.value).status == CallStatus::InvalidArgument,
+                       "A foreign array was accepted");
+                 Check(moved.Release().Succeeded() && sum.Invoke(moved).status == CallStatus::InvalidHandle,
+                       "A released array was accepted as an argument");
+
+                 // With everything freed the component releases; destroying a component force-releases arrays.
+                 (void)second->Release();
+                 Check(component.Release().Succeeded(), "A component with no live arrays could not be released");
+                 auto survivor = Ints::Create(other, 1);
+                 Ints stale = std::move(*survivor.value);
+                 {
+                     Component dying = Load(*host, arguments.component);
+                     auto inner = Ints::Create(dying, 1);
+                     Check(inner.Succeeded(), "Creating an array in a second component failed");
+                 }
+                 Check(stale.Length().Succeeded(), "Destroying another component affected this array");
              }},
             {"member handles stop working when their component is released",
              [&] {

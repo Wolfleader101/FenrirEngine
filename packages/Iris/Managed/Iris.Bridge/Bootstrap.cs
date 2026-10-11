@@ -35,7 +35,12 @@ public static partial class Bootstrap
                 GetMember = &GetMember,
                 SetMember = &SetMember,
                 FreeString = &FreeString,
-                RegisterStruct = &RegisterStruct
+                RegisterStruct = &RegisterStruct,
+                CreateArray = &CreateArray,
+                GetArrayLength = &GetArrayLength,
+                GetArrayElement = &GetArrayElement,
+                SetArrayElement = &SetArrayElement,
+                CopyArray = &CopyArray
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

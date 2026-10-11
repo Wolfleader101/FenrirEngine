@@ -68,6 +68,21 @@ namespace Iris::Detail
         using RegisterStructFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, const std::uint8_t*, std::int32_t,
                                                                  std::uint64_t*, std::uint8_t*, std::int32_t,
                                                                  std::int32_t*, std::int32_t*);
+        using CreateArrayFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::int32_t, std::int64_t, std::uint64_t*,
+                                                              std::uint8_t*, std::int32_t, std::int32_t*,
+                                                              std::int32_t*);
+        using ArrayLengthFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int64_t*,
+                                                              std::uint8_t*, std::int32_t, std::int32_t*,
+                                                              std::int32_t*);
+        using ArrayGetFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::int64_t,
+                                                           std::uint64_t*, std::uint8_t*, std::int32_t, std::int32_t*,
+                                                           std::int32_t*);
+        using ArraySetFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::int64_t,
+                                                           std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
+                                                           std::int32_t*);
+        using ArrayCopyFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::int64_t,
+                                                            std::int64_t, void*, std::int32_t, std::uint8_t*,
+                                                            std::int32_t, std::int32_t*, std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -92,13 +107,18 @@ namespace Iris::Detail
         SetMemberFn setMember;
         FreeStringFn freeString;
         RegisterStructFn registerStruct;
+        CreateArrayFn createArray;
+        ArrayLengthFn arrayLength;
+        ArrayGetFn arrayGet;
+        ArraySetFn arraySet;
+        ArrayCopyFn arrayCopy;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 18;
+    inline constexpr std::int32_t BridgeVersion = 19;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 21> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 26> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -118,7 +138,12 @@ namespace Iris::Detail
                                                                         "GetMember",
                                                                         "SetMember",
                                                                         "FreeString",
-                                                                        "RegisterStruct"};
+                                                                        "RegisterStruct",
+                                                                        "CreateArray",
+                                                                        "GetArrayLength",
+                                                                        "GetArrayElement",
+                                                                        "SetArrayElement",
+                                                                        "CopyArray"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),
