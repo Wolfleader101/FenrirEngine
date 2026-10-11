@@ -377,8 +377,7 @@ namespace Iris
      * an object is declared as returning `std::optional<Object>`: each call gets a new, independently
      * owned handle, even when the method returns the same managed object again, and an empty optional is
      * a null return.
-     */
-    /**
+     *
      * Mapped structs (see StructMapping) are passed by value, as `Vec3` in the signature, and returned by
      * value. Their bytes are borrowed for the call.
      */

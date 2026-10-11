@@ -43,7 +43,7 @@ static unsafe class StructChecks
         return id;
     }
 
-    private static int KindOf(ulong id) => (int)(id << 8) | StructKind;
+    private static int KindOf(ulong id) => ValueKinds.StructKind(id);
 
     private static ulong TypeId(ulong token, string name)
     {
@@ -137,6 +137,23 @@ static unsafe class StructChecks
             try { ComponentRegistry.TryFindMethod(token, structs, "Add", KindOf(9999), new[] { vecKind, vecKind }, true, out _); }
             catch (BridgeArgumentException) { threw = true; }
             Check(threw, "An unknown struct handle was accepted");
+
+            // A struct handle from another component, or unknown, is an argument error even when nothing else matches.
+            foreach (int foreign in new[] { KindOf(poseId), KindOf(9999) })
+            {
+                threw = false;
+                try { ComponentRegistry.TryFindMethod(token, structs, "NoSuchMethod", Float, new[] { Int32, foreign }, true, out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound in a method lookup");
+                threw = false;
+                try { ComponentRegistry.TryCreateObject(token, TypeId(token, Component + "Counter"), new[] { foreign, foreign, foreign }, new ulong[3], out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound for a constructor");
+                threw = false;
+                try { ComponentRegistry.TryFindMember(token, TypeId(token, Component + "Body"), "NoSuchMember", 0, foreign, out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound for a member");
+            }
 
             // Null struct arguments are rejected.
             threw = false;
