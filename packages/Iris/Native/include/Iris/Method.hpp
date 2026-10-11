@@ -62,6 +62,54 @@ namespace Iris
                           };
 
     /**
+     * @brief What an Array can hold: a PrimitiveValue, a mapped struct (see StructMapping), or
+     * `std::string` for a managed `string[]`.
+     */
+    template <typename T>
+    concept ArrayElement = PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::string>;
+
+    template <ArrayElement T>
+    class Array;
+
+    namespace Detail
+    {
+        // Array<E>, or `const Array<E>*` (a nullable array argument): `value` and the element type.
+        template <typename T>
+        struct ArrayInfo
+        {
+            static constexpr bool value = false;
+        };
+        template <ArrayElement E>
+        struct ArrayInfo<Array<E>>
+        {
+            static constexpr bool value = true;
+            using Element = E;
+        };
+        template <typename T>
+        struct ArrayInfo<const T*> : ArrayInfo<T>
+        {
+        };
+        // std::optional<Array<E>>, a returned array where empty is null.
+        template <typename T>
+        struct OptionalArrayInfo
+        {
+            static constexpr bool value = false;
+        };
+        template <ArrayElement E>
+        struct OptionalArrayInfo<std::optional<Array<E>>>
+        {
+            static constexpr bool value = true;
+            using Element = E;
+        };
+        // An array as declared in a signature: `const Array<E>&` or `const Array<E>*`.
+        template <typename T>
+        concept ArraySignature =
+            (std::is_lvalue_reference_v<T> && std::is_const_v<std::remove_reference_t<T>> &&
+             ArrayInfo<std::remove_cvref_t<T>>::value && !std::is_pointer_v<std::remove_cvref_t<T>>) ||
+            (std::is_pointer_v<T> && ArrayInfo<T>::value);
+    } // namespace Detail
+
+    /**
      * @brief A string passed to managed code: `std::string_view` for a string that is never null, or
      * `std::optional<std::string_view>` where an empty optional is a null string. The text is UTF-8,
      * may contain null characters, and is borrowed only for the duration of the call; malformed UTF-8 is
@@ -76,8 +124,9 @@ namespace Iris
      * (declared as `const Object&`), which matches any managed class or interface parameter.
      */
     template <typename T>
-    concept Argument = PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> ||
-                       StructValue<std::remove_cvref_t<T>> || std::same_as<std::remove_cvref_t<T>, Object>;
+    concept Argument =
+        PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> || StructValue<std::remove_cvref_t<T>> ||
+        std::same_as<std::remove_cvref_t<T>, Object> || Detail::ArrayInfo<std::remove_cvref_t<T>>::value;
 
     /**
      * @brief An argument as declared in a method signature: a PrimitiveValue by value, a string as
@@ -85,8 +134,8 @@ namespace Iris
      * cannot be copied, so a by-value Object is not a signature argument).
      */
     template <typename T>
-    concept SignatureArgument =
-        PrimitiveValue<T> || StringArgument<T> || StructValue<T> || std::same_as<T, const Object&>;
+    concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || StructValue<T> ||
+                                std::same_as<T, const Object&> || Detail::ArraySignature<T>;
 
     /**
      * @brief What a managed method can return: void, a PrimitiveValue, `std::optional<Object>`, or
@@ -94,8 +143,9 @@ namespace Iris
      * keeps distinct from the empty string. A returned string is an owned copy with no size limit.
      */
     template <typename T>
-    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> ||
-                         std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>>;
+    concept Returnable =
+        std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
+        std::same_as<T, std::optional<std::string>> || Detail::OptionalArrayInfo<T>::value;
 
     namespace Detail
     {
@@ -116,7 +166,8 @@ namespace Iris
             Double = 11,
             Object = 12,
             String = 13,
-            Struct = 14
+            Struct = 14,
+            Array = 15 // Only in a KindSpec; on the wire it is combined with the element kind.
         };
 
         struct StructInfo;
@@ -189,6 +240,8 @@ namespace Iris
                 return ValueKind::String;
             else if constexpr (StructValue<T>)
                 return ValueKind::Struct;
+            else if constexpr (ArrayInfo<T>::value || OptionalArrayInfo<T>::value)
+                return ValueKind::Array;
             else
             {
                 static_assert(PrimitiveValue<T>,
@@ -215,13 +268,38 @@ namespace Iris
         struct KindSpec
         {
             ValueKind kind;
-            const StructInfo* info;
+            const StructInfo* info;              // The struct's mapping, or an array's struct element mapping.
+            ValueKind element = ValueKind::Void; // An array's element kind.
         };
+
+        // The kind of an array element: String for std::string, else as for a value.
+        template <typename E>
+        constexpr KindSpec ElementSpecOf() noexcept
+        {
+            if constexpr (std::same_as<E, std::string>)
+                return {ValueKind::String, nullptr};
+            else
+                return {KindOf<E>(), StructInfoPtr<E>()};
+        }
 
         template <typename Declared>
         constexpr KindSpec KindSpecOf() noexcept
         {
-            return {KindOf<Declared>(), StructInfoPtr<Declared>()};
+            using T = std::remove_cvref_t<Declared>;
+            if constexpr (ArrayInfo<T>::value)
+            {
+                constexpr KindSpec element = ElementSpecOf<typename ArrayInfo<T>::Element>();
+                return {ValueKind::Array, element.info, element.kind};
+            }
+            else if constexpr (OptionalArrayInfo<T>::value)
+            {
+                constexpr KindSpec element = ElementSpecOf<typename OptionalArrayInfo<T>::Element>();
+                return {ValueKind::Array, element.info, element.kind};
+            }
+            else
+            {
+                return {KindOf<Declared>(), StructInfoPtr<Declared>()};
+            }
         }
 
         template <typename Field>
@@ -280,6 +358,14 @@ namespace Iris
                 // The struct's bytes are borrowed from the caller for the call.
                 slot = reinterpret_cast<std::uintptr_t>(&value);
             }
+            else if constexpr (ArrayInfo<T>::value)
+            {
+                // An array travels as its object handle; a null pointer is a null array (slot zero).
+                if constexpr (std::is_pointer_v<T>)
+                    object = value != nullptr ? &value->AsObject() : nullptr;
+                else
+                    object = &value.AsObject();
+            }
             else
                 slot = ToSlot<T>(value);
         }
@@ -333,7 +419,14 @@ namespace Iris
             {
                 if (raw.value)
                 {
-                    if constexpr (std::same_as<Result, std::optional<Object>>)
+                    if constexpr (OptionalArrayInfo<Result>::value)
+                    {
+                        using Element = typename OptionalArrayInfo<Result>::Element;
+                        result.value.emplace(*raw.value == 0
+                                                 ? std::nullopt
+                                                 : Result(Array<Element>::FromObject(method.AdoptObject(*raw.value))));
+                    }
+                    else if constexpr (std::same_as<Result, std::optional<Object>>)
                     {
                         // Zero is a null return; anything else is a new, independently owned handle.
                         result.value.emplace(*raw.value == 0 ? std::nullopt

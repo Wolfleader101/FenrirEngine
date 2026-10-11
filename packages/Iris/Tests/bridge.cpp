@@ -100,7 +100,7 @@ namespace
                  Check(host.LoadComponent(arguments.bridge).status == CallStatus::NotInitialized,
                        "An uninitialized host loaded a component");
                  const auto initialized = host.Initialize({arguments.runtimeConfig, arguments.bridge, {}});
-                 Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 18,
+                 Check(initialized.success && initialized.bridgeAssemblyLoaded && initialized.bridgeVersion == 19,
                        initialized.diagnostic);
              }},
             {"a second bridge file is rejected in the same process",
@@ -316,11 +316,11 @@ int main(int argc, char* argv[])
     if (mode == "fixture")
         return RunFixture(arguments);
     if (mode == "legacy")
-        return RunRejected(arguments, "an older bridge version is rejected", "expected 18, received 17", 17, true);
+        return RunRejected(arguments, "an older bridge version is rejected", "expected 19, received 18", 18, true);
     if (mode == "oversized")
-        return RunRejected(arguments, "a bridge table of another size is rejected", "table size", 18, true);
+        return RunRejected(arguments, "a bridge table of another size is rejected", "table size", 19, true);
     if (mode == "missing")
-        return RunRejected(arguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 18,
+        return RunRejected(arguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 19,
                            true);
     if (mode == "notbridge")
         return RunRejected(arguments, "an assembly without the bridge entry point is rejected", "GetBridgeFunctions",

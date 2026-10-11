@@ -64,6 +64,22 @@ namespace Iris::Detail
     CallResult<std::int32_t> ResolveWireKind(const BridgeFunctions& bridge, std::uint64_t component,
                                              const KindSpec& spec)
     {
+        if (spec.kind == ValueKind::Array)
+        {
+            // An array's wire kind is 15 with the element's wire kind above it, or 16 with a struct
+            // element's handle above it.
+            const auto element = ResolveWireKind(bridge, component, KindSpec{spec.element, spec.info});
+            if (!element.Succeeded())
+            {
+                return element;
+            }
+            const std::int32_t elementKind = *element.value;
+            if (spec.element == ValueKind::Struct)
+            {
+                return Success<std::int32_t>((elementKind & ~0xFF) | 16);
+            }
+            return Success<std::int32_t>((elementKind << 8) | 15);
+        }
         if (spec.kind != ValueKind::Struct)
         {
             return Success<std::int32_t>(static_cast<std::int32_t>(spec.kind));

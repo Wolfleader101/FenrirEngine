@@ -81,6 +81,13 @@ static class UnloadChecks
               ComponentRegistry.TryFindMethod(token, factoryType, "Make", 12, new[] { 6 }, true, out makeMethod) == ComponentRegistry.FindResult.Found &&
               ComponentRegistry.TryInvokeMethod(token, makeMethod, new ulong[] { 3 }, out returnedId) && returnedId != 0,
               "Unload fixture returned-object call failed");
+        // An array is rooted like an object: it blocks release until freed, and a leaked one is dropped by a forced release.
+        Check(ComponentRegistry.TryCreateArray(token, (6 << 8) | 15, 8, out ulong arrayId) && arrayId != 0, "Unload fixture array creation failed");
+        if (!leakObject)
+        {
+            Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with a live array was released");
+            Check(ComponentRegistry.ReleaseObject(token, arrayId), "Unload fixture array release failed");
+        }
         if (!leakObject)
         {
             Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with live objects was released");

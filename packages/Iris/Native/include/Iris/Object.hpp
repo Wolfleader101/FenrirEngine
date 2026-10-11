@@ -10,6 +10,7 @@ namespace Iris
     {
         class RawMethod;
         class RawMember;
+        class RawArray;
     } // namespace Detail
 
     /**
@@ -46,6 +47,7 @@ namespace Iris
         friend class Type;
         friend class Detail::RawMethod;
         friend class Detail::RawMember;
+        friend class Detail::RawArray;
         struct State;
         explicit Object(std::unique_ptr<State> state) noexcept;
         std::unique_ptr<State> state;

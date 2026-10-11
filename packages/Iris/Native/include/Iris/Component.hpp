@@ -10,6 +10,11 @@
 
 namespace Iris
 {
+    namespace Detail
+    {
+        class RawArray;
+    }
+
     struct ComponentInfo
     {
         std::string assemblyName;
@@ -66,6 +71,7 @@ namespace Iris
 
       private:
         friend class Host;
+        friend class Detail::RawArray;
         struct State;
         explicit Component(std::unique_ptr<State> state) noexcept;
         std::unique_ptr<State> state;

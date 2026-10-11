@@ -81,7 +81,12 @@ public static class Bootstrap
             GetMember = &GetMember,
             SetMember = &SetMember,
             FreeString = &FreeString,
-            RegisterStruct = &RegisterStruct
+            RegisterStruct = &RegisterStruct,
+            CreateArray = &CreateArray,
+            GetArrayLength = &GetArrayLength,
+            GetArrayElement = &GetArrayElement,
+            SetArrayElement = &SetArrayElement,
+            CopyArray = &CopyArray
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -225,6 +230,36 @@ public static class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *value = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int CreateArray(ulong token, int kind, long length, ulong* objectId, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *objectId = 1; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int GetArrayLength(ulong token, ulong objectId, long* length, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *length = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int GetArrayElement(ulong token, ulong objectId, int kind, long index, ulong* slot, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *slot = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int SetArrayElement(ulong token, ulong objectId, int kind, long index, ulong slot, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int CopyArray(ulong token, ulong objectId, int kind, long start, long count, void* buffer, int intoArray, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
