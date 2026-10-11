@@ -54,6 +54,9 @@ public struct Marker
 
 public static class Plain
 {
+    public sealed class Inner
+    {
+    }
 }
 
 internal class HiddenActor : Actor

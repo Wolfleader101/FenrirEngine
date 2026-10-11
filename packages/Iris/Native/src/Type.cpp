@@ -11,6 +11,8 @@
 #include "Utf8Buffer.hpp"
 
 #include <cstring>
+#include <limits>
+#include <stdexcept>
 #include <utility>
 #include <vector>
 
@@ -175,13 +177,23 @@ namespace Iris
                                                  diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
             try
             {
-                if (static_cast<CallStatus>(status) != CallStatus::Success || block == 0)
+                if (static_cast<CallStatus>(status) != CallStatus::Success)
                 {
                     return Detail::CompleteCall<T>(status, operation, diagnostic, T{});
+                }
+                if (block == 0)
+                {
+                    return Detail::Failure<T>(CallStatus::InvalidResponse, "The bridge returned no type snapshot.");
                 }
                 const auto* memory = reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(block));
                 std::int64_t length = 0;
                 std::memcpy(&length, memory, sizeof(length));
+                if (length < 0 || length > std::numeric_limits<std::int32_t>::max())
+                {
+                    bridge.freeString(block);
+                    block = 0;
+                    return Detail::Failure<T>(CallStatus::InvalidResponse, Malformed);
+                }
                 Detail::SnapshotReader reader(memory + sizeof(length), static_cast<std::size_t>(length));
                 T value{};
                 parse(reader, value);
@@ -268,7 +280,11 @@ namespace Iris
                         case 5:
                             argument.value = reader.String();
                             break;
+                        case 0:
+                        case 6:
+                            break; // Null, or a value with no native form: a monostate.
                         default:
+                            reader.Fail();
                             break;
                         }
                         attribute.arguments.push_back(std::move(argument));

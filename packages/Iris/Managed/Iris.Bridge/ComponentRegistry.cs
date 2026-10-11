@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Runtime.Loader;
@@ -174,7 +175,12 @@ internal static class ComponentRegistry
         }
         Type[] types;
         try { types = entry.Assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException exception) { types = Array.FindAll(exception.Types, type => type != null)!; }
+        catch (ReflectionTypeLoadException exception)
+        {
+            // A type that cannot load (a base class in a missing assembly, say) is left out, and the host is told.
+            types = Array.FindAll(exception.Types, type => type != null)!;
+            BridgeLog.Write(LogLevel.Warning, $"{exception.LoaderExceptions.Length} type(s) of component '{entry.Name}' could not be loaded and are not listed: {exception.LoaderExceptions.FirstOrDefault()?.Message}");
+        }
         Array.Sort(types, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
         var ids = new List<ulong>();
         foreach (Type type in types)
@@ -232,17 +238,24 @@ internal static class ComponentRegistry
         }
         if (targetName != null)
         {
-            Type? resolved = entry.Assembly.GetType(targetName, throwOnError: false, ignoreCase: false) ?? Type.GetType(targetName, throwOnError: false);
+            Type? resolved = entry.Assembly.GetType(targetName, throwOnError: false, ignoreCase: false);
+            if (resolved != null && !resolved.IsVisible) resolved = null; // Only public types, as everywhere else.
+            resolved ??= Type.GetType(targetName, throwOnError: false);
             if (resolved == null)
             {
                 foreach (AssemblyName reference in entry.Assembly.GetReferencedAssemblies())
                 {
                     try { resolved = entry.Context.LoadFromAssemblyName(reference).GetType(targetName, throwOnError: false, ignoreCase: false); }
-                    catch (Exception exception) when (exception is IOException or BadImageFormatException or FileLoadException) { }
+                    catch (Exception exception) when (exception is IOException or BadImageFormatException or FileLoadException or InvalidOperationException) { }
                     if (resolved != null) break;
                 }
             }
             if (resolved == null) return AssignResult.UnknownType;
+            lock (Gate)
+            {
+                // The component may have been released while the name was resolved.
+                if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return AssignResult.InvalidHandle;
+            }
             target = resolved;
         }
         return target.IsAssignableFrom(type) ? AssignResult.Assignable : AssignResult.NotAssignable;

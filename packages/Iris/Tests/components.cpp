@@ -1595,6 +1595,9 @@ namespace
                      Check(component.FindType(name).Succeeded(), "A listed type could not be found: " + name);
                  }
                  Check(component.GetTypes().value->size() == names.size(), "Listing twice differed");
+                 Check(index("Iris.Examples.Component.Plain+Inner") < count &&
+                           index("Iris.Examples.Component.Plain") < index("Iris.Examples.Component.Plain+Inner"),
+                       "A nested public type was not listed after its enclosing type");
 
                  // The list is a set of handles: it stops working with the component, and holds nothing of its own.
                  auto types = std::move(*listed.value);
@@ -1823,6 +1826,27 @@ namespace
                  Check(host->Initialize(configuration).success, "Re-sharing the same file failed");
                  const auto asComponent = host->LoadComponent(configuration.sharedAssemblies.front());
                  Check(asComponent.status == CallStatus::InvalidArgument, "A shared assembly loaded as a component");
+             }},
+            {"type queries give the same answers when the contract assembly is shared",
+             [&] {
+                 auto configuration = arguments.configuration;
+                 configuration.sharedAssemblies = {arguments.component.parent_path() / "Iris.Examples.Contracts.dll"};
+                 auto host = std::make_unique<Host>();
+                 Check(host->Initialize(configuration).success, "Initialization with a shared assembly failed");
+                 const auto component = Load(*host, arguments.component);
+                 Check(Call(component, SharedCalculatorType, "ContractIsShared", 0, 0).value == 1,
+                       "The contract was not shared");
+                 const auto player = *component.FindType("Iris.Examples.Component.Player").value;
+                 const auto interfaces = player.GetInterfaces();
+                 Check(interfaces.Succeeded() && interfaces.value->size() == 2 &&
+                           (*interfaces.value)[0].fullName == "Iris.Examples.Contracts.IScript",
+                       "The shared contract interface was not reported");
+                 Check(player.IsAssignableTo("Iris.Examples.Contracts.IScript").value == true &&
+                           component.FindType(SharedCalculatorType)
+                                   .value->IsAssignableTo("Iris.Examples.Contracts.CalculatorBase")
+                                   .value == true &&
+                           player.IsAssignableTo("Iris.Examples.Contracts.CalculatorBase").value == false,
+                       "Assignability to a shared contract type was wrong");
              }},
             {"sharing a missing assembly fails initialization",
              [&] {

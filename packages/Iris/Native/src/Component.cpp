@@ -105,13 +105,23 @@ namespace Iris
         std::uint64_t block = 0;
         const auto status = state->bridge->listTypes(state->token, &block, diagnostic.bytes.data(), diagnostic.Capacity,
                                                      &diagnostic.written, &diagnostic.truncated);
-        if (static_cast<CallStatus>(status) != CallStatus::Success || block == 0)
+        if (static_cast<CallStatus>(status) != CallStatus::Success)
         {
             return Detail::CompleteCall<std::vector<Type>>(status, "ListTypes", diagnostic, std::vector<Type>{});
+        }
+        if (block == 0)
+        {
+            return Detail::Failure<std::vector<Type>>(CallStatus::InvalidResponse, "The bridge returned no type list.");
         }
         const auto* memory = reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(block));
         std::int64_t length = 0;
         std::memcpy(&length, memory, sizeof(length));
+        if (length < 0 || length > std::numeric_limits<std::int32_t>::max())
+        {
+            state->bridge->freeString(block);
+            return Detail::Failure<std::vector<Type>>(CallStatus::InvalidResponse,
+                                                      "The bridge returned a malformed type list.");
+        }
         std::vector<Type> types;
         bool valid = false;
         try
