@@ -90,14 +90,6 @@ namespace Iris
             return result;
         }
 
-        // Wraps an object handle the bridge returned for an array of `T`. For library use: it is not checked
-        // here, and an object that is not a `T[]` fails its first Length/Get/Set with InvalidArgument.
-        // Like an Object, an Array must be used from one thread at a time.
-        [[nodiscard]] static Array FromObject(Object object)
-        {
-            return Array(std::move(object), 0);
-        }
-
         [[nodiscard]] bool IsValid() const noexcept
         {
             return object.IsValid();
@@ -204,6 +196,7 @@ namespace Iris
         }
 
       private:
+        friend struct Detail::ArrayAccess;
         Array(Object owner, std::int32_t arrayKind) noexcept : object(std::move(owner)), cachedKind(arrayKind)
         {
         }

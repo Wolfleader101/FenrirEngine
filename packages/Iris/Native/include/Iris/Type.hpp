@@ -110,8 +110,8 @@ namespace Iris
          * @brief Finds a public static, non-generic method by name and exact signature.
          *
          * `FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add")` finds `int Add(int, int)`;
-         * parameter and return types are derived from the C++ types, and only PrimitiveValue types (and
-         * void for the return) compile. Overloads are told apart by their exact parameter types. A method
+         * parameter and return types are derived from the C++ types (see SignatureArgument and Returnable), and
+         * any other type does not compile. Overloads are told apart by their exact parameter types. A method
          * with another name, return type, parameter types or count, a generic or UnmanagedCallersOnly
          * method, or one that is not public is NotFound. The name is case-sensitive UTF-8 without null
          * characters, borrowed for the call. Finding the same method again returns an equivalent handle.
@@ -152,7 +152,8 @@ namespace Iris
          * @brief Constructs an object with the public constructor whose parameters match exactly.
          *
          * `CreateObject(std::int32_t{5}, 2.5)` calls `T(int, double)`; no arguments call the parameterless
-         * constructor. Only PrimitiveValue arguments compile. An abstract or static type, or no matching
+         * constructor. Arguments follow Argument; their types are deduced, so pass a string as
+         * `std::string_view` rather than a literal. An abstract or static type, a struct, or no matching
          * constructor, is NotFound; an exception from the constructor is ManagedException and leaves
          * nothing rooted. The returned Object owns the new instance.
          */

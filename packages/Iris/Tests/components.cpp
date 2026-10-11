@@ -1,7 +1,6 @@
 // Component ownership checks against the real bridge and the published example component.
 #include "../Examples/Hosting/ExampleNatives.hpp"
-#include "Iris/Array.hpp"
-#include "Iris/Host.hpp"
+#include "Iris/Iris.hpp"
 #include "TestHarness.hpp"
 
 #include <algorithm>
@@ -277,6 +276,27 @@ namespace
                  const auto component = Load(*host, arguments.component);
                  const auto shared = Call(component, SharedCalculatorType, "ContractIsShared", 0, 0);
                  Check(shared.value == 0, "The contract resolved to a shared copy without a declaration");
+             }},
+            {"results reach their value through * and ->, and move it out of an rvalue",
+             [&] {
+                 auto host = StartHost(arguments);
+                 Check(host->Initialize(arguments.configuration).Succeeded() && Host::DiscoverHostFxr().Succeeded(),
+                       "Succeeded() disagreed with success");
+                 auto loaded = host->LoadComponent(arguments.component);
+                 Check(loaded.Succeeded() && loaded->IsLoaded(), "operator-> did not reach the component");
+                 Component component = *std::move(loaded);
+                 Check(component.IsLoaded() && !loaded.value->IsLoaded(), "operator* && did not move the owner out");
+                 const auto add =
+                     component.FindType(CalculationType)->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+                 const auto sum = add->Invoke(20, 22);
+                 Check(sum.Succeeded() && *sum == 42, "operator* did not read the value");
+                 const auto settings = *component.FindType(SettingsType);
+                 Object object = *settings.CreateObject();
+                 Check(object.IsValid(), "Moving an Object out of a prvalue result failed");
+                 // A CallResult<bool> is not a bool: the answer and the call's success stay separate.
+                 static_assert(!std::is_constructible_v<bool, CallResult<bool>>);
+                 const auto assignable = settings.IsAssignableTo("System.IDisposable");
+                 Check(assignable.Succeeded() && !*assignable, "IsAssignableTo answered wrongly");
              }},
             {"malformed, empty and null-containing names are rejected",
              [&] {
@@ -1342,9 +1362,10 @@ namespace
                            flagArray.value->CopyOut(0, flagBack).Succeeded() && flagBack[0] && !flagBack[1] &&
                            flagBack[2],
                        "A bool bulk copy was wrong");
-                 // An object that is not an array is diagnosed, not misread.
+                 // An object that is not an array is diagnosed, not misread. Only the library can wrap an Object as
+                 // an Array (Detail is not API); the check guards against a bridge that returns the wrong object.
                  auto counter = component.FindType(CounterType).value->CreateObject();
-                 auto adopted = Array<std::int32_t>::FromObject(std::move(*counter.value));
+                 auto adopted = Detail::ArrayAccess::Adopt<Array<std::int32_t>>(std::move(*counter.value));
                  Check(adopted.Length().status == CallStatus::InvalidArgument &&
                            adopted.Get(0).status == CallStatus::InvalidArgument,
                        "A non-array object was used as an array");

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Iris VERSION 0.1.0 LANGUAGES CXX)
+project(Iris VERSION 0.2.0 LANGUAGES CXX)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(iris_is_top_level ON)
@@ -72,7 +72,7 @@ if(IRIS_INSTALL)
         INSTALL_DESTINATION "${IRIS_INSTALL_CMAKE_DIR}"
         PATH_VARS IRIS_INSTALL_BRIDGE_DIR IRIS_INSTALL_NETHOST_RUNTIME)
     write_basic_package_version_file("${CMAKE_CURRENT_BINARY_DIR}/IrisConfigVersion.cmake"
-        COMPATIBILITY SameMinorVersion)
+        COMPATIBILITY SameMajorVersion)
     install(FILES
         "${CMAKE_CURRENT_BINARY_DIR}/IrisConfig.cmake"
         "${CMAKE_CURRENT_BINARY_DIR}/IrisConfigVersion.cmake"

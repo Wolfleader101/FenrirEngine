@@ -1,6 +1,7 @@
 namespace Iris.Bridge;
 
-// Stable int32 wire values, mirrored by the native CallStatus enum.
+// Stable int32 wire values, mirrored by the native CallStatus enum (except BufferTooSmall, which native code
+// reports as InvalidResponse because it always sizes buffers from the bridge's own answer).
 internal enum BridgeStatus : int
 {
     Success = 0,

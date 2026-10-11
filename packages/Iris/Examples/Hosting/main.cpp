@@ -71,9 +71,9 @@ int main(int argc, char* argv[])
     {
         Host host;
         const auto initialized = host.Initialize(configuration);
-        std::cout << "Initialize: " << (initialized.success ? "ok" : "failed") << '\n'
+        std::cout << "Initialize: " << (initialized.Succeeded() ? "ok" : "failed") << '\n'
                   << initialized.diagnostic << '\n';
-        if (!initialized.success)
+        if (!initialized.Succeeded())
         {
             return EXIT_FAILURE;
         }

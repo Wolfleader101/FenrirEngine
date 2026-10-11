@@ -45,6 +45,12 @@ namespace Iris
         bool bridgeAssemblyLoaded = false;
         // The version the bridge reported during the handshake, including a mismatched one.
         std::optional<std::int32_t> bridgeVersion;
+
+        // The same as `success`, spelled like CallResult::Succeeded.
+        [[nodiscard]] bool Succeeded() const noexcept
+        {
+            return success;
+        }
     };
 
     struct HostFxrDiscoveryResult
@@ -53,6 +59,11 @@ namespace Iris
         // Present only on success.
         std::filesystem::path hostFxrPath;
         std::string diagnostic;
+
+        [[nodiscard]] bool Succeeded() const noexcept
+        {
+            return success;
+        }
     };
 
     /**

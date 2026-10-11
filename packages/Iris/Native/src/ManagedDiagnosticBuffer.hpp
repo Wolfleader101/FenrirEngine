@@ -11,11 +11,13 @@
 
 namespace Iris::Detail
 {
-    // Diagnostic storage for one bridge call. Managed code borrows it for the call only.
+    // Diagnostic storage for one bridge call. Managed code borrows it for the call only. The bytes are left
+    // uninitialized on purpose: the bridge writes `written` bytes and only those are read, and zeroing 4 KiB
+    // on every call (including every successful one) was a measurable part of a call's cost.
     struct ManagedDiagnosticBuffer
     {
         static constexpr std::int32_t Capacity = 4096;
-        std::array<std::uint8_t, Capacity> bytes{};
+        std::array<std::uint8_t, Capacity> bytes;
         std::int32_t written = 0;
         std::int32_t truncated = 0;
 
@@ -90,14 +92,24 @@ namespace Iris::Detail
         return result;
     }
 
-    // Builds the result of one bridge call from its wire status. Success carries `value`. Any bridge
-    // status 1..7 is passed through with the managed diagnostic, or a fallback naming `operation`;
-    // any other status becomes UnexpectedStatus without managed details.
+    // The bridge's wire status 4 (BufferTooSmall). Native code always sizes buffers from the bridge's own
+    // answer, so the bridge reporting it is a malformed response; it is not a public CallStatus.
+    inline constexpr std::int32_t WireBufferTooSmall = 4;
+
+    // Builds the result of one bridge call from its wire status. Success carries `value`. The bridge's
+    // public statuses are passed through with the managed diagnostic, or a fallback naming `operation`;
+    // BufferTooSmall becomes InvalidResponse, and any other status UnexpectedStatus without managed details.
     template <typename T, typename... Value>
     [[nodiscard]] CallResult<T> CompleteCall(std::int32_t status, const char* operation,
                                              const ManagedDiagnosticBuffer& diagnostic, Value&&... value)
     {
         const std::string name(operation);
+        if (status == WireBufferTooSmall)
+        {
+            return diagnostic.ApplyTo(
+                Failure<T>(CallStatus::InvalidResponse,
+                           name + " reported a buffer too small, but the buffer was sized from its own answer."));
+        }
         switch (static_cast<CallStatus>(status))
         {
         case CallStatus::Success:
@@ -106,8 +118,6 @@ namespace Iris::Detail
             return diagnostic.ApplyTo(Failure<T>(CallStatus::InvalidArgument, name + " rejected an argument."));
         case CallStatus::ManagedException:
             return diagnostic.ApplyTo(Failure<T>(CallStatus::ManagedException, name + " caught a managed exception."));
-        case CallStatus::BufferTooSmall:
-            return diagnostic.ApplyTo(Failure<T>(CallStatus::BufferTooSmall, name + " needs a larger buffer."));
         case CallStatus::InvalidHandle:
             return diagnostic.ApplyTo(
                 Failure<T>(CallStatus::InvalidHandle, name + " received an invalid or released handle."));

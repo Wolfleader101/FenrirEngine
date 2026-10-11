@@ -3,6 +3,7 @@
 #include "ManagedDiagnosticBuffer.hpp"
 #include "MemberState.hpp"
 #include "ObjectState.hpp"
+#include "StringBlock.hpp"
 
 #include <utility>
 

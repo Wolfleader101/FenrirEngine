@@ -3,6 +3,7 @@
 #include "ComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "ObjectState.hpp"
+#include "StringBlock.hpp"
 #include "StructRegistration.hpp"
 
 #include <limits>

@@ -18,9 +18,9 @@ namespace Iris
     class Type;
 
     /**
-     * @brief The value types a field or property can have: a PrimitiveValue, `std::optional<Object>` for a
-     * class- or interface-typed member, or `std::optional<std::string>` for a string; an empty optional is
-     * null (distinct from an empty string).
+     * @brief The value types a field or property can have: a PrimitiveValue, a mapped struct,
+     * `std::optional<Object>` for a class- or interface-typed member, or `std::optional<std::string>` for a
+     * string; an empty optional is null (distinct from an empty string). Arrays are not member values.
      */
     template <typename T>
     concept MemberValue = PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
@@ -68,7 +68,9 @@ namespace Iris
      *
      * For an object-typed member, `T` is `std::optional<Object>`: `Get` returns a new, independently
      * owned handle (empty for null), and `Set` takes a `const Object*` where `nullptr` stores null; the
-     * object must be an instance of the member's type. Like Type, a Member is a cheap, copyable value
+     * object must be an instance of the member's type. A string member's `Set` takes
+     * `std::optional<std::string_view>` (empty stores null) and a struct member's a `const T&` (see Value).
+     * Like Type, a Member is a cheap, copyable value
      * that holds no managed reference and stops working (InvalidHandle) when its component is released.
      */
     template <MemberValue T>

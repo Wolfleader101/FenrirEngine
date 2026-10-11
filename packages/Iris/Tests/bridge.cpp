@@ -197,7 +197,7 @@ namespace
                                              {"CopySuccessWithMetadata", CallStatus::InvalidResponse, 2},
                                              {"QueryUnknownStatus", CallStatus::UnexpectedStatus, 1},
                                              {"CopyUnknownStatus", CallStatus::UnexpectedStatus, 2},
-                                             {"CopyBufferTooSmall", CallStatus::BufferTooSmall, 2},
+                                             {"CopyBufferTooSmall", CallStatus::InvalidResponse, 2},
                                              {"QueryInvalidArgument", CallStatus::InvalidArgument, 1},
                                              {"QueryEmptyTruncated", CallStatus::ManagedException, 1},
                                              {"QueryNegativeLength", CallStatus::InvalidResponse, 1},
