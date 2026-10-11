@@ -13,12 +13,17 @@ set(iris_checks_runtimeconfig "${iris_checks_managed}/checks/ManagedChecks.runti
 set(iris_checks_bridge "${iris_checks_managed}/checks/Iris.Bridge.dll")
 set(iris_checks_fixture "${iris_checks_managed}/fixture/Iris.Bridge.dll")
 set(iris_checks_component "${iris_checks_managed}/component/Iris.Examples.Component.dll")
+set(iris_checks_component_b "${iris_checks_managed}/component-b/Iris.Examples.Component.dll")
 
 add_custom_target(IrisManagedBuild ALL
     # Publish a deployment, including its private dependency and .deps.json.
     # --output on build would also redirect referenced projects into this directory.
     COMMAND "${iris_checks_dotnet}" publish "${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Hosting/Component/Iris.Examples.Component.csproj"
         --configuration "${iris_checks_configuration}" --output "${iris_checks_managed}/component" -m:1
+    # Version B of the same component, in its own directory and intermediate output: reload checks replace A with it.
+    COMMAND "${iris_checks_dotnet}" publish "${CMAKE_CURRENT_SOURCE_DIR}/../Examples/Hosting/Component/Iris.Examples.Component.csproj"
+        --configuration "${iris_checks_configuration}" --output "${iris_checks_managed}/component-b" -m:1 --no-restore
+        -p:IrisFixtureVersion=B -p:IntermediateOutputPath=obj/fixture-b/
     COMMAND "${iris_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/ManagedChecks/ManagedChecks.csproj"
         --configuration "${iris_checks_configuration}" --output "${iris_checks_managed}/checks"
     COMMAND "${iris_checks_dotnet}" build "${CMAKE_CURRENT_SOURCE_DIR}/FixtureBridge/FixtureBridge.csproj"
@@ -43,7 +48,8 @@ add_test(NAME ManagedContracts
     COMMAND "${iris_checks_dotnet}" "${iris_checks_managed}/checks/ManagedChecks.dll" "${iris_checks_component}")
 add_test(NAME ManagedUnload
     COMMAND "${iris_checks_dotnet}" "${iris_checks_managed}/checks/ManagedChecks.dll" --unload "${iris_checks_component}")
-set_tests_properties(ManagedUnload PROPERTIES TIMEOUT 30)
+set_tests_properties(ManagedUnload PROPERTIES TIMEOUT 60)
+set_tests_properties(ManagedContracts ManagedUnload PROPERTIES ENVIRONMENT "IRIS_TEST_COMPONENT_B=${iris_checks_component_b}")
 
 # Bridge checks: each bridge variant runs in its own process, because the bridge lives in the default
 # load context. The fixture bridge selects its handshake response from IRIS_TEST_BRIDGE_MODE.
@@ -66,6 +72,7 @@ endforeach()
 iris_add_native_checks(IrisComponentChecks components.cpp)
 add_test(NAME Components
     COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}")
+set_tests_properties(Components PROPERTIES ENVIRONMENT "IRIS_TEST_COMPONENT_B=${iris_checks_component_b}")
 
 # The same checks' unbound mode: nothing is registered, so the component's internal calls are missing.
 add_test(NAME Components-unbound

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -226,6 +227,33 @@ namespace
         Check(owner.GetInfo().status == CallStatus::InvalidHandle &&
                   Call(owner, CalculationType, "LocalAdd", 20, 22).status == CallStatus::InvalidHandle,
               message);
+    }
+
+    // The second build of the component (version B), named by the test runner.
+    std::filesystem::path VersionBPath()
+    {
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
+        const char* path = std::getenv("IRIS_TEST_COMPONENT_B");
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+        Check(path != nullptr && std::filesystem::exists(path),
+              "IRIS_TEST_COMPONENT_B does not name version B of the component");
+        return std::filesystem::absolute(path);
+    }
+
+    int VersionNumber(const Component& component)
+    {
+        const auto version = component.FindType("Iris.Examples.Component.Version");
+        Check(version.Succeeded(), "The Version type was missing");
+        const auto number = version.value->FindMethod<std::int32_t()>("Number");
+        Check(number.Succeeded(), "Version.Number was missing");
+        const auto result = number.value->Invoke();
+        Check(result.Succeeded(), "Version.Number failed");
+        return *result.value;
     }
 
     int Run(const Arguments& arguments)
@@ -1708,6 +1736,64 @@ namespace
                  // A type with none.
                  Check(component.FindType("Iris.Examples.Component.Plain").value->GetAttributes().value->empty(),
                        "A type without attributes listed some");
+             }},
+            {"replacing a component with version B: new behaviour, and no handle from A ever works again",
+             [&] {
+                 const auto pathB = VersionBPath();
+                 auto host = StartHost(arguments);
+                 for (int cycle = 0; cycle < 4; ++cycle)
+                 {
+                     std::optional<Component> a;
+                     a.emplace(Load(*host, arguments.component));
+                     Check(VersionNumber(*a) == 1, "Version A did not behave as A");
+                     const auto aVersion = *a->FindType("Iris.Examples.Component.Version").value;
+                     const auto aNumber = *aVersion.FindMethod<std::int32_t()>("Number").value;
+                     const auto aMember =
+                         *a->FindType(SettingsType).value->FindField<std::int32_t>("StaticCount").value;
+                     const auto aTypes = *a->GetTypes().value;
+                     auto aObject = a->FindType(CounterType).value->CreateObject();
+                     auto aArray = Array<std::int32_t>::Create(*a, 3);
+                     Check(aObject.Succeeded() && aArray.Succeeded(), "Version A's object or array was not created");
+                     Check(a->Release().status == CallStatus::InUse,
+                           "Live objects did not block replacing the component");
+                     Check(aObject.value->Release().Succeeded() && aArray.value->Release().Succeeded() &&
+                               a->Release().Succeeded(),
+                           "Version A could not be released");
+
+                     // Version B loads from its own path and behaves differently.
+                     const auto b = Load(*host, pathB);
+                     Check(VersionNumber(b) == 2, "Version B did not behave as B");
+                     Check(b.FindType("Iris.Examples.Component.OnlyInB").Succeeded() &&
+                               b.FindType("Iris.Examples.Component.OnlyInA").status == CallStatus::NotFound,
+                           "Version B's types were wrong");
+
+                     // Nothing from A works, and A's handles are not reinterpreted against B.
+                     Check(aVersion.GetInfo().status == CallStatus::InvalidHandle &&
+                               aNumber.Invoke().status == CallStatus::InvalidHandle &&
+                               aMember.Get().status == CallStatus::InvalidHandle &&
+                               aTypes.front().GetInfo().status == CallStatus::InvalidHandle &&
+                               a->GetInfo().status == CallStatus::InvalidHandle &&
+                               a->FindType(CounterType).status == CallStatus::InvalidHandle &&
+                               aObject.value->Release().Succeeded() && !aObject.value->IsValid() &&
+                               aArray.value->Length().status == CallStatus::InvalidHandle,
+                           "A handle from version A survived the replacement");
+                     Check(VersionNumber(b) == 2, "Using A's stale handles disturbed version B");
+                 }
+             }},
+            {"a failed replacement leaves the host usable and the next version loads",
+             [&] {
+                 const auto pathB = VersionBPath();
+                 auto host = StartHost(arguments);
+                 {
+                     const auto a = Load(*host, arguments.component);
+                     Check(VersionNumber(a) == 1, "Version A did not behave as A");
+                 }
+                 const auto missing = host->LoadComponent(pathB.parent_path() / "Missing.Component.dll");
+                 Check(!missing.Succeeded() && !missing.value && !missing.diagnostic.empty(),
+                       "Loading a missing component did not fail with a diagnostic");
+                 const auto b = Load(*host, pathB);
+                 Check(VersionNumber(b) == 2, "Version B did not load after a failed replacement");
+                 Check(VersionNumber(Load(*host, arguments.component)) == 1, "Version A could not be loaded again");
              }},
             {"member handles stop working when their component is released",
              [&] {

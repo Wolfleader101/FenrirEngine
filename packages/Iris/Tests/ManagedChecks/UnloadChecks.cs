@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -127,6 +128,128 @@ static class UnloadChecks
         throw new Exception("Released context/component/private dependency did not collect within 10 verification cycles");
     }
 
+
+    // Everything one version of the component has handed out, kept as plain ids so nothing here roots it.
+    private sealed record Handles(ulong Token, ulong Type, ulong Method, ulong Member, ulong Object, ulong Array, ulong StructId, Observation Observation);
+
+    private static string? Take(ulong block)
+    {
+        if (block == 0) return null;
+        unsafe
+        {
+            string text = new UTF8Encoding(false, true).GetString((byte*)block + 8, checked((int)*(long*)block));
+            ValueKinds.FreeString(block);
+            return text;
+        }
+    }
+
+    // Loads one version, uses every kind of API feature, releases everything and returns the ids it handed out.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static unsafe Handles LoadUseRelease(string path, int number, string name)
+    {
+        ulong token = ComponentRegistry.Load(path);
+        const string ns = "Iris.Examples.Component.";
+        ulong version = 0, numberMethod = 0, nameMethod = 0, scaleMethod = 0;
+        Check(ComponentRegistry.TryFindType(token, ns + "Version", out version) == ComponentRegistry.FindResult.Found, "Version type missing");
+        Check(ComponentRegistry.TryFindMethod(token, version, "Number", 6, Array.Empty<int>(), true, out numberMethod) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, numberMethod, ReadOnlySpan<ulong>.Empty, out ulong observed) && (int)observed == number,
+              "The loaded version was not " + name);
+        Check(ComponentRegistry.TryFindMethod(token, version, "Name", 13, Array.Empty<int>(), true, out nameMethod) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, nameMethod, ReadOnlySpan<ulong>.Empty, out ulong block) && Take(block) == name, "A string result was wrong for " + name);
+        Check(ComponentRegistry.TryFindMethod(token, version, "Scale", 6, new[] { 6 }, true, out scaleMethod) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, scaleMethod, new ulong[] { 3 }, out ulong scaled) && (int)scaled == (number == 1 ? 6 : 30), "Version behaviour differed from expectation");
+        // Only the loaded version has its own type.
+        Check(ComponentRegistry.TryFindType(token, ns + (number == 1 ? "OnlyInA" : "OnlyInB"), out _) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryFindType(token, ns + (number == 1 ? "OnlyInB" : "OnlyInA"), out _) == ComponentRegistry.FindResult.NotFound, "The other version's type was visible");
+
+        // Fields, objects, arrays, structs, strings, internal calls, attributes and listing.
+        ComponentRegistry.TryFindType(token, ns + "Settings", out ulong settings);
+        Check(ComponentRegistry.TryFindMember(token, settings, "StaticCount", 0, 6, out ulong member) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TrySetMemberValue(token, member, 0, 7) && ComponentRegistry.TryGetMemberValue(token, member, 0, out ulong memberValue) && memberValue == 7, "Member use failed");
+        ComponentRegistry.TryFindType(token, ns + "Counter", out ulong counter);
+        Check(ComponentRegistry.TryCreateObject(token, counter, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out ulong obj) == ComponentRegistry.CreateResult.Created, "Object creation failed");
+        Check(ComponentRegistry.TryCreateArray(token, (6 << 8) | 15, 4, out ulong array) && ComponentRegistry.TrySetArrayElement(token, array, (6 << 8) | 15, 1, 5), "Array use failed");
+        Check(ComponentRegistry.TryRegisterStruct(token, $"{ns}Vec3|12\nX|0|10|\nY|4|10|\nZ|8|10|", out ulong structId) == ComponentRegistry.FindResult.Found, "Struct registration failed");
+        ComponentRegistry.TryFindType(token, ns + "Strings", out ulong strings);
+        Check(ComponentRegistry.TryFindMethod(token, strings, "Greeting", 13, Array.Empty<int>(), true, out ulong greeting) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, greeting, ReadOnlySpan<ulong>.Empty, out ulong greetingBlock) && Take(greetingBlock) != null, "String use failed");
+        ComponentRegistry.TryFindType(token, ns + "Natives", out ulong natives);
+        Check(ComponentRegistry.TryFindMethod(token, natives, "CallAdd", 6, new[] { 6, 6 }, true, out ulong callAdd) == ComponentRegistry.FindResult.Found &&
+              ComponentRegistry.TryInvokeMethod(token, callAdd, new ulong[] { 2, 3 }, out ulong sum) && sum == 5, "Internal call use failed");
+        ComponentRegistry.TryFindType(token, ns + "Player", out ulong player);
+        foreach (TypeQueries.Query query in new[] { TypeQueries.Query.Base, TypeQueries.Query.Interfaces, TypeQueries.Query.Attributes })
+            Check(ComponentRegistry.TryQueryType(token, player, query, out byte[] snapshot) && snapshot.Length > 0, "A type query failed");
+        Check(ComponentRegistry.TryListTypes(token, out ulong[] listed) && listed.Length > 10, "Listing failed");
+        Check(ComponentRegistry.TryIsAssignable(token, player, 0, "System.IDisposable") == ComponentRegistry.AssignResult.Assignable, "Assignability failed");
+
+        // Release everything: arrays and objects first (a live one refuses release), then the component.
+        Check(ComponentRegistry.TryRelease(token, force: false) == ComponentRegistry.ReleaseResult.InUse, "Live objects did not block release");
+        Check(ComponentRegistry.ReleaseObject(token, obj) && ComponentRegistry.ReleaseObject(token, array), "Releasing objects failed");
+        Assembly assembly = AssemblyLoadContext.All.SelectMany(context => context.Assemblies).Single(item => item.Location == path);
+        AssemblyLoadContext loadContext = AssemblyLoadContext.GetLoadContext(assembly)!;
+        Assembly dependency = loadContext.Assemblies.Single(item => item.GetName().Name == "Iris.Examples.Dependency");
+        var observation = new Observation(token, new WeakReference(assembly, true), new WeakReference(dependency, true));
+        Check(ComponentRegistry.Release(token), "Release failed");
+        GC.KeepAlive(loadContext);
+        return new Handles(token, version, numberMethod, member, obj, array, structId, observation);
+    }
+
+    // Every id the old version handed out is dead, and none of them selects anything in the new one.
+    private static void CheckStale(Handles old, ulong newToken)
+    {
+        Check(newToken != old.Token, "A token was reused");
+        Check(!ComponentRegistry.TryGetTypeName(old.Token, old.Type, 0, out _), "A released component's type handle worked");
+        Check(!ComponentRegistry.TryGetTypeName(newToken, old.Type, 0, out _), "An old type handle selected a type of the new version");
+        Check(!ComponentRegistry.TryInvokeMethod(old.Token, old.Method, ReadOnlySpan<ulong>.Empty, out _) &&
+              !ComponentRegistry.TryInvokeMethod(newToken, old.Method, ReadOnlySpan<ulong>.Empty, out _), "An old method handle worked");
+        Check(!ComponentRegistry.TryGetMemberValue(old.Token, old.Member, 0, out _) && !ComponentRegistry.TryGetMemberValue(newToken, old.Member, 0, out _), "An old member handle worked");
+        Check(!ComponentRegistry.ReleaseObject(old.Token, old.Object) && !ComponentRegistry.ReleaseObject(newToken, old.Object), "An old object handle worked");
+        Check(!ComponentRegistry.TryGetArrayLength(old.Token, old.Array, out _) && !ComponentRegistry.TryGetArrayLength(newToken, old.Array, out _), "An old array handle worked");
+        Check(!ComponentRegistry.TryListTypes(old.Token, out _) && ComponentRegistry.TryRegisterStruct(old.Token, "X|1\nA|0|2|", out _) == ComponentRegistry.FindResult.InvalidHandle, "A released component still answered");
+    }
+
+    internal static void RunReload(string pathA, string pathB)
+    {
+        int baseline = ComponentRegistry.Count, trackingBaseline = ComponentRegistry.TrackingCount;
+        var previous = new List<Observation>();
+        for (int cycle = 0; cycle < 4; ++cycle)
+        {
+            // A: use it all, release it all.
+            Handles a = LoadUseRelease(pathA, 1, "A");
+            CheckStaleAfterB(a, pathB, previous);
+        }
+        Console.WriteLine("Managed reload: four A/B replacements observed the new behaviour, killed every old handle, and collected each version.");
+
+        // A reload that fails partway (version B's assembly is missing) leaves no roots and the bridge usable.
+        Handles first = LoadUseRelease(pathA, 1, "A");
+        int tracking = ComponentRegistry.TrackingCount;
+        bool failed = false;
+        try { ComponentRegistry.Load(Path.Combine(Path.GetDirectoryName(pathB)!, "Missing.Component.dll")); }
+        catch (Exception) { failed = true; }
+        Check(failed, "Loading a missing assembly did not fail");
+        Check(ComponentRegistry.TrackingCount == tracking, "A failed reload left a registration");
+        Handles retry = LoadUseRelease(pathB, 2, "B");
+        WaitForCollection(first.Observation);
+        WaitForCollection(retry.Observation);
+        Forget(first.Token);
+        Forget(retry.Token);
+        Check(ComponentRegistry.Count == baseline && ComponentRegistry.TrackingCount == trackingBaseline, "Reload checks leaked registrations");
+        Console.WriteLine("Managed reload: a failed reload left no registry roots and the host loaded the next version.");
+    }
+
+    // Loads B while A is released, checks A's handles are dead, then lets A be collected and B released.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void CheckStaleAfterB(Handles a, string pathB, List<Observation> previous)
+    {
+        Handles b = LoadUseRelease(pathB, 2, "B");
+        CheckStale(a, b.Token);
+        CheckStale(b, a.Token);
+        WaitForCollection(a.Observation);
+        WaitForCollection(b.Observation);
+        Forget(a.Token);
+        Forget(b.Token);
+    }
+
     internal static unsafe void Run(string componentPath)
     {
         string path = Path.GetFullPath(componentPath);
@@ -183,5 +306,9 @@ static class UnloadChecks
         Check(ComponentRegistry.Count == baseline && ComponentRegistry.TrackingCount == trackingBaseline, "Unload checks leaked records");
         InvocationChecks.CheckResidentBridge(componentPath);
         Console.WriteLine("Managed unloading: forgotten observers do not retain assemblies; stale tokens reject access; resident bridge remains usable.");
+
+        string? versionB = Environment.GetEnvironmentVariable("IRIS_TEST_COMPONENT_B");
+        Check(!string.IsNullOrEmpty(versionB) && File.Exists(versionB), "IRIS_TEST_COMPONENT_B does not name the second component build");
+        RunReload(path, Path.GetFullPath(versionB!));
     }
 }
