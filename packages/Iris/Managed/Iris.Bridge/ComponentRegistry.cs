@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Runtime.Loader;
 
 namespace Iris.Bridge;
@@ -19,8 +20,13 @@ internal static class ComponentRegistry
     // Handles to types, methods and members looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
     // its component.
+    // A blittable struct registered from native: its managed type and size in bytes.
+    private sealed record StructRecord(Type Type, int Size);
+
     private sealed class HandleTable
     {
+        internal readonly Dictionary<Type, ulong> StructIds = new();
+        internal readonly Dictionary<ulong, StructRecord> Structs = new();
         internal readonly Dictionary<Type, ulong> TypeIds = new();
         internal readonly Dictionary<ulong, Type> Types = new();
         internal readonly Dictionary<MethodInfo, ulong> MethodIds = new();
@@ -47,6 +53,7 @@ internal static class ComponentRegistry
     private static ulong lastMethodId; // so a handle is never reused.
     private static ulong lastObjectId;
     private static ulong lastMemberId;
+    private static ulong lastStructId;
 
     internal enum FindResult { Found, NotFound, InvalidHandle }
     internal enum ReleaseResult { Released, InvalidHandle, InUse }
@@ -156,8 +163,19 @@ internal static class ComponentRegistry
         (type.IsClass || type.IsInterface) && type != typeof(string) && !type.IsArray && !type.IsByRef && !type.IsPointer &&
         !type.ContainsGenericParameters;
 
-    private static bool KindMatches(Type type, int kind, bool isReturn)
+    private static StructRecord StructOf(Entry entry, int kind)
     {
+        lock (Gate)
+        {
+            if (!entry.Handles.Structs.TryGetValue(ValueKinds.StructId(kind), out StructRecord? record))
+                throw new BridgeArgumentException("A struct kind does not name a struct registered for this component.");
+            return record;
+        }
+    }
+
+    private static bool KindMatches(Entry entry, Type type, int kind, bool isReturn)
+    {
+        if (ValueKinds.IsStruct(kind)) return type == StructOf(entry, kind).Type;
         switch ((ValueKind)kind)
         {
             case ValueKind.Object: return IsObjectType(type);
@@ -175,11 +193,11 @@ internal static class ComponentRegistry
         return true;
     }
 
-    private static bool SignatureMatches(ParameterInfo[] parameters, int[] kinds)
+    private static bool SignatureMatches(Entry entry, ParameterInfo[] parameters, int[] kinds)
     {
         if (parameters.Length != kinds.Length) return false;
         for (int index = 0; index < kinds.Length; ++index)
-            if (!KindMatches(parameters[index].ParameterType, kinds[index], isReturn: false)) return false;
+            if (!KindMatches(entry, parameters[index].ParameterType, kinds[index], isReturn: false)) return false;
         return true;
     }
 
@@ -208,7 +226,7 @@ internal static class ComponentRegistry
         {
             if (candidate.Name != name || candidate.IsGenericMethod ||
                 candidate.IsDefined(typeof(System.Runtime.InteropServices.UnmanagedCallersOnlyAttribute), inherit: false) ||
-                !KindMatches(candidate.ReturnType, returnKind, isReturn: true) || !SignatureMatches(candidate.GetParameters(), parameterKinds))
+                !KindMatches(entry, candidate.ReturnType, returnKind, isReturn: true) || !SignatureMatches(entry, candidate.GetParameters(), parameterKinds))
                 continue;
             if (method != null)
             {
@@ -286,6 +304,11 @@ internal static class ComponentRegistry
         var values = new object?[arguments.Length];
         for (int index = 0; index < values.Length; ++index)
         {
+            if (ValueKinds.IsStruct(kinds[index]))
+            {
+                values[index] = StructFromSlot(entry, kinds[index], arguments[index]);
+                continue;
+            }
             if ((ValueKind)kinds[index] != ValueKind.Object)
             {
                 values[index] = ValueKinds.ToObject(kinds[index], arguments[index]);
@@ -308,6 +331,7 @@ internal static class ComponentRegistry
     // the same managed object. Null is the zero handle.
     private static ulong ReturnSlot(ulong token, Entry entry, int kind, object? returned)
     {
+        if (ValueKinds.IsStruct(kind)) return StructToBlock(entry, kind, returned!);
         if ((ValueKind)kind != ValueKind.Object) return ValueKinds.ToSlot(kind, returned);
         if (returned == null) return 0;
         lock (Gate)
@@ -353,7 +377,7 @@ internal static class ComponentRegistry
         ConstructorInfo? constructor = null;
         foreach (ConstructorInfo candidate in type.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
         {
-            if (!SignatureMatches(candidate.GetParameters(), parameterKinds)) continue;
+            if (!SignatureMatches(entry, candidate.GetParameters(), parameterKinds)) continue;
             if (constructor != null)
                 throw new BridgeArgumentException("The signature matches more than one constructor; object parameters match any class, so constructors that differ only by them are ambiguous.");
             constructor = candidate;
@@ -397,7 +421,7 @@ internal static class ComponentRegistry
         if (memberKind == 0)
         {
             FieldInfo? field = type.GetField(name, flags);
-            if (field != null && KindMatches(field.FieldType, valueKind, isReturn: false))
+            if (field != null && KindMatches(entry, field.FieldType, valueKind, isReturn: false))
             {
                 info = field;
                 member = new MemberRecord(field, null, null, null, field.FieldType, valueKind, field.IsStatic, field.DeclaringType!);
@@ -406,7 +430,7 @@ internal static class ComponentRegistry
         else
         {
             PropertyInfo? property = FindProperty(type, name, flags);
-            if (property != null && property.GetIndexParameters().Length == 0 && KindMatches(property.PropertyType, valueKind, isReturn: false))
+            if (property != null && property.GetIndexParameters().Length == 0 && KindMatches(entry, property.PropertyType, valueKind, isReturn: false))
             {
                 MethodInfo? getter = property.GetGetMethod(), setter = property.GetSetMethod();
                 // An init-only setter is public to reflection but only valid while the object is constructed.
@@ -517,6 +541,10 @@ internal static class ComponentRegistry
                     throw new BridgeArgumentException($"The value is not an instance of {member.ValueType}.");
             }
         }
+        else if (ValueKinds.IsStruct(member.ValueKind))
+        {
+            converted = StructFromSlot(entry!, member.ValueKind, value);
+        }
         else
         {
             converted = ValueKinds.ToObject(member.ValueKind, value);
@@ -526,6 +554,127 @@ internal static class ComponentRegistry
         else
             member.Setter!.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, new[] { converted }, culture: null);
         return true;
+    }
+
+    // Copies a struct out of the caller's bytes. Blittable, so this is a plain memory copy.
+    private static unsafe object StructFromSlot(Entry entry, int kind, ulong slot)
+    {
+        if (slot == 0) throw new BridgeArgumentException("A struct argument has no value.");
+        return Marshal.PtrToStructure((IntPtr)slot, StructOf(entry, kind).Type)!;
+    }
+
+    // Copies a struct into a new block the caller gives back with FreeString.
+    private static unsafe ulong StructToBlock(Entry entry, int kind, object value)
+    {
+        StructRecord record = StructOf(entry, kind);
+        byte* block = (byte*)NativeMemory.Alloc((nuint)record.Size);
+        try
+        {
+            Marshal.StructureToPtr(value, (IntPtr)block, fDeleteOld: false);
+        }
+        catch
+        {
+            NativeMemory.Free(block);
+            throw;
+        }
+        return (ulong)block;
+    }
+
+    private static readonly Type[] BlittablePrimitives =
+        { typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint), typeof(long), typeof(ulong), typeof(float), typeof(double) };
+
+    private static bool IsBlittableField(Type type) =>
+        Array.IndexOf(BlittablePrimitives, type) >= 0 || (type.IsValueType && !type.IsPrimitive && !type.IsEnum && BlittableProblem(type) == null);
+
+    // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers and other
+    // blittable structs, with sequential or explicit layout. bool and char are excluded because their managed and
+    // native sizes disagree.
+    private static string? BlittableProblem(Type type)
+    {
+        if (!type.IsValueType || type.IsPrimitive || type.IsEnum || type.ContainsGenericParameters)
+            return $"{type} is not a struct.";
+        if (type.IsAutoLayout) return $"{type} has automatic layout, so its layout is not fixed.";
+        FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        if (fields.Length == 0) return $"{type} has no fields.";
+        foreach (FieldInfo field in fields)
+            if (!IsBlittableField(field.FieldType))
+                return $"{type} is not blittable: field '{field.Name}' has type {field.FieldType}.";
+        return null;
+    }
+
+    private static int PrimitiveKindOf(Type type)
+    {
+        for (int kind = (int)ValueKind.Int8; kind <= (int)ValueKind.Double; ++kind)
+            if (ValueKinds.ToType(kind, allowVoid: false) == type) return kind;
+        return -1;
+    }
+
+    // Registers a struct the native side maps, after checking the native description against the managed
+    // type. The description is text: a first line "TypeName|size", then one line per field,
+    // "name|offset|kind|nestedTypeName" in declaration order (nestedTypeName is empty unless kind is Struct;
+    // a nested struct must be registered first). Any mismatch throws BridgeArgumentException, naming it.
+    // Registering the same type again validates again and returns the same handle.
+    internal static FindResult TryRegisterStruct(ulong token, string description, out ulong structId)
+    {
+        structId = 0;
+        Entry entry;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active)
+                return FindResult.InvalidHandle;
+            entry = active;
+        }
+        string[] lines = description.Split('\n');
+        string[] header = lines[0].Split('|');
+        if (header.Length != 2 || !int.TryParse(header[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int nativeSize))
+            throw new BridgeArgumentException("The struct description is malformed.");
+        Type? type = entry.Assembly.GetType(header[0], throwOnError: false, ignoreCase: false);
+        if (type == null || type.Assembly != entry.Assembly || !type.IsVisible) return FindResult.NotFound;
+        if (BlittableProblem(type) is string problem) throw new BridgeArgumentException(problem);
+
+        FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        int managedSize = Marshal.SizeOf(type);
+        if (managedSize != nativeSize)
+            throw new BridgeArgumentException($"{type} is {managedSize} bytes but the native struct is {nativeSize}.");
+        if (lines.Length - 1 != fields.Length)
+            throw new BridgeArgumentException($"{type} has {fields.Length} fields but the native struct declares {lines.Length - 1}.");
+        for (int index = 0; index < fields.Length; ++index)
+        {
+            string[] parts = lines[index + 1].Split('|');
+            if (parts.Length != 4 || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int offset) ||
+                !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int kind))
+                throw new BridgeArgumentException("The struct description is malformed.");
+            FieldInfo field = fields[index];
+            if (field.Name != parts[0])
+                throw new BridgeArgumentException($"Field {index} of {type} is '{field.Name}' but the native struct has '{parts[0]}' there (field order must match).");
+            int managedOffset = (int)Marshal.OffsetOf(type, field.Name);
+            if (managedOffset != offset)
+                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is at offset {managedOffset} but the native field is at {offset}.");
+            if ((ValueKind)kind == ValueKind.Struct)
+            {
+                lock (Gate)
+                {
+                    if (!entry.Handles.StructIds.TryGetValue(field.FieldType, out _) || field.FieldType.FullName != parts[3])
+                        throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which the native struct does not map to the same struct.");
+                }
+            }
+            else if (PrimitiveKindOf(field.FieldType) != kind)
+            {
+                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which does not match the native field's type.");
+            }
+        }
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+                return FindResult.InvalidHandle;
+            if (!entry.Handles.StructIds.TryGetValue(type, out structId))
+            {
+                structId = checked(++lastStructId);
+                entry.Handles.StructIds.Add(type, structId);
+                entry.Handles.Structs.Add(structId, new StructRecord(type, managedSize));
+            }
+            return FindResult.Found;
+        }
     }
 
     // Unroots an owned object. False for an unknown component or object, including one already released.

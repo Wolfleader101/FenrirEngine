@@ -12,6 +12,8 @@ add_library(Iris STATIC
     src/Method.cpp
     src/Object.cpp
     src/StringBlock.cpp
+    src/StructRegistration.cpp
+    src/StructRegistration.hpp
     src/ObjectState.hpp
     src/MethodState.hpp
     src/Names.hpp

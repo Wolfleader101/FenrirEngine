@@ -65,6 +65,9 @@ namespace Iris::Detail
         using SetMemberFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::uint64_t, std::uint64_t,
                                                             std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
         using FreeStringFn = void(IRIS_BRIDGE_CALL*)(std::uint64_t);
+        using RegisterStructFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, const std::uint8_t*, std::int32_t,
+                                                                 std::uint64_t*, std::uint8_t*, std::int32_t,
+                                                                 std::int32_t*, std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -88,13 +91,14 @@ namespace Iris::Detail
         GetMemberFn getMember;
         SetMemberFn setMember;
         FreeStringFn freeString;
+        RegisterStructFn registerStruct;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 17;
+    inline constexpr std::int32_t BridgeVersion = 18;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 20> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 21> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -113,7 +117,8 @@ namespace Iris::Detail
                                                                         "FindMember",
                                                                         "GetMember",
                                                                         "SetMember",
-                                                                        "FreeString"};
+                                                                        "FreeString",
+                                                                        "RegisterStruct"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

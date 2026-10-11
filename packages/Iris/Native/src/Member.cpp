@@ -47,6 +47,11 @@ namespace Iris
         return Detail::TakeString(*state->bridge, block);
     }
 
+    void Detail::RawMember::TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept
+    {
+        Detail::TakeBytes(*state->bridge, block, out, size);
+    }
+
     CallResult<std::uint64_t> Detail::RawMember::Get(const Object* target) const
     {
         std::uint64_t targetHandle = 0;
@@ -66,7 +71,7 @@ namespace Iris
         catch (...)
         {
             // The block is not owned by anything yet; give it back rather than leak it.
-            if (state->returnsString && status == 0 && value != 0)
+            if (state->returnsBlock && status == 0 && value != 0)
             {
                 state->bridge->freeString(value);
             }

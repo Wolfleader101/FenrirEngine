@@ -44,6 +44,7 @@ static class Checks
             ("object passing", () => ObjectChecks.RunPassing(component)),
             ("members", () => MemberChecks.Run(component)),
             ("strings", () => StringChecks.Run(component)),
+            ("structs", () => StructChecks.Run(component)),
             ("log sink", () => LogChecks.Run(component)),
             ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)),
             // Last: sharing is process-wide and permanent.

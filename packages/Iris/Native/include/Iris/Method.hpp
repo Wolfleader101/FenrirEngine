@@ -6,6 +6,7 @@
 #include <array>
 #include <bit>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -31,6 +32,36 @@ namespace Iris
                               (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8));
 
     /**
+     * @brief Declares how a C++ struct mirrors a managed blittable struct. Specialize it for each struct:
+     *
+     * ```cpp
+     * template <> struct Iris::StructMapping<Vec3>
+     * {
+     *     static constexpr std::string_view typeName = "MyComponent.Vec3";
+     *     static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Vec3, X), IRIS_FIELD(Vec3, Y));
+     * };
+     * ```
+     *
+     * List every field, in declaration order, and a field that is itself a mapped struct is allowed.
+     * The managed side checks the size, field names, order, offsets and types the first time the struct
+     * is used with a component; a mismatch, or a managed struct that is not blittable, fails the lookup
+     * with a diagnostic and the call never happens.
+     */
+    template <typename T>
+    struct StructMapping;
+
+    /**
+     * @brief A C++ struct with a StructMapping: trivially copyable standard-layout data that is passed to
+     * managed code by value, returned by value, and used as a field or property value.
+     */
+    template <typename T>
+    concept StructValue = !PrimitiveValue<T> && std::is_trivially_copyable_v<T> && std::is_standard_layout_v<T> &&
+                          std::default_initializable<T> && requires {
+                              StructMapping<T>::typeName;
+                              StructMapping<T>::fields;
+                          };
+
+    /**
      * @brief A string passed to managed code: `std::string_view` for a string that is never null, or
      * `std::optional<std::string_view>` where an empty optional is a null string. The text is UTF-8,
      * may contain null characters, and is borrowed only for the duration of the call; malformed UTF-8 is
@@ -45,8 +76,8 @@ namespace Iris
      * (declared as `const Object&`), which matches any managed class or interface parameter.
      */
     template <typename T>
-    concept Argument =
-        PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> || std::same_as<std::remove_cvref_t<T>, Object>;
+    concept Argument = PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> ||
+                       StructValue<std::remove_cvref_t<T>> || std::same_as<std::remove_cvref_t<T>, Object>;
 
     /**
      * @brief An argument as declared in a method signature: a PrimitiveValue by value, a string as
@@ -54,7 +85,8 @@ namespace Iris
      * cannot be copied, so a by-value Object is not a signature argument).
      */
     template <typename T>
-    concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || std::same_as<T, const Object&>;
+    concept SignatureArgument =
+        PrimitiveValue<T> || StringArgument<T> || StructValue<T> || std::same_as<T, const Object&>;
 
     /**
      * @brief What a managed method can return: void, a PrimitiveValue, `std::optional<Object>`, or
@@ -62,8 +94,8 @@ namespace Iris
      * keeps distinct from the empty string. A returned string is an owned copy with no size limit.
      */
     template <typename T>
-    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || std::same_as<T, std::optional<Object>> ||
-                         std::same_as<T, std::optional<std::string>>;
+    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> ||
+                         std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>>;
 
     namespace Detail
     {
@@ -83,8 +115,42 @@ namespace Iris
             Float = 10,
             Double = 11,
             Object = 12,
-            String = 13
+            String = 13,
+            Struct = 14
         };
+
+        struct StructInfo;
+
+        // One field of a mapped struct: name, byte offset, kind, and for a struct field its own mapping.
+        struct StructFieldInfo
+        {
+            std::string_view name;
+            std::size_t offset;
+            ValueKind kind;
+            const StructInfo* nested;
+        };
+
+        // A struct mapping as the bridge needs it.
+        struct StructInfo
+        {
+            std::string_view typeName;
+            std::size_t size;
+            std::span<const StructFieldInfo> fields;
+        };
+
+        template <StructValue T>
+        inline constexpr StructInfo StructInfoOf{StructMapping<T>::typeName, sizeof(T),
+                                                 std::span<const StructFieldInfo>(StructMapping<T>::fields)};
+
+        template <typename Declared>
+        constexpr const StructInfo* StructInfoPtr() noexcept
+        {
+            using T = std::remove_cvref_t<Declared>;
+            if constexpr (StructValue<T>)
+                return &StructInfoOf<T>;
+            else
+                return nullptr;
+        }
 
         // What a string argument's slot points to; mirrored by the managed StringArgument. It lives on the
         // caller's stack for the call, and the text it points to is borrowed from the caller.
@@ -121,6 +187,8 @@ namespace Iris
             else if constexpr (std::same_as<T, std::string_view> || std::same_as<T, std::optional<std::string_view>> ||
                                std::same_as<T, std::optional<std::string>>)
                 return ValueKind::String;
+            else if constexpr (StructValue<T>)
+                return ValueKind::Struct;
             else
             {
                 static_assert(PrimitiveValue<T>,
@@ -140,6 +208,26 @@ namespace Iris
                 else
                     return std::is_signed_v<T> ? ValueKind::Int64 : ValueKind::UInt64;
             }
+        }
+
+        // A kind as declared in C++, with the mapping when it is a struct (the bridge handle for the struct
+        // is only known once the mapping is registered with a component).
+        struct KindSpec
+        {
+            ValueKind kind;
+            const StructInfo* info;
+        };
+
+        template <typename Declared>
+        constexpr KindSpec KindSpecOf() noexcept
+        {
+            return {KindOf<Declared>(), StructInfoPtr<Declared>()};
+        }
+
+        template <typename Field>
+        constexpr StructFieldInfo MakeField(std::string_view name, std::size_t offset) noexcept
+        {
+            return {name, offset, KindOf<Field>(), StructInfoPtr<Field>()};
         }
 
         // Each value travels in one 64-bit slot: integers sign- or zero-extended, bool as 0 or 1, and
@@ -187,6 +275,11 @@ namespace Iris
                 text = MakeStringView(value);
                 slot = reinterpret_cast<std::uintptr_t>(&text);
             }
+            else if constexpr (StructValue<T>)
+            {
+                // The struct's bytes are borrowed from the caller for the call.
+                slot = reinterpret_cast<std::uintptr_t>(&value);
+            }
             else
                 slot = ToSlot<T>(value);
         }
@@ -196,6 +289,9 @@ namespace Iris
         // Copies a returned string block and gives it back to the bridge. A zero slot is a null string.
         // `bridge` is the table the block came from.
         std::optional<std::string> TakeString(const BridgeFunctions& bridge, std::uint64_t block);
+
+        // Copies `size` bytes of a returned struct block into `out` and gives the block back.
+        void TakeBytes(const BridgeFunctions& bridge, std::uint64_t block, void* out, std::size_t size) noexcept;
 
         // An untyped method handle: arguments and result are raw slots. Use Method<Signature> instead.
         class RawMethod
@@ -212,6 +308,8 @@ namespace Iris
             [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
             // Copies and releases a string block the bridge returned from this method's component.
             [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
+            // Copies and releases a struct block the bridge returned from this method's component.
+            void TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept;
 
             // Why object arguments cannot be sent, or nothing: shared with Type::CreateObject.
             [[nodiscard]] static std::optional<std::pair<CallStatus, std::string>> ResolveObjects(
@@ -240,6 +338,12 @@ namespace Iris
                         // Zero is a null return; anything else is a new, independently owned handle.
                         result.value.emplace(*raw.value == 0 ? std::nullopt
                                                              : std::optional<Object>(method.AdoptObject(*raw.value)));
+                    }
+                    else if constexpr (StructValue<Result>)
+                    {
+                        Result value;
+                        method.TakeStruct(*raw.value, &value, sizeof(Result));
+                        result.value = value;
                     }
                     else if constexpr (std::same_as<Result, std::optional<std::string>>)
                     {
@@ -273,6 +377,10 @@ namespace Iris
      * an object is declared as returning `std::optional<Object>`: each call gets a new, independently
      * owned handle, even when the method returns the same managed object again, and an empty optional is
      * a null return.
+     */
+    /**
+     * Mapped structs (see StructMapping) are passed by value, as `Vec3` in the signature, and returned by
+     * value. Their bytes are borrowed for the call.
      */
     template <typename... Args, typename Result>
         requires((SignatureArgument<Args> && ...) && Returnable<Result>)
@@ -336,3 +444,18 @@ namespace Iris
         Detail::RawMethod method;
     };
 } // namespace Iris
+
+namespace Iris
+{
+    /**
+     * @brief The fields of a StructMapping, from IRIS_FIELD entries.
+     */
+    template <typename... Fields>
+    constexpr std::array<Detail::StructFieldInfo, sizeof...(Fields)> StructFields(Fields... fields) noexcept
+    {
+        return {fields...};
+    }
+} // namespace Iris
+
+/// One field of a mapped struct: `IRIS_FIELD(Vec3, X)`.
+#define IRIS_FIELD(Type, member) ::Iris::Detail::MakeField<decltype(Type::member)>(#member, offsetof(Type, member))

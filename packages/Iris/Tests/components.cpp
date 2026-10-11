@@ -12,6 +12,88 @@
 #include <utility>
 #include <vector>
 
+namespace Fixture
+{
+    struct Vec3
+    {
+        float X, Y, Z;
+    };
+    struct Pose
+    {
+        Vec3 Position;
+        Vec3 Scale;
+        double Weight;
+        std::uint8_t Flags;
+    };
+    struct Packed
+    {
+        std::int32_t Low, High;
+    };
+    // Wrong on purpose: the managed Vec3 is three floats.
+    struct WideVec3
+    {
+        double X, Y, Z;
+    };
+    struct SwappedVec3
+    {
+        float Y, X, Z;
+    };
+    struct FlagValue
+    {
+        bool Flag;
+        std::int32_t Value;
+    };
+} // namespace Fixture
+
+template <>
+struct Iris::StructMapping<Fixture::Vec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::Vec3, X), IRIS_FIELD(Fixture::Vec3, Y), IRIS_FIELD(Fixture::Vec3, Z));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::Pose>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Pose";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::Pose, Position), IRIS_FIELD(Fixture::Pose, Scale),
+                           IRIS_FIELD(Fixture::Pose, Weight), IRIS_FIELD(Fixture::Pose, Flags));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::Packed>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Packed";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::Packed, Low), IRIS_FIELD(Fixture::Packed, High));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::WideVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD(Fixture::WideVec3, X), IRIS_FIELD(Fixture::WideVec3, Y), IRIS_FIELD(Fixture::WideVec3, Z));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::SwappedVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD(Fixture::SwappedVec3, Y), IRIS_FIELD(Fixture::SwappedVec3, X), IRIS_FIELD(Fixture::SwappedVec3, Z));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::FlagValue>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.WithBool";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::FlagValue, Flag), IRIS_FIELD(Fixture::FlagValue, Value));
+};
+
 namespace
 {
     using namespace Iris;
@@ -27,6 +109,8 @@ namespace
     constexpr std::string_view SettingsType = "Iris.Examples.Component.Settings";
     constexpr std::string_view HidingSettingsType = "Iris.Examples.Component.HidingSettings";
     constexpr std::string_view StringsType = "Iris.Examples.Component.Strings";
+    constexpr std::string_view StructsType = "Iris.Examples.Component.Structs";
+    constexpr std::string_view BodyType = "Iris.Examples.Component.Body";
     constexpr std::string_view GreeterType = "Iris.Examples.Component.Greeter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
 
@@ -1087,6 +1171,104 @@ namespace
                            settings.FindField<std::optional<Object>>("Label").status == CallStatus::NotFound &&
                            settings.FindField<std::optional<std::string>>("Count").status == CallStatus::NotFound,
                        "A member matched a kind it is not");
+             }},
+            {"blittable structs pass by value, return by value, and nest",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto structs = *component.FindType(StructsType).value;
+                 using Fixture::Vec3;
+                 const auto add = structs.FindMethod<Vec3(Vec3, Vec3)>("Add");
+                 Check(add.Succeeded(), "A struct signature was not found: " + add.diagnostic);
+                 const auto sum = add.value->Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});
+                 Check(sum.Succeeded() && sum.value->X == 11 && sum.value->Y == 22 && sum.value->Z == 33,
+                       "A struct did not round-trip");
+                 const auto dot = structs.FindMethod<float(Vec3, Vec3)>("Dot");
+                 Check(dot.value->Invoke(Vec3{1, 2, 3}, Vec3{4, 5, 6}).value == 32.0f, "A struct argument was misread");
+                 const auto scale = structs.FindMethod<Vec3(Vec3, float)>("Scale");
+                 Check(scale.value->Invoke(Vec3{1, 2, 3}, 2.0f).value->Z == 6, "A struct and a primitive did not mix");
+                 const auto mixed = structs.FindMethod<std::int32_t(std::int32_t, Vec3, double)>("Mixed");
+                 Check(mixed.value->Invoke(1, Vec3{40, 0, 0}, 1.9).value == 42,
+                       "Struct arguments shifted their neighbours");
+
+                 // A struct containing structs, with padding before the double and after the byte.
+                 using Fixture::Pose;
+                 const auto move = structs.FindMethod<Pose(Pose, Vec3)>("Move");
+                 Check(move.Succeeded(), "A nested struct signature was not found: " + move.diagnostic);
+                 const auto moved = move.value->Invoke(Pose{{1, 1, 1}, {2, 2, 2}, 0.5, 7}, Vec3{1, 2, 3});
+                 Check(moved.Succeeded() && moved.value->Position.Y == 3 && moved.value->Scale.Z == 2 &&
+                           moved.value->Weight == 0.5 && moved.value->Flags == 8,
+                       "A nested struct did not round-trip");
+
+                 using Fixture::Packed;
+                 const auto swap = structs.FindMethod<Packed(Packed)>("Swap");
+                 Check(swap.value->Invoke(Packed{1, 2}).value->Low == 2,
+                       "An explicit-layout struct did not round-trip");
+
+                 // Struct parameters are matched exactly.
+                 Check(structs.FindMethod<Vec3(Vec3)>("Add").status == CallStatus::NotFound &&
+                           structs.FindMethod<float(Vec3, Vec3)>("Add").status == CallStatus::NotFound &&
+                           structs.FindMethod<float(float, float)>("Dot").status == CallStatus::NotFound,
+                       "A struct signature matched something else");
+                 Check(structs.FindMethod<Packed(Vec3, Vec3)>("Add").status == CallStatus::NotFound,
+                       "A different struct return type matched");
+             }},
+            {"struct mappings that do not match the managed type fail the lookup and never call",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto structs = *component.FindType(StructsType).value;
+                 const auto wide = structs.FindMethod<Fixture::WideVec3(Fixture::WideVec3, Fixture::WideVec3)>("Add");
+                 Check(wide.status == CallStatus::InvalidArgument && !wide.value &&
+                           wide.diagnostic.find("24") != std::string::npos &&
+                           wide.diagnostic.find("12") != std::string::npos,
+                       "A size mismatch was not diagnosed: " + wide.diagnostic);
+                 const auto swapped =
+                     structs.FindMethod<Fixture::SwappedVec3(Fixture::SwappedVec3, Fixture::SwappedVec3)>("Add");
+                 Check(swapped.status == CallStatus::InvalidArgument &&
+                           swapped.diagnostic.find("order") != std::string::npos,
+                       "A field-order mismatch was not diagnosed: " + swapped.diagnostic);
+                 const auto body = *component.FindType(BodyType).value;
+                 Check(body.FindField<Fixture::WideVec3>("Position").status == CallStatus::InvalidArgument &&
+                           body.CreateObject(Fixture::SwappedVec3{1, 2, 3}).status == CallStatus::InvalidArgument,
+                       "A bad mapping was accepted by a member or constructor");
+
+                 const auto flip = structs.FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Flip");
+                 Check(flip.status == CallStatus::InvalidArgument &&
+                           flip.diagnostic.find("blittable") != std::string::npos,
+                       "A non-blittable struct was accepted: " + flip.diagnostic);
+
+                 // The right mapping still works afterwards.
+                 Check(structs.FindMethod<Fixture::Vec3(Fixture::Vec3, Fixture::Vec3)>("Add").Succeeded(),
+                       "A good mapping failed after bad ones");
+             }},
+            {"structs work as constructor arguments, instance method arguments, fields and properties",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto body = *component.FindType(BodyType).value;
+                 using Fixture::Vec3;
+                 const auto object = body.CreateObject(Vec3{1, 2, 3});
+                 Check(object.Succeeded(), "A constructor with a struct failed: " + object.diagnostic);
+                 const auto position = *body.FindField<Vec3>("Position").value;
+                 Check(position.Get(*object.value).value->Y == 2, "A constructor stored the wrong struct");
+                 const auto moved = body.FindInstanceMethod<Vec3(Vec3)>("Moved");
+                 Check(moved.value->Invoke(*object.value, Vec3{10, 10, 10}).value->X == 11,
+                       "An instance method with structs failed");
+                 const auto velocity = *body.FindProperty<Vec3>("Velocity").value;
+                 Check(velocity.Set(*object.value, Vec3{4, 5, 6}).Succeeded() &&
+                           velocity.Get(*object.value).value->Z == 6,
+                       "A struct property did not round-trip");
+                 const auto origin = *body.FindField<Vec3>("Origin").value;
+                 Check(origin.Set(Vec3{7, 8, 9}).Succeeded() && origin.Get().value->Y == 8,
+                       "A static struct field did not round-trip");
+                 const auto pose = *body.FindField<Fixture::Pose>("Pose").value;
+                 Check(pose.Set(*object.value, Fixture::Pose{{1, 2, 3}, {4, 5, 6}, 7.5, 9}).Succeeded() &&
+                           pose.Get(*object.value).value->Weight == 7.5,
+                       "A nested struct field did not round-trip");
+                 Check(body.FindField<float>("Position").status == CallStatus::NotFound &&
+                           body.FindField<std::optional<Object>>("Position").status == CallStatus::NotFound,
+                       "A struct field matched another kind");
              }},
             {"member handles stop working when their component is released",
              [&] {

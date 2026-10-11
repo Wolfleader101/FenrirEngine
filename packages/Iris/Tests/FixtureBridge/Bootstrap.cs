@@ -80,7 +80,8 @@ public static class Bootstrap
             FindMember = &FindMember,
             GetMember = &GetMember,
             SetMember = &SetMember,
-            FreeString = &FreeString
+            FreeString = &FreeString,
+            RegisterStruct = &RegisterStruct
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -224,6 +225,13 @@ public static class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *value = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int RegisterStruct(ulong token, byte* description, int length, ulong* structId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *structId = 1; *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

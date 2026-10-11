@@ -5,6 +5,7 @@
 #include "MethodState.hpp"
 #include "Names.hpp"
 #include "ObjectState.hpp"
+#include "StructRegistration.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
@@ -41,25 +42,35 @@ namespace Iris
         return Detail::Success<TypeInfo>(TypeInfo{std::move(*fullName.value), std::move(*assemblyName.value)});
     }
 
-    CallResult<Detail::RawMethod> Type::FindMethodRaw(std::string_view name, Detail::ValueKind returnKind,
-                                                      std::span<const Detail::ValueKind> parameterKinds,
+    CallResult<Detail::RawMethod> Type::FindMethodRaw(std::string_view name, Detail::KindSpec returnSpec,
+                                                      std::span<const Detail::KindSpec> parameterKinds,
                                                       bool isStatic) const
     {
         if (const auto problem = Detail::NameProblem(name, "method"))
         {
             return Detail::Failure<Detail::RawMethod>(CallStatus::InvalidArgument, *problem);
         }
+        const auto returnKind = Detail::ResolveWireKind(*state->bridge, state->component, returnSpec);
+        if (!returnKind.Succeeded())
+        {
+            return Detail::PropagateFailure<Detail::RawMethod>(returnKind);
+        }
         std::vector<std::int32_t> kinds;
         kinds.reserve(parameterKinds.size());
-        for (const auto kind : parameterKinds)
+        for (const auto& spec : parameterKinds)
         {
-            kinds.push_back(static_cast<std::int32_t>(kind));
+            const auto kind = Detail::ResolveWireKind(*state->bridge, state->component, spec);
+            if (!kind.Succeeded())
+            {
+                return Detail::PropagateFailure<Detail::RawMethod>(kind);
+            }
+            kinds.push_back(*kind.value);
         }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t methodId = 0;
         const auto status = (isStatic ? state->bridge->findMethod : state->bridge->findInstanceMethod)(
             state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
-            static_cast<std::int32_t>(name.size()), static_cast<std::int32_t>(returnKind), kinds.data(),
+            static_cast<std::int32_t>(name.size()), *returnKind.value, kinds.data(),
             static_cast<std::int32_t>(kinds.size()), &methodId, diagnostic.bytes.data(), diagnostic.Capacity,
             &diagnostic.written, &diagnostic.truncated);
         if (static_cast<CallStatus>(status) == CallStatus::Success && methodId == 0)
@@ -71,12 +82,13 @@ namespace Iris
         handle->bridge = state->bridge;
         handle->component = state->component;
         handle->method = methodId;
-        handle->returnsString = returnKind == Detail::ValueKind::String;
+        handle->returnsBlock =
+            returnSpec.kind == Detail::ValueKind::String || returnSpec.kind == Detail::ValueKind::Struct;
         return Detail::CompleteCall<Detail::RawMethod>(status, "FindMethod", diagnostic,
                                                        Detail::RawMethod(std::move(handle)));
     }
 
-    CallResult<Object> Type::CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
+    CallResult<Object> Type::CreateObjectRaw(std::span<const Detail::KindSpec> parameterKinds,
                                              std::span<std::uint64_t> slots,
                                              std::span<const Object* const> objects) const
     {
@@ -86,9 +98,14 @@ namespace Iris
         }
         std::vector<std::int32_t> kinds;
         kinds.reserve(parameterKinds.size());
-        for (const auto kind : parameterKinds)
+        for (const auto& spec : parameterKinds)
         {
-            kinds.push_back(static_cast<std::int32_t>(kind));
+            const auto kind = Detail::ResolveWireKind(*state->bridge, state->component, spec);
+            if (!kind.Succeeded())
+            {
+                return Detail::PropagateFailure<Object>(kind);
+            }
+            kinds.push_back(*kind.value);
         }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t objectId = 0;
@@ -109,17 +126,22 @@ namespace Iris
     }
 
     CallResult<Detail::RawMember> Type::FindMemberRaw(std::string_view name, bool isProperty,
-                                                      Detail::ValueKind kind) const
+                                                      Detail::KindSpec spec) const
     {
         if (const auto problem = Detail::NameProblem(name, "member"))
         {
             return Detail::Failure<Detail::RawMember>(CallStatus::InvalidArgument, *problem);
         }
+        const auto wireKind = Detail::ResolveWireKind(*state->bridge, state->component, spec);
+        if (!wireKind.Succeeded())
+        {
+            return Detail::PropagateFailure<Detail::RawMember>(wireKind);
+        }
         Detail::ManagedDiagnosticBuffer diagnostic;
         std::uint64_t memberId = 0;
         const auto status = state->bridge->findMember(
             state->component, state->type, reinterpret_cast<const std::uint8_t*>(name.data()),
-            static_cast<std::int32_t>(name.size()), isProperty ? 1 : 0, static_cast<std::int32_t>(kind), &memberId,
+            static_cast<std::int32_t>(name.size()), isProperty ? 1 : 0, *wireKind.value, &memberId,
             diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
         if (static_cast<CallStatus>(status) == CallStatus::Success && memberId == 0)
         {
@@ -130,7 +152,7 @@ namespace Iris
         handle->bridge = state->bridge;
         handle->component = state->component;
         handle->member = memberId;
-        handle->returnsString = kind == Detail::ValueKind::String;
+        handle->returnsBlock = spec.kind == Detail::ValueKind::String || spec.kind == Detail::ValueKind::Struct;
         return Detail::CompleteCall<Detail::RawMember>(status, "FindMember", diagnostic,
                                                        Detail::RawMember(std::move(handle)));
     }
