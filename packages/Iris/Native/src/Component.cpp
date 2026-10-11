@@ -155,7 +155,7 @@ namespace Iris
         return Detail::CompleteCall<std::vector<Type>>(status, "ListTypes", diagnostic, std::move(types));
     }
 
-    CallResult<ComponentUnloadState> Component::GetUnloadStatus() const
+    CallResult<ComponentUnloadState> Component::GetUnloadState() const
     {
         if (state == nullptr || (state->token == 0 && state->trackingToken == 0))
         {

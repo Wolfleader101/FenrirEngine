@@ -32,7 +32,7 @@
   - Stale header comments and the compile-time error text were corrected.
   - The diagnostic buffer is no longer zeroed on every call (about 10–30% faster calls).
 - **Docs:** the README covers:
-  - every feature with examples, and a table of which C++ types cross where;
+  - every feature with an example (the host and component details too), and a table of which C++ types cross where;
   - deployment requirements (runtime, bridge, nethost, components, shared assemblies, internal calls registered before load; no bridge reference needed);
   - threading, a Mono/Coral comparison, the checks and a platform matrix.
   - `GLOSSARY.md` at the repository root defines the core terms, including generation, release and collection.
@@ -55,3 +55,26 @@
   - an unload wait;
   - a fast invocation path and a benchmark.
   - Ticket 19 sets their priority and the threading model.
+
+### Review of the commit
+
+A review of `00817d7` found these, all fixed in the follow-up commit:
+
+- **Freeze-relevant:**
+  - `Array::AsObject` was public plumbing, like `FromObject`. It is now private, through `Detail::ArrayAccess`.
+  - `*result` on a temporary returned `T&&`, which dangles in `for (x : *component.GetTypes())`. The rvalue overload now returns `T` by value. Every dereference asserts in debug builds.
+  - `GetUnloadStatus` returned a `ComponentUnloadState`. It is renamed `GetUnloadState`.
+  - `InvalidArgument`'s meaning is now stated as frozen (README, ADR-0006).
+  - Every `namespace Detail` block is marked "not API".
+- **Consumer:** it dereferenced unchecked results. Every step is now checked, and its claims are reworded to "a small script host", not "every feature".
+- **Docs:**
+  - the lock wording in Threading;
+  - the string array-element row in the types table;
+  - the internal-call types;
+  - the "throws only" wording;
+  - metadata strings using U+FFFD (now documented);
+  - the moved-from wording in the glossary;
+  - stale `Object` and `PrimitiveValue` comments;
+  - examples for `DiscoverHostFxr`, `IsInitialized`, `sharedAssemblies`, `GetInfo` and `GetUnloadState`;
+  - softer performance claims.
+- **Test:** the accessor case no longer depends on the default .NET root. It now covers the const overloads and iterating a dereferenced temporary.

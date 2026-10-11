@@ -115,7 +115,7 @@ int main(int argc, char* argv[])
 
     // After release, handles stop working.
     const auto released = component->Release();
-    const auto unload = component->GetUnloadStatus();
+    const auto unload = component->GetUnloadState();
     std::cout << "Release: status " << static_cast<std::int32_t>(released.status) << ", unload "
               << (unload.value ? UnloadStateName(*unload.value) : "unknown") << '\n';
     const auto stale = add.Succeeded() ? add.value->Invoke(1, 2) : Iris::CallResult<std::int32_t>{};

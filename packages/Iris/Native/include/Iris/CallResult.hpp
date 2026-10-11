@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -47,23 +48,29 @@ namespace Iris
 
         [[nodiscard]] T& operator*() & noexcept
         {
+            assert(value.has_value());
             return *value;
         }
         [[nodiscard]] const T& operator*() const& noexcept
         {
+            assert(value.has_value());
             return *value;
         }
-        // Moves the value out: `Component component = *std::move(loaded);`.
-        [[nodiscard]] T&& operator*() && noexcept
+        // Moves the value out of a temporary or `std::move`d result, by value, so nothing refers into the
+        // result after it is gone: `for (const Type& type : *component.GetTypes())` is safe.
+        [[nodiscard]] T operator*() &&
         {
+            assert(value.has_value());
             return std::move(*value);
         }
         [[nodiscard]] T* operator->() noexcept
         {
+            assert(value.has_value());
             return value.operator->();
         }
         [[nodiscard]] const T* operator->() const noexcept
         {
+            assert(value.has_value());
             return value.operator->();
         }
     };

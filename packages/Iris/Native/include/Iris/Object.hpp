@@ -6,6 +6,8 @@
 
 namespace Iris
 {
+    // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
+    // any release, so always build against the headers of the library you link.
     namespace Detail
     {
         class RawMethod;
@@ -14,7 +16,8 @@ namespace Iris
     } // namespace Detail
 
     /**
-     * @brief Owns one managed object created with Type::CreateObject.
+     * @brief Owns one managed object: created with Type::CreateObject, or returned from a method or member as
+     * `std::optional<Object>`.
      *
      * While an Object exists, the bridge keeps the managed object alive (it survives GC) and its
      * component cannot be released: Component::Release returns InUse until every Object is released.
