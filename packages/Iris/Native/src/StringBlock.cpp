@@ -1,5 +1,6 @@
+#include "StringBlock.hpp"
+
 #include "BridgeFunctions.hpp"
-#include "Iris/Method.hpp"
 
 #include <cstring>
 

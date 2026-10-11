@@ -32,7 +32,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 16: type enumeration and attributes (done)
 - **Phase C, lifetime and stabilisation (17–19):**
   - 17: reload and root-retention checks (done)
-  - 18: API stabilisation
+  - 18: API stabilisation (done; see `review-18.md`, ADR-0006)
   - 19: engine integration spec
 
 ## Scope and boundaries
@@ -61,7 +61,8 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 - **Handles.** Handles are opaque, validated on every use, and never reused. They are never CLR addresses, OS handles or raw `GCHandle` values. Owners may outlive the host and must release safely after it is gone.
 - **Release versus collection.** Explicit release and observed collection are separate concepts. Library operations never force GC.
 - **Wire signatures.** Signatures use explicit calling conventions and fixed-width types, and the native and managed declarations must agree. Ordinary managed exceptions are caught before returning across the boundary; native allocations keep normal C++ exception behaviour.
-- **Threading.** Calls on a wrapper or owner must be externally serialized until a ticket deliberately changes this.
+- **Threading.** Calls on a host or owner must be externally serialized until a ticket deliberately changes this. Calls on different owners from different threads are designed to work but are untested (README, "Threading").
+- **API stability.** The public headers are frozen at 0.2: changes are additive, and a breaking change needs an ADR (ADR-0006).
 
 ## Working method for every ticket
 
@@ -78,30 +79,42 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
 
 Ask for clarification only when a consequential decision can't be settled from the ticket, the ADRs and the code. Record hard-to-reverse decisions as ADRs in `docs/adr/`.
 
-## Current state (after ticket 16)
+## Current state (after ticket 18)
 
-Implemented and tested (11 CTests of named cases; Windows Debug and Release):
+The public API is frozen at version 0.2 (ADR-0006). It has 12 CTests of named cases, all passing on Windows in Debug and Release. The API covers:
 
-- hostfxr discovery, loading and diagnostics
-- the bridge handshake: the bridge is loaded into the default load context, then one entry point fills a version-21 function table of thirty operations
-- bounded managed diagnostics
-- collectible component loading with private dependency resolution
-- typed static invocation: `Type::FindMethod<R(Args...)>` and `Method::Invoke` for bool, sized integers, float and double
-- release, and observation of the unload (NotRequested, Pending or Collected)
-- type enumeration, base types, interfaces, assignability and attribute snapshots
-- internal calls (registered native functions bound to component function pointer fields at load)
-- arrays (create, index and bulk access, string and struct elements, as arguments and returns, null versus empty)
-- blittable structs (validated mappings, nested, by value in and out, as members)
-- strings (UTF-8, borrowed in, owned out, null distinct from empty) as arguments, returns and member values
-- fields and properties, static and instance, primitive and object-typed, with diagnosed misuse
-- objects passed to and returned from methods and constructors, with independent handles
-- managed objects with explicit ownership: constructors by exact signature, instance and virtual methods, a live-object release policy
-- a process-wide log sink for bridge events and exception reports, with severity
-- type handles: look up a public type by name and read its names; invalidated by release
-- shared contract assemblies with one type identity across components
-- a CMake install/export package (`find_package(Iris)`, `iris_deploy`) verified by a standalone consumer
+- hostfxr discovery, loading and diagnostics, and one bridge per process: the bridge is loaded into the default load context, and one handshake fills a version-21 table of thirty operations
+- collectible components with private dependencies, shared contract assemblies, release, and observed unloading (NotRequested, Pending, Collected)
+- replacement: version B of a component loaded after version A, with no handle from A ever working again
+- types:
+  - lookup and listing
+  - base types, interfaces and assignability
+  - attribute snapshots read from metadata
+- methods:
+  - static and instance (including virtual)
+  - found once by exact C++ signature, then invoked; unsupported types do not compile
+- values:
+  - primitives
+  - strings (UTF-8, null distinct from empty)
+  - blittable structs, validated against the managed layout
+  - objects, as RAII owners with a live-object release policy
+  - one-dimensional arrays
+- fields and properties: static and instance, with misuse diagnosed
+- internal calls, bound by name when a component loads; an unbound one fails the load
+- `CallResult<T>` everywhere, with `*` and `->` access, plus a process-wide log sink
+- a CMake install/export package (`find_package(Iris 0.2)`, `iris_deploy`), checked by a standalone consumer that exercises every feature
 
-Linux and macOS are untested. `review-01.md` lists the known problems and assigns each to a ticket.
+Linux and macOS are untested (README, "Platforms"). `review-18.md` lists the deferred, additive gaps:
+
+- member enumeration and member attributes
+- enums
+- an object's runtime type
+- empty handles
+- a way to wait for an unload
+- a faster invocation path
+- setting the log sink before initialization
+
+Ticket 19 decides which of these the engine needs first.
 
 ## Build and run (Windows, PowerShell, from the repository root)
 

@@ -15,11 +15,13 @@ add_library(Iris STATIC
     src/Method.cpp
     src/Object.cpp
     src/StringBlock.cpp
+    src/StringBlock.hpp
     src/StructRegistration.cpp
     src/StructRegistration.hpp
     src/ObjectState.hpp
     src/MethodState.hpp
     src/Names.hpp
+    src/SnapshotReader.hpp
     src/Type.cpp
     src/TypeState.hpp
     src/HostFxrDiscovery.cpp
@@ -33,6 +35,7 @@ add_library(Iris STATIC
     src/Utf8Buffer.hpp
     include/Iris/Host.hpp
     include/Iris/InternalCall.hpp
+    include/Iris/Iris.hpp
     include/Iris/CallResult.hpp
     include/Iris/Array.hpp
     include/Iris/Component.hpp

@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.20)
 project(IrisConsumer LANGUAGES CXX)
 
-find_package(Iris 0.1 CONFIG REQUIRED)
+find_package(Iris 0.2 CONFIG REQUIRED)
 
 add_executable(IrisConsumer main.cpp)
 target_compile_features(IrisConsumer PRIVATE cxx_std_20)

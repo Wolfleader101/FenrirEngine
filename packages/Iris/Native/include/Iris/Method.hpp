@@ -120,8 +120,9 @@ namespace Iris
                              std::same_as<std::remove_cvref_t<T>, std::optional<std::string_view>>;
 
     /**
-     * @brief What can be passed to a managed method or constructor: a PrimitiveValue, a string, or an Object
-     * (declared as `const Object&`), which matches any managed class or interface parameter.
+     * @brief What can be passed to a managed method or constructor: a PrimitiveValue, a string (see
+     * StringArgument), a mapped struct (see StructMapping), an Object, which matches any managed class or
+     * interface parameter, or an Array (`const Array<T>*` passes a nullable array).
      */
     template <typename T>
     concept Argument =
@@ -129,18 +130,20 @@ namespace Iris
         std::same_as<std::remove_cvref_t<T>, Object> || Detail::ArrayInfo<std::remove_cvref_t<T>>::value;
 
     /**
-     * @brief An argument as declared in a method signature: a PrimitiveValue by value, a string as
-     * `std::string_view` or `std::optional<std::string_view>`, or an Object as `const Object&` (an Object
-     * cannot be copied, so a by-value Object is not a signature argument).
+     * @brief An argument as declared in a method signature: a PrimitiveValue or mapped struct by value, a
+     * string as `std::string_view` or `std::optional<std::string_view>`, an Object as `const Object&`, or an
+     * array as `const Array<T>&` (never null) or `const Array<T>*` (null allowed). Owners cannot be copied, so
+     * a by-value Object or Array is not a signature argument.
      */
     template <typename T>
     concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || StructValue<T> ||
                                 std::same_as<T, const Object&> || Detail::ArraySignature<T>;
 
     /**
-     * @brief What a managed method can return: void, a PrimitiveValue, `std::optional<Object>`, or
-     * `std::optional<std::string>`; in both optionals an empty value is a null return, which a string
-     * keeps distinct from the empty string. A returned string is an owned copy with no size limit.
+     * @brief What a managed method can return: void, a PrimitiveValue, a mapped struct, `std::optional<Object>`,
+     * `std::optional<std::string>`, or `std::optional<Array<T>>`. In each optional an empty value is a null
+     * return, which a string keeps distinct from the empty string and an array from an empty array. A returned
+     * string is an owned copy; a returned Object or Array is a new, independently owned handle.
      */
     template <typename T>
     concept Returnable =
@@ -246,7 +249,9 @@ namespace Iris
             else
             {
                 static_assert(PrimitiveValue<T>,
-                              "Only bool, sized integers, float, double and Object cross the boundary by value.");
+                              "Iris cannot pass this C++ type to managed code. Use bool, a sized integer, float, "
+                              "double, std::string_view (std::optional<std::string> to return), a struct with a "
+                              "StructMapping, const Object& or Array<T>.");
                 if constexpr (std::same_as<T, bool>)
                     return ValueKind::Bool;
                 else if constexpr (std::same_as<T, float>)
@@ -371,15 +376,6 @@ namespace Iris
                 slot = ToSlot<T>(value);
         }
 
-        struct BridgeFunctions;
-
-        // Copies a returned string block and gives it back to the bridge. A zero slot is a null string.
-        // `bridge` is the table the block came from.
-        std::optional<std::string> TakeString(const BridgeFunctions& bridge, std::uint64_t block);
-
-        // Copies `size` bytes of a returned struct block into `out` and gives the block back.
-        void TakeBytes(const BridgeFunctions& bridge, std::uint64_t block, void* out, std::size_t size) noexcept;
-
         // An untyped method handle: arguments and result are raw slots. Use Method<Signature> instead.
         class RawMethod
         {
@@ -409,6 +405,17 @@ namespace Iris
             std::shared_ptr<const State> state;
         };
 
+        // Wraps an object handle the bridge returned for a `T[]` as an Array<T>. Not API: an Array is only ever
+        // made from a handle whose element type the signature already matched.
+        struct ArrayAccess
+        {
+            template <typename ArrayType>
+            [[nodiscard]] static ArrayType Adopt(Object object)
+            {
+                return ArrayType(std::move(object), 0);
+            }
+        };
+
         template <typename Result, typename Handle>
         CallResult<Result> ToTyped(const Handle& method, CallResult<std::uint64_t> raw)
         {
@@ -423,9 +430,9 @@ namespace Iris
                     if constexpr (OptionalArrayInfo<Result>::value)
                     {
                         using Element = typename OptionalArrayInfo<Result>::Element;
-                        result.value.emplace(*raw.value == 0
-                                                 ? std::nullopt
-                                                 : Result(Array<Element>::FromObject(method.AdoptObject(*raw.value))));
+                        result.value.emplace(*raw.value == 0 ? std::nullopt
+                                                             : Result(ArrayAccess::Adopt<Array<Element>>(
+                                                                   method.AdoptObject(*raw.value))));
                     }
                     else if constexpr (std::same_as<Result, std::optional<Object>>)
                     {
@@ -472,8 +479,9 @@ namespace Iris
      * owned handle, even when the method returns the same managed object again, and an empty optional is
      * a null return.
      *
-     * Mapped structs (see StructMapping) are passed by value, as `Vec3` in the signature, and returned by
-     * value. Their bytes are borrowed for the call.
+     * Strings, mapped structs and arrays follow SignatureArgument and Returnable: a string is borrowed for the
+     * call and returned as an owned copy, a struct's bytes are borrowed and returned by value, and an array is
+     * passed as its handle (the callee sees the same elements).
      */
     template <typename... Args, typename Result>
         requires((SignatureArgument<Args> && ...) && Returnable<Result>)

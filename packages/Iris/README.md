@@ -5,8 +5,10 @@ components into collectible contexts, call into them, and unload them. It has no
 FenrirEngine, which includes it only when `FENRIR_ENABLE_SCRIPTING` is on. See [ADR-0001](../../docs/adr/0001-own-dotnet-hosting-library-before-engine-integration.md)
 for the scope, [ADR-0003](../../docs/adr/0003-name-the-hosting-library-iris.md) for the name, and [the implementation plan](IMPLEMENTATION_PLAN.md) for the roadmap.
 
-Tested on Windows x64 (MSVC, .NET 10), Debug and Release. Linux and macOS builds are supported by the
-CMake logic but have not been run yet.
+The public API is frozen as of version 0.2 ([ADR-0006](../../docs/adr/0006-freeze-the-iris-public-api.md)): later
+changes add to it, and a breaking change needs its own ADR. Only Windows has been tested so far; see
+[Platforms](#platforms). Terms such as *component*, *owner*, *handle* and *release* are defined in the
+[glossary](../../GLOSSARY.md).
 
 ## Layout
 
@@ -68,7 +70,7 @@ cmake --install out/build/iris --config Debug --prefix out/install/iris
 ```
 
 ```cmake
-find_package(Iris 0.1 CONFIG REQUIRED)    # with CMAKE_PREFIX_PATH including the install prefix
+find_package(Iris 0.2 CONFIG REQUIRED)    # with CMAKE_PREFIX_PATH including the install prefix
 target_link_libraries(MyApp PRIVATE Iris::Iris)
 iris_deploy(MyApp)                        # copies nethost and the bridge next to MyApp
 ```
@@ -84,11 +86,15 @@ At run time an application needs:
 - `nethost` next to the executable (on Unix `iris_deploy` also sets an `$ORIGIN`/`@loader_path` run path);
 - `Iris.Bridge.dll`, `Iris.Bridge.runtimeconfig.json` and `Iris.Bridge.deps.json`; the bridge's own
   runtime configuration is a valid `HostConfiguration::runtimeConfigPath`;
-- each component with its `.deps.json` and private dependencies (`dotnet publish` produces this);
-- an installed .NET 10 runtime, found by nethost or given as `HostConfiguration::dotnetRoot`.
+- each component with its `.deps.json` and private dependencies (`dotnet publish` produces this), built for
+  `net10.0` (the example also sets `EnableDynamicLoading`, which copies NuGet dependencies on build);
+- any shared contract assembly listed in `HostConfiguration::sharedAssemblies`, at the path you list;
+- an installed .NET 10 runtime, found by nethost or given as `HostConfiguration::dotnetRoot`;
+- every internal call a component declares, registered before that component loads (otherwise the load
+  fails and names the missing ones).
 
-Components reference the bridge with `Private=false` and `ExcludeAssets=runtime`, so they never deploy
-a private copy of it.
+A component does not need to reference `Iris.Bridge`. If one does (the example component does, to test
+resolution), reference it with `Private=false` and `ExcludeAssets=runtime` so it never deploys a copy.
 
 ## Running the example
 
@@ -119,25 +125,48 @@ non-ASCII output.
 
 ## Using the library
 
+`#include <Iris/Iris.hpp>` brings in the whole API (each header also works on its own).
+
 ```cpp
+#include <Iris/Iris.hpp>
 using namespace Iris;
 
 Host host;
-const auto initialized = host.Initialize({.runtimeConfigPath = "app.runtimeconfig.json",
+const auto initialized = host.Initialize({.runtimeConfigPath = "Iris.Bridge.runtimeconfig.json",
                                           .bridgeAssemblyPath = "Iris.Bridge.dll"});
-if (!initialized.success) { /* initialized.diagnostic explains why */ }
+if (!initialized.Succeeded()) { /* initialized.diagnostic explains why */ }
 
 auto loaded = host.LoadComponent("MyComponent.dll");
 if (loaded.Succeeded())
 {
-    Component component = std::move(*loaded.value);
-    const auto type = component.FindType("MyComponent.Calculations");
-    const auto add = type.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
-    const auto sum = add.value->Invoke(20, 22);
-    if (sum.Succeeded()) { /* *sum.value == 42 */ }
-    (void)component.Release(); // Or let the owner's destructor release it.
+    Component component = *std::move(loaded);
+    const auto add = component.FindType("MyComponent.Calculations")
+                         ->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");
+    const auto sum = add->Invoke(20, 22);          // find once, call many times
+    if (sum.Succeeded()) { /* *sum == 42 */ }
+    (void)component.Release();                     // or let the owner's destructor release it
 }
 ```
+
+Every call returns a `CallResult<T>` (see [Results and diagnostics](#results-and-diagnostics)). `*result` and
+`result->` reach the value like `std::optional`, so check `Succeeded()` first; the examples below skip the
+checks for brevity. Nothing in Iris throws except a failed native allocation.
+
+### What crosses the boundary
+
+The C++ types in a signature decide the managed types, and anything else does not compile.
+
+| C++ type | Managed type | Argument | Return | Field / property | Array element |
+| --- | --- | --- | --- | --- | --- |
+| `bool`, `std::int8_t` … `std::uint64_t`, `float`, `double` | the same primitive | by value | by value | yes | yes |
+| `std::string_view`, `std::optional<std::string_view>` (empty = null) | `string` | yes | | `Set` | `Set` |
+| `std::optional<std::string>` (empty = null) | `string` | | yes | `Get` | `Get` |
+| a struct with a `StructMapping` | a blittable struct | by value | by value | yes | yes |
+| `const Object&` / `std::optional<Object>` | any class or interface | `const Object&` | `std::optional<Object>` | `std::optional<Object>` | |
+| `const Array<T>&`, `const Array<T>*` / `std::optional<Array<T>>` | `T[]` | yes (`*` may be null) | yes | | |
+
+Not supported: enums, `char`, generics, delegates, multi-dimensional or jagged arrays, `ref`/`out`
+parameters. Internal calls (managed code calling native code) have their own, smaller set of types.
 
 ### Types
 
@@ -146,7 +175,7 @@ in the component's assembly (nested types use `+`). `Type::GetInfo()` reports it
 
 ```cpp
 const auto type = component.FindType("MyComponent.Calculations");
-if (type.Succeeded()) { const auto info = type.value->GetInfo(); /* info.value->fullName */ }
+if (type.Succeeded()) { const auto info = type->GetInfo(); /* info->fullName */ }
 ```
 
 A `Type` is a cheap value: copying it is fine and it holds no managed reference. It is valid while its
@@ -160,15 +189,15 @@ every call returns `InvalidHandle`. It does not keep the component from unloadin
 signature at compile time, so overloads are told apart by their exact parameter types:
 
 ```cpp
-const auto add  = type.value->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");   // int Add(int, int)
-const auto addL = type.value->FindMethod<std::int64_t(std::int64_t, std::int64_t)>("Add");   // long Add(long, long)
-const auto scale = type.value->FindMethod<double(double, float)>("Scale");
-const auto touch = type.value->FindMethod<void()>("Touch");
+const auto add   = type->FindMethod<std::int32_t(std::int32_t, std::int32_t)>("Add");   // int Add(int, int)
+const auto addL  = type->FindMethod<std::int64_t(std::int64_t, std::int64_t)>("Add");   // long Add(long, long)
+const auto scale = type->FindMethod<double(double, float)>("Scale");
+const auto touch = type->FindMethod<void()>("Touch");
 ```
 
-Only `PrimitiveValue` types compile: `bool`, 8/16/32/64-bit integers, `float`, `double`, and `void` for
-a return. A method that doesn't match (other name, return type, parameter types or count, generic,
-`UnmanagedCallersOnly`, not public, an instance method) is `NotFound`. Any exception the method throws,
+Parameters and returns can be any type in the table above, and `void` for a return. A method that doesn't
+match (other name, return type, parameter types or count, generic, `UnmanagedCallersOnly`, not public, an
+instance method) is `NotFound`. Any exception the method throws,
 including `OverflowException` and `ArgumentException`, is `ManagedException` with its own details; the
 status is never derived from the exception's type. A `Method` is a cheap value like `Type`, stops
 working (`InvalidHandle`) when its component is released, and does not keep it from unloading.
@@ -180,10 +209,10 @@ exactly (`CreateObject(std::int32_t{5}, 2.5)` calls `T(int, double)`) and return
 Instance methods are found with `Type::FindInstanceMethod<Signature>` and called on an object:
 
 ```cpp
-const auto counter = *component.FindType("MyComponent.Counter").value;
-auto object = counter.CreateObject(std::int32_t{5});                       // Counter(int)
-const auto next = counter.FindInstanceMethod<std::int32_t()>("Next").value;  // virtual int Next()
-const auto result = next->Invoke(*object.value);
+const Type counter = *component.FindType("MyComponent.Counter");
+Object object = *counter.CreateObject(std::int32_t{5});                 // Counter(int)
+const auto next = counter.FindInstanceMethod<std::int32_t()>("Next");  // virtual int Next()
+const auto result = next->Invoke(object);
 ```
 
 While an `Object` exists the bridge keeps the managed object alive, so it survives GC, and holds only that
@@ -207,11 +236,11 @@ An `Object` can be passed to a method or constructor by declaring the parameter 
 method can return one by declaring `std::optional<Object>`:
 
 ```cpp
-const auto make  = factory.FindMethod<std::optional<Object>(std::int32_t)>("Make").value;  // static Counter Make(int)
-const auto total = factory.FindMethod<std::int32_t(const Object&, const Object&)>("Total").value;
+const auto make  = factory.FindMethod<std::optional<Object>(std::int32_t)>("Make");  // static Counter Make(int)
+const auto total = factory.FindMethod<std::int32_t(const Object&, const Object&)>("Total");
 auto a = make->Invoke(3);                                  // CallResult<std::optional<Object>>
 auto b = make->Invoke(4);
-const auto sum = total->Invoke(**a.value, **b.value);      // 7
+const auto sum = total->Invoke(**a, **b);                  // 7
 ```
 
 - **Matching.** C++ cannot name the managed type, so an `Object` parameter or return matches any class or
@@ -231,21 +260,22 @@ const auto sum = total->Invoke(**a.value, **b.value);      // 7
 type `T`, static or instance (declared or inherited), and return a `Member<T>`:
 
 ```cpp
-const auto settings = *component.FindType("MyComponent.Settings").value;
-const auto count   = *settings.FindField<std::int32_t>("Count").value;         // instance field
-const auto enabled = *settings.FindProperty<bool>("Enabled").value;            // instance property
-const auto limit   = *settings.FindField<std::int32_t>("StaticCount").value;   // static field
-auto object = settings.CreateObject();
+const Type settings = *component.FindType("MyComponent.Settings");
+const auto count   = *settings.FindField<std::int32_t>("Count");         // instance field
+const auto enabled = *settings.FindProperty<bool>("Enabled");            // instance property
+const auto limit   = *settings.FindField<std::int32_t>("StaticCount");   // static field
+Object object = *settings.CreateObject();
 
-(void)count.Set(*object.value, 5);                 // instance: pass the object
-const auto n = count.Get(*object.value);           // CallResult<std::int32_t>
+(void)count.Set(object, 5);                        // instance: pass the object
+const auto n = count.Get(object);                  // CallResult<std::int32_t>
 (void)limit.Set(41);                               // static: no object
 ```
 
-`T` is a `PrimitiveValue` matched exactly, or `std::optional<Object>` for a class- or interface-typed
+`T` is a primitive matched exactly (no widening), a mapped struct, `std::optional<std::string>` for a string
+(`Set` takes `std::optional<std::string_view>`), or `std::optional<Object>` for a class- or interface-typed
 member: `Get` returns a new, independently owned handle (empty for null) and `Set` takes a `const Object*`
-(`nullptr` stores null; the object must be an instance of the member's type). A missing, private or
-differently typed member, and indexers, are `NotFound`.
+(`nullptr` stores null; the object must be an instance of the member's type). Arrays are not member values
+yet. A missing, private or differently typed member, and indexers, are `NotFound`.
 
 Misuse is a diagnostic, not undefined behaviour: using a static member with an object or an instance member
 without one, writing a read-only member (a `readonly` field, a constant, a property with no public
@@ -259,12 +289,12 @@ Like `Type`, a `Member` is a cheap value that holds no managed reference and sto
 Strings cross the boundary as UTF-8. Native input is borrowed for the call; a result is an owning copy.
 
 ```cpp
-const auto strings = *component.FindType("MyComponent.Strings").value;
-const auto echo = *strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("Echo").value;
+const Type strings = *component.FindType("MyComponent.Strings");
+const auto echo = *strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("Echo");
 
 const auto a = echo.Invoke("hello \xCF\x80");     // CallResult<std::optional<std::string>>
 const auto b = echo.Invoke(std::nullopt);         // a null string in (for a parameter declared `string?`)...
-// b.value is engaged (the call worked) and *b.value is empty: ...a null string out.
+// b.Succeeded() (the call worked) and *b is an empty optional: ...a null string out.
 ```
 
 - **Arguments** are `std::string_view` (never null) or `std::optional<std::string_view>` (empty optional =
@@ -295,7 +325,7 @@ struct Iris::StructMapping<Vec3>
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Vec3, X), IRIS_FIELD(Vec3, Y), IRIS_FIELD(Vec3, Z));
 };
 
-const auto add = *math.FindMethod<Vec3(Vec3, Vec3)>("Add").value;
+const auto add = *math.FindMethod<Vec3(Vec3, Vec3)>("Add");
 const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Vec3>
 ```
 
@@ -319,21 +349,19 @@ It follows the ownership rules of an `Object`: it keeps the managed array alive,
 (`InUse`) until released, and moves rather than copies.
 
 ```cpp
-#include <Iris/Array.hpp>
-
-auto numbers = Array<std::int32_t>::Create(component, 4).value;   // new int[4]
-(void)numbers->Set(2, 7);
-const auto n = numbers->Get(2);                                   // CallResult<std::int32_t>
+Array<std::int32_t> numbers = *Array<std::int32_t>::Create(component, 4);   // new int[4]
+(void)numbers.Set(2, 7);
+const auto n = numbers.Get(2);                                    // CallResult<std::int32_t>
 const std::int32_t more[] = {10, 20};
-(void)numbers->CopyIn(0, more);                                   // bulk copy, primitives and structs
+(void)numbers.CopyIn(0, more);                                    // bulk copy, primitives and structs
 std::int32_t out[4];
-(void)numbers->CopyOut(0, out);
+(void)numbers.CopyOut(0, out);
 
-const auto sum = *math.FindMethod<std::int32_t(const Array<std::int32_t>&)>("Sum").value;
-const auto total = sum.Invoke(*numbers);
+const auto sum = *math.FindMethod<std::int32_t(const Array<std::int32_t>&)>("Sum");
+const auto total = sum.Invoke(numbers);
 
-const auto range = *math.FindMethod<std::optional<Array<std::int32_t>>(std::int32_t)>("Range").value;
-const auto made = range.Invoke(5);                                // *made.value is the array, or empty for null
+const auto range = *math.FindMethod<std::optional<Array<std::int32_t>>(std::int32_t)>("Range");
+const auto made = range.Invoke(5);                                // *made is the array, or empty for null
 ```
 
 - **Elements.** Primitives and mapped structs are read and written by value. A string element reads as
@@ -399,7 +427,7 @@ These queries are the building blocks for finding scripts; they know nothing abo
 
 ```cpp
 const auto types = component.GetTypes();                       // CallResult<std::vector<Type>>
-for (const auto& type : *types.value)
+for (const Type& type : *types)
 {
     const auto base = type.GetBaseType();                       // std::optional<TypeInfo>
     const auto interfaces = type.GetInterfaces();               // std::vector<TypeInfo>, sorted by name
@@ -437,8 +465,8 @@ copying is not supported). Release everything first: a live `Object` or `Array` 
 return `InUse`.
 
 ```cpp
-{ Component a = *host.LoadComponent("v1/MyComponent.dll").value; /* use it */ }   // released on destruction
-Component b = *host.LoadComponent("v2/MyComponent.dll").value;                    // new behaviour
+{ Component a = *host.LoadComponent("v1/MyComponent.dll"); /* use it */ }   // released on destruction
+Component b = *host.LoadComponent("v2/MyComponent.dll");                    // new behaviour
 ```
 
 Handles from the old version (`Type`, `Method`, `Member`, `Object`, `Array`, the owner) report `InvalidHandle`
@@ -447,14 +475,19 @@ cooperative: `GetUnloadStatus` reports `Pending` until nothing in the host keeps
 `Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris keeps no
 root of its own that the tests have found: handle tables, internal call bindings, type listings and attribute
 snapshots are plain data, and components that used all of them were observed to collect. A failed load
-(a missing file, unbound internal calls) leaves nothing registered.
+(a missing file, unbound internal calls) leaves nothing registered. Iris never triggers a collection, so a
+host can observe `Pending` turn into `Collected` but cannot hurry it; an explicit way to wait is a planned
+addition.
 
 ### Logging
 
-`Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink):
+`Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink). It needs
+an initialized host, so messages from `Initialize` itself are not delivered:
 
 ```cpp
-host.SetLogSink([](const Iris::LogMessage& message) { std::cerr << static_cast<int>(message.level) << ": " << message.text << '\n'; });
+(void)host.SetLogSink([](const Iris::LogMessage& message) {
+    std::cerr << static_cast<int>(message.level) << ": " << message.text << '\n';
+});
 ```
 
 Messages arrive with a `LogLevel`. Bridge events (a component loaded or released, an assembly shared) are
@@ -482,7 +515,8 @@ captures must outlive it. `text` is only valid during the call.
   gets a new handle.
 - **Shared assemblies are permanent.** Assemblies listed in `HostConfiguration::sharedAssemblies` load
   once into the default context and stay shared for the life of the process.
-- **External serialization.** Calls on one host, or on one owner, must not run concurrently.
+- **External serialization.** Calls on one host, or on one owner, must not run concurrently (see
+  [Threading](#threading)).
 
 ### Results and diagnostics
 
@@ -494,11 +528,10 @@ and an owning UTF-8 `diagnostic`.
 | `Success` (0) | The call succeeded. |
 | `InvalidArgument` (1) | The bridge rejected an argument (a malformed name or path, for example). |
 | `ManagedException` (3) | Managed code threw; the diagnostic holds `Exception.ToString()`. |
-| `BufferTooSmall` (4) | An output buffer was too small. |
 | `InvalidHandle` (5) | The owner was released or moved from, or the bridge did not recognise its handle. |
 | `NotFound` (6) | A lookup found nothing (a type, method or constructor that is missing, not public, generic or abstract). |
 | `InUse` (7) | `Component::Release` was refused because the component still has live objects. |
-| `NotInitialized` (-1) | The host is not initialized. No managed code ran. |
+| `NotInitialized` (-1) | The host is not initialized (or the result was never filled in). No managed code ran. |
 | `UnexpectedStatus` (-2) | The bridge returned an unknown status. |
 | `InvalidResponse` (-3) | The bridge returned a malformed response. |
 
@@ -507,8 +540,42 @@ says so). If managed code cannot produce valid details, the result keeps its sta
 fallback message. An unknown status carries only a native message. A failed call is never repeated to build its diagnostic, and it leaves the host
 ready for the next call. Native allocation failures still throw normally.
 
-`Initialize` returns an `InitializationResult` instead: `success`, an owning diagnostic that includes
+`Initialize` returns an `InitializationResult` instead: `Succeeded()`, an owning diagnostic that includes
 hostfxr's own messages, and flags recording how far the attempt got.
+
+There is deliberately no conversion from `CallResult` to `bool`: `if (type.IsAssignableTo("X"))` would test
+whether the call worked, not the answer. Write `Succeeded() && *result`.
+
+### Threading
+
+- **Guaranteed:** calls on one `Host`, and on one owner (`Component`, `Object`, `Array`), must be serialized
+  by the caller. Handles (`Type`, `Method`, `Member`) are immutable values and may be copied across threads.
+- **Designed, not verified:** calls on *different* owners from different threads. The bridge takes one lock
+  per operation (never while component code runs), and the native process-wide tables (internal calls, the
+  log sink) are mutex-guarded, but no test runs Iris concurrently.
+- **Your responsibility:** the log sink and internal call functions run on whatever thread calls them, which
+  includes threads component code starts. CoreCLR attaches native threads automatically; there is no
+  attach call.
+
+Until the engine integration (ticket 19) decides otherwise, drive Iris from one thread.
+
+### Coming from Mono or Coral
+
+| You want to | Mono | Coral | Iris |
+| --- | --- | --- | --- |
+| Start the runtime | `mono_jit_init` | `HostInstance::Initialize` | `Host::Initialize` |
+| Load and unload code | domains | `AssemblyLoadContext` | `Host::LoadComponent`, `Component::Release` |
+| Find a type | `mono_class_from_name` | `GetType` | `Component::FindType`, `GetTypes` |
+| Call a method | `mono_runtime_invoke` | `InvokeMethod("Name", ...)` | `FindMethod<Sig>` once, then `Invoke` |
+| Create an object | `mono_object_new` | `CreateInstance` | `Type::CreateObject` (an RAII `Object`) |
+| Read a field | `mono_field_get_value` | `GetFieldValue` | `FindField<T>`, then `Member<T>::Get` |
+| Native code callable from C# | `mono_add_internal_call` | `AddInternalCall` | `RegisterInternalCall<&Fn>` |
+| Handle errors | exception out-parameter | exception callback | `CallResult` status, plus the log sink |
+
+What Iris does differently: signatures are matched exactly at lookup (and unsupported types fail to
+compile), struct layouts are checked against the managed type, a component whose internal calls are not
+all registered fails to load, and errors are values. Not available yet: listing a type's members, attributes
+on members, an object's runtime type, enums, and forcing a collection.
 
 ## How it works
 
@@ -540,11 +607,24 @@ hostfxr's own messages, and flags recording how far the attempt got.
 | `Bridge-real` | The handshake with the real bridge, and rejection of a second bridge file in the same process. |
 | `Bridge-fixture` | How the native host handles scripted bridge responses: bounded and invalid diagnostics, malformed results, no repeated calls, string reads, unload observation, cleanup on destruction. |
 | `Bridge-legacy`, `-oversized`, `-missing`, `-notbridge` | Rejection of a mismatched version, table size, missing entry, or an assembly without the bridge. |
-| `Components` | Component owners against the real bridge: identity, failures, names, paths, moves, release, outliving the host, shared assemblies. |
-| `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` against it. |
+| `Components` | Every public feature against the real bridge: owners, types, methods, objects, members, strings, structs, arrays, internal calls, discovery, replacement, release, outliving the host, shared assemblies. |
+| `Components-unbound` | The same program with no internal calls registered: loading a component that declares them fails and names them. |
+| `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host using every feature) against it. |
+| `UnsupportedTypeDoesNotCompile` | A signature with an unsupported C++ type fails to compile with Iris's own message. |
 
 Each check program runs named cases and reports every failure. The fixture bridge
 (`Tests/FixtureBridge`) is driven by method name (`Scenario:<name>`, `Select:<mode>`, `Counter:<name>`) through the same `FindMethod` and `Invoke`.
+
+## Platforms
+
+| Platform | Compiler | Configure and build | Tests | Notes |
+| --- | --- | --- | --- | --- |
+| Windows 11 x64 | MSVC 19.44 (Visual Studio 2022) | verified | all 12 pass, Debug and Release | .NET SDK 10.0.401 |
+| Linux x64 | GCC / Clang | not run | not run | CMake logic exists (`libnethost.so`, `$ORIGIN` run path) |
+| macOS (arm64, x64) | Apple Clang | not run | not run | CMake logic exists (`libnethost.dylib`, `@loader_path`); one build per architecture |
+
+Release is verified by running `ctest -C Release` by hand; CMake does not enforce it. There is no CI yet:
+automated runners for all three platforms are future work.
 
 ## References
 
