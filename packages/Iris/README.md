@@ -429,6 +429,25 @@ for (const auto& type : *types.value)
 - **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
   like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 
+### Replacing a component
+
+A component is replaced by releasing it and loading the new build from **its own path**: loading locks the
+file on Windows, so build a new version into a new directory rather than overwriting the old one (shadow
+copying is not supported). Release everything first: a live `Object` or `Array` makes `Component::Release`
+return `InUse`.
+
+```cpp
+{ Component a = *host.LoadComponent("v1/MyComponent.dll").value; /* use it */ }   // released on destruction
+Component b = *host.LoadComponent("v2/MyComponent.dll").value;                    // new behaviour
+```
+
+Handles from the old version (`Type`, `Method`, `Member`, `Object`, `Array`, the owner) report `InvalidHandle`
+after it is released, and are never reused, so they cannot select anything in the new version. Unloading is
+cooperative: `GetUnloadStatus` reports `Pending` until nothing in the host keeps the old code alive (a
+`Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris itself
+keeps nothing alive: handle tables, internal call bindings, type listings and attribute snapshots are
+plain data. A failed load (a missing file, unbound internal calls) leaves nothing registered.
+
 ### Logging
 
 `Host::SetLogSink` registers one process-wide sink for bridge messages (clear it with an empty sink):

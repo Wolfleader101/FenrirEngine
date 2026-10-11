@@ -31,7 +31,7 @@ The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `
   - 15: internal calls (done)
   - 16: type enumeration and attributes (done)
 - **Phase C, lifetime and stabilisation (17–19):**
-  - 17: reload and root-retention checks
+  - 17: reload and root-retention checks (done)
   - 18: API stabilisation
   - 19: engine integration spec
 

@@ -3,6 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- A second build of this component (-p:IrisFixtureVersion=B) behaves observably differently, for reload checks. -->
+    <DefineConstants Condition="'$(IrisFixtureVersion)' == 'B'">$(DefineConstants);FIXTURE_B</DefineConstants>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
   <ItemGroup>
