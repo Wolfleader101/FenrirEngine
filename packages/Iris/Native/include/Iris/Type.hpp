@@ -7,9 +7,12 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <variant>
+#include <vector>
 
 namespace Iris
 {
@@ -17,6 +20,32 @@ namespace Iris
     {
         std::string fullName;
         std::string assemblyName;
+    };
+
+    /**
+     * @brief One argument of a custom attribute, as recorded in the assembly's metadata.
+     *
+     * `name` is empty for a constructor argument and the property or field name for a named one. `typeName` is
+     * the managed type the argument was declared as. `value` is `std::monostate` for null and for an
+     * argument that has no native form (an array), a `bool`, an `std::int64_t` (signed integers and enums),
+     * an `std::uint64_t` (unsigned integers and chars), a `double` (`float` and `double`), or a
+     * `std::string` (a string, or the full name of a `Type` argument).
+     */
+    struct AttributeArgument
+    {
+        std::string name;
+        std::string typeName;
+        std::variant<std::monostate, bool, std::int64_t, std::uint64_t, double, std::string> value;
+    };
+
+    /**
+     * @brief A custom attribute applied to a type: its type and its arguments, constructor arguments first.
+     * Read as metadata; the attribute is never instantiated, so no component code runs.
+     */
+    struct AttributeInfo
+    {
+        TypeInfo type;
+        std::vector<AttributeArgument> arguments;
     };
 
     namespace Detail
@@ -46,6 +75,36 @@ namespace Iris
     {
       public:
         [[nodiscard]] CallResult<TypeInfo> GetInfo() const;
+
+        /**
+         * @brief The base type, or an empty optional for a type without one (an interface, `System.Object`).
+         * A snapshot: it names the type and does not need to be a type of this component.
+         */
+        [[nodiscard]] CallResult<std::optional<TypeInfo>> GetBaseType() const;
+
+        /**
+         * @brief Every interface the type implements, inherited ones included, sorted by full name.
+         */
+        [[nodiscard]] CallResult<std::vector<TypeInfo>> GetInterfaces() const;
+
+        /**
+         * @brief The custom attributes applied to the type itself, in metadata order, with their arguments.
+         * Inherited attributes are not included.
+         */
+        [[nodiscard]] CallResult<std::vector<AttributeInfo>> GetAttributes() const;
+
+        /**
+         * @brief Whether an instance of this type can be used as `other` (the same type, a subclass, or an
+         * implementation of an interface). `other` must be a type of the same component.
+         */
+        [[nodiscard]] CallResult<bool> IsAssignableTo(const Type& other) const;
+
+        /**
+         * @brief Like the overload taking a Type, for a target named by full name: a type of the component
+         * assembly, the framework (`System.IDisposable`), or an assembly the component references, such as
+         * a shared contract. A name that cannot be resolved is NotFound.
+         */
+        [[nodiscard]] CallResult<bool> IsAssignableTo(std::string_view fullName) const;
 
         /**
          * @brief Finds a public static, non-generic method by name and exact signature.

@@ -146,6 +146,108 @@ internal static class ComponentRegistry
         }
     }
 
+    // The handle for a type of this component, created on first use. Caller holds no lock.
+    private static ulong TypeIdFor(Entry entry, Type type)
+    {
+        lock (Gate)
+        {
+            if (!entry.Handles.TypeIds.TryGetValue(type, out ulong typeId))
+            {
+                typeId = checked(++lastTypeId);
+                entry.Handles.TypeIds.Add(type, typeId);
+                entry.Handles.Types.Add(typeId, type);
+            }
+            return typeId;
+        }
+    }
+
+    // The public, non-generic types the component assembly defines, in declaration order (metadata token),
+    // nested public types included. These are exactly the types FindType can find. False for an unknown component.
+    internal static bool TryListTypes(ulong token, out ulong[] typeIds)
+    {
+        typeIds = Array.Empty<ulong>();
+        Entry entry;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active) return false;
+            entry = active;
+        }
+        Type[] types;
+        try { types = entry.Assembly.GetTypes(); }
+        catch (ReflectionTypeLoadException exception) { types = Array.FindAll(exception.Types, type => type != null)!; }
+        Array.Sort(types, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
+        var ids = new List<ulong>();
+        foreach (Type type in types)
+        {
+            if (!type.IsVisible || type.ContainsGenericParameters) continue;
+            lock (Gate)
+            {
+                if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return false;
+            }
+            ids.Add(TypeIdFor(entry, type));
+        }
+        typeIds = ids.ToArray();
+        return true;
+    }
+
+    // A snapshot (see TypeQueries) of a looked-up type. False for an unknown component or type handle.
+    internal static bool TryQueryType(ulong token, ulong typeId, TypeQueries.Query query, out byte[] data)
+    {
+        data = Array.Empty<byte>();
+        Type type;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Types.TryGetValue(typeId, out Type? found)) return false;
+            type = found;
+        }
+        data = TypeQueries.Run(type, query);
+        return true;
+    }
+
+    internal enum AssignResult { Assignable, NotAssignable, InvalidHandle, UnknownType }
+
+    // Whether an instance of the type can be stored where `target` is expected: the target is another handle
+    // of this component (otherId), or a type named in the component assembly, the framework, or an assembly
+    // the component references (a contract, shared or private). A name nothing resolves is UnknownType.
+    internal static AssignResult TryIsAssignable(ulong token, ulong typeId, ulong otherId, string? targetName)
+    {
+        Entry entry;
+        Type type, target;
+        lock (Gate)
+        {
+            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+                !active.Handles.Types.TryGetValue(typeId, out Type? found)) return AssignResult.InvalidHandle;
+            entry = active;
+            type = found;
+            if (targetName == null)
+            {
+                if (!active.Handles.Types.TryGetValue(otherId, out Type? other)) return AssignResult.InvalidHandle;
+                target = other;
+            }
+            else
+            {
+                target = null!;
+            }
+        }
+        if (targetName != null)
+        {
+            Type? resolved = entry.Assembly.GetType(targetName, throwOnError: false, ignoreCase: false) ?? Type.GetType(targetName, throwOnError: false);
+            if (resolved == null)
+            {
+                foreach (AssemblyName reference in entry.Assembly.GetReferencedAssemblies())
+                {
+                    try { resolved = entry.Context.LoadFromAssemblyName(reference).GetType(targetName, throwOnError: false, ignoreCase: false); }
+                    catch (Exception exception) when (exception is IOException or BadImageFormatException or FileLoadException) { }
+                    if (resolved != null) break;
+                }
+            }
+            if (resolved == null) return AssignResult.UnknownType;
+            target = resolved;
+        }
+        return target.IsAssignableFrom(type) ? AssignResult.Assignable : AssignResult.NotAssignable;
+    }
+
     // field 0 is the type's full name, 1 its assembly's simple name. False for an unknown component or
     // type handle, including a handle that belongs to another component.
     internal static bool TryGetTypeName(ulong token, ulong typeId, int field, out string? text)

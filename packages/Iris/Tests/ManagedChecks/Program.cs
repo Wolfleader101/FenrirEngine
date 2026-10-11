@@ -48,6 +48,7 @@ static class Checks
             ("structs", () => StructChecks.Run(component)),
             ("arrays", () => ArrayChecks.Run(component)),
             ("internal calls", () => InternalCallChecks.Run(component)),
+            ("type queries", () => TypeQueryChecks.Run(component)),
             ("log sink", () => LogChecks.Run(component)),
             ("resident bridge after the other groups", () => InvocationChecks.CheckResidentBridge(component)),
             // Last: sharing is process-wide and permanent.

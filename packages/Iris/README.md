@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 20.
+Managed bridge initialized; bridge version 21.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -392,6 +392,38 @@ Iris::RegisterInternalCall<&AddImpl>("MyComponent.Natives.Add");   // "Namespace
   value-initialized result (zero, or null for a pointer).
 - **No lifetime coupling.** A registration holds only a name, kinds and a native address, so it never
   keeps a released component alive.
+
+### Discovering types
+
+These queries are the building blocks for finding scripts; they know nothing about any engine.
+
+```cpp
+const auto types = component.GetTypes();                       // CallResult<std::vector<Type>>
+for (const auto& type : *types.value)
+{
+    const auto base = type.GetBaseType();                       // std::optional<TypeInfo>
+    const auto interfaces = type.GetInterfaces();               // std::vector<TypeInfo>, sorted by name
+    const auto attributes = type.GetAttributes();               // std::vector<AttributeInfo>
+    const auto isScript = type.IsAssignableTo("MyContracts.IScript");   // CallResult<bool>
+}
+```
+
+- **Listing.** `Component::GetTypes()` returns the public, non-generic types the component assembly defines,
+  nested public types included, in declaration (metadata) order. These are exactly the types `FindType` can
+  find; internal and generic-definition types are not listed.
+- **Relationships.** `GetBaseType` and `GetInterfaces` are owning snapshots naming types, which need not
+  belong to the component (`System.Object`, a contract). Interfaces include inherited ones.
+  `IsAssignableTo(Type)` compares two types of the same component. `IsAssignableTo("Full.Name")` resolves a
+  name in the component assembly, then the framework, then the assemblies the component references (so a
+  contract assembly works whether it is shared or private); an unresolvable name is `NotFound`.
+- **Attributes.** `GetAttributes` lists the attributes on the type itself (not inherited ones) with their
+  constructor arguments followed by named arguments. Arguments are read from metadata, so the attribute is
+  never instantiated and no component code runs. An argument value is null/unrepresentable
+  (`std::monostate`), `bool`, `std::int64_t` (signed integers and enums), `std::uint64_t` (unsigned integers
+  and chars), `double`, or `std::string` (a string, or a `Type` argument's full name); `typeName` says what it
+  was declared as. Attributes on methods and fields are not available yet.
+- **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
+  like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 
 ### Logging
 
