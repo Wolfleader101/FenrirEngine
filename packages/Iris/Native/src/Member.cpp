@@ -59,7 +59,19 @@ namespace Iris
         const auto status =
             state->bridge->getMember(state->component, state->member, targetHandle, &value, diagnostic.bytes.data(),
                                      diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
-        return CompleteCall<std::uint64_t>(status, "GetMember", diagnostic, value);
+        try
+        {
+            return CompleteCall<std::uint64_t>(status, "GetMember", diagnostic, value);
+        }
+        catch (...)
+        {
+            // The block is not owned by anything yet; give it back rather than leak it.
+            if (state->returnsString && status == 0 && value != 0)
+            {
+                state->bridge->freeString(value);
+            }
+            throw;
+        }
     }
 
     CallResult<void> Detail::RawMember::Set(const Object* target, std::uint64_t value, const Object* objectValue) const

@@ -6,6 +6,10 @@ namespace Iris.Examples.Component;
 // text that is not ASCII, embedded nulls, and text with no UTF-8 form.
 public static class Strings
 {
+    // Counts calls that reached managed code, so tests can show a rejected call never ran.
+    public static int Calls;
+    public static int Counted(string first, string second) => ++Calls;
+
     public static string Echo(string text) => text;
     public static string? EchoOrNull(string? text) => text;
     public static bool IsNull(string? text) => text is null;
@@ -15,7 +19,12 @@ public static class Strings
     public static string WithNull() => "A\0B";
     public static string Empty() => string.Empty;
     public static string? Null() => null;
-    public static string Repeat(string text, int count) => string.Concat(System.Linq.Enumerable.Repeat(text, count));
+    public static string Repeat(string text, int count) => CountedRepeat(text, count);
+    private static string CountedRepeat(string text, int count)
+    {
+        ++Calls;
+        return string.Concat(System.Linq.Enumerable.Repeat(text, count));
+    }
     public static string UnpairedSurrogate() => "A\uD800B";
     public static string Throws(string text) => throw new InvalidOperationException("Rejected: " + text);
 

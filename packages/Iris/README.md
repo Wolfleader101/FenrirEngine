@@ -263,7 +263,7 @@ const auto strings = *component.FindType("MyComponent.Strings").value;
 const auto echo = *strings.FindMethod<std::optional<std::string>(std::optional<std::string_view>)>("Echo").value;
 
 const auto a = echo.Invoke("hello \xCF\x80");     // CallResult<std::optional<std::string>>
-const auto b = echo.Invoke(std::nullopt);         // a null string in...
+const auto b = echo.Invoke(std::nullopt);         // a null string in (for a parameter declared `string?`)...
 // b.value is engaged (the call worked) and *b.value is empty: ...a null string out.
 ```
 
@@ -274,7 +274,8 @@ const auto b = echo.Invoke(std::nullopt);         // a null string in...
 - **Decoding is strict.** Malformed UTF-8 in an argument is `InvalidArgument` and no managed code runs. A
   managed string that cannot become UTF-8 (an unpaired surrogate) is `InvalidArgument` on the way back.
   Nothing is replaced with U+FFFD.
-- **Any size, one call.** Text may contain null characters and has no fixed size limit. A result is produced
+- **Any size, one call.** Text may contain null characters and has no fixed buffer size (the only limit is
+  2 GiB of UTF-8, in either direction, reported as `InvalidArgument`). A result is produced
   once and copied once; there is no size query that could run managed code twice.
 - A string is its own kind: a `string` parameter is matched by `std::string_view` signatures only, never
   by `const Object&`, and an `Object` or integer never matches it.

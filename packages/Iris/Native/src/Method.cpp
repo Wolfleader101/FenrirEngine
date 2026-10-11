@@ -68,7 +68,19 @@ namespace Iris
         const auto status = state->bridge->invokeMethod(
             state->component, state->method, slots.data(), static_cast<std::int32_t>(slots.size()), &result,
             diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
-        return CompleteCall<std::uint64_t>(status, "InvokeMethod", diagnostic, result);
+        try
+        {
+            return CompleteCall<std::uint64_t>(status, "InvokeMethod", diagnostic, result);
+        }
+        catch (...)
+        {
+            // The block is not owned by anything yet; give it back rather than leak it.
+            if (state->returnsString && status == 0 && result != 0)
+            {
+                state->bridge->freeString(result);
+            }
+            throw;
+        }
     }
 
     CallResult<std::uint64_t> Detail::RawMethod::InvokeInstance(const Object& object, std::span<std::uint64_t> slots,
@@ -96,6 +108,18 @@ namespace Iris
                                                                 slots.data(), static_cast<std::int32_t>(slots.size()),
                                                                 &result, diagnostic.bytes.data(), diagnostic.Capacity,
                                                                 &diagnostic.written, &diagnostic.truncated);
-        return CompleteCall<std::uint64_t>(status, "InvokeInstanceMethod", diagnostic, result);
+        try
+        {
+            return CompleteCall<std::uint64_t>(status, "InvokeInstanceMethod", diagnostic, result);
+        }
+        catch (...)
+        {
+            // The block is not owned by anything yet; give it back rather than leak it.
+            if (state->returnsString && status == 0 && result != 0)
+            {
+                state->bridge->freeString(result);
+            }
+            throw;
+        }
     }
 } // namespace Iris

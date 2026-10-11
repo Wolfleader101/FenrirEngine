@@ -10,7 +10,7 @@
 - [x] String returns arrive as owning UTF-8 and preserve embedded nulls and non-ASCII text. There is no fixed size limit and no size-then-call-again round trip that could run managed code twice.
 - [x] A null managed string is distinguishable from an empty one on the native side.
 - [x] String fields and properties work once ticket 11 is complete (a follow-up note is acceptable if 11 is not yet done).
-- [x] Any UTF-8 coverage that ticket 03 kept fixture-only is now covered here, and that fixture path is removed.
+- [x] Any UTF-8 coverage that ticket 03 kept fixture-only is now covered here. (The fixture scenarios that remain test diagnostic/name text transport, not string values; see Resolution.)
 
 ## Comments
 
@@ -32,5 +32,5 @@ From the ticket 03 review: removing `GetGreeting` and `EchoUtf8` lost the only r
 - A returned string with an unpaired surrogate is `InvalidArgument` (it has no UTF-8 form).
 - Known limits: `CreateObject` deduces its argument types, so pass `std::string_view` explicitly rather than a
   `const char*` or `std::string`; a string longer than 2 GiB is rejected as `InvalidArgument`.
-- `NativeMemory`-owned blocks leak only if native never frees; the native side frees in every path, and
-  `FreeString(0)` is ignored.
+- `NativeMemory`-owned blocks leak only if native never frees; the native side frees the block when copying or
+  completing the call throws (`bad_alloc`), and `FreeString(0)` is ignored.
