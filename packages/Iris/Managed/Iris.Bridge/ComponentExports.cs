@@ -458,6 +458,89 @@ public static partial class Bootstrap
         }
     }
 
+    // Lists the component's public non-generic types as type handles, in declaration order. Publishes a block
+    // (eight-byte length, then an int64 count and that many int64 handles) the caller gives back with FreeString.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int ListTypes(ulong token, ulong* block, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (block != null) *block = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || block == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryListTypes(token, out ulong[] ids)) return (int)BridgeStatus.InvalidHandle;
+            var data = new byte[8 + ids.Length * 8];
+            BitConverter.TryWriteBytes(data.AsSpan(0, 8), (long)ids.Length);
+            for (int index = 0; index < ids.Length; ++index) BitConverter.TryWriteBytes(data.AsSpan(8 + index * 8, 8), (long)ids[index]);
+            *block = TypeQueries.ToBlock(data);
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)StatusFor(exception);
+        }
+    }
+
+    // A snapshot of a type: query 0 base type, 1 interfaces, 2 custom attributes (see TypeQueries for the
+    // format). Publishes a block the caller gives back with FreeString. No component code runs.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int QueryType(ulong token, ulong typeId, int query, ulong* block,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (block != null) *block = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || block == null)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (query < 0 || query > 2) throw new BridgeArgumentException($"Unknown type query {query}.");
+            if (!ComponentRegistry.TryQueryType(token, typeId, (TypeQueries.Query)query, out byte[] data)) return (int)BridgeStatus.InvalidHandle;
+            *block = TypeQueries.ToBlock(data);
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)StatusFor(exception);
+        }
+    }
+
+    // Whether the type is assignable to another: `otherId` is a type handle of this component, or 0 with the
+    // target named in explicit-length UTF-8. *result is 1 or 0. NotFound (6): the named type cannot be resolved.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int IsTypeAssignable(ulong token, ulong typeId, ulong otherId, byte* name, int nameLength, int* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (result != null) *result = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+            (otherId == 0) == (name == null) || (name != null && nameLength <= 0))
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            string? targetName = name == null ? null : new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength));
+            if (targetName != null && targetName.Contains('\0')) throw new BridgeArgumentException("A type name cannot contain null characters.");
+            switch (ComponentRegistry.TryIsAssignable(token, typeId, otherId, targetName))
+            {
+                case ComponentRegistry.AssignResult.Assignable:
+                    *result = 1;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.AssignResult.NotAssignable:
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.AssignResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new TypeLoadException($"No type named '{targetName}' could be resolved from the component."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+        }
+    }
+
     // Gives back a string block returned in a result slot. Zero is ignored. Cannot fail.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static void FreeString(ulong block)

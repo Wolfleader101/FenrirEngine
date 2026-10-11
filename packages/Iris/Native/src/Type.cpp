@@ -5,10 +5,12 @@
 #include "MethodState.hpp"
 #include "Names.hpp"
 #include "ObjectState.hpp"
+#include "SnapshotReader.hpp"
 #include "StructRegistration.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
+#include <cstring>
 #include <utility>
 #include <vector>
 
@@ -155,5 +157,153 @@ namespace Iris
         handle->returnsBlock = spec.kind == Detail::ValueKind::String || spec.kind == Detail::ValueKind::Struct;
         return Detail::CompleteCall<Detail::RawMember>(status, "FindMember", diagnostic,
                                                        Detail::RawMember(std::move(handle)));
+    }
+
+    namespace
+    {
+        const char* const Malformed = "The bridge returned a malformed type snapshot.";
+
+        // Runs one snapshot query and hands the block's bytes to `parse`, which fills the result. The block is
+        // given back to the bridge whatever happens.
+        template <typename T, typename Parse>
+        CallResult<T> Snapshot(const Detail::BridgeFunctions& bridge, std::uint64_t component, std::uint64_t type,
+                               std::int32_t query, const char* operation, Parse parse)
+        {
+            Detail::ManagedDiagnosticBuffer diagnostic;
+            std::uint64_t block = 0;
+            const auto status = bridge.queryType(component, type, query, &block, diagnostic.bytes.data(),
+                                                 diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
+            try
+            {
+                if (static_cast<CallStatus>(status) != CallStatus::Success || block == 0)
+                {
+                    return Detail::CompleteCall<T>(status, operation, diagnostic, T{});
+                }
+                const auto* memory = reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(block));
+                std::int64_t length = 0;
+                std::memcpy(&length, memory, sizeof(length));
+                Detail::SnapshotReader reader(memory + sizeof(length), static_cast<std::size_t>(length));
+                T value{};
+                parse(reader, value);
+                bridge.freeString(block);
+                block = 0;
+                if (!reader.Finished())
+                {
+                    return Detail::Failure<T>(CallStatus::InvalidResponse, Malformed);
+                }
+                return Detail::CompleteCall<T>(status, operation, diagnostic, std::move(value));
+            }
+            catch (...)
+            {
+                if (block != 0)
+                {
+                    bridge.freeString(block);
+                }
+                throw;
+            }
+        }
+
+        TypeInfo ReadTypeInfo(Detail::SnapshotReader& reader)
+        {
+            TypeInfo info;
+            info.fullName = reader.String();
+            info.assemblyName = reader.String();
+            return info;
+        }
+    } // namespace
+
+    CallResult<std::optional<TypeInfo>> Type::GetBaseType() const
+    {
+        return Snapshot<std::optional<TypeInfo>>(*state->bridge, state->component, state->type, 0, "QueryType",
+                                                 [](Detail::SnapshotReader& reader, std::optional<TypeInfo>& value) {
+                                                     if (reader.Int32() == 1)
+                                                     {
+                                                         value = ReadTypeInfo(reader);
+                                                     }
+                                                 });
+    }
+
+    CallResult<std::vector<TypeInfo>> Type::GetInterfaces() const
+    {
+        return Snapshot<std::vector<TypeInfo>>(*state->bridge, state->component, state->type, 1, "QueryType",
+                                               [](Detail::SnapshotReader& reader, std::vector<TypeInfo>& value) {
+                                                   const std::int32_t count = reader.Int32();
+                                                   for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                                                   {
+                                                       value.push_back(ReadTypeInfo(reader));
+                                                   }
+                                               });
+    }
+
+    CallResult<std::vector<AttributeInfo>> Type::GetAttributes() const
+    {
+        return Snapshot<std::vector<AttributeInfo>>(
+            *state->bridge, state->component, state->type, 2, "QueryType",
+            [](Detail::SnapshotReader& reader, std::vector<AttributeInfo>& value) {
+                const std::int32_t count = reader.Int32();
+                for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                {
+                    AttributeInfo attribute;
+                    attribute.type = ReadTypeInfo(reader);
+                    const std::int32_t arguments = reader.Int32();
+                    for (std::int32_t position = 0; reader.Ok() && position < arguments; ++position)
+                    {
+                        AttributeArgument argument;
+                        argument.name = reader.String();
+                        argument.typeName = reader.String();
+                        switch (reader.Int32())
+                        {
+                        case 1:
+                            argument.value = reader.Int64() != 0;
+                            break;
+                        case 2:
+                            argument.value = reader.Int64();
+                            break;
+                        case 3:
+                            argument.value = static_cast<std::uint64_t>(reader.Int64());
+                            break;
+                        case 4:
+                            argument.value = reader.Double();
+                            break;
+                        case 5:
+                            argument.value = reader.String();
+                            break;
+                        default:
+                            break;
+                        }
+                        attribute.arguments.push_back(std::move(argument));
+                    }
+                    value.push_back(std::move(attribute));
+                }
+            });
+    }
+
+    CallResult<bool> Type::IsAssignableTo(const Type& other) const
+    {
+        if (other.state->component != state->component)
+        {
+            return Detail::Failure<bool>(CallStatus::InvalidArgument, "The types belong to different components.");
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::int32_t result = 0;
+        const auto status = state->bridge->isTypeAssignable(state->component, state->type, other.state->type, nullptr,
+                                                            0, &result, diagnostic.bytes.data(), diagnostic.Capacity,
+                                                            &diagnostic.written, &diagnostic.truncated);
+        return Detail::CompleteCall<bool>(status, "IsTypeAssignable", diagnostic, result != 0);
+    }
+
+    CallResult<bool> Type::IsAssignableTo(std::string_view fullName) const
+    {
+        if (const auto problem = Detail::NameProblem(fullName, "type"))
+        {
+            return Detail::Failure<bool>(CallStatus::InvalidArgument, *problem);
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::int32_t result = 0;
+        const auto status = state->bridge->isTypeAssignable(
+            state->component, state->type, 0, reinterpret_cast<const std::uint8_t*>(fullName.data()),
+            static_cast<std::int32_t>(fullName.size()), &result, diagnostic.bytes.data(), diagnostic.Capacity,
+            &diagnostic.written, &diagnostic.truncated);
+        return Detail::CompleteCall<bool>(status, "IsTypeAssignable", diagnostic, result != 0);
     }
 } // namespace Iris

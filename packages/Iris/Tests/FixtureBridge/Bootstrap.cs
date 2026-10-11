@@ -87,7 +87,10 @@ public static class Bootstrap
             GetArrayElement = &GetArrayElement,
             SetArrayElement = &SetArrayElement,
             CopyArray = &CopyArray,
-            RegisterInternalCall = &RegisterInternalCall
+            RegisterInternalCall = &RegisterInternalCall,
+            ListTypes = &ListTypes,
+            QueryType = &QueryType,
+            IsTypeAssignable = &IsTypeAssignable
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -231,6 +234,25 @@ public static class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *value = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int ListTypes(ulong token, ulong* block, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *block = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int QueryType(ulong token, ulong typeId, int query, ulong* block, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *block = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int IsTypeAssignable(ulong token, ulong typeId, ulong otherId, byte* name, int nameLength, int* result,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *result = 0; *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

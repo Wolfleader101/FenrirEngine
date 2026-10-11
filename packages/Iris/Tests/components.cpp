@@ -1560,6 +1560,152 @@ namespace
                      "Registering twice after start-up failed");
                  CheckCalculation(Load(*host, arguments.component));
              }},
+            {"a component lists its public types in declaration order",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto listed = component.GetTypes();
+                 Check(listed.Succeeded() && listed.value->size() > 10,
+                       "Listing returned too few types: " + listed.diagnostic);
+                 std::vector<std::string> names;
+                 for (const auto& type : *listed.value)
+                 {
+                     const auto info = type.GetInfo();
+                     Check(info.Succeeded() && info.value->assemblyName == "Iris.Examples.Component",
+                           "A listed type did not belong to the component");
+                     names.push_back(info.value->fullName);
+                 }
+                 const auto index = [&](std::string_view name) {
+                     return std::find(names.begin(), names.end(), std::string(name)) - names.begin();
+                 };
+                 const auto count = static_cast<std::ptrdiff_t>(names.size());
+                 Check(index("Iris.Examples.Component.Actor") < count &&
+                           index("Iris.Examples.Component.Boss") < count &&
+                           index("Iris.Examples.Component.Actor") < index("Iris.Examples.Component.Player") &&
+                           index("Iris.Examples.Component.Player") < index("Iris.Examples.Component.Enemy") &&
+                           index("Iris.Examples.Component.Enemy") < index("Iris.Examples.Component.Boss"),
+                       "Types were missing or out of declaration order");
+                 Check(index("Iris.Examples.Component.HiddenActor") == count &&
+                           std::none_of(names.begin(), names.end(),
+                                        [](const std::string& name) { return name.find("Box") != std::string::npos; }),
+                       "An internal or generic type was listed");
+                 // Every listed type can also be found by name, and listing again gives the same set.
+                 for (const auto& name : names)
+                 {
+                     Check(component.FindType(name).Succeeded(), "A listed type could not be found: " + name);
+                 }
+                 Check(component.GetTypes().value->size() == names.size(), "Listing twice differed");
+
+                 // The list is a set of handles: it stops working with the component, and holds nothing of its own.
+                 auto types = std::move(*listed.value);
+                 Check(component.Release().Succeeded(), "Listed types kept the component from being released");
+                 Check(types.front().GetInfo().status == CallStatus::InvalidHandle &&
+                           component.GetTypes().status == CallStatus::InvalidHandle,
+                       "Listed types worked after their component was released");
+             }},
+            {"base types, interfaces and assignability across the component, a contract and the framework",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto player = *component.FindType("Iris.Examples.Component.Player").value;
+                 const auto actor = *component.FindType("Iris.Examples.Component.Actor").value;
+                 const auto boss = *component.FindType("Iris.Examples.Component.Boss").value;
+                 const auto base = player.GetBaseType();
+                 Check(base.Succeeded() && base.value->has_value() &&
+                           (*base.value)->fullName == "Iris.Examples.Component.Actor" &&
+                           (*base.value)->assemblyName == "Iris.Examples.Component",
+                       "The base type was wrong");
+                 const auto objectBase = actor.GetBaseType();
+                 Check(objectBase.Succeeded() && objectBase.value->has_value() &&
+                           (*objectBase.value)->fullName == "System.Object",
+                       "A class without a base declared the wrong base");
+                 const auto interfaces = player.GetInterfaces();
+                 Check(interfaces.Succeeded() && interfaces.value->size() == 2 &&
+                           (*interfaces.value)[0].fullName == "Iris.Examples.Contracts.IScript" &&
+                           (*interfaces.value)[0].assemblyName == "Iris.Examples.Contracts" &&
+                           (*interfaces.value)[1].fullName == "System.IDisposable",
+                       "The interfaces were wrong or unsorted");
+                 Check(boss.GetInterfaces().value->size() == 1, "An inherited interface was missed");
+
+                 Check(player.IsAssignableTo(actor).value == true && boss.IsAssignableTo(actor).value == true &&
+                           actor.IsAssignableTo(player).value == false && player.IsAssignableTo(player).value == true,
+                       "Assignability between component types was wrong");
+                 Check(player.IsAssignableTo("System.IDisposable").value == true &&
+                           player.IsAssignableTo("Iris.Examples.Contracts.IScript").value == true &&
+                           boss.IsAssignableTo("Iris.Examples.Contracts.IScript").value == true &&
+                           player.IsAssignableTo("System.Object").value == true &&
+                           component.FindType("Iris.Examples.Component.Plain")
+                                   .value->IsAssignableTo("Iris.Examples.Contracts.IScript")
+                                   .value == false,
+                       "Assignability to framework and contract types was wrong");
+                 const auto unknown = player.IsAssignableTo("No.Such.Type");
+                 Check(unknown.status == CallStatus::NotFound && !unknown.value, "An unknown target was not NotFound");
+                 Check(player.IsAssignableTo("").status == CallStatus::InvalidArgument,
+                       "An empty target name was accepted");
+                 const auto second = Load(*host, arguments.component);
+                 Check(player.IsAssignableTo(*second.FindType("Iris.Examples.Component.Actor").value).status ==
+                           CallStatus::InvalidArgument,
+                       "A type of another component was accepted");
+             }},
+            {"custom attributes list their constructor and named arguments without running component code",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto attributes = component.FindType("Iris.Examples.Component.Player").value->GetAttributes();
+                 Check(attributes.Succeeded(), "Attributes failed: " + attributes.diagnostic);
+                 std::vector<AttributeInfo> scripts, others;
+                 for (const auto& attribute : *attributes.value)
+                 {
+                     (attribute.type.fullName == "Iris.Examples.Component.ScriptAttribute" ? scripts : others)
+                         .push_back(attribute);
+                 }
+                 Check(scripts.size() == 2 && others.size() == 2, "The attributes of Player were not listed");
+                 // [Script("player", 3, Enabled = true, Weight = 0.5)]
+                 const auto& player = scripts[0];
+                 Check(player.arguments.size() == 4 && player.arguments[0].name.empty() &&
+                           std::get<std::string>(player.arguments[0].value) == "player" &&
+                           std::get<std::int64_t>(player.arguments[1].value) == 3 &&
+                           player.arguments[1].typeName == "System.Int32" && player.arguments[2].name == "Enabled" &&
+                           std::get<bool>(player.arguments[2].value) && player.arguments[3].name == "Weight" &&
+                           std::get<double>(player.arguments[3].value) == 0.5,
+                       "A constructor or named argument was wrong");
+                 Check(scripts[1].arguments.size() == 1 &&
+                           std::get<std::string>(scripts[1].arguments[0].value) == "hero",
+                       "A second attribute of the same type was wrong");
+                 Check(player.type.assemblyName == "Iris.Examples.Component", "An attribute's assembly was wrong");
+
+                 // The framework's attribute, with a string argument.
+                 const auto obsolete = std::find_if(others.begin(), others.end(), [](const AttributeInfo& attribute) {
+                     return attribute.type.fullName == "System.ObsoleteAttribute";
+                 });
+                 Check(obsolete != others.end() && std::get<std::string>(obsolete->arguments.at(0).value) == "replaced",
+                       "A framework attribute was wrong");
+
+                 // Every shape of constructor argument.
+                 const auto details = std::find_if(others.begin(), others.end(), [](const AttributeInfo& attribute) {
+                     return attribute.type.fullName == "Iris.Examples.Component.DetailsAttribute";
+                 });
+                 Check(details != others.end() && details->arguments.size() == 8, "The Details attribute was wrong");
+                 const auto& a = details->arguments;
+                 Check(std::get<std::int64_t>(a[0].value) == 2 && a[0].typeName == "Iris.Examples.Component.Mode",
+                       "An enum argument was wrong");
+                 Check(std::get<std::string>(a[1].value) == "Iris.Examples.Component.Actor" &&
+                           a[1].typeName == "System.Type",
+                       "A Type argument was wrong");
+                 Check(std::get<std::uint64_t>(a[2].value) == 200 &&
+                           std::get<std::uint64_t>(a[3].value) == std::numeric_limits<std::uint64_t>::max(),
+                       "An unsigned argument was wrong");
+                 Check(std::get<double>(a[4].value) == 1.5 && std::get<std::uint64_t>(a[5].value) == 'x',
+                       "A float or char argument was wrong");
+                 Check(std::holds_alternative<std::monostate>(a[6].value) && a[6].typeName == "System.String",
+                       "A null argument was wrong");
+                 Check(std::holds_alternative<std::monostate>(a[7].value) && a[7].typeName == "System.Int32[]",
+                       "An array argument was not reported as unrepresentable");
+
+                 // A type with none.
+                 Check(component.FindType("Iris.Examples.Component.Plain").value->GetAttributes().value->empty(),
+                       "A type without attributes listed some");
+             }},
             {"member handles stop working when their component is released",
              [&] {
                  auto host = StartHost(arguments);

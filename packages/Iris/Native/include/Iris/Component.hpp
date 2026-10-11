@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace Iris
 {
@@ -55,6 +56,12 @@ namespace Iris
         // NotRequested while loaded; Pending or Collected after Release (a snapshot, with no
         // deadline for Pending). Remains available after Release and host destruction.
         [[nodiscard]] CallResult<ComponentUnloadState> GetUnloadStatus() const;
+
+        // Lists the component's public, non-generic types as handles, in declaration order (the order they
+        // appear in the assembly's metadata), nested public types included. These are exactly the types
+        // FindType finds; internal and generic-definition types are not listed. A snapshot: types are not
+        // added or removed after load, and the handles behave like those from FindType.
+        [[nodiscard]] CallResult<std::vector<Type>> GetTypes() const;
 
         // Finds a public, closed type defined in this component's assembly by full name (for example
         // "My.Namespace.Calculator"; nested types use '+'). The name is case-sensitive UTF-8 without

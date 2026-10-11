@@ -87,6 +87,14 @@ namespace Iris::Detail
                                                                        const std::int32_t*, std::int32_t, void*,
                                                                        std::uint8_t*, std::int32_t, std::int32_t*,
                                                                        std::int32_t*);
+        using ListTypesFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t*, std::uint8_t*, std::int32_t,
+                                                            std::int32_t*, std::int32_t*);
+        using QueryTypeFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::int32_t, std::uint64_t*,
+                                                            std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*);
+        using IsTypeAssignableFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::uint64_t, std::uint64_t,
+                                                                   const std::uint8_t*, std::int32_t, std::int32_t*,
+                                                                   std::uint8_t*, std::int32_t, std::int32_t*,
+                                                                   std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -117,13 +125,16 @@ namespace Iris::Detail
         ArraySetFn arraySet;
         ArrayCopyFn arrayCopy;
         RegisterInternalCallFn registerInternalCall;
+        ListTypesFn listTypes;
+        QueryTypeFn queryType;
+        IsTypeAssignableFn isTypeAssignable;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 20;
+    inline constexpr std::int32_t BridgeVersion = 21;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 27> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 30> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -149,7 +160,10 @@ namespace Iris::Detail
                                                                         "GetArrayElement",
                                                                         "SetArrayElement",
                                                                         "CopyArray",
-                                                                        "RegisterInternalCall"};
+                                                                        "RegisterInternalCall",
+                                                                        "ListTypes",
+                                                                        "QueryType",
+                                                                        "IsTypeAssignable"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

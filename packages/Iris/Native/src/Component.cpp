@@ -3,9 +3,11 @@
 #include "ComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "Names.hpp"
+#include "SnapshotReader.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
+#include <cstring>
 #include <limits>
 #include <utility>
 
@@ -91,6 +93,56 @@ namespace Iris
         handle->component = state->token;
         handle->type = typeId;
         return Detail::CompleteCall<Type>(status, "FindType", diagnostic, Type(std::move(handle)));
+    }
+
+    CallResult<std::vector<Type>> Component::GetTypes() const
+    {
+        if (!IsLoaded())
+        {
+            return Detail::Failure<std::vector<Type>>(CallStatus::InvalidHandle, ReleasedOwner);
+        }
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::uint64_t block = 0;
+        const auto status = state->bridge->listTypes(state->token, &block, diagnostic.bytes.data(), diagnostic.Capacity,
+                                                     &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) != CallStatus::Success || block == 0)
+        {
+            return Detail::CompleteCall<std::vector<Type>>(status, "ListTypes", diagnostic, std::vector<Type>{});
+        }
+        const auto* memory = reinterpret_cast<const std::uint8_t*>(static_cast<std::uintptr_t>(block));
+        std::int64_t length = 0;
+        std::memcpy(&length, memory, sizeof(length));
+        std::vector<Type> types;
+        bool valid = false;
+        try
+        {
+            Detail::SnapshotReader reader(memory + sizeof(length), static_cast<std::size_t>(length));
+            const std::int64_t count = reader.Int64();
+            for (std::int64_t index = 0; reader.Ok() && index < count; ++index)
+            {
+                auto handle = std::make_shared<Type::State>();
+                handle->bridge = state->bridge;
+                handle->component = state->token;
+                handle->type = static_cast<std::uint64_t>(reader.Int64());
+                if (reader.Ok())
+                {
+                    types.push_back(Type(std::move(handle)));
+                }
+            }
+            valid = reader.Finished();
+        }
+        catch (...)
+        {
+            state->bridge->freeString(block);
+            throw;
+        }
+        state->bridge->freeString(block);
+        if (!valid)
+        {
+            return Detail::Failure<std::vector<Type>>(CallStatus::InvalidResponse,
+                                                      "The bridge returned a malformed type list.");
+        }
+        return Detail::CompleteCall<std::vector<Type>>(status, "ListTypes", diagnostic, std::move(types));
     }
 
     CallResult<ComponentUnloadState> Component::GetUnloadStatus() const
