@@ -444,9 +444,10 @@ Component b = *host.LoadComponent("v2/MyComponent.dll").value;                  
 Handles from the old version (`Type`, `Method`, `Member`, `Object`, `Array`, the owner) report `InvalidHandle`
 after it is released, and are never reused, so they cannot select anything in the new version. Unloading is
 cooperative: `GetUnloadStatus` reports `Pending` until nothing in the host keeps the old code alive (a
-`Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris itself
-keeps nothing alive: handle tables, internal call bindings, type listings and attribute snapshots are
-plain data. A failed load (a missing file, unbound internal calls) leaves nothing registered.
+`Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris keeps no
+root of its own that the tests have found: handle tables, internal call bindings, type listings and attribute
+snapshots are plain data, and components that used all of them were observed to collect. A failed load
+(a missing file, unbound internal calls) leaves nothing registered.
 
 ### Logging
 

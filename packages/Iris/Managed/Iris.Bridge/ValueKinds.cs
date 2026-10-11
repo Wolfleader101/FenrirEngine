@@ -73,6 +73,9 @@ internal static class ValueKinds
         };
     }
 
+    // The wire kind of an array of a registered struct.
+    internal static int ArrayKindOfStruct(ulong structId) => checked((int)(structId << 8)) | (int)ValueKind.StructArray;
+
     // The kind of an array's elements: a primitive, String, or the struct kind.
     internal static int ElementKind(int arrayKind) =>
         (arrayKind & 0xFF) == (int)ValueKind.StructArray ? StructKind((ulong)(arrayKind >> 8)) : arrayKind >> 8;

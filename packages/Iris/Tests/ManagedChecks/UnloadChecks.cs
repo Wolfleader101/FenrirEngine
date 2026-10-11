@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -143,14 +142,14 @@ static class UnloadChecks
         }
     }
 
-    // Loads one version, uses every kind of API feature, releases everything and returns the ids it handed out.
+    // Loads one version, uses every kind of API feature and returns the ids it handed out; the component is still live.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static unsafe Handles LoadUseRelease(string path, int number, string name)
+    private static unsafe Handles LoadUse(string path, int number, string name)
     {
         ulong token = ComponentRegistry.Load(path);
         const string ns = "Iris.Examples.Component.";
         ulong version = 0, numberMethod = 0, nameMethod = 0, scaleMethod = 0;
-        Check(ComponentRegistry.TryFindType(token, ns + "Version", out version) == ComponentRegistry.FindResult.Found, "Version type missing");
+        Check(ComponentRegistry.TryFindType(token, ns + "ComponentVersion", out version) == ComponentRegistry.FindResult.Found, "Version type missing");
         Check(ComponentRegistry.TryFindMethod(token, version, "Number", 6, Array.Empty<int>(), true, out numberMethod) == ComponentRegistry.FindResult.Found &&
               ComponentRegistry.TryInvokeMethod(token, numberMethod, ReadOnlySpan<ulong>.Empty, out ulong observed) && (int)observed == number,
               "The loaded version was not " + name);
@@ -182,16 +181,27 @@ static class UnloadChecks
         Check(ComponentRegistry.TryListTypes(token, out ulong[] listed) && listed.Length > 10, "Listing failed");
         Check(ComponentRegistry.TryIsAssignable(token, player, 0, "System.IDisposable") == ComponentRegistry.AssignResult.Assignable, "Assignability failed");
 
-        // Release everything: arrays and objects first (a live one refuses release), then the component.
-        Check(ComponentRegistry.TryRelease(token, force: false) == ComponentRegistry.ReleaseResult.InUse, "Live objects did not block release");
-        Check(ComponentRegistry.ReleaseObject(token, obj) && ComponentRegistry.ReleaseObject(token, array), "Releasing objects failed");
         Assembly assembly = AssemblyLoadContext.All.SelectMany(context => context.Assemblies).Single(item => item.Location == path);
         AssemblyLoadContext loadContext = AssemblyLoadContext.GetLoadContext(assembly)!;
         Assembly dependency = loadContext.Assemblies.Single(item => item.GetName().Name == "Iris.Examples.Dependency");
         var observation = new Observation(token, new WeakReference(assembly, true), new WeakReference(dependency, true));
-        Check(ComponentRegistry.Release(token), "Release failed");
         GC.KeepAlive(loadContext);
         return new Handles(token, version, numberMethod, member, obj, array, structId, observation);
+    }
+
+    // Releases arrays and objects first (a live one refuses release), then the component.
+    private static void ReleaseAll(Handles handles)
+    {
+        Check(ComponentRegistry.TryRelease(handles.Token, force: false) == ComponentRegistry.ReleaseResult.InUse, "Live objects did not block release");
+        Check(ComponentRegistry.ReleaseObject(handles.Token, handles.Object) && ComponentRegistry.ReleaseObject(handles.Token, handles.Array), "Releasing objects failed");
+        Check(ComponentRegistry.Release(handles.Token), "Release failed");
+    }
+
+    private static Handles LoadUseRelease(string path, int number, string name)
+    {
+        Handles handles = LoadUse(path, number, name);
+        ReleaseAll(handles);
+        return handles;
     }
 
     // Every id the old version handed out is dead, and none of them selects anything in the new one.
@@ -208,45 +218,109 @@ static class UnloadChecks
         Check(!ComponentRegistry.TryListTypes(old.Token, out _) && ComponentRegistry.TryRegisterStruct(old.Token, "X|1\nA|0|2|", out _) == ComponentRegistry.FindResult.InvalidHandle, "A released component still answered");
     }
 
+    // Positive controls: something the host holds keeps the released component Pending until it is cleared.
+    private static object? heldObject;
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static Observation LoadAndHold(string path, bool holdArray)
+    {
+        Handles handles = LoadUse(path, 1, "A");
+        ulong heldId = handles.Object;
+        if (holdArray)
+        {
+            // An int[] references no component type, so it could not pin anything; an array of the component's own struct does.
+            Check(ComponentRegistry.TryCreateArray(handles.Token, ValueKinds.ArrayKindOfStruct(handles.StructId), 2, out heldId), "Struct array creation failed");
+        }
+        heldObject = ComponentRegistry.PeekObject(handles.Token, heldId);
+        Check(heldObject != null, "The live object could not be observed");
+        if (holdArray) Check(ComponentRegistry.ReleaseObject(handles.Token, heldId), "Releasing the struct array failed");
+        ReleaseAll(handles);
+        return handles.Observation;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void DropHeldObject() => heldObject = null;
+
+    // A load that fails after the context and assembly exist (the internal calls are unbound) roots nothing.
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool AssemblyStillLoaded(string path) =>
+        AssemblyLoadContext.All.SelectMany(context => context.Assemblies).Any(item => item.Location == path);
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void FailLoadAfterContextCreated(string path)
+    {
+        InternalCalls.Clear();
+        try { ComponentRegistry.Load(path); throw new Exception("Loading with unbound internal calls succeeded"); }
+        catch (BridgeArgumentException) { }
+        finally { InternalCallChecks.RegisterAll(); }
+    }
+
     internal static void RunReload(string pathA, string pathB)
     {
         int baseline = ComponentRegistry.Count, trackingBaseline = ComponentRegistry.TrackingCount;
-        var previous = new List<Observation>();
         for (int cycle = 0; cycle < 4; ++cycle)
         {
-            // A: use it all, release it all.
-            Handles a = LoadUseRelease(pathA, 1, "A");
-            CheckStaleAfterB(a, pathB, previous);
+            if (cycle % 2 == 0)
+            {
+                // B loads only after A has been collected.
+                Handles a = LoadUseRelease(pathA, 1, "A");
+                WaitForCollection(a.Observation);
+                Forget(a.Token);
+                CheckReplacedBy(a, pathB, aAlreadyCollected: true);
+            }
+            else
+            {
+                // B loads while A is merely released (Pending).
+                CheckReplacedBy(LoadUseRelease(pathA, 1, "A"), pathB, aAlreadyCollected: false);
+            }
         }
-        Console.WriteLine("Managed reload: four A/B replacements observed the new behaviour, killed every old handle, and collected each version.");
+        Console.WriteLine("Managed reload: four A/B replacements (B after A collected, and B while A pending) observed the new behaviour, killed every old handle against a live B, and collected each version.");
 
-        // A reload that fails partway (version B's assembly is missing) leaves no roots and the bridge usable.
-        Handles first = LoadUseRelease(pathA, 1, "A");
-        int tracking = ComponentRegistry.TrackingCount;
+        // A load that fails after the context exists leaves no roots, and the host loads the next version.
+        int tracking = ComponentRegistry.TrackingCount, count = ComponentRegistry.Count;
+        FailLoadAfterContextCreated(pathA);
+        Check(ComponentRegistry.TrackingCount == tracking && ComponentRegistry.Count == count, "A failed load left a registration");
+        for (int cycle = 0; cycle < 10 && AssemblyStillLoaded(pathA); ++cycle) CollectCycle();
+        Check(!AssemblyStillLoaded(pathA), "A failed load left its assembly and context alive");
+        // A file that does not exist fails earlier still.
         bool failed = false;
         try { ComponentRegistry.Load(Path.Combine(Path.GetDirectoryName(pathB)!, "Missing.Component.dll")); }
         catch (Exception) { failed = true; }
-        Check(failed, "Loading a missing assembly did not fail");
-        Check(ComponentRegistry.TrackingCount == tracking, "A failed reload left a registration");
+        Check(failed && ComponentRegistry.TrackingCount == tracking, "Loading a missing assembly did not fail cleanly");
         Handles retry = LoadUseRelease(pathB, 2, "B");
-        WaitForCollection(first.Observation);
         WaitForCollection(retry.Observation);
-        Forget(first.Token);
         Forget(retry.Token);
+
+        // Positive controls: an object or array the host still holds keeps the released component Pending until it lets go.
+        foreach (bool array in new[] { false, true })
+        {
+            Observation held = LoadAndHold(pathA, array);
+            try
+            {
+                for (int cycle = 0; cycle < 3; ++cycle) CollectCycle();
+                Check(State(held.Token) == 1 && held.Assembly.IsAlive && held.Dependency.IsAlive, $"A held {(array ? "array" : "object")} did not keep unloading Pending");
+            }
+            finally { DropHeldObject(); }
+            WaitForCollection(held);
+            Forget(held.Token);
+        }
         Check(ComponentRegistry.Count == baseline && ComponentRegistry.TrackingCount == trackingBaseline, "Reload checks leaked registrations");
-        Console.WriteLine("Managed reload: a failed reload left no registry roots and the host loaded the next version.");
+        Console.WriteLine("Managed reload: a load failing after its context exists left no roots; a held object or array keeps unloading Pending until cleared.");
     }
 
-    // Loads B while A is released, checks A's handles are dead, then lets A be collected and B released.
+    // Loads B while checking A's ids against B's live token, then releases and collects B (and A if needed).
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private static void CheckStaleAfterB(Handles a, string pathB, List<Observation> previous)
+    private static void CheckReplacedBy(Handles a, string pathB, bool aAlreadyCollected)
     {
-        Handles b = LoadUseRelease(pathB, 2, "B");
+        Handles b = LoadUse(pathB, 2, "B");
         CheckStale(a, b.Token);
+        // B's own ids are newer than every id A handed out, so an old id can never alias a new one.
+        Check(b.Type > a.Type && b.Method > a.Method && b.Member > a.Member && b.Object > a.Object && b.Array > a.Array, "Ids were reused across versions");
+        ReleaseAll(b);
         CheckStale(b, a.Token);
-        WaitForCollection(a.Observation);
+        if (!aAlreadyCollected) WaitForCollection(a.Observation);
         WaitForCollection(b.Observation);
-        Forget(a.Token);
+        if (!aAlreadyCollected) Forget(a.Token);
         Forget(b.Token);
     }
 
