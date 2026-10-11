@@ -36,7 +36,7 @@ From review 01 (D5): components load with `LoadFromAssemblyPath`, which locks th
   `Object`/`Array`/`Component` handles are `InvalidHandle`, B keeps working) and a failed replacement followed by
   a good load. The native tests do not wait for collection: nothing in the public API forces a GC, so the
   managed checks own that observation.
-- Retention, honestly: the *positive controls* are a host-held managed object and a host-held array, which keep
+- Retention, honestly: the *positive controls* are a host-held managed object and a host-held array of the component's own struct (a primitive `int[]` references no component type, so it cannot pin anything), which keep
   the released component `Pending` until dropped, then it collects (plus the existing retained-`Type` case).
   For bindings, handle tables, type lists and attribute snapshots the evidence is non-retention only: they are
   plain ids/bytes, components that used all of them were observed to collect, and there is no seam to pin them.
