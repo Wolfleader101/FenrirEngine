@@ -123,11 +123,16 @@ namespace Iris
      * with the same function again succeeds; a different function under a used name is InvalidArgument.
      * There is no unregistering: a function must stay valid for the life of the process.
      *
-     * When a component loads, the bridge binds every static function pointer field in its assembly by the
-     * name `Namespace.Type.Field` and checks the signature. A field with no registration, a different
-     * signature, a calling convention other than Cdecl, a readonly field or a managed function pointer fails
-     * the load with InvalidArgument and a diagnostic naming every such field, so managed code never calls a
-     * null pointer. Bindings hold no managed reference, so they never keep a released component alive.
+     * When a component loads, the bridge binds every public static unmanaged function pointer field in its
+     * assembly by the name `Namespace.Type.Field` (`Namespace.Outer+Inner.Field` for a nested type) and
+     * checks the signature. A field with no registration, a different signature, a calling convention
+     * other than Cdecl, or that is readonly, thread-static or on a generic type fails the load with
+     * InvalidArgument and a diagnostic naming every such field, so managed code never calls a null pointer.
+     * Private and managed function pointer fields, and fields in dependency assemblies, are ignored. Binding
+     * runs the declaring type's static constructor (types without one are bound first), so a static
+     * constructor must not call an internal call. `nint`/`nuint` fields are pointers; use `size_t` as a
+     * 64-bit integer only if the managed side says `ulong`. Bindings hold no managed reference, so they
+     * never keep a released component alive.
      *
      * A C++ exception that escapes `Function` is caught at the boundary and never unwinds through managed
      * frames. It is reported as an Error through the log sink, and managed code receives a

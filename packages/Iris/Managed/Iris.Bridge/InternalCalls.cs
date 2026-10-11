@@ -78,19 +78,29 @@ internal static class InternalCalls
         var problems = new List<string>();
         Type[] types;
         try { types = assembly.GetTypes(); }
-        catch (ReflectionTypeLoadException exception) { types = Array.FindAll(exception.Types, type => type != null)!; }
+        catch (ReflectionTypeLoadException exception)
+        {
+            // A type that cannot load (a missing dependency, say) cannot be used either, so it holds no live
+            // binding; like any use of it, the failure is reported when something touches it.
+            types = Array.FindAll(exception.Types, type => type != null)!;
+        }
+        // Types without a static constructor first: binding a field runs its type's static constructor, and one
+        // that calls an internal call must find the others already bound.
+        Array.Sort(types, (left, right) => (left.TypeInitializer != null).CompareTo(right.TypeInitializer != null));
         foreach (Type type in types)
         {
-            if (type.ContainsGenericParameters) continue;
-            foreach (FieldInfo field in type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+            // Only public static fields are bindings; private function pointers are the component's own.
+            foreach (FieldInfo field in type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly))
             {
-                if (!field.FieldType.IsFunctionPointer) continue;
+                if (!field.FieldType.IsFunctionPointer || !field.FieldType.IsUnmanagedFunctionPointer) continue;
                 string name = $"{type.FullName}.{field.Name}";
-                if (!field.FieldType.IsUnmanagedFunctionPointer) { problems.Add($"{name}: not an unmanaged function pointer."); continue; }
+                if (type.ContainsGenericParameters) { problems.Add($"{name}: a generic type cannot hold an internal call (each instantiation has its own copy)."); continue; }
                 if (field.IsInitOnly || field.IsLiteral) { problems.Add($"{name}: must not be readonly."); continue; }
+                if (field.IsDefined(typeof(ThreadStaticAttribute), inherit: false)) { problems.Add($"{name}: must not be thread-static."); continue; }
                 Type[] conventions = field.FieldType.GetFunctionPointerCallingConventions();
-                if (Array.Exists(conventions, convention => convention != typeof(System.Runtime.CompilerServices.CallConvCdecl)))
-                { problems.Add($"{name}: only the Cdecl calling convention is supported."); continue; }
+                Type[] unsupported = Array.FindAll(conventions, convention => convention != typeof(System.Runtime.CompilerServices.CallConvCdecl));
+                if (unsupported.Length > 0)
+                { problems.Add($"{name}: only the Cdecl calling convention is supported, not {string.Join(", ", unsupported.Select(convention => convention.Name))}."); continue; }
                 Registration? registration;
                 lock (Gate) Table.TryGetValue(name, out registration);
                 if (registration == null) { problems.Add($"{name}: no internal call is registered under this name."); continue; }
@@ -107,8 +117,15 @@ internal static class InternalCalls
         }
         if (problems.Count > 0)
             throw new BridgeArgumentException($"{problems.Count} internal call(s) could not be bound:\n  " + string.Join("\n  ", problems));
+        // Setting a field runs its type's static constructor, which is component code and can throw.
         foreach ((FieldInfo field, Registration registration) in fields)
-            field.SetValue(null, registration.Function);
+        {
+            try { field.SetValue(null, registration.Function); }
+            catch (Exception exception)
+            {
+                throw new BridgeArgumentException($"{field.DeclaringType!.FullName}.{field.Name} could not be bound: {(exception is TypeInitializationException or TargetInvocationException ? exception.InnerException ?? exception : exception).Message}");
+            }
+        }
     }
 
     private static string Signature(int returnKind, IEnumerable<int> parameters) =>

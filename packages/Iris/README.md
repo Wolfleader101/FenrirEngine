@@ -376,10 +376,12 @@ Iris::RegisterInternalCall<&AddImpl>("MyComponent.Natives.Add");   // "Namespace
   `Host::Initialize`. It applies to components loaded afterwards; a loaded component is not changed.
   Registering the same function under a name again succeeds; a different one is `InvalidArgument`. There
   is no unregistering, so a registered function must stay valid for the life of the process.
-- **Checked when the component loads.** The bridge binds every static function pointer field in the
-  component assembly by `Namespace.Type.Field` and checks the signature. If any field has no registration,
-  a different signature, a calling convention other than `Cdecl`, is `readonly`, or is not an unmanaged
-  pointer, **the load fails** with `InvalidArgument` and a diagnostic listing every such field. Managed code
+- **Checked when the component loads.** The bridge binds every public static unmanaged function pointer
+  field in the component assembly by `Namespace.Type.Field` (`Namespace.Outer+Inner.Field` for a nested
+  type) and checks the signature. Private and managed function pointers, and fields in dependency assemblies,
+  are ignored. Binding runs the declaring type's static constructor, so a static constructor must not call an
+  internal call. If any field has no registration, a different signature, a calling convention other than
+  `Cdecl`, is `readonly`, thread-static or on a generic type, **the load fails** with `InvalidArgument` and a diagnostic listing every such field. Managed code
   can therefore never call a null pointer. A registration also makes the component require it: a host that
   registers nothing cannot load a component that declares bindings.
 - **Signatures.** Parameters and results are `void`, sized integers, `float`, `double` or pointers. `bool`
