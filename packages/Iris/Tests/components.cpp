@@ -247,7 +247,7 @@ namespace
 
     int VersionNumber(const Component& component)
     {
-        const auto version = component.FindType("Iris.Examples.Component.Version");
+        const auto version = component.FindType("Iris.Examples.Component.ComponentVersion");
         Check(version.Succeeded(), "The Version type was missing");
         const auto number = version.value->FindMethod<std::int32_t()>("Number");
         Check(number.Succeeded(), "Version.Number was missing");
@@ -1746,7 +1746,7 @@ namespace
                      std::optional<Component> a;
                      a.emplace(Load(*host, arguments.component));
                      Check(VersionNumber(*a) == 1, "Version A did not behave as A");
-                     const auto aVersion = *a->FindType("Iris.Examples.Component.Version").value;
+                     const auto aVersion = *a->FindType("Iris.Examples.Component.ComponentVersion").value;
                      const auto aNumber = *aVersion.FindMethod<std::int32_t()>("Number").value;
                      const auto aMember =
                          *a->FindType(SettingsType).value->FindField<std::int32_t>("StaticCount").value;

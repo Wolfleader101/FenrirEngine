@@ -21,15 +21,24 @@ From review 01 (D5): components load with `LoadFromAssemblyPath`, which locks th
 
 - Fixture: the example component builds twice. Version B is the same project published with
   `-p:IrisFixtureVersion=B` (defines `FIXTURE_B`) into `component-b/` with its own intermediate directory;
-  `Version.cs` differs observably (`Number`, `Name`, `Scale`, and `OnlyInA`/`OnlyInB`). CTest passes B's
-  path to the managed, unload and component checks as `IRIS_TEST_COMPONENT_B`.
+  `ComponentVersion.cs` differs observably (`Number`, `Name`, `Scale`, and `OnlyInA`/`OnlyInB`). CTest passes B's
+  path to the unload and component checks as `IRIS_TEST_COMPONENT_B`.
 - Managed (`UnloadChecks.RunReload`): four A/B cycles. Each version is used through every API (types,
   methods, strings, structs, arrays, objects, members, internal calls, listing, attribute snapshots,
-  assignability), released, and its context, assembly and private dependency are *observed collected* after the
-  next version has loaded; every id from one version is dead against both its own token and the other's. A
-  missing B assembly fails the load, leaves `TrackingCount` unchanged, and the next load works.
-- Native (`components.cpp`): the same replacement through the public API, with stale `Type`/`Method`/`Member`/
-  `Object`/`Array`/`Component` handles all `InvalidHandle`, plus a failed replacement followed by a good load.
-- Retention: the existing retained-`Type` and leaked-object cases still show a reference *you* hold keeps
-  unloading `Pending`; the reload cycles now also use bindings, caches (handle tables), attribute snapshots
-  and type lists and still collect, which shows Iris holds no root of its own. Passes in Debug and Release.
+  assignability). Even cycles load B only after A is *observed collected*; odd cycles load B while A is merely
+  released. A's ids are checked against B's **live** token (and B's against A's), and B's ids are asserted newer
+  than every one of A's, so an old id cannot alias a new one. Context, assembly and private dependency of both
+  versions are observed collected.
+- Failing partway: with the internal calls unbound the load fails *after* the context and assembly exist; the
+  registry counts are unchanged and the half-loaded assembly is observed to leave memory. A missing file also
+  fails cleanly, and the next version loads.
+- Native (`components.cpp`): the same replacement through the public API (stale `Type`/`Method`/`Member`/
+  `Object`/`Array`/`Component` handles are `InvalidHandle`, B keeps working) and a failed replacement followed by
+  a good load. The native tests do not wait for collection: nothing in the public API forces a GC, so the
+  managed checks own that observation.
+- Retention, honestly: the *positive controls* are a host-held managed object and a host-held array, which keep
+  the released component `Pending` until dropped, then it collects (plus the existing retained-`Type` case).
+  For bindings, handle tables, type lists and attribute snapshots the evidence is non-retention only: they are
+  plain ids/bytes, components that used all of them were observed to collect, and there is no seam to pin them.
+  A leaked object under a *forced* release is dropped and collects (existing case).
+- Release: both configurations are run by hand (`ctest -C Release`); CMake does not force it, and CI is out of scope.

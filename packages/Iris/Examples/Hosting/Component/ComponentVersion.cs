@@ -2,7 +2,7 @@ namespace Iris.Examples.Component;
 
 // Two builds of this component (see IrisFixtureVersion in the project) behave differently, so reload checks
 // can tell which one is loaded.
-public static class Version
+public static class ComponentVersion
 {
 #if FIXTURE_B
     public static int Number() => 2;
