@@ -23,8 +23,8 @@ namespace Iris
      * null (distinct from an empty string).
      */
     template <typename T>
-    concept MemberValue =
-        PrimitiveValue<T> || std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>>;
+    concept MemberValue = PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
+                          std::same_as<T, std::optional<std::string>>;
 
     namespace Detail
     {
@@ -42,6 +42,8 @@ namespace Iris
             [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
             // Copies and releases a string block the bridge returned from this member's component.
             [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
+            // Copies and releases a struct block the bridge returned from this member's component.
+            void TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept;
 
           private:
             friend class ::Iris::Type;
@@ -76,7 +78,8 @@ namespace Iris
         // What Set takes: the value itself, or a pointer to the Object for an object member.
         using Value = std::conditional_t<
             std::same_as<T, std::optional<Object>>, const Object*,
-            std::conditional_t<std::same_as<T, std::optional<std::string>>, std::optional<std::string_view>, T>>;
+            std::conditional_t<std::same_as<T, std::optional<std::string>>, std::optional<std::string_view>,
+                               std::conditional_t<StructValue<T>, const T&, T>>>;
 
         [[nodiscard]] CallResult<T> Get() const
         {
@@ -113,6 +116,8 @@ namespace Iris
                 text = Detail::MakeStringView(value);
                 return reinterpret_cast<std::uintptr_t>(&text);
             }
+            else if constexpr (StructValue<T>)
+                return reinterpret_cast<std::uintptr_t>(&value);
             else
                 return Detail::ToSlot<T>(value);
         }

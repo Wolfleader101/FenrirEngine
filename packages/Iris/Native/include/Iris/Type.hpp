@@ -29,8 +29,8 @@ namespace Iris
         {
             using Handle = Method<Result(Args...)>;
             using InstanceHandle = InstanceMethod<Result(Args...)>;
-            static constexpr ValueKind returnKind = KindOf<Result>();
-            static constexpr std::array<ValueKind, sizeof...(Args)> parameterKinds = {KindOf<Args>()...};
+            static constexpr KindSpec returnKind = KindSpecOf<Result>();
+            static constexpr std::array<KindSpec, sizeof...(Args)> parameterKinds = {KindSpecOf<Args>()...};
         };
     } // namespace Detail
 
@@ -74,9 +74,10 @@ namespace Iris
         /**
          * @brief Finds a public field of type `T` by name, static or instance, declared or inherited.
          *
-         * `T` is a PrimitiveValue matched exactly (`std::int32_t` for an `int` field, no widening), or
-         * `std::optional<Object>` for a class- or interface-typed field. A missing, private or
-         * differently typed field is NotFound. The name is case-sensitive UTF-8 without null characters.
+         * `T` is a PrimitiveValue matched exactly (`std::int32_t` for an `int` field, no widening), a mapped
+         * struct, `std::optional<std::string>`, or `std::optional<Object>` for a class- or interface-typed field. A
+         * missing, private or differently typed field is NotFound. The name is case-sensitive UTF-8 without null
+         * characters.
          */
         template <MemberValue T>
         [[nodiscard]] CallResult<Member<T>> FindField(std::string_view name) const;
@@ -104,12 +105,12 @@ namespace Iris
         friend class Component;
         struct State;
         explicit Type(std::shared_ptr<const State> state) noexcept;
-        [[nodiscard]] CallResult<Detail::RawMethod> FindMethodRaw(std::string_view name, Detail::ValueKind returnKind,
-                                                                  std::span<const Detail::ValueKind> parameterKinds,
+        [[nodiscard]] CallResult<Detail::RawMethod> FindMethodRaw(std::string_view name, Detail::KindSpec returnKind,
+                                                                  std::span<const Detail::KindSpec> parameterKinds,
                                                                   bool isStatic) const;
         [[nodiscard]] CallResult<Detail::RawMember> FindMemberRaw(std::string_view name, bool isProperty,
-                                                                  Detail::ValueKind kind) const;
-        [[nodiscard]] CallResult<Object> CreateObjectRaw(std::span<const Detail::ValueKind> parameterKinds,
+                                                                  Detail::KindSpec kind) const;
+        [[nodiscard]] CallResult<Object> CreateObjectRaw(std::span<const Detail::KindSpec> parameterKinds,
                                                          std::span<std::uint64_t> slots,
                                                          std::span<const Object* const> objects) const;
         std::shared_ptr<const State> state;
@@ -120,7 +121,7 @@ namespace Iris
     {
         using Traits = Detail::MethodTraits<Signature>;
         auto raw =
-            FindMethodRaw(name, Traits::returnKind, std::span<const Detail::ValueKind>(Traits::parameterKinds), true);
+            FindMethodRaw(name, Traits::returnKind, std::span<const Detail::KindSpec>(Traits::parameterKinds), true);
         CallResult<typename Traits::Handle> result;
         result.status = raw.status;
         result.diagnostic = std::move(raw.diagnostic);
@@ -138,7 +139,7 @@ namespace Iris
     {
         using Traits = Detail::MethodTraits<Signature>;
         auto raw =
-            FindMethodRaw(name, Traits::returnKind, std::span<const Detail::ValueKind>(Traits::parameterKinds), false);
+            FindMethodRaw(name, Traits::returnKind, std::span<const Detail::KindSpec>(Traits::parameterKinds), false);
         CallResult<typename Traits::InstanceHandle> result;
         result.status = raw.status;
         result.diagnostic = std::move(raw.diagnostic);
@@ -154,13 +155,13 @@ namespace Iris
         requires(Argument<Args> && ...)
     CallResult<Object> Type::CreateObject(const Args&... arguments) const
     {
-        const std::array<Detail::ValueKind, sizeof...(Args)> kinds = {Detail::KindOf<Args>()...};
+        const std::array<Detail::KindSpec, sizeof...(Args)> kinds = {Detail::KindSpecOf<Args>()...};
         std::uint64_t slots[sizeof...(Args) + 1] = {};
         const Object* objects[sizeof...(Args) + 1] = {};
         Detail::StringArgumentView texts[sizeof...(Args) + 1] = {};
         std::size_t index = 0;
         ((Detail::PackArgument(slots[index], objects[index], texts[index], arguments), ++index), ...);
-        return CreateObjectRaw(std::span<const Detail::ValueKind>(kinds),
+        return CreateObjectRaw(std::span<const Detail::KindSpec>(kinds),
                                std::span<std::uint64_t>(slots, sizeof...(Args)),
                                std::span<const Object* const>(objects, sizeof...(Args)));
     }
@@ -168,7 +169,7 @@ namespace Iris
     template <MemberValue T>
     CallResult<Member<T>> Type::FindField(std::string_view name) const
     {
-        auto raw = FindMemberRaw(name, false, Detail::KindOf<T>());
+        auto raw = FindMemberRaw(name, false, Detail::KindSpecOf<T>());
         CallResult<Member<T>> result;
         result.status = raw.status;
         result.diagnostic = std::move(raw.diagnostic);
@@ -183,7 +184,7 @@ namespace Iris
     template <MemberValue T>
     CallResult<Member<T>> Type::FindProperty(std::string_view name) const
     {
-        auto raw = FindMemberRaw(name, true, Detail::KindOf<T>());
+        auto raw = FindMemberRaw(name, true, Detail::KindSpecOf<T>());
         CallResult<Member<T>> result;
         result.status = raw.status;
         result.diagnostic = std::move(raw.diagnostic);

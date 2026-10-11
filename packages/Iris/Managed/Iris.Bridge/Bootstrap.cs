@@ -34,7 +34,8 @@ public static partial class Bootstrap
                 FindMember = &FindMember,
                 GetMember = &GetMember,
                 SetMember = &SetMember,
-                FreeString = &FreeString
+                FreeString = &FreeString,
+                RegisterStruct = &RegisterStruct
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.

@@ -12,6 +12,6 @@ namespace Iris
         std::shared_ptr<const Detail::BridgeFunctions> bridge;
         std::uint64_t component = 0;
         std::uint64_t member = 0;
-        bool returnsString = false; // A successful get is then a block that must be given back.
+        bool returnsBlock = false; // A successful string or struct get is then a block that must be given back.
     };
 } // namespace Iris

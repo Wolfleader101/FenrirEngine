@@ -52,6 +52,11 @@ namespace Iris
         return Detail::TakeString(*state->bridge, block);
     }
 
+    void Detail::RawMethod::TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept
+    {
+        Detail::TakeBytes(*state->bridge, block, out, size);
+    }
+
     CallResult<std::uint64_t> Detail::RawMethod::Invoke(std::span<std::uint64_t> slots,
                                                         std::span<const Object* const> objects) const
     {
@@ -75,7 +80,7 @@ namespace Iris
         catch (...)
         {
             // The block is not owned by anything yet; give it back rather than leak it.
-            if (state->returnsString && status == 0 && result != 0)
+            if (state->returnsBlock && status == 0 && result != 0)
             {
                 state->bridge->freeString(result);
             }
@@ -115,7 +120,7 @@ namespace Iris
         catch (...)
         {
             // The block is not owned by anything yet; give it back rather than leak it.
-            if (state->returnsString && status == 0 && result != 0)
+            if (state->returnsBlock && status == 0 && result != 0)
             {
                 state->bridge->freeString(result);
             }

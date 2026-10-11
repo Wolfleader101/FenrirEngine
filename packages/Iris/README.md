@@ -101,7 +101,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 17.
+Managed bridge initialized; bridge version 18.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -279,6 +279,37 @@ const auto b = echo.Invoke(std::nullopt);         // a null string in (for a par
   once and copied once; there is no size query that could run managed code twice.
 - A string is its own kind: a `string` parameter is matched by `std::string_view` signatures only, never
   by `const Object&`, and an `Object` or integer never matches it.
+
+### Blittable structs
+
+A C++ struct that mirrors a managed blittable struct is declared once with a `StructMapping`, then passes
+by value like any other argument, returns by value, and works as a field or property value.
+
+```cpp
+struct Vec3 { float X, Y, Z; };
+
+template <>
+struct Iris::StructMapping<Vec3>
+{
+    static constexpr std::string_view typeName = "MyComponent.Vec3";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Vec3, X), IRIS_FIELD(Vec3, Y), IRIS_FIELD(Vec3, Z));
+};
+
+const auto add = *math.FindMethod<Vec3(Vec3, Vec3)>("Add").value;
+const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Vec3>
+```
+
+- **Validated on first use.** The first lookup that uses a mapping with a component registers it: the
+  bridge checks the size, each field's name, offset and type, and the field order against the managed
+  struct. A mismatch fails the lookup (`InvalidArgument`) with a diagnostic saying what differs, and
+  the call can never happen. Structs nested in a mapping are registered first, and are checked too.
+- **Blittable only.** A managed struct must hold only sized integers, `float`, `double` and other
+  blittable structs, with sequential or explicit layout. `bool`, `char`, references, enums and
+  automatic-layout structs are rejected with a reason. List every field, in declaration order, using
+  public fields or fields you can name; auto-property backing fields do not match.
+- **Mapped structs are trivially copyable, standard-layout types.** Their bytes are borrowed for the call
+  and copied once on the way back; there is no allocation per call beyond the bridge's return block.
+- A mapping is checked per component, so registering the same mapping again is cheap and idempotent.
 
 ### Logging
 

@@ -27,7 +27,12 @@ internal enum ValueKind : int
     Object = 12,
     // A string. An argument slot holds a pointer to a borrowed StringArgument; a return slot holds a block
     // from EncodeString (zero is null) that the caller copies and gives back to FreeString.
-    String = 13
+    String = 13,
+    // A blittable struct. On the wire the kind is Struct in the low byte and a struct handle from
+    // RegisterStruct above it (id << 8). An argument slot points to the struct's bytes, borrowed from the
+    // caller; a return slot holds a block of the struct's bytes that the caller copies and gives back to
+    // FreeString.
+    Struct = 14
 }
 
 // What a string argument's slot points to. The native side owns it and keeps it alive for the call.
@@ -41,7 +46,15 @@ internal unsafe struct StringArgument
 
 internal static class ValueKinds
 {
-    internal static bool IsValid(int kind) => kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String;
+    internal static bool IsStruct(int kind) => kind > 0 && (kind & 0xFF) == (int)ValueKind.Struct && (kind >> 8) > 0;
+
+    internal static ulong StructId(int kind) => (ulong)(kind >> 8);
+
+    // The wire kind of a registered struct. Ids are small positive counters.
+    internal static int StructKind(ulong id) => checked((int)(id << 8) | (int)ValueKind.Struct);
+
+    internal static bool IsValid(int kind) =>
+        IsStruct(kind) || (kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String);
 
     // Throws BridgeArgumentException for a kind that is unknown, or that names no single type: Object
     // matches many, and Void is a return type only.

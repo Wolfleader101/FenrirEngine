@@ -28,4 +28,15 @@ namespace Iris
         bridge.freeString(block);
         return text;
     }
+
+    void Detail::TakeBytes(const BridgeFunctions& bridge, std::uint64_t block, void* out, std::size_t size) noexcept
+    {
+        if (block == 0)
+        {
+            std::memset(out, 0, size);
+            return;
+        }
+        std::memcpy(out, reinterpret_cast<const void*>(static_cast<std::uintptr_t>(block)), size);
+        bridge.freeString(block);
+    }
 } // namespace Iris

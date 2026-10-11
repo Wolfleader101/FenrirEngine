@@ -310,6 +310,40 @@ public static partial class Bootstrap
         }
     }
 
+    // Registers a native struct mapping for a component (see ComponentRegistry.TryRegisterStruct for the
+    // description format) and publishes its handle. NotFound (6): no such public struct. InvalidArgument (1):
+    // the managed type is not blittable or does not match the native description; the diagnostic says how.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int RegisterStruct(ulong token, byte* description, int length, ulong* structId,
+        byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (structId != null) *structId = 0;
+        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || structId == null ||
+            description == null || length <= 0)
+            return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            string text = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(description, length));
+            switch (ComponentRegistry.TryRegisterStruct(token, text, out ulong found))
+            {
+                case ComponentRegistry.FindResult.Found:
+                    *structId = found;
+                    return (int)BridgeStatus.Success;
+                case ComponentRegistry.FindResult.InvalidHandle:
+                    return (int)BridgeStatus.InvalidHandle;
+                default:
+                    ManagedDiagnostic.Write(new TypeLoadException("No public struct with that name was found."),
+                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    return (int)BridgeStatus.NotFound;
+            }
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+        }
+    }
+
     // Gives back a string block returned in a result slot. Zero is ignored. Cannot fail.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static void FreeString(ulong block)
