@@ -453,6 +453,7 @@ internal static class ComponentRegistry
             entry = active;
             type = found;
         }
+        if (ValueKinds.IsArray(valueKind)) throw new BridgeArgumentException("Arrays are not supported as field or property values.");
         RequireStructs(entry, valueKind, Array.Empty<int>());
         const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.FlattenHierarchy;
         MemberRecord? member = null;
@@ -770,6 +771,12 @@ internal static class ComponentRegistry
         return true;
     }
 
+    // Element access names the array type it expects, so a bad kind can never read as a quiet zero.
+    private static void RequireArrayKind(int kind)
+    {
+        if (!ValueKinds.IsArray(kind)) throw new BridgeArgumentException($"Unsupported array kind {kind}.");
+    }
+
     private static void CheckIndex(Array array, long index)
     {
         if (index < 0 || index >= array.LongLength)
@@ -780,6 +787,7 @@ internal static class ComponentRegistry
     internal static bool TryGetArrayElement(ulong token, ulong objectId, int kind, long index, out ulong slot)
     {
         slot = 0;
+        RequireArrayKind(kind);
         if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
         CheckIndex(array!, index);
         object? value = array!.GetValue(index);
@@ -790,6 +798,7 @@ internal static class ComponentRegistry
 
     internal static bool TrySetArrayElement(ulong token, ulong objectId, int kind, long index, ulong slot)
     {
+        RequireArrayKind(kind);
         if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
         CheckIndex(array!, index);
         int elementKind = ValueKinds.ElementKind(kind);
@@ -811,6 +820,7 @@ internal static class ComponentRegistry
     // primitive and struct elements can be copied.
     internal static unsafe bool TryCopyArray(ulong token, ulong objectId, int kind, long start, long count, void* buffer, bool intoArray)
     {
+        RequireArrayKind(kind);
         if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
         int elementKind = ValueKinds.ElementKind(kind);
         int size = ValueKinds.IsStruct(elementKind) ? StructOf(entry!, elementKind).Size : PrimitiveSize(elementKind);
