@@ -784,7 +784,7 @@ internal static class ComponentRegistry
 
     // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers, bool, char,
     // enums, fixed-size arrays and other blittable structs, with sequential or explicit layout.
-    private static string? BlittableProblem(Type type)
+    internal static string? BlittableProblem(Type type)
     {
         if (!type.IsValueType || type.IsPrimitive || type.IsEnum || type.ContainsGenericParameters)
             return $"{type} is not a struct.";

@@ -48,6 +48,101 @@ namespace Iris
         std::vector<AttributeArgument> arguments;
     };
 
+    /**
+     * @brief What kind of managed type a member has, for display and serialization. Enums and structs are
+     * reported with their type name in `type`; a class or interface is `Object`; a generic type, pointer or
+     * anything else is `Other`.
+     */
+    enum class TypeKind : std::int32_t
+    {
+        Other = 0,
+        Void = 1,
+        Bool = 2,
+        Char = 3,
+        Int8 = 4,
+        UInt8 = 5,
+        Int16 = 6,
+        UInt16 = 7,
+        Int32 = 8,
+        UInt32 = 9,
+        Int64 = 10,
+        UInt64 = 11,
+        Float = 12,
+        Double = 13,
+        String = 14,
+        Enum = 15,
+        Struct = 16,
+        Object = 17,
+        Array = 18
+    };
+
+    /**
+     * @brief A member's declared accessibility. For a property it is the most accessible accessor's.
+     */
+    enum class MemberVisibility : std::int32_t
+    {
+        Private = 0,
+        PrivateProtected = 1,
+        Internal = 2,
+        Protected = 3,
+        ProtectedInternal = 4,
+        Public = 5
+    };
+
+    /**
+     * @brief A field of a type. `offset` is the byte offset in memory for an instance field of a blittable
+     * struct (the layout struct-mapping validation checks), and empty for anything else.
+     */
+    struct FieldInfo
+    {
+        std::string name;
+        TypeInfo type;
+        TypeKind kind = TypeKind::Other;
+        bool isStatic = false;
+        bool isReadOnly = false; // readonly or const
+        MemberVisibility visibility = MemberVisibility::Private;
+        std::optional<std::size_t> offset;
+        std::vector<AttributeInfo> attributes;
+    };
+
+    /**
+     * @brief A property of a type. `canRead` and `canWrite` say whether an accessor exists, whatever its
+     * accessibility. Indexers are not listed.
+     */
+    struct PropertyInfo
+    {
+        std::string name;
+        TypeInfo type;
+        TypeKind kind = TypeKind::Other;
+        bool isStatic = false;
+        bool canRead = false;
+        bool canWrite = false;
+        MemberVisibility visibility = MemberVisibility::Private;
+        std::vector<AttributeInfo> attributes;
+    };
+
+    struct ParameterInfo
+    {
+        std::string name;
+        TypeInfo type;
+        TypeKind kind = TypeKind::Other;
+    };
+
+    /**
+     * @brief A method of a type. Constructors, property and event accessors, operators and compiler-generated
+     * methods are not listed.
+     */
+    struct MethodInfo
+    {
+        std::string name;
+        TypeInfo returnType;
+        TypeKind returnKind = TypeKind::Void;
+        bool isStatic = false;
+        MemberVisibility visibility = MemberVisibility::Private;
+        std::vector<ParameterInfo> parameters;
+        std::vector<AttributeInfo> attributes;
+    };
+
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
     // any release, so always build against the headers of the library you link.
     namespace Detail
@@ -94,6 +189,20 @@ namespace Iris
          * Inherited attributes are not included.
          */
         [[nodiscard]] CallResult<std::vector<AttributeInfo>> GetAttributes() const;
+
+        /**
+         * @brief The type's fields, properties and methods, each with its name, type, kind, static-ness,
+         * visibility and attributes, in declaration order. They are owning snapshots that hold no reference
+         * to the component.
+         *
+         * Only members declared on this type are listed (inherited ones are found on the base type, see
+         * GetBaseType), public and non-public alike, so an editor can show a private field marked for
+         * serialization. Compiler-generated members (auto-property backing fields, accessors) are not listed.
+         * Attributes are read as metadata and never instantiated, and have the shape of GetAttributes.
+         */
+        [[nodiscard]] CallResult<std::vector<FieldInfo>> GetFields() const;
+        [[nodiscard]] CallResult<std::vector<PropertyInfo>> GetProperties() const;
+        [[nodiscard]] CallResult<std::vector<MethodInfo>> GetMethods() const;
 
         /**
          * @brief Whether an instance of this type can be used as `other` (the same type, a subclass, or an

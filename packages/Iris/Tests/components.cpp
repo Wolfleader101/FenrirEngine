@@ -1760,6 +1760,130 @@ namespace
                  Check(component.ValidateStruct<Vec3>().status == CallStatus::InvalidHandle,
                        "A released component validated a struct");
              }},
+            {"a type's fields, properties and methods are listed with kinds, offsets, visibility and attributes",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 const auto names = [](const auto& members) {
+                     std::vector<std::string> result;
+                     for (const auto& member : members)
+                     {
+                         result.push_back(member.name);
+                     }
+                     return result;
+                 };
+                 using Names = std::vector<std::string>;
+                 const std::string script = "Iris.Examples.Component.ScriptAttribute";
+
+                 // A struct: declaration order, kinds, byte offsets, statics and constants.
+                 const auto probe = *component.FindType("Iris.Examples.Component.Probe").value;
+                 const auto fields = probe.GetFields();
+                 Check(fields.Succeeded(), "Fields were not listed: " + fields.diagnostic);
+                 Check(names(*fields.value) ==
+                           Names{"Opacity", "Position", "Active", "hidden", "Count", "Max", "Style"},
+                       "A struct's fields were listed in the wrong order, or a compiler-generated one appeared");
+                 const auto& opacity = (*fields.value)[0];
+                 Check(opacity.kind == TypeKind::Float && opacity.type.fullName == "System.Single" &&
+                           !opacity.isStatic && !opacity.isReadOnly && opacity.visibility == MemberVisibility::Public &&
+                           opacity.offset == std::optional<std::size_t>(0),
+                       "A float field was described wrongly");
+                 Check(opacity.attributes.size() == 1 && opacity.attributes[0].type.fullName == script &&
+                           opacity.attributes[0].arguments.size() == 3 &&
+                           std::get<std::string>(opacity.attributes[0].arguments[0].value) == "opacity" &&
+                           std::get<std::int64_t>(opacity.attributes[0].arguments[1].value) == 2 &&
+                           opacity.attributes[0].arguments[2].name == "Weight" &&
+                           std::get<double>(opacity.attributes[0].arguments[2].value) == 0.5,
+                       "A field's attribute was not read with its arguments");
+                 const auto& position = (*fields.value)[1];
+                 Check(position.kind == TypeKind::Struct && position.type.fullName == "Iris.Examples.Component.Vec3" &&
+                           position.offset == std::optional<std::size_t>(4),
+                       "A struct field was described wrongly");
+                 Check((*fields.value)[2].kind == TypeKind::Bool && (*fields.value)[2].offset == std::optional<std::size_t>(16),
+                       "A bool field was described wrongly");
+                 Check((*fields.value)[3].visibility == MemberVisibility::Private && !(*fields.value)[3].isStatic &&
+                           (*fields.value)[3].kind == TypeKind::Int32,
+                       "A private field was described wrongly");
+                 Check((*fields.value)[4].isStatic && !(*fields.value)[4].offset && !(*fields.value)[4].isReadOnly,
+                       "A static field has no offset");
+                 Check((*fields.value)[5].isStatic && (*fields.value)[5].isReadOnly, "A constant is read-only");
+                 Check((*fields.value)[6].kind == TypeKind::Enum && (*fields.value)[6].type.fullName == "Iris.Examples.Component.Mode",
+                       "An enum field was described wrongly");
+
+                 // Offsets agree with the layout struct-mapping validation checks.
+                 const auto pose = *component.FindType("Iris.Examples.Component.Pose").value;
+                 const auto poseFields = pose.GetFields();
+                 Check(poseFields.Succeeded() && poseFields.value->size() == 4 &&
+                           (*poseFields.value)[0].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Position)) &&
+                           (*poseFields.value)[1].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Scale)) &&
+                           (*poseFields.value)[2].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Weight)) &&
+                           (*poseFields.value)[3].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Flags)) &&
+                           component.ValidateStruct<Fixture::Pose>().Succeeded(),
+                       "Reported offsets disagree with the validated layout");
+
+                 const auto probeProperties = probe.GetProperties();
+                 Check(probeProperties.Succeeded() && names(*probeProperties.value) == Names{"Hidden"} &&
+                           (*probeProperties.value)[0].canRead && !(*probeProperties.value)[0].canWrite,
+                       "A read-only property was described wrongly");
+
+                 // A class: only declared members, no backing fields, no indexer, no accessors.
+                 const auto probed = *component.FindType("Iris.Examples.Component.Probed").value;
+                 const auto classFields = probed.GetFields();
+                 Check(classFields.Succeeded() && names(*classFields.value) == Names{"Legacy", "Wide", "Fixed", "Shared"},
+                       "A class's declared fields were wrong (inherited and compiler-generated ones are excluded)");
+                 const auto& legacy = (*classFields.value)[0];
+                 Check(!legacy.offset && legacy.attributes.size() == 1 &&
+                           legacy.attributes[0].type.fullName == "System.ObsoleteAttribute" &&
+                           std::get<std::string>(legacy.attributes[0].arguments[0].value) == "old",
+                       "A class field's offset or attribute was wrong");
+                 Check((*classFields.value)[1].visibility == MemberVisibility::ProtectedInternal &&
+                           (*classFields.value)[1].kind == TypeKind::Int64 &&
+                           (*classFields.value)[2].isReadOnly && (*classFields.value)[2].kind == TypeKind::String &&
+                           (*classFields.value)[3].isStatic && (*classFields.value)[3].kind == TypeKind::Double,
+                       "A class field's visibility, kind or flags were wrong");
+
+                 const auto properties = probed.GetProperties();
+                 Check(properties.Succeeded() && names(*properties.value) == Names{"Title", "Size", "Computed", "Flag"},
+                       "A class's properties were wrong (the indexer is excluded)");
+                 const auto& title = (*properties.value)[0];
+                 Check(title.kind == TypeKind::String && title.canRead && title.canWrite && !title.isStatic &&
+                           title.visibility == MemberVisibility::Public,
+                       "A read-write property was described wrongly");
+                 const auto& size = (*properties.value)[1];
+                 Check(size.canWrite && size.visibility == MemberVisibility::Public && size.attributes.size() == 1 &&
+                           size.attributes[0].arguments.size() == 2 && size.attributes[0].arguments[1].name == "Tag" &&
+                           std::get<std::string>(size.attributes[0].arguments[1].value) == "range",
+                       "A property's attribute or accessors were wrong");
+                 Check(!(*properties.value)[2].canWrite && (*properties.value)[3].isStatic &&
+                           (*properties.value)[3].kind == TypeKind::Bool,
+                       "A computed or static property was described wrongly");
+
+                 const auto methods = probed.GetMethods();
+                 Check(methods.Succeeded() && names(*methods.value) == Names{"Scale", "Reset", "Secret"},
+                       "A class's methods were wrong (accessors, constructors and inherited methods are excluded)");
+                 const auto& scale = (*methods.value)[0];
+                 Check(scale.returnKind == TypeKind::Float && !scale.isStatic && scale.parameters.size() == 2 &&
+                           scale.parameters[0].name == "factor" && scale.parameters[0].kind == TypeKind::Float &&
+                           scale.parameters[1].name == "label" && scale.parameters[1].kind == TypeKind::String &&
+                           std::any_of(scale.attributes.begin(), scale.attributes.end(),
+                                       [&](const AttributeInfo& attribute) { return attribute.type.fullName == script; }),
+                       "A method was described wrongly");
+                 Check((*methods.value)[1].isStatic && (*methods.value)[1].returnKind == TypeKind::Void &&
+                           (*methods.value)[1].parameters.empty(),
+                       "A static void method was described wrongly");
+                 const auto& secret = (*methods.value)[2];
+                 Check(secret.visibility == MemberVisibility::Private && secret.parameters.size() == 3 &&
+                           secret.parameters[0].kind == TypeKind::Struct && secret.parameters[1].kind == TypeKind::Array &&
+                           secret.parameters[2].kind == TypeKind::Object,
+                       "Parameter kinds were wrong");
+
+                 // Listings are snapshots: nothing references the component afterwards.
+                 Check(component.Release().Succeeded(), "The component was not released");
+                 Check(probe.GetFields().status == CallStatus::InvalidHandle &&
+                           probed.GetProperties().status == CallStatus::InvalidHandle &&
+                           probed.GetMethods().status == CallStatus::InvalidHandle,
+                       "A released component still listed members");
+                 Check(fields.value->size() == 7, "A snapshot changed after release");
+             }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {
                  auto host = StartHost(arguments);
