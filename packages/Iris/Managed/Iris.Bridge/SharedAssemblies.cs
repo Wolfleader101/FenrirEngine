@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
 
@@ -45,6 +46,20 @@ internal static class SharedAssemblies
             ByName.Add(name, assembly);
         }
         BridgeLog.Write(LogLevel.Info, $"Sharing assembly '{name}' with every component.");
+    }
+
+    // A public type of a shared assembly by full name, or null. This is how a host maps a struct that the shared contract
+    // defines (the component's own assembly is searched first, by the caller).
+    internal static Type? FindType(string fullName)
+    {
+        Assembly[] shared;
+        lock (Gate) shared = ByName.Values.ToArray();
+        foreach (Assembly assembly in shared)
+        {
+            Type? type = assembly.GetType(fullName, throwOnError: false, ignoreCase: false);
+            if (type != null && type.IsVisible) return type;
+        }
+        return null;
     }
 
     internal static bool IsShared(string? name)

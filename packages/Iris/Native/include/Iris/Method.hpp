@@ -682,5 +682,10 @@ namespace Iris
     }
 } // namespace Iris
 
-/// One field of a mapped struct: `IRIS_FIELD(Vec3, X)`.
+/// One field of a mapped struct: `IRIS_FIELD(Vec3, X)`. The managed field has the same name as the C++ member.
 #define IRIS_FIELD(Type, member) ::Iris::Detail::MakeField<decltype(Type::member)>(#member, offsetof(Type, member))
+
+/// One field of a mapped struct whose managed name differs from the C++ member's: `IRIS_FIELD_AS(Transform, pos,
+/// "Position")`. Fields are matched by position, then checked by name, so the name is what the managed struct calls it.
+#define IRIS_FIELD_AS(Type, member, managedName) \
+    ::Iris::Detail::MakeField<decltype(Type::member)>(managedName, offsetof(Type, member))
