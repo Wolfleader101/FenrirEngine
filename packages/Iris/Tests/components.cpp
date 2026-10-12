@@ -117,6 +117,24 @@ namespace Fixture
         std::array<Gear, 3> Gears;
         bool Ready[3];
     };
+    // Wrong on purpose: the managed WithText holds a string.
+    struct TextHolder
+    {
+        std::int32_t Name;
+    };
+    // Wrong on purpose: no such managed type.
+    struct Ghost
+    {
+        std::int32_t Value;
+    };
+    // A nested struct whose inner mapping is wrong.
+    struct WidePose
+    {
+        WideVec3 Position;
+        Vec3 Scale;
+        double Weight;
+        std::uint8_t Flags;
+    };
 } // namespace Fixture
 
 template <>
@@ -243,6 +261,27 @@ struct Iris::StructMapping<Fixture::Bundle>
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD(Fixture::Bundle, Weights), IRIS_FIELD(Fixture::Bundle, Points),
                            IRIS_FIELD(Fixture::Bundle, Gears), IRIS_FIELD(Fixture::Bundle, Ready));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::TextHolder>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.WithText";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fixture::TextHolder, Name));
+};
+template <>
+struct Iris::StructMapping<Fixture::Ghost>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Missing";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fixture::Ghost, Value));
+};
+template <>
+struct Iris::StructMapping<Fixture::WidePose>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Pose";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::WidePose, Position), IRIS_FIELD(Fixture::WidePose, Scale),
+                           IRIS_FIELD(Fixture::WidePose, Weight), IRIS_FIELD(Fixture::WidePose, Flags));
 };
 
 namespace
@@ -1680,6 +1719,46 @@ namespace
                        "A different struct matched");
                  Check(values.FindMethod<Fixture::Label(Fixture::Label)>("Rename").Succeeded(),
                        "A good mapping failed after bad ones");
+             }},
+            {"a struct mapping can be validated on its own, before any call uses it",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 using Fixture::Vec3;
+                 Check(component.ValidateStruct<Vec3>().Succeeded(), "A matching mapping was not validated");
+                 Check(component.ValidateStruct<Vec3>().Succeeded(), "Validating twice failed");
+                 Check(component.ValidateStruct<Fixture::Pose>().Succeeded() &&
+                           component.ValidateStruct<Fixture::Setting>().Succeeded() &&
+                           component.ValidateStruct<Fixture::Label>().Succeeded() &&
+                           component.ValidateStruct<Fixture::Bundle>().Succeeded(),
+                       "Nested, enum and array mappings were not validated");
+
+                 // Each kind of mismatch is diagnosed, names what differs, and leaves the component usable.
+                 const auto wide = component.ValidateStruct<Fixture::WideVec3>();
+                 Check(wide.status == CallStatus::InvalidArgument && wide.diagnostic.find("24") != std::string::npos,
+                       "A size mismatch was not diagnosed: " + wide.diagnostic);
+                 const auto swapped = component.ValidateStruct<Fixture::SwappedVec3>();
+                 Check(swapped.status == CallStatus::InvalidArgument && swapped.diagnostic.find("order") != std::string::npos,
+                       "A field-order mismatch was not diagnosed: " + swapped.diagnostic);
+                 const auto nested = component.ValidateStruct<Fixture::WidePose>();
+                 Check(nested.status == CallStatus::InvalidArgument,
+                       "A nested mismatch was accepted: " + nested.diagnostic);
+                 const auto text = component.ValidateStruct<Fixture::TextHolder>();
+                 Check(text.status == CallStatus::InvalidArgument && text.diagnostic.find("blittable") != std::string::npos,
+                       "A non-blittable type was accepted: " + text.diagnostic);
+                 Check(component.ValidateStruct<Fixture::Ghost>().status == CallStatus::NotFound,
+                       "A missing type was not NotFound");
+                 const auto length = component.ValidateStruct<Fixture::ShortLabel>();
+                 Check(length.status == CallStatus::InvalidArgument && length.diagnostic.find("Text") != std::string::npos,
+                       "A field mismatch did not name the field: " + length.diagnostic);
+
+                 Check(component.ValidateStruct<Vec3>().Succeeded() && component.FindType(StructsType).Succeeded(),
+                       "The component was not usable after failed validations");
+
+                 // A released component refuses.
+                 Check(component.Release().Succeeded(), "The component was not released");
+                 Check(component.ValidateStruct<Vec3>().status == CallStatus::InvalidHandle,
+                       "A released component validated a struct");
              }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {

@@ -73,6 +73,25 @@ namespace Iris
         // component's dependencies are not found through it.
         [[nodiscard]] CallResult<Type> FindType(std::string_view fullName) const;
 
+        /**
+         * @brief Validates a StructMapping against the managed type in this component without calling any
+         * method. Name, size, field count and each field's name, offset and kind are checked, nested structs,
+         * enums and fixed-size arrays included, with the same rules and diagnostics as the first use of the
+         * mapping as an argument, return or member. Success registers the mapping exactly as that first use
+         * does, so validating again (or using the struct afterwards) is harmless.
+         *
+         * Call it for every mapping when a component loads if native code shares struct memory with managed
+         * code by pointer (an internal call receives structs by pointer and never checks their layout).
+         * A missing type is NotFound; a mismatch or a type that is not blittable is InvalidArgument with a
+         * diagnostic naming the field; a released component is InvalidHandle. A failure leaves the component
+         * usable.
+         */
+        template <StructValue T>
+        [[nodiscard]] CallResult<void> ValidateStruct() const
+        {
+            return ValidateStructRaw(Detail::StructInfoOf<T>);
+        }
+
         // Releases the component and requests cooperative unloading. Idempotent. Invalidates this owner even
         // when the unload request reports an error, except that a component with live Objects is refused
         // with InUse and stays loaded and usable: release the objects first. Destroying the owner
@@ -84,6 +103,7 @@ namespace Iris
         friend class Detail::RawArray;
         struct State;
         explicit Component(std::unique_ptr<State> state) noexcept;
+        [[nodiscard]] CallResult<void> ValidateStructRaw(const Detail::StructInfo& info) const;
         std::unique_ptr<State> state;
     };
 } // namespace Iris

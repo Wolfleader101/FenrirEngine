@@ -4,6 +4,7 @@
 #include "ManagedDiagnosticBuffer.hpp"
 #include "Names.hpp"
 #include "SnapshotReader.hpp"
+#include "StructRegistration.hpp"
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
@@ -93,6 +94,21 @@ namespace Iris
         handle->component = state->token;
         handle->type = typeId;
         return Detail::CompleteCall<Type>(status, "FindType", diagnostic, Type(std::move(handle)));
+    }
+
+    CallResult<void> Component::ValidateStructRaw(const Detail::StructInfo& info) const
+    {
+        if (!IsLoaded())
+        {
+            return Detail::Failure<void>(CallStatus::InvalidHandle, ReleasedOwner);
+        }
+        const auto kind = Detail::ResolveWireKind(*state->bridge, state->token,
+                                                  Detail::KindSpec{Detail::ValueKind::Struct, &info});
+        if (!kind.Succeeded())
+        {
+            return Detail::PropagateFailure<void>(kind);
+        }
+        return Detail::Success<void>();
     }
 
     CallResult<std::vector<Type>> Component::GetTypes() const
