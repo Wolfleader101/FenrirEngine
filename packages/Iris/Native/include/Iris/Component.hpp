@@ -3,6 +3,7 @@
 #include "CallResult.hpp"
 #include "Type.hpp"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -58,6 +59,21 @@ namespace Iris
         // NotRequested while loaded; Pending or Collected after Release (a snapshot, with no
         // deadline for Pending). Remains available after Release and host destruction.
         [[nodiscard]] CallResult<ComponentUnloadState> GetUnloadState() const;
+
+        /**
+         * @brief Waits up to `timeout` for a released component to be collected, and reports Collected, or
+         * Pending if the time ran out (the component stays unloading; nothing is lost and the host stays
+         * usable). Iris never forces a collection by itself, so this is the one place it happens: while the
+         * component is Pending, each attempt runs a full, blocking garbage collection with finalizers on
+         * the runtime, then looks again. That is expensive, so call it only at a reload point, not every frame.
+         *
+         * A loaded component returns NotRequested at once, and an already collected one Collected at once,
+         * without collecting. A Pending result after a long wait usually means a root still holds the
+         * component: a running thread, a static that holds one of its types, or an object handed to a host
+         * that kept it. A negative timeout is InvalidArgument and a moved-from owner is InvalidHandle. Works
+         * after Release, like GetUnloadState, and after the Host is gone.
+         */
+        [[nodiscard]] CallResult<ComponentUnloadState> WaitForUnload(std::chrono::milliseconds timeout) const;
 
         // Lists the component's public, non-generic types as handles, in declaration order (the order they
         // appear in the assembly's metadata), nested public types included. These are exactly the types

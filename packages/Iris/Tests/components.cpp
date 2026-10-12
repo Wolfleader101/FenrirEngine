@@ -4,6 +4,7 @@
 #include "TestHarness.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <array>
 #include <cmath>
 #include <cstring>
@@ -1884,6 +1885,64 @@ namespace
                        "A released component still listed members");
                  Check(fields.value->size() == 7, "A snapshot changed after release");
              }},
+            {"waiting for an unload reports Collected once a released component is gone",
+             [&] {
+                 auto host = StartHost(arguments);
+                 auto component = Load(*host, arguments.component);
+                 // Nothing released: harmless, and no collection is forced.
+                 const auto loaded = component.WaitForUnload(std::chrono::milliseconds(50));
+                 Check(loaded.Succeeded() && *loaded.value == ComponentUnloadState::NotRequested,
+                       "Waiting on a loaded component was not NotRequested");
+                 Check(component.WaitForUnload(std::chrono::milliseconds(-1)).status == CallStatus::InvalidArgument,
+                       "A negative timeout was accepted");
+
+                 Check(component.Release().Succeeded(), "The component was not released");
+                 const auto waited = component.WaitForUnload(std::chrono::seconds(10));
+                 Check(waited.Succeeded() && *waited.value == ComponentUnloadState::Collected,
+                       "A released component with no roots was not collected: " + waited.diagnostic);
+                 Check(*component.GetUnloadState().value == ComponentUnloadState::Collected,
+                       "GetUnloadState disagrees after a wait");
+                 // Already collected: harmless, and quick.
+                 const auto again = component.WaitForUnload(std::chrono::seconds(10));
+                 Check(again.Succeeded() && *again.value == ComponentUnloadState::Collected,
+                       "Waiting on a collected component failed");
+
+                 // A moved-from owner is InvalidHandle.
+                 auto moved = std::move(component);
+                 Check(component.WaitForUnload(std::chrono::milliseconds(1)).status == CallStatus::InvalidHandle,
+                       "A moved-from owner waited");
+             }},
+            {"a leaked root keeps the component Pending until it ends, and the host stays usable",
+             [&] {
+                 auto host = StartHost(arguments);
+                 Examples::leakStop = false;
+                 auto component = Load(*host, arguments.component);
+                 const auto leaks = *component.FindType("Iris.Examples.Component.Leaks").value;
+                 Check(leaks.FindMethod<void()>("Start").value->Invoke().Succeeded(), "The leak did not start");
+                 Check(component.Release().Succeeded(), "The component was not released");
+
+                 const auto started = std::chrono::steady_clock::now();
+                 const auto pending = component.WaitForUnload(std::chrono::milliseconds(300));
+                 const auto elapsed = std::chrono::steady_clock::now() - started;
+                 Check(pending.Succeeded() && *pending.value == ComponentUnloadState::Pending,
+                       "A leaked component was reported as unloaded");
+                 Check(elapsed >= std::chrono::milliseconds(250) && elapsed < std::chrono::seconds(20),
+                       "The wait did not honour its timeout");
+                 Check(component.WaitForUnload(std::chrono::milliseconds(0)).Succeeded(),
+                       "A zero timeout failed");
+
+                 // The host works throughout: another component loads and runs.
+                 auto other = Load(*host, arguments.component);
+                 Check(other.FindType(CalculationType).Succeeded(), "The host was unusable after a timed-out wait");
+                 Check(other.Release().Succeeded(), "The other component was not released");
+
+                 // Once the root ends, the same wait reports Collected.
+                 Examples::leakStop = true;
+                 const auto collected = component.WaitForUnload(std::chrono::seconds(20));
+                 Check(collected.Succeeded() && *collected.value == ComponentUnloadState::Collected,
+                       "The component was not collected after its root ended");
+                 Check(other.WaitForUnload(std::chrono::seconds(20)).Succeeded(), "The other component was not collected");
+             }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {
                  auto host = StartHost(arguments);
@@ -2551,7 +2610,7 @@ namespace
                  auto host = StartHost(arguments);
                  const auto missing = host->LoadComponent(arguments.component);
                  Check(missing.status == CallStatus::InvalidArgument && !missing.value &&
-                           missing.diagnostic.find("9 internal call(s)") != std::string::npos &&
+                           missing.diagnostic.find("10 internal call(s)") != std::string::npos &&
                            missing.diagnostic.find("Iris.Examples.Component.Natives.Add") != std::string::npos &&
                            missing.diagnostic.find("no internal call is registered") != std::string::npos,
                        "Unbound internal calls were not diagnosed: " + missing.diagnostic);

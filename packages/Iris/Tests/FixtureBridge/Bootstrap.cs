@@ -90,7 +90,8 @@ public static class Bootstrap
             RegisterInternalCall = &RegisterInternalCall,
             ListTypes = &ListTypes,
             QueryType = &QueryType,
-            IsTypeAssignable = &IsTypeAssignable
+            IsTypeAssignable = &IsTypeAssignable,
+            WaitForComponentUnload = &WaitForComponentUnload
         };
         int answerVersion = handshake == "legacy" ? BridgeFunctions.Version - 1 : BridgeFunctions.Version;
         int answerSize = handshake == "oversized" ? sizeof(BridgeFunctions) + IntPtr.Size : sizeof(BridgeFunctions);
@@ -253,6 +254,12 @@ public static class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         *result = 0; *written = 0; *truncated = 0; return 0;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    public static unsafe int WaitForComponentUnload(ulong token, int timeoutMs, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        *state = 1; *written = 0; *truncated = 0; return 0;
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]

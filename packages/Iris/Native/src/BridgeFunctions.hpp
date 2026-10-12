@@ -95,6 +95,9 @@ namespace Iris::Detail
                                                                    const std::uint8_t*, std::int32_t, std::int32_t*,
                                                                    std::uint8_t*, std::int32_t, std::int32_t*,
                                                                    std::int32_t*);
+        using WaitForUnloadFn = std::int32_t(IRIS_BRIDGE_CALL*)(std::uint64_t, std::int32_t, std::int32_t*,
+                                                                std::uint8_t*, std::int32_t, std::int32_t*,
+                                                                std::int32_t*);
         using RegisterFn = std::int32_t(IRIS_BRIDGE_CALL*)(const std::uint8_t*, std::int32_t, std::uint8_t*,
                                                            std::int32_t, std::int32_t*, std::int32_t*);
 
@@ -128,13 +131,14 @@ namespace Iris::Detail
         ListTypesFn listTypes;
         QueryTypeFn queryType;
         IsTypeAssignableFn isTypeAssignable;
+        WaitForUnloadFn waitForUnload;
     };
 #undef IRIS_BRIDGE_CALL
 
-    inline constexpr std::int32_t BridgeVersion = 21;
+    inline constexpr std::int32_t BridgeVersion = 22;
 
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
-    inline constexpr std::array<const char*, 30> BridgeFunctionNames = {"LoadComponent",
+    inline constexpr std::array<const char*, 31> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",
                                                                         "ReleaseComponent",
                                                                         "GetComponentUnloadState",
@@ -163,7 +167,8 @@ namespace Iris::Detail
                                                                         "RegisterInternalCall",
                                                                         "ListTypes",
                                                                         "QueryType",
-                                                                        "IsTypeAssignable"};
+                                                                        "IsTypeAssignable",
+                                                                        "WaitForComponentUnload"};
 
     static_assert(sizeof(void (*)()) == sizeof(void*), "Bridge slots are copied as object pointers");
     static_assert(sizeof(BridgeFunctions) == BridgeFunctionNames.size() * sizeof(void*),

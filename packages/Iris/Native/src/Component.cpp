@@ -8,6 +8,7 @@
 #include "TypeState.hpp"
 #include "Utf8Buffer.hpp"
 
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <utility>
@@ -195,6 +196,38 @@ namespace Iris
                                                          "The unload query returned an invalid state for this owner.");
         }
         return Detail::CompleteCall<ComponentUnloadState>(status, "GetComponentUnloadState", diagnostic, observedState);
+    }
+
+    CallResult<ComponentUnloadState> Component::WaitForUnload(std::chrono::milliseconds timeout) const
+    {
+        if (state == nullptr || (state->token == 0 && state->trackingToken == 0))
+        {
+            return Detail::Failure<ComponentUnloadState>(CallStatus::InvalidHandle,
+                                                         "The component owner has been moved.");
+        }
+        if (timeout.count() < 0)
+        {
+            return Detail::Failure<ComponentUnloadState>(CallStatus::InvalidArgument,
+                                                         "The unload timeout cannot be negative.");
+        }
+        const bool loaded = IsLoaded();
+        const auto milliseconds = static_cast<std::int32_t>(
+            std::min<std::int64_t>(timeout.count(), std::numeric_limits<std::int32_t>::max()));
+        Detail::ManagedDiagnosticBuffer diagnostic;
+        std::int32_t observed = -1;
+        const auto status = state->bridge->waitForUnload(loaded ? state->token : state->trackingToken, milliseconds,
+                                                         &observed, diagnostic.bytes.data(), diagnostic.Capacity,
+                                                         &diagnostic.written, &diagnostic.truncated);
+        const auto observedState = static_cast<ComponentUnloadState>(observed);
+        const bool consistent = loaded ? observedState == ComponentUnloadState::NotRequested
+                                       : (observedState == ComponentUnloadState::Pending ||
+                                          observedState == ComponentUnloadState::Collected);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && !consistent)
+        {
+            return Detail::Failure<ComponentUnloadState>(CallStatus::InvalidResponse,
+                                                         "The unload wait returned an invalid state for this owner.");
+        }
+        return Detail::CompleteCall<ComponentUnloadState>(status, "WaitForComponentUnload", diagnostic, observedState);
     }
 
     CallResult<void> Component::Release()

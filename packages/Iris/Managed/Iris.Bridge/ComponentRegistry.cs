@@ -1174,6 +1174,27 @@ internal static class ComponentRegistry
         }
     }
 
+    // Waits for a released component to be collected: while it is Pending, runs a full blocking collection
+    // (with finalizers) and looks again, until it is Collected or timeoutMs has passed, in which case the
+    // state is still Pending. A component that is still loaded or already collected returns at once, without
+    // collecting. False for an unknown token.
+    internal static bool TryWaitForUnload(ulong token, int timeoutMs, out ComponentUnloadState state)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        if (!TryGetUnloadState(token, out state)) return false;
+        while (state == ComponentUnloadState.Pending)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            if (!TryGetUnloadState(token, out state)) return false;
+            long remaining = timeoutMs - clock.ElapsedMilliseconds;
+            if (state != ComponentUnloadState.Pending || remaining <= 0) break;
+            System.Threading.Thread.Sleep((int)Math.Min(remaining, 10));
+        }
+        return true;
+    }
+
     internal static bool ForgetUnload(ulong token)
     {
         lock (Gate)

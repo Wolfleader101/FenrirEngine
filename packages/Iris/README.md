@@ -107,7 +107,7 @@ it runs without arguments. From the repository root in PowerShell, after a Visua
 
 ```text
 Initialize: ok
-Managed bridge initialized; bridge version 21.
+Managed bridge initialized; bridge version 22.
 Loaded Iris.Examples.Component
 FindType: Iris.Examples.Component.Calculations
 FindType(missing): status 6
@@ -168,6 +168,7 @@ host.IsInitialized();                           // true once the bridge handshak
 const auto info = component.GetInfo();          // info->assemblyName == "MyComponent"
 (void)component.Release();
 const auto state = component.GetUnloadState();  // Pending, later Collected
+const auto done = component.WaitForUnload(std::chrono::seconds(5));   // forces collections: see "Reloading"
 ```
 
 ### What crosses the boundary
@@ -535,9 +536,21 @@ cooperative: `GetUnloadState` reports `Pending` until nothing in the host keeps 
 `Type` object you kept from `System.Reflection`, a thread, a static) and `Collected` afterwards. Iris keeps no
 root of its own that the tests have found: handle tables, internal call bindings, type listings and attribute
 snapshots are plain data, and components that used all of them were observed to collect. A failed load
-(a missing file, unbound internal calls) leaves nothing registered. Iris never triggers a collection, so a
-host can observe `Pending` turn into `Collected` but cannot hurry it; an explicit way to wait is a planned
-addition.
+(a missing file, unbound internal calls) leaves nothing registered.
+
+To confirm that the old version is gone before loading the new one, call
+`component.WaitForUnload(timeout)` on the released owner. It returns `Collected`, or `Pending` if the timeout
+passed first (nothing is lost, and the host stays usable). A `Pending` result after a generous timeout means a
+root is still holding the component: a running thread, a static that holds one of its types, or an object a host
+kept. A loaded or already collected component returns at once.
+
+- **It forces collections, and that is its cost.** Each attempt while the component is `Pending` runs a full,
+  blocking garbage collection with finalizers on the whole runtime, then looks again every few milliseconds
+  until the timeout. That pauses every managed thread, so it is only for reload points, never per frame. Nothing
+  else in Iris collects; if you never call it, `Pending` still turns into `Collected` whenever the runtime next
+  collects.
+- **Why no `Host::CollectGarbage`.** A bare collection answers nothing the host needs, since the question at a
+  reload is whether this component is gone, and the wait asks exactly that.
 
 ### Logging
 
@@ -570,7 +583,8 @@ captures must outlive it. `text` is only valid during the call.
   destroyed. Destroy owners before `main` returns, never during static destruction.
 - **Release is not collection.** `Release` (or destroying the owner) drops the bridge's strong
   references and requests unloading. Collection happens later, when nothing else roots the component.
-  `GetUnloadState` reports `NotRequested`, `Pending` or `Collected`. The library never forces GC.
+  `GetUnloadState` reports `NotRequested`, `Pending` or `Collected`. The library forces a collection only inside
+  `WaitForUnload`, when the host asks.
 - **Handles are never reused.** After release, an owner's calls return `InvalidHandle`; a new load
   gets a new handle.
 - **Shared assemblies are permanent.** Assemblies listed in `HostConfiguration::sharedAssemblies` load

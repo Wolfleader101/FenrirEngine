@@ -44,7 +44,8 @@ public static partial class Bootstrap
                 RegisterInternalCall = &RegisterInternalCall,
                 ListTypes = &ListTypes,
                 QueryType = &QueryType,
-                IsTypeAssignable = &IsTypeAssignable
+                IsTypeAssignable = &IsTypeAssignable,
+                WaitForComponentUnload = &WaitForComponentUnload
             });
 
     // A null destination with zero capacity queries the size; requiredBytes is mandatory.
