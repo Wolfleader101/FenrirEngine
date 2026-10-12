@@ -374,6 +374,11 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
   (a number, `bool`, `char16_t`, a mapped struct, an enum), and `char`/`char8_t` elements are bytes (a C# `byte`).
   The length and the element type are validated, and a size mismatch is reported first. This is how a
   `char name[256]` crosses; it is a byte array, not a string, and Iris does no text conversion.
+- **Validate up front with `Component::ValidateStruct<T>()`.** It runs the same checks without calling a
+  method and returns `CallResult<void>` (`NotFound` for a missing type, `InvalidArgument` with a diagnostic naming
+  the field for a mismatch, `InvalidHandle` for a released component). Do this for every mapping when a
+  component loads if native code shares struct memory with managed code through pointers, such as an internal
+  call, because those never check the layout. Validating again, or using the struct afterwards, is harmless.
 - **Mapped structs are trivially copyable, standard-layout types.** Their bytes are borrowed for the call
   and copied once on the way back; there is no allocation per call beyond the bridge's return block.
 - Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
