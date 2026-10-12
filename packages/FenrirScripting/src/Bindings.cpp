@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace Fenrir::Detail
 {
@@ -61,6 +62,52 @@ namespace Fenrir::Detail
             auto* app = ActiveApp();
             return app != nullptr && app->GetActiveScene().GetEntityList().HasEntity(value);
         }
+
+        // Native.ComponentIdOf: the id of the component registered under a UTF-8 name for the C# type with the given full
+        // name; -1 if nothing is registered under the name, -3 if it is registered for a different C# type.
+        std::int32_t ComponentIdOf(const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 || typeName == nullptr ||
+                typeLength < 0)
+            {
+                return -1;
+            }
+            return context->components->Resolve(std::string_view(name, static_cast<std::size_t>(length)),
+                                                std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        }
+
+        // Native.RegistryGeneration: which registry ids belong to. Zero when none is active.
+        std::uint32_t RegistryGeneration()
+        {
+            const auto* context = activeContext.load();
+            return context == nullptr || context->components == nullptr ? 0U : context->components->Generation();
+        }
+
+        // Native.ComponentGet: the entity's component in the engine's storage, or null.
+        void* ComponentGet(std::int32_t id, std::uint32_t entity)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr)
+            {
+                return nullptr;
+            }
+            const auto* component = context->components->Get(id);
+            return component == nullptr ? nullptr
+                                        : component->get(context->app->GetActiveScene().GetEntityList(), entity);
+        }
+
+        // Native.ComponentHas: whether the entity is alive and has the component.
+        bool ComponentHas(std::int32_t id, std::uint32_t entity)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr)
+            {
+                return false;
+            }
+            const auto* component = context->components->Get(id);
+            return component != nullptr && component->has(context->app->GetActiveScene().GetEntityList(), entity);
+        }
     } // namespace
 
     bool ActivateEngineContext(EngineContext* context) noexcept
@@ -83,6 +130,10 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&TimeDeltaTime>(prefix + "TimeDeltaTime"),
             Iris::RegisterInternalCall<&TimeTickRate>(prefix + "TimeTickRate"),
             Iris::RegisterInternalCall<&EntityIsValid>(prefix + "EntityIsValid"),
+            Iris::RegisterInternalCall<&ComponentIdOf>(prefix + "ComponentIdOf"),
+            Iris::RegisterInternalCall<&RegistryGeneration>(prefix + "RegistryGeneration"),
+            Iris::RegisterInternalCall<&ComponentGet>(prefix + "ComponentGet"),
+            Iris::RegisterInternalCall<&ComponentHas>(prefix + "ComponentHas"),
         };
         for (auto& result : results)
         {

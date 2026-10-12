@@ -58,4 +58,10 @@ fenrir_expect_compile(InternalField OK)         # an internal field of an intern
 fenrir_expect_compile(PointerField OK)          # a pointer field makes the accessors class unsafe
 fenrir_expect_compile(LatePart OK)              # IComponent named only on a later part of a partial struct
 fenrir_expect_compile(ManagedComponent FENRIR0004)  # a component holding a reference: a clear error
-fenrir_expect_compile(ReadOnlyStruct CS1061)    # a readonly component has no writable accessors
+fenrir_expect_compile(ReadOnlyStruct CS1929)    # a readonly component has no writable accessors
+# The hierarchy is readable but never writable from C#.
+fenrir_expect_compile(RelationshipRead OK)             # reads through a ReadOnlyRef work
+fenrir_expect_compile(RelationshipRef CS0315)          # there is no Ref<Relationship>
+fenrir_expect_compile(RelationshipAssign CS8331)       # r.Value = ... on a ReadOnlyRef
+fenrir_expect_compile(RelationshipField CS8331)        # r.Parent = ... on a ReadOnlyRef
+fenrir_expect_compile(ReadOnlyViewOfWritable CS8332)   # a writable component through the read-only view

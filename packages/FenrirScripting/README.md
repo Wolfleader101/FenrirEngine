@@ -89,6 +89,73 @@ void Nudge(Ref<Transform> t)
   that compiles.
 - **A `Ref<T>` can be null** (`IsNull`); using `Value` on one throws `InvalidOperationException` naming the type.
 
+## Native components
+
+A component the engine stores in EnTT is exposed to C# by name. EnTT has no registry of types by name at run time, so
+FenrirScripting keeps the table: each entry knows how to reach one component's storage for an entity (get a pointer,
+has, add, remove) and how to check its layout against a C# struct.
+
+| Name | C# type | Native type | Access |
+| --- | --- | --- | --- |
+| `Fenrir.Transform` | `Transform` (`Position`, `Rotation`, `Scale`) | `Fenrir::Transform` | read and write |
+| `Fenrir.Name` | `Name` (`Text`, a fixed UTF-8 buffer of 256 bytes) | `Fenrir::Name` | read and write |
+| `Fenrir.Relationship` | `Relationship` (`Parent`, `FirstChild`, `NextSibling`, `PrevSibling`) | `Fenrir::Relationship` | **read only** |
+
+```csharp
+var t = new Entity(id).Get<Transform>();        // a Ref<Transform> into the engine's storage
+t.Position.X += 1;                              // visible to C++ through GetComponent<Transform>() at once
+new Entity(id).Get<Name>().Text = "Player";     // a string in, UTF-8 in the shared buffer
+var parent = new Entity(id).GetReadOnly<Relationship>().Parent;   // an EntityLink; check IsNull, then use Target
+bool has = new Entity(id).Has<Transform>();
+```
+
+`Get` and `GetReadOnly` throw `InvalidOperationException` with a message that says why: the entity is not alive, it has
+no such component, the engine has nothing registered under the type's name, or the type has no `[NativeComponent]`
+attribute. (Creating, destroying, adding and removing from C# arrives with deferred changes, ticket 06.)
+
+### Adding your own
+
+Register a C++ component from anywhere, with an `Iris::StructMapping` and a C# struct of exactly the same layout carrying
+`[NativeComponent("Name")]`:
+
+```cpp
+struct Health { std::int32_t Current, Max; };
+template <> struct Iris::StructMapping<Health> {
+    static constexpr std::string_view typeName = "MyGame.Health";    // the C# struct's full name
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Health, Current), IRIS_FIELD(Health, Max));
+};
+
+scripting.RegisterComponent<Health>("MyGame.Health");   // or ScriptingConfig::components, before the assembly loads
+```
+
+```csharp
+[NativeComponent("MyGame.Health")]
+public struct Health : IComponent { public int Current; public int Max; }
+```
+
+- **The layout is checked, and a mismatch fails.** When a script assembly loads, every registered component is validated
+  against its C# struct (name, size, each field's name, offset and kind). The first mismatch fails the whole load: the
+  assembly is released, the app keeps running, and the error names the component and the field. Registering after the
+  assembly loaded is checked at once, with the same all-or-nothing result.
+- **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
+  gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
+  This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
+  `W, X, Y, Z` in that order. Declaring `X, Y, Z, W` would have swapped every rotation silently.
+- **Members Iris cannot map** (a private buffer, a type holding a pointer) can be described by a plain struct with the same
+  size and layout: `MakeComponent<T, Mapping>(name)`. Size and alignment are checked at compile time. `Relationship` does
+  this, because an `Entity` holds a pointer to its entity list (C# sees the 32-bit entity value and keeps the rest opaque),
+  and so does `Name`, whose buffer is private.
+- **A native component is reached only through the C# type that was validated.** Declaring your own struct with
+  `[NativeComponent("Fenrir.Relationship")]` does not work: the engine hands the component out only to the type whose
+  layout it checked, and `Get<T>` throws for any other.
+- **Read-only components.** `MakeReadOnlyComponent` (or `RegisterReadOnlyComponent`) registers data scripts must not
+  change. In C# such a struct implements `IReadOnlyComponent` (not `IComponent`), so there is no `Ref<T>` for it, and
+  `ReadOnlyRef<T>` hands out `ref readonly` accessors: assigning through it is a compile error (`CS8331`, `CS8332`),
+  checked by the `RefCompile-Relationship*` tests.
+- **A caution for native code.** `Fenrir::Entity(id, list)` is a *creating* constructor: it adds a Transform, a Name and a
+  Relationship, replacing existing ones. To look an entity up without touching it, use `EntityList::GetEntity(id)`, which is
+  what the registry does.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the

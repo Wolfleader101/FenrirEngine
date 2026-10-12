@@ -1,5 +1,6 @@
 #include "FenrirScripting/Scripting.hpp"
 
+#include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
 
 #include <Iris/Iris.hpp>
@@ -70,6 +71,7 @@ namespace Fenrir
         // only until Shutdown clears the sink. The mutex guards the logger against a sink call racing Shutdown.
         std::mutex mutex;
         ILogger* logger = nullptr;
+        Detail::ComponentRegistry components;
         Detail::EngineContext context;
         bool contextActive = false;
         std::unique_ptr<Iris::Host> host;
@@ -152,6 +154,65 @@ namespace Fenrir
     bool Scripting::HasScripts() const noexcept
     {
         return m_state != nullptr && m_state->component.has_value();
+    }
+
+    namespace
+    {
+        // Checks every registered component against its C# struct. The first mismatch is the answer, naming the field.
+        Iris::CallResult<void> ValidateRegistration(const ComponentRegistration& registration, const Iris::Component& component)
+        {
+            if (!registration.validate)
+            {
+                return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
+            }
+            auto validated = registration.validate(component);
+            if (!validated.Succeeded())
+            {
+                validated.diagnostic = "Component '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+            }
+            return validated;
+        }
+
+        Iris::CallResult<void> ValidateAll(const std::vector<ComponentRegistration>& registrations, const Iris::Component& component)
+        {
+            for (const auto& registration : registrations)
+            {
+                if (auto validated = ValidateRegistration(registration, component); !validated.Succeeded())
+                {
+                    return validated;
+                }
+            }
+            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
+        }
+    } // namespace
+
+    Iris::CallResult<void> Scripting::RegisterComponent(ComponentRegistration registration)
+    {
+        if (m_state == nullptr)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::NotInitialized, "Scripting did not start.", false};
+        }
+        if (m_state->components.Add(registration) < 0)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
+                                          "The component name '" + registration.name +
+                                              "' is empty, already registered, or has no storage operations.",
+                                          false};
+        }
+        if (!m_state->component.has_value())
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
+        }
+        auto validated = ValidateRegistration(registration, *m_state->component);
+        if (!validated.Succeeded())
+        {
+            if (ILogger* logger = m_state->logger)
+            {
+                logger->Error("Scripting: {} Releasing the script assembly.", validated.diagnostic);
+            }
+            m_state->Shutdown();
+        }
+        return validated;
     }
 
     Iris::Component* Scripting::GetComponent() noexcept
@@ -246,6 +307,20 @@ namespace Fenrir
         // The engine's native functions act on this App, and are registered before the contract is shared (sharing
         // binds the contract's function pointers to them).
         state->context.app = &app;
+        state->context.components = &state->components;
+        if (!Detail::RegisterEngineComponents(state->components))
+        {
+            logger.Error("Scripting: the engine's own components could not be registered; running without scripts.");
+            return Scripting(std::move(state));
+        }
+        for (auto& registration : config.components)
+        {
+            if (state->components.Add(std::move(registration)) < 0)
+            {
+                logger.Error("Scripting: a component in the config has an empty or duplicate name; running without scripts.");
+                return Scripting(std::move(state));
+            }
+        }
         if (!Detail::ActivateEngineContext(&state->context))
         {
             logger.Error("Scripting: another Scripting is already active in this process; running without scripts.");
@@ -288,6 +363,13 @@ namespace Fenrir
             logger.Error("Scripting: the script assembly '{}' could not be loaded; running without scripts. {}",
                          assembly.string(), loaded.diagnostic);
             // Nothing runs, so give back the runtime and the process-wide slot.
+            state->Shutdown();
+            return Scripting(std::move(state));
+        }
+        // All or nothing: the assembly stays loaded only if every registered component matches its C# struct.
+        if (auto validated = ValidateAll(state->components.All(), *loaded.value); !validated.Succeeded())
+        {
+            logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), validated.diagnostic);
             state->Shutdown();
             return Scripting(std::move(state));
         }
