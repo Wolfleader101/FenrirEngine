@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <optional>
+#include <span>
 #include <string>
 #include <type_traits>
 
@@ -55,11 +57,11 @@ namespace Fenrir
         /** Removes the component. False for a read-only one or a dead entity. */
         std::function<bool(EntityList& entities, std::uint32_t entity)> remove;
 
-        /**
-         * The EnTT storage holding this component in a list, for building runtime views over it beside other storages. It
-         * is created if the list has none yet.
-         */
-        std::function<entt::sparse_set*(EntityList& entities)> pool;
+        /** Names this component in a query (EntityList::ForEachWith), beside any other component, native or dynamic. */
+        std::optional<ComponentSelector> selector;
+
+        /** How many entities in the list have this component. */
+        std::function<std::size_t(EntityList& entities)> count;
 
         /**
          * Checks the C# struct this component mirrors against its Iris StructMapping, in a loaded script assembly. A mismatch
@@ -133,7 +135,8 @@ namespace Fenrir
             }
             return true;
         };
-        registration.pool = [](EntityList& entities) -> entt::sparse_set* { return &entities.GetRegistry().storage<T>(); };
+        registration.selector = ComponentSelector::Native<T>();
+        registration.count = [selector = *registration.selector](EntityList& entities) { return entities.CountOf(selector); };
         registration.validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); };
         return registration;
     }

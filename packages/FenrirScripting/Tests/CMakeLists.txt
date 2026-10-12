@@ -5,8 +5,6 @@ add_executable(FenrirScriptingTests
     HeadlessApp.hpp
 )
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting)
-# The byte storage is internal; its own behaviour is tested directly.
-target_include_directories(FenrirScriptingTests PRIVATE ../src)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
@@ -26,6 +24,11 @@ add_custom_command(
 add_custom_target(FenrirScriptFixture DEPENDS "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll")
 add_dependencies(FenrirScriptFixture FenrirScriptingContract)
 add_dependencies(FenrirScriptingTests FenrirScriptFixture)
+
+# The ECS is wrapped by FenrirECS so it can change without breaking code built on it. FenrirScripting must use only the wrapper:
+# this fails if any of its code mentions EnTT.
+add_test(NAME ScriptingDoesNotUseEnTT
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.." -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/NoEnTT.cmake")
 
 add_test(NAME FenrirScripting
     COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll")

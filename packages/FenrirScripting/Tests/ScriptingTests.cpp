@@ -1,17 +1,15 @@
 #include "HeadlessApp.hpp"
 #include "TestHarness.hpp"
 
-#include <entt/entity/runtime_view.hpp>
-
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "../src/ByteStorage.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <set>
+#include <string>
 #include <vector>
 #include <fstream>
 #include <iostream>
@@ -636,14 +634,7 @@ namespace
 
     std::size_t PoolCount(EntityList& entities)
     {
-        std::size_t count = 0;
-        for (auto&& [id, storage] : entities.GetRegistry().storage())
-        {
-            (void)id;
-            (void)storage;
-            ++count;
-        }
-        return count;
+        return entities.ComponentStorageCount();
     }
 
     void AScriptAssemblyReportsTheComponentsItDefines()
@@ -720,11 +711,11 @@ namespace
         Check(Scripted<float>(scripting, "SpeedX", second.GetId()) == 42.0F, "C# did not read a native write");
 
         // The pool holds one element per entity that has the component.
-        Check(velocity->pool(entities)->size() == 3, "The pool did not hold three elements");
+        Check(velocity->count(entities) == 3, "The pool did not hold three elements");
 
         // Destroying an entity removes its element, and the others keep their values.
         entities.DestroyEntity(second.GetId());
-        Check(velocity->pool(entities)->size() == 2, "Destroying an entity left its component in the pool");
+        Check(velocity->count(entities) == 2, "Destroying an entity left its component in the pool");
         Check(!velocity->has(entities, second.GetId()), "A destroyed entity still had the component");
         Check(Scripted<float>(scripting, "SpeedX", first.GetId()) == 2.0F && Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F,
               "Removing an element disturbed the others");
@@ -738,7 +729,7 @@ namespace
         // Removing one explicitly, and again (harmless).
         Check(velocity->remove(entities, first.GetId()) && !velocity->has(entities, first.GetId()), "A component was not removed");
         Check(velocity->remove(entities, first.GetId()), "Removing twice failed");
-        Check(velocity->pool(entities)->size() == 1, "The pool did not shrink");
+        Check(velocity->count(entities) == 1, "The pool did not shrink");
     }
 
     void ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities()
@@ -767,17 +758,15 @@ namespace
         }
         Check(transform->remove(entities, ids[4]), "Transform was not removed");
 
+        // A query over any mix of native and script components, through the ECS own API.
         const auto iterate = [&](std::initializer_list<const ComponentRegistration*> registrations) {
-            entt::runtime_view view;
+            std::vector<ComponentSelector> selectors;
             for (const auto* registration : registrations)
             {
-                view.iterate(*registration->pool(entities));
+                selectors.push_back(*registration->selector);
             }
             std::set<std::uint32_t> found;
-            for (const auto entity : view)
-            {
-                found.insert(static_cast<std::uint32_t>(entity));
-            }
+            entities.ForEachWith(selectors, [&](std::uint32_t entity) { found.insert(entity); });
             return found;
         };
         using Ids = std::set<std::uint32_t>;
@@ -820,7 +809,7 @@ namespace
         }
         Check(aligned->get(entities, ids.front()) == first && aligned->get(entities, ids[400]) == middle,
               "Growing the storage moved an existing element");
-        Check(aligned->pool(entities)->size() == 3700, "The pool did not hold every element");
+        Check(aligned->count(entities) == 3700, "The pool did not hold every element");
 
         // C# reads and writes a Vector128 in it.
         Scripted<void>(scripting, "FillAligned", ids[400]);
@@ -835,30 +824,88 @@ namespace
               "An empty component did not work as a tag");
     }
 
-    void TheByteStorageRefusesToChangeShapeWhileInUse()
+    // The ECS own dynamic components, through its public API only (no scripting involved).
+    void TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse()
     {
-        entt::registry registry;
-        auto& storage = registry.storage<Detail::ScriptComponentTag>(entt::hashed_string{"shape"});
-        const auto entity = registry.create();
+        EntityList entities;
+        const DynamicComponentType small("Test.Small", 8, 4);
+        const auto entity = entities.CreateEntity().GetId();
 
-        Check(!storage.IsConfigured() && storage.Emplace(entity) == nullptr, "An unconfigured storage accepted an element");
-        Check(!storage.Configure(0, 4) && !storage.Configure(8, 0) && !storage.Configure(8, 3) && !storage.Configure(7, 4),
-              "An impossible size or alignment was accepted");
-        Check(storage.Configure(8, 4) && storage.Configure(8, 4), "A valid configuration, or repeating it, failed");
+        // Nothing is stored until one is added, and an invalid description is refused.
+        Check(entities.GetDynamic(small, entity) == nullptr && !entities.HasDynamic(small, entity) &&
+                  entities.CountDynamic(small) == 0,
+              "A type nobody added had components");
+        Check(!entities.AddDynamic(DynamicComponentType("Test.Bad", 7, 4), entity) &&
+                  !entities.AddDynamic(DynamicComponentType("Test.Bad", 8, 3), entity) &&
+                  !entities.AddDynamic(DynamicComponentType("", 8, 4), entity) &&
+                  !entities.AddDynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4), entity),
+              "An impossible description was accepted");
+        Check(small.IsValid() && !DynamicComponentType("x", 0, 1).IsValid(), "IsValid was wrong");
 
-        auto* element = static_cast<std::uint8_t*>(storage.Emplace(entity));
-        Check(element != nullptr && std::all_of(element, element + 8, [](std::uint8_t byte) { return byte == 0; }),
-              "A new element was not zeroed");
-        Check(storage.Emplace(entity) == element, "Adding an entity twice gave it a second element");
-        Check(!storage.Configure(16, 8), "The shape changed while an element was stored");
-        Check(storage.Find(entity) == element && storage.ElementSize() == 8, "A refused change disturbed the storage");
+        Check(entities.AddDynamic(small, entity) && entities.AddDynamic(small, entity),
+              "Adding a component, or adding it twice, failed");
+        auto* bytes = static_cast<std::uint8_t*>(entities.GetDynamic(small, entity));
+        Check(bytes != nullptr && std::all_of(bytes, bytes + 8, [](std::uint8_t byte) { return byte == 0; }) &&
+                  entities.CountDynamic(small) == 1,
+              "A new component was not zeroed, or was counted twice");
+        Check(reinterpret_cast<std::uintptr_t>(bytes) % 4 == 0, "The component was not aligned");
 
-        // Empty again, it can take a new shape.
-        registry.destroy(entity);
-        Check(storage.size() == 0 && storage.Configure(16, 8) && storage.ElementSize() == 16,
+        // The same name with another shape is refused while components of the first shape exist.
+        const DynamicComponentType wider("Test.Small", 16, 8);
+        Check(wider.Id() == small.Id(), "The same name did not give the same id");
+        Check(!entities.AddDynamic(wider, entity), "A component of another shape was added under the same name");
+        Check(entities.GetDynamic(small, entity) == bytes, "A refused add disturbed the storage");
+
+        // Once none are left, the name can take a new shape.
+        Check(entities.RemoveDynamic(small, entity) && !entities.HasDynamic(small, entity) &&
+                  entities.CountDynamic(small) == 0,
+              "Removing a component did not empty the storage");
+        Check(entities.AddDynamic(wider, entity) &&
+                  reinterpret_cast<std::uintptr_t>(entities.GetDynamic(wider, entity)) % 8 == 0,
               "An emptied storage did not accept a new shape");
-        const auto next = registry.create();
-        Check(reinterpret_cast<std::uintptr_t>(storage.Emplace(next)) % 8 == 0, "The new shape was not honoured");
+
+        // A destroyed entity has no components, and cannot be given any.
+        entities.DestroyEntity(entity);
+        Check(!entities.HasDynamic(wider, entity) && !entities.RemoveDynamic(wider, entity) &&
+                  !entities.AddDynamic(wider, entity),
+              "A destroyed entity still had a dynamic component");
+        Check(entities.CountDynamic(wider) == 0, "A destroyed entity component stayed in the storage");
+
+        // A name whose id (a hash) equals another name id must not share its storage: the first to use it owns it.
+        // Found by brute force against the FNV-1a ids: these two names hash to the same 32-bit id.
+        const std::string first = "Test.Collide.39238";
+        const std::string second = "Test.Collide.644126";
+        const DynamicComponentType owner(first, 8, 4);
+        const DynamicComponentType intruder(second, 8, 4);
+        Check(owner.Id() == intruder.Id() && owner.Name() != intruder.Name(), "The two names did not collide");
+        const auto holder = entities.CreateEntity().GetId();
+        Check(entities.AddDynamic(owner, holder), "The first name could not use the storage");
+        Check(!entities.AddDynamic(intruder, holder) && !entities.HasDynamic(intruder, holder) &&
+                  entities.GetDynamic(intruder, holder) == nullptr && entities.CountDynamic(intruder) == 0,
+              "A second name shared the first name storage");
+        (void)entities.RemoveDynamic(intruder, holder); // Must not remove the owner component.
+        Check(entities.HasDynamic(owner, holder) && entities.CountDynamic(owner) == 1, "The intruder disturbed the owner");
+
+        // The largest allowed component costs a page of its own size, not 256 of them, and is still aligned.
+        const DynamicComponentType big("Test.Big", DynamicComponentType::MaxSize, 16);
+        std::set<void*> addresses;
+        for (int index = 0; index < 3; ++index)
+        {
+            const auto id = entities.CreateEntity().GetId();
+            Check(entities.AddDynamic(big, id), "A maximum-size component was not added");
+            void* at = entities.GetDynamic(big, id);
+            Check(at != nullptr && reinterpret_cast<std::uintptr_t>(at) % 16 == 0, "A maximum-size component was not aligned");
+            addresses.insert(at);
+        }
+        Check(addresses.size() == 3 && entities.CountOf(ComponentSelector::Dynamic(big)) == 3, "Maximum-size components overlapped");
+
+        // A query over a dynamic type nobody has added visits nothing, and makes no storage.
+        const std::size_t storages = entities.ComponentStorageCount();
+        std::size_t visited = 0;
+        const ComponentSelector never = ComponentSelector::Dynamic(DynamicComponentType("Test.Never", 4, 4));
+        entities.ForEachWith(std::span<const ComponentSelector>(&never, 1), [&](std::uint32_t) { ++visited; });
+        Check(visited == 0 && entities.ComponentStorageCount() == storages,
+              "A query over an unused dynamic type visited entities or made storage");
     }
 
     void AFailedLoadLeavesNoComponentsAndNoPools()
@@ -1007,7 +1054,8 @@ int main(int argc, char* argv[])
         {"a runtime view over native and script pools iterates the right entities",
          ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities},
         {"script component storage honours alignment and never moves elements", ScriptComponentStorageHonoursAlignmentAndNeverMovesElements},
-        {"the byte storage refuses to change shape while in use", TheByteStorageRefusesToChangeShapeWhileInUse},
+        {"the ECS holds dynamic components and refuses to change their shape while in use",
+         TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

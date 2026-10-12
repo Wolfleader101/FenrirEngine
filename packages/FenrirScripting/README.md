@@ -171,17 +171,22 @@ The SDK's generator writes a table into the script assembly listing every `IComp
 runs that table as the assembly loads. Each component is reported with its full name, its size and its alignment as C#
 lays it out, and the engine registers it under that name.
 
-- **Storage.** Each C# component type gets its own EnTT storage, a `ByteStorage` named after the type. It is an ordinary
-  EnTT sparse set holding opaque elements of the reported size and alignment, so it takes part in everything the registry
-  does: `registry.destroy` removes the entity's element, and `entt::runtime_view` iterates it beside the native pools.
-  A new element is all zero bytes (a C# `default`).
-- **Elements do not move when the storage grows.** They live in pages of 256 elements, each page allocated once and
-  aligned to the component's alignment (a `Vector128` field makes it 16). Removing an element moves the last one into its
-  place, as EnTT's own storage does, so a pointer is good until the storage next changes.
-- **Pools are created lazily, per scene.** Registering a component creates no storage; each entity list (scene) makes its
-  pool the first time the component is used in it. So a load that is thrown away leaves nothing behind.
-- **From native code**, `scripting.FindComponent("Ns.Velocity")` gives the registration: `get`, `has`, `add`, `remove`, and
-  `pool` (the `entt::sparse_set*`, for views). Its `size`, `alignment` and `scriptDefined` say what it is. The same
+- **Storage belongs to the ECS.** FenrirScripting does not store anything itself and never touches the ECS library
+  ([ADR-0008](../../docs/adr/0008-fenrirecs-owns-the-ecs-library.md)). It describes the component to `FenrirECS` as a
+  `DynamicComponentType` (name, size, alignment) and calls `EntityList::AddDynamic`, `GetDynamic`, `HasDynamic` and
+  `RemoveDynamic`. The ECS stores such components like any other: removed with the entity, found by a query beside native
+  ones. A new component is all zero bytes (a C# `default`). A test fails the build if scripting code names the ECS library.
+- **Components do not move when the storage grows.** The ECS keeps them in pages of up to 256 (and at most 64 KiB a page), each
+  page allocated once and aligned to the component's alignment (a `Vector128` field makes it 16). Removing one moves the last into its place, so a
+  pointer is good until a component of that type is next removed.
+- **Storage is created lazily, per scene.** Registering a component creates nothing; each scene makes the storage the first
+  time the component is added in it, and asking about a component nobody added creates nothing. So a load that is thrown
+  away leaves nothing behind.
+- **A storage id is a hash of the name, and the ECS defends it.** If another name hashes to the same id, or the id belongs to
+  a native storage, the later user is refused and the first is untouched (tested with two real colliding names).
+- **From native code**, `scripting.FindComponent("Ns.Velocity")` gives the registration: `get`, `has`, `add`, `remove`,
+  `count`, and `selector`, which names the component in `EntityList::ForEachWith(selectors, func)` (every entity with all of
+  them, native and script components mixed). Its `size`, `alignment` and `scriptDefined` say what it is. The same
   registration works for a native component.
 - **Rules.** A component is an `unmanaged` struct implementing `IComponent`; one holding a reference is refused when the
   script compiles (`FENRIR0004`). It needs no `[NativeComponent]` attribute (a struct that has one mirrors a native

@@ -2,31 +2,36 @@
 
 #include <entt/entity/registry.hpp>
 
+#include "FenrirECS/DynamicComponent.hpp"
+
 #include <cstddef>
 #include <cstdint>
+#include <algorithm>
 #include <cstring>
+#include <string>
 #include <memory>
 #include <new>
 #include <vector>
 
+// Private to the ECS: nothing outside FenrirECS includes this, and nothing outside it knows the ECS is built on EnTT.
 namespace Fenrir::Detail
 {
-    // Names the kind of storage a C# component lives in. The registry builds a storage from a type, so this tag stands for
-    // "an opaque byte pool"; one pool per C# component type is made under a name (see ScriptComponentStorageId).
-    struct ScriptComponentTag
+    // Names the kind of storage a dynamic component lives in. The registry builds a storage from a type, so this tag stands
+    // for "an opaque byte pool"; one pool per dynamic component type is made under an id derived from its name.
+    struct DynamicComponentTag
     {
     };
 
     /**
      * An EnTT storage of opaque, fixed-size elements, whose size and alignment are known only at run time: the pool behind a
-     * C# component. EnTT builds its typed storages from compile-time types, so a component type that exists only after a
-     * script assembly loads needs this one class instead.
+     * DynamicComponentType. EnTT builds its typed storages from compile-time types, so a component type that exists only at run
+     * time needs this one class instead.
      *
      * It is an ordinary EnTT sparse set underneath, so it takes part in everything the registry does with a storage:
      * `registry.destroy` removes the entity's element, and runtime views iterate it beside native pools.
      *
-     * Elements live in pages of a fixed number of elements, each page allocated once, never moved and aligned to the
-     * element's alignment. Adding entities therefore never moves an existing element. (Removing one moves the last
+     * Elements live in pages of a fixed number of elements (up to 256, and no more than 64 KiB a page, so one large element does
+     * not cost 256 of them), each page allocated once, never moved and aligned to the element's alignment. Adding entities therefore never moves an existing element. (Removing one moves the last
      * element into its place, as EnTT's own storage does.) A new element is all zero bytes, which is a C# `default`.
      *
      * Pages are kept for the life of the storage: clearing it or removing every element empties it but returns no memory,
@@ -38,14 +43,14 @@ namespace Fenrir::Detail
         using underlying_iterator = typename base_type::basic_iterator;
 
       public:
-        static constexpr std::size_t ElementsPerPage = 256;
+        static constexpr std::size_t MaxElementsPerPage = 256;
+        static constexpr std::size_t MaxPageBytes = 64 * 1024;
 
-        // The largest element a script component may have. A component is plain data that an entity carries by the
-        // thousand; this keeps a page (ElementsPerPage elements) to 16 MiB and the arithmetic far from overflow.
-        static constexpr std::size_t MaxElementSize = 64 * 1024;
+        // The largest element allowed (a page is ElementsPerPage elements, so 16 MiB at most, and the arithmetic cannot overflow).
+        static constexpr std::size_t MaxElementSize = DynamicComponentType::MaxSize;
 
         explicit ByteStorage(const allocator_type& allocator)
-            : base_type{entt::type_id<ScriptComponentTag>(), entt::deletion_policy::swap_and_pop, allocator}
+            : base_type{entt::type_id<DynamicComponentTag>(), entt::deletion_policy::swap_and_pop, allocator}
         {
         }
 
@@ -78,7 +83,26 @@ namespace Fenrir::Detail
             ReleasePages(); // Pages from an earlier, different configuration (the storage is empty).
             m_size = size;
             m_alignment = alignment;
+            m_perPage = std::clamp<std::size_t>(MaxPageBytes / size, 1, MaxElementsPerPage);
             return true;
+        }
+
+        // The name of the component type this storage holds, empty until claimed. A storage id is a hash, so two names can in
+        // principle land on one id: the first to claim a storage owns it, and the other is refused.
+        [[nodiscard]] const std::string& Owner() const noexcept
+        {
+            return m_owner;
+        }
+
+        // Whether `name` may use this storage: it is unclaimed or already that name's.
+        [[nodiscard]] bool MayBeUsedBy(const std::string& name) const noexcept
+        {
+            return m_owner.empty() || m_owner == name;
+        }
+
+        void Claim(const std::string& name)
+        {
+            m_owner = name;
         }
 
         [[nodiscard]] bool IsConfigured() const noexcept
@@ -156,7 +180,7 @@ namespace Fenrir::Detail
       private:
         [[nodiscard]] std::size_t PageBytes() const noexcept
         {
-            return m_size * ElementsPerPage;
+            return m_size * m_perPage;
         }
 
         [[nodiscard]] std::size_t PageAlignment() const noexcept
@@ -166,13 +190,13 @@ namespace Fenrir::Detail
 
         [[nodiscard]] void* ElementAt(std::size_t position) const
         {
-            return payload[position / ElementsPerPage] + (position % ElementsPerPage) * m_size;
+            return payload[position / m_perPage] + (position % m_perPage) * m_size;
         }
 
         // The element at a position, allocating the pages up to it. Existing pages are never touched.
         void* AssureElement(std::size_t position)
         {
-            const std::size_t page = position / ElementsPerPage;
+            const std::size_t page = position / m_perPage;
             while (payload.size() <= page)
             {
                 payload.push_back(static_cast<std::byte*>(::operator new(PageBytes(), std::align_val_t{PageAlignment()})));
@@ -208,12 +232,14 @@ namespace Fenrir::Detail
         std::vector<std::byte*> payload;
         std::size_t m_size = 0;
         std::size_t m_alignment = 0;
+        std::size_t m_perPage = 1;
+        std::string m_owner;
     };
 } // namespace Fenrir::Detail
 
-// Tells the registry which storage a ScriptComponentTag gets.
+// Tells the registry which storage a DynamicComponentTag gets.
 template <typename Entity, typename Allocator>
-struct entt::storage_type<Fenrir::Detail::ScriptComponentTag, Entity, Allocator>
+struct entt::storage_type<Fenrir::Detail::DynamicComponentTag, Entity, Allocator>
 {
     using type = Fenrir::Detail::ByteStorage;
 };
