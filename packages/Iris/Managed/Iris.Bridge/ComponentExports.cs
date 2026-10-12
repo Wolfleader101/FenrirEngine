@@ -482,7 +482,7 @@ public static partial class Bootstrap
         }
     }
 
-    // A snapshot of a type: query 0 base type, 1 interfaces, 2 custom attributes (see TypeQueries for the
+    // A snapshot of a type: query 0 base type, 1 interfaces, 2 custom attributes, 3 fields, 4 properties, 5 methods (see TypeQueries for the
     // format). Publishes a block the caller gives back with FreeString. No component code runs.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int QueryType(ulong token, ulong typeId, int query, ulong* block,
@@ -493,7 +493,7 @@ public static partial class Bootstrap
             return (int)BridgeStatus.InvalidArgument;
         try
         {
-            if (query < 0 || query > 2) throw new BridgeArgumentException($"Unknown type query {query}.");
+            if (query < 0 || query > 5) throw new BridgeArgumentException($"Unknown type query {query}.");
             if (!ComponentRegistry.TryQueryType(token, typeId, (TypeQueries.Query)query, out byte[] data)) return (int)BridgeStatus.InvalidHandle;
             *block = TypeQueries.ToBlock(data);
             return (int)BridgeStatus.Success;

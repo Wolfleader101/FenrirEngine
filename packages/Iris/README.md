@@ -478,6 +478,9 @@ for (const Type& type : *types)
     const auto base = type.GetBaseType();                       // std::optional<TypeInfo>
     const auto interfaces = type.GetInterfaces();               // std::vector<TypeInfo>, sorted by name
     const auto attributes = type.GetAttributes();               // std::vector<AttributeInfo>
+    const auto fields = type.GetFields();                       // std::vector<FieldInfo>
+    const auto properties = type.GetProperties();               // std::vector<PropertyInfo>
+    const auto methods = type.GetMethods();                     // std::vector<MethodInfo>
     const auto isScript = type.IsAssignableTo("MyContracts.IScript");   // CallResult<bool>
 }
 ```
@@ -498,9 +501,19 @@ for (const Type& type : *types)
   (`std::monostate`), `bool`, `std::int64_t` (signed integers and enums), `std::uint64_t` (unsigned integers
   and chars), `double`, or `std::string` (a string, or a `Type` argument's full name); `typeName` says what it
   was declared as. Reading attributes loads the assemblies of the attribute types and of any `typeof`
-  argument into the component, and one that cannot load fails the query. Attributes on methods and fields
-  are not available yet. Metadata text is read-only, so a lone surrogate in a name or attribute string
+  argument into the component, and one that cannot load fails the query. Metadata text is read-only, so a lone surrogate in a name or attribute string
   becomes U+FFFD rather than failing the whole query (strings passed to and from calls stay strict).
+- **Members.** `GetFields`, `GetProperties` and `GetMethods` return owning snapshots, in declaration order, of
+  the members **declared on that type** (inherited members are not included: they belong to the base type, so
+  walk `GetBaseType` for them). Public and non-public members are listed, each with its `visibility`, and
+  compiler-generated members (auto-property backing fields), property and event accessors, constructors,
+  operators and indexers are not. Each has its name, its type (`TypeInfo`) and a `TypeKind` (`Int32`, `Float`,
+  `String`, `Enum`, `Struct`, `Object`, `Array`, and so on) for display and serialization, whether it is static, and
+  its `attributes` in the `AttributeInfo` shape above (so `[Range(0, 1)]` arrives with its arguments). A field
+  is also read-only for `readonly` or `const`, and an instance field of a blittable struct has a byte `offset`
+  that is the layout struct-mapping validation checks (empty for anything else). A property reports whether
+  it `canRead` and `canWrite` (an accessor exists, whatever its accessibility) and the more accessible
+  accessor's visibility. A method has its return type and kind and its parameters.
 - **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
   like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 
@@ -622,8 +635,8 @@ Until the engine integration (ticket 19) decides otherwise, drive Iris from one 
 
 What Iris does differently: signatures are matched exactly at lookup (and unsupported types fail to
 compile), struct layouts are checked against the managed type, a component whose internal calls are not
-all registered fails to load, and errors are values. Not available yet: listing a type's members, attributes
-on members, an object's runtime type, and forcing a collection.
+all registered fails to load, and errors are values. Not available yet: an object's runtime type, and forcing a
+collection.
 
 ## How it works
 

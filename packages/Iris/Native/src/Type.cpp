@@ -222,6 +222,72 @@ namespace Iris
             info.assemblyName = reader.String();
             return info;
         }
+
+        void ReadAttributes(Detail::SnapshotReader& reader, std::vector<AttributeInfo>& value)
+        {
+            const std::int32_t count = reader.Int32();
+            for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+            {
+                AttributeInfo attribute;
+                attribute.type = ReadTypeInfo(reader);
+                const std::int32_t arguments = reader.Int32();
+                for (std::int32_t position = 0; reader.Ok() && position < arguments; ++position)
+                {
+                    AttributeArgument argument;
+                    argument.name = reader.String();
+                    argument.typeName = reader.String();
+                    switch (reader.Int32())
+                    {
+                    case 1:
+                        argument.value = reader.Int64() != 0;
+                        break;
+                    case 2:
+                        argument.value = reader.Int64();
+                        break;
+                    case 3:
+                        argument.value = static_cast<std::uint64_t>(reader.Int64());
+                        break;
+                    case 4:
+                        argument.value = reader.Double();
+                        break;
+                    case 5:
+                        argument.value = reader.String();
+                        break;
+                    case 0:
+                    case 6:
+                        break; // Null, or a value with no native form: a monostate.
+                    default:
+                        reader.Fail();
+                        break;
+                    }
+                    attribute.arguments.push_back(std::move(argument));
+                }
+                value.push_back(std::move(attribute));
+            }
+        }
+
+        // A kind or visibility from the wire. An unknown value makes the snapshot malformed.
+        TypeKind ReadKind(Detail::SnapshotReader& reader)
+        {
+            const std::int32_t kind = reader.Int32();
+            if (kind < 0 || kind > static_cast<std::int32_t>(TypeKind::Array))
+            {
+                reader.Fail();
+                return TypeKind::Other;
+            }
+            return static_cast<TypeKind>(kind);
+        }
+
+        MemberVisibility ReadVisibility(Detail::SnapshotReader& reader)
+        {
+            const std::int32_t visibility = reader.Int32();
+            if (visibility < 0 || visibility > static_cast<std::int32_t>(MemberVisibility::Public))
+            {
+                reader.Fail();
+                return MemberVisibility::Private;
+            }
+            return static_cast<MemberVisibility>(visibility);
+        }
     } // namespace
 
     CallResult<std::optional<TypeInfo>> Type::GetBaseType() const
@@ -251,45 +317,84 @@ namespace Iris
     {
         return Snapshot<std::vector<AttributeInfo>>(
             *state->bridge, state->component, state->type, 2, "QueryType",
-            [](Detail::SnapshotReader& reader, std::vector<AttributeInfo>& value) {
+            [](Detail::SnapshotReader& reader, std::vector<AttributeInfo>& value) { ReadAttributes(reader, value); });
+    }
+
+    CallResult<std::vector<FieldInfo>> Type::GetFields() const
+    {
+        return Snapshot<std::vector<FieldInfo>>(
+            *state->bridge, state->component, state->type, 3, "QueryType",
+            [](Detail::SnapshotReader& reader, std::vector<FieldInfo>& value) {
                 const std::int32_t count = reader.Int32();
                 for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
                 {
-                    AttributeInfo attribute;
-                    attribute.type = ReadTypeInfo(reader);
-                    const std::int32_t arguments = reader.Int32();
-                    for (std::int32_t position = 0; reader.Ok() && position < arguments; ++position)
+                    FieldInfo field;
+                    field.name = reader.String();
+                    field.type = ReadTypeInfo(reader);
+                    field.kind = ReadKind(reader);
+                    const std::int32_t flags = reader.Int32();
+                    field.isStatic = (flags & 1) != 0;
+                    field.isReadOnly = (flags & 2) != 0;
+                    field.visibility = ReadVisibility(reader);
+                    const std::int64_t offset = reader.Int64();
+                    if (offset >= 0)
                     {
-                        AttributeArgument argument;
-                        argument.name = reader.String();
-                        argument.typeName = reader.String();
-                        switch (reader.Int32())
-                        {
-                        case 1:
-                            argument.value = reader.Int64() != 0;
-                            break;
-                        case 2:
-                            argument.value = reader.Int64();
-                            break;
-                        case 3:
-                            argument.value = static_cast<std::uint64_t>(reader.Int64());
-                            break;
-                        case 4:
-                            argument.value = reader.Double();
-                            break;
-                        case 5:
-                            argument.value = reader.String();
-                            break;
-                        case 0:
-                        case 6:
-                            break; // Null, or a value with no native form: a monostate.
-                        default:
-                            reader.Fail();
-                            break;
-                        }
-                        attribute.arguments.push_back(std::move(argument));
+                        field.offset = static_cast<std::size_t>(offset);
                     }
-                    value.push_back(std::move(attribute));
+                    ReadAttributes(reader, field.attributes);
+                    value.push_back(std::move(field));
+                }
+            });
+    }
+
+    CallResult<std::vector<PropertyInfo>> Type::GetProperties() const
+    {
+        return Snapshot<std::vector<PropertyInfo>>(
+            *state->bridge, state->component, state->type, 4, "QueryType",
+            [](Detail::SnapshotReader& reader, std::vector<PropertyInfo>& value) {
+                const std::int32_t count = reader.Int32();
+                for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                {
+                    PropertyInfo property;
+                    property.name = reader.String();
+                    property.type = ReadTypeInfo(reader);
+                    property.kind = ReadKind(reader);
+                    const std::int32_t flags = reader.Int32();
+                    property.isStatic = (flags & 1) != 0;
+                    property.canRead = (flags & 2) != 0;
+                    property.canWrite = (flags & 4) != 0;
+                    property.visibility = ReadVisibility(reader);
+                    ReadAttributes(reader, property.attributes);
+                    value.push_back(std::move(property));
+                }
+            });
+    }
+
+    CallResult<std::vector<MethodInfo>> Type::GetMethods() const
+    {
+        return Snapshot<std::vector<MethodInfo>>(
+            *state->bridge, state->component, state->type, 5, "QueryType",
+            [](Detail::SnapshotReader& reader, std::vector<MethodInfo>& value) {
+                const std::int32_t count = reader.Int32();
+                for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                {
+                    MethodInfo method;
+                    method.name = reader.String();
+                    method.returnType = ReadTypeInfo(reader);
+                    method.returnKind = ReadKind(reader);
+                    method.isStatic = (reader.Int32() & 1) != 0;
+                    method.visibility = ReadVisibility(reader);
+                    const std::int32_t parameters = reader.Int32();
+                    for (std::int32_t position = 0; reader.Ok() && position < parameters; ++position)
+                    {
+                        ParameterInfo parameter;
+                        parameter.name = reader.String();
+                        parameter.type = ReadTypeInfo(reader);
+                        parameter.kind = ReadKind(reader);
+                        method.parameters.push_back(std::move(parameter));
+                    }
+                    ReadAttributes(reader, method.attributes);
+                    value.push_back(std::move(method));
                 }
             });
     }
