@@ -36,6 +36,8 @@ static unsafe class InternalCallChecks
     private static ushort NextChar(ushort value) => (ushort)(value + 1);
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static byte LeakStopped() => 1;
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static int Triple(int value) => value * 3;
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static void Ignore(byte value) { }
@@ -55,6 +57,7 @@ static unsafe class InternalCallChecks
         Register("Negate", Bool, new[] { Bool }, (delegate* unmanaged[Cdecl]<byte, byte>)&Negate);
         Register("NextChar", Char, new[] { Char }, (delegate* unmanaged[Cdecl]<ushort, ushort>)&NextChar);
         Register("LeakStopped", Bool, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<byte>)&LeakStopped);
+        InternalCalls.Register("Iris.Examples.Contracts.SharedNatives.Triple", Int32, new[] { Int32 }, (IntPtr)(delegate* unmanaged[Cdecl]<int, int>)&Triple);
     }
 
     private static ulong Method(ulong token, ulong type, string name, int returnKind, params int[] parameters)

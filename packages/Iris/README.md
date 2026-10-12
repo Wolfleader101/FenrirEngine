@@ -455,6 +455,13 @@ const auto registered = Iris::RegisterInternalCall<&AddImpl>("MyComponent.Native
   `Cdecl`, is `readonly`, thread-static or on a generic type, **the load fails** with `InvalidArgument` and a diagnostic listing every such field. Managed code
   can therefore never call a null pointer. A registration also makes the component require it: a host that
   registers nothing cannot load a component that declares bindings.
+- **Shared assemblies bind too.** The public static function pointer fields of an assembly in
+  `HostConfiguration::sharedAssemblies` are bound when it is shared, by the same rules and with the same
+  diagnostics as a component's, so a shared contract can wrap native calls in friendly C# methods and every
+  component reaches the one copy. `Host::Initialize` attaches the registered internal calls before it shares
+  anything, so register them before `Initialize`. A field with no registration fails the initialization (`Sharing
+  assembly failed: ...` naming the field); nothing is shared then, and registering the function and trying again
+  works. A component that keeps a private copy of a contract it does not share does not get that copy bound.
 - **Signatures.** Parameters and results are `void`, sized integers, `float`, `double`, `bool`, `char16_t` or
   pointers. A string is passed as a UTF-8 `const char*` and a length, a struct as a pointer to it; the pointers
   are valid for the call.

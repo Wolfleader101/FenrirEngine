@@ -27,6 +27,9 @@ public static unsafe class Natives
     public static char CallNextChar(char value) => NextChar(value);
     public static bool CallLeakStopped() => LeakStopped();
 
+    // Reaches the shared contract's native function; only bound when the host shares the contract.
+    public static int CallSharedTriple(int value) => Iris.Examples.Contracts.SharedNatives.CallTriple(value);
+
     public static int CallMeasure(string text)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(text);

@@ -62,6 +62,10 @@ namespace Iris::Examples
     {
         return leakStop.load();
     }
+    inline int Triple(int value)
+    {
+        return value * 3;
+    }
     inline char16_t NextChar(char16_t value)
     {
         return static_cast<char16_t>(value + 1);
@@ -82,6 +86,7 @@ namespace Iris::Examples
             Iris::RegisterInternalCall<&Negate>(prefix + "Negate"),
             Iris::RegisterInternalCall<&NextChar>(prefix + "NextChar"),
             Iris::RegisterInternalCall<&LeakStopped>(prefix + "LeakStopped"),
+            Iris::RegisterInternalCall<&Triple>("Iris.Examples.Contracts.SharedNatives.Triple"),
         };
         for (auto& result : results)
         {
