@@ -18,7 +18,7 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <windows.h>
+#include <Windows.h>
 #elif defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
@@ -73,7 +73,7 @@ namespace Fenrir
 
         void Forward(const Iris::LogMessage& message)
         {
-            const std::lock_guard lock(mutex);
+            const std::lock_guard<std::mutex> lock(mutex);
             if (logger == nullptr)
             {
                 return;
@@ -94,6 +94,9 @@ namespace Fenrir
             case Iris::LogLevel::Error:
                 logger->Error("[Iris] {}", text);
                 break;
+            default:
+                logger->Log("[Iris] {}", text);
+                break;
             }
         }
 
@@ -106,7 +109,7 @@ namespace Fenrir
                 (void)host->SetLogSink({});
                 host.reset();
             }
-            const std::lock_guard lock(mutex);
+            const std::lock_guard<std::mutex> lock(mutex);
             logger = nullptr;
         }
     };

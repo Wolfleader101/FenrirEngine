@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <span>
 
 namespace
 {
@@ -18,10 +19,18 @@ namespace
 
     constexpr int Frames = 5;
 
+    // Every test starts from the same config, so a field added to ScriptingConfig later is not a warning each time.
+    ScriptingConfig ConfigFor(const std::filesystem::path& scriptAssembly)
+    {
+        ScriptingConfig config;
+        config.scriptAssembly = scriptAssembly;
+        return config;
+    }
+
     void RunsFramesWithTheFixture()
     {
         HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{.scriptAssembly = fixture});
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         const auto messages = headless.Logger().Messages();
         Check(scripting.IsRunning(),
               "The runtime was not started: " + (messages.empty() ? std::string("no messages") : messages.back().text));
@@ -41,7 +50,7 @@ namespace
     {
         HeadlessApp headless;
         const auto missing = fixture.parent_path() / "does-not-exist.dll";
-        auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{.scriptAssembly = missing});
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(missing));
         Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing assembly started scripting");
         Check(headless.Logger().Contains(LogLevel::Error, "does-not-exist.dll"),
               "A missing assembly was not logged as an error naming it");
@@ -68,7 +77,7 @@ namespace
         const auto& invalid = temp.path;
 
         HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{.scriptAssembly = invalid});
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(invalid));
         Check(!scripting.HasScripts(), "An invalid assembly loaded");
         Check(headless.Logger().Contains(LogLevel::Error, "could not be loaded"),
               "An invalid assembly was not logged as an error");
@@ -79,9 +88,9 @@ namespace
     void MissingBridgeIsLoggedAndTheAppRuns()
     {
         HeadlessApp headless;
-        auto scripting = Scripting::Install(
-            headless.Get(), ScriptingConfig{.scriptAssembly = fixture,
-                                            .bridgeDirectory = fixture.parent_path() / "no-bridge-here"});
+        auto config = ConfigFor(fixture);
+        config.bridgeDirectory = fixture.parent_path() / "no-bridge-here";
+        auto scripting = Scripting::Install(headless.Get(), config);
         Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing bridge started scripting");
         Check(headless.Logger().Contains(LogLevel::Error, ".NET could not be started"),
               "A missing bridge was not logged as an error");
@@ -111,7 +120,7 @@ namespace
     void ShutdownReleasesEverythingWhenTheAppFinishes()
     {
         HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{.scriptAssembly = fixture});
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         Check(scripting.IsRunning() && scripting.HasScripts(), "The fixture did not load");
         headless.Run(Frames);
         // The App's Exit phase has released the script assembly and the runtime host: nothing of Iris remains
@@ -126,11 +135,11 @@ namespace
         // Another install in the same process works after the previous one was released.
         {
             HeadlessApp headless;
-            auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{.scriptAssembly = fixture});
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
             Check(scripting.HasScripts(), "The first install did not load");
         }
         HeadlessApp second;
-        auto scripting = Scripting::Install(second.Get(), ScriptingConfig{.scriptAssembly = fixture});
+        auto scripting = Scripting::Install(second.Get(), ConfigFor(fixture));
         Check(scripting.HasScripts(), "A second install after a destroyed one did not load");
         second.Run(2);
         Check(second.FramesRun() == 2, "The second app did not run");
@@ -139,13 +148,14 @@ namespace
 
 int main(int argc, char* argv[])
 {
-    if (argc != 2)
+    const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
+    if (arguments.size() != 2)
     {
         std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll\n";
         return EXIT_FAILURE;
     }
-    fixture = std::filesystem::absolute(argv[1]);
-    executableDirectory = std::filesystem::absolute(argv[0]).parent_path();
+    fixture = std::filesystem::absolute(arguments[1]);
+    executableDirectory = std::filesystem::absolute(arguments[0]).parent_path();
     return RunCases({
         {"the fixture loads, frames run and Iris's messages reach the engine logger", RunsFramesWithTheFixture},
         {"a missing script assembly is logged and the app keeps running", MissingAssemblyIsLoggedAndTheAppRuns},

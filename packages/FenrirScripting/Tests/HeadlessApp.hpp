@@ -39,7 +39,7 @@ namespace Fenrir::Testing
 
         [[nodiscard]] std::vector<LoggedMessage> Messages() const
         {
-            const std::lock_guard lock(m_mutex);
+            const std::lock_guard<std::mutex> lock(m_mutex);
             return m_messages;
         }
 
@@ -76,7 +76,7 @@ namespace Fenrir::Testing
       private:
         void Record(LogLevel level, std::string_view message)
         {
-            const std::lock_guard lock(m_mutex);
+            const std::lock_guard<std::mutex> lock(m_mutex);
             m_messages.push_back({level, std::string(message)});
         }
 
