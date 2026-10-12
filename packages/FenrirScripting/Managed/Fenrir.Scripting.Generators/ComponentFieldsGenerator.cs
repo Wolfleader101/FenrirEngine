@@ -14,12 +14,15 @@ namespace Fenrir.Scripting.Generators;
 /// <summary>
 /// For every struct implementing <c>Fenrir.Scripting.IComponent</c>, emits C# 14 extension properties on
 /// <c>Ref&lt;T&gt;</c>, one per public or internal instance field, each returning <c>ref</c> to the field in the
-/// component's storage. A script then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site.
+/// component's storage. A script then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site. Every component
+/// also gets <c>ref readonly</c> properties on <c>ReadOnlyRef&lt;T&gt;</c>, and a component that only implements
+/// <c>IReadOnlyComponent</c> gets nothing else, so scripts cannot write it.
 /// </summary>
 [Generator]
 public sealed class ComponentFieldsGenerator : IIncrementalGenerator
 {
     private const string ComponentInterface = "Fenrir.Scripting.IComponent";
+    private const string ReadOnlyComponentInterface = "Fenrir.Scripting.IReadOnlyComponent";
 
     // Members of Ref<T> itself: a component field with one of these names would be shadowed, never reached.
     private static readonly string[] RefMembers = { "Value", "IsNull" };
@@ -46,7 +49,7 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor ReadOnlyComponent = new(
         "FENRIR0005", "A readonly component has nothing to write through",
-        "Component '{0}' is a readonly struct, so none of its fields can be exposed as writable; remove 'readonly'",
+        "Component '{0}' is a readonly struct, so none of its fields can be exposed as writable on Ref<T>; remove 'readonly' or make it an IReadOnlyComponent",
         "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -72,8 +75,11 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         var declaration = (StructDeclarationSyntax)context.Node;
         if (context.SemanticModel.GetDeclaredSymbol(declaration, cancellation) is not INamedTypeSymbol symbol)
             return null;
-        if (!symbol.AllInterfaces.Any(static i => i.ToDisplayString() == ComponentInterface))
+        // IComponent extends IReadOnlyComponent, so this finds both kinds.
+        if (!symbol.AllInterfaces.Any(static i => i.ToDisplayString() == ReadOnlyComponentInterface))
             return null;
+        // A writable component gets accessors on Ref<T> too; a read-only one only on ReadOnlyRef<T>.
+        bool writable = symbol.AllInterfaces.Any(static i => i.ToDisplayString() == ComponentInterface);
         // A partial struct is seen once per declaration; only the first one emits.
         if (symbol.DeclaringSyntaxReferences[0].GetSyntax(cancellation) != declaration)
             return null;
@@ -87,18 +93,18 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
             return Refused(key, diagnostics, GenericComponent, location, symbol.Name);
         if (!symbol.IsUnmanagedType)
             return Refused(key, diagnostics, ManagedComponent, location, symbol.Name);
-        if (symbol.IsReadOnly)
-            return Refused(key, diagnostics, ReadOnlyComponent, location, symbol.Name);
         if (HasHiddenContainer(symbol))
             return Refused(key, diagnostics, InaccessibleComponent, location, symbol.Name);
 
         string fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         bool needsUnsafe = false;
-        var members = new StringBuilder();
+        // Two views of the same fields: writable accessors on Ref<T>, and ref readonly ones on ReadOnlyRef<T>.
+        var writableMembers = new StringBuilder();
+        var readOnlyMembers = new StringBuilder();
         foreach (IFieldSymbol field in symbol.GetMembers().OfType<IFieldSymbol>())
         {
-            // Backing fields, statics, constants, readonly fields (no ref to give) and fixed buffers have no property.
-            if (field.IsStatic || field.IsConst || field.IsImplicitlyDeclared || field.IsReadOnly || field.IsFixedSizeBuffer)
+            // Backing fields, statics, constants and fixed buffers have no property.
+            if (field.IsStatic || field.IsConst || field.IsImplicitlyDeclared || field.IsFixedSizeBuffer)
                 continue;
             if (field.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal))
                 continue;
@@ -115,9 +121,15 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
             string access = field.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
             string type = field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             string name = Identifier(field.Name);
-            members.Append("        ").Append(access).Append(" ref ").Append(type).Append(' ').Append(name)
-                   .Append(" => ref self.Value.").Append(name).Append(";\n");
+            readOnlyMembers.Append("        ").Append(access).Append(" ref readonly ").Append(type).Append(' ').Append(name)
+                           .Append(" => ref self.Value.").Append(name).Append(";\n");
+            // A readonly field (or any field of a readonly struct) has no ref to give out for writing.
+            if (writable && !field.IsReadOnly && !symbol.IsReadOnly)
+                writableMembers.Append("        ").Append(access).Append(" ref ").Append(type).Append(' ').Append(name)
+                               .Append(" => ref self.Value.").Append(name).Append(";\n");
         }
+        if (writable && symbol.IsReadOnly)
+            diagnostics.Add(new DiagnosticInfo(ReadOnlyComponent, location, new[] { symbol.Name }));
 
         string visibility = IsPubliclyVisible(symbol) ? "public" : "internal";
         string? ns = symbol.ContainingNamespace.IsGlobalNamespace ? null : symbol.ContainingNamespace.ToDisplayString();
@@ -127,8 +139,14 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         if (ns != null)
             source.Append("namespace ").Append(ns).Append("\n{\n");
         source.Append(visibility).Append(needsUnsafe ? " static unsafe class " : " static class ").Append(ClassName(symbol)).Append("\n{\n");
-        source.Append("    extension(global::Fenrir.Scripting.Ref<").Append(fullName).Append("> self)\n    {\n");
-        source.Append(members);
+        if (writable && writableMembers.Length > 0)
+        {
+            source.Append("    extension(global::Fenrir.Scripting.Ref<").Append(fullName).Append("> self)\n    {\n");
+            source.Append(writableMembers);
+            source.Append("    }\n");
+        }
+        source.Append("    extension(global::Fenrir.Scripting.ReadOnlyRef<").Append(fullName).Append("> self)\n    {\n");
+        source.Append(readOnlyMembers);
         source.Append("    }\n}\n");
         if (ns != null)
             source.Append("}\n");

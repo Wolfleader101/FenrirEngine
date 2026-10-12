@@ -9,4 +9,11 @@
     <AssemblyName>Fenrir.Scripting</AssemblyName>
     <RootNamespace>Fenrir.Scripting</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- The engine's own components (Transform, Name, Relationship) live in this assembly, so the generator that gives
+         every component its Ref<T> accessors runs on it too. -->
+    <ProjectReference Include="../Fenrir.Scripting.Generators/Fenrir.Scripting.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="OutputPath;_CommandLineDefinedOutputPath" />
+  </ItemGroup>
 </Project>

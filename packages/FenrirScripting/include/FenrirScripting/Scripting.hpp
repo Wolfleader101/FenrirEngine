@@ -2,11 +2,13 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include <Iris/Iris.hpp>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/ComponentRegistry.hpp"
 
 namespace Fenrir
 {
@@ -32,6 +34,12 @@ namespace Fenrir
          * @brief An absolute .NET installation root, or empty for the default search.
          */
         std::filesystem::path dotnetRoot;
+
+        /**
+         * @brief Native components to expose to C# besides the engine's own (Transform, Name and Relationship), built with
+         * MakeComponent. They are registered before the script assembly loads and checked against it as it does.
+         */
+        std::vector<ComponentRegistration> components;
 
         /**
          * @brief Further assemblies every script load shares as one copy. The Fenrir.Scripting contract is always
@@ -79,6 +87,28 @@ namespace Fenrir
          * @brief Whether the script assembly loaded.
          */
         [[nodiscard]] bool HasScripts() const noexcept;
+
+        /**
+         * @brief Exposes another native component to C# (see MakeComponent and MakeReadOnlyComponent). If a script assembly
+         * is loaded, the component's C# struct is checked against its layout straight away: a mismatch is
+         * `InvalidArgument` with a diagnostic naming the field, is logged, and releases the script assembly, exactly as a
+         * mismatch at load does (all or nothing). A name that is empty or already taken is `InvalidArgument`.
+         */
+        [[nodiscard]] Iris::CallResult<void> RegisterComponent(ComponentRegistration registration);
+
+        /** @brief MakeComponent<T, Mapping>(name), registered. */
+        template <typename T, typename Mapping = T>
+        [[nodiscard]] Iris::CallResult<void> RegisterComponent(std::string name)
+        {
+            return RegisterComponent(MakeComponent<T, Mapping>(std::move(name)));
+        }
+
+        /** @brief MakeReadOnlyComponent<T, Mapping>(name), registered. */
+        template <typename T, typename Mapping = T>
+        [[nodiscard]] Iris::CallResult<void> RegisterReadOnlyComponent(std::string name)
+        {
+            return RegisterComponent(MakeReadOnlyComponent<T, Mapping>(std::move(name)));
+        }
 
         /**
          * @brief The loaded script assembly, or null when there are no scripts. The pointer stays valid until

@@ -2,6 +2,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
 
 namespace Fenrir::Detail
@@ -12,6 +13,7 @@ namespace Fenrir::Detail
     struct EngineContext
     {
         App* app = nullptr;
+        ComponentRegistry* components = nullptr;
     };
 
     // Makes `context` the active one. False (and nothing changes) if another is already active.

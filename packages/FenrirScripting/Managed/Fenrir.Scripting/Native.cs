@@ -18,4 +18,18 @@ internal static unsafe class Native
 
     // Whether the entity value (the full entt value, version bits included) is alive in the active scene.
     public static delegate* unmanaged[Cdecl]<uint, bool> EntityIsValid;
+
+    // The engine's registry of native components. A component is found by the name it was registered under, and
+    // that name is only good for the registry generation it was looked up in: a new Scripting has a new registry.
+    //   ComponentIdOf(name, nameBytes, typeName, typeBytes): the id of the component registered under that name for the C#
+    //   type with that full name; -1 when nothing is registered under the name, -3 when it is registered for a different
+    //   C# type (so a script cannot claim a native component with a struct of its own).
+    //   RegistryGeneration(): changes every time a registry is created.
+    //   ComponentGet(id, entity): a pointer to the entity's component in the engine's storage, or null when the entity
+    //   is not alive or does not have it. The pointer is good until the engine next changes its storage.
+    //   ComponentHas(id, entity): whether the entity is alive and has the component.
+    public static delegate* unmanaged[Cdecl]<byte*, int, byte*, int, int> ComponentIdOf;
+    public static delegate* unmanaged[Cdecl]<uint> RegistryGeneration;
+    public static delegate* unmanaged[Cdecl]<int, uint, void*> ComponentGet;
+    public static delegate* unmanaged[Cdecl]<int, uint, bool> ComponentHas;
 }

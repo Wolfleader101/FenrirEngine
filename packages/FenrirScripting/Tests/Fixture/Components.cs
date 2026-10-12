@@ -8,7 +8,7 @@ public struct Vec3
 }
 
 // A component with a nested struct, so the tests cover t.Position.X += 1.
-public struct Transform : IComponent
+public struct Pose : IComponent
 {
     public Vec3 Position;
     public float Scale;
@@ -63,7 +63,7 @@ public static unsafe class Access
 {
     public static void Nudge(ulong address)
     {
-        var t = new Ref<Transform>((Transform*)address);
+        var t = new Ref<Pose>((Pose*)address);
         t.Position.X += 1;
         t.Position.Y = 5;
         t.Scale *= 2;
@@ -72,7 +72,7 @@ public static unsafe class Access
 
     public static float ReadSum(ulong address)
     {
-        var t = new Ref<Transform>((Transform*)address);
+        var t = new Ref<Pose>((Pose*)address);
         return t.Position.X + t.Position.Y + t.Position.Z + t.Scale;
     }
 
@@ -121,7 +121,7 @@ public static unsafe class Access
     {
         try
         {
-            var t = new Ref<Transform>(null);
+            var t = new Ref<Pose>(null);
             _ = t.Value;
             return null;
         }
@@ -131,5 +131,5 @@ public static unsafe class Access
         }
     }
 
-    public static bool NullRefIsNull() => new Ref<Transform>(null).IsNull;
+    public static bool NullRefIsNull() => new Ref<Pose>(null).IsNull;
 }

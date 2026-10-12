@@ -13,7 +13,10 @@ add_custom_command(
     OUTPUT "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_managed_dir}/Fenrir.Scripting/Fenrir.Scripting.csproj"
         --configuration Release --output "${FENRIR_SCRIPTING_CONTRACT_DIR}" -nologo -v:q
+    # The contract builds the generator as a project reference, so the generator is built first by its own command and
+    # the two builds never write the same files at once.
     DEPENDS ${fenrir_contract_sources} "${fenrir_managed_dir}/Fenrir.Scripting/Fenrir.Scripting.csproj"
+        "${FENRIR_SCRIPTING_CONTRACT_DIR}/analyzers/Fenrir.Scripting.Generators.dll"
     COMMENT "Building the Fenrir.Scripting contract"
     VERBATIM
 )
@@ -41,6 +44,9 @@ include(cmake/FenrirScriptingDeploy.cmake)
 add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
+    src/EngineComponents.cpp
+    src/ComponentRegistry.hpp
+    include/FenrirScripting/ComponentRegistry.hpp
     src/EngineContext.hpp
     include/FenrirScripting/Scripting.hpp
 )
