@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputType>Library</OutputType>
+    <!-- Only the shared component and the one case named by -p:Case=<Name> are compiled. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" />
+  <ItemGroup>
+    <Compile Include="Component.cs;$(Case).cs" />
+  </ItemGroup>
+</Project>

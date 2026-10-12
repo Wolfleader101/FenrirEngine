@@ -35,6 +35,60 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
   phase, on the main thread), and again, harmlessly, when the `Scripting` object is destroyed. Destroy it before
   `main` returns.
 
+## Writing a script project
+
+A script project needs only the scripting SDK: one folder holding `Fenrir.Scripting.dll` (the contract),
+`analyzers/Fenrir.Scripting.Generators.dll` (the source generator) and `Fenrir.Scripting.props`. CMake builds it into
+`<build>/fenrir-scripting/contract/`. Import the props file and nothing else is needed:
+
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" />   <!-- dotnet build -p:FenrirScriptingSdk=<folder>/ -->
+</Project>
+```
+
+The props file references the contract for compilation only (the host shares its own copy at run time), turns on
+runs the generator (the field accessors are C# 14 extension properties, the default for net10.0). A script's output must not carry its own copy of `Fenrir.Scripting.dll`.
+
+### Components and `Ref<T>`
+
+A component is an `unmanaged` struct implementing `IComponent`. `Ref<T>` is a `ref struct` over a pointer into the
+engine's storage, and for every component the generator adds one extension property per public (or internal)
+instance field, returning `ref` to that field:
+
+```csharp
+public struct Vec3 { public float X, Y, Z; }
+public struct Transform : IComponent { public Vec3 Position; public float Scale; }
+
+void Nudge(Ref<Transform> t)
+{
+    t.Position.X += 1;     // writes the engine's memory: no `ref` at the call site
+    t.Scale *= 2;
+    Transform copy = t.Value;   // the whole component (a copy when assigned to a variable)
+}
+```
+
+- **How it works.** The generated code is a C# 14 `extension(Ref<Transform> self)` block with
+  `public ref Vec3 Position => ref self.Value.Position;`. A property that returns `ref` is a variable, so
+  `t.Position.X += 1` assigns through it. The `t.Value.Position.X` spelling the spec kept as a fallback also works,
+  but is not needed.
+- **What gets a property.** Public and internal instance fields. Not exposed: static and `const` fields, `readonly`
+  fields (there is no `ref` to give), and fixed buffers. A field named `Value` or `IsNull` would be shadowed by
+  `Ref<T>`'s own members, so the generator warns (`FENRIR0001`) and it stays reachable as `t.Value.Value`. A generic
+  component warns (`FENRIR0002`). A keyword-named field (`@class`) works. A nested or internal component gets an
+  accessors class of the matching accessibility. A `partial` component works, but keep all of its fields in one
+  declaration: the compiler warns (`CS0282`) that field order across declarations is undefined, and a component's
+  layout is what native code relies on.
+- **A `Ref<T>` is only good for the call that was handed it.** It points into storage the engine may move, so the
+  compiler refuses every way of keeping one. Each is a compile-fail test: a field of a class (`CS8345`), a lambda
+  capturing it (`CS9108`), `List<Ref<T>>` (`CS9244`) and an `async` method taking it (`CS4012`), against a control case
+  that compiles.
+- **A `Ref<T>` can be null** (`IsNull`); using `Value` on one throws `InvalidOperationException` naming the type.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
@@ -78,7 +132,8 @@ therefore never become a null call. Rules to remember:
 ## Tests
 
 `FenrirScriptingTests` runs an `App` with no window for a few frames around a small fixture script assembly
-(`Tests/Fixture`), built with the same .NET SDK Iris uses. Run it with CTest:
+(`Tests/Fixture`), built with the same .NET SDK Iris uses against the scripting SDK folder. The `RefCompile-*` tests
+build the small projects in `Tests/CompileFail` and check the compiler's verdict. Run everything with CTest:
 
 ```sh
 cmake -S . -B out/build/engine-scripting -DFENRIR_ENABLE_SCRIPTING=ON
