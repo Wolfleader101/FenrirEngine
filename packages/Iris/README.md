@@ -507,14 +507,16 @@ for (const Type& type : *types)
 - **Members.** `GetFields`, `GetProperties` and `GetMethods` return owning snapshots, in declaration order, of
   the members **declared on that type** (inherited members are not included: they belong to the base type, so
   walk `GetBaseType` for them). Public and non-public members are listed, each with its `visibility`, and
-  compiler-generated members (auto-property backing fields), property and event accessors, constructors,
-  operators and indexers are not. Each has its name, its type (`TypeInfo`) and a `TypeKind` (`Int32`, `Float`,
+  compiler-generated members (anything marked `[CompilerGenerated]`, such as auto-property backing fields),
+  property and event accessors, constructors, operators and indexers are not. An explicit interface
+  implementation is listed under its dotted name. Each has its name, its type (`TypeInfo`) and a `TypeKind` (`Int32`, `Float`,
   `String`, `Enum`, `Struct`, `Object`, `Array`, and so on) for display and serialization, whether it is static, and
   its `attributes` in the `AttributeInfo` shape above (so `[Range(0, 1)]` arrives with its arguments). A field
   is also read-only for `readonly` or `const`, and an instance field of a blittable struct has a byte `offset`
   that is the layout struct-mapping validation checks (empty for anything else). A property reports whether
   it `canRead` and `canWrite` (an accessor exists, whatever its accessibility) and the more accessible
-  accessor's visibility. A method has its return type and kind and its parameters.
+  accessor's visibility (when the two differ, in the order public, protected internal, protected, internal,
+  private protected, private). A method has its return type and kind and its parameters.
 - **Nothing keeps the component alive.** Snapshots are plain data, and the listed `Type` handles behave
   like those from `FindType`: they stop working (`InvalidHandle`) when the component is released.
 
@@ -546,7 +548,8 @@ kept. A loaded or already collected component returns at once.
 
 - **It forces collections, and that is its cost.** Each attempt while the component is `Pending` runs a full,
   blocking garbage collection with finalizers on the whole runtime, then looks again every few milliseconds
-  until the timeout. That pauses every managed thread, so it is only for reload points, never per frame. Nothing
+  until the timeout; a timeout of zero still runs one collection if the component is `Pending`. That pauses
+  every managed thread, so it is only for reload points, never per frame. Nothing
   else in Iris collects; if you never call it, `Pending` still turns into `Collected` whenever the runtime next
   collects.
 - **Why no `Host::CollectGarbage`.** A bare collection answers nothing the host needs, since the question at a
