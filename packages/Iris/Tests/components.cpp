@@ -136,7 +136,21 @@ namespace Fixture
         double Weight;
         std::uint8_t Flags;
     };
+    // A struct from the shared contract, with C++ member names that differ from the managed field names.
+    struct SharedPoint
+    {
+        std::int32_t x;
+        std::int32_t y;
+    };
 } // namespace Fixture
+
+template <>
+struct Iris::StructMapping<Fixture::SharedPoint>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Contracts.SharedPoint";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fixture::SharedPoint, x, "X"),
+                                                      IRIS_FIELD_AS(Fixture::SharedPoint, y, "Renamed"));
+};
 
 template <>
 struct Iris::EnumMapping<Fixture::Gear>
@@ -1942,6 +1956,25 @@ namespace
                  Check(collected.Succeeded() && *collected.value == ComponentUnloadState::Collected,
                        "The component was not collected after its root ended");
                  Check(other.WaitForUnload(std::chrono::seconds(20)).Succeeded(), "The other component was not collected");
+             }},
+            {"a struct defined in a shared assembly can be validated and passed, under managed field names",
+             [&] {
+                 auto configuration = arguments.configuration;
+                 configuration.sharedAssemblies = {arguments.component.parent_path() / "Iris.Examples.Contracts.dll"};
+                 auto host = std::make_unique<Host>();
+                 Check(host->Initialize(configuration).success, "Initialization with a shared assembly failed");
+                 const auto component = Load(*host, arguments.component);
+
+                 // The type is in the contract, not the component, and the C++ members are x and y.
+                 const auto validated = component.ValidateStruct<Fixture::SharedPoint>();
+                 Check(validated.Succeeded(), "A shared struct was not validated: " + validated.diagnostic);
+                 const auto shift = (*component.FindType(SharedCalculatorType).value)
+                                        .FindMethod<Fixture::SharedPoint(Fixture::SharedPoint)>("Shift");
+                 Check(shift.Succeeded(), "A method over a shared struct was not found: " + shift.diagnostic);
+                 const auto shifted = shift.value->Invoke(Fixture::SharedPoint{10, 20});
+                 Check(shifted.Succeeded() && shifted.value->x == 11 && shifted.value->y == 22,
+                       "A shared struct did not round-trip");
+
              }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {

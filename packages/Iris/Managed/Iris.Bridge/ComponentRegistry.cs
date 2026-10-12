@@ -871,8 +871,11 @@ internal static class ComponentRegistry
         if ((header.Length != 2 && !isEnum) || (isEnum && lines.Length != 1) ||
             !int.TryParse(header[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int nativeSize))
             throw new BridgeArgumentException("The struct description is malformed.");
+        // The component's own assembly first, then the assemblies the host shares with every component (a contract).
         Type? type = entry.Assembly.GetType(header[0], throwOnError: false, ignoreCase: false);
-        if (type == null || type.Assembly != entry.Assembly || !type.IsVisible) return FindResult.NotFound;
+        if (type != null && (type.Assembly != entry.Assembly || !type.IsVisible)) type = null;
+        type ??= SharedAssemblies.FindType(header[0]);
+        if (type == null) return FindResult.NotFound;
 
         StructRecord created;
         if (isEnum)
