@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Scripting</AssemblyName>
+    <RootNamespace>Fenrir.Scripting</RootNamespace>
+  </PropertyGroup>
+</Project>

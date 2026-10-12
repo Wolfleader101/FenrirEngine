@@ -1,12 +1,15 @@
 #include "HeadlessApp.hpp"
 #include "TestHarness.hpp"
 
+#include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <optional>
+#include <type_traits>
 #include <span>
 
 namespace
@@ -18,6 +21,54 @@ namespace
     std::filesystem::path executableDirectory;
 
     constexpr int Frames = 5;
+
+    constexpr const char* FixtureType = "Fenrir.ScriptFixture.Fixture";
+
+    // Calls a static method of the fixture script assembly through Iris, as the runner will call scripts.
+    template <typename Result, typename... Args>
+    Result Call(Scripting& scripting, const char* method, Args... arguments)
+    {
+        auto* component = scripting.GetComponent();
+        Check(component != nullptr, "There is no loaded script assembly");
+        const auto type = component->FindType(FixtureType);
+        Check(type.Succeeded(), std::string("The fixture type was not found: ") + type.diagnostic);
+        const auto handle = type.value->FindMethod<Result(Args...)>(method);
+        Check(handle.Succeeded(), std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
+        const auto result = handle.value->Invoke(arguments...);
+        Check(result.Succeeded(), std::string("The fixture method ") + method + " failed: " + result.diagnostic);
+        if constexpr (!std::is_void_v<Result>)
+        {
+            return *result.value;
+        }
+    }
+
+    // A directory holding copies of the files Scripting looks for beside the executable, minus the ones left out.
+    struct BridgeCopy
+    {
+        std::filesystem::path path = std::filesystem::temp_directory_path() / "fenrir-bridge-copy";
+        BridgeCopy(const std::filesystem::path& from, bool withBridge, bool withContract)
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+            std::filesystem::create_directories(path);
+            if (withBridge)
+            {
+                for (const char* name : {"Iris.Bridge.dll", "Iris.Bridge.runtimeconfig.json", "Iris.Bridge.deps.json"})
+                {
+                    std::filesystem::copy_file(from / name, path / name);
+                }
+            }
+            if (withContract)
+            {
+                std::filesystem::copy_file(from / "Fenrir.Scripting.dll", path / "Fenrir.Scripting.dll");
+            }
+        }
+        ~BridgeCopy()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+    };
 
     // Every test starts from the same config, so a field added to ScriptingConfig later is not a warning each time.
     ScriptingConfig ConfigFor(const std::filesystem::path& scriptAssembly)
@@ -78,7 +129,8 @@ namespace
 
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(invalid));
-        Check(!scripting.HasScripts(), "An invalid assembly loaded");
+        Check(!scripting.HasScripts() && !scripting.IsRunning(),
+              "An invalid assembly loaded, or left the runtime running with nothing to run");
         Check(headless.Logger().Contains(LogLevel::Error, "could not be loaded"),
               "An invalid assembly was not logged as an error");
         headless.Run(Frames);
@@ -87,15 +139,130 @@ namespace
 
     void MissingBridgeIsLoggedAndTheAppRuns()
     {
+        const BridgeCopy noBridge(executableDirectory, /*withBridge=*/false, /*withContract=*/true);
         HeadlessApp headless;
         auto config = ConfigFor(fixture);
-        config.bridgeDirectory = fixture.parent_path() / "no-bridge-here";
+        config.bridgeDirectory = noBridge.path;
         auto scripting = Scripting::Install(headless.Get(), config);
         Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing bridge started scripting");
         Check(headless.Logger().Contains(LogLevel::Error, ".NET could not be started"),
               "A missing bridge was not logged as an error");
         headless.Run(Frames);
         Check(headless.FramesRun() == Frames, "The app did not keep running without the bridge");
+    }
+
+    void MissingContractIsLoggedAndTheAppRuns()
+    {
+        const BridgeCopy noContract(executableDirectory, /*withBridge=*/true, /*withContract=*/false);
+        HeadlessApp headless;
+        auto config = ConfigFor(fixture);
+        config.bridgeDirectory = noContract.path;
+        auto scripting = Scripting::Install(headless.Get(), config);
+        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing contract started scripting");
+        Check(headless.Logger().Contains(LogLevel::Error, "Fenrir.Scripting.dll"),
+              "A missing contract was not logged as an error naming it");
+        headless.Run(Frames);
+        Check(headless.FramesRun() == Frames, "The app did not keep running without the contract");
+    }
+
+    void ASecondActiveInstallIsRefused()
+    {
+        HeadlessApp first;
+        auto firstScripting = Scripting::Install(first.Get(), ConfigFor(fixture));
+        Check(firstScripting.HasScripts(), "The first install did not load");
+        HeadlessApp second;
+        auto secondScripting = Scripting::Install(second.Get(), ConfigFor(fixture));
+        Check(!secondScripting.HasScripts(), "A second active install loaded scripts");
+        Check(second.Logger().Contains(LogLevel::Error, "already active"), "A second install was not explained");
+        second.Run(2);
+        Check(second.FramesRun() == 2, "The second app did not run");
+        // The first is untouched, and a new install works once it is gone.
+        Check(Call<int>(firstScripting, "Answer") == 42, "The first install stopped working");
+    }
+
+    void ScriptsLogThroughTheEngineLogger()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        Call<void>(scripting, "LogAll");
+        const auto& logger = headless.Logger();
+        Check(logger.Contains(LogLevel::Info, "hello from C#"), "Log.Info did not reach the engine logger");
+        Check(logger.Contains(LogLevel::Warn, "careful now"), "Log.Warn did not reach the engine logger");
+        Check(logger.Contains(LogLevel::Error, "boom"), "Log.Error did not reach the engine logger");
+        // UTF-8 survives, and braces are text rather than a format string.
+        Check(logger.Contains(LogLevel::Info, "pi \xCF\x80 {0} {} {name}"), "Non-ASCII text or braces were mangled");
+        // There is no length limit, and null is an empty message.
+        Check(logger.Contains(LogLevel::Info, std::string(2000, 'x')), "A long message was truncated");
+        const auto messages = logger.Messages();
+        Check(std::any_of(messages.begin(), messages.end(),
+                          [](const LoggedMessage& message) { return message.level == LogLevel::Info && message.text.empty(); }),
+              "A null message was not logged as an empty one");
+    }
+
+    void ScriptsReadTheEngineClock()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        bool sawDelta = false;
+        bool matched = true;
+        headless.Get().AddSequentialSystems(SchedulePriority::Update, {[&](App& app) {
+                                                const float delta = Call<float>(scripting, "DeltaTime");
+                                                const float tick = Call<float>(scripting, "TickRate");
+                                                matched = matched && delta == static_cast<float>(app.GetTime().deltaTime) &&
+                                                          tick == static_cast<float>(app.GetTime().tickRate);
+                                                sawDelta = sawDelta || delta > 0.0F;
+                                            }});
+        headless.Run(Frames);
+        Check(matched, "Time did not match the engine's clock");
+        Check(sawDelta, "Time.DeltaTime was never positive");
+    }
+
+    void EntityValidityFollowsTheActiveScene()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto isValid = [&](std::uint32_t value) { return Call<bool>(scripting, "IsValid", value); };
+
+        const auto first = entities.CreateEntity().GetId();
+        Check(isValid(first), "A live entity was not valid");
+        entities.DestroyEntity(first);
+        Check(!isValid(first), "A destroyed entity was still valid");
+
+        // The slot is reused with a new version, so the old value stays invalid and the new one is valid.
+        const auto second = entities.CreateEntity().GetId();
+        Check((second & 0xFFFFFU) == (first & 0xFFFFFU) && second != first,
+              "The test did not reuse the entity's slot with a new version");
+        Check(isValid(second), "The entity that reused the slot was not valid");
+        Check(!isValid(first), "A stale entity became valid when its slot was reused");
+        Check(!isValid(0xFFFFFFFFU), "The null entity was valid");
+    }
+
+    void TheContractIsOneSharedCopyAcrossGenerations()
+    {
+        int firstIdentity = 0;
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            Check(Call<bool>(scripting, "ContractIsShared"),
+                  "The contract was not the host's shared copy in the default load context");
+            firstIdentity = Call<int>(scripting, "ContractIdentity");
+            // And it is the host's deployed file (beside the executable), not a copy a script brought along.
+            const auto reported = Call<std::optional<std::string>>(scripting, "ContractLocation");
+            Check(reported.has_value(), "The contract reported no location");
+            const auto& location = *reported;
+            Check(std::filesystem::equivalent(location, executableDirectory / "Fenrir.Scripting.dll"),
+                  "The contract was not loaded from the host's directory: " + location);
+        }
+        // A fresh install loads the script assembly again; the contract it sees is the very same assembly.
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(Call<bool>(scripting, "ContractIsShared"), "The contract was not shared on the second install");
+        Check(Call<int>(scripting, "ContractIdentity") == firstIdentity,
+              "The contract changed identity between generations");
     }
 
     void TheBuildDeploysTheBridgeNextToTheExecutable()
@@ -161,6 +328,12 @@ int main(int argc, char* argv[])
         {"a missing script assembly is logged and the app keeps running", MissingAssemblyIsLoggedAndTheAppRuns},
         {"an invalid script assembly is logged and the app keeps running", InvalidAssemblyIsLoggedAndTheAppRuns},
         {"a missing bridge is logged and the app keeps running", MissingBridgeIsLoggedAndTheAppRuns},
+        {"a missing contract is logged and the app keeps running", MissingContractIsLoggedAndTheAppRuns},
+        {"a second active install is refused and explained", ASecondActiveInstallIsRefused},
+        {"scripts log through the engine logger at every level", ScriptsLogThroughTheEngineLogger},
+        {"scripts read the engine clock", ScriptsReadTheEngineClock},
+        {"entity validity follows the active scene, including slot reuse", EntityValidityFollowsTheActiveScene},
+        {"the contract is one shared copy across generations", TheContractIsOneSharedCopyAcrossGenerations},
         {"the build deploys the bridge next to the executable", TheBuildDeploysTheBridgeNextToTheExecutable},
         {"no configured assembly does nothing and never starts .NET", NoAssemblyConfiguredDoesNothing},
         {"everything Iris owns is released when the app finishes", ShutdownReleasesEverythingWhenTheAppFinishes},

@@ -4,4 +4,11 @@
     <Nullable>enable</Nullable>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Compile against the contract, but do not deploy a copy: the host shares its own. -->
+    <ProjectReference Include="../../Managed/Fenrir.Scripting/Fenrir.Scripting.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
 </Project>

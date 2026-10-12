@@ -1,5 +1,7 @@
 #include "FenrirScripting/Scripting.hpp"
 
+#include "EngineContext.hpp"
+
 #include <Iris/Iris.hpp>
 
 #include <cstdint>
@@ -68,6 +70,8 @@ namespace Fenrir
         // only until Shutdown clears the sink. The mutex guards the logger against a sink call racing Shutdown.
         std::mutex mutex;
         ILogger* logger = nullptr;
+        Detail::EngineContext context;
+        bool contextActive = false;
         std::unique_ptr<Iris::Host> host;
         std::optional<Iris::Component> component;
 
@@ -109,6 +113,11 @@ namespace Fenrir
                 (void)host->SetLogSink({});
                 host.reset();
             }
+            if (contextActive)
+            {
+                Detail::DeactivateEngineContext(&context);
+                contextActive = false;
+            }
             const std::lock_guard<std::mutex> lock(mutex);
             logger = nullptr;
         }
@@ -143,6 +152,11 @@ namespace Fenrir
     bool Scripting::HasScripts() const noexcept
     {
         return m_state != nullptr && m_state->component.has_value();
+    }
+
+    Iris::Component* Scripting::GetComponent() noexcept
+    {
+        return m_state != nullptr && m_state->component.has_value() ? &*m_state->component : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -215,11 +229,37 @@ namespace Fenrir
                          config.bridgeDirectory.string());
             return Scripting(std::move(state));
         }
+        // The contract every script compiles against is shared, so its types have one identity across reloads.
+        const auto contract = bridgeDirectory / "Fenrir.Scripting.dll";
+        if (!std::filesystem::is_regular_file(contract, error))
+        {
+            logger.Error("Scripting: the contract '{}' is missing; running without scripts.", contract.string());
+            return Scripting(std::move(state));
+        }
         Iris::HostConfiguration configuration;
         configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
         configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
         configuration.dotnetRoot = config.dotnetRoot;
         configuration.sharedAssemblies = config.sharedAssemblies;
+        configuration.sharedAssemblies.push_back(contract);
+
+        // The engine's native functions act on this App, and are registered before the contract is shared (sharing
+        // binds the contract's function pointers to them).
+        state->context.app = &app;
+        if (!Detail::ActivateEngineContext(&state->context))
+        {
+            logger.Error("Scripting: another Scripting is already active in this process; running without scripts.");
+            return Scripting(std::move(state));
+        }
+        state->contextActive = true;
+        if (const auto bound = Detail::RegisterEngineBindings(); !bound.Succeeded())
+        {
+            logger.Error("Scripting: the engine's native functions could not be registered; running without "
+                         "scripts. {}",
+                         bound.diagnostic);
+            state->Shutdown();
+            return Scripting(std::move(state));
+        }
 
         state->logger = &logger;
         state->host = std::make_unique<Iris::Host>();
@@ -247,6 +287,8 @@ namespace Fenrir
         {
             logger.Error("Scripting: the script assembly '{}' could not be loaded; running without scripts. {}",
                          assembly.string(), loaded.diagnostic);
+            // Nothing runs, so give back the runtime and the process-wide slot.
+            state->Shutdown();
             return Scripting(std::move(state));
         }
         state->component.emplace(std::move(*loaded.value));
