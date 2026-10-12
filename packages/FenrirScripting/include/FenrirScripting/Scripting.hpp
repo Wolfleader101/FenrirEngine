@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 
+#include <Iris/Iris.hpp>
+
 #include "FenrirApp/App.hpp"
 
 namespace Fenrir
@@ -20,8 +22,9 @@ namespace Fenrir
         std::filesystem::path scriptAssembly;
 
         /**
-         * @brief The directory holding Iris.Bridge.dll and its .runtimeconfig.json (the build's iris_deploy puts
-         * them next to the executable). Empty means the executable's own directory.
+         * @brief The directory holding Iris.Bridge.dll, its .runtimeconfig.json and the scripting contract
+         * Fenrir.Scripting.dll (the build's fenrir_deploy_scripting puts them next to the executable). Empty means
+         * the executable's own directory.
          */
         std::filesystem::path bridgeDirectory;
 
@@ -31,7 +34,8 @@ namespace Fenrir
         std::filesystem::path dotnetRoot;
 
         /**
-         * @brief Assemblies every script load shares as one copy (the Fenrir.Scripting contract, from ticket 02 on).
+         * @brief Further assemblies every script load shares as one copy. The Fenrir.Scripting contract is always
+         * shared, from `bridgeDirectory`, so it does not belong here.
          */
         std::vector<std::filesystem::path> sharedAssemblies;
     };
@@ -47,7 +51,9 @@ namespace Fenrir
      * and again, harmlessly, when this object is destroyed. Destroy it before the App and before `main`
      * returns, never during static destruction: releasing calls into the runtime.
      *
-     * All calls happen on the thread that runs the App's sequential systems. Not thread-safe.
+     * All calls happen on the thread that runs the App's sequential systems. Not thread-safe. Only one Scripting
+     * is active in a process at a time: the engine's native functions act on that one App, so a second Install
+     * while another is active logs an error and runs without scripts.
      */
     class Scripting
     {
@@ -73,6 +79,12 @@ namespace Fenrir
          * @brief Whether the script assembly loaded.
          */
         [[nodiscard]] bool HasScripts() const noexcept;
+
+        /**
+         * @brief The loaded script assembly, or null when there are no scripts. The pointer stays valid until
+         * Shutdown. This is the hook the runner and the tests call into scripts through.
+         */
+        [[nodiscard]] Iris::Component* GetComponent() noexcept;
 
         /**
          * @brief Releases the script assembly and the runtime host, and stops forwarding Iris's log messages.

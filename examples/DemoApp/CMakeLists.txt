@@ -50,8 +50,8 @@ target_link_libraries(DemoApp PRIVATE
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(DemoApp PRIVATE FenrirScripting)
     target_compile_definitions(DemoApp PRIVATE FENRIR_SCRIPTING)
-    # Puts nethost and the Iris bridge next to the executable.
-    iris_deploy(DemoApp)
+    # Puts nethost, the Iris bridge and the Fenrir.Scripting contract next to the executable.
+    fenrir_deploy_scripting(DemoApp)
 
     # The demo's script assembly, built with the .NET SDK Iris found and copied to <exe dir>/scripts, which is where
     # assets/demoApp.feproj ("scriptAssembly") points, relative to the working directory like the assets.
