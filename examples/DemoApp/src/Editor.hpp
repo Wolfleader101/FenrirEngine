@@ -39,6 +39,9 @@ struct ProjectSettings
     std::string description = "";
     std::string author = "";
     std::string assetPath = "";
+    // The project's one C# script assembly (built externally), relative to the working directory like assetPath.
+    // Empty means the project has no scripts.
+    std::string scriptAssembly = "";
 };
 
 enum class LogLevel

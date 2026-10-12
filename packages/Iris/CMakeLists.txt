@@ -26,6 +26,10 @@ else()
     set(IRIS_BRIDGE_DIR "${IRIS_PREBUILT_BRIDGE_DIR}")
 endif()
 include(cmake/IrisDeploy.cmake)
+if(NOT iris_is_top_level)
+    # A parent project that adds Iris needs the bridge location to call iris_deploy.
+    set(IRIS_BRIDGE_DIR "${IRIS_BRIDGE_DIR}" PARENT_SCOPE)
+endif()
 include(GNUInstallDirs)
 
 add_subdirectory(Native)

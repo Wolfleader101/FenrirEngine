@@ -27,12 +27,16 @@
 
 #include <glaze/glaze.hpp>
 
+#ifdef FENRIR_SCRIPTING
+#include "FenrirScripting/Scripting.hpp"
+#endif
+
 template <>
 struct glz::meta<ProjectSettings>
 {
     using T = ProjectSettings;
     static constexpr auto value =
-        object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath);
+        object(&T::identity, &T::name, &T::version, &T::description, &T::author, &T::assetPath, &T::scriptAssembly);
 };
 
 // template <>
@@ -336,6 +340,12 @@ int main(int argc, char* argv[])
     }
 
     Fenrir::App app(std::move(logger));
+
+#ifdef FENRIR_SCRIPTING
+    // Declared after the app, so .NET is released before the app is destroyed and before main returns.
+    auto scripting =
+        Fenrir::Scripting::Install(app, Fenrir::ScriptingConfig{.scriptAssembly = projectSettings.scriptAssembly});
+#endif
 
     Fenrir::Camera camera;
     Window window(projectSettings.name + " v" + projectSettings.version);

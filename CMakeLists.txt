@@ -39,4 +39,9 @@ add_subdirectory(packages/FenrirScene)
 add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
 
+if(FENRIR_ENABLE_SCRIPTING)
+    enable_testing()
+    add_subdirectory(packages/FenrirScripting)
+endif()
+
 add_subdirectory(examples)
