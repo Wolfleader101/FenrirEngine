@@ -52,6 +52,25 @@ if(FENRIR_ENABLE_SCRIPTING)
     target_compile_definitions(DemoApp PRIVATE FENRIR_SCRIPTING)
     # Puts nethost and the Iris bridge next to the executable.
     iris_deploy(DemoApp)
+
+    # The demo's script assembly, built with the .NET SDK Iris found and copied to <exe dir>/scripts, which is where
+    # assets/demoApp.feproj ("scriptAssembly") points, relative to the working directory like the assets.
+    set(demo_scripts_dir "${CMAKE_CURRENT_BINARY_DIR}/scripts")
+    file(GLOB demo_scripts_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.cs")
+    add_custom_command(
+        OUTPUT "${demo_scripts_dir}/DemoScripts.dll"
+        COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
+            --configuration Release --output "${demo_scripts_dir}" -nologo -v:q
+        DEPENDS ${demo_scripts_sources} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
+        COMMENT "Building the demo script assembly"
+        VERBATIM
+    )
+    add_custom_target(DemoScripts DEPENDS "${demo_scripts_dir}/DemoScripts.dll")
+    add_dependencies(DemoApp DemoScripts)
+    add_custom_command(TARGET DemoApp POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${demo_scripts_dir}" "$<TARGET_FILE_DIR:DemoApp>/scripts"
+        VERBATIM
+    )
 endif()
 
 target_compile_definitions(DemoApp PRIVATE 

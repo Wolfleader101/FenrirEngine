@@ -9,7 +9,8 @@
       "installDir": "${sourceDir}/out/install/${presetName}",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++"
+        "CMAKE_CXX_COMPILER": "clang++",
+        "FENRIR_ENABLE_SCRIPTING": "ON"
       },
       "condition": {
         "type": "equals",
@@ -78,7 +79,8 @@
         "strategy": "external"
       },
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "FENRIR_ENABLE_SCRIPTING": "ON"
       }
     },
     {
