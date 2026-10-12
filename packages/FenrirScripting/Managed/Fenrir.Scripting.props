@@ -1,0 +1,28 @@
+<Project>
+  <!--
+    The Fenrir scripting SDK, as a script project sees it. Import this file from a script project and nothing else is
+    needed: it references the Fenrir.Scripting contract (compile-time only, because the host shares its own copy at run
+    time) and runs the Fenrir.Scripting.Generators source generator, which adds the Ref<T> field accessors for every
+    IComponent struct.
+
+        <Import Project="path/to/sdk/Fenrir.Scripting.props" />
+
+    The importing project defines FenrirScriptingSdk (the folder holding this file, for example
+    dotnet build -p:FenrirScriptingSdk=path/to/sdk/), because an import path is read before this file can default it.
+
+    The folder holding this file also holds Fenrir.Scripting.dll and analyzers/Fenrir.Scripting.Generators.dll.
+  -->
+  <PropertyGroup>
+    <FenrirScriptingSdk Condition="'$(FenrirScriptingSdk)' == ''">$(MSBuildThisFileDirectory)</FenrirScriptingSdk>
+    <!-- Tolerates a value given without its trailing slash. -->
+    <FenrirScriptingSdk>$([MSBuild]::EnsureTrailingSlash('$(FenrirScriptingSdk)'))</FenrirScriptingSdk>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Fenrir.Scripting">
+      <HintPath>$(FenrirScriptingSdk)Fenrir.Scripting.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Analyzer Include="$(FenrirScriptingSdk)analyzers/Fenrir.Scripting.Generators.dll" />
+  </ItemGroup>
+</Project>

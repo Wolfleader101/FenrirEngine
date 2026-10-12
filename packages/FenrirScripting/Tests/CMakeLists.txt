@@ -15,6 +15,7 @@ add_custom_command(
     OUTPUT "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
         --configuration Release --output "${fenrir_fixture_dir}" -nologo -v:q
+        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
     DEPENDS ${fenrir_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
         FenrirScriptingContract
     COMMENT "Building the scripting test fixture assembly"
@@ -27,3 +28,34 @@ add_dependencies(FenrirScriptingTests FenrirScriptFixture)
 add_test(NAME FenrirScripting
     COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll")
 set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120)
+
+
+# Ref<T> points into storage that can move, so the compiler must refuse every way of keeping it past the call that was
+# given it. Each case is one small C# file built against the SDK: the control must compile (so a failure below is the
+# rule and not a broken setup), and every misuse must fail with its own diagnostic and no other error. The SDK is built
+# by the FenrirScriptingContract target (part of ALL), so build everything before running these.
+set(fenrir_compile_fail_work "${CMAKE_CURRENT_BINARY_DIR}/compile-fail")
+function(fenrir_expect_compile case expect)
+    add_test(NAME "RefCompile-${case}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DDOTNET=${IRIS_DOTNET_EXECUTABLE}"
+            "-DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/CompileFail/CompileFail.csproj"
+            "-DSDK=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+            "-DCASE=${case}"
+            "-DWORK=${fenrir_compile_fail_work}"
+            "-DEXPECT=${expect}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExpectCompile.cmake")
+    set_tests_properties("RefCompile-${case}" PROPERTIES TIMEOUT 120)
+endfunction()
+fenrir_expect_compile(Control OK)
+fenrir_expect_compile(StoreInField CS8345)      # a field of a class
+fenrir_expect_compile(CaptureInLambda CS9108)   # a lambda capturing it
+fenrir_expect_compile(InCollection CS9244)      # List<Ref<T>>
+fenrir_expect_compile(AcrossAwait CS4012)       # an async method taking it
+fenrir_expect_compile(AcrossAwaitLocal CS4007)  # a local still alive after an await
+# What the generator must get right, and what it must refuse clearly.
+fenrir_expect_compile(InternalField OK)         # an internal field of an internal type on a public component
+fenrir_expect_compile(PointerField OK)          # a pointer field makes the accessors class unsafe
+fenrir_expect_compile(LatePart OK)              # IComponent named only on a later part of a partial struct
+fenrir_expect_compile(ManagedComponent FENRIR0004)  # a component holding a reference: a clear error
+fenrir_expect_compile(ReadOnlyStruct CS1061)    # a readonly component has no writable accessors

@@ -5,6 +5,7 @@
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -24,13 +25,15 @@ namespace
 
     constexpr const char* FixtureType = "Fenrir.ScriptFixture.Fixture";
 
-    // Calls a static method of the fixture script assembly through Iris, as the runner will call scripts.
+    constexpr const char* AccessType = "Fenrir.ScriptFixture.Access";
+
+    // Calls a static method of a type in the fixture script assembly through Iris, as the runner will call scripts.
     template <typename Result, typename... Args>
-    Result Call(Scripting& scripting, const char* method, Args... arguments)
+    Result CallIn(const char* typeName, Scripting& scripting, const char* method, Args... arguments)
     {
         auto* component = scripting.GetComponent();
         Check(component != nullptr, "There is no loaded script assembly");
-        const auto type = component->FindType(FixtureType);
+        const auto type = component->FindType(typeName);
         Check(type.Succeeded(), std::string("The fixture type was not found: ") + type.diagnostic);
         const auto handle = type.value->FindMethod<Result(Args...)>(method);
         Check(handle.Succeeded(), std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
@@ -40,6 +43,55 @@ namespace
         {
             return *result.value;
         }
+    }
+
+    template <typename Result, typename... Args>
+    Result Call(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(FixtureType, scripting, method, arguments...);
+    }
+
+    template <typename Result, typename... Args>
+    Result Access(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(AccessType, scripting, method, arguments...);
+    }
+
+    // The native side of the components the fixture declares (same layout as the C# structs).
+    struct NativeVec3
+    {
+        float X, Y, Z;
+    };
+    struct NativeTransform
+    {
+        NativeVec3 Position;
+        float Scale;
+        std::int32_t Flags;
+    };
+    struct NativeNested
+    {
+        double Weight;
+    };
+    struct NativeHidden
+    {
+        std::int32_t Count;
+    };
+    struct NativeClash
+    {
+        std::int32_t Value, IsNull, Fine;
+    };
+    struct NativeSplit
+    {
+        std::int32_t A, B;
+    };
+    struct NativeReserved
+    {
+        std::int32_t Class, Event;
+    };
+
+    std::uint64_t AddressOf(const void* memory)
+    {
+        return static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(memory));
     }
 
     // A directory holding copies of the files Scripting looks for beside the executable, minus the ones left out.
@@ -241,6 +293,56 @@ namespace
         Check(!isValid(0xFFFFFFFFU), "The null entity was valid");
     }
 
+    void RefWritesThroughGeneratedAccessorsIntoNativeMemory()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+
+        // t.Position.X += 1 on a nested struct field, a plain assignment, a compound multiply and a flag: all land in
+        // memory this test owns, with no ref at the call site.
+        NativeTransform transform{{1, 2, 3}, 4, 1};
+        Access<void>(scripting, "Nudge", AddressOf(&transform));
+        Check(transform.Position.X == 2 && transform.Position.Y == 5 && transform.Position.Z == 3 &&
+                  transform.Scale == 8 && transform.Flags == 5,
+              "Writes through the generated accessors did not reach native memory");
+        Check(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 18.0F,
+              "Reads through the generated accessors did not see native memory");
+
+        // Writes from C++ are seen too: it is the same memory.
+        transform.Position.Z = 10;
+        Check(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 25.0F,
+              "A native write was not seen by the script");
+
+        NativeNested nested{1.0};
+        Check(Access<double>(scripting, "NudgeNested", AddressOf(&nested)) == 1.5 && nested.Weight == 1.5,
+              "A nested component type got no accessors");
+        NativeHidden hidden{4};
+        Check(Access<std::int32_t>(scripting, "NudgeHidden", AddressOf(&hidden)) == 7 && hidden.Count == 7,
+              "An internal component got no accessors");
+        NativeClash clash{0, 0, 0};
+        Check(Access<std::int32_t>(scripting, "NudgeClash", AddressOf(&clash)) == 24 && clash.Fine == 7 &&
+                  clash.Value == 8 && clash.IsNull == 9,
+              "Fields named like Ref<T> members were not reachable through Value");
+        NativeSplit split{100, 200};
+        Check(Access<std::int32_t>(scripting, "NudgeSplit", AddressOf(&split)) == 303 && split.A == 101 && split.B == 202,
+              "A partial component did not get accessors for all of its fields");
+        NativeReserved reserved{10, 20};
+        Check(Access<std::int32_t>(scripting, "NudgeReserved", AddressOf(&reserved)) == 33 && reserved.Class == 11 &&
+                  reserved.Event == 22,
+              "Keyword-named fields were not exposed");
+    }
+
+    void ANullRefSaysSoInsteadOfCrashing()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(Access<bool>(scripting, "NullRefIsNull"), "A null Ref was not reported as null");
+        const auto message = Access<std::optional<std::string>>(scripting, "NullRefMessage");
+        Check(message.has_value() && message->find("Transform") != std::string::npos,
+              "Reading a null Ref did not throw a clear exception");
+    }
+
     void TheContractIsOneSharedCopyAcrossGenerations()
     {
         int firstIdentity = 0;
@@ -334,6 +436,8 @@ int main(int argc, char* argv[])
         {"scripts read the engine clock", ScriptsReadTheEngineClock},
         {"entity validity follows the active scene, including slot reuse", EntityValidityFollowsTheActiveScene},
         {"the contract is one shared copy across generations", TheContractIsOneSharedCopyAcrossGenerations},
+        {"Ref<T> writes through generated accessors into native memory", RefWritesThroughGeneratedAccessorsIntoNativeMemory},
+        {"a null Ref says so instead of crashing", ANullRefSaysSoInsteadOfCrashing},
         {"the build deploys the bridge next to the executable", TheBuildDeploysTheBridgeNextToTheExecutable},
         {"no configured assembly does nothing and never starts .NET", NoAssemblyConfiguredDoesNothing},
         {"everything Iris owns is released when the app finishes", ShutdownReleasesEverythingWhenTheAppFinishes},

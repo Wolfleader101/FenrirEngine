@@ -1,0 +1,205 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
+
+namespace Fenrir.Scripting.Generators;
+
+/// <summary>
+/// For every struct implementing <c>Fenrir.Scripting.IComponent</c>, emits C# 14 extension properties on
+/// <c>Ref&lt;T&gt;</c>, one per public or internal instance field, each returning <c>ref</c> to the field in the
+/// component's storage. A script then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site.
+/// </summary>
+[Generator]
+public sealed class ComponentFieldsGenerator : IIncrementalGenerator
+{
+    private const string ComponentInterface = "Fenrir.Scripting.IComponent";
+
+    // Members of Ref<T> itself: a component field with one of these names would be shadowed, never reached.
+    private static readonly string[] RefMembers = { "Value", "IsNull" };
+
+    private static readonly DiagnosticDescriptor ShadowedField = new(
+        "FENRIR0001", "A component field is hidden by a member of Ref<T>",
+        "Field '{0}' of component '{1}' is not exposed on Ref<{1}> because Ref<T> already has a member with that name; use Value.{0}",
+        "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor GenericComponent = new(
+        "FENRIR0002", "Generic components are not supported",
+        "Component '{0}' is generic; its fields are not exposed on Ref<T>. Components must be closed, unmanaged structs",
+        "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor InaccessibleComponent = new(
+        "FENRIR0003", "A component must be reachable from its accessors",
+        "Component '{0}' is nested inside a private or protected type, so no accessors can be generated for it; make it internal or public",
+        "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ManagedComponent = new(
+        "FENRIR0004", "A component must be an unmanaged struct",
+        "Component '{0}' is not unmanaged: it holds a reference type or a managed field, which cannot live in the engine's storage",
+        "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor ReadOnlyComponent = new(
+        "FENRIR0005", "A readonly component has nothing to write through",
+        "Component '{0}' is a readonly struct, so none of its fields can be exposed as writable; remove 'readonly'",
+        "Fenrir.Scripting", DiagnosticSeverity.Warning, isEnabledByDefault: true);
+
+    public void Initialize(IncrementalGeneratorInitializationContext context)
+    {
+        // Every struct is looked at, not only those with a base list: a partial struct may name IComponent on any part.
+        IncrementalValuesProvider<ComponentModel> components = context.SyntaxProvider
+            .CreateSyntaxProvider(
+                static (node, _) => node is StructDeclarationSyntax,
+                static (syntax, cancellation) => Describe(syntax, cancellation))
+            .Where(static model => model is not null)!;
+
+        context.RegisterSourceOutput(components, static (output, model) =>
+        {
+            foreach (DiagnosticInfo diagnostic in model.Diagnostics)
+                output.ReportDiagnostic(diagnostic.ToDiagnostic());
+            if (model.Source.Length > 0)
+                output.AddSource(model.HintName, model.Source);
+        });
+    }
+
+    private static ComponentModel? Describe(GeneratorSyntaxContext context, CancellationToken cancellation)
+    {
+        var declaration = (StructDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(declaration, cancellation) is not INamedTypeSymbol symbol)
+            return null;
+        if (!symbol.AllInterfaces.Any(static i => i.ToDisplayString() == ComponentInterface))
+            return null;
+        // A partial struct is seen once per declaration; only the first one emits.
+        if (symbol.DeclaringSyntaxReferences[0].GetSyntax(cancellation) != declaration)
+            return null;
+
+        string key = symbol.ToDisplayString();
+        LocationInfo location = LocationInfo.From(declaration.Identifier.GetLocation());
+        var diagnostics = new List<DiagnosticInfo>();
+
+        // Reasons there is nothing to generate. Each says so once, at the struct.
+        if (symbol.IsGenericType)
+            return Refused(key, diagnostics, GenericComponent, location, symbol.Name);
+        if (!symbol.IsUnmanagedType)
+            return Refused(key, diagnostics, ManagedComponent, location, symbol.Name);
+        if (symbol.IsReadOnly)
+            return Refused(key, diagnostics, ReadOnlyComponent, location, symbol.Name);
+        if (HasHiddenContainer(symbol))
+            return Refused(key, diagnostics, InaccessibleComponent, location, symbol.Name);
+
+        string fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        bool needsUnsafe = false;
+        var members = new StringBuilder();
+        foreach (IFieldSymbol field in symbol.GetMembers().OfType<IFieldSymbol>())
+        {
+            // Backing fields, statics, constants, readonly fields (no ref to give) and fixed buffers have no property.
+            if (field.IsStatic || field.IsConst || field.IsImplicitlyDeclared || field.IsReadOnly || field.IsFixedSizeBuffer)
+                continue;
+            if (field.DeclaredAccessibility is not (Accessibility.Public or Accessibility.Internal or Accessibility.ProtectedOrInternal))
+                continue;
+            if (Array.IndexOf(RefMembers, field.Name) >= 0)
+            {
+                LocationInfo at = field.Locations.Length > 0 ? LocationInfo.From(field.Locations[0]) : location;
+                diagnostics.Add(new DiagnosticInfo(ShadowedField, at, new[] { field.Name, symbol.Name }));
+                continue;
+            }
+            // A pointer in a field's type needs the accessors class to be unsafe (the script project allows it).
+            needsUnsafe |= ContainsPointer(field.Type);
+            // An internal field is exposed only as widely as it is declared, so a public accessor never names an
+            // internal type.
+            string access = field.DeclaredAccessibility == Accessibility.Public ? "public" : "internal";
+            string type = field.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string name = Identifier(field.Name);
+            members.Append("        ").Append(access).Append(" ref ").Append(type).Append(' ').Append(name)
+                   .Append(" => ref self.Value.").Append(name).Append(";\n");
+        }
+
+        string visibility = IsPubliclyVisible(symbol) ? "public" : "internal";
+        string? ns = symbol.ContainingNamespace.IsGlobalNamespace ? null : symbol.ContainingNamespace.ToDisplayString();
+        var source = new StringBuilder();
+        source.Append("// <auto-generated>Fenrir.Scripting.Generators: field accessors for ").Append(symbol.Name).Append(".</auto-generated>\n");
+        source.Append("#nullable enable\n");
+        if (ns != null)
+            source.Append("namespace ").Append(ns).Append("\n{\n");
+        source.Append(visibility).Append(needsUnsafe ? " static unsafe class " : " static class ").Append(ClassName(symbol)).Append("\n{\n");
+        source.Append("    extension(global::Fenrir.Scripting.Ref<").Append(fullName).Append("> self)\n    {\n");
+        source.Append(members);
+        source.Append("    }\n}\n");
+        if (ns != null)
+            source.Append("}\n");
+
+        return new ComponentModel(key, source.ToString(), diagnostics.ToImmutableArray());
+    }
+
+    private static ComponentModel Refused(string key, List<DiagnosticInfo> diagnostics, DiagnosticDescriptor descriptor,
+        LocationInfo location, string name)
+    {
+        diagnostics.Add(new DiagnosticInfo(descriptor, location, new[] { name }));
+        return new ComponentModel(key, "", diagnostics.ToImmutableArray());
+    }
+
+    // Nested structs are named after their containers so two structs never share a class name.
+    private static string ClassName(INamedTypeSymbol symbol) => string.Join("_", Chain(symbol).Select(static s => s.Name)) + "_Fields";
+
+    // The struct and the types around it, outermost first.
+    private static IEnumerable<INamedTypeSymbol> Chain(INamedTypeSymbol symbol)
+    {
+        var chain = new List<INamedTypeSymbol>();
+        for (INamedTypeSymbol? current = symbol; current != null; current = current.ContainingType)
+            chain.Insert(0, current);
+        return chain;
+    }
+
+    private static bool IsPubliclyVisible(INamedTypeSymbol symbol) =>
+        Chain(symbol).All(static s => s.DeclaredAccessibility == Accessibility.Public);
+
+    // A top-level accessors class cannot name a type nested in something private or protected.
+    private static bool HasHiddenContainer(INamedTypeSymbol symbol) =>
+        Chain(symbol).Any(static s => s.DeclaredAccessibility is Accessibility.Private or Accessibility.Protected or Accessibility.ProtectedAndInternal);
+
+    private static bool ContainsPointer(ITypeSymbol type) =>
+        type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer ||
+        (type is INamedTypeSymbol named && named.TypeArguments.Any(ContainsPointer));
+
+    private static string Identifier(string name) =>
+        SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None || SyntaxFacts.GetContextualKeywordKind(name) != SyntaxKind.None
+            ? "@" + name
+            : name;
+
+    // What one component contributes. It compares by value, so an unchanged component is not regenerated.
+    private sealed record ComponentModel(string TypeName, string Source, ImmutableArray<DiagnosticInfo> Diagnostics)
+    {
+        // The full name, so two structs of the same name in different namespaces never share a hint name.
+        public string HintName => TypeName.Replace('<', '_').Replace('>', '_') + ".Fields.g.cs";
+
+        public bool Equals(ComponentModel? other) =>
+            other is not null && TypeName == other.TypeName && Source == other.Source && Diagnostics.SequenceEqual(other.Diagnostics);
+
+        public override int GetHashCode() => (TypeName, Source).GetHashCode();
+    }
+
+    // A source position as plain data. A Location holds a syntax tree, which would keep the previous compilation alive
+    // in the generator's cache and make every edit regenerate everything.
+    private sealed record LocationInfo(string Path, TextSpan Span, LinePositionSpan LineSpan)
+    {
+        public static LocationInfo From(Location location) =>
+            new(location.SourceTree?.FilePath ?? "", location.SourceSpan, location.GetLineSpan().Span);
+
+        public Location ToLocation() => Location.Create(Path, Span, LineSpan);
+    }
+
+    private sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationInfo Location, string[] Arguments)
+    {
+        public Diagnostic ToDiagnostic() => Diagnostic.Create(Descriptor, Location.ToLocation(), Arguments.Cast<object>().ToArray());
+
+        public bool Equals(DiagnosticInfo? other) =>
+            other is not null && Descriptor.Id == other.Descriptor.Id && Location == other.Location && Arguments.SequenceEqual(other.Arguments);
+
+        public override int GetHashCode() => (Descriptor.Id, Location).GetHashCode();
+    }
+}
