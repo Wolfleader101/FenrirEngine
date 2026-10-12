@@ -139,6 +139,27 @@ public static partial class Bootstrap
         }
     }
 
+    // Waits up to timeoutMs for a released component to be collected, running full blocking collections while it
+    // waits. The state is Pending if the time ran out. Collection happens only when the host asks for it here.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    internal static unsafe int WaitForComponentUnload(ulong token, int timeoutMs, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
+    {
+        if (state != null) *state = -1;
+        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
+        if (!diagnosticValid || state == null || timeoutMs < 0) return (int)BridgeStatus.InvalidArgument;
+        try
+        {
+            if (!ComponentRegistry.TryWaitForUnload(token, timeoutMs, out ComponentUnloadState observed)) return (int)BridgeStatus.InvalidHandle;
+            *state = (int)observed;
+            return (int)BridgeStatus.Success;
+        }
+        catch (Exception exception)
+        {
+            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
+            return (int)BridgeStatus.ManagedException;
+        }
+    }
+
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int ForgetComponentUnload(ulong token, byte* diagnostic, int capacity, int* written, int* truncated)
     {

@@ -34,6 +34,8 @@ static unsafe class InternalCallChecks
     private static byte Negate(byte value) => (byte)(value == 0 ? 1 : 0);
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static ushort NextChar(ushort value) => (ushort)(value + 1);
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static byte LeakStopped() => 1;
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static void Ignore(byte value) { }
@@ -52,6 +54,7 @@ static unsafe class InternalCallChecks
         Register("Record", Void, new[] { Int32 }, (delegate* unmanaged[Cdecl]<int, void>)&Record);
         Register("Negate", Bool, new[] { Bool }, (delegate* unmanaged[Cdecl]<byte, byte>)&Negate);
         Register("NextChar", Char, new[] { Char }, (delegate* unmanaged[Cdecl]<ushort, ushort>)&NextChar);
+        Register("LeakStopped", Bool, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<byte>)&LeakStopped);
     }
 
     private static ulong Method(ulong token, ulong type, string name, int returnKind, params int[] parameters)
@@ -86,7 +89,7 @@ static unsafe class InternalCallChecks
         try
         {
             string unbound = LoadFailure(path);
-            Check(unbound.Contains("9 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
+            Check(unbound.Contains("10 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
                   "Unbound fields were not diagnosed: " + unbound);
             Check(ComponentRegistry.TrackingCount == before, "A failed load left a registration");
 

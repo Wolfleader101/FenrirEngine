@@ -56,6 +56,12 @@ namespace Iris::Examples
         return !value;
     }
 
+    // The unload checks' deliberate leak: a managed thread runs until the host sets this.
+    inline std::atomic<bool> leakStop{false};
+    inline bool LeakStopped()
+    {
+        return leakStop.load();
+    }
     inline char16_t NextChar(char16_t value)
     {
         return static_cast<char16_t>(value + 1);
@@ -75,6 +81,7 @@ namespace Iris::Examples
             Iris::RegisterInternalCall<&Record>(prefix + "Record"),
             Iris::RegisterInternalCall<&Negate>(prefix + "Negate"),
             Iris::RegisterInternalCall<&NextChar>(prefix + "NextChar"),
+            Iris::RegisterInternalCall<&LeakStopped>(prefix + "LeakStopped"),
         };
         for (auto& result : results)
         {

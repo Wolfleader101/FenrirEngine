@@ -91,6 +91,20 @@ public struct Bundle
     public Ready Ready;
 }
 
+// A deliberate leak for the unload checks: a thread running component code keeps the component from being
+// collected until it returns. It polls a native flag, so the host decides when it ends.
+public static class Leaks
+{
+    public static void Start()
+    {
+        var thread = new System.Threading.Thread(() =>
+        {
+            while (!Natives.CallLeakStopped()) System.Threading.Thread.Sleep(5);
+        }) { IsBackground = true };
+        thread.Start();
+    }
+}
+
 // bool, char, enums and inline arrays across the boundary.
 public static class Values
 {
