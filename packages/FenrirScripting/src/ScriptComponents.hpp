@@ -1,10 +1,7 @@
 #pragma once
 
 #include <string>
-#include <string_view>
-#include <vector>
 
-#include "ByteStorage.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 
 namespace Fenrir::Detail
@@ -17,15 +14,13 @@ namespace Fenrir::Detail
         std::size_t alignment = 0;
     };
 
-    // The EnTT storage id of a script component's pool. Derived from the name, with a prefix that keeps it apart from the
-    // ids EnTT derives from C++ types.
-    [[nodiscard]] entt::id_type ScriptStorageId(std::string_view name);
+    // The ECS's description of the component type a script reported.
+    [[nodiscard]] inline DynamicComponentType ToDynamicType(const ScriptComponentDescription& description)
+    {
+        return DynamicComponentType(description.name, description.size, description.alignment);
+    }
 
-    // Whether the description can be a script component's: a size that is a multiple of a power-of-two alignment, no larger
-    // than ByteStorage::MaxElementSize.
-    [[nodiscard]] bool IsPlausible(const ScriptComponentDescription& description) noexcept;
-
-    // A registration whose operations act on a ByteStorage named after the component, created in each list the first time
-    // it is used. Nothing is created here, so registering and then discarding it leaves no trace in any list.
+    // A registration whose operations act on the ECS's dynamic components of that type. The ECS creates storage in a scene
+    // the first time one is added there, so registering this, and then discarding it, leaves no trace in any scene.
     [[nodiscard]] ComponentRegistration MakeScriptComponent(const ScriptComponentDescription& description);
 } // namespace Fenrir::Detail

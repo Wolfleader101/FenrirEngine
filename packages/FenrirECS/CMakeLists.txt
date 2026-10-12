@@ -6,6 +6,10 @@ add_library(FenrirECS STATIC
     src/EntityList.cpp
 
     include/FenrirECS/DefaultComponents.hpp
+
+    include/FenrirECS/DynamicComponent.hpp
+    src/DynamicComponent.cpp
+    src/ByteStorage.hpp
 )
 
 add_subdirectory(libs)

@@ -16,7 +16,7 @@ internal static unsafe class Native
     public static delegate* unmanaged[Cdecl]<float> TimeDeltaTime;
     public static delegate* unmanaged[Cdecl]<float> TimeTickRate;
 
-    // Whether the entity value (the full entt value, version bits included) is alive in the active scene.
+    // Whether the entity value (the engine full entity value, version bits included) is alive in the active scene.
     public static delegate* unmanaged[Cdecl]<uint, bool> EntityIsValid;
 
     // The engine's registry of native components. A component is found by the name it was registered under, and

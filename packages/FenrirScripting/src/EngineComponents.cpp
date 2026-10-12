@@ -55,7 +55,7 @@ struct Iris::StructMapping<Fenrir::Detail::NameView>
 
 namespace Fenrir::Detail
 {
-    // Fenrir::Entity is an entt value and a pointer to its entity list. Scripts see the value; the rest is the engine's.
+    // Fenrir::Entity is a 32-bit entity value and a pointer to its entity list. Scripts see the value; the rest is the engine's.
     // These stand in for Entity and Relationship, which have members Iris cannot map, and must have exactly their size
     // and layout (checked below, and by a test that reads real hierarchy memory from C#).
     struct EntityLinkView

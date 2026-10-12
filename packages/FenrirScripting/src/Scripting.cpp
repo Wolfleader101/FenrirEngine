@@ -236,7 +236,7 @@ namespace Fenrir
         // Whether what the script reported can be registered next to what the engine already has.
         Iris::CallResult<void> CheckDiscovered(const std::vector<Description>& found, const Detail::ComponentRegistry& registry)
         {
-            std::unordered_map<entt::id_type, std::string> storageIds;
+            std::unordered_map<std::uint32_t, std::string> storageIds;
             std::unordered_set<std::string> names;
             for (const auto& description : found)
             {
@@ -244,7 +244,7 @@ namespace Fenrir
                 {
                     return Failed("The script reported the component '" + description.name + "' more than once.");
                 }
-                if (!Detail::IsPlausible(description))
+                if (!Detail::ToDynamicType(description).IsValid())
                 {
                     return Failed("The script component '" + description.name + "' reported a size of " +
                                   std::to_string(description.size) + " and an alignment of " +
@@ -255,7 +255,7 @@ namespace Fenrir
                     return Failed("The script defines a component '" + description.name +
                                   "', but the engine already has a component of that name.");
                 }
-                const auto [at, added] = storageIds.emplace(Detail::ScriptStorageId(description.name), description.name);
+                const auto [at, added] = storageIds.emplace(Detail::ToDynamicType(description).Id(), description.name);
                 if (!added)
                 {
                     return Failed("The script components '" + at->second + "' and '" + description.name +
