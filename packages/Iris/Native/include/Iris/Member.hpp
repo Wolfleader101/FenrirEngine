@@ -18,12 +18,12 @@ namespace Iris
     class Type;
 
     /**
-     * @brief The value types a field or property can have: a PrimitiveValue, a mapped struct,
+     * @brief The value types a field or property can have: a PrimitiveValue, a mapped struct or enum,
      * `std::optional<Object>` for a class- or interface-typed member, or `std::optional<std::string>` for a
      * string; an empty optional is null (distinct from an empty string). Arrays are not member values.
      */
     template <typename T>
-    concept MemberValue = PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
+    concept MemberValue = PrimitiveValue<T> || StructValue<T> || EnumValue<T> || std::same_as<T, std::optional<Object>> ||
                           std::same_as<T, std::optional<std::string>>;
 
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in

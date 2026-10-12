@@ -14,12 +14,16 @@ public static unsafe class Natives
     public static delegate* unmanaged[Cdecl]<Vec3*, void> Normalize;
     public static delegate* unmanaged[Cdecl]<int> Throws;
     public static delegate* unmanaged[Cdecl]<int, void> Record;
+    public static delegate* unmanaged[Cdecl]<bool, bool> Negate;
+    public static delegate* unmanaged[Cdecl]<char, char> NextChar;
 
     public static int CallAdd(int left, int right) => Add(left, right);
     public static double CallHalf(double value) => Half(value);
     public static long CallCombine(long left, byte right) => Combine(left, right);
     public static int CallThrows() => Throws();
     public static void CallRecord(int value) => Record(value);
+    public static bool CallNegate(bool value) => Negate(value);
+    public static char CallNextChar(char value) => NextChar(value);
 
     public static int CallMeasure(string text)
     {

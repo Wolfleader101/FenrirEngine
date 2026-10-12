@@ -7,7 +7,7 @@ using Iris.Bridge;
 static unsafe class InternalCallChecks
 {
     private const string Natives = "Iris.Examples.Component.Natives.";
-    private const int Void = 0, Int32 = 6, Int64 = 8, UInt8 = 3, Double = 11, Pointer = 17;
+    private const int Void = 0, Bool = 1, Char = 18, Int32 = 6, Int64 = 8, UInt8 = 3, Double = 11, Pointer = 17;
     private static int recorded;
 
     private static void Check(bool condition, string message)
@@ -29,6 +29,14 @@ static unsafe class InternalCallChecks
     private static int Throws() => -1;
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static void Record(int value) => recorded = value;
+    // bool is one byte in a signature that has marshalling disabled, so the check's own function uses a byte.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static byte Negate(byte value) => (byte)(value == 0 ? 1 : 0);
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static ushort NextChar(ushort value) => (ushort)(value + 1);
+
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static void Ignore(byte value) { }
 
     private static void Register(string name, int returnKind, int[] kinds, void* function) =>
         InternalCalls.Register(Natives + name, returnKind, kinds, (IntPtr)function);
@@ -42,6 +50,8 @@ static unsafe class InternalCallChecks
         Register("Normalize", Void, new[] { Pointer }, (delegate* unmanaged[Cdecl]<float*, void>)&Normalize);
         Register("Throws", Int32, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<int>)&Throws);
         Register("Record", Void, new[] { Int32 }, (delegate* unmanaged[Cdecl]<int, void>)&Record);
+        Register("Negate", Bool, new[] { Bool }, (delegate* unmanaged[Cdecl]<byte, byte>)&Negate);
+        Register("NextChar", Char, new[] { Char }, (delegate* unmanaged[Cdecl]<ushort, ushort>)&NextChar);
     }
 
     private static ulong Method(ulong token, ulong type, string name, int returnKind, params int[] parameters)
@@ -76,7 +86,7 @@ static unsafe class InternalCallChecks
         try
         {
             string unbound = LoadFailure(path);
-            Check(unbound.Contains("7 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
+            Check(unbound.Contains("9 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
                   "Unbound fields were not diagnosed: " + unbound);
             Check(ComponentRegistry.TrackingCount == before, "A failed load left a registration");
 
@@ -96,9 +106,27 @@ static unsafe class InternalCallChecks
             catch (BridgeArgumentException) { conflict = true; }
             Check(conflict, "A conflicting registration was accepted");
             bool invalid = false;
-            try { Register("Bad", 1, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<int>)&Throws); }
+            try { Register("Bad", 12, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<int>)&Throws); }
             catch (BridgeArgumentException) { invalid = true; }
-            Check(invalid, "A bool return kind was accepted");
+            Check(invalid, "An object return kind was accepted");
+        }
+        finally
+        {
+            InternalCalls.Clear();
+            RegisterAll();
+        }
+
+        // bool and char in a signature need an assembly with marshalling disabled, since otherwise the runtime
+        // gives them a size of its own choosing. This assembly (the checks) has not disabled it.
+        try
+        {
+            InternalCalls.Clear();
+            InternalCalls.Register(typeof(UnmarshalledNatives).FullName + ".Flag", Void, new[] { Bool }, (IntPtr)(delegate* unmanaged[Cdecl]<byte, void>)&Ignore);
+            string marshalled = "";
+            try { InternalCalls.Bind(typeof(UnmarshalledNatives).Assembly); }
+            catch (BridgeArgumentException exception) { marshalled = exception.Message; }
+            Check(marshalled.Contains("UnmarshalledNatives.Flag") && marshalled.Contains("DisableRuntimeMarshalling"),
+                  "A bool internal call in an assembly with marshalling enabled was bound: " + marshalled);
         }
         finally
         {
@@ -126,4 +154,10 @@ static unsafe class InternalCallChecks
         }
         Console.WriteLine("Internal calls: unbound and mismatched fields fail the load with diagnostics, registrations are idempotent, and bound fields reach native code.");
     }
+}
+
+// A public static function pointer field with a bool, in an assembly that has not disabled runtime marshalling.
+public static unsafe class UnmarshalledNatives
+{
+    public static delegate* unmanaged[Cdecl]<bool, void> Flag;
 }

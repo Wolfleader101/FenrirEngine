@@ -6,7 +6,7 @@ using Iris.Bridge;
 static unsafe class StructChecks
 {
     private const string Component = "Iris.Examples.Component.";
-    private const int Float = 10, Double = 11, Int32 = 6, UInt8 = 3;
+    private const int Float = 10, Double = 11, Int32 = 6, UInt8 = 3, Int8 = 2, UInt16 = 5;
     private const int StructKind = 14;
 
     private static void Check(bool condition, string message)
@@ -94,8 +94,10 @@ static unsafe class StructChecks
                   "A field count mismatch was accepted or undiagnosed: " + countProblem);
 
             // Non-blittable and unusable types are rejected with a reason.
-            Check(Register(token, $"{Component}WithBool|8\nFlag|0|1|\nValue|4|{Int32}|", out none, out string boolProblem) == 1 && boolProblem.Contains("blittable"),
-                  "A struct with a bool was accepted: " + boolProblem);
+            Check(Register(token, $"{Component}WithBool|8\nFlag|0|1|\nValue|4|{Int32}|", out none, out string boolProblem) == 0 && none != 0,
+                  "A struct with a bool was rejected: " + boolProblem);
+            Check(Register(token, $"{Component}WithBool|8\nFlag|0|{Int32}|\nValue|4|{Int32}|", out none, out string boolKind) == 1 && boolKind.Contains("Flag"),
+                  "A bool field declared as an int was accepted: " + boolKind);
             Check(Register(token, $"{Component}WithText|8\nName|0|{Int32}|", out none, out string textProblem) == 1 && textProblem.Contains("blittable"),
                   "A struct with a reference was accepted: " + textProblem);
             Check(Register(token, $"{Component}Counter|4\nValue|0|{Int32}|", out none, out string classProblem) == 1 && classProblem.Contains("not a struct"),
@@ -111,6 +113,51 @@ static unsafe class StructChecks
             Check(Register(token, pose.Replace("Position|0|14|" + Vec3, "Position|0|14|" + Component + "Pose"), out none, out string wrongNested) == 1 && wrongNested.Contains("Position"),
                   "A nested field with the wrong struct was accepted: " + wrongNested);
             ulong poseOnToken = Registered(token, pose);
+
+            // Enums are one line: "TypeName|size|underlyingKind". The underlying type, the size and the kind of
+            // type are all checked.
+            const int Bool = 1, Char = 18, Enum = 19, InlineArray = 20;
+            string gear = Component + "Gear", shade = Component + "Shade", setting = Component + "Setting", label = Component + "Label";
+            Check(Register(token, $"{gear}|4|{Int32}", out none, out string enumProblem) == 0 && none != 0, "A matching enum was rejected: " + enumProblem);
+            Check(Register(token, $"{gear}|8|8", out none, out string underlyingProblem) == 1 && none == 0 && underlyingProblem.Contains("underlying"),
+                  "An enum with the wrong underlying type was accepted: " + underlyingProblem);
+            Check(Register(token, $"{gear}|2|{Int32}", out none, out string enumSizeProblem) == 1 && enumSizeProblem.Contains("bytes"),
+                  "An enum with the wrong size was accepted: " + enumSizeProblem);
+            Check(Register(token, $"{Vec3}|4|{Int32}", out none, out string notEnum) == 1 && notEnum.Contains("not an enum"),
+                  "A struct was accepted as an enum: " + notEnum);
+            Check(Register(token, $"{gear}|4", out none, out string notStruct) == 1 && notStruct.Contains("not a struct"),
+                  "An enum was accepted as a struct: " + notStruct);
+            Check(Register(token, $"{Component}Missing|4|{Int32}", out none, out _) == 6, "A missing enum was not NotFound");
+            Check(Register(token, $"{gear}|4|x", out none, out _) == 1, "A malformed enum description was accepted");
+
+            // An enum field names its enum, which must be registered first.
+            string settingText = $"{setting}|12\nCurrent|0|{Enum}|{gear}\nTint|4|{Enum}|{shade}\nLocked|5|{Bool}|\nLevel|8|{Int32}|";
+            Check(Register(other, settingText, out none, out string unregistered) == 1 && unregistered.Contains("Current"),
+                  "An enum field with an unregistered enum was accepted: " + unregistered);
+            Registered(token, $"{shade}|1|{UInt8}");
+            Registered(token, settingText);
+            Check(Register(token, settingText.Replace($"Current|0|{Enum}|{gear}", $"Current|0|{Enum}|{shade}"), out none, out string wrongEnum) == 1 && wrongEnum.Contains("Current"),
+                  "An enum field naming the wrong enum was accepted: " + wrongEnum);
+            Check(Register(token, settingText.Replace($"Current|0|{Enum}|{gear}", $"Current|0|{Int32}|"), out none, out string enumAsInt) == 1 && enumAsInt.Contains("Current"),
+                  "An enum field declared as its integer was accepted: " + enumAsInt);
+            Check(Register(token, settingText.Replace($"Locked|5|{Bool}|", $"Locked|5|{UInt8}|"), out none, out string boolAsByte) == 1 && boolAsByte.Contains("Locked"),
+                  "A bool field declared as a byte was accepted: " + boolAsByte);
+
+            // A fixed-size array field is six parts: "name|offset|20|elementTypeName|elementKind|length".
+            string labelText = $"{label}|28\nId|0|{Int32}|\nText|4|{InlineArray}||{UInt8}|16\nWide|20|{InlineArray}||{Char}|4";
+            Registered(token, labelText);
+            Check(Register(token, labelText.Replace($"{UInt8}|16", $"{UInt8}|15"), out none, out string lengthProblem) == 1 && lengthProblem.Contains("Text") && lengthProblem.Contains("16") && lengthProblem.Contains("15"),
+                  "An array of the wrong length was accepted: " + lengthProblem);
+            Check(Register(token, labelText.Replace($"{InlineArray}||{UInt8}|16", $"{InlineArray}||{Int8}|16"), out none, out string elementProblem) == 1 && elementProblem.Contains("Text"),
+                  "An array of the wrong element type was accepted: " + elementProblem);
+            Check(Register(token, labelText.Replace($"Text|4|{InlineArray}||{UInt8}|16", $"Text|4|{UInt8}|"), out none, out string scalarProblem) == 1 && scalarProblem.Contains("Text"),
+                  "A scalar was accepted where the managed field is an array: " + scalarProblem);
+            Check(Register(token, labelText.Replace($"Text|4|{InlineArray}||{UInt8}|16", $"Text|4|{InlineArray}|"), out none, out _) == 1,
+                  "A malformed array field was accepted");
+            Check(Register(token, labelText.Replace($"Id|0|{Int32}|", $"Id|0|{InlineArray}||{Int32}|1"), out none, out string arrayAsScalar) == 1 && arrayAsScalar.Contains("Id"),
+                  "An array was accepted where the managed field is a scalar: " + arrayAsScalar);
+            Check(Register(token, labelText.Replace($"Wide|20|{InlineArray}||{Char}|4", $"Wide|20|{InlineArray}||{UInt16}|4"), out none, out string charProblem) == 1 && charProblem.Contains("Wide"),
+                  "An array of ushort was accepted for a fixed buffer of char: " + charProblem);
 
             // Static calls with struct arguments and returns, nested structs and explicit layout.
             ulong structs = TypeId(token, Component + "Structs");

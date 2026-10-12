@@ -31,7 +31,7 @@ namespace Iris
 
         template <typename T>
         concept InternalCallType =
-            std::is_void_v<T> || std::is_pointer_v<T> || (PrimitiveValue<T> && !std::same_as<T, bool>);
+            std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
 
         template <InternalCallType T>
         constexpr ValueKind InternalKindOf() noexcept
@@ -116,9 +116,10 @@ namespace Iris
      * ```
      *
      * The signature is taken from the function. Parameters and the result are void, sized integers,
-     * `float`, `double`, or pointers (a `bool` or character is rejected, because its unmanaged
-     * representation is ambiguous). A string crosses as a UTF-8 `const char*` and a length, and a struct
-     * as a pointer to it; the pointers are valid for the call only.
+     * `float`, `double`, `bool` (one byte), `char16_t` (a managed `char`) or pointers. A `bool` or `char16_t`
+     * needs `[assembly: DisableRuntimeMarshalling]` on the component, or its load fails. A string crosses as
+     * a UTF-8 `const char*` and a length, and a struct as a pointer to it; the pointers are valid for the
+     * call only.
      *
      * Registration is process-wide, may happen before or after the host starts, and applies to every
      * component loaded afterwards (already loaded components are not changed). Registering the same name

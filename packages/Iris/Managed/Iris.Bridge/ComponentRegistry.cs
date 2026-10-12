@@ -18,8 +18,10 @@ internal static class ComponentRegistry
     private sealed record MemberRecord(FieldInfo? Field, PropertyInfo? Property, MethodInfo? Getter, MethodInfo? Setter,
         Type ValueType, int ValueKind, bool IsStatic, Type DeclaringType);
 
-    // A blittable struct registered from native: its managed type and size in bytes.
-    private sealed record StructRecord(Type Type, int Size);
+    // A struct or enum registered from native: its managed type and size in bytes. For a struct, BoolOffsets
+    // lists where its bool bytes are (nested structs and inline arrays included), so a copy from native can
+    // make them 0 or 1. For an enum, UnderlyingKind is the wire kind of its integer type (zero for a struct).
+    private sealed record StructRecord(Type Type, int Size, int[] BoolOffsets, int UnderlyingKind = 0);
 
     // Handles to types, methods and members looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
@@ -301,7 +303,12 @@ internal static class ComponentRegistry
 
     private static void RequireStruct(Entry entry, int kind)
     {
-        if (ValueKinds.IsStruct(kind) || (ValueKinds.IsArray(kind) && (kind & 0xFF) == (int)ValueKind.StructArray)) StructOf(entry, kind);
+        if (ValueKinds.IsRegistered(kind) || (ValueKinds.IsArray(kind) && (kind & 0xFF) == (int)ValueKind.StructArray))
+        {
+            // An array of enums is not supported, so a struct array must name a struct.
+            if (StructOf(entry, kind).UnderlyingKind != 0 && !ValueKinds.IsEnum(kind))
+                throw new BridgeArgumentException("An array of enums is not supported.");
+        }
     }
 
     // The managed element type of an array kind.
@@ -310,7 +317,7 @@ internal static class ComponentRegistry
 
     private static bool KindMatches(Entry entry, Type type, int kind, bool isReturn)
     {
-        if (ValueKinds.IsStruct(kind)) return type == StructOf(entry, kind).Type;
+        if (ValueKinds.IsRegistered(kind)) return type == StructOf(entry, kind).Type;
         if (ValueKinds.IsArray(kind)) return type.IsSZArray && type.GetElementType() == ElementTypeOf(entry, kind);
         switch ((ValueKind)kind)
         {
@@ -446,6 +453,11 @@ internal static class ComponentRegistry
                 values[index] = StructFromSlot(entry, kinds[index], arguments[index]);
                 continue;
             }
+            if (ValueKinds.IsEnum(kinds[index]))
+            {
+                values[index] = EnumFromSlot(entry, kinds[index], arguments[index]);
+                continue;
+            }
             if (ValueKinds.IsArray(kinds[index]))
             {
                 // An array travels as an object handle; zero is a null array.
@@ -486,6 +498,7 @@ internal static class ComponentRegistry
     private static ulong ReturnSlot(ulong token, Entry entry, int kind, object? returned)
     {
         if (ValueKinds.IsStruct(kind)) return StructToBlock(entry, kind, returned!);
+        if (ValueKinds.IsEnum(kind)) return EnumToSlot(entry, kind, returned!);
         if ((ValueKind)kind != ValueKind.Object && !ValueKinds.IsArray(kind)) return ValueKinds.ToSlot(kind, returned);
         if (returned == null) return 0;
         lock (Gate)
@@ -702,6 +715,10 @@ internal static class ComponentRegistry
         {
             converted = StructFromSlot(entry!, member.ValueKind, value);
         }
+        else if (ValueKinds.IsEnum(member.ValueKind))
+        {
+            converted = EnumFromSlot(entry!, member.ValueKind, value);
+        }
         else
         {
             converted = ValueKinds.ToObject(member.ValueKind, value);
@@ -713,11 +730,24 @@ internal static class ComponentRegistry
         return true;
     }
 
-    // Copies a struct out of the caller's bytes. Blittable, so this is a plain memory copy.
+    // Copies a struct out of the caller's bytes: a plain memory copy, then every bool byte made 0 or 1, so a
+    // stray nonzero byte reads as true and managed code never sees an invalid bool.
     private static unsafe object StructFromSlot(Entry entry, int kind, ulong slot)
     {
         if (slot == 0) throw new BridgeArgumentException("A struct argument has no value.");
-        return Marshal.PtrToStructure((IntPtr)slot, StructOf(entry, kind).Type)!;
+        StructRecord record = StructOf(entry, kind);
+        object box = ManagedLayout.Box(record.Type, (byte*)slot, record.Size);
+        if (record.BoolOffsets.Length > 0)
+        {
+            fixed (byte* data = &ManagedLayout.Data(box)) NormalizeBools(data, record.BoolOffsets);
+        }
+        return box;
+    }
+
+    private static unsafe void NormalizeBools(byte* origin, int[] offsets)
+    {
+        foreach (int offset in offsets)
+            if (origin[offset] > 1) origin[offset] = 1;
     }
 
     // Copies a struct into a new block the caller gives back with FreeString.
@@ -725,27 +755,35 @@ internal static class ComponentRegistry
     {
         StructRecord record = StructOf(entry, kind);
         byte* block = (byte*)NativeMemory.Alloc((nuint)record.Size);
-        try
-        {
-            Marshal.StructureToPtr(value, (IntPtr)block, fDeleteOld: false);
-        }
-        catch
-        {
-            NativeMemory.Free(block);
-            throw;
-        }
+        ManagedLayout.Unbox(value, block, record.Size);
         return (ulong)block;
     }
 
-    private static readonly Type[] BlittablePrimitives =
-        { typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint), typeof(long), typeof(ulong), typeof(float), typeof(double) };
+    // An enum travels as its underlying integer.
+    private static object EnumFromSlot(Entry entry, int kind, ulong slot)
+    {
+        StructRecord record = StructOf(entry, kind);
+        return Enum.ToObject(record.Type, ValueKinds.ToObject(record.UnderlyingKind, slot)!);
+    }
+
+    private static ulong EnumToSlot(Entry entry, int kind, object value) =>
+        ValueKinds.ToSlot(StructOf(entry, kind).UnderlyingKind, value);
+
+    // The wire kind of a primitive, bool or char type, or -1.
+    internal static int PrimitiveKindOf(Type type)
+    {
+        if (type == typeof(bool)) return (int)ValueKind.Bool;
+        if (type == typeof(char)) return (int)ValueKind.Char;
+        for (int kind = (int)ValueKind.Int8; kind <= (int)ValueKind.Double; ++kind)
+            if (ValueKinds.ToType(kind, allowVoid: false) == type) return kind;
+        return -1;
+    }
 
     private static bool IsBlittableField(Type type) =>
-        Array.IndexOf(BlittablePrimitives, type) >= 0 || (type.IsValueType && !type.IsPrimitive && !type.IsEnum && BlittableProblem(type) == null);
+        PrimitiveKindOf(type) >= 0 || type.IsEnum || (type.IsValueType && !type.IsPrimitive && BlittableProblem(type) == null);
 
-    // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers and other
-    // blittable structs, with sequential or explicit layout. bool and char are excluded because their managed and
-    // native sizes disagree.
+    // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers, bool, char,
+    // enums, fixed-size arrays and other blittable structs, with sequential or explicit layout.
     private static string? BlittableProblem(Type type)
     {
         if (!type.IsValueType || type.IsPrimitive || type.IsEnum || type.ContainsGenericParameters)
@@ -759,18 +797,64 @@ internal static class ComponentRegistry
         return null;
     }
 
-    private static int PrimitiveKindOf(Type type)
+    // How a struct field looks on the wire. Nested is the field's struct or enum type; for an inline array,
+    // ElementKind, ElementNested and Length describe the element.
+    private readonly record struct FieldShape(int Kind, Type? Nested, int ElementKind, Type? ElementNested, int Length);
+
+    private static int ScalarKindOf(Type type)
     {
-        for (int kind = (int)ValueKind.Int8; kind <= (int)ValueKind.Double; ++kind)
-            if (ValueKinds.ToType(kind, allowVoid: false) == type) return kind;
-        return -1;
+        int primitive = PrimitiveKindOf(type);
+        if (primitive >= 0) return primitive;
+        return type.IsEnum ? (int)ValueKind.Enum : (int)ValueKind.Struct;
     }
 
-    // Registers a struct the native side maps, after checking the native description against the managed
-    // type. The description is text: a first line "TypeName|size", then one line per field,
-    // "name|offset|kind|nestedTypeName" in declaration order (nestedTypeName is empty unless kind is Struct;
-    // a nested struct must be registered first). Any mismatch throws BridgeArgumentException, naming it.
-    // Registering the same type again validates again and returns the same handle.
+    private static Type? NestedTypeOf(Type type) => type.IsEnum || (type.IsValueType && !type.IsPrimitive) ? type : null;
+
+    // A fixed buffer (`fixed byte Name[16]`) or an [InlineArray] struct: its element type and length.
+    private static bool TryGetInlineArray(FieldInfo field, out Type element, out int length)
+    {
+        element = typeof(void);
+        length = 0;
+        if (field.GetCustomAttribute<System.Runtime.CompilerServices.FixedBufferAttribute>() is { } fixedBuffer)
+        {
+            element = fixedBuffer.ElementType;
+            length = fixedBuffer.Length;
+            return true;
+        }
+        if (field.FieldType.GetCustomAttribute<System.Runtime.CompilerServices.InlineArrayAttribute>() is { } inline)
+        {
+            FieldInfo[] inner = field.FieldType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (inner.Length != 1) return false;
+            element = inner[0].FieldType;
+            length = inline.Length;
+            return true;
+        }
+        return false;
+    }
+
+    private static FieldShape ShapeOf(FieldInfo field)
+    {
+        if (TryGetInlineArray(field, out Type element, out int length))
+            return new FieldShape((int)ValueKind.InlineArray, null, ScalarKindOf(element), NestedTypeOf(element), length);
+        int kind = ScalarKindOf(field.FieldType);
+        return new FieldShape(kind, kind is (int)ValueKind.Struct or (int)ValueKind.Enum ? field.FieldType : null, 0, null, 0);
+    }
+
+    private static string KindName(int kind) => kind switch
+    {
+        (int)ValueKind.Struct => "a struct",
+        (int)ValueKind.Enum => "an enum",
+        (int)ValueKind.InlineArray => "a fixed-size array",
+        _ => ValueKinds.ToType(kind, allowVoid: false).Name
+    };
+
+    // Registers a struct or enum the native side maps, after checking the native description against the
+    // managed type. The description is text. A struct is a first line "TypeName|size", then one line per
+    // field in declaration order, "name|offset|kind|nestedTypeName" (nestedTypeName is empty unless kind is
+    // Struct or Enum, and a nested type must be registered first); an inline array field has six parts,
+    // "name|offset|InlineArray|elementNestedTypeName|elementKind|length". An enum is one line,
+    // "TypeName|size|underlyingKind". Any mismatch throws BridgeArgumentException, naming it. Registering the
+    // same type again validates again and returns the same handle.
     internal static FindResult TryRegisterStruct(ulong token, string description, out ulong structId)
     {
         structId = 0;
@@ -783,44 +867,31 @@ internal static class ComponentRegistry
         }
         string[] lines = description.Split('\n');
         string[] header = lines[0].Split('|');
-        if (header.Length != 2 || !int.TryParse(header[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int nativeSize))
+        bool isEnum = header.Length == 3;
+        if ((header.Length != 2 && !isEnum) || (isEnum && lines.Length != 1) ||
+            !int.TryParse(header[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int nativeSize))
             throw new BridgeArgumentException("The struct description is malformed.");
         Type? type = entry.Assembly.GetType(header[0], throwOnError: false, ignoreCase: false);
         if (type == null || type.Assembly != entry.Assembly || !type.IsVisible) return FindResult.NotFound;
-        if (BlittableProblem(type) is string problem) throw new BridgeArgumentException(problem);
 
-        // Reflection does not promise declaration order; the metadata token does.
-        FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        Array.Sort(fields, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
-        int managedSize = Marshal.SizeOf(type);
-        if (managedSize != nativeSize)
-            throw new BridgeArgumentException($"{type} is {managedSize} bytes but the native struct is {nativeSize}.");
-        if (lines.Length - 1 != fields.Length)
-            throw new BridgeArgumentException($"{type} has {fields.Length} fields but the native struct declares {lines.Length - 1}.");
-        for (int index = 0; index < fields.Length; ++index)
+        StructRecord created;
+        if (isEnum)
         {
-            string[] parts = lines[index + 1].Split('|');
-            if (parts.Length != 4 || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int offset) ||
-                !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int kind))
-                throw new BridgeArgumentException("The struct description is malformed.");
-            FieldInfo field = fields[index];
-            if (field.Name != parts[0])
-                throw new BridgeArgumentException($"Field {index} of {type} is '{field.Name}' but the native struct has '{parts[0]}' there (field order must match).");
-            int managedOffset = (int)Marshal.OffsetOf(type, field.Name);
-            if (managedOffset != offset)
-                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is at offset {managedOffset} but the native field is at {offset}.");
-            if ((ValueKind)kind == ValueKind.Struct)
-            {
-                lock (Gate)
-                {
-                    if (!entry.Handles.StructIds.TryGetValue(field.FieldType, out _) || field.FieldType.FullName != parts[3])
-                        throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which the native struct does not map to the same struct.");
-                }
-            }
-            else if (PrimitiveKindOf(field.FieldType) != kind)
-            {
-                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which does not match the native field's type.");
-            }
+            if (!int.TryParse(header[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int nativeUnderlying))
+                throw new BridgeArgumentException("The enum description is malformed.");
+            if (!type.IsEnum) throw new BridgeArgumentException($"{type} is not an enum.");
+            Type underlyingType = Enum.GetUnderlyingType(type);
+            int underlying = PrimitiveKindOf(underlyingType);
+            if (underlying != nativeUnderlying)
+                throw new BridgeArgumentException($"{type} is an enum of {underlyingType.Name}, which does not match the native enum's underlying type.");
+            int enumSize = ManagedLayout.SizeOf(type);
+            if (enumSize != nativeSize)
+                throw new BridgeArgumentException($"{type} is {enumSize} bytes but the native enum is {nativeSize}.");
+            created = new StructRecord(type, enumSize, Array.Empty<int>(), underlying);
+        }
+        else
+        {
+            created = ValidateStruct(entry, type, nativeSize, lines);
         }
         lock (Gate)
         {
@@ -830,9 +901,87 @@ internal static class ComponentRegistry
             {
                 structId = checked(++lastStructId);
                 entry.Handles.StructIds.Add(type, structId);
-                entry.Handles.Structs.Add(structId, new StructRecord(type, managedSize));
+                entry.Handles.Structs.Add(structId, created);
             }
             return FindResult.Found;
+        }
+    }
+
+    private static StructRecord ValidateStruct(Entry entry, Type type, int nativeSize, string[] lines)
+    {
+        if (BlittableProblem(type) is string problem) throw new BridgeArgumentException(problem);
+
+        // Reflection does not promise declaration order; the metadata token does.
+        FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+        Array.Sort(fields, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
+        int managedSize = ManagedLayout.SizeOf(type);
+        if (managedSize != nativeSize)
+            throw new BridgeArgumentException($"{type} is {managedSize} bytes but the native struct is {nativeSize}.");
+        if (lines.Length - 1 != fields.Length)
+            throw new BridgeArgumentException($"{type} has {fields.Length} fields but the native struct declares {lines.Length - 1}.");
+        var bools = new List<int>();
+        for (int index = 0; index < fields.Length; ++index)
+        {
+            string[] parts = lines[index + 1].Split('|');
+            if ((parts.Length != 4 && parts.Length != 6) || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int offset) ||
+                !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int kind))
+                throw new BridgeArgumentException("The struct description is malformed.");
+            FieldInfo field = fields[index];
+            if (field.Name != parts[0])
+                throw new BridgeArgumentException($"Field {index} of {type} is '{field.Name}' but the native struct has '{parts[0]}' there (field order must match).");
+            int managedOffset = ManagedLayout.OffsetOf(field);
+            if (managedOffset != offset)
+                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is at offset {managedOffset} but the native field is at {offset}.");
+            FieldShape shape = ShapeOf(field);
+            if ((ValueKind)kind == ValueKind.InlineArray)
+            {
+                if (parts.Length != 6 || !int.TryParse(parts[4], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int elementKind) ||
+                    !int.TryParse(parts[5], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int length))
+                    throw new BridgeArgumentException("The struct description is malformed.");
+                if (shape.Kind != kind)
+                    throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which does not match the native field's type (a fixed-size array).");
+                if (shape.ElementKind != elementKind || !SameNested(entry, shape.ElementNested, elementKind, parts[3]))
+                    throw new BridgeArgumentException($"The elements of field '{field.Name}' of {type} are {KindName(shape.ElementKind)}, which does not match the native array's element type.");
+                if (shape.Length != length)
+                    throw new BridgeArgumentException($"Field '{field.Name}' of {type} holds {shape.Length} elements but the native array holds {length}.");
+                AddBoolOffsets(entry, bools, offset, shape.ElementKind, shape.ElementNested, length);
+                continue;
+            }
+            if (parts.Length != 4 || shape.Kind != kind || !SameNested(entry, shape.Nested, kind, parts[3]))
+            {
+                string detail = shape.Nested != null && shape.Kind == kind
+                    ? "which the native struct does not map to the same type"
+                    : "which does not match the native field's type";
+                throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, {detail}.");
+            }
+            AddBoolOffsets(entry, bools, offset, kind, shape.Nested, 1);
+        }
+        return new StructRecord(type, managedSize, bools.ToArray());
+    }
+
+    // For a struct or enum kind: the type is already registered and has the native side's name. Any other
+    // kind has no nested type.
+    private static bool SameNested(Entry entry, Type? nested, int kind, string nativeName)
+    {
+        if (kind != (int)ValueKind.Struct && kind != (int)ValueKind.Enum) return nativeName.Length == 0;
+        lock (Gate)
+            return nested != null && entry.Handles.StructIds.ContainsKey(nested) && nested.FullName == nativeName;
+    }
+
+    // Adds the bool byte offsets of `count` consecutive elements starting at `offset`.
+    private static void AddBoolOffsets(Entry entry, List<int> bools, int offset, int kind, Type? nested, int count)
+    {
+        if (kind == (int)ValueKind.Bool)
+        {
+            for (int index = 0; index < count; ++index) bools.Add(offset + index);
+        }
+        else if (kind == (int)ValueKind.Struct)
+        {
+            StructRecord inner;
+            lock (Gate) inner = entry.Handles.Structs[entry.Handles.StructIds[nested!]];
+            if (inner.BoolOffsets.Length == 0) return;
+            for (int index = 0; index < count; ++index)
+                foreach (int innerOffset in inner.BoolOffsets) bools.Add(offset + index * inner.Size + innerOffset);
         }
     }
 
@@ -927,7 +1076,7 @@ internal static class ComponentRegistry
     private static int PrimitiveSize(int kind) => (ValueKind)kind switch
     {
         ValueKind.Bool or ValueKind.Int8 or ValueKind.UInt8 => 1,
-        ValueKind.Int16 or ValueKind.UInt16 => 2,
+        ValueKind.Int16 or ValueKind.UInt16 or ValueKind.Char => 2,
         ValueKind.Int32 or ValueKind.UInt32 or ValueKind.Float => 4,
         ValueKind.Int64 or ValueKind.UInt64 or ValueKind.Double => 8,
         _ => throw new BridgeArgumentException("Bulk copies need primitive or struct elements.")
@@ -940,7 +1089,8 @@ internal static class ComponentRegistry
         RequireArrayKind(kind);
         if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
         int elementKind = ValueKinds.ElementKind(kind);
-        int size = ValueKinds.IsStruct(elementKind) ? StructOf(entry!, elementKind).Size : PrimitiveSize(elementKind);
+        StructRecord? structElement = ValueKinds.IsStruct(elementKind) ? StructOf(entry!, elementKind) : null;
+        int size = structElement?.Size ?? PrimitiveSize(elementKind);
         if (start < 0 || count < 0 || (ulong)start + (ulong)count > (ulong)array!.LongLength)
             throw new BridgeArgumentException($"The range {start}..{(ulong)start + (ulong)count} is outside an array of length {array!.LongLength}.");
         if (count == 0) return true;
@@ -949,8 +1099,19 @@ internal static class ComponentRegistry
         fixed (byte* data = &System.Runtime.InteropServices.MemoryMarshal.GetArrayDataReference(array))
         {
             byte* element = data + (ulong)start * (ulong)size;
-            if (intoArray) Buffer.MemoryCopy(buffer, element, bytes, bytes);
-            else Buffer.MemoryCopy(element, buffer, bytes, bytes);
+            if (intoArray)
+            {
+                Buffer.MemoryCopy(buffer, element, bytes, bytes);
+                // Managed code is only given 0 or 1 for a bool, whatever the native bytes were.
+                if ((ValueKind)elementKind == ValueKind.Bool)
+                    for (long index = 0; index < count; ++index) if (element[index] > 1) element[index] = 1;
+                if (structElement != null && structElement.BoolOffsets.Length > 0)
+                    for (long index = 0; index < count; ++index) NormalizeBools(element + index * size, structElement.BoolOffsets);
+            }
+            else
+            {
+                Buffer.MemoryCopy(element, buffer, bytes, bytes);
+            }
         }
         return true;
     }

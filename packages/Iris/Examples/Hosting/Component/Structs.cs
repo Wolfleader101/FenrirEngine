@@ -16,13 +16,14 @@ public struct Pose
     public byte Flags;
 }
 
-// Not blittable: a bool and a reference have different managed and native representations.
+// A bool is one byte in memory, as in C++, so a struct holding one is plain data too.
 public struct WithBool
 {
     public bool Flag;
     public int Value;
 }
 
+// Not blittable: a reference has no native representation.
 public struct WithText
 {
     public string Name;
