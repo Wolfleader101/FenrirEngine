@@ -35,7 +35,7 @@ namespace Fenrir::Detail
         // The id of the new registration, or -1 if the name is empty or already taken.
         std::int32_t Add(ComponentRegistration registration)
         {
-            if (registration.name.empty() || registration.get == nullptr || registration.has == nullptr ||
+            if (registration.name.empty() || !registration.get || !registration.has ||
                 m_ids.contains(registration.name))
             {
                 return -1;
@@ -46,6 +46,26 @@ namespace Fenrir::Detail
             // The table changed, so any id or "not registered" that C# remembered is stale.
             m_generation = ++s_generations;
             return id;
+        }
+
+        // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or the same name
+        // twice.
+        bool AddAll(std::vector<ComponentRegistration> registrations)
+        {
+            std::unordered_map<std::string, int> seen;
+            for (const auto& registration : registrations)
+            {
+                if (registration.name.empty() || !registration.get || !registration.has || m_ids.contains(registration.name) ||
+                    !seen.emplace(registration.name, 0).second)
+                {
+                    return false;
+                }
+            }
+            for (auto& registration : registrations)
+            {
+                (void)Add(std::move(registration));
+            }
+            return true;
         }
 
         // The id registered under a name, or -1.

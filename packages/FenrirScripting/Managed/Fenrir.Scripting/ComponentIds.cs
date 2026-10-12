@@ -7,9 +7,6 @@ namespace Fenrir.Scripting;
 // for as long as the registry it came from is the current one.
 internal static unsafe class ComponentIds<T> where T : unmanaged, IReadOnlyComponent
 {
-    /// <summary>The type has no [NativeComponent] attribute, so the engine has nothing registered for it.</summary>
-    internal const int NotNative = -2;
-
     /// <summary>The attribute names a component the host has not registered.</summary>
     internal const int NotRegistered = -1;
 
@@ -20,7 +17,11 @@ internal static unsafe class ComponentIds<T> where T : unmanaged, IReadOnlyCompo
     private static bool resolved;
     private static int id;
 
+    /// <summary>The name in a [NativeComponent] attribute, or null for a component the script defines.</summary>
     internal static string? NativeName { get; } = typeof(T).GetCustomAttribute<NativeComponentAttribute>()?.Name;
+
+    /// <summary>The name the engine knows the component by: the attribute's, or the type's own full name for a script component.</summary>
+    internal static string Name { get; } = NativeName ?? typeof(T).FullName ?? typeof(T).Name;
 
     internal static int Id
     {
@@ -39,12 +40,10 @@ internal static unsafe class ComponentIds<T> where T : unmanaged, IReadOnlyCompo
 
     private static int Resolve()
     {
-        if (NativeName == null)
-            return NotNative;
         string typeName = typeof(T).FullName ?? typeof(T).Name;
-        Span<byte> name = stackalloc byte[Encoding.UTF8.GetMaxByteCount(NativeName.Length)];
+        Span<byte> name = stackalloc byte[Encoding.UTF8.GetMaxByteCount(Name.Length)];
         Span<byte> type = stackalloc byte[Encoding.UTF8.GetMaxByteCount(typeName.Length)];
-        int nameLength = Encoding.UTF8.GetBytes(NativeName, name);
+        int nameLength = Encoding.UTF8.GetBytes(Name, name);
         int typeLength = Encoding.UTF8.GetBytes(typeName, type);
         fixed (byte* nameBytes = name)
         fixed (byte* typeBytes = type)

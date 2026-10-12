@@ -24,12 +24,6 @@ public struct FakeRelationship : IComponent
     public int Value2;
 }
 
-// A component with no [NativeComponent] attribute: not a native one.
-public struct Plain : IComponent
-{
-    public int Value2;
-}
-
 // What scripts do with the native components, called by the tests through Iris.
 public static class Registry
 {
@@ -86,8 +80,6 @@ public static class Registry
 
     // Looks up Health, which may or may not be registered yet.
     public static string? HealthLookup(uint entity) => Message(() => new Entity(entity).Get<Health>().Current);
-
-    public static string? NotNative(uint entity) => Message(() => new Entity(entity).Get<Plain>().Value2);
 
     private static string? Message(Func<object> action)
     {

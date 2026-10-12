@@ -4,6 +4,7 @@
 
 #include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
+#include "ScriptComponents.hpp"
 
 namespace Fenrir::Detail
 {
@@ -14,6 +15,10 @@ namespace Fenrir::Detail
     {
         App* app = nullptr;
         ComponentRegistry* components = nullptr;
+
+        // Set only while a script assembly reports the components it defines (while it loads): where to put them. Null at any
+        // other time, so a stray call from a script is ignored.
+        std::vector<ScriptComponentDescription>* discovering = nullptr;
     };
 
     // Makes `context` the active one. False (and nothing changes) if another is already active.

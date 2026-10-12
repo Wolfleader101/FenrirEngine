@@ -11,6 +11,11 @@ namespace Fenrir
         return entity;
     }
 
+    entt::registry& EntityList::GetRegistry()
+    {
+        return m_registry;
+    }
+
     Entity EntityList::GetEntity(uint32_t id)
     {
         if (m_registry.valid(static_cast<entt::entity>(id)))

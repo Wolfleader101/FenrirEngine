@@ -45,6 +45,9 @@ add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
     src/EngineComponents.cpp
+    src/ScriptComponents.cpp
+    src/ScriptComponents.hpp
+    src/ByteStorage.hpp
     src/ComponentRegistry.hpp
     include/FenrirScripting/ComponentRegistry.hpp
     src/EngineContext.hpp

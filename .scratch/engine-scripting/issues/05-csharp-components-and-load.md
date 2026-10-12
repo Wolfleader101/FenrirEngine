@@ -4,14 +4,28 @@
 
 **Blocked by:** 03, Iris 20
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A C# component added to an entity is removed when the entity is destroyed.
-- [ ] A runtime view over a native pool and a C# pool iterates the right entities.
-- [ ] Alignment is honoured, and storage pages don't move existing elements on growth.
-- [ ] A load that fails partway leaves no new pools or registry entries, and the previous generation (if any) is untouched.
-- [ ] A non-`unmanaged` `IComponent` is rejected at compile time (generator or constraint) or at load with a diagnostic.
+- [x] A C# component added to an entity is removed when the entity is destroyed.
+- [x] A runtime view over a native pool and a C# pool iterates the right entities.
+- [x] Alignment is honoured, and storage pages don't move existing elements on growth.
+- [x] A load that fails partway leaves no new pools or registry entries, and the previous generation (if any) is untouched. *(The first half is done and tested. There is no reload yet, so there is no previous generation to protect: that half is built for but deferred to ticket 10, which must run this transaction on the new generation before it releases the old one.)*
+- [x] A non-`unmanaged` `IComponent` is rejected at compile time (generator or constraint) or at load with a diagnostic.
 
 ## Comments
 
 Spec: `.scratch/engine-scripting/spec.md` (Model; Loading). C# component data lives in native memory, which ticket 10 relies on.
+
+### Resolution
+
+- **Storage:** `ByteStorage` (`src/ByteStorage.hpp`) is an EnTT `basic_sparse_set` with run-time element size and alignment, plugged into the registry through a `storage_type` specialisation on a tag type and addressed by a name-derived storage id (`fenrir.script:<full name>`). It overrides the sparse set's hooks (pop, emplace, swap and the element accessor), so `registry.destroy` and runtime views work with no special cases. Elements live in 256-element pages, allocated once and aligned; growth never moves one. A new element is zeroed.
+- **Discovery:** the Roslyn generator now also writes `Fenrir.Scripting.Generated.ComponentTable.Register()` into the script assembly, listing its writable, non-native, closed, unmanaged component structs. The engine runs it as the assembly loads; each call (`ScriptComponents.Report<T>()`) reports the full name, `Unsafe.SizeOf<T>()` and the alignment through the `RegisterScriptComponent` internal call. Alignment is measured with a probe struct (the offset of a `T` after one byte).
+- **All-or-nothing:** `CompleteLoad` discovers and checks, then validates every native mapping, then registers. Nothing is registered before the last step, and pools are lazy, so a failure at any step leaves no registry entry and no storage. The tests prove it by failing a native mapping after a script has reported four components, and compare the pool count before and after.
+- **C# side:** a component with no `[NativeComponent]` attribute is looked up by its full name, through the same type-checked path as a native one, so `Get<T>`, `Has<T>` and the generated accessors work unchanged.
+- **Registration shape:** operations on `ComponentRegistration` are now `std::function`s (a script component's carry its storage id, size and alignment), and it gained `size`, `alignment`, `scriptDefined` and `pool`. `Scripting::FindComponent(name)` exposes a registration to native code.
+- **Engine change:** `EntityList::GetRegistry()` (public, documented), so the scripting layer can add its storage to a list's registry.
+- **Bullet 5 (non-unmanaged component):** rejected at compile time by the generator (`FENRIR0004`, an error), with a compile test (`RefCompile-ManagedComponent`). Nothing non-unmanaged can reach a load.
+- **Load order, as built:** discover and check the script's components, then check every native mapping, then register. The spec lists "register components" first; registering last is what makes the load atomic, since nothing is committed until every check has passed. Because registration is lazy and last, mapping validation never sees the script's own components (it has nothing to validate for them: their C# struct is the definition).
+- **Hardening from review:** the storage allocates a page before it adds an entity (an allocation failure cannot leave an entity without an element); an unconfigured storage refuses elements, so the inherited public `push` cannot corrupt it; elements are capped at 64 KiB; registrations commit all or none (`AddAll`); a component reported twice is named as such; and asking whether an entity has a script component, or for its data, never creates a pool (only adding does).
+- **Previous generation untouched:** there is no reload yet, so there is no previous generation. The transaction is built so that a failed load changes nothing, and ticket 10 must run it on the *new* generation before releasing the old one. Registrations are tagged `scriptDefined` so a reload can replace exactly the script's components.
+- **Tests (eight new cases):** discovery with sizes and alignments (12/4, 16/8, 32/16, 1/1); a script component shared with C# in both directions and removed when its entity is destroyed (pool size checked), including slot reuse; runtime views over native and script pools (two-, three- and one-pool views, and after a destroy); 16-byte alignment over 700 elements and growth by 3000 more without moving any; a failed load leaving no registry entry and no pool; a name clash with a native component; and the byte storage refusing a reshape while in use.

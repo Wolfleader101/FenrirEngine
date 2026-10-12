@@ -5,6 +5,8 @@ add_executable(FenrirScriptingTests
     HeadlessApp.hpp
 )
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting)
+# The byte storage is internal; its own behaviour is tested directly.
+target_include_directories(FenrirScriptingTests PRIVATE ../src)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
