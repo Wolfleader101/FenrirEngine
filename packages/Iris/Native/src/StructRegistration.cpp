@@ -9,11 +9,16 @@ namespace Iris::Detail
 {
     namespace
     {
-        // The text the bridge parses: "TypeName|size", then "name|offset|kind|nestedTypeName" per field.
+        // The text the bridge parses: "TypeName|size", then "name|offset|kind|nestedTypeName" per field, or for
+        // an enum the one line "TypeName|size|underlyingKind".
         std::string Describe(const StructInfo& info)
         {
             std::string text(info.typeName);
             text += '|' + std::to_string(info.size);
+            if (info.underlying != ValueKind::Void)
+            {
+                return text + '|' + std::to_string(static_cast<std::int32_t>(info.underlying));
+            }
             for (const auto& field : info.fields)
             {
                 text += '\n';
@@ -23,6 +28,11 @@ namespace Iris::Detail
                 if (field.nested != nullptr)
                 {
                     text += field.nested->typeName;
+                }
+                if (field.kind == ValueKind::InlineArray)
+                {
+                    text += '|' + std::to_string(static_cast<std::int32_t>(field.element)) + '|' +
+                            std::to_string(field.length);
                 }
             }
             return text;
@@ -80,7 +90,7 @@ namespace Iris::Detail
             }
             return Success<std::int32_t>((elementKind << 8) | 15);
         }
-        if (spec.kind != ValueKind::Struct)
+        if (spec.kind != ValueKind::Struct && spec.kind != ValueKind::Enum)
         {
             return Success<std::int32_t>(static_cast<std::int32_t>(spec.kind));
         }
@@ -90,6 +100,6 @@ namespace Iris::Detail
             return PropagateFailure<std::int32_t>(id);
         }
         return Success<std::int32_t>(
-            static_cast<std::int32_t>((*id.value << 8U) | static_cast<std::uint64_t>(ValueKind::Struct)));
+            static_cast<std::int32_t>((*id.value << 8U) | static_cast<std::uint64_t>(spec.kind)));
     }
 } // namespace Iris::Detail

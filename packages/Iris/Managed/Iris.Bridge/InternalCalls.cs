@@ -15,9 +15,10 @@ namespace Iris.Bridge;
 // it cannot keep a released component alive.
 internal static class InternalCalls
 {
-    // Kinds an internal call signature can use: the sized numbers (bool and char are excluded because
-    // their unmanaged representation is ambiguous), void for a return, and Pointer for any pointer
-    // (strings travel as a UTF-8 pointer and a length, structs as a pointer).
+    // Kinds an internal call signature can use: the sized numbers, bool (one byte) and char (two bytes), void
+    // for a return, and Pointer for any pointer (strings travel as a UTF-8 pointer and a length, structs as a
+    // pointer). A signature with bool or char needs [assembly: DisableRuntimeMarshalling] (see Bind), since
+    // otherwise the runtime marshals them by its own rules.
     private sealed record Registration(string Name, int ReturnKind, int[] ParameterKinds, IntPtr Function);
 
     private static readonly object Gate = new();
@@ -25,7 +26,7 @@ internal static class InternalCalls
 
     internal static bool IsValidKind(int kind, bool isReturn) =>
         kind == (int)ValueKind.Pointer || (isReturn && kind == (int)ValueKind.Void) ||
-        (kind >= (int)ValueKind.Int8 && kind <= (int)ValueKind.Double);
+        (kind >= (int)ValueKind.Int8 && kind <= (int)ValueKind.Double) || kind == (int)ValueKind.Bool || kind == (int)ValueKind.Char;
 
     // Registering the same name with the same signature and address again is a no-op, so a host can
     // register on every start-up; anything else under an existing name is an argument error.
@@ -58,9 +59,7 @@ internal static class InternalCalls
     {
         if (type == typeof(void)) return (int)ValueKind.Void;
         if (type.IsPointer || type.IsFunctionPointer || type == typeof(IntPtr) || type == typeof(UIntPtr)) return (int)ValueKind.Pointer;
-        for (int kind = (int)ValueKind.Int8; kind <= (int)ValueKind.Double; ++kind)
-            if (ValueKinds.ToType(kind, allowVoid: false) == type) return kind;
-        return -1;
+        return ComponentRegistry.PrimitiveKindOf(type);
     }
 
     private static string Describe(int kind) => (ValueKind)kind switch
@@ -110,6 +109,12 @@ internal static class InternalCalls
                     !parameters.Select(KindOf).SequenceEqual(registration.ParameterKinds))
                 {
                     problems.Add($"{name}: the field's signature ({Signature(returnKind, parameters.Select(KindOf))}) does not match the registered one ({Signature(registration.ReturnKind, registration.ParameterKinds)}).");
+                    continue;
+                }
+                if ((registration.ReturnKind is (int)ValueKind.Bool or (int)ValueKind.Char || registration.ParameterKinds.Any(kind => kind is (int)ValueKind.Bool or (int)ValueKind.Char)) &&
+                    !assembly.IsDefined(typeof(System.Runtime.CompilerServices.DisableRuntimeMarshallingAttribute)))
+                {
+                    problems.Add($"{name}: uses bool or char, whose unmanaged size is only fixed when the assembly has [assembly: DisableRuntimeMarshalling].");
                     continue;
                 }
                 fields.Add((field, registration));

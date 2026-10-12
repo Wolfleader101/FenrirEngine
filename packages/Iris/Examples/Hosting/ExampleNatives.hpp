@@ -51,6 +51,16 @@ namespace Iris::Examples
         recordedValue = value;
     }
 
+    inline bool Negate(bool value)
+    {
+        return !value;
+    }
+
+    inline char16_t NextChar(char16_t value)
+    {
+        return static_cast<char16_t>(value + 1);
+    }
+
     // Registers every function; returns the first failure, or a success.
     [[nodiscard]] inline Iris::CallResult<void> RegisterNatives()
     {
@@ -63,6 +73,8 @@ namespace Iris::Examples
             Iris::RegisterInternalCall<&Normalize>(prefix + "Normalize"),
             Iris::RegisterInternalCall<&Throws>(prefix + "Throws"),
             Iris::RegisterInternalCall<&Record>(prefix + "Record"),
+            Iris::RegisterInternalCall<&Negate>(prefix + "Negate"),
+            Iris::RegisterInternalCall<&NextChar>(prefix + "NextChar"),
         };
         for (auto& result : results)
         {

@@ -22,11 +22,14 @@ namespace Iris
     class Type;
 
     /**
-     * @brief The primitive types: bool, 8/16/32/64-bit integers, float and double, matched exactly (no
-     * widening). Character types are excluded because their managed meaning is ambiguous.
+     * @brief The primitive types: bool, 8/16/32/64-bit integers, float, double and `char16_t`, matched exactly
+     * (no widening). A bool is one byte, and a `char16_t` is a UTF-16 code unit, a managed `char`. The other
+     * character types are excluded because their managed meaning is ambiguous (`char` and `char8_t` are
+     * accepted only as the elements of an inline array, where they are bytes).
      */
     template <typename T>
     concept PrimitiveValue = std::same_as<T, bool> || std::same_as<T, float> || std::same_as<T, double> ||
+                             std::same_as<T, char16_t> ||
                              (std::integral<T> && !std::same_as<T, char> && !std::same_as<T, wchar_t> &&
                               !std::same_as<T, char8_t> && !std::same_as<T, char16_t> && !std::same_as<T, char32_t> &&
                               (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8));
@@ -42,7 +45,9 @@ namespace Iris
      * };
      * ```
      *
-     * List every field, in declaration order, and a field that is itself a mapped struct is allowed.
+     * List every field, in declaration order. A field can be a number, `bool`, `char16_t`, an enum with an
+     * EnumMapping, another mapped struct, or a fixed-size array `T[N]` or `std::array<T, N>` of those (with
+     * `char` and `char8_t` as bytes).
      * The managed side checks the size, field names, order, offsets and types the first time the struct
      * is used with a component; a mismatch, or a managed struct that is not blittable, fails the lookup
      * with a diagnostic and the call never happens.
@@ -60,6 +65,33 @@ namespace Iris
                               StructMapping<T>::typeName;
                               StructMapping<T>::fields;
                           };
+
+    /**
+     * @brief Declares which managed enum a C++ enum mirrors. Specialize it for each enum:
+     *
+     * ```cpp
+     * enum class Mode : std::int32_t { Off, On };
+     * template <> struct Iris::EnumMapping<Mode> { static constexpr std::string_view typeName = "MyComponent.Mode"; };
+     * ```
+     *
+     * An enum crosses as its underlying integer, so the managed enum must have exactly the same underlying
+     * type (a mismatch fails the lookup with a diagnostic and the call never happens). Values the managed enum
+     * does not name are carried unchanged.
+     */
+    template <typename T>
+    struct EnumMapping;
+
+    /**
+     * @brief A C++ enum with an EnumMapping, passed by value to and from managed code and used as a field,
+     * property or mapped-struct field. Its underlying type must be a sized integer.
+     */
+    template <typename T>
+    concept EnumValue = std::is_enum_v<T> && requires { EnumMapping<T>::typeName; } &&
+                        std::integral<std::underlying_type_t<T>> && !std::same_as<std::underlying_type_t<T>, bool> &&
+                        !std::same_as<std::underlying_type_t<T>, char> && !std::same_as<std::underlying_type_t<T>, wchar_t> &&
+                        !std::same_as<std::underlying_type_t<T>, char8_t> &&
+                        !std::same_as<std::underlying_type_t<T>, char16_t> &&
+                        !std::same_as<std::underlying_type_t<T>, char32_t>;
 
     /**
      * @brief What an Array can hold: a PrimitiveValue, a mapped struct (see StructMapping), or
@@ -140,12 +172,13 @@ namespace Iris
 
     /**
      * @brief What can be passed to a managed method or constructor: a PrimitiveValue, a string (see
-     * StringArgument), a mapped struct (see StructMapping), an Object, which matches any managed class or
-     * interface parameter, or an Array (`const Array<T>*` passes a nullable array).
+     * StringArgument), a mapped struct (see StructMapping), a mapped enum (see EnumMapping), an Object, which
+     * matches any managed class or interface parameter, or an Array (`const Array<T>*` passes a nullable array).
      */
     template <typename T>
     concept Argument =
         PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> || StructValue<std::remove_cvref_t<T>> ||
+        EnumValue<std::remove_cvref_t<T>> ||
         std::same_as<std::remove_cvref_t<T>, Object> || Detail::ArrayInfo<std::remove_cvref_t<T>>::value;
 
     /**
@@ -155,18 +188,18 @@ namespace Iris
      * a by-value Object or Array is not a signature argument.
      */
     template <typename T>
-    concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || StructValue<T> ||
+    concept SignatureArgument = PrimitiveValue<T> || StringArgument<T> || StructValue<T> || EnumValue<T> ||
                                 std::same_as<T, const Object&> || Detail::ArraySignature<T>;
 
     /**
-     * @brief What a managed method can return: void, a PrimitiveValue, a mapped struct, `std::optional<Object>`,
+     * @brief What a managed method can return: void, a PrimitiveValue, a mapped struct or enum, `std::optional<Object>`,
      * `std::optional<std::string>`, or `std::optional<Array<T>>`. In each optional an empty value is a null
      * return, which a string keeps distinct from the empty string and an array from an empty array. A returned
      * string is an owned copy; a returned Object or Array is a new, independently owned handle.
      */
     template <typename T>
     concept Returnable =
-        std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || std::same_as<T, std::optional<Object>> ||
+        std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || EnumValue<T> || std::same_as<T, std::optional<Object>> ||
         std::same_as<T, std::optional<std::string>> || Detail::OptionalArrayInfo<T>::value;
 
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
@@ -191,27 +224,35 @@ namespace Iris
             Object = 12,
             String = 13,
             Struct = 14,
-            Array = 15,  // Only in a KindSpec; on the wire it is combined with the element kind.
-            Pointer = 17 // Only in internal call signatures.
+            Array = 15, // Only in a KindSpec; on the wire it is combined with the element kind.
+            Pointer = 17, // Only in internal call signatures.
+            Char = 18,
+            Enum = 19,       // On the wire combined with the enum's handle, like Struct.
+            InlineArray = 20 // Only as a struct field: the element kind and length are described beside it.
         };
 
         struct StructInfo;
 
-        // One field of a mapped struct: name, byte offset, kind, and for a struct field its own mapping.
+        // One field of a mapped struct: name, byte offset, kind, and for a struct or enum field its own mapping.
+        // A fixed-size array field has kind InlineArray, and its element's kind, mapping (`nested`) and length.
         struct StructFieldInfo
         {
             std::string_view name;
             std::size_t offset;
             ValueKind kind;
             const StructInfo* nested;
+            ValueKind element = ValueKind::Void;
+            std::size_t length = 0;
         };
 
-        // A struct mapping as the bridge needs it.
+        // A struct mapping as the bridge needs it. An enum mapping has no fields and names its underlying
+        // integer kind instead.
         struct StructInfo
         {
             std::string_view typeName;
             std::size_t size;
             std::span<const StructFieldInfo> fields;
+            ValueKind underlying = ValueKind::Void;
         };
 
         template <StructValue T>
@@ -219,11 +260,20 @@ namespace Iris
                                                  std::span<const StructFieldInfo>(StructMapping<T>::fields)};
 
         template <typename Declared>
+        constexpr ValueKind KindOf() noexcept;
+
+        template <EnumValue T>
+        inline constexpr StructInfo EnumInfoOf{EnumMapping<T>::typeName, sizeof(T), {}, KindOf<std::underlying_type_t<T>>()};
+
+        // The struct or enum mapping a declared type needs registered, or null.
+        template <typename Declared>
         constexpr const StructInfo* StructInfoPtr() noexcept
         {
             using T = std::remove_cvref_t<Declared>;
             if constexpr (StructValue<T>)
                 return &StructInfoOf<T>;
+            else if constexpr (EnumValue<T>)
+                return &EnumInfoOf<T>;
             else
                 return nullptr;
         }
@@ -265,16 +315,21 @@ namespace Iris
                 return ValueKind::String;
             else if constexpr (StructValue<T>)
                 return ValueKind::Struct;
+            else if constexpr (EnumValue<T>)
+                return ValueKind::Enum;
             else if constexpr (ArrayInfo<T>::value || OptionalArrayInfo<T>::value)
                 return ValueKind::Array;
             else
             {
                 static_assert(PrimitiveValue<T>,
-                              "Iris cannot pass this C++ type to managed code. Use bool, a sized integer, float, "
-                              "double, std::string_view (std::optional<std::string> to return), a struct with a "
-                              "StructMapping, const Object& or Array<T>.");
+                              "Iris cannot pass this C++ type to managed code. Use bool, a sized integer, "
+                              "char16_t, float, double, std::string_view (std::optional<std::string> to "
+                              "return), a struct with a StructMapping, an enum with an EnumMapping, "
+                              "const Object& or Array<T>.");
                 if constexpr (std::same_as<T, bool>)
                     return ValueKind::Bool;
+                else if constexpr (std::same_as<T, char16_t>)
+                    return ValueKind::Char;
                 else if constexpr (std::same_as<T, float>)
                     return ValueKind::Float;
                 else if constexpr (std::same_as<T, double>)
@@ -329,19 +384,75 @@ namespace Iris
             }
         }
 
+        // A fixed-size array member: `T[N]` or `std::array<T, N>`.
+        template <typename T>
+        struct InlineArrayInfo
+        {
+            static constexpr bool value = false;
+        };
+        template <typename E, std::size_t N>
+        struct InlineArrayInfo<E[N]>
+        {
+            static constexpr bool value = true;
+            using Element = E;
+            static constexpr std::size_t length = N;
+        };
+        template <typename E, std::size_t N>
+        struct InlineArrayInfo<std::array<E, N>>
+        {
+            static constexpr bool value = true;
+            using Element = E;
+            static constexpr std::size_t length = N;
+        };
+
+        // What an inline array can hold: the values a struct field can, and `char` or `char8_t` as bytes.
+        template <typename E>
+        concept InlineArrayElement = PrimitiveValue<E> || StructValue<E> || EnumValue<E> || std::same_as<E, char> ||
+                                     std::same_as<E, char8_t>;
+
+        // The kind of an inline array's elements: `char` and `char8_t` are bytes (a managed `byte`).
+        template <typename E>
+        constexpr ValueKind InlineElementKindOf() noexcept
+        {
+            if constexpr (std::same_as<E, char> || std::same_as<E, char8_t>)
+                return ValueKind::UInt8;
+            else
+                return KindOf<E>();
+        }
+
         template <typename Field>
         constexpr StructFieldInfo MakeField(std::string_view name, std::size_t offset) noexcept
         {
-            return {name, offset, KindOf<Field>(), StructInfoPtr<Field>()};
+            if constexpr (InlineArrayInfo<Field>::value)
+            {
+                using Element = typename InlineArrayInfo<Field>::Element;
+                static_assert(InlineArrayElement<Element>,
+                              "Iris cannot map this array member. An array member can hold bool, a sized integer, "
+                              "char, char8_t, char16_t, float, double, a struct with a StructMapping or an enum "
+                              "with an EnumMapping.");
+                return {name,
+                        offset,
+                        ValueKind::InlineArray,
+                        StructInfoPtr<Element>(),
+                        InlineElementKindOf<Element>(),
+                        InlineArrayInfo<Field>::length};
+            }
+            else
+            {
+                return {name, offset, KindOf<Field>(), StructInfoPtr<Field>()};
+            }
         }
 
         // Each value travels in one 64-bit slot: integers sign- or zero-extended, bool as 0 or 1, and
         // float and double as their raw IEEE bits (float in the low 32 bits). An Object's slot is filled
         // in from its handle when the call is made.
-        template <PrimitiveValue T>
+        template <typename T>
+            requires(PrimitiveValue<T> || EnumValue<T>)
         constexpr std::uint64_t ToSlot(T value) noexcept
         {
-            if constexpr (std::same_as<T, float>)
+            if constexpr (std::is_enum_v<T>)
+                return ToSlot<std::underlying_type_t<T>>(static_cast<std::underlying_type_t<T>>(value));
+            else if constexpr (std::same_as<T, float>)
                 return std::bit_cast<std::uint32_t>(value);
             else if constexpr (std::same_as<T, double>)
                 return std::bit_cast<std::uint64_t>(value);
@@ -353,10 +464,13 @@ namespace Iris
                 return static_cast<std::uint64_t>(value);
         }
 
-        template <PrimitiveValue T>
+        template <typename T>
+            requires(PrimitiveValue<T> || EnumValue<T>)
         constexpr T FromSlot(std::uint64_t slot) noexcept
         {
-            if constexpr (std::same_as<T, float>)
+            if constexpr (std::is_enum_v<T>)
+                return static_cast<T>(FromSlot<std::underlying_type_t<T>>(slot));
+            else if constexpr (std::same_as<T, float>)
                 return std::bit_cast<float>(static_cast<std::uint32_t>(slot));
             else if constexpr (std::same_as<T, double>)
                 return std::bit_cast<double>(slot);

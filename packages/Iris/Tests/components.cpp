@@ -4,7 +4,9 @@
 #include "TestHarness.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <limits>
 #include <memory>
@@ -47,7 +49,112 @@ namespace Fixture
         bool Flag;
         std::int32_t Value;
     };
+    struct Glyph
+    {
+        char16_t Letter;
+        bool Bold;
+        std::uint16_t Code;
+    };
+    enum class Gear : std::int32_t
+    {
+        Off = 0,
+        On = 1,
+        Auto = 7
+    };
+    enum class Shade : std::uint8_t
+    {
+        Dark = 1,
+        Light = 2
+    };
+    enum class Offset : std::int16_t
+    {
+        Negative = -5,
+        Positive = 5
+    };
+    // Wrong on purpose: the managed Gear is an int.
+    enum class WideGear : std::int64_t
+    {
+        Off = 0
+    };
+    struct Setting
+    {
+        Gear Current;
+        Shade Tint;
+        bool Locked;
+        std::int32_t Level;
+    };
+    struct WideSetting
+    {
+        WideGear Current;
+        Shade Tint;
+        bool Locked;
+        std::int32_t Level;
+    };
+    struct Label
+    {
+        std::int32_t Id;
+        char Text[16];
+        char16_t Wide[4];
+    };
+    // Wrong on purpose: the same size and offsets as Label, but the text is 15 bytes long.
+    struct ShortLabel
+    {
+        std::int32_t Id;
+        std::uint8_t Text[15];
+        char16_t Wide[4];
+    };
+    // Wrong on purpose: the text elements are signed bytes.
+    struct SignedLabel
+    {
+        std::int32_t Id;
+        std::int8_t Text[16];
+        char16_t Wide[4];
+    };
+    struct Bundle
+    {
+        float Weights[4];
+        Vec3 Points[2];
+        std::array<Gear, 3> Gears;
+        bool Ready[3];
+    };
 } // namespace Fixture
+
+template <>
+struct Iris::EnumMapping<Fixture::Gear>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Gear";
+};
+template <>
+struct Iris::EnumMapping<Fixture::Shade>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Shade";
+};
+template <>
+struct Iris::EnumMapping<Fixture::Offset>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Offset";
+};
+template <>
+struct Iris::EnumMapping<Fixture::WideGear>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Gear";
+};
+template <>
+struct Iris::StructMapping<Fixture::Setting>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Setting";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::Setting, Current), IRIS_FIELD(Fixture::Setting, Tint),
+                           IRIS_FIELD(Fixture::Setting, Locked), IRIS_FIELD(Fixture::Setting, Level));
+};
+template <>
+struct Iris::StructMapping<Fixture::WideSetting>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Setting";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::WideSetting, Current), IRIS_FIELD(Fixture::WideSetting, Tint),
+                           IRIS_FIELD(Fixture::WideSetting, Locked), IRIS_FIELD(Fixture::WideSetting, Level));
+};
 
 template <>
 struct Iris::StructMapping<Fixture::Vec3>
@@ -98,6 +205,46 @@ struct Iris::StructMapping<Fixture::FlagValue>
         Iris::StructFields(IRIS_FIELD(Fixture::FlagValue, Flag), IRIS_FIELD(Fixture::FlagValue, Value));
 };
 
+template <>
+struct Iris::StructMapping<Fixture::Glyph>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Glyph";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fixture::Glyph, Letter),
+                                                      IRIS_FIELD(Fixture::Glyph, Bold), IRIS_FIELD(Fixture::Glyph, Code));
+};
+
+template <>
+struct Iris::StructMapping<Fixture::Label>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Label";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fixture::Label, Id), IRIS_FIELD(Fixture::Label, Text),
+                                                      IRIS_FIELD(Fixture::Label, Wide));
+};
+template <>
+struct Iris::StructMapping<Fixture::ShortLabel>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Label";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::ShortLabel, Id), IRIS_FIELD(Fixture::ShortLabel, Text),
+                           IRIS_FIELD(Fixture::ShortLabel, Wide));
+};
+template <>
+struct Iris::StructMapping<Fixture::SignedLabel>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Label";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::SignedLabel, Id), IRIS_FIELD(Fixture::SignedLabel, Text),
+                           IRIS_FIELD(Fixture::SignedLabel, Wide));
+};
+template <>
+struct Iris::StructMapping<Fixture::Bundle>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Bundle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::Bundle, Weights), IRIS_FIELD(Fixture::Bundle, Points),
+                           IRIS_FIELD(Fixture::Bundle, Gears), IRIS_FIELD(Fixture::Bundle, Ready));
+};
+
 namespace
 {
     using namespace Iris;
@@ -116,6 +263,7 @@ namespace
     constexpr std::string_view StructsType = "Iris.Examples.Component.Structs";
     constexpr std::string_view BodyType = "Iris.Examples.Component.Body";
     constexpr std::string_view NativesType = "Iris.Examples.Component.Natives";
+    constexpr std::string_view ValuesType = "Iris.Examples.Component.Values";
     constexpr std::string_view ArraysType = "Iris.Examples.Component.Arrays";
     constexpr std::string_view GreeterType = "Iris.Examples.Component.Greeter";
     constexpr std::string_view SharedCalculatorType = "Iris.Examples.Component.SharedCalculator";
@@ -1306,11 +1454,6 @@ namespace
                            body.CreateObject(Fixture::SwappedVec3{1, 2, 3}).status == CallStatus::InvalidArgument,
                        "A bad mapping was accepted by a member or constructor");
 
-                 const auto flip = structs.FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Flip");
-                 Check(flip.status == CallStatus::InvalidArgument &&
-                           flip.diagnostic.find("blittable") != std::string::npos,
-                       "A non-blittable struct was accepted: " + flip.diagnostic);
-
                  // The right mapping still works afterwards.
                  Check(structs.FindMethod<Fixture::Vec3(Fixture::Vec3, Fixture::Vec3)>("Add").Succeeded(),
                        "A good mapping failed after bad ones");
@@ -1342,6 +1485,201 @@ namespace
                  Check(body.FindField<float>("Position").status == CallStatus::NotFound &&
                            body.FindField<std::optional<Object>>("Position").status == CallStatus::NotFound,
                        "A struct field matched another kind");
+             }},
+            {"bool is one byte: it works in mapped structs, and any nonzero byte reads as true",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto structs = *component.FindType(StructsType).value;
+                 const auto flip = structs.FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Flip");
+                 Check(flip.Succeeded(), "A struct with a bool was not found: " + flip.diagnostic);
+                 const auto flipped = flip.value->Invoke(Fixture::FlagValue{true, 5});
+                 Check(flipped.Succeeded() && !flipped.value->Flag && flipped.value->Value == 5,
+                       "A bool field did not cross: " + flipped.diagnostic);
+                 Check(flip.value->Invoke(Fixture::FlagValue{false, -3}).value->Flag, "A false bool did not flip");
+
+                 // Managed code is only ever given 0 or 1: a stray nonzero byte is true, and comes back as 1.
+                 const auto same = (*component.FindType(ValuesType).value).FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Same");
+                 Check(same.Succeeded(), "Same was not found: " + same.diagnostic);
+                 Fixture::FlagValue odd{false, 9};
+                 std::memset(&odd, 2, 1);
+                 const auto back = same.value->Invoke(odd);
+                 Check(back.Succeeded() && back.value->Value == 9, "A struct with an odd bool did not cross");
+                 std::uint8_t raw = 0;
+                 std::memcpy(&raw, &*back.value, 1);
+                 Check(raw == 1, "A nonzero bool byte was not normalised to 1 (it was " + std::to_string(raw) + ")");
+
+                 // A bulk copy into a managed bool[] normalises too.
+                 auto flags = Array<bool>::Create(component, 3);
+                 Check(flags.Succeeded(), "A bool array was not created");
+                 std::uint8_t stray[3] = {0, 2, 255};
+                 bool strayBools[3];
+                 std::memcpy(strayBools, stray, 3);
+                 Check(flags.value->CopyIn(0, std::span<const bool>(strayBools)).Succeeded(), "A bool copy failed");
+                 Check(flags.value->Get(0).value == false && flags.value->Get(1).value == true &&
+                           flags.value->Get(2).value == true,
+                       "A stray nonzero byte in a bool array was not read as true");
+                 Check(flags.value->Release().Succeeded(), "A bool array was not released");
+
+                 // The same struct as a property of an object, and as an array element.
+                 const auto values = *component.FindType(ValuesType).value;
+                 Check(values.FindMethod<bool(bool, bool)>("Both").value->Invoke(true, true).value == true &&
+                           values.FindMethod<bool(bool, bool)>("Both").value->Invoke(true, false).value == false,
+                       "bool arguments and returns regressed");
+             }},
+            {"char is a UTF-16 code unit: arguments, returns, struct fields, arrays and internal calls",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto values = *component.FindType(ValuesType).value;
+                 const auto next = values.FindMethod<char16_t(char16_t)>("Next");
+                 Check(next.Succeeded(), "A char method was not found: " + next.diagnostic);
+                 Check(next.value->Invoke(u'a').value == u'b' && next.value->Invoke(u'\u03c0').value == u'\u03c1',
+                       "A char did not cross as a UTF-16 code unit");
+                 // A char is not an int, and is matched exactly.
+                 Check(values.FindMethod<std::uint16_t(std::uint16_t)>("Next").status == CallStatus::NotFound,
+                       "A ushort signature matched a char method");
+
+                 const auto bump = values.FindMethod<Fixture::Glyph(Fixture::Glyph)>("Bump");
+                 Check(bump.Succeeded(), "A struct with a char was not found: " + bump.diagnostic);
+                 const auto bumped = bump.value->Invoke(Fixture::Glyph{u'x', true, 7});
+                 Check(bumped.Succeeded() && bumped.value->Letter == u'y' && !bumped.value->Bold &&
+                           bumped.value->Code == 8,
+                       "A struct with a char, a bool and padding did not round-trip");
+
+                 const auto word = values.FindMethod<std::optional<Array<char16_t>>()>("Word");
+                 Check(word.Succeeded(), "A char array was not found: " + word.diagnostic);
+                 const auto letters = word.value->Invoke();
+                 Check(letters.Succeeded() && letters.value->has_value(), "A char array was not returned");
+                 std::vector<char16_t> text(*(*letters.value)->Length().value);
+                 Check(text.size() == 3 && (*letters.value)->CopyOut(0, text).Succeeded() && text[0] == u'h' &&
+                           text[2] == u'\u03c0',
+                       "A char array did not copy");
+
+                 const auto natives = *component.FindType(NativesType).value;
+                 Check(natives.FindMethod<char16_t(char16_t)>("CallNextChar").value->Invoke(u'q').value == u'r',
+                       "A char crossed an internal call as something other than two bytes");
+             }},
+            {"enums cross as their underlying integer: arguments, returns, struct fields, fields and properties",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto values = *component.FindType(ValuesType).value;
+                 using Fixture::Gear;
+                 const auto cycle = values.FindMethod<Gear(Gear)>("Cycle");
+                 Check(cycle.Succeeded(), "An enum method was not found: " + cycle.diagnostic);
+                 Check(cycle.value->Invoke(Gear::Off).value == Gear::On &&
+                           cycle.value->Invoke(Gear::On).value == Gear::Auto &&
+                           cycle.value->Invoke(Gear::Auto).value == Gear::Off,
+                       "An enum did not round-trip");
+                 // A value the enum does not name is still just an integer.
+                 Check(cycle.value->Invoke(static_cast<Gear>(42)).value == Gear::Off, "An undefined enum value failed");
+
+                 // The underlying type is part of the signature: byte and short enums, and sign extension.
+                 const auto invert = values.FindMethod<Fixture::Shade(Fixture::Shade)>("Invert");
+                 Check(invert.Succeeded() && invert.value->Invoke(Fixture::Shade::Dark).value == Fixture::Shade::Light,
+                       "A byte enum did not round-trip");
+                 const auto mirror = values.FindMethod<Fixture::Offset(Fixture::Offset)>("Mirror");
+                 Check(mirror.Succeeded() &&
+                           mirror.value->Invoke(Fixture::Offset::Negative).value == Fixture::Offset::Positive &&
+                           mirror.value->Invoke(Fixture::Offset::Positive).value == Fixture::Offset::Negative,
+                       "A signed short enum lost its sign");
+
+                 // An enum is not its integer, and is matched by type.
+                 Check(values.FindMethod<std::int32_t(std::int32_t)>("Cycle").status == CallStatus::NotFound,
+                       "An int signature matched an enum method");
+                 Check(values.FindMethod<Fixture::Shade(Gear)>("Cycle").status == CallStatus::NotFound,
+                       "A different enum return type matched");
+
+                 // A native enum with the wrong underlying type is diagnosed and never called.
+                 const auto wide = values.FindMethod<Fixture::WideGear(Fixture::WideGear)>("Cycle");
+                 Check(wide.status == CallStatus::InvalidArgument && !wide.value &&
+                           wide.diagnostic.find("Gear") != std::string::npos,
+                       "An enum with the wrong underlying type was accepted: " + wide.diagnostic);
+
+                 // As a struct field, next to a bool and a byte enum.
+                 const auto tune = values.FindMethod<Fixture::Setting(Fixture::Setting)>("Tune");
+                 Check(tune.Succeeded(), "A struct with enums was not found: " + tune.diagnostic);
+                 const auto tuned = tune.value->Invoke(Fixture::Setting{Gear::On, Fixture::Shade::Dark, false, 4});
+                 Check(tuned.Succeeded() && tuned.value->Current == Gear::Auto &&
+                           tuned.value->Tint == Fixture::Shade::Light && tuned.value->Locked &&
+                           tuned.value->Level == 5,
+                       "A struct with enum fields did not round-trip");
+                 const auto badStruct = values.FindMethod<Fixture::WideSetting(Fixture::WideSetting)>("Tune");
+                 Check(badStruct.status == CallStatus::InvalidArgument,
+                       "A struct with a wrong enum field was accepted: " + badStruct.diagnostic);
+
+                 // Fields and properties, static and instance.
+                 const auto dial = *component.FindType("Iris.Examples.Component.Dial").value;
+                 const auto object = dial.CreateObject();
+                 Check(object.Succeeded(), "An object could not be created: " + object.diagnostic);
+                 const auto selected = *dial.FindField<Gear>("Selected").value;
+                 Check(selected.Set(*object.value, Gear::On).Succeeded() && selected.Get(*object.value).value == Gear::On,
+                       "An enum field did not round-trip");
+                 const auto tone = *dial.FindProperty<Fixture::Shade>("Tone").value;
+                 Check(tone.Get(*object.value).value == Fixture::Shade::Dark &&
+                           tone.Set(*object.value, Fixture::Shade::Light).Succeeded() &&
+                           tone.Get(*object.value).value == Fixture::Shade::Light,
+                       "An enum property did not round-trip");
+                 const auto fallback = *dial.FindField<Gear>("Default").value;
+                 Check(fallback.Get().value == Gear::Auto, "A static enum field was wrong");
+                 Check(dial.FindField<std::int32_t>("Selected").status == CallStatus::NotFound,
+                       "An enum field matched its integer");
+             }},
+            {"fixed-size arrays inside structs: bytes, UTF-16 units, floats, structs, enums and bools",
+             [&] {
+                 auto host = StartHost(arguments);
+                 const auto component = Load(*host, arguments.component);
+                 const auto values = *component.FindType(ValuesType).value;
+
+                 // A fixed buffer of bytes ("char Text[16]") and one of UTF-16 units.
+                 const auto rename = values.FindMethod<Fixture::Label(Fixture::Label)>("Rename");
+                 Check(rename.Succeeded(), "A struct with fixed buffers was not found: " + rename.diagnostic);
+                 Fixture::Label label{};
+                 label.Id = 7;
+                 std::memcpy(label.Text, "original text", 13);
+                 label.Wide[0] = u'a';
+                 label.Wide[3] = u'\u03c0';
+                 const auto renamed = rename.value->Invoke(label);
+                 Check(renamed.Succeeded(), "A struct with fixed buffers did not cross: " + renamed.diagnostic);
+                 Check(renamed.value->Id == 8 && std::string(renamed.value->Text) == "renamed" &&
+                           renamed.value->Text[15] == 0 && renamed.value->Wide[0] == u'b' &&
+                           renamed.value->Wide[3] == u'\u03c0',
+                       "A fixed buffer did not round-trip");
+
+                 // [InlineArray] structs of floats, structs, enums and bools; all reversed by the callee.
+                 using Fixture::Gear;
+                 const auto reverse = values.FindMethod<Fixture::Bundle(Fixture::Bundle)>("Reverse");
+                 Check(reverse.Succeeded(), "A struct with inline arrays was not found: " + reverse.diagnostic);
+                 Fixture::Bundle bundle{{1, 2, 3, 4}, {{1, 2, 3}, {4, 5, 6}}, {Gear::Off, Gear::On, Gear::Auto},
+                                        {true, false, false}};
+                 std::memset(&bundle.Ready[1], 2, 1); // any nonzero byte is true
+                 const auto reversed = reverse.value->Invoke(bundle);
+                 Check(reversed.Succeeded(), "A struct with inline arrays did not cross: " + reversed.diagnostic);
+                 Check(reversed.value->Weights[0] == 4 && reversed.value->Weights[3] == 1 &&
+                           reversed.value->Points[0].X == 4 && reversed.value->Points[1].Z == 3 &&
+                           reversed.value->Gears[0] == Gear::Auto && reversed.value->Gears[2] == Gear::Off,
+                       "Inline array elements moved or were lost");
+                 // Ready was {true, true(2), false}; reversed and negated it is {true, false, false}.
+                 Check(reversed.value->Ready[0] && !reversed.value->Ready[1] && !reversed.value->Ready[2],
+                       "An inline array of bools was not read as 0 or 1");
+
+                 // The length, the element type and the shape are all checked.
+                 const auto shorter = values.FindMethod<Fixture::ShortLabel(Fixture::ShortLabel)>("Rename");
+                 Check(shorter.status == CallStatus::InvalidArgument &&
+                           shorter.diagnostic.find("Text") != std::string::npos &&
+                           shorter.diagnostic.find("16") != std::string::npos &&
+                           shorter.diagnostic.find("15") != std::string::npos,
+                       "A length mismatch was not diagnosed: " + shorter.diagnostic);
+                 const auto signedText = values.FindMethod<Fixture::SignedLabel(Fixture::SignedLabel)>("Rename");
+                 Check(signedText.status == CallStatus::InvalidArgument &&
+                           signedText.diagnostic.find("Text") != std::string::npos,
+                       "An element type mismatch was not diagnosed: " + signedText.diagnostic);
+                 // Mapped as a scalar field, or as a different struct, an array is not accepted.
+                 Check(values.FindMethod<Fixture::Label(Fixture::Bundle)>("Rename").status == CallStatus::NotFound,
+                       "A different struct matched");
+                 Check(values.FindMethod<Fixture::Label(Fixture::Label)>("Rename").Succeeded(),
+                       "A good mapping failed after bad ones");
              }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {
@@ -1576,6 +1914,10 @@ namespace
                  Check(normalized.Succeeded() && std::abs(normalized.value->X - 0.6f) < 1e-6f &&
                            std::abs(normalized.value->Z - 0.8f) < 1e-6f,
                        "A struct passed by pointer was not updated");
+                 const auto negate = natives.FindMethod<bool(bool)>("CallNegate");
+                 Check(negate.Succeeded() && negate.value->Invoke(true).value == false &&
+                           negate.value->Invoke(false).value == true,
+                       "A bool crossed an internal call as something other than one byte");
                  Examples::recordedValue = 0;
                  Check(natives.FindMethod<void(std::int32_t)>("CallRecord").value->Invoke(9).Succeeded() &&
                            Examples::recordedValue == 9,
@@ -2006,7 +2348,7 @@ namespace
                  auto host = StartHost(arguments);
                  const auto missing = host->LoadComponent(arguments.component);
                  Check(missing.status == CallStatus::InvalidArgument && !missing.value &&
-                           missing.diagnostic.find("7 internal call(s)") != std::string::npos &&
+                           missing.diagnostic.find("9 internal call(s)") != std::string::npos &&
                            missing.diagnostic.find("Iris.Examples.Component.Natives.Add") != std::string::npos &&
                            missing.diagnostic.find("no internal call is registered") != std::string::npos,
                        "Unbound internal calls were not diagnosed: " + missing.diagnostic);

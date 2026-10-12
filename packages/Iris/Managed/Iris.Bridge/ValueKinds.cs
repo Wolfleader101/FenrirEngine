@@ -39,7 +39,15 @@ internal enum ValueKind : int
     Array = 15,
     StructArray = 16,
     // Any pointer. Used only in internal call signatures, never as a method or member kind.
-    Pointer = 17
+    Pointer = 17,
+    // A UTF-16 code unit (C# char, C++ char16_t), in the low 16 bits of the slot.
+    Char = 18,
+    // An enum registered from native, like a struct: Enum in the low byte and a handle above it (id << 8).
+    // The value travels in the slot as its underlying integer, sign- or zero-extended.
+    Enum = 19,
+    // A fixed-size array stored inside a struct. Only in a struct field description, never a method or
+    // member kind: the field's element kind and length are described beside it.
+    InlineArray = 20
 }
 
 // What a string argument's slot points to. The native side owns it and keeps it alive for the call.
@@ -57,6 +65,14 @@ internal static class ValueKinds
 
     internal static ulong StructId(int kind) => (ulong)(kind >> 8);
 
+    internal static bool IsEnum(int kind) => kind > 0 && (kind & 0xFF) == (int)ValueKind.Enum && (kind >> 8) > 0;
+
+    // A kind that names a struct or enum registered with the component.
+    internal static bool IsRegistered(int kind) => IsStruct(kind) || IsEnum(kind);
+
+    // The wire kind of a registered enum.
+    internal static int EnumKind(ulong id) => checked((int)(id << 8) | (int)ValueKind.Enum);
+
     // The wire kind of a registered struct. Ids are small positive counters.
     internal static int StructKind(ulong id) => checked((int)(id << 8) | (int)ValueKind.Struct);
 
@@ -67,7 +83,7 @@ internal static class ValueKinds
         int element = kind >> 8;
         return (kind & 0xFF) switch
         {
-            (int)ValueKind.Array => (element >= (int)ValueKind.Bool && element <= (int)ValueKind.Double) || element == (int)ValueKind.String,
+            (int)ValueKind.Array => (element >= (int)ValueKind.Bool && element <= (int)ValueKind.Double) || element == (int)ValueKind.String || element == (int)ValueKind.Char,
             (int)ValueKind.StructArray => element > 0,
             _ => false
         };
@@ -81,7 +97,8 @@ internal static class ValueKinds
         (arrayKind & 0xFF) == (int)ValueKind.StructArray ? StructKind((ulong)(arrayKind >> 8)) : arrayKind >> 8;
 
     internal static bool IsValid(int kind) =>
-        IsStruct(kind) || IsArray(kind) || (kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String);
+        IsStruct(kind) || IsEnum(kind) || IsArray(kind) || (kind >= (int)ValueKind.Void && kind <= (int)ValueKind.String) ||
+        kind == (int)ValueKind.Char;
 
     // Throws BridgeArgumentException for a kind that is unknown, or that names no single type: Object
     // matches many, and Void is a return type only.
@@ -157,6 +174,7 @@ internal static class ValueKinds
             ValueKind.UInt64 => typeof(ulong),
             ValueKind.Float => typeof(float),
             ValueKind.Double => typeof(double),
+            ValueKind.Char => typeof(char),
             ValueKind.String => typeof(string),
             _ => throw new BridgeArgumentException($"Unsupported value kind {kind}.")
         };
@@ -177,6 +195,7 @@ internal static class ValueKinds
             ValueKind.UInt64 => slot,
             ValueKind.Float => BitConverter.UInt32BitsToSingle(unchecked((uint)slot)),
             ValueKind.Double => BitConverter.UInt64BitsToDouble(slot),
+            ValueKind.Char => unchecked((char)(ushort)slot),
             ValueKind.String => DecodeString(slot),
             _ => throw new BridgeArgumentException($"Unsupported argument kind {kind}.")
         };
@@ -199,6 +218,7 @@ internal static class ValueKinds
             ValueKind.UInt64 => (ulong)value!,
             ValueKind.Float => BitConverter.SingleToUInt32Bits((float)value!),
             ValueKind.Double => unchecked((ulong)BitConverter.DoubleToInt64Bits((double)value!)),
+            ValueKind.Char => (char)value!,
             ValueKind.String => EncodeString((string?)value),
             _ => throw new BridgeArgumentException($"Unsupported return kind {kind}.")
         };

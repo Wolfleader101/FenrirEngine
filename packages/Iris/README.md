@@ -177,15 +177,19 @@ The C++ types in a signature decide the managed types, and anything else does no
 | C++ type | Managed type | Argument | Return | Field / property | Array element |
 | --- | --- | --- | --- | --- | --- |
 | `bool`, `std::int8_t` … `std::uint64_t`, `float`, `double` | the same primitive | by value | by value | yes | yes |
+| `char16_t` | `char` (a UTF-16 code unit) | by value | by value | yes | yes |
+| an enum with an `EnumMapping` | an enum with the same underlying type | by value | by value | yes | |
 | `std::string_view`, `std::optional<std::string_view>` (empty = null) | `string` | yes | | `Set` | `Set` |
 | `std::optional<std::string>` (empty = null) | `string` | | yes | `Get` | `Get` (of an `Array<std::string>`) |
 | a struct with a `StructMapping` | a blittable struct | by value | by value | yes | yes |
 | `const Object&` / `std::optional<Object>` | any class or interface | `const Object&` | `std::optional<Object>` | `std::optional<Object>` | |
 | `const Array<T>&`, `const Array<T>*` / `std::optional<Array<T>>` | `T[]` | yes (`*` may be null) | yes | | |
 
-Not supported: enums, `char`, generics, delegates, multi-dimensional or jagged arrays, `ref`/`out`
-parameters, and passing null for a class parameter. Internal calls (managed code calling native code) use
-a different set: primitives other than `bool`, and raw pointers.
+Not supported: generics, delegates, multi-dimensional or jagged arrays, `ref`/`out` parameters, and passing
+null for a class parameter. A `bool` is one byte (see below), and `char`, `char8_t`, `char32_t` and `wchar_t` do
+not cross on their own, because their managed meaning is ambiguous (`char` and `char8_t` are bytes inside a
+mapped struct's fixed-size array). Internal calls (managed code calling native code) use a different set:
+primitives including `bool` and `char16_t`, and raw pointers.
 
 ### Types
 
@@ -352,10 +356,24 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
   cheap and idempotent): the bridge checks the size, each field's name, offset and type, and the field order against the managed
   struct. A mismatch fails the lookup (`InvalidArgument`) with a diagnostic saying what differs, and
   the call can never happen. Structs nested in a mapping are registered first, and are checked too.
-- **Blittable only.** A managed struct must hold only sized integers, `float`, `double` and other
-  blittable structs, with sequential or explicit layout. `bool`, `char`, references, enums and
+- **Blittable only.** A managed struct must hold only sized integers, `float`, `double`, `bool`, `char`,
+  enums, fixed-size arrays and other blittable structs, with sequential or explicit layout. References and
   automatic-layout structs are rejected with a reason. List every field, in declaration order, using
   public fields or fields you can name; auto-property backing fields do not match.
+- **`bool` is one byte, `char` is two.** In memory, a managed `bool` is one byte, as a C++ `bool` is, and a
+  managed `char` is a UTF-16 code unit, as `char16_t` is. Iris copies struct bytes directly (it does not use the
+  marshaller), so these match. Managed code is only ever given 0 or 1 for a `bool` that Iris copies: any nonzero byte in a struct,
+  a single value or a bulk array copy reads as true, and is stored as 1. (An internal call's `bool` result is
+  returned by the native function itself, and a C++ `bool` is always 0 or 1.)
+- **Enums.** An enum is declared with an `EnumMapping` (`typeName`), crosses as its underlying integer, and
+  works as a method argument or return, a field or property, and a mapped-struct field. The managed enum must
+  have exactly the same underlying type (`enum class Mode : std::int32_t` is an `enum Mode : int`); a mismatch
+  fails the lookup with a diagnostic. A value the managed enum does not name is carried unchanged.
+- **Fixed-size arrays.** A struct field `T name[N]` or `std::array<T, N>` mirrors a C# fixed buffer
+  (`fixed byte Text[16]`) or an `[InlineArray(N)]` struct. The element can be anything a struct field can be
+  (a number, `bool`, `char16_t`, a mapped struct, an enum), and `char`/`char8_t` elements are bytes (a C# `byte`).
+  The length and the element type are validated, and a size mismatch is reported first. This is how a
+  `char name[256]` crosses; it is a byte array, not a string, and Iris does no text conversion.
 - **Mapped structs are trivially copyable, standard-layout types.** Their bytes are borrowed for the call
   and copied once on the way back; there is no allocation per call beyond the bridge's return block.
 - Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
@@ -396,7 +414,7 @@ const auto made = range.Invoke(5);                                // *made is th
   elements, and releasing one leaves the other working.
 - **Exact types.** An `Array<double>` never matches an `int[]` parameter, and `object[]` or jagged arrays are
   not supported by signature (`NotFound`). Struct elements are validated like any mapped struct.
-- A `bool` bulk copy trusts the buffer to hold 0 or 1 in each byte.
+- A `bool` bulk copy reads any nonzero byte as true.
 - Arrays are not (yet) available as field or property values; hold one in an `Array<T>` and pass it.
 
 ### Internal calls (managed code calling native code)
@@ -431,9 +449,13 @@ const auto registered = Iris::RegisterInternalCall<&AddImpl>("MyComponent.Native
   `Cdecl`, is `readonly`, thread-static or on a generic type, **the load fails** with `InvalidArgument` and a diagnostic listing every such field. Managed code
   can therefore never call a null pointer. A registration also makes the component require it: a host that
   registers nothing cannot load a component that declares bindings.
-- **Signatures.** Parameters and results are `void`, sized integers, `float`, `double` or pointers. `bool`
-  and characters are rejected because their unmanaged representation is ambiguous. A string is passed as
-  a UTF-8 `const char*` and a length, a struct as a pointer to it; the pointers are valid for the call.
+- **Signatures.** Parameters and results are `void`, sized integers, `float`, `double`, `bool`, `char16_t` or
+  pointers. A string is passed as a UTF-8 `const char*` and a length, a struct as a pointer to it; the pointers
+  are valid for the call.
+- **`bool` and `char` need `[assembly: DisableRuntimeMarshalling]`.** With runtime marshalling on, the runtime
+  chooses a function pointer's `bool` and `char` size itself (a four-byte `BOOL`, an encoding), which would not
+  match C++. A component with a `bool` or `char` internal call and without the attribute fails to load with a
+  diagnostic naming the field. The attribute makes a `bool` one byte and a `char` two.
 - **Exceptions stop at the boundary.** The function is wrapped, so a C++ exception never unwinds through
   managed frames. It is reported as an Error through the log sink and managed code receives a
   value-initialized result (zero, or null for a pointer).
@@ -596,7 +618,7 @@ Until the engine integration (ticket 19) decides otherwise, drive Iris from one 
 What Iris does differently: signatures are matched exactly at lookup (and unsupported types fail to
 compile), struct layouts are checked against the managed type, a component whose internal calls are not
 all registered fails to load, and errors are values. Not available yet: listing a type's members, attributes
-on members, an object's runtime type, enums, and forcing a collection.
+on members, an object's runtime type, and forcing a collection.
 
 ## How it works
 
