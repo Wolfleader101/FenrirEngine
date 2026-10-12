@@ -10,7 +10,9 @@ namespace Iris.Bridge;
 // itself, plus contract assemblies the host declares (for example a scripting API that components
 // compile against). A component's reference to a shared assembly always resolves to that copy,
 // even when the component deploys a private one, so types keep one identity across components.
-// Registration is process-wide and permanent, like the default load context it fills.
+// Registration is process-wide and permanent, like the default load context it fills. A shared assembly's public
+// static function pointer fields are bound to the host's internal calls when it is shared, which is why the host
+// registers its internal calls before it shares anything (Host::Initialize does it in that order).
 internal static class SharedAssemblies
 {
     private static readonly object Gate = new();
@@ -36,7 +38,11 @@ internal static class SharedAssemblies
                     return;
                 throw new BridgeArgumentException($"An assembly named '{name}' is already shared from '{existing.Location}'.");
             }
-            ByName.Add(name, AssemblyLoadContext.Default.LoadFromAssemblyPath(path));
+            Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(path);
+            // Its internal calls bind now, like a component's, and a field that cannot bind fails the sharing with a
+            // diagnostic. Nothing is shared then, so the host can register the missing function and try again.
+            InternalCalls.Bind(assembly);
+            ByName.Add(name, assembly);
         }
         BridgeLog.Write(LogLevel.Info, $"Sharing assembly '{name}' with every component.");
     }

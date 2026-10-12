@@ -343,6 +343,12 @@ namespace Iris
         {
             return finish(std::move(result));
         }
+        // Internal calls first: sharing an assembly binds its own internal call fields to them.
+        if (auto attached = AttachInternalCalls(bridge); !attached.Succeeded())
+        {
+            result.diagnostic = "Registering internal calls failed: " + attached.diagnostic;
+            return finish(std::move(result));
+        }
         for (const auto& shared : configuration.sharedAssemblies)
         {
             auto registered = ShareAssembly(*bridge, shared);
@@ -351,11 +357,6 @@ namespace Iris
                 result.diagnostic = "Sharing assembly failed: " + registered.diagnostic;
                 return finish(std::move(result));
             }
-        }
-        if (auto attached = AttachInternalCalls(bridge); !attached.Succeeded())
-        {
-            result.diagnostic = "Registering internal calls failed: " + attached.diagnostic;
-            return finish(std::move(result));
         }
         state->bridge = std::move(bridge);
         result.success = true;

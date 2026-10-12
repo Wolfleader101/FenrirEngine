@@ -2552,6 +2552,15 @@ namespace
                  Check(Call(first, SharedCalculatorType, "ContractIsShared", 0, 0).value == 1 &&
                            Call(second, SharedCalculatorType, "ContractIsShared", 0, 0).value == 1,
                        "A component bound to its private contract copy");
+                 // The shared contract's own internal call was bound when it was shared, and both components reach it.
+                 const auto triple = [&](const Component& component) {
+                     return (*component.FindType(NativesType).value)
+                         .FindMethod<std::int32_t(std::int32_t)>("CallSharedTriple")
+                         .value->Invoke(14)
+                         .value;
+                 };
+                 Check(triple(first) == 42 && triple(second) == 42,
+                       "A shared contract's internal call was not bound");
                  // Sharing the same file again is a no-op; a contract cannot also be a component.
                  Check(host->Initialize(configuration).success, "Re-sharing the same file failed");
                  const auto asComponent = host->LoadComponent(configuration.sharedAssemblies.front());
@@ -2605,6 +2614,24 @@ namespace
     int RunUnbound(const Arguments& arguments)
     {
         return Tests::RunCases({
+            {"sharing a contract whose internal call is unregistered fails initialization, then works once registered",
+             [&] {
+                 auto configuration = arguments.configuration;
+                 configuration.sharedAssemblies = {arguments.component.parent_path() / "Iris.Examples.Contracts.dll"};
+                 Host host;
+                 const auto failed = host.Initialize(configuration);
+                 Check(!failed.success && !host.IsInitialized() &&
+                           failed.diagnostic.find("Iris.Examples.Contracts.SharedNatives.Triple") != std::string::npos &&
+                           failed.diagnostic.find("no internal call is registered") != std::string::npos,
+                       "An unbound shared contract field was not diagnosed: " + failed.diagnostic);
+                 // The failed attempt shared nothing: once the function is registered the same sharing works.
+                 Check(Iris::RegisterInternalCall<&Iris::Examples::Triple>("Iris.Examples.Contracts.SharedNatives.Triple")
+                           .Succeeded(),
+                       "Registering the shared contract's function failed");
+                 Host again;
+                 const auto shared = again.Initialize(configuration);
+                 Check(shared.success, "Sharing after registering failed: " + shared.diagnostic);
+             }},
             {"a component with unbound internal calls fails to load, then loads once they are registered",
              [&] {
                  auto host = StartHost(arguments);
