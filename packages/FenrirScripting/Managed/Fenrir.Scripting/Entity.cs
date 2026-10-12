@@ -37,12 +37,12 @@ public readonly struct Entity : IEquatable<Entity>
     private static int IdOf<T>() where T : unmanaged, IReadOnlyComponent
     {
         int id = ComponentIds<T>.Id;
-        if (id == ComponentIds<T>.NotNative)
-            throw new InvalidOperationException($"{typeof(T).Name} is not a native component: it has no [NativeComponent] attribute.");
         if (id == ComponentIds<T>.WrongType)
             throw new InvalidOperationException($"'{ComponentIds<T>.NativeName}' is registered for a different C# type than {typeof(T).FullName}; a native component is reached only through the type the host validated.");
         if (id == ComponentIds<T>.NotRegistered)
-            throw new InvalidOperationException($"The engine has no component registered as '{ComponentIds<T>.NativeName}' (for {typeof(T).Name}).");
+            throw new InvalidOperationException(ComponentIds<T>.NativeName != null
+                ? $"The engine has no component registered as '{ComponentIds<T>.NativeName}' (for {typeof(T).Name})."
+                : $"The engine does not know {typeof(T).Name}: a component a script defines is registered when its assembly loads, and only if the script project uses the Fenrir scripting SDK.");
         return id;
     }
 

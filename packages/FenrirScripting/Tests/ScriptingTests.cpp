@@ -1,13 +1,18 @@
 #include "HeadlessApp.hpp"
 #include "TestHarness.hpp"
 
+#include <entt/entity/runtime_view.hpp>
+
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "../src/ByteStorage.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <filesystem>
+#include <set>
+#include <vector>
 #include <fstream>
 #include <iostream>
 #include <optional>
@@ -556,8 +561,6 @@ namespace
         Check(missing.has_value() && missing->find("has no Transform") != std::string::npos, "A missing component was not explained (got " + missing.value_or("<no exception>") + ")");
         const auto dead = Registry<std::optional<std::string>>(scripting, "MissingComponent", goneId);
         Check(dead.has_value() && dead->find("not alive") != std::string::npos, "A dead entity was not explained");
-        const auto plain = Registry<std::optional<std::string>>(scripting, "NotNative", bare.GetId());
-        Check(plain.has_value() && plain->find("NativeComponent") != std::string::npos, "A non-native type was not explained");
     }
 
     void AMismatchedComponentFailsTheLoadAndNamesTheField()
@@ -615,6 +618,285 @@ namespace
               "A mismatched registration was accepted or undiagnosed: " + registered.diagnostic);
         Check(!scripting.HasScripts(), "A mismatched registration left the script assembly loaded");
         Check(headless.Logger().Contains(LogLevel::Error, "'Current'"), "The mismatch was not logged");
+    }
+
+    // ---- components defined in C#
+
+    constexpr const char* VelocityName = "Fenrir.ScriptFixture.Velocity";
+    constexpr const char* CounterName = "Fenrir.ScriptFixture.Counter";
+    constexpr const char* AlignedName = "Fenrir.ScriptFixture.Aligned";
+    constexpr const char* TaggedName = "Fenrir.ScriptFixture.Tagged";
+    constexpr const char* ScriptedType = "Fenrir.ScriptFixture.Scripted";
+
+    template <typename Result, typename... Args>
+    Result Scripted(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(ScriptedType, scripting, method, arguments...);
+    }
+
+    std::size_t PoolCount(EntityList& entities)
+    {
+        std::size_t count = 0;
+        for (auto&& [id, storage] : entities.GetRegistry().storage())
+        {
+            (void)id;
+            (void)storage;
+            ++count;
+        }
+        return count;
+    }
+
+    void AScriptAssemblyReportsTheComponentsItDefines()
+    {
+        HeadlessApp headless;
+        auto& scene = headless.Get().GetActiveScene().GetEntityList();
+        const std::size_t poolsBefore = PoolCount(scene);
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+
+        // Registering components creates no storage, and neither does asking about them: a pool appears when a component is
+        // first added in a scene. (So "a failed load leaves no pools" is a real property, not an accident of timing.)
+        Check(PoolCount(scene) == poolsBefore, "Loading a script assembly created storage");
+        const auto* velocity = scripting.FindComponent(VelocityName);
+        const auto probe = scene.CreateEntity().GetId();
+        const std::size_t poolsWithEntity = PoolCount(scene);
+        Check(!velocity->has(scene, probe) && velocity->get(scene, probe) == nullptr && velocity->remove(scene, probe),
+              "Reading or removing an absent script component misbehaved");
+        Check(PoolCount(scene) == poolsWithEntity, "Asking about a script component created storage");
+        Check(velocity->add(scene, probe) && PoolCount(scene) == poolsWithEntity + 1, "Adding a script component did not create its pool");
+
+        const auto expect = [&](const char* name, std::size_t size, std::size_t alignment) {
+            const auto* registration = scripting.FindComponent(name);
+            Check(registration != nullptr, std::string("The script component ") + name + " was not registered");
+            Check(registration->scriptDefined && !registration->readOnly && registration->typeName == name,
+                  std::string(name) + " was not described as a script component");
+            Check(registration->size == size && registration->alignment == alignment,
+                  std::string(name) + " has the wrong size or alignment: " + std::to_string(registration->size) + " / " +
+                      std::to_string(registration->alignment));
+        };
+        expect(VelocityName, 12, 4);
+        expect(CounterName, 16, 8);
+        expect(AlignedName, 32, 16);
+        expect(TaggedName, 1, 1);
+
+        // Native components are not script-defined, and a [NativeComponent] struct in the script is not reported as one.
+        Check(!scripting.FindComponent("Fenrir.Transform")->scriptDefined, "A native component was described as script-defined");
+        Check(scripting.FindComponent("Fenrir.ScriptFixture.Health") == nullptr,
+              "A [NativeComponent] struct was reported as a script-defined component");
+    }
+
+    void AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* velocity = scripting.FindComponent(VelocityName);
+        Check(velocity != nullptr, "Velocity was not registered");
+
+        auto first = entities.CreateEntity();
+        auto second = entities.CreateEntity();
+        auto third = entities.CreateEntity();
+        Check(!velocity->has(entities, first.GetId()), "A component was there before it was added");
+        for (auto* entity : {&first, &second, &third})
+        {
+            Check(velocity->add(entities, entity->GetId()), "A component was not added");
+        }
+        Check(velocity->add(entities, first.GetId()), "Adding twice failed"); // Harmless, and keeps the one it has.
+
+        // A new component is all zero bytes, which is a C# default.
+        Check(Scripted<float>(scripting, "SpeedX", first.GetId()) == 0.0F, "A new script component was not zeroed");
+
+        // C# writes to it; native code sees the same bytes.
+        Scripted<void>(scripting, "Accelerate", first.GetId());
+        Scripted<void>(scripting, "Accelerate", first.GetId());
+        Scripted<void>(scripting, "Accelerate", third.GetId());
+        const auto* values = static_cast<const float*>(velocity->get(entities, first.GetId()));
+        Check(values != nullptr && values[0] == 2 && values[1] == 4 && values[2] == 6, "C# writes were not in the engine's storage");
+        Check(Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F, "A second entity's component was wrong");
+        Check(Scripted<float>(scripting, "SpeedX", second.GetId()) == 0.0F, "A write reached the wrong entity's component");
+
+        // Native code writes it too, and C# reads that.
+        static_cast<float*>(velocity->get(entities, second.GetId()))[0] = 42;
+        Check(Scripted<float>(scripting, "SpeedX", second.GetId()) == 42.0F, "C# did not read a native write");
+
+        // The pool holds one element per entity that has the component.
+        Check(velocity->pool(entities)->size() == 3, "The pool did not hold three elements");
+
+        // Destroying an entity removes its element, and the others keep their values.
+        entities.DestroyEntity(second.GetId());
+        Check(velocity->pool(entities)->size() == 2, "Destroying an entity left its component in the pool");
+        Check(!velocity->has(entities, second.GetId()), "A destroyed entity still had the component");
+        Check(Scripted<float>(scripting, "SpeedX", first.GetId()) == 2.0F && Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F,
+              "Removing an element disturbed the others");
+
+        // The slot is reused by a new entity, which does not inherit the old component.
+        const auto reused = entities.CreateEntity().GetId();
+        Check(!velocity->has(entities, reused), "A new entity inherited a destroyed entity's component");
+        Check(!Scripted<bool>(scripting, "HasVelocity", reused), "C# saw a component on an entity that has none");
+        Check(Scripted<bool>(scripting, "HasVelocity", first.GetId()), "C# did not see a component that is there");
+
+        // Removing one explicitly, and again (harmless).
+        Check(velocity->remove(entities, first.GetId()) && !velocity->has(entities, first.GetId()), "A component was not removed");
+        Check(velocity->remove(entities, first.GetId()), "Removing twice failed");
+        Check(velocity->pool(entities)->size() == 1, "The pool did not shrink");
+    }
+
+    void ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* transform = scripting.FindComponent("Fenrir.Transform");
+        const auto* velocity = scripting.FindComponent(VelocityName);
+        const auto* counter = scripting.FindComponent(CounterName);
+
+        std::vector<std::uint32_t> ids;
+        for (int index = 0; index < 6; ++index)
+        {
+            ids.push_back(entities.CreateEntity().GetId());
+        }
+        // Every entity has a Transform (the engine adds it). Velocity on 0, 2, 4. Counter on 2, 3, 4, 5. Without a
+        // Transform: entity 4.
+        for (const int index : {0, 2, 4})
+        {
+            Check(velocity->add(entities, ids[static_cast<std::size_t>(index)]), "Velocity was not added");
+        }
+        for (const int index : {2, 3, 4, 5})
+        {
+            Check(counter->add(entities, ids[static_cast<std::size_t>(index)]), "Counter was not added");
+        }
+        Check(transform->remove(entities, ids[4]), "Transform was not removed");
+
+        const auto iterate = [&](std::initializer_list<const ComponentRegistration*> registrations) {
+            entt::runtime_view view;
+            for (const auto* registration : registrations)
+            {
+                view.iterate(*registration->pool(entities));
+            }
+            std::set<std::uint32_t> found;
+            for (const auto entity : view)
+            {
+                found.insert(static_cast<std::uint32_t>(entity));
+            }
+            return found;
+        };
+        using Ids = std::set<std::uint32_t>;
+        Check(iterate({transform, velocity}) == Ids{ids[0], ids[2]}, "Native + script view was wrong (Transform and Velocity)");
+        Check(iterate({velocity, counter}) == Ids{ids[2], ids[4]}, "Script + script view was wrong (Velocity and Counter)");
+        Check(iterate({transform, velocity, counter}) == Ids{ids[2]}, "A three-pool view was wrong");
+        Check(iterate({counter}) == Ids{ids[2], ids[3], ids[4], ids[5]}, "A single script pool iterated the wrong entities");
+
+        // Destroying an entity drops it from every pool, native and script.
+        entities.DestroyEntity(ids[2]);
+        Check(iterate({transform, velocity}) == Ids{ids[0]}, "A destroyed entity stayed in a view");
+        Check(iterate({counter}) == Ids{ids[3], ids[4], ids[5]}, "A destroyed entity stayed in a script pool");
+    }
+
+    void ScriptComponentStorageHonoursAlignmentAndNeverMovesElements()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* aligned = scripting.FindComponent(AlignedName);
+        Check(aligned != nullptr, "Aligned was not registered");
+
+        // More elements than one page holds (a page is 256), each on a 16-byte boundary.
+        std::vector<std::uint32_t> ids;
+        for (int index = 0; index < 700; ++index)
+        {
+            ids.push_back(entities.CreateEntity().GetId());
+            Check(aligned->add(entities, ids.back()), "Aligned was not added");
+            Check(reinterpret_cast<std::uintptr_t>(aligned->get(entities, ids.back())) % 16 == 0,
+                  "An element was not 16-byte aligned");
+        }
+
+        // Growing the storage does not move what is already in it.
+        void* first = aligned->get(entities, ids.front());
+        void* middle = aligned->get(entities, ids[400]);
+        for (int index = 0; index < 3000; ++index)
+        {
+            const auto id = entities.CreateEntity().GetId();
+            Check(aligned->add(entities, id), "Aligned was not added while growing");
+        }
+        Check(aligned->get(entities, ids.front()) == first && aligned->get(entities, ids[400]) == middle,
+              "Growing the storage moved an existing element");
+        Check(aligned->pool(entities)->size() == 3700, "The pool did not hold every element");
+
+        // C# reads and writes a Vector128 in it.
+        Scripted<void>(scripting, "FillAligned", ids[400]);
+        const auto* lanes = static_cast<const float*>(aligned->get(entities, ids[400]));
+        Check(lanes[0] == 1 && lanes[3] == 4 && static_cast<const std::uint8_t*>(aligned->get(entities, ids[400]))[16] == 7,
+              "C# writes to an aligned component were not in the storage");
+        Check(Scripted<float>(scripting, "AlignedLane", ids[400], 2) == 3.0F, "C# did not read a lane back");
+
+        // A tag with no data is still a component.
+        const auto* tagged = scripting.FindComponent(TaggedName);
+        Check(tagged->add(entities, ids[1]) && Scripted<bool>(scripting, "HasTagged", ids[1]) && !Scripted<bool>(scripting, "HasTagged", ids[2]),
+              "An empty component did not work as a tag");
+    }
+
+    void TheByteStorageRefusesToChangeShapeWhileInUse()
+    {
+        entt::registry registry;
+        auto& storage = registry.storage<Detail::ScriptComponentTag>(entt::hashed_string{"shape"});
+        const auto entity = registry.create();
+
+        Check(!storage.IsConfigured() && storage.Emplace(entity) == nullptr, "An unconfigured storage accepted an element");
+        Check(!storage.Configure(0, 4) && !storage.Configure(8, 0) && !storage.Configure(8, 3) && !storage.Configure(7, 4),
+              "An impossible size or alignment was accepted");
+        Check(storage.Configure(8, 4) && storage.Configure(8, 4), "A valid configuration, or repeating it, failed");
+
+        auto* element = static_cast<std::uint8_t*>(storage.Emplace(entity));
+        Check(element != nullptr && std::all_of(element, element + 8, [](std::uint8_t byte) { return byte == 0; }),
+              "A new element was not zeroed");
+        Check(storage.Emplace(entity) == element, "Adding an entity twice gave it a second element");
+        Check(!storage.Configure(16, 8), "The shape changed while an element was stored");
+        Check(storage.Find(entity) == element && storage.ElementSize() == 8, "A refused change disturbed the storage");
+
+        // Empty again, it can take a new shape.
+        registry.destroy(entity);
+        Check(storage.size() == 0 && storage.Configure(16, 8) && storage.ElementSize() == 16,
+              "An emptied storage did not accept a new shape");
+        const auto next = registry.create();
+        Check(reinterpret_cast<std::uintptr_t>(storage.Emplace(next)) % 8 == 0, "The new shape was not honoured");
+    }
+
+    void AFailedLoadLeavesNoComponentsAndNoPools()
+    {
+        HeadlessApp headless;
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const std::size_t poolsBefore = PoolCount(entities);
+
+        // The script assembly defines components and loads fine, then a native mapping fails: the load is rolled back.
+        ScriptingConfig config = ConfigFor(fixture);
+        config.components.push_back(MakeComponent<BadHealth>("Test.BadHealth"));
+        auto scripting = Scripting::Install(headless.Get(), config);
+        Check(!scripting.HasScripts(), "A mismatched component left scripts loaded");
+        Check(scripting.FindComponent(VelocityName) == nullptr && scripting.FindComponent(CounterName) == nullptr &&
+                  scripting.FindComponent(AlignedName) == nullptr && scripting.FindComponent(TaggedName) == nullptr,
+              "A failed load left script components registered");
+        Check(scripting.FindComponent("Fenrir.Transform") != nullptr && scripting.FindComponent("Test.BadHealth") != nullptr,
+              "A failed load disturbed the components that were registered before it");
+        Check(PoolCount(entities) == poolsBefore, "A failed load left storage behind");
+
+        // And a clean load afterwards registers them, with nothing carried over from the failure.
+        HeadlessApp again;
+        auto fine = Scripting::Install(again.Get(), ConfigFor(fixture));
+        Check(fine.FindComponent(VelocityName) != nullptr, "A later clean load did not register the script components");
+    }
+
+    void AScriptComponentCannotTakeANativeComponentsName()
+    {
+        HeadlessApp headless;
+        ScriptingConfig config = ConfigFor(fixture);
+        // A native component already holds the name the script's Velocity would use.
+        config.components.push_back(MakeComponent<Health>(VelocityName));
+        auto scripting = Scripting::Install(headless.Get(), config);
+        Check(!scripting.HasScripts(), "A script component took a native component's name");
+        Check(headless.Logger().Contains(LogLevel::Error, "already has a component of that name") &&
+                  headless.Logger().Contains(LogLevel::Error, VelocityName),
+              "The name clash was not explained");
+        Check(scripting.FindComponent(CounterName) == nullptr, "The clash left part of the script's components registered");
     }
 
     void TheContractIsOneSharedCopyAcrossGenerations()
@@ -720,6 +1002,14 @@ int main(int argc, char* argv[])
         {"lookup failures say what went wrong", LookupFailuresSayWhatWentWrong},
         {"a mismatched component fails the load and names the field", AMismatchedComponentFailsTheLoadAndNamesTheField},
         {"a component registered later is checked at once", AComponentRegisteredLaterIsCheckedAtOnce},
+        {"a script assembly reports the components it defines, with size and alignment", AScriptAssemblyReportsTheComponentsItDefines},
+        {"a script component is shared with C# and removed with its entity", AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity},
+        {"a runtime view over native and script pools iterates the right entities",
+         ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities},
+        {"script component storage honours alignment and never moves elements", ScriptComponentStorageHonoursAlignmentAndNeverMovesElements},
+        {"the byte storage refuses to change shape while in use", TheByteStorageRefusesToChangeShapeWhileInUse},
+        {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
+        {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},
         {"a script cannot claim a native component with a struct of its own", AScriptCannotClaimANativeComponentWithAStructOfItsOwn},
         {"the build deploys the bridge next to the executable", TheBuildDeploysTheBridgeNextToTheExecutable},

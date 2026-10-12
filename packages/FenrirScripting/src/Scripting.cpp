@@ -2,6 +2,7 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "ScriptComponents.hpp"
 
 #include <Iris/Iris.hpp>
 
@@ -12,6 +13,8 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #if defined(_WIN32)
@@ -185,6 +188,128 @@ namespace Fenrir
             return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
         }
     } // namespace
+
+    namespace
+    {
+        using Description = Detail::ScriptComponentDescription;
+
+        Iris::CallResult<void> Succeeded()
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
+        }
+
+        Iris::CallResult<void> Failed(std::string diagnostic)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, std::move(diagnostic), false};
+        }
+
+        // Runs the table the SDK's generator wrote into the script assembly, which reports each component type the script
+        // defines (full name, size, alignment) through an internal call. A script assembly without the table defines none.
+        Iris::CallResult<void> DiscoverScriptComponents(const Iris::Component& component, Detail::EngineContext& context,
+                                                        std::vector<Description>& found)
+        {
+            const auto table = component.FindType("Fenrir.Scripting.Generated.ComponentTable");
+            if (table.status == Iris::CallStatus::NotFound)
+            {
+                return Succeeded();
+            }
+            if (!table.Succeeded())
+            {
+                return Iris::CallResult<void>{table.status, "The component table could not be read: " + table.diagnostic, false};
+            }
+            const auto report = table.value->FindMethod<void()>("Register");
+            if (!report.Succeeded())
+            {
+                return Iris::CallResult<void>{report.status, "The component table has no Register method: " + report.diagnostic, false};
+            }
+            context.discovering = &found;
+            const auto ran = report.value->Invoke();
+            context.discovering = nullptr;
+            if (!ran.Succeeded())
+            {
+                return Iris::CallResult<void>{ran.status, "The script assembly could not report its components: " + ran.diagnostic,
+                                              ran.diagnosticTruncated};
+            }
+            return Succeeded();
+        }
+
+        // Whether what the script reported can be registered next to what the engine already has.
+        Iris::CallResult<void> CheckDiscovered(const std::vector<Description>& found, const Detail::ComponentRegistry& registry)
+        {
+            std::unordered_map<entt::id_type, std::string> storageIds;
+            std::unordered_set<std::string> names;
+            for (const auto& description : found)
+            {
+                if (!names.insert(description.name).second)
+                {
+                    return Failed("The script reported the component '" + description.name + "' more than once.");
+                }
+                if (!Detail::IsPlausible(description))
+                {
+                    return Failed("The script component '" + description.name + "' reported a size of " +
+                                  std::to_string(description.size) + " and an alignment of " +
+                                  std::to_string(description.alignment) + ", which no C# struct has.");
+                }
+                if (registry.Find(description.name) >= 0)
+                {
+                    return Failed("The script defines a component '" + description.name +
+                                  "', but the engine already has a component of that name.");
+                }
+                const auto [at, added] = storageIds.emplace(Detail::ScriptStorageId(description.name), description.name);
+                if (!added)
+                {
+                    return Failed("The script components '" + at->second + "' and '" + description.name +
+                                  "' map to the same storage; rename one.");
+                }
+            }
+            return Succeeded();
+        }
+
+        // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives. Nothing
+        // is registered unless all of it passes, so a failure leaves the registry exactly as it was:
+        //   1. discover the components the script defines, and check them;
+        //   2. check every native component's mapping against its C# struct;
+        //   3. only then register the script's components.
+        // (Systems join between 1 and 2 in a later ticket.)
+        Iris::CallResult<void> CompleteLoad(Detail::EngineContext& context, Detail::ComponentRegistry& registry,
+                                            const Iris::Component& component)
+        {
+            std::vector<Description> found;
+            if (auto discovered = DiscoverScriptComponents(component, context, found); !discovered.Succeeded())
+            {
+                return discovered;
+            }
+            if (auto checked = CheckDiscovered(found, registry); !checked.Succeeded())
+            {
+                return checked;
+            }
+            if (auto validated = ValidateAll(registry.All(), component); !validated.Succeeded())
+            {
+                return validated;
+            }
+            std::vector<ComponentRegistration> registrations;
+            registrations.reserve(found.size());
+            for (const auto& description : found)
+            {
+                registrations.push_back(Detail::MakeScriptComponent(description));
+            }
+            // All or none: the checks above make a refusal impossible, but if one happens nothing is half-registered.
+            if (!registry.AddAll(std::move(registrations)))
+            {
+                return Failed("The script's components could not be registered together.");
+            }
+            return Succeeded();
+        }
+    } // namespace
+
+    const ComponentRegistration* Scripting::FindComponent(std::string_view name) const
+    {
+        if (m_state == nullptr)
+        {
+            return nullptr;
+        }
+        return m_state->components.Get(m_state->components.Find(name));
+    }
 
     Iris::CallResult<void> Scripting::RegisterComponent(ComponentRegistration registration)
     {
@@ -366,8 +491,9 @@ namespace Fenrir
             state->Shutdown();
             return Scripting(std::move(state));
         }
-        // All or nothing: the assembly stays loaded only if every registered component matches its C# struct.
-        if (auto validated = ValidateAll(state->components.All(), *loaded.value); !validated.Succeeded())
+        // All or nothing: the assembly stays loaded only if its components are discovered and every native component
+        // matches its C# struct.
+        if (auto validated = CompleteLoad(state->context, state->components, *loaded.value); !validated.Succeeded())
         {
             logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), validated.diagnostic);
             state->Shutdown();

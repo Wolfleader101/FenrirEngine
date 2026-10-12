@@ -112,6 +112,14 @@ namespace Fenrir
         template <typename... Components>
         auto Group();
 
+        /**
+         * @brief The EnTT registry behind this list, for code that adds storages of its own (the scripting layer adds one
+         * per C# component type). Prefer the list's own methods for entities and components.
+         *
+         * @return entt::registry& the registry
+         */
+        entt::registry& GetRegistry();
+
       private:
         entt::registry m_registry;
 

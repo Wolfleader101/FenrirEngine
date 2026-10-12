@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Iris/Iris.hpp>
@@ -109,6 +110,12 @@ namespace Fenrir
         {
             return RegisterComponent(MakeReadOnlyComponent<T, Mapping>(std::move(name)));
         }
+
+        /**
+         * @brief The component registered under a name (native, or defined by the loaded script assembly), or null. Use its
+         * operations to add, remove and reach a component on an entity from native code, whatever defines it.
+         */
+        [[nodiscard]] const ComponentRegistration* FindComponent(std::string_view name) const;
 
         /**
          * @brief The loaded script assembly, or null when there are no scripts. The pointer stays valid until

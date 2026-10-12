@@ -29,6 +29,10 @@ internal static unsafe class Native
     //   is not alive or does not have it. The pointer is good until the engine next changes its storage.
     //   ComponentHas(id, entity): whether the entity is alive and has the component.
     public static delegate* unmanaged[Cdecl]<byte*, int, byte*, int, int> ComponentIdOf;
+
+    // RegisterScriptComponent(utf8Name, nameBytes, size, alignment): a script assembly reports a component type it defines,
+    // while it loads. False when nothing is loading.
+    public static delegate* unmanaged[Cdecl]<byte*, int, int, int, bool> RegisterScriptComponent;
     public static delegate* unmanaged[Cdecl]<uint> RegistryGeneration;
     public static delegate* unmanaged[Cdecl]<int, uint, void*> ComponentGet;
     public static delegate* unmanaged[Cdecl]<int, uint, bool> ComponentHas;

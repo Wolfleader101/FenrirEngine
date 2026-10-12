@@ -156,6 +156,45 @@ public struct Health : IComponent { public int Current; public int Max; }
   Relationship, replacing existing ones. To look an entity up without touching it, use `EntityList::GetEntity(id)`, which is
   what the registry does.
 
+## Components defined in C#
+
+A script can define components with no C++ at all:
+
+```csharp
+public struct Velocity : IComponent { public Vector3 Linear; }
+
+var v = new Entity(id).Get<Velocity>();
+v.Linear += new Vector3(1, 2, 3);          // writes the engine's storage, like any component
+```
+
+The SDK's generator writes a table into the script assembly listing every `IComponent` struct it defines, and the engine
+runs that table as the assembly loads. Each component is reported with its full name, its size and its alignment as C#
+lays it out, and the engine registers it under that name.
+
+- **Storage.** Each C# component type gets its own EnTT storage, a `ByteStorage` named after the type. It is an ordinary
+  EnTT sparse set holding opaque elements of the reported size and alignment, so it takes part in everything the registry
+  does: `registry.destroy` removes the entity's element, and `entt::runtime_view` iterates it beside the native pools.
+  A new element is all zero bytes (a C# `default`).
+- **Elements do not move when the storage grows.** They live in pages of 256 elements, each page allocated once and
+  aligned to the component's alignment (a `Vector128` field makes it 16). Removing an element moves the last one into its
+  place, as EnTT's own storage does, so a pointer is good until the storage next changes.
+- **Pools are created lazily, per scene.** Registering a component creates no storage; each entity list (scene) makes its
+  pool the first time the component is used in it. So a load that is thrown away leaves nothing behind.
+- **From native code**, `scripting.FindComponent("Ns.Velocity")` gives the registration: `get`, `has`, `add`, `remove`, and
+  `pool` (the `entt::sparse_set*`, for views). Its `size`, `alignment` and `scriptDefined` say what it is. The same
+  registration works for a native component.
+- **Rules.** A component is an `unmanaged` struct implementing `IComponent`; one holding a reference is refused when the
+  script compiles (`FENRIR0004`). It needs no `[NativeComponent]` attribute (a struct that has one mirrors a native
+  component and is not reported). Its name is its full name, so it must not equal a native component's name.
+
+### Loading is all or nothing
+
+A script assembly's load is a transaction. In order: the components it defines are discovered and checked; every native
+component's mapping is checked against its C# struct; and only then are the script's components registered. If any step
+fails, the assembly is released and **nothing** from that load is registered: no registry entries and no storage. (The checks
+today are a malformed report, a name that clashes with a native component or another script component, two names that would
+share a storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the

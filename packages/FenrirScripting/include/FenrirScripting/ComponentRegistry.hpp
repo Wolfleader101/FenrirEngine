@@ -2,6 +2,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -12,44 +13,58 @@
 namespace Fenrir
 {
     /**
-     * @brief One native component the engine exposes to C# by name: how to reach its storage for an entity, and how to
-     * check that a C# struct has exactly its layout.
+     * @brief One component the engine exposes to C# by name: how to reach its storage for an entity, and (for a native one)
+     * how to check that a C# struct has exactly its layout.
      *
      * EnTT has no registry of types by name at run time, so this is the table that maps a name such as
-     * "Fenrir.Transform" to the operations on the right storage. Build one with MakeComponent or MakeReadOnlyComponent
-     * and register it with Scripting::RegisterComponent or ScriptingConfig::components. It holds no state, so it can be
-     * copied freely.
+     * "Fenrir.Transform" to the operations on the right storage. A native component is described by MakeComponent or
+     * MakeReadOnlyComponent and registered with Scripting::RegisterComponent or ScriptingConfig::components. A component a
+     * script defines in C# has no C++ type at all: it is registered when the script assembly loads. Copying one is cheap.
      */
     struct ComponentRegistration
     {
-        /** The name C# uses, in a [NativeComponent("...")] attribute. */
+        /** The name C# uses: a [NativeComponent("...")] attribute for a native component, the type's full name otherwise. */
         std::string name;
 
         /**
-         * The full name of the C# struct this component is validated against (the mapping's typeName). C# gets the
-         * component only through that type: a script cannot claim the name for a struct of its own, which would skip the
-         * layout check.
+         * The full name of the C# struct this component is validated against (the mapping's typeName; for a script-defined
+         * component, its own full name). C# gets the component only through that type: a script cannot claim the name for a
+         * struct of its own, which would skip the layout check.
          */
         std::string typeName;
 
         /** True if scripts may only read it: it has no add or remove, and C# gets it as a ReadOnlyRef. */
         bool readOnly = false;
 
+        /** True for a component a script defines in C#. It exists only while the script assembly that defines it is loaded. */
+        bool scriptDefined = false;
+
+        /** Size and alignment in bytes of one component, as C# lays it out. */
+        std::size_t size = 0;
+        std::size_t alignment = 0;
+
         /** Where the component is in the entity's storage, or null if the entity is not alive or lacks it. */
-        void* (*get)(EntityList& entities, std::uint32_t entity) = nullptr;
+        std::function<void*(EntityList& entities, std::uint32_t entity)> get;
 
         /** Whether the entity is alive and has the component. */
-        bool (*has)(EntityList& entities, std::uint32_t entity) = nullptr;
+        std::function<bool(EntityList& entities, std::uint32_t entity)> has;
 
-        /** Adds a default-constructed component. False for a read-only one or a dead entity. */
-        bool (*add)(EntityList& entities, std::uint32_t entity) = nullptr;
+        /** Adds a default-constructed (for a script component, zeroed) component. False for a read-only one or a dead entity. */
+        std::function<bool(EntityList& entities, std::uint32_t entity)> add;
 
         /** Removes the component. False for a read-only one or a dead entity. */
-        bool (*remove)(EntityList& entities, std::uint32_t entity) = nullptr;
+        std::function<bool(EntityList& entities, std::uint32_t entity)> remove;
 
         /**
-         * Checks the C# struct this component mirrors against its Iris StructMapping, in a loaded script assembly.
-         * A mismatch is InvalidArgument with a diagnostic naming the field.
+         * The EnTT storage holding this component in a list, for building runtime views over it beside other storages. It
+         * is created if the list has none yet.
+         */
+        std::function<entt::sparse_set*(EntityList& entities)> pool;
+
+        /**
+         * Checks the C# struct this component mirrors against its Iris StructMapping, in a loaded script assembly. A mismatch
+         * is InvalidArgument with a diagnostic naming the field. Empty for a script-defined component, whose C# struct is
+         * the definition.
          */
         std::function<Iris::CallResult<void>(const Iris::Component&)> validate;
     };
@@ -61,54 +76,6 @@ namespace Fenrir
         inline Entity LiveEntity(EntityList& entities, std::uint32_t entity)
         {
             return entities.GetEntity(entity);
-        }
-
-        template <typename T>
-        void* GetComponentPointer(EntityList& entities, std::uint32_t entity)
-        {
-            Entity handle = LiveEntity(entities, entity);
-            if (!handle.IsValid() || !handle.HasComponent<T>())
-            {
-                return nullptr;
-            }
-            return &handle.GetComponent<T>();
-        }
-
-        template <typename T>
-        bool HasComponentOf(EntityList& entities, std::uint32_t entity)
-        {
-            Entity handle = LiveEntity(entities, entity);
-            return handle.IsValid() && handle.HasComponent<T>();
-        }
-
-        template <typename T>
-        bool AddComponentOf(EntityList& entities, std::uint32_t entity)
-        {
-            Entity handle = LiveEntity(entities, entity);
-            if (!handle.IsValid())
-            {
-                return false;
-            }
-            if (!handle.HasComponent<T>())
-            {
-                handle.AddComponent<T>();
-            }
-            return true;
-        }
-
-        template <typename T>
-        bool RemoveComponentOf(EntityList& entities, std::uint32_t entity)
-        {
-            Entity handle = LiveEntity(entities, entity);
-            if (!handle.IsValid())
-            {
-                return false;
-            }
-            if (handle.HasComponent<T>())
-            {
-                handle.RemoveComponent<T>();
-            }
-            return true;
         }
     } // namespace Detail
 
@@ -132,11 +99,41 @@ namespace Fenrir
         ComponentRegistration registration;
         registration.name = std::move(name);
         registration.typeName = std::string(Iris::StructMapping<Mapping>::typeName);
-        registration.readOnly = false;
-        registration.get = &Detail::GetComponentPointer<T>;
-        registration.has = &Detail::HasComponentOf<T>;
-        registration.add = &Detail::AddComponentOf<T>;
-        registration.remove = &Detail::RemoveComponentOf<T>;
+        registration.size = sizeof(T);
+        registration.alignment = alignof(T);
+        registration.get = [](EntityList& entities, std::uint32_t entity) -> void* {
+            Entity handle = Detail::LiveEntity(entities, entity);
+            return handle.IsValid() && handle.HasComponent<T>() ? &handle.GetComponent<T>() : nullptr;
+        };
+        registration.has = [](EntityList& entities, std::uint32_t entity) {
+            Entity handle = Detail::LiveEntity(entities, entity);
+            return handle.IsValid() && handle.HasComponent<T>();
+        };
+        registration.add = [](EntityList& entities, std::uint32_t entity) {
+            Entity handle = Detail::LiveEntity(entities, entity);
+            if (!handle.IsValid())
+            {
+                return false;
+            }
+            if (!handle.HasComponent<T>())
+            {
+                handle.AddComponent<T>();
+            }
+            return true;
+        };
+        registration.remove = [](EntityList& entities, std::uint32_t entity) {
+            Entity handle = Detail::LiveEntity(entities, entity);
+            if (!handle.IsValid())
+            {
+                return false;
+            }
+            if (handle.HasComponent<T>())
+            {
+                handle.RemoveComponent<T>();
+            }
+            return true;
+        };
+        registration.pool = [](EntityList& entities) -> entt::sparse_set* { return &entities.GetRegistry().storage<T>(); };
         registration.validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); };
         return registration;
     }

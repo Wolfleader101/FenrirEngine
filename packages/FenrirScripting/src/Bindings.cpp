@@ -77,6 +77,21 @@ namespace Fenrir::Detail
                                                 std::string_view(typeName, static_cast<std::size_t>(typeLength)));
         }
 
+        // Native.RegisterScriptComponent: a script assembly reports a component type it defines, while it loads. False if
+        // nothing is loading.
+        bool RegisterScriptComponent(const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment)
+        {
+            auto* context = activeContext.load();
+            if (context == nullptr || context->discovering == nullptr || name == nullptr || length <= 0 || size <= 0 ||
+                alignment <= 0)
+            {
+                return false;
+            }
+            context->discovering->push_back({std::string(name, static_cast<std::size_t>(length)),
+                                             static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+            return true;
+        }
+
         // Native.RegistryGeneration: which registry ids belong to. Zero when none is active.
         std::uint32_t RegistryGeneration()
         {
@@ -131,6 +146,7 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&TimeTickRate>(prefix + "TimeTickRate"),
             Iris::RegisterInternalCall<&EntityIsValid>(prefix + "EntityIsValid"),
             Iris::RegisterInternalCall<&ComponentIdOf>(prefix + "ComponentIdOf"),
+            Iris::RegisterInternalCall<&RegisterScriptComponent>(prefix + "RegisterScriptComponent"),
             Iris::RegisterInternalCall<&RegistryGeneration>(prefix + "RegistryGeneration"),
             Iris::RegisterInternalCall<&ComponentGet>(prefix + "ComponentGet"),
             Iris::RegisterInternalCall<&ComponentHas>(prefix + "ComponentHas"),
