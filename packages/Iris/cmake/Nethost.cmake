@@ -30,7 +30,8 @@ foreach(iris_nethost_file IN ITEMS
     endif()
 endforeach()
 
-add_library(Iris::Nethost SHARED IMPORTED)
+# GLOBAL so a project that adds Iris as a subdirectory can use iris_deploy from its own directories.
+add_library(Iris::Nethost SHARED IMPORTED GLOBAL)
 set_target_properties(Iris::Nethost PROPERTIES
     IMPORTED_LOCATION "${iris_nethost_runtime}"
     INTERFACE_INCLUDE_DIRECTORIES "${iris_dotnet_native_dir}"

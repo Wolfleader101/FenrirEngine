@@ -47,6 +47,13 @@ target_link_libraries(DemoApp PRIVATE
     v8lib
 )
 
+if(FENRIR_ENABLE_SCRIPTING)
+    target_link_libraries(DemoApp PRIVATE FenrirScripting)
+    target_compile_definitions(DemoApp PRIVATE FENRIR_SCRIPTING)
+    # Puts nethost and the Iris bridge next to the executable.
+    iris_deploy(DemoApp)
+endif()
+
 target_compile_definitions(DemoApp PRIVATE 
 V8_COMPRESS_POINTERS # WHAT A FUCKING STUPID FUCKING DUMB FUCKING FEATURE -- https://stackoverflow.com/questions/62921373/embedder-side-pointer-compression-is-disabled
 V8_ENABLE_SANDBOX # SHITTY FUCKING DEFINITION NEEDED -- https://github.com/CauldronDevelopmentLLC/cbang/issues/117
