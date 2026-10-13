@@ -2,6 +2,9 @@
 #include "ScriptingProbe.hpp"
 #include "TestHarness.hpp"
 
+#include <catch2/catch_session.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/Scripting.hpp"
@@ -2482,109 +2485,381 @@ namespace
     }
 } // namespace
 
+TEST_CASE("the fixture loads, frames run and Iris's messages reach the engine logger", "[scripting]")
+{
+    RunsFramesWithTheFixture();
+}
+
+TEST_CASE("a missing script assembly is logged and the app keeps running", "[scripting]")
+{
+    MissingAssemblyIsLoggedAndTheAppRuns();
+}
+
+TEST_CASE("an invalid script assembly is logged and the app keeps running", "[scripting]")
+{
+    InvalidAssemblyIsLoggedAndTheAppRuns();
+}
+
+TEST_CASE("a missing bridge is logged and the app keeps running", "[scripting]")
+{
+    MissingBridgeIsLoggedAndTheAppRuns();
+}
+
+TEST_CASE("a missing contract is logged and the app keeps running", "[scripting]")
+{
+    MissingContractIsLoggedAndTheAppRuns();
+}
+
+TEST_CASE("a second active install is refused and explained", "[scripting]")
+{
+    ASecondActiveInstallIsRefused();
+}
+
+TEST_CASE("scripts log through the engine logger at every level", "[scripting]")
+{
+    ScriptsLogThroughTheEngineLogger();
+}
+
+TEST_CASE("scripts read the engine clock", "[scripting]")
+{
+    ScriptsReadTheEngineClock();
+}
+
+TEST_CASE("entity validity follows the active scene, including slot reuse", "[scripting]")
+{
+    EntityValidityFollowsTheActiveScene();
+}
+
+TEST_CASE("the contract is one shared copy across generations", "[scripting]")
+{
+    TheContractIsOneSharedCopyAcrossGenerations();
+}
+
+TEST_CASE("Ref<T> writes through generated accessors into native memory", "[scripting]")
+{
+    RefWritesThroughGeneratedAccessorsIntoNativeMemory();
+}
+
+TEST_CASE("a null Ref says so instead of crashing", "[scripting]")
+{
+    ANullRefSaysSoInsteadOfCrashing();
+}
+
+TEST_CASE("a Transform is the same memory in C++ and C#", "[scripting]")
+{
+    ATransformIsTheSameMemoryInCppAndInCSharp();
+}
+
+TEST_CASE("a Name round-trips both ways, and long text is cut between characters", "[scripting]")
+{
+    ANameRoundTripsBothWays();
+}
+
+TEST_CASE("the hierarchy is readable from C# but not writable", "[scripting]")
+{
+    TheHierarchyIsReadableButNotWritable();
+}
+
+TEST_CASE("a component registered by the test works with no engine changes", "[scripting]")
+{
+    ACustomComponentRegisteredByTheTestWorksWithNoEngineChanges();
+}
+
+TEST_CASE("lookup failures say what went wrong", "[scripting]")
+{
+    LookupFailuresSayWhatWentWrong();
+}
+
+TEST_CASE("a mismatched component fails the load and names the field", "[scripting]")
+{
+    AMismatchedComponentFailsTheLoadAndNamesTheField();
+}
+
+TEST_CASE("a component registered later is checked at once", "[scripting]")
+{
+    AComponentRegisteredLaterIsCheckedAtOnce();
+}
+
+TEST_CASE("a script assembly reports the components it defines, with size and alignment", "[scripting]")
+{
+    AScriptAssemblyReportsTheComponentsItDefines();
+}
+
+TEST_CASE("a script component is shared with C# and removed with its entity", "[scripting]")
+{
+    AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity();
+}
+
+TEST_CASE("a runtime view over native and script pools iterates the right entities", "[scripting]")
+{
+    ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities();
+}
+
+TEST_CASE("script component storage honours alignment and never moves elements", "[scripting]")
+{
+    ScriptComponentStorageHonoursAlignmentAndNeverMovesElements();
+}
+
+TEST_CASE("the ECS holds dynamic components and refuses to change their shape while in use", "[scripting]")
+{
+    TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse();
+}
+
+TEST_CASE("a created entity is usable at once and exists afterwards", "[scripting]")
+{
+    ACreatedEntityIsUsableAtOnceAndExistsAfterwards();
+}
+
+TEST_CASE("a Ref stays valid while the same component is added and removed elsewhere", "[scripting]")
+{
+    ARefStaysValidWhileTheSameComponentIsAddedAndRemovedElsewhere();
+}
+
+TEST_CASE("reads see live state and changes wait for playback", "[scripting]")
+{
+    ReadsSeeLiveStateAndChangesWaitForPlayback();
+}
+
+TEST_CASE("changes apply in the order they were made", "[scripting]")
+{
+    ChangesApplyInTheOrderTheyWereMade();
+}
+
+TEST_CASE("destroy then add on the same entity leaves it destroyed", "[scripting]")
+{
+    DestroyThenAddOnTheSameEntityLeavesItDestroyed();
+}
+
+TEST_CASE("get and structural changes fail clearly", "[scripting]")
+{
+    GetAndStructuralChangesFailClearly();
+}
+
+TEST_CASE("discarding changes leaves no entities behind", "[scripting]")
+{
+    DiscardingChangesLeavesNoEntitiesBehind();
+}
+
+TEST_CASE("writes through query rows are visible natively", "[scripting]")
+{
+    WritesThroughQueryRowsAreVisibleNatively();
+}
+
+TEST_CASE("a query makes the same number of native calls for any number of entities", "[scripting]")
+{
+    AQueryMakesTheSameNumberOfNativeCallsForAnyNumberOfEntities();
+}
+
+TEST_CASE("structural changes during iteration are deferred", "[scripting]")
+{
+    StructuralChangesDuringIterationAreDeferred();
+}
+
+TEST_CASE("ForEach defers structural changes too", "[scripting]")
+{
+    ForEachDefersStructuralChangesToo();
+}
+
+TEST_CASE("empty and invalid queries behave", "[scripting]")
+{
+    EmptyAndInvalidQueriesBehave();
+}
+
+TEST_CASE("the widest query has eight components", "[scripting]")
+{
+    TheWidestQueryHasEightComponents();
+}
+
+TEST_CASE("systems run in phase and order, with changes applied after each", "[scripting]")
+{
+    SystemsRunInPhaseAndOrderAndChangesApplyAfterEachOne();
+}
+
+TEST_CASE("OnCreate runs after load and OnDestroy before release", "[scripting]")
+{
+    OnCreateRunsAfterLoadAndOnDestroyBeforeRelease();
+}
+
+TEST_CASE("a phase does nothing after Shutdown", "[scripting]")
+{
+    ASystemsCallsAfterShutdownDoNothing();
+}
+
+TEST_CASE("a C++ event is read in C#", "[scripting]")
+{
+    ACppEventIsReadInCSharp();
+}
+
+TEST_CASE("a C# event is read in C++", "[scripting]")
+{
+    ACSharpEventIsReadInCpp();
+}
+
+TEST_CASE("a C#-only event needs no C++", "[scripting]")
+{
+    ACSharpOnlyEventNeedsNoCpp();
+}
+
+TEST_CASE("events have the same frame window in both languages", "[scripting]")
+{
+    EventsHaveTheSameFrameWindowInBothLanguages();
+}
+
+TEST_CASE("a system never sees its own sends and a view stays valid", "[scripting]")
+{
+    ASystemNeverSeesItsOwnSendsAndAViewStaysValid();
+}
+
+TEST_CASE("event lookup failures say what went wrong", "[scripting]")
+{
+    EventLookupFailuresSayWhatWentWrong();
+}
+
+TEST_CASE("a mismatched event fails the load and names the field", "[scripting]")
+{
+    AMismatchedEventFailsTheLoadAndNamesTheField();
+}
+
+TEST_CASE("C++ event users are unchanged by named and byte queues", "[scripting]")
+{
+    CppEventUsersAreUnchangedByNamedAndByteQueues();
+}
+
+TEST_CASE("a released generation unloads and its copy is deleted", "[scripting]")
+{
+    AReleasedGenerationUnloadsAndItsCopyIsDeleted();
+}
+
+TEST_CASE("a rebuilt assembly changes behaviour without a restart and keeps unchanged data", "[scripting]")
+{
+    ARebuiltAssemblyChangesBehaviourWithoutARestartAndKeepsUnchangedData();
+}
+
+TEST_CASE("a changed layout drops the component and the events, and nothing reads stale bytes", "[scripting]")
+{
+    AChangedLayoutDropsTheComponentAndTheEventsAndNothingReadsStaleBytes();
+}
+
+TEST_CASE("a broken build keeps the old generation running", "[scripting]")
+{
+    ABrokenBuildKeepsTheOldGenerationRunning();
+}
+
+TEST_CASE("repeated reloads leave no generations behind", "[scripting]")
+{
+    RepeatedReloadsLeaveNoGenerationsBehind();
+}
+
+TEST_CASE("the watcher reloads a stable build between frames", "[scripting]")
+{
+    TheWatcherReloadsAStableBuildBetweenFrames();
+}
+
+TEST_CASE("with hot reload off the watcher never acts but Reload still works", "[scripting]")
+{
+    WithHotReloadOffTheWatcherNeverActsButReloadStillWorks();
+}
+
+TEST_CASE("reloading with nothing loaded fails cleanly", "[scripting]")
+{
+    ReloadingWithNothingLoadedFailsCleanly();
+}
+
+TEST_CASE("a failed load leaves no components and no pools", "[scripting]")
+{
+    AFailedLoadLeavesNoComponentsAndNoPools();
+}
+
+TEST_CASE("a script component cannot take a native component's name", "[scripting]")
+{
+    AScriptComponentCannotTakeANativeComponentsName();
+}
+
+TEST_CASE("a sound report loads and registers everything together", "[scripting]")
+{
+    ASoundReportLoadsAndRegistersEverythingTogether();
+}
+
+TEST_CASE("a duplicate script component is refused and leaves nothing behind", "[scripting]")
+{
+    ADuplicateScriptComponentIsRefused();
+}
+
+TEST_CASE("a script component with an impossible layout is refused and leaves nothing behind", "[scripting]")
+{
+    AScriptComponentWithAnImpossibleLayoutIsRefused();
+}
+
+TEST_CASE("a duplicate script event is refused and leaves nothing behind", "[scripting]")
+{
+    ADuplicateScriptEventIsRefused();
+}
+
+TEST_CASE("a script event with an impossible layout is refused and leaves nothing behind", "[scripting]")
+{
+    AScriptEventWithAnImpossibleLayoutIsRefused();
+}
+
+TEST_CASE("a script event cannot take the name of a queue the app already has", "[scripting]")
+{
+    AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas();
+}
+
+TEST_CASE("a wrong field type is caught too", "[scripting]")
+{
+    AWrongFieldTypeIsCaughtToo();
+}
+
+TEST_CASE("a script cannot claim a native component with a struct of its own", "[scripting]")
+{
+    AScriptCannotClaimANativeComponentWithAStructOfItsOwn();
+}
+
+TEST_CASE("the build deploys the bridge next to the executable", "[scripting]")
+{
+    TheBuildDeploysTheBridgeNextToTheExecutable();
+}
+
+TEST_CASE("no configured assembly does nothing and never starts .NET", "[scripting]")
+{
+    NoAssemblyConfiguredDoesNothing();
+}
+
+TEST_CASE("a scripting that is not live answers every call the same way", "[scripting]")
+{
+    ScriptingThatIsNotLiveAnswersEveryCallTheSameWay();
+}
+
+TEST_CASE("everything Iris owns is released when the app finishes", "[scripting]")
+{
+    ShutdownReleasesEverythingWhenTheAppFinishes();
+}
+
+TEST_CASE("destroying the owner releases everything, and a later install works", "[scripting]")
+{
+    DestroyingTheOwnerWithoutRunningReleasesEverything();
+}
+
+// The fixture assemblies are built by CMake and named on the command line, ahead of Catch2's own arguments:
+//   FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll Fenrir.BadReportFixture.dll [Catch2
+//   options]
 int main(int argc, char* argv[])
 {
-    const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
-    if (arguments.size() != 4)
+    constexpr int Fixtures = 3;
+    if (argc < Fixtures + 1)
     {
         std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll "
-                     "Fenrir.BadReportFixture.dll\n";
+                     "Fenrir.BadReportFixture.dll [Catch2 options]\n";
         return EXIT_FAILURE;
     }
+    const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
     fixture = std::filesystem::absolute(arguments[1]);
     fixtureV2 = std::filesystem::absolute(arguments[2]);
     badReports = std::filesystem::absolute(arguments[3]);
     executableDirectory = std::filesystem::absolute(arguments[0]).parent_path();
-    return RunCases({
-        {"the fixture loads, frames run and Iris's messages reach the engine logger", RunsFramesWithTheFixture},
-        {"a missing script assembly is logged and the app keeps running", MissingAssemblyIsLoggedAndTheAppRuns},
-        {"an invalid script assembly is logged and the app keeps running", InvalidAssemblyIsLoggedAndTheAppRuns},
-        {"a missing bridge is logged and the app keeps running", MissingBridgeIsLoggedAndTheAppRuns},
-        {"a missing contract is logged and the app keeps running", MissingContractIsLoggedAndTheAppRuns},
-        {"a second active install is refused and explained", ASecondActiveInstallIsRefused},
-        {"scripts log through the engine logger at every level", ScriptsLogThroughTheEngineLogger},
-        {"scripts read the engine clock", ScriptsReadTheEngineClock},
-        {"entity validity follows the active scene, including slot reuse", EntityValidityFollowsTheActiveScene},
-        {"the contract is one shared copy across generations", TheContractIsOneSharedCopyAcrossGenerations},
-        {"Ref<T> writes through generated accessors into native memory",
-         RefWritesThroughGeneratedAccessorsIntoNativeMemory},
-        {"a null Ref says so instead of crashing", ANullRefSaysSoInsteadOfCrashing},
-        {"a Transform is the same memory in C++ and C#", ATransformIsTheSameMemoryInCppAndInCSharp},
-        {"a Name round-trips both ways, and long text is cut between characters", ANameRoundTripsBothWays},
-        {"the hierarchy is readable from C# but not writable", TheHierarchyIsReadableButNotWritable},
-        {"a component registered by the test works with no engine changes",
-         ACustomComponentRegisteredByTheTestWorksWithNoEngineChanges},
-        {"lookup failures say what went wrong", LookupFailuresSayWhatWentWrong},
-        {"a mismatched component fails the load and names the field", AMismatchedComponentFailsTheLoadAndNamesTheField},
-        {"a component registered later is checked at once", AComponentRegisteredLaterIsCheckedAtOnce},
-        {"a script assembly reports the components it defines, with size and alignment",
-         AScriptAssemblyReportsTheComponentsItDefines},
-        {"a script component is shared with C# and removed with its entity",
-         AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity},
-        {"a runtime view over native and script pools iterates the right entities",
-         ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities},
-        {"script component storage honours alignment and never moves elements",
-         ScriptComponentStorageHonoursAlignmentAndNeverMovesElements},
-        {"the ECS holds dynamic components and refuses to change their shape while in use",
-         TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse},
-        {"a created entity is usable at once and exists afterwards", ACreatedEntityIsUsableAtOnceAndExistsAfterwards},
-        {"a Ref stays valid while the same component is added and removed elsewhere",
-         ARefStaysValidWhileTheSameComponentIsAddedAndRemovedElsewhere},
-        {"reads see live state and changes wait for playback", ReadsSeeLiveStateAndChangesWaitForPlayback},
-        {"changes apply in the order they were made", ChangesApplyInTheOrderTheyWereMade},
-        {"destroy then add on the same entity leaves it destroyed", DestroyThenAddOnTheSameEntityLeavesItDestroyed},
-        {"get and structural changes fail clearly", GetAndStructuralChangesFailClearly},
-        {"discarding changes leaves no entities behind", DiscardingChangesLeavesNoEntitiesBehind},
-        {"writes through query rows are visible natively", WritesThroughQueryRowsAreVisibleNatively},
-        {"a query makes the same number of native calls for any number of entities",
-         AQueryMakesTheSameNumberOfNativeCallsForAnyNumberOfEntities},
-        {"structural changes during iteration are deferred", StructuralChangesDuringIterationAreDeferred},
-        {"ForEach defers structural changes too", ForEachDefersStructuralChangesToo},
-        {"empty and invalid queries behave", EmptyAndInvalidQueriesBehave},
-        {"the widest query has eight components", TheWidestQueryHasEightComponents},
-        {"systems run in phase and order, with changes applied after each",
-         SystemsRunInPhaseAndOrderAndChangesApplyAfterEachOne},
-        {"OnCreate runs after load and OnDestroy before release", OnCreateRunsAfterLoadAndOnDestroyBeforeRelease},
-        {"a phase does nothing after Shutdown", ASystemsCallsAfterShutdownDoNothing},
-        {"a C++ event is read in C#", ACppEventIsReadInCSharp},
-        {"a C# event is read in C++", ACSharpEventIsReadInCpp},
-        {"a C#-only event needs no C++", ACSharpOnlyEventNeedsNoCpp},
-        {"events have the same frame window in both languages", EventsHaveTheSameFrameWindowInBothLanguages},
-        {"a system never sees its own sends and a view stays valid", ASystemNeverSeesItsOwnSendsAndAViewStaysValid},
-        {"event lookup failures say what went wrong", EventLookupFailuresSayWhatWentWrong},
-        {"a mismatched event fails the load and names the field", AMismatchedEventFailsTheLoadAndNamesTheField},
-        {"C++ event users are unchanged by named and byte queues", CppEventUsersAreUnchangedByNamedAndByteQueues},
-        {"a released generation unloads and its copy is deleted", AReleasedGenerationUnloadsAndItsCopyIsDeleted},
-        {"a rebuilt assembly changes behaviour without a restart and keeps unchanged data",
-         ARebuiltAssemblyChangesBehaviourWithoutARestartAndKeepsUnchangedData},
-        {"a changed layout drops the component and the events, and nothing reads stale bytes",
-         AChangedLayoutDropsTheComponentAndTheEventsAndNothingReadsStaleBytes},
-        {"a broken build keeps the old generation running", ABrokenBuildKeepsTheOldGenerationRunning},
-        {"repeated reloads leave no generations behind", RepeatedReloadsLeaveNoGenerationsBehind},
-        {"the watcher reloads a stable build between frames", TheWatcherReloadsAStableBuildBetweenFrames},
-        {"with hot reload off the watcher never acts but Reload still works",
-         WithHotReloadOffTheWatcherNeverActsButReloadStillWorks},
-        {"reloading with nothing loaded fails cleanly", ReloadingWithNothingLoadedFailsCleanly},
-        {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
-        {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
-        {"a sound report loads and registers everything together", ASoundReportLoadsAndRegistersEverythingTogether},
-        {"a duplicate script component is refused and leaves nothing behind", ADuplicateScriptComponentIsRefused},
-        {"a script component with an impossible layout is refused and leaves nothing behind",
-         AScriptComponentWithAnImpossibleLayoutIsRefused},
-        {"a duplicate script event is refused and leaves nothing behind", ADuplicateScriptEventIsRefused},
-        {"a script event with an impossible layout is refused and leaves nothing behind",
-         AScriptEventWithAnImpossibleLayoutIsRefused},
-        {"a script event cannot take the name of a queue the app already has",
-         AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas},
-        {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},
-        {"a script cannot claim a native component with a struct of its own",
-         AScriptCannotClaimANativeComponentWithAStructOfItsOwn},
-        {"the build deploys the bridge next to the executable", TheBuildDeploysTheBridgeNextToTheExecutable},
-        {"no configured assembly does nothing and never starts .NET", NoAssemblyConfiguredDoesNothing},
-        {"a scripting that is not live answers every call the same way",
-         ScriptingThatIsNotLiveAnswersEveryCallTheSameWay},
-        {"everything Iris owns is released when the app finishes", ShutdownReleasesEverythingWhenTheAppFinishes},
-        {"destroying the owner releases everything, and a later install works",
-         DestroyingTheOwnerWithoutRunningReleasesEverything},
-    });
+
+    // Catch2 gets the program name and whatever follows the fixtures.
+    std::vector<char*> forwarded{argv[0]};
+    forwarded.insert(forwarded.end(), arguments.begin() + Fixtures + 1, arguments.end());
+    return Catch::Session().run(static_cast<int>(forwarded.size()), forwarded.data());
 }

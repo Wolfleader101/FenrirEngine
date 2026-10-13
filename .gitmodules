@@ -7,6 +7,6 @@
 [submodule "packages/FenrirECS/libs/entt"]
 	path = packages/FenrirECS/libs/entt
 	url = https://github.com/skypjack/entt
-[submodule "packages/FenrirECS/libs/catch2"]
-	path = packages/FenrirECS/libs/catch2
+[submodule "libs/catch2"]
+	path = libs/catch2
 	url = https://github.com/catchorg/Catch2

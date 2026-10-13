@@ -5,7 +5,10 @@ add_executable(FenrirScriptingTests
     HeadlessApp.hpp
     ScriptingProbe.hpp
 )
-target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting)
+include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
+fenrir_add_catch2()
+# Catch2 without its own main: the tests take the fixture assemblies on the command line (see main).
+target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
