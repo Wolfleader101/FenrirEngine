@@ -2161,6 +2161,73 @@ namespace
               "A build that was still changing was loaded");
     }
 
+    void WithHotReloadOffTheWatcherNeverActsButReloadStillWorks()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        int frame = 0;
+        Scripting* installed = nullptr;
+        int generationBeforeManualReload = 0;
+        bool reloaded = false;
+        int generationAtExit = 0;
+        std::int32_t answerAtExit = 0;
+
+        app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App&) {
+                                     ++frame;
+                                     if (frame == 2)
+                                     {
+                                         build.Overwrite(fixtureV2);
+                                     }
+                                     if (frame == 30)
+                                     {
+                                         generationBeforeManualReload = installed->Generation();
+                                         reloaded = installed->Reload().Succeeded();
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate,
+                                 {[&](App&) { std::this_thread::sleep_for(std::chrono::milliseconds(5)); }});
+        app.AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+                                     generationAtExit = installed->Generation();
+                                     answerAtExit = Reloaded<std::int32_t>(*installed, "Answer");
+                                 }});
+        // The watcher would look every frame and settle within 20ms, were it on.
+        ScriptingConfig config = build.Config(false);
+        config.reloadInterval = std::chrono::milliseconds(0);
+        config.reloadDebounce = std::chrono::milliseconds(20);
+        auto scripting = Scripting::Install(app, config);
+        installed = &scripting;
+
+        headless.Run(40);
+
+        Check(generationBeforeManualReload == 1, "The watcher reloaded a build although hot reload was off");
+        Check(reloaded && generationAtExit == 2 && answerAtExit == 2, "An explicit Reload did not load the new build");
+        Check(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1,
+              "Something other than the one explicit Reload reloaded");
+    }
+
+    void ReloadingWithNothingLoadedFailsCleanly()
+    {
+        // No script assembly configured: .NET never starts.
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{});
+            const auto result = scripting.Reload();
+            Check(!result.Succeeded() && result.status == Iris::CallStatus::NotInitialized,
+                  "Reloading with no script assembly configured did not say so");
+            headless.Run(Frames);
+            Check(headless.FramesRun() == Frames, "The app did not keep running after a refused reload");
+        }
+        // A configured assembly that does not exist.
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture.parent_path() / "missing.dll"));
+            const auto result = scripting.Reload();
+            Check(!result.Succeeded() && !scripting.HasScripts(),
+                  "Reloading a script assembly that never loaded worked");
+        }
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -2448,6 +2515,9 @@ int main(int argc, char* argv[])
         {"a broken build keeps the old generation running", ABrokenBuildKeepsTheOldGenerationRunning},
         {"repeated reloads leave no generations behind", RepeatedReloadsLeaveNoGenerationsBehind},
         {"the watcher reloads a stable build between frames", TheWatcherReloadsAStableBuildBetweenFrames},
+        {"with hot reload off the watcher never acts but Reload still works",
+         WithHotReloadOffTheWatcherNeverActsButReloadStillWorks},
+        {"reloading with nothing loaded fails cleanly", ReloadingWithNothingLoadedFailsCleanly},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a sound report loads and registers everything together", ASoundReportLoadsAndRegistersEverythingTogether},
