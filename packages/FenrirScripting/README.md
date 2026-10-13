@@ -226,7 +226,7 @@ is *now*, so a component added a line ago is not there yet, and an entity just d
 - **Failing clearly.** `Get<T>` on a missing component or a dead entity, and any change on a dead entity or an unregistered
   component, throw `InvalidOperationException` saying which. Transform and Name cannot be removed (the engine assumes every
   entity has them), and read-only components such as Relationship have no `Add` or `Remove` at all.
-- **From C++.** `Scripting::PendingChangeCount()`, `ApplyChanges()` (returns how many were applied and skipped) and
+- **From C++.** `ApplyChanges()` (returns how many were applied and skipped) and
   `DiscardChanges()` (drops them, and destroys the entities they created). Native code that changes the ECS directly is not
   buffered.
 
@@ -245,8 +245,8 @@ systems have a context (ticket 08).
 
 - **Cost.** A query makes two native calls (an upper bound on the rows, then the rows) however many entities match: native code
   runs the ECS query and fills a scratch buffer of the entity and one component address per type. Measured in a Release
-  build: 10,000 entities with Transform and Velocity took about 0.5 ms for the whole `Integrate` loop. `Scripting::QueryCallCount()`
-  exposes the count so a test can check it.
+  build: 10,000 entities with Transform and Velocity took about 0.5 ms for the whole `Integrate` loop.
+  The tests count the calls through `ScriptingProbe`, so a test can check it.
 - **Changes during iteration** are deferred (see above), so a loop that removes, adds, creates or destroys never disturbs the
   rows it is walking. Queries nest; each has its own rows. Leaving a loop early is fine.
 - **Empty and invalid.** A query with no matches is empty and creates no storage. A component the engine has not registered,
@@ -279,7 +279,7 @@ Within a phase, the lowest `Order` runs first (ties by full name). `OnCreate` an
   never run.
 - **What the engine does.** `Scripting::Install` makes the `SystemHost` (one managed object), runs every system's `OnCreate`,
   and registers one *sequential* native system for each phase that has systems. Each frame the phase system calls into the
-  script **once**, and the runner runs that phase's systems in order. `Scripting::PhaseCallCount()` counts those calls.
+  script **once**, and the runner runs that phase's systems in order. The tests count those calls through `ScriptingProbe`.
   `OnDestroy` runs, last system first, when the app finishes (the Exit phase) or on `Scripting::Shutdown()`, before the
   script assembly is released.
 - **Changes land between systems.** After every system (and every `OnCreate`/`OnDestroy`) the runner plays back what that system

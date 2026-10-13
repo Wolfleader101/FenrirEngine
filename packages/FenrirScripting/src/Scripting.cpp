@@ -108,6 +108,13 @@ namespace Fenrir
         Detail::ChangeBuffer changes;
         Detail::EngineContext context;
         bool contextActive = false;
+
+        // Scripting is live when the engine context points at this state and an App is attached: only then can scripts
+        // act on the scene, and only then do changes and reloads mean anything.
+        [[nodiscard]] bool IsLive() const noexcept
+        {
+            return contextActive && context.app != nullptr;
+        }
         std::unique_ptr<Iris::Host> host;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
         Detail::GenerationLifecycle generations;
@@ -257,7 +264,7 @@ namespace Fenrir
                 {
                     generations.Unload();
                 }
-                if (contextActive && context.app != nullptr)
+                if (IsLive())
                 {
                     DropScriptData();
                 }
@@ -351,7 +358,7 @@ namespace Fenrir
 
     Iris::CallResult<void> Scripting::State::Reload()
     {
-        if (host == nullptr || !contextActive || context.app == nullptr)
+        if (host == nullptr || !IsLive())
         {
             return Iris::CallResult<void>{Iris::CallStatus::NotInitialized,
                                           "Scripting is not running a script assembly that can be reloaded.", false};
@@ -361,7 +368,7 @@ namespace Fenrir
 
     void Scripting::State::PollForReload()
     {
-        if (host == nullptr || !contextActive)
+        if (host == nullptr || !IsLive())
         {
             return;
         }
@@ -471,24 +478,18 @@ namespace Fenrir
         return m_state == nullptr ? 0 : m_state->generations.PendingUnloadCount();
     }
 
-    std::size_t Scripting::PhaseCallCount() const noexcept
+    Scripting::Diagnostics Scripting::ReadDiagnostics() const noexcept
     {
-        return m_state == nullptr ? 0 : m_state->phaseCalls;
-    }
-
-    std::size_t Scripting::QueryCallCount() const noexcept
-    {
-        return m_state == nullptr ? 0 : m_state->context.queryCalls;
-    }
-
-    std::size_t Scripting::PendingChangeCount() const noexcept
-    {
-        return m_state == nullptr ? 0 : m_state->changes.Size();
+        if (m_state == nullptr)
+        {
+            return {};
+        }
+        return {m_state->phaseCalls, m_state->context.queryCalls, m_state->changes.Size()};
     }
 
     Scripting::ChangeSummary Scripting::ApplyChanges()
     {
-        if (m_state == nullptr || !m_state->contextActive || m_state->context.app == nullptr)
+        if (!m_state || !m_state->IsLive())
         {
             return {};
         }
@@ -498,13 +499,13 @@ namespace Fenrir
 
     void Scripting::DiscardChanges()
     {
-        if (m_state != nullptr && m_state->contextActive && m_state->context.app != nullptr)
+        if (m_state && m_state->IsLive())
         {
             m_state->changes.Discard(m_state->context.app->GetActiveScene().GetEntityList());
         }
     }
 
-    Iris::Component* Scripting::GetComponent() noexcept
+    Iris::Component* Scripting::LoadedComponent() noexcept
     {
         return m_state != nullptr ? m_state->generations.Component() : nullptr;
     }

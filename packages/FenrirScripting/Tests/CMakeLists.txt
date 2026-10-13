@@ -3,6 +3,7 @@ add_executable(FenrirScriptingTests
     ScriptingTests.cpp
     TestHarness.hpp
     HeadlessApp.hpp
+    ScriptingProbe.hpp
 )
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
