@@ -48,6 +48,18 @@ internal static unsafe class Native
     public static delegate* unmanaged[Cdecl]<int, uint, void*, int> ComponentAdd;
     public static delegate* unmanaged[Cdecl]<int, uint, int> ComponentRemove;
 
+    // Events. Each is a queue the engine owns (the same queue C++ SendEvent/ReadEvents use for a native event).
+    //   EventIdOf(name, nameBytes, typeName, typeBytes): like ComponentIdOf, for events.
+    //   RegisterScriptEvent(utf8Name, nameBytes, size, alignment): a script assembly reports an event it defines, while it loads.
+    //   EventSend(id, event): records an event to send when the system returns; 0 when recorded, otherwise a refusal code
+    //   (-5 scripting is not running, -6 the event has no queue).
+    //   EventRead(id, out data): how many events can be read (this frame's and last frame's) and where they are; negative if the
+    //   event is unknown. The address is good until the system returns.
+    public static delegate* unmanaged[Cdecl]<byte*, int, byte*, int, int> EventIdOf;
+    public static delegate* unmanaged[Cdecl]<byte*, int, int, int, bool> RegisterScriptEvent;
+    public static delegate* unmanaged[Cdecl]<int, void*, int> EventSend;
+    public static delegate* unmanaged[Cdecl]<int, nuint*, int> EventRead;
+
     // Plays back (ChangesApply, returning how many changes were applied) or drops (ChangesDiscard) the structural changes
     // recorded since the last time. The system runner calls them after each system.
     public static delegate* unmanaged[Cdecl]<int> ChangesApply;

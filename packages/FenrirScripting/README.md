@@ -290,6 +290,39 @@ Within a phase, the lowest `Order` runs first (ties by full name). `OnCreate` an
   covered by a test, because the debug assert aborts the process.
 - `SystemContext` has `Time`, `Log`, `CreateEntity()` and `Query<...>()`. Events join it in ticket 09.
 
+## Events
+
+```csharp
+public struct Damage : IEvent { public Entity Target; public float Amount; }   // C#-only: nothing else needed
+
+[System(Phase.Update, Order = 10)]
+public sealed class Reporter : ISystem
+{
+    public void OnUpdate(in SystemContext ctx)
+    {
+        foreach (var hit in ctx.Events.Read<Damage>())
+            ctx.Log.Info($"{hit.Target} took {hit.Amount}");
+        ctx.Events.Send(new Damage { Target = default, Amount = 1 });
+    }
+}
+```
+
+An event is an unmanaged struct implementing `IEvent`. The engine keeps one queue per event with the same double buffering as
+C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the last frame's, and the queues rotate once a frame.
+
+- **C#-only events need no C++.** The SDK generator lists them in an `EventTable`; when the script assembly loads, the engine
+  makes a queue for each (the App's `CreateEventQueue`), and removes it when the assembly is released.
+- **Sharing a C++ event.** Register it with `Scripting::RegisterEvent<T>("Ns.Name")` (or `ScriptingConfig::events`) and
+  mirror it in C# with `[NativeEvent("Ns.Name")]`. The layout is checked like a component's, and a mismatch fails the load
+  naming the field. `SendEvent<T>`/`ReadEvents<T>` in C++ and `Events.Send/Read<T>()` in C# are then one queue. The C++ type
+  must be trivially copyable and default constructible: events cross the boundary as bytes.
+- **Sends wait for the system to return.** `Events.Send` is recorded like a structural change, so a system never reads its own
+  sends and a view from `Events.Read<T>()` stays valid for the whole system. The systems after it, and C++, see the send.
+- **Reading.** `Read<T>()` gives an `EventReader<T>` (a `ref struct`, so it cannot outlive the system): `Count`, an indexer
+  and `foreach`. Elements come out oldest first; `var` copies one, `ref readonly var` does not.
+- **By name from C++.** `App::NameEvent<T>("name")` gives a typed queue a name, `App::FindEventQueue("name")` finds any named
+  queue and reads or sends it as bytes (`IEventQueue::ReadRaw/SendRaw`). Existing `SendEvent`/`ReadEvents` code is unchanged.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the

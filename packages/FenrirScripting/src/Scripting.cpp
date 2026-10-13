@@ -91,6 +91,9 @@ namespace Fenrir
         std::thread::id mainThread;
         std::size_t phaseCalls = 0;
 
+        // The queues the loaded script assembly made for the events it defines, removed again when it is released.
+        std::vector<std::string> createdEventQueues;
+
         // Makes the runner if the script assembly has systems, schedules one sequential native system for each phase that has
         // any, and runs OnCreate. Nothing to do (and success) when the script defines no systems.
         Iris::CallResult<void> StartSystems(App& app, const std::shared_ptr<State>& self)
@@ -222,6 +225,14 @@ namespace Fenrir
             runnerRun.reset();
             runnerDestroy.reset();
             runner.reset();
+            if (contextActive && context.app != nullptr)
+            {
+                for (const auto& name : createdEventQueues)
+                {
+                    (void)context.app->RemoveEventQueue(name);
+                }
+            }
+            createdEventQueues.clear();
             component.reset();
             if (host != nullptr)
             {
@@ -375,6 +386,81 @@ namespace Fenrir
             return Succeeded();
         }
 
+        // Runs the table the generator wrote for the events the script defines (full name, size, alignment each).
+        Iris::CallResult<void> DiscoverScriptEvents(const Iris::Component& component, Detail::EngineContext& context,
+                                                    std::vector<Detail::ScriptEventDescription>& found)
+        {
+            const auto table = component.FindType("Fenrir.Scripting.Generated.EventTable");
+            if (table.status == Iris::CallStatus::NotFound)
+            {
+                return Succeeded();
+            }
+            if (!table.Succeeded())
+            {
+                return Iris::CallResult<void>{table.status, "The event table could not be read: " + table.diagnostic, false};
+            }
+            const auto report = table.value->FindMethod<void()>("Register");
+            if (!report.Succeeded())
+            {
+                return Iris::CallResult<void>{report.status, "The event table has no Register method: " + report.diagnostic, false};
+            }
+            context.discoveringEvents = &found;
+            const auto ran = report.value->Invoke();
+            context.discoveringEvents = nullptr;
+            if (!ran.Succeeded())
+            {
+                return Iris::CallResult<void>{ran.status, "The script assembly could not report its events: " + ran.diagnostic,
+                                              ran.diagnosticTruncated};
+            }
+            return Succeeded();
+        }
+
+        // Whether the events a script reported can live next to the engine's: usable layouts, and names nobody has.
+        Iris::CallResult<void> CheckDiscoveredEvents(const std::vector<Detail::ScriptEventDescription>& found,
+                                                     const Detail::ComponentRegistry& registry, App& app)
+        {
+            constexpr std::size_t maxAlignment = 16;
+            std::unordered_set<std::string> names;
+            for (const auto& description : found)
+            {
+                if (!names.insert(description.name).second)
+                {
+                    return Failed("The script reported the event '" + description.name + "' more than once.");
+                }
+                const bool usable = description.size > 0 && description.alignment > 0 && description.alignment <= maxAlignment &&
+                                    (description.alignment & (description.alignment - 1)) == 0 &&
+                                    description.size % description.alignment == 0;
+                if (!usable)
+                {
+                    return Failed("The script event '" + description.name + "' reported a size of " + std::to_string(description.size) +
+                                  " and an alignment of " + std::to_string(description.alignment) + ", which the engine cannot store.");
+                }
+                if (registry.FindEvent(description.name) >= 0 || app.FindEventQueue(description.name) != nullptr)
+                {
+                    return Failed("The script defines an event '" + description.name + "', but the engine already has an event of that name.");
+                }
+            }
+            return Succeeded();
+        }
+
+        // Checks every registered native event against its C# struct.
+        Iris::CallResult<void> ValidateAllEvents(const std::vector<EventRegistration>& registrations, const Iris::Component& component)
+        {
+            for (const auto& registration : registrations)
+            {
+                if (!registration.validate)
+                {
+                    continue;
+                }
+                if (auto validated = registration.validate(component); !validated.Succeeded())
+                {
+                    validated.diagnostic = "Event '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+                    return validated;
+                }
+            }
+            return Succeeded();
+        }
+
         // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives. Nothing
         // is registered unless all of it passes, so a failure leaves the registry exactly as it was:
         //   1. discover the components the script defines, and check them;
@@ -382,7 +468,7 @@ namespace Fenrir
         //   3. only then register the script's components.
         // (Systems join between 1 and 2 in a later ticket.)
         Iris::CallResult<void> CompleteLoad(Detail::EngineContext& context, Detail::ComponentRegistry& registry,
-                                            const Iris::Component& component)
+                                            const Iris::Component& component, std::vector<std::string>& createdEventQueues)
         {
             std::vector<Description> found;
             if (auto discovered = DiscoverScriptComponents(component, context, found); !discovered.Succeeded())
@@ -393,7 +479,20 @@ namespace Fenrir
             {
                 return checked;
             }
+            std::vector<Detail::ScriptEventDescription> foundEvents;
+            if (auto discovered = DiscoverScriptEvents(component, context, foundEvents); !discovered.Succeeded())
+            {
+                return discovered;
+            }
+            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app); !checked.Succeeded())
+            {
+                return checked;
+            }
             if (auto validated = ValidateAll(registry.All(), component); !validated.Succeeded())
+            {
+                return validated;
+            }
+            if (auto validated = ValidateAllEvents(registry.Events(), component); !validated.Succeeded())
             {
                 return validated;
             }
@@ -408,6 +507,30 @@ namespace Fenrir
             {
                 return Failed("The script's components could not be registered together.");
             }
+            // Likewise for events: the checks above make a refusal impossible.
+            std::vector<EventRegistration> eventRegistrations;
+            for (const auto& description : foundEvents)
+            {
+                EventRegistration registration;
+                registration.name = description.name;
+                registration.typeName = description.name;
+                registration.size = description.size;
+                registration.alignment = description.alignment;
+                registration.scriptDefined = true;
+                eventRegistrations.push_back(std::move(registration));
+            }
+            if (!registry.AddEvents(std::move(eventRegistrations)))
+            {
+                return Failed("The script's events could not be registered together.");
+            }
+            for (const auto& description : foundEvents)
+            {
+                if (context.app->CreateEventQueue(description.name, description.size, description.alignment) == nullptr)
+                {
+                    return Failed("The queue for the script event '" + description.name + "' could not be made.");
+                }
+                createdEventQueues.push_back(description.name);
+            }
             return Succeeded();
         }
     } // namespace
@@ -419,6 +542,42 @@ namespace Fenrir
             return nullptr;
         }
         return m_state->components.Get(m_state->components.Find(name));
+    }
+
+    Iris::CallResult<void> Scripting::RegisterEvent(EventRegistration registration)
+    {
+        if (m_state == nullptr || m_state->context.app == nullptr)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::NotInitialized, "Scripting did not start.", false};
+        }
+        if (registration.name.empty() || m_state->components.FindEvent(registration.name) >= 0 ||
+            (registration.bind && !registration.bind(*m_state->context.app)))
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
+                                          "The event name '" + registration.name + "' is empty, already registered, or already names another queue.",
+                                          false};
+        }
+        const std::string name = registration.name;
+        const auto validate = registration.validate;
+        if (m_state->components.AddEvent(std::move(registration)) < 0)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, "The event '" + name + "' could not be registered.", false};
+        }
+        if (!m_state->component.has_value() || !validate)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
+        }
+        auto validated = validate(*m_state->component);
+        if (!validated.Succeeded())
+        {
+            validated.diagnostic = "Event '" + name + "' does not match its C# struct: " + validated.diagnostic;
+            if (ILogger* logger = m_state->logger)
+            {
+                logger->Error("Scripting: {} Releasing the script assembly.", validated.diagnostic);
+            }
+            m_state->Shutdown();
+        }
+        return validated;
     }
 
     Iris::CallResult<void> Scripting::RegisterComponent(ComponentRegistration registration)
@@ -590,6 +749,14 @@ namespace Fenrir
                 return Scripting(std::move(state));
             }
         }
+        for (auto& registration : config.events)
+        {
+            if ((registration.bind && !registration.bind(app)) || state->components.AddEvent(std::move(registration)) < 0)
+            {
+                logger.Error("Scripting: an event in the config has an empty or duplicate name; running without scripts.");
+                return Scripting(std::move(state));
+            }
+        }
         if (!Detail::ActivateEngineContext(&state->context))
         {
             logger.Error("Scripting: another Scripting is already active in this process; running without scripts.");
@@ -637,7 +804,7 @@ namespace Fenrir
         }
         // All or nothing: the assembly stays loaded only if its components are discovered and every native component
         // matches its C# struct.
-        if (auto validated = CompleteLoad(state->context, state->components, *loaded.value); !validated.Succeeded())
+        if (auto validated = CompleteLoad(state->context, state->components, *loaded.value, state->createdEventQueues); !validated.Succeeded())
         {
             logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), validated.diagnostic);
             state->Shutdown();

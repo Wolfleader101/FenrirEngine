@@ -10,6 +10,7 @@
 #include <string>
 #include <type_traits>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 
 namespace Fenrir
@@ -75,6 +76,60 @@ namespace Fenrir
          */
         std::function<Iris::CallResult<void>(const Iris::Component&)> validate;
     };
+
+    /**
+     * @brief One event the engine exposes to C# by name. The event's queue is the App's named queue (App::FindEventQueue), so
+     * C++ `SendEvent<T>`/`ReadEvents<T>` and C# `Events.Send/Read` are the same queue with the same frame window.
+     *
+     * A C++ event is described by MakeEvent and registered with Scripting::RegisterEvent or ScriptingConfig::events; its C#
+     * struct says `[NativeEvent("Ns.Name")]`. An event only C# defines needs no registration at all: the script assembly
+     * reports it as it loads and the engine makes its queue.
+     */
+    struct EventRegistration
+    {
+        /** The name C# uses: a [NativeEvent("...")] attribute for a native event, the type's full name otherwise. */
+        std::string name;
+
+        /** The full name of the C# struct this event is validated against; C# gets the event only through that type. */
+        std::string typeName;
+
+        /** Size and alignment in bytes of one event. */
+        std::size_t size = 0;
+        std::size_t alignment = 0;
+
+        /** True for an event a script defines in C#. It exists only while the script assembly that defines it is loaded. */
+        bool scriptDefined = false;
+
+        /** Gives the App's queue for this event its name. Empty for a script-defined event, whose queue is made at load. */
+        std::function<bool(App& app)> bind;
+
+        /** Checks the C# struct against the event's Iris StructMapping. Empty for a script-defined event. */
+        std::function<Iris::CallResult<void>(const Iris::Component&)> validate;
+    };
+
+    /**
+     * @brief Registers the C++ event `T` under `name`, mirrored by the C# struct that `Mapping`'s Iris::StructMapping names.
+     * `T` must be copyable as plain bytes (the queue moves events between C++ and C# as bytes) and default constructible.
+     * `Mapping` is `T` unless its members are not accessible to a mapping; see MakeComponent.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] EventRegistration MakeEvent(std::string name)
+    {
+        static_assert(std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>,
+                      "An event shared with scripts is moved as bytes, so it must be trivially copyable and default constructible.");
+        static_assert(sizeof(Mapping) == sizeof(T) && alignof(Mapping) == alignof(T),
+                      "The mapping must have the size and alignment of the event it stands for.");
+        static_assert(Iris::StructValue<Mapping>,
+                      "The mapping needs an Iris::StructMapping and must be trivially copyable standard-layout data.");
+        EventRegistration registration;
+        registration.name = std::move(name);
+        registration.typeName = std::string(Iris::StructMapping<Mapping>::typeName);
+        registration.size = sizeof(T);
+        registration.alignment = alignof(T);
+        registration.bind = [eventName = registration.name](App& app) { return app.NameEvent<T>(eventName); };
+        registration.validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); };
+        return registration;
+    }
 
     namespace Detail
     {
