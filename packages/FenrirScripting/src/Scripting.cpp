@@ -341,6 +341,11 @@ namespace Fenrir
         return validated;
     }
 
+    std::size_t Scripting::QueryCallCount() const noexcept
+    {
+        return m_state == nullptr ? 0 : m_state->context.queryCalls;
+    }
+
     std::size_t Scripting::PendingChangeCount() const noexcept
     {
         return m_state == nullptr ? 0 : m_state->changes.Size();

@@ -98,7 +98,7 @@ public readonly struct Entity : IEquatable<Entity>
     public unsafe ReadOnlyRef<T> GetReadOnly<T>() where T : unmanaged, IReadOnlyComponent => new((T*)PointerTo<T>());
 
     // The registry id of a native component type, or a clear exception.
-    private static int IdOf<T>() where T : unmanaged, IReadOnlyComponent
+    internal static int IdOf<T>() where T : unmanaged, IReadOnlyComponent
     {
         int id = ComponentIds<T>.Id;
         if (id == ComponentIds<T>.WrongType)

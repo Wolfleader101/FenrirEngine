@@ -229,6 +229,31 @@ is *now*, so a component added a line ago is not there yet, and an entity just d
   `DiscardChanges()` (drops them, and destroys the entities they created). Native code that changes the ECS directly is not
   buffered.
 
+## Queries
+
+```csharp
+foreach (var (entity, transform, velocity) in World.Query<Transform, Velocity>())
+    transform.Position += velocity.Linear;           // writes the engine's own memory
+
+World.Query<Counter>().ForEach((Entity entity, Ref<Counter> counter) => counter.Hits += 1);
+```
+
+A query visits every entity that has all the listed components (1 to 8 of them, native and C# mixed), in no particular order.
+Each row deconstructs into the `Entity` and a `Ref<T>` per component. `ctx.Query<...>()` will forward to `World.Query` once
+systems have a context (ticket 08).
+
+- **Cost.** A query makes two native calls (an upper bound on the rows, then the rows) however many entities match: native code
+  runs the ECS query and fills a scratch buffer of the entity and one component address per type. Measured in a Release
+  build: 10,000 entities with Transform and Velocity took about 0.5 ms for the whole `Integrate` loop. `Scripting::QueryCallCount()`
+  exposes the count so a test can check it.
+- **Changes during iteration** are deferred (see above), so a loop that removes, adds, creates or destroys never disturbs the
+  rows it is walking. Queries nest; each has its own rows. Leaving a loop early is fine.
+- **Empty and invalid.** A query with no matches is empty and creates no storage. A component the engine has not registered,
+  or the same component listed twice, throws `InvalidOperationException` saying which. Read-only components (Relationship)
+  cannot be queried yet: queries are read-write.
+- **The generated part** is written by the SDK's source generator into the contract itself (`Query<...>`, `QueryRow<...>`,
+  `QueryAction<...>`, arities 1 to 8), because each arity has its own shape.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
