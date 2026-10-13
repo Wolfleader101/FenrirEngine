@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -116,6 +117,38 @@ namespace Fenrir
          * operations to add, remove and reach a component on an entity from native code, whatever defines it.
          */
         [[nodiscard]] const ComponentRegistration* FindComponent(std::string_view name) const;
+
+        /** @brief What ApplyChanges did. */
+        struct ChangeSummary
+        {
+            std::size_t applied = 0;
+            /** Changes that named an entity destroyed earlier in the same batch: not applied, and logged as warnings. */
+            std::size_t skipped = 0;
+        };
+
+        /**
+         * @brief Plays back the structural changes scripts have made since the last call, in the order they were made.
+         *
+         * A script that creates, destroys, adds or removes (Entity.Create, Destroy, Add, Remove) does not touch the ECS storage
+         * at the time: the change is recorded, so every Ref<T> the script holds stays valid until it returns. Whatever calls
+         * into a script (the runner after each system, or `OnCreate`) calls this when the script returns. Reads (Get, Has,
+         * IsValid) are never recorded and see the state as it is now, which does not include changes not yet played back.
+         * A created entity's id is usable at once; it gets its Transform, Name and Relationship here.
+         *
+         * Playback skips, with a warning, a create, add or remove naming an entity an earlier change destroyed, so a
+         * destroy-then-add on one entity leaves it destroyed. A second destroy of an entity is not an error and is not
+         * reported.
+         */
+        ChangeSummary ApplyChanges();
+
+        /** @brief How many changes are recorded and not yet played back. */
+        [[nodiscard]] std::size_t PendingChangeCount() const noexcept;
+
+        /**
+         * @brief Drops the recorded changes instead of playing them back (a script threw, say). Entities it created are
+         * destroyed. Reads are unaffected.
+         */
+        void DiscardChanges();
 
         /**
          * @brief The loaded script assembly, or null when there are no scripts. The pointer stays valid until

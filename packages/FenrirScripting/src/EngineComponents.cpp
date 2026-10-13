@@ -103,8 +103,12 @@ namespace Fenrir::Detail
 {
     bool RegisterEngineComponents(ComponentRegistry& registry)
     {
-        return registry.Add(MakeComponent<Transform>("Fenrir.Transform")) >= 0 &&
-               registry.Add(MakeComponent<Name, NameView>("Fenrir.Name")) >= 0 &&
-               registry.Add(MakeReadOnlyComponent<Relationship, RelationshipView>("Fenrir.Relationship")) >= 0;
+        // Every entity the engine makes has all three, and the renderer and hierarchy rely on it: scripts cannot remove them.
+        auto transform = MakeComponent<Transform>("Fenrir.Transform");
+        auto name = MakeComponent<Name, NameView>("Fenrir.Name");
+        auto relationship = MakeReadOnlyComponent<Relationship, RelationshipView>("Fenrir.Relationship");
+        transform.required = name.required = relationship.required = true;
+        return registry.Add(std::move(transform)) >= 0 && registry.Add(std::move(name)) >= 0 &&
+               registry.Add(std::move(relationship)) >= 0;
     }
 } // namespace Fenrir::Detail

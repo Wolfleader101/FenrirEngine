@@ -38,6 +38,11 @@ namespace Fenrir
         /** True if scripts may only read it: it has no add or remove, and C# gets it as a ReadOnlyRef. */
         bool readOnly = false;
 
+        /**
+         * True if the engine assumes every entity has it (Transform, Name, Relationship), so scripts may not remove it.
+         */
+        bool required = false;
+
         /** True for a component a script defines in C#. It exists only while the script assembly that defines it is loaded. */
         bool scriptDefined = false;
 

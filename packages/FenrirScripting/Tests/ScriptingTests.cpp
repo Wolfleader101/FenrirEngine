@@ -908,6 +908,212 @@ namespace
               "A query over an unused dynamic type visited entities or made storage");
     }
 
+    constexpr const char* ChangesType = "Fenrir.ScriptFixture.Changes";
+
+    template <typename Result, typename... Args>
+    Result Changes(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(ChangesType, scripting, method, arguments...);
+    }
+
+    // The script-defined Velocity, added to an entity from native code.
+    std::uint32_t EntityWithVelocity(Scripting& scripting, EntityList& entities)
+    {
+        const auto id = entities.CreateEntity().GetId();
+        Check(scripting.FindComponent(VelocityName)->add(entities, id), "Velocity was not added");
+        return id;
+    }
+
+    float VelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id)
+    {
+        const auto* values = static_cast<const float*>(scripting.FindComponent(VelocityName)->get(entities, id));
+        Check(values != nullptr, "The entity had no Velocity");
+        return values[0];
+    }
+
+    void ACreatedEntityIsUsableAtOnceAndExistsAfterwards()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* velocity = scripting.FindComponent(VelocityName);
+
+        const auto id = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
+        // Alive and usable (the script added to it), but nothing is in the storage until playback.
+        Check(id != NullEntity && entities.HasEntity(id), "The new entity was not alive at once");
+        Check(scripting.PendingChangeCount() == 3, "The script's changes were not recorded");
+        Check(!velocity->has(entities, id) && !entities.GetEntity(id).HasComponent<Transform>(),
+              "A change reached the storage before playback");
+
+        const auto summary = scripting.ApplyChanges();
+        Check(summary.applied == 3 && summary.skipped == 0 && scripting.PendingChangeCount() == 0, "Playback did not apply all");
+        auto entity = entities.GetEntity(id);
+        Check(entity.HasComponent<Transform>() && entity.HasComponent<Name>() && entity.HasComponent<Relationship>(),
+              "A created entity did not get the engine's components");
+        Check(std::string(entity.GetComponent<Name>().Get()).starts_with("Entity "), "A created entity did not get a name");
+        const auto* values = static_cast<const float*>(velocity->get(entities, id));
+        Check(values != nullptr && values[0] == 1 && values[1] == 2 && values[2] == 3, "The added value was not applied");
+        Check(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->has(entities, id), "A default component was not added");
+
+        // Nothing left over to play back.
+        Check(scripting.ApplyChanges().applied == 0, "Playing back twice applied something twice");
+    }
+
+    void ARefStaysValidWhileTheSameComponentIsAddedAndRemovedElsewhere()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto victim = EntityWithVelocity(scripting, entities); // First in the pool: its removal moves the last one.
+        const auto middle = EntityWithVelocity(scripting, entities);
+        const auto kept = EntityWithVelocity(scripting, entities);
+        (void)middle;
+
+        // The script holds a Ref to `kept` while the victim loses its component and thousands of entities gain one.
+        const auto sum = Changes<float>(scripting, "RefSurvivesChanges", kept, victim);
+        Check(sum == 22.0F, "The Ref did not keep reading and writing the same memory");
+        Check(scripting.FindComponent(VelocityName)->has(entities, victim), "A removal reached the storage before playback");
+
+        const auto summary = scripting.ApplyChanges();
+        Check(summary.skipped == 0 && summary.applied > 5000, "Playback did not apply every change");
+        Check(!scripting.FindComponent(VelocityName)->has(entities, victim), "The removal was not applied");
+        Check(VelocityX(scripting, entities, kept) == 9.0F,
+              "The write through the Ref did not stay with the kept entity when the pool changed");
+        // 3 to begin with, minus the victim, plus 5000 new entities and the one made before them.
+        Check(scripting.FindComponent(VelocityName)->count(entities) == 5003, "The pool did not end up with the right entities");
+    }
+
+    void ReadsSeeLiveStateAndChangesWaitForPlayback()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto bare = entities.CreateEntity().GetId();
+        const auto holder = EntityWithVelocity(scripting, entities);
+        const auto doomed = entities.CreateEntity().GetId();
+
+        Check(!Changes<bool>(scripting, "AddThenHas", bare), "Has saw a component that was only recorded");
+        Check(Changes<bool>(scripting, "RemoveThenHas", holder), "Has missed a component that was only recorded as removed");
+        Check(Changes<bool>(scripting, "DestroyThenIsValid", doomed), "A destroyed entity was gone before playback");
+        Check(entities.HasEntity(doomed), "A destroy reached the ECS before playback");
+
+        (void)scripting.ApplyChanges();
+        Check(scripting.FindComponent(VelocityName)->has(entities, bare), "The add was not applied");
+        Check(!scripting.FindComponent(VelocityName)->has(entities, holder), "The removal was not applied");
+        Check(!entities.HasEntity(doomed), "The destroy was not applied");
+    }
+
+    void ChangesApplyInTheOrderTheyWereMade()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto entity = entities.CreateEntity().GetId();
+
+        Changes<void>(scripting, "ChangesApplyInOrder", entity);
+        Check(scripting.ApplyChanges().applied == 4, "Not every change was applied");
+        Check(VelocityX(scripting, entities, entity) == 3.0F, "The last add did not win: the order was not kept");
+
+        // Remove then add leaves a fresh default one.
+        Changes<void>(scripting, "RemoveThenAdd", entity);
+        (void)scripting.ApplyChanges();
+        Check(VelocityX(scripting, entities, entity) == 0.0F, "Remove then add did not give a default component");
+
+        // A native component takes a value too.
+        Changes<void>(scripting, "SetTransform", entity);
+        (void)scripting.ApplyChanges();
+        const auto& transform = entities.GetEntity(entity).GetComponent<Transform>();
+        Check(transform.pos == glm::vec3(9, 8, 7) && transform.scale == glm::vec3(2, 2, 2) && transform.rot.w == 1.0F,
+              "A native component did not take the value");
+    }
+
+    void DestroyThenAddOnTheSameEntityLeavesItDestroyed()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+
+        // Destroy first: the add that follows names an entity that no longer exists, is skipped, and is reported.
+        const auto first = entities.CreateEntity().GetId();
+        Changes<void>(scripting, "DestroyThenAdd", first);
+        const auto summary = scripting.ApplyChanges();
+        Check(summary.applied == 1 && summary.skipped == 1, "Destroy-then-add did not apply one and skip one");
+        Check(!entities.HasEntity(first), "The entity survived being destroyed");
+        Check(headless.Logger().Contains(LogLevel::Warn, "skipped adding a component for entity"),
+              "The skipped change was not reported");
+
+        // The slot is reused by a later entity: the skipped add did not leak onto it.
+        const auto reused = entities.CreateEntity().GetId();
+        Check(!scripting.FindComponent(VelocityName)->has(entities, reused), "A skipped add reached a new entity");
+        Check(scripting.FindComponent(VelocityName)->count(entities) == 0, "A skipped add left a component behind");
+
+        // Add first, destroy after: the entity is gone and takes the component with it.
+        const auto second = entities.CreateEntity().GetId();
+        Changes<void>(scripting, "AddThenDestroy", second);
+        const auto both = scripting.ApplyChanges();
+        Check(both.applied == 2 && both.skipped == 0 && !entities.HasEntity(second), "Add-then-destroy was not well defined");
+        Check(scripting.FindComponent(VelocityName)->count(entities) == 0, "A destroyed entity kept its component");
+
+        // Destroying twice is the same as once.
+        const auto third = entities.CreateEntity().GetId();
+        Changes<void>(scripting, "DestroyTwice", third);
+        Check(scripting.ApplyChanges().skipped == 0 && !entities.HasEntity(third), "Destroying twice was not harmless");
+
+        // Created and destroyed in one go, leaving nothing behind.
+        std::size_t before = 0;
+        entities.ForEachEntity([&](auto) { ++before; });
+        const auto gone = Changes<std::uint32_t>(scripting, "CreateAndDestroy");
+        (void)scripting.ApplyChanges();
+        std::size_t after = 0;
+        entities.ForEachEntity([&](auto) { ++after; });
+        Check(!entities.HasEntity(gone) && after == before, "A created-then-destroyed entity was left behind");
+    }
+
+    void GetAndStructuralChangesFailClearly()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto bare = entities.CreateEntity().GetId();
+        const auto stale = entities.CreateEntity().GetId();
+        entities.DestroyEntity(stale);
+        const auto message = [&](const char* method, std::uint32_t entity) {
+            return Changes<std::optional<std::string>>(scripting, method, entity).value_or("");
+        };
+
+        const auto missing = message("TryGetMissing", bare);
+        Check(missing.find("has no Velocity") != std::string::npos, "Get on a missing component said: " + missing);
+        const auto staleGet = message("TryGetMissing", stale);
+        Check(staleGet.find("not alive") != std::string::npos, "Get on a stale entity said: " + staleGet);
+        Check(message("TryAddOnStale", stale).find("not alive") != std::string::npos, "Add on a stale entity did not say so");
+        Check(message("TryDestroyStale", stale).find("not alive") != std::string::npos, "Destroy of a stale entity did not say so");
+        Check(message("TryRemoveRequired", bare).find("needs every entity") != std::string::npos,
+              "Removing Transform was not refused clearly");
+        Check(message("TryRemoveName", bare).find("needs every entity") != std::string::npos, "Removing Name was not refused");
+        Check(scripting.PendingChangeCount() == 0, "A refused change was recorded");
+        Check(entities.GetEntity(bare).HasComponent<Transform>(), "A refused removal changed the entity");
+    }
+
+    void DiscardingChangesLeavesNoEntitiesBehind()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto existing = EntityWithVelocity(scripting, entities);
+
+        const auto created = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
+        Changes<void>(scripting, "RemoveThenAdd", existing);
+        Check(scripting.PendingChangeCount() > 0 && entities.HasEntity(created), "Nothing was recorded");
+        scripting.DiscardChanges();
+        Check(scripting.PendingChangeCount() == 0 && !entities.HasEntity(created), "Discarding left the created entity");
+        Check(scripting.FindComponent(VelocityName)->has(entities, existing), "Discarding applied a change");
+
+        // After Shutdown there is nothing to play back, and it says so rather than crashing.
+        scripting.Shutdown();
+        Check(scripting.ApplyChanges().applied == 0 && scripting.PendingChangeCount() == 0, "Changes outlived Shutdown");
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -1056,6 +1262,14 @@ int main(int argc, char* argv[])
         {"script component storage honours alignment and never moves elements", ScriptComponentStorageHonoursAlignmentAndNeverMovesElements},
         {"the ECS holds dynamic components and refuses to change their shape while in use",
          TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse},
+        {"a created entity is usable at once and exists afterwards", ACreatedEntityIsUsableAtOnceAndExistsAfterwards},
+        {"a Ref stays valid while the same component is added and removed elsewhere",
+         ARefStaysValidWhileTheSameComponentIsAddedAndRemovedElsewhere},
+        {"reads see live state and changes wait for playback", ReadsSeeLiveStateAndChangesWaitForPlayback},
+        {"changes apply in the order they were made", ChangesApplyInTheOrderTheyWereMade},
+        {"destroy then add on the same entity leaves it destroyed", DestroyThenAddOnTheSameEntityLeavesItDestroyed},
+        {"get and structural changes fail clearly", GetAndStructuralChangesFailClearly},
+        {"discarding changes leaves no entities behind", DiscardingChangesLeavesNoEntitiesBehind},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

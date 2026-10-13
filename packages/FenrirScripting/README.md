@@ -200,6 +200,35 @@ fails, the assembly is released and **nothing** from that load is registered: no
 today are a malformed report, a name that clashes with a native component or another script component, two names that would
 share a storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
 
+## Creating, destroying, adding and removing
+
+```csharp
+var bullet = Entity.Create();                       // usable at once
+bullet.Add(new Velocity { Linear = new Vector3(0, 0, 30) });
+bullet.Add<Tagged>();                               // a default (all-zero) component
+other.Remove<Velocity>();
+victim.Destroy();
+```
+
+These work for native and C# components alike, on the active scene. They are **recorded, not applied**: the ECS storage does
+not change until the native code that called into the script gets control back and calls `Scripting::ApplyChanges()` (the
+runner will do it after each system). That is what keeps every `Ref<T>` a script took valid for the whole call, even when
+other entities gain or lose the same component. Reads (`Get`, `Has`, `IsValid`) are never recorded and see the state as it
+is *now*, so a component added a line ago is not there yet, and an entity just destroyed is still alive.
+
+- **Order.** Changes play back in the order they were made. `Add(value)` sets the value (replacing one that is there);
+  `Add<T>()` keeps an existing component and otherwise adds a default one.
+- **A created entity** gets its Transform, Name and Relationship at playback, like any entity the engine makes. Until then it
+  is alive with no components.
+- **Destroy then add** (or any change after a destroy) on one entity: the entity stays destroyed, the later change is skipped
+  with a warning, and it never reaches whatever reuses the slot. Destroying twice is harmless.
+- **Failing clearly.** `Get<T>` on a missing component or a dead entity, and any change on a dead entity or an unregistered
+  component, throw `InvalidOperationException` saying which. Transform and Name cannot be removed (the engine assumes every
+  entity has them), and read-only components such as Relationship have no `Add` or `Remove` at all.
+- **From C++.** `Scripting::PendingChangeCount()`, `ApplyChanges()` (returns how many were applied and skipped) and
+  `DiscardChanges()` (drops them, and destroys the entities they created). Native code that changes the ECS directly is not
+  buffered.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the

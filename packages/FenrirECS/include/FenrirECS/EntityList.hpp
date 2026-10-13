@@ -64,6 +64,20 @@ namespace Fenrir
         Entity CreateEntity();
 
         /**
+         * @brief Makes an entity id that is alive but has no components yet, not even the ones every entity gets. Code that
+         * must hand an id out before it can change the list (deferred changes) uses this, then CompleteEntity when it does.
+         *
+         * @return the new entity's id
+         */
+        [[nodiscard]] std::uint32_t ReserveEntity();
+
+        /**
+         * @brief Gives a reserved entity the components every entity has (CreateEntity does this for you). False if the entity
+         * is not alive. Do not call it for an entity CreateEntity made: it would reset its Transform, Name and Relationship.
+         */
+        bool CompleteEntity(std::uint32_t id);
+
+        /**
          * @brief Get the Entity object
          *
          * @param id The id of the entity to get
