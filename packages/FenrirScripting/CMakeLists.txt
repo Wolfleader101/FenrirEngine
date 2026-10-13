@@ -50,6 +50,8 @@ add_library(FenrirScripting STATIC
     src/ChangeBuffer.hpp
     src/EngineComponents.cpp
     src/ScriptComponents.cpp
+    src/ScriptSchema.cpp
+    src/ScriptSchema.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
     include/FenrirScripting/ComponentRegistry.hpp
