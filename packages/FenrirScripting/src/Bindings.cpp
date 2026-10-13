@@ -176,6 +176,27 @@ namespace Fenrir::Detail
                                                                       *context->components, id, entity));
         }
 
+        // Native.ChangesApply: plays back the recorded changes, returning how many were applied.
+        std::int32_t ChangesApply()
+        {
+            auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || context->changes == nullptr)
+            {
+                return 0;
+            }
+            return static_cast<std::int32_t>(context->changes->Apply(*context->app, *context->components).applied);
+        }
+
+        // Native.ChangesDiscard: drops the recorded changes (and destroys the entities they created).
+        void ChangesDiscard()
+        {
+            auto* context = activeContext.load();
+            if (context != nullptr && context->app != nullptr && context->changes != nullptr)
+            {
+                context->changes->Discard(context->app->GetActiveScene().GetEntityList());
+            }
+        }
+
         // Native.QueryCount and Native.QueryFill: see Queries.hpp.
         std::int32_t QueryCount(const std::int32_t* ids, std::int32_t count)
         {
@@ -232,6 +253,8 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&EntityDestroy>(prefix + "EntityDestroy"),
             Iris::RegisterInternalCall<&ComponentAdd>(prefix + "ComponentAdd"),
             Iris::RegisterInternalCall<&ComponentRemove>(prefix + "ComponentRemove"),
+            Iris::RegisterInternalCall<&ChangesApply>(prefix + "ChangesApply"),
+            Iris::RegisterInternalCall<&ChangesDiscard>(prefix + "ChangesDiscard"),
             Iris::RegisterInternalCall<&QueryCount>(prefix + "QueryCount"),
             Iris::RegisterInternalCall<&QueryFill>(prefix + "QueryFill"),
         };

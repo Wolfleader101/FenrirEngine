@@ -42,6 +42,16 @@ public sealed class QueryGenerator : IIncrementalGenerator
             text.Append("        public static Query<").Append(Names(arity)).Append("> Query<").Append(Names(arity)).Append(">()");
             text.Append(Constraints(arity)).Append(" => default;\n");
         }
+        text.Append("    }\n\n");
+
+        // The same entry points on the context a system is given.
+        text.Append("    public readonly partial struct SystemContext\n    {\n");
+        for (int arity = 1; arity <= MaxArity; arity++)
+        {
+            text.Append("        /// <summary>Every entity that has all of these components, read-write.</summary>\n");
+            text.Append("        public Query<").Append(Names(arity)).Append("> Query<").Append(Names(arity)).Append(">()");
+            text.Append(Constraints(arity)).Append(" => default;\n");
+        }
         text.Append("    }\n}\n");
         return text.ToString();
     }

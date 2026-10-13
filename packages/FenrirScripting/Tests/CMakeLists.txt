@@ -70,3 +70,8 @@ fenrir_expect_compile(RelationshipRef CS0315)          # there is no Ref<Relatio
 fenrir_expect_compile(RelationshipAssign CS8331)       # r.Value = ... on a ReadOnlyRef
 fenrir_expect_compile(RelationshipField CS8331)        # r.Parent = ... on a ReadOnlyRef
 fenrir_expect_compile(ReadOnlyViewOfWritable CS8332)   # a writable component through the read-only view
+# Systems are found at build time, so a mistake is an error there and not a silent no-op when the game runs.
+fenrir_expect_compile(SystemControl OK)
+fenrir_expect_compile(SystemNotASystem FENRIR0010)
+fenrir_expect_compile(SystemPrivateConstructor FENRIR0011)
+fenrir_expect_compile(SystemBadPhase FENRIR0013)

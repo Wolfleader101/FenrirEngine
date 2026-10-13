@@ -6,6 +6,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include <cassert>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -13,6 +14,7 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <thread>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -81,6 +83,101 @@ namespace Fenrir
         std::unique_ptr<Iris::Host> host;
         std::optional<Iris::Component> component;
 
+        // The script's systems: one managed object (the generated SystemHost) the engine calls once per phase. Released
+        // before the component, which cannot be released while an object it made is alive.
+        std::optional<Iris::Object> runner;
+        std::optional<Iris::InstanceMethod<void(std::int32_t)>> runnerRun;
+        std::optional<Iris::InstanceMethod<void()>> runnerDestroy;
+        std::thread::id mainThread;
+        std::size_t phaseCalls = 0;
+
+        // Makes the runner if the script assembly has systems, schedules one sequential native system for each phase that has
+        // any, and runs OnCreate. Nothing to do (and success) when the script defines no systems.
+        Iris::CallResult<void> StartSystems(App& app, const std::shared_ptr<State>& self)
+        {
+            using Result = Iris::CallResult<void>;
+            const auto type = component->FindType("Fenrir.Scripting.Generated.SystemHost");
+            if (type.status == Iris::CallStatus::NotFound)
+            {
+                return Result{Iris::CallStatus::Success, {}, false};
+            }
+            if (!type.Succeeded())
+            {
+                return Result{type.status, "The script's system host could not be read: " + type.diagnostic, false};
+            }
+            auto object = type.value->CreateObject();
+            if (!object.Succeeded())
+            {
+                return Result{object.status, "The script's systems could not be created: " + object.diagnostic,
+                              object.diagnosticTruncated};
+            }
+            const auto mask = type.value->FindInstanceMethod<std::int32_t()>("PhaseMask");
+            const auto create = type.value->FindInstanceMethod<void()>("OnCreate");
+            const auto run = type.value->FindInstanceMethod<void(std::int32_t)>("Run");
+            const auto destroy = type.value->FindInstanceMethod<void()>("OnDestroy");
+            for (const auto* found : {&mask.status, &create.status, &run.status, &destroy.status})
+            {
+                if (*found != Iris::CallStatus::Success)
+                {
+                    return Result{*found, "The script's system host is missing a method: " + mask.diagnostic + create.diagnostic +
+                                              run.diagnostic + destroy.diagnostic,
+                                  false};
+                }
+            }
+            runner.emplace(std::move(*object.value));
+            runnerRun.emplace(*run.value);
+            runnerDestroy.emplace(*destroy.value);
+            mainThread = std::this_thread::get_id();
+
+            const auto phases = mask.value->Invoke(*runner);
+            if (!phases.Succeeded())
+            {
+                return Result{phases.status, "The script's systems could not be listed: " + phases.diagnostic,
+                              phases.diagnosticTruncated};
+            }
+            constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick, SchedulePriority::Update,
+                                                       SchedulePriority::PostUpdate};
+            for (int phase = 0; phase < 4; ++phase)
+            {
+                if ((*phases.value & (1 << phase)) != 0)
+                {
+                    app.AddSequentialSystems(priorities[phase], {[self, phase](App&) { self->RunPhase(phase); }});
+                }
+            }
+            const auto created = create.value->Invoke(*runner);
+            if (!created.Succeeded())
+            {
+                return Result{created.status, "The script's systems could not start: " + created.diagnostic,
+                              created.diagnosticTruncated};
+            }
+            return Result{Iris::CallStatus::Success, {}, false};
+        }
+
+        // One transition into managed code for the whole phase. Only ever on the main thread: Iris calls, script calls and
+        // the internal calls they make all assume it.
+        void RunPhase(int phase)
+        {
+            if (!runner.has_value() || !runnerRun.has_value())
+            {
+                return;
+            }
+            if (std::this_thread::get_id() != mainThread)
+            {
+                assert(false && "Scripts must only run on the main thread");
+                if (ILogger* log = logger)
+                {
+                    log->Error("Scripting: a script phase was asked to run off the main thread and was skipped.");
+                }
+                return;
+            }
+            ++phaseCalls;
+            const auto ran = runnerRun->Invoke(*runner, phase);
+            if (!ran.Succeeded() && logger != nullptr)
+            {
+                logger->Error("Scripting: running the script's systems failed: {}", ran.diagnostic);
+            }
+        }
+
         void Forward(const Iris::LogMessage& message)
         {
             const std::lock_guard<std::mutex> lock(mutex);
@@ -112,7 +209,19 @@ namespace Fenrir
 
         void Shutdown() noexcept
         {
-            // The script assembly first, then the host that loaded it.
+            // The systems say goodbye while the runtime is still up, then let go of their object; then the script assembly, then
+            // the host that loaded it.
+            if (runner.has_value() && runnerDestroy.has_value() && contextActive)
+            {
+                const auto destroyed = runnerDestroy->Invoke(*runner);
+                if (!destroyed.Succeeded() && logger != nullptr)
+                {
+                    logger->Error("Scripting: the script's systems could not shut down cleanly: {}", destroyed.diagnostic);
+                }
+            }
+            runnerRun.reset();
+            runnerDestroy.reset();
+            runner.reset();
             component.reset();
             if (host != nullptr)
             {
@@ -341,6 +450,11 @@ namespace Fenrir
         return validated;
     }
 
+    std::size_t Scripting::PhaseCallCount() const noexcept
+    {
+        return m_state == nullptr ? 0 : m_state->phaseCalls;
+    }
+
     std::size_t Scripting::QueryCallCount() const noexcept
     {
         return m_state == nullptr ? 0 : m_state->context.queryCalls;
@@ -530,6 +644,12 @@ namespace Fenrir
             return Scripting(std::move(state));
         }
         state->component.emplace(std::move(*loaded.value));
+        if (auto started = state->StartSystems(app, state); !started.Succeeded())
+        {
+            logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), started.diagnostic);
+            state->Shutdown();
+            return Scripting(std::move(state));
+        }
         logger.Info("Scripting: loaded '{}'.", assembly.filename().string());
         return Scripting(std::move(state));
     }

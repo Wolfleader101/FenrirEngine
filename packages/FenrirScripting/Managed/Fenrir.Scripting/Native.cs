@@ -48,6 +48,11 @@ internal static unsafe class Native
     public static delegate* unmanaged[Cdecl]<int, uint, void*, int> ComponentAdd;
     public static delegate* unmanaged[Cdecl]<int, uint, int> ComponentRemove;
 
+    // Plays back (ChangesApply, returning how many changes were applied) or drops (ChangesDiscard) the structural changes
+    // recorded since the last time. The system runner calls them after each system.
+    public static delegate* unmanaged[Cdecl]<int> ChangesApply;
+    public static delegate* unmanaged[Cdecl]<void> ChangesDiscard;
+
     // Queries. A row is the entity followed by the address of its component for each id, in order.
     //   QueryCount(ids, count): how many entities have every component; negative if an id is unknown.
     //   QueryFill(ids, count, rows, capacity): writes up to `capacity` rows and returns how many; negative if an id is unknown.
