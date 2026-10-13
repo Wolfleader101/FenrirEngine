@@ -11,11 +11,14 @@ namespace Fenrir.Scripting;
 public static unsafe class ScriptComponents
 {
     // A struct with a byte before a T: the T sits at the first offset T allows, which is its alignment.
+    // Only ever laid out by the runtime to measure an offset; never assigned.
+#pragma warning disable CS0649
     private struct AlignmentProbe<T> where T : unmanaged
     {
         public byte Marker;
         public T Value;
     }
+#pragma warning restore CS0649
 
     /// <summary>The alignment, in bytes, that C# lays <typeparamref name="T"/> out with.</summary>
     internal static int AlignmentOf<T>() where T : unmanaged
