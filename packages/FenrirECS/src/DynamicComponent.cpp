@@ -33,7 +33,7 @@ namespace Fenrir
 
     bool DynamicComponentType::IsValid() const noexcept
     {
-        return !m_name.empty() && m_size > 0 && m_size <= MaxSize && m_alignment > 0 && (m_alignment & (m_alignment - 1)) == 0 &&
-               m_size % m_alignment == 0;
+        return !m_name.empty() && m_size > 0 && m_size <= MaxSize && m_alignment > 0 &&
+               (m_alignment & (m_alignment - 1)) == 0 && m_size % m_alignment == 0;
     }
 } // namespace Fenrir

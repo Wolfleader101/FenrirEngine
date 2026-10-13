@@ -49,7 +49,8 @@ namespace Fenrir
 
     namespace
     {
-        // The queue for an event that has no C++ type: the same two buffers and the same rotation as EventQueue<T>, over bytes.
+        // The queue for an event that has no C++ type: the same two buffers and the same rotation as EventQueue<T>,
+        // over bytes.
         class ByteEventQueue final : public IEventQueue
         {
           public:

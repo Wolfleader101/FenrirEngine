@@ -19,10 +19,11 @@ namespace Fenrir
     class EntityList;
 
     /**
-     * @brief Names one kind of component, native or dynamic, for a query: "entities that have this". A query takes any mix.
+     * @brief Names one kind of component, native or dynamic, for a query: "entities that have this". A query takes any
+     * mix.
      *
-     * It says nothing about how the ECS stores components, so code that builds queries from selectors keeps working if the
-     * ECS changes underneath. Cheap to copy; make them once, not per frame.
+     * It says nothing about how the ECS stores components, so code that builds queries from selectors keeps working if
+     * the ECS changes underneath. Cheap to copy; make them once, not per frame.
      */
     class ComponentSelector
     {
@@ -64,16 +65,18 @@ namespace Fenrir
         Entity CreateEntity();
 
         /**
-         * @brief Makes an entity id that is alive but has no components yet, not even the ones every entity gets. Code that
-         * must hand an id out before it can change the list (deferred changes) uses this, then CompleteEntity when it does.
+         * @brief Makes an entity id that is alive but has no components yet, not even the ones every entity gets. Code
+         * that must hand an id out before it can change the list (deferred changes) uses this, then CompleteEntity when
+         * it does.
          *
          * @return the new entity's id
          */
         [[nodiscard]] std::uint32_t ReserveEntity();
 
         /**
-         * @brief Gives a reserved entity the components every entity has (CreateEntity does this for you). False if the entity
-         * is not alive. Do not call it for an entity CreateEntity made: it would reset its Transform, Name and Relationship.
+         * @brief Gives a reserved entity the components every entity has (CreateEntity does this for you). False if the
+         * entity is not alive. Do not call it for an entity CreateEntity made: it would reset its Transform, Name and
+         * Relationship.
          */
         bool CompleteEntity(std::uint32_t id);
 
@@ -163,15 +166,16 @@ namespace Fenrir
 
         /**
          * @name Components known only at run time
-         * Components of a DynamicComponentType: plain bytes of a given size and alignment, one per entity, zeroed when added and
-         * removed with the entity. A scripting layer uses these for components that scripts define. The storage for a type is
-         * created in this list when the first one is added; asking about a type nobody has added creates nothing.
+         * Components of a DynamicComponentType: plain bytes of a given size and alignment, one per entity, zeroed when
+         * added and removed with the entity. A scripting layer uses these for components that scripts define. The
+         * storage for a type is created in this list when the first one is added; asking about a type nobody has added
+         * creates nothing.
          * @{
          */
 
         /**
-         * @brief The entity's component of this type, or null if the entity is not alive or has none. The pointer is good until
-         * a component of this type is removed or this list is cleared.
+         * @brief The entity's component of this type, or null if the entity is not alive or has none. The pointer is
+         * good until a component of this type is removed or this list is cleared.
          */
         [[nodiscard]] void* GetDynamic(const DynamicComponentType& type, std::uint32_t entity);
 
@@ -179,8 +183,9 @@ namespace Fenrir
         [[nodiscard]] bool HasDynamic(const DynamicComponentType& type, std::uint32_t entity);
 
         /**
-         * @brief Gives the entity a zeroed component of this type (or keeps the one it has). False if the entity is not alive,
-         * the type is not valid, or this list already holds components of that name with a different size or alignment.
+         * @brief Gives the entity a zeroed component of this type (or keeps the one it has). False if the entity is not
+         * alive, the type is not valid, or this list already holds components of that name with a different size or
+         * alignment.
          */
         bool AddDynamic(const DynamicComponentType& type, std::uint32_t entity);
 
@@ -191,16 +196,16 @@ namespace Fenrir
         [[nodiscard]] std::size_t CountDynamic(const DynamicComponentType& type);
 
         /**
-         * @brief Removes every component of this type from every entity, and returns how many there were. Afterwards the type
-         * may be added again with a different size or alignment. Do nothing if no entity has one.
+         * @brief Removes every component of this type from every entity, and returns how many there were. Afterwards
+         * the type may be added again with a different size or alignment. Do nothing if no entity has one.
          */
         std::size_t ClearDynamic(const DynamicComponentType& type);
         /** @} */
 
         /**
-         * @brief Calls `func(entity)` for every entity that has all of the selected components, in no particular order. The
-         * selectors may mix native and dynamic components. Do not add or remove components of the selected kinds, or destroy
-         * entities, inside `func`. With no selectors nothing is visited.
+         * @brief Calls `func(entity)` for every entity that has all of the selected components, in no particular order.
+         * The selectors may mix native and dynamic components. Do not add or remove components of the selected kinds,
+         * or destroy entities, inside `func`. With no selectors nothing is visited.
          *
          * @param selectors the components an entity must have
          * @param func a callable taking the entity's id (std::uint32_t)
@@ -209,8 +214,8 @@ namespace Fenrir
         void ForEachWith(std::span<const ComponentSelector> selectors, Func&& func);
 
         /**
-         * @brief How many entities have the selected component. Constant time. (Selecting a native component makes its storage if
-         * the list has none, as asking the ECS for a view of it would; a dynamic one never does.)
+         * @brief How many entities have the selected component. Constant time. (Selecting a native component makes its
+         * storage if the list has none, as asking the ECS for a view of it would; a dynamic one never does.)
          */
         [[nodiscard]] std::size_t CountOf(const ComponentSelector& selector);
 
@@ -220,8 +225,8 @@ namespace Fenrir
       private:
         entt::registry m_registry;
 
-        void ForEachWithImpl(std::span<const ComponentSelector> selectors, void (*visit)(void* context, std::uint32_t entity),
-                             void* context);
+        void ForEachWithImpl(std::span<const ComponentSelector> selectors,
+                             void (*visit)(void* context, std::uint32_t entity), void* context);
 
         // The storage for a native component type, as the opaque pointer a ComponentSelector hands back.
         template <typename T>
@@ -245,7 +250,9 @@ namespace Fenrir
     {
         ForEachWithImpl(
             selectors,
-            [](void* context, std::uint32_t entity) { (*static_cast<std::remove_reference_t<Func>*>(context))(entity); },
+            [](void* context, std::uint32_t entity) {
+                (*static_cast<std::remove_reference_t<Func>*>(context))(entity);
+            },
             const_cast<std::remove_const_t<std::remove_reference_t<Func>>*>(std::addressof(func)));
     }
 

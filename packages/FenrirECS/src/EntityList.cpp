@@ -15,7 +15,6 @@ namespace Fenrir
         return entity;
     }
 
-
     std::uint32_t EntityList::ReserveEntity()
     {
         return static_cast<std::uint32_t>(m_registry.create());
@@ -77,8 +76,8 @@ namespace Fenrir
 
     namespace
     {
-        // Whatever the registry holds under a dynamic type id, if it is one of our pools. An id is a hash, so it can in principle
-        // belong to a storage of something else; the typed lookup trusts the id, so this checks first.
+        // Whatever the registry holds under a dynamic type id, if it is one of our pools. An id is a hash, so it can in
+        // principle belong to a storage of something else; the typed lookup trusts the id, so this checks first.
         Detail::ByteStorage* PoolUnder(entt::registry& registry, const DynamicComponentType& type)
         {
             entt::sparse_set* storage = registry.storage(type.Id());
@@ -87,16 +86,17 @@ namespace Fenrir
                        : nullptr;
         }
 
-        // The list's pool for a dynamic type if it has one. Reading never creates a pool. A pool under the id that belongs to a
-        // different type name (the same hash) is not this type's.
+        // The list's pool for a dynamic type if it has one. Reading never creates a pool. A pool under the id that
+        // belongs to a different type name (the same hash) is not this type's.
         Detail::ByteStorage* ExistingPool(entt::registry& registry, const DynamicComponentType& type)
         {
             Detail::ByteStorage* pool = PoolUnder(registry, type);
             return pool != nullptr && pool->Owner() == type.Name() ? pool : nullptr;
         }
 
-        // The pool, created and shaped for the type if the list has none yet. Null if the type is not valid, if it exists with a
-        // different shape, or if the id is taken by something else (another name with the same hash, or a native storage).
+        // The pool, created and shaped for the type if the list has none yet. Null if the type is not valid, if it
+        // exists with a different shape, or if the id is taken by something else (another name with the same hash, or a
+        // native storage).
         Detail::ByteStorage* Pool(entt::registry& registry, const DynamicComponentType& type)
         {
             if (!type.IsValid())
@@ -212,12 +212,14 @@ namespace Fenrir
     ComponentSelector ComponentSelector::Dynamic(DynamicComponentType type)
     {
         return ComponentSelector([type = std::move(type)](EntityList& entities) -> void* {
-            // No pool yet means nobody has added one, so nothing can match: the query visits nothing, and makes no storage.
+            // No pool yet means nobody has added one, so nothing can match: the query visits nothing, and makes no
+            // storage.
             return static_cast<entt::sparse_set*>(ExistingPool(entities.m_registry, type));
         });
     }
 
-    void EntityList::ForEachWithImpl(std::span<const ComponentSelector> selectors, void (*visit)(void*, std::uint32_t), void* context)
+    void EntityList::ForEachWithImpl(std::span<const ComponentSelector> selectors, void (*visit)(void*, std::uint32_t),
+                                     void* context)
     {
         if (selectors.empty())
         {
