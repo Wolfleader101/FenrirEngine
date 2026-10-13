@@ -89,14 +89,11 @@ namespace Fenrir::Detail
         // same name twice.
         bool AddAll(std::vector<ComponentRegistration> registrations)
         {
-            std::unordered_map<std::string, int> seen;
-            for (const auto& registration : registrations)
+            if (!CanAddAll(registrations, m_ids, [](const ComponentRegistration& registration) {
+                    return !registration.name.empty() && registration.get && registration.has;
+                }))
             {
-                if (registration.name.empty() || !registration.get || !registration.has ||
-                    m_ids.contains(registration.name) || !seen.emplace(registration.name, 0).second)
-                {
-                    return false;
-                }
+                return false;
             }
             for (auto& registration : registrations)
             {
@@ -137,14 +134,10 @@ namespace Fenrir::Detail
         // twice.
         bool AddEvents(std::vector<EventRegistration> registrations)
         {
-            std::unordered_map<std::string, int> seen;
-            for (const auto& registration : registrations)
+            if (!CanAddAll(registrations, m_eventIds,
+                           [](const EventRegistration& registration) { return !registration.name.empty(); }))
             {
-                if (registration.name.empty() || m_eventIds.contains(registration.name) ||
-                    !seen.emplace(registration.name, 0).second)
-                {
-                    return false;
-                }
+                return false;
             }
             for (auto& registration : registrations)
             {
@@ -196,6 +189,24 @@ namespace Fenrir::Detail
 
       private:
         inline static std::atomic<std::uint32_t> s_generations{0};
+
+        // The one rule for adding a batch to either table: every registration is usable (`usable`), none takes a name
+        // `taken` already holds, and no name appears twice in the batch.
+        template <typename Registration, typename Usable>
+        [[nodiscard]] static bool CanAddAll(const std::vector<Registration>& batch,
+                                            const std::unordered_map<std::string, std::int32_t>& taken, Usable usable)
+        {
+            std::unordered_map<std::string, int> seen;
+            for (const auto& registration : batch)
+            {
+                if (!usable(registration) || taken.contains(registration.name) ||
+                    !seen.emplace(registration.name, 0).second)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
 
         std::uint32_t m_generation;
         std::vector<ComponentRegistration> m_components;
