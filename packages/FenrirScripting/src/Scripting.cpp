@@ -13,6 +13,7 @@
 #include <chrono>
 #include <cstdint>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -548,6 +549,14 @@ namespace Fenrir
         }
     }
 
+    // Why a stage of starting scripting failed: what went wrong, and the diagnostic that came with it, if any.
+    struct StartupFailure
+    {
+        std::string what;
+        std::string detail;
+    };
+    using StartupStage = std::function<std::optional<StartupFailure>()>;
+
     Scripting Scripting::InstallImpl(App& app, ScriptingConfig config)
     {
         auto state = std::make_shared<State>();
@@ -562,159 +571,180 @@ namespace Fenrir
             return Scripting(std::move(state));
         }
 
+        // What the stages build up for the ones after them.
         std::error_code error;
-        const auto assembly = std::filesystem::absolute(config.scriptAssembly, error);
-        if (error || !std::filesystem::is_regular_file(assembly, error))
-        {
-            logger.Error("Scripting: the script assembly '{}' does not exist; running without scripts.",
-                         config.scriptAssembly.string());
-            return Scripting(std::move(state));
-        }
-
-        const auto bridgeDirectory = config.bridgeDirectory.empty()
-                                         ? ExecutableDirectory()
-                                         : std::filesystem::absolute(config.bridgeDirectory, error);
-        if (error)
-        {
-            logger.Error("Scripting: the bridge directory '{}' is not a usable path; running without scripts.",
-                         config.bridgeDirectory.string());
-            return Scripting(std::move(state));
-        }
-        // The contract every script compiles against is shared, so its types have one identity across reloads.
-        const auto contract = bridgeDirectory / "Fenrir.Scripting.dll";
-        if (!std::filesystem::is_regular_file(contract, error))
-        {
-            logger.Error("Scripting: the contract '{}' is missing; running without scripts.", contract.string());
-            return Scripting(std::move(state));
-        }
-        Iris::HostConfiguration configuration;
-        configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
-        configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
-        configuration.dotnetRoot = config.dotnetRoot;
-        configuration.sharedAssemblies = config.sharedAssemblies;
-        configuration.sharedAssemblies.push_back(contract);
-
-        // The engine's native functions act on this App, and are registered before the contract is shared (sharing
-        // binds the contract's function pointers to them).
-        state->context.app = &app;
-        state->context.components = &state->components;
-        state->context.changes = &state->changes;
-        if (!Detail::RegisterEngineComponents(state->components))
-        {
-            logger.Error("Scripting: the engine's own components could not be registered; running without scripts.");
-            return Scripting(std::move(state));
-        }
-        for (auto& registration : config.components)
-        {
-            if (state->components.Add(std::move(registration)) < 0)
-            {
-                logger.Error(
-                    "Scripting: a component in the config has an empty or duplicate name; running without scripts.");
-                return Scripting(std::move(state));
-            }
-        }
-        for (auto& registration : config.events)
-        {
-            if ((registration.bind && !registration.bind(app)) ||
-                state->components.AddEvent(std::move(registration)) < 0)
-            {
-                logger.Error(
-                    "Scripting: an event in the config has an empty or duplicate name; running without scripts.");
-                return Scripting(std::move(state));
-            }
-        }
-        if (!Detail::ActivateEngineContext(&state->context))
-        {
-            logger.Error("Scripting: another Scripting is already active in this process; running without scripts.");
-            return Scripting(std::move(state));
-        }
-        state->contextActive = true;
-        if (const auto bound = Detail::RegisterEngineBindings(); !bound.Succeeded())
-        {
-            logger.Error("Scripting: the engine's native functions could not be registered; running without "
-                         "scripts. {}",
-                         bound.diagnostic);
-            state->Shutdown();
-            return Scripting(std::move(state));
-        }
-
-        state->logger = &logger;
-        state->host = std::make_unique<Iris::Host>();
-        const auto initialized = state->host->Initialize(configuration);
-        if (!initialized.Succeeded())
-        {
-            logger.Error("Scripting: .NET could not be started; running without scripts. {}", initialized.diagnostic);
-            state->Shutdown();
-            return Scripting(std::move(state));
-        }
-        // The sink may be called from any managed thread; State::Forward serialises it against Shutdown.
-        const auto sink =
-            state->host->SetLogSink([weak = std::weak_ptr<State>(state)](const Iris::LogMessage& message) {
-                if (const auto live = weak.lock())
-                {
-                    live->Forward(message);
-                }
-            });
-        if (!sink.Succeeded())
-        {
-            logger.Warn("Scripting: Iris's log messages will not be shown. {}", sink.diagnostic);
-        }
-
-        state->scriptAssembly = assembly;
-        // Each Install has a directory of its own, so one that is still waiting for a generation to unload never gets
-        // in the way of the next.
-        static std::atomic<int> installs{0};
+        std::filesystem::path assembly;
+        std::filesystem::path bridgeDirectory;
+        std::filesystem::path contract;
         Detail::GenerationLifecycle::Settings settings;
-        settings.assembly = assembly;
-        settings.scratchRoot =
-            (config.reloadDirectory.empty()
-                 ? std::filesystem::temp_directory_path(error) / ("FenrirScripting-" + std::to_string(ProcessId()))
-                 : std::filesystem::absolute(config.reloadDirectory, error)) /
-            ("install-" + std::to_string(++installs));
-        settings.hotReload = config.hotReload;
-        settings.reloadInterval = config.reloadInterval;
-        settings.reloadDebounce = config.reloadDebounce;
-        settings.unloadTimeout = config.unloadTimeout;
-        // The lifecycle knows nothing of what a generation holds: the State supplies that. It owns the lifecycle, so
-        // the raw pointer the hooks keep lives as long as they do.
-        State* const self = state.get();
-        Detail::GenerationLifecycle::Hooks hooks;
-        hooks.completeLoad = [self](const Iris::Component& loaded) {
-            return Detail::CompleteLoad(self->context, self->components, loaded, self->ownedComponents,
-                                        self->ownedEvents);
+
+        // Starting is a list of stages, run in order, and the first to fail ends it: one place reports why, gives
+        // everything back and returns a Scripting without scripts. The order matters where the comments say so.
+        const std::vector<StartupStage> stages = {
+            // The files scripting needs are there.
+            [&]() -> std::optional<StartupFailure> {
+                assembly = std::filesystem::absolute(config.scriptAssembly, error);
+                if (error || !std::filesystem::is_regular_file(assembly, error))
+                {
+                    return StartupFailure{"the script assembly '" + config.scriptAssembly.string() + "' does not exist",
+                                          {}};
+                }
+                bridgeDirectory = config.bridgeDirectory.empty()
+                                      ? ExecutableDirectory()
+                                      : std::filesystem::absolute(config.bridgeDirectory, error);
+                if (error)
+                {
+                    return StartupFailure{
+                        "the bridge directory '" + config.bridgeDirectory.string() + "' is not a usable path", {}};
+                }
+                // The contract every script compiles against is shared, so its types have one identity across
+                // reloads.
+                contract = bridgeDirectory / "Fenrir.Scripting.dll";
+                if (!std::filesystem::is_regular_file(contract, error))
+                {
+                    return StartupFailure{"the contract '" + contract.string() + "' is missing", {}};
+                }
+                return std::nullopt;
+            },
+            // The engine's native functions act on this App, and are registered before the contract is shared (sharing
+            // binds the contract's function pointers to them).
+            [&]() -> std::optional<StartupFailure> {
+                state->context.app = &app;
+                state->context.components = &state->components;
+                state->context.changes = &state->changes;
+                if (!Detail::RegisterEngineComponents(state->components))
+                {
+                    return StartupFailure{"the engine's own components could not be registered", {}};
+                }
+                for (auto& registration : config.components)
+                {
+                    if (state->components.Add(std::move(registration)) < 0)
+                    {
+                        return StartupFailure{"a component in the config has an empty or duplicate name", {}};
+                    }
+                }
+                for (auto& registration : config.events)
+                {
+                    if ((registration.bind && !registration.bind(app)) ||
+                        state->components.AddEvent(std::move(registration)) < 0)
+                    {
+                        return StartupFailure{"an event in the config has an empty or duplicate name", {}};
+                    }
+                }
+                return std::nullopt;
+            },
+            // Only one Scripting is active in a process, and the engine's bindings must exist before .NET starts.
+            [&]() -> std::optional<StartupFailure> {
+                if (!Detail::ActivateEngineContext(&state->context))
+                {
+                    return StartupFailure{"another Scripting is already active in this process", {}};
+                }
+                state->contextActive = true;
+                if (const auto bound = Detail::RegisterEngineBindings(); !bound.Succeeded())
+                {
+                    return StartupFailure{"the engine's native functions could not be registered", bound.diagnostic};
+                }
+                return std::nullopt;
+            },
+            // .NET, with the contract shared, and Iris's messages going to the engine's logger.
+            [&]() -> std::optional<StartupFailure> {
+                Iris::HostConfiguration configuration;
+                configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
+                configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
+                configuration.dotnetRoot = config.dotnetRoot;
+                configuration.sharedAssemblies = config.sharedAssemblies;
+                configuration.sharedAssemblies.push_back(contract);
+
+                state->logger = &logger;
+                state->host = std::make_unique<Iris::Host>();
+                const auto initialized = state->host->Initialize(configuration);
+                if (!initialized.Succeeded())
+                {
+                    return StartupFailure{".NET could not be started", initialized.diagnostic};
+                }
+                // The sink may be called from any managed thread; State::Forward serialises it against Shutdown.
+                const auto sink =
+                    state->host->SetLogSink([weak = std::weak_ptr<State>(state)](const Iris::LogMessage& message) {
+                        if (const auto live = weak.lock())
+                        {
+                            live->Forward(message);
+                        }
+                    });
+                if (!sink.Succeeded())
+                {
+                    logger.Warn("Scripting: Iris's log messages will not be shown. {}", sink.diagnostic);
+                }
+                return std::nullopt;
+            },
+            // The generations of the script assembly, and what runs each frame.
+            [&]() -> std::optional<StartupFailure> {
+                state->scriptAssembly = assembly;
+                // Each Install has a directory of its own, so one that is still waiting for a generation to unload
+                // never gets in the way of the next.
+                static std::atomic<int> installs{0};
+                settings.assembly = assembly;
+                settings.scratchRoot =
+                    (config.reloadDirectory.empty() ? std::filesystem::temp_directory_path(error) /
+                                                          ("FenrirScripting-" + std::to_string(ProcessId()))
+                                                    : std::filesystem::absolute(config.reloadDirectory, error)) /
+                    ("install-" + std::to_string(++installs));
+                if (error || settings.scratchRoot.empty())
+                {
+                    return StartupFailure{"the folder for the script copies could not be chosen", {}};
+                }
+                settings.hotReload = config.hotReload;
+                settings.reloadInterval = config.reloadInterval;
+                settings.reloadDebounce = config.reloadDebounce;
+                settings.unloadTimeout = config.unloadTimeout;
+                // The lifecycle knows nothing of what a generation holds: the State supplies that. It owns the
+                // lifecycle, so the raw pointer the hooks keep lives as long as they do.
+                State* const self = state.get();
+                Detail::GenerationLifecycle::Hooks hooks;
+                hooks.completeLoad = [self](const Iris::Component& loaded) {
+                    return Detail::CompleteLoad(self->context, self->components, loaded, self->ownedComponents,
+                                                self->ownedEvents);
+                };
+                hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
+                hooks.stop = [self] { self->StopSystems(); };
+                hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context.app, self->components); };
+                const bool hotReload = settings.hotReload;
+                state->generations.Configure(state->host.get(), &logger, std::move(settings), std::move(hooks));
+
+                // The watcher looks before anything else runs in a frame, so a reload happens between frames. The
+                // phases are scheduled once; each runs the current generation's systems, if it has any in that phase.
+                if (hotReload)
+                {
+                    app.AddSequentialSystems(SchedulePriority::PreUpdate, {[state](App&) { state->PollForReload(); }});
+                }
+                constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick,
+                                                           SchedulePriority::Update, SchedulePriority::PostUpdate};
+                for (int phase = 0; phase < 4; ++phase)
+                {
+                    app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});
+                }
+                return std::nullopt;
+            },
+            // The first generation.
+            [&]() -> std::optional<StartupFailure> {
+                if (const auto loaded = state->generations.Load(); !loaded.Succeeded())
+                {
+                    return StartupFailure{{}, loaded.diagnostic};
+                }
+                return std::nullopt;
+            },
         };
-        hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
-        hooks.stop = [self] { self->StopSystems(); };
-        hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context.app, self->components); };
-        const bool hotReload = settings.hotReload;
-        const bool scratchChosen = !error && !settings.scratchRoot.empty();
-        state->generations.Configure(state->host.get(), &logger, std::move(settings), std::move(hooks));
 
-        // The watcher looks before anything else runs in a frame, so a reload happens between frames. The phases are
-        // scheduled once; each runs the current generation's systems, if it has any in that phase.
-        if (hotReload)
+        for (const auto& stage : stages)
         {
-            app.AddSequentialSystems(SchedulePriority::PreUpdate, {[state](App&) { state->PollForReload(); }});
-        }
-        constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick,
-                                                   SchedulePriority::Update, SchedulePriority::PostUpdate};
-        for (int phase = 0; phase < 4; ++phase)
-        {
-            app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});
-        }
-
-        if (!scratchChosen)
-        {
-            logger.Error("Scripting: the folder for the script copies could not be chosen; running without scripts.");
-            state->Shutdown();
-            return Scripting(std::move(state));
-        }
-        if (const auto loaded = state->generations.Load(); !loaded.Succeeded())
-        {
-            logger.Error("Scripting: running without scripts. {}", loaded.diagnostic);
-            // Nothing runs, so give back the runtime and the process-wide slot.
-            state->Shutdown();
-            return Scripting(std::move(state));
+            if (const auto failure = stage())
+            {
+                logger.Error("Scripting: {}running without scripts.{}",
+                             failure->what.empty() ? std::string() : failure->what + "; ",
+                             failure->detail.empty() ? std::string() : " " + failure->detail);
+                // Nothing runs, so give back the runtime and the process-wide slot.
+                state->Shutdown();
+                return Scripting(std::move(state));
+            }
         }
         logger.Info("Scripting: loaded '{}'.", assembly.filename().string());
         return Scripting(std::move(state));
