@@ -4,7 +4,7 @@
 
 **Blocked by:** `script-schema-reconciliation` ticket 04
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] A rebuilt file is picked up between frames
 - [ ] A file that keeps changing is not loaded until stable

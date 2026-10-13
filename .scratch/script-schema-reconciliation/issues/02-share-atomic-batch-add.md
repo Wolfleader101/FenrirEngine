@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Component and event batch adds go through one shared rule
 - [ ] Ticket 01 tests and all existing tests pass unchanged

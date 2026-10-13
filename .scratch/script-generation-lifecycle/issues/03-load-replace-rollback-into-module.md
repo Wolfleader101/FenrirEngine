@@ -4,7 +4,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Failures are returned as results across the module's interface
 - [ ] `Reload()` behaves as before, including re-entrancy guard and exception handling

@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Host state holds no file-stamp, debounce or poll-time fields
 - [ ] Frame cost when nothing changes is not worse
