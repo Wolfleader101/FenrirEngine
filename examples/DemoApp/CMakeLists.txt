@@ -53,24 +53,21 @@ if(FENRIR_ENABLE_SCRIPTING)
     # Puts nethost, the Iris bridge and the Fenrir.Scripting contract next to the executable.
     fenrir_deploy_scripting(DemoApp)
 
-    # The demo's script assembly, built with the .NET SDK Iris found and copied to <exe dir>/scripts, which is where
-    # assets/demoApp.feproj ("scriptAssembly") points, relative to the working directory like the assets.
-    set(demo_scripts_dir "${CMAKE_CURRENT_BINARY_DIR}/scripts")
+    # The demo's script assembly, built with the .NET SDK Iris found straight into <exe dir>/scripts, which is where
+    # assets/demoApp.feproj ("scriptAssembly") points, relative to the working directory like the assets. It is its own
+    # target and always runs (dotnet skips what has not changed), so building just DemoScripts while the demo is running
+    # drops the new build where the demo's hot reload is watching for it.
     file(GLOB demo_scripts_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.cs")
-    add_custom_command(
-        OUTPUT "${demo_scripts_dir}/DemoScripts.dll"
+    add_custom_target(DemoScripts
         COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
-            --configuration Release --output "${demo_scripts_dir}" -nologo -v:q
-        DEPENDS ${demo_scripts_sources} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
+            --configuration Release --output "$<TARGET_FILE_DIR:DemoApp>/scripts" -nologo -v:q
+            "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+        SOURCES ${demo_scripts_sources} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
         COMMENT "Building the demo script assembly"
         VERBATIM
     )
-    add_custom_target(DemoScripts DEPENDS "${demo_scripts_dir}/DemoScripts.dll")
+    add_dependencies(DemoScripts FenrirScriptingContract)
     add_dependencies(DemoApp DemoScripts)
-    add_custom_command(TARGET DemoApp POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory "${demo_scripts_dir}" "$<TARGET_FILE_DIR:DemoApp>/scripts"
-        VERBATIM
-    )
 endif()
 
 target_compile_definitions(DemoApp PRIVATE 
