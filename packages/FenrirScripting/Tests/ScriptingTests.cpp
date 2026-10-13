@@ -1,8 +1,6 @@
 #include "HeadlessApp.hpp"
 #include "ScriptingProbe.hpp"
-#include "TestHarness.hpp"
 
-#include <catch2/catch_session.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include "FenrirECS/DefaultComponents.hpp"
@@ -12,6 +10,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -112,10 +111,24 @@ namespace
     using TestNative::FloatHealth;
     using TestNative::Health;
 
-    std::filesystem::path fixture;
-    std::filesystem::path fixtureV2;  // The same fixture built with VARIANT2: the "new build" the reload tests swap in.
-    std::filesystem::path badReports; // The hand-written assembly whose tables report what the generator never would.
-    std::filesystem::path executableDirectory;
+    // CTest names the assemblies it built, and the directory of this executable, in the environment.
+    std::filesystem::path FromEnvironment(const char* name)
+    {
+        const char* value = std::getenv(name);
+        if (value == nullptr)
+        {
+            std::cerr << "Set " << name << " (CTest does): the scripting tests need the fixture assemblies.\n";
+            return {};
+        }
+        return std::filesystem::absolute(value);
+    }
+
+    const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_FIXTURE");
+    // The same fixture built with VARIANT2: the "new build" the reload tests swap in.
+    const std::filesystem::path fixtureV2 = FromEnvironment("FENRIR_TEST_FIXTURE_V2");
+    // The hand-written assembly whose tables report what the generator never would.
+    const std::filesystem::path badReports = FromEnvironment("FENRIR_TEST_BAD_REPORTS");
+    const std::filesystem::path executableDirectory = FromEnvironment("FENRIR_TEST_EXECUTABLE_DIR");
 
     constexpr int Frames = 5;
 
@@ -129,13 +142,25 @@ namespace
     Result CallIn(const char* typeName, Scripting& scripting, const char* method, Args... arguments)
     {
         auto* component = ScriptingProbe::Component(scripting);
-        Check(component != nullptr, "There is no loaded script assembly");
+        {
+            INFO("There is no loaded script assembly");
+            REQUIRE(component != nullptr);
+        }
         const auto type = component->FindType(typeName);
-        Check(type.Succeeded(), std::string("The fixture type was not found: ") + type.diagnostic);
+        {
+            INFO(std::string("The fixture type was not found: ") + type.diagnostic);
+            REQUIRE(type.Succeeded());
+        }
         const auto handle = type.value->FindMethod<Result(Args...)>(method);
-        Check(handle.Succeeded(), std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
+        {
+            INFO(std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
+            REQUIRE(handle.Succeeded());
+        }
         const auto result = handle.value->Invoke(arguments...);
-        Check(result.Succeeded(), std::string("The fixture method ") + method + " failed: " + result.diagnostic);
+        {
+            INFO(std::string("The fixture method ") + method + " failed: " + result.diagnostic);
+            REQUIRE(result.Succeeded());
+        }
         if constexpr (!std::is_void_v<Result>)
         {
             return *result.value;
@@ -240,18 +265,30 @@ namespace
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         const auto messages = headless.Logger().Messages();
-        Check(scripting.IsRunning(),
-              "The runtime was not started: " + (messages.empty() ? std::string("no messages") : messages.back().text));
-        Check(scripting.HasScripts(), "The fixture assembly did not load");
+        {
+            INFO("The runtime was not started: " +
+                 (messages.empty() ? std::string("no messages") : messages.back().text));
+            REQUIRE(scripting.IsRunning());
+        }
+        {
+            INFO("The fixture assembly did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not run the requested frames");
+        {
+            INFO("The app did not run the requested frames");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
         // Iris's own messages arrive through the engine logger, tagged as Iris's.
         const auto logged = headless.Logger().Messages();
         const bool fromIris = std::any_of(logged.begin(), logged.end(), [](const LoggedMessage& message) {
             return message.level == LogLevel::Info && message.text.rfind("[Iris] ", 0) == 0 &&
                    message.text.find("Fenrir.ScriptFixture") != std::string::npos;
         });
-        Check(fromIris, "Iris's log messages did not reach the engine logger");
+        {
+            INFO("Iris's log messages did not reach the engine logger");
+            REQUIRE(fromIris);
+        }
     }
 
     void MissingAssemblyIsLoggedAndTheAppRuns()
@@ -259,11 +296,19 @@ namespace
         HeadlessApp headless;
         const auto missing = fixture.parent_path() / "does-not-exist.dll";
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(missing));
-        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing assembly started scripting");
-        Check(headless.Logger().Contains(LogLevel::Error, "does-not-exist.dll"),
-              "A missing assembly was not logged as an error naming it");
+        {
+            INFO("A missing assembly started scripting");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("A missing assembly was not logged as an error naming it");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, "does-not-exist.dll"));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not keep running without scripts");
+        {
+            INFO("The app did not keep running without scripts");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
     }
 
     void InvalidAssemblyIsLoggedAndTheAppRuns()
@@ -286,12 +331,19 @@ namespace
 
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(invalid));
-        Check(!scripting.HasScripts() && !scripting.IsRunning(),
-              "An invalid assembly loaded, or left the runtime running with nothing to run");
-        Check(headless.Logger().Contains(LogLevel::Error, "could not be loaded"),
-              "An invalid assembly was not logged as an error");
+        {
+            INFO("An invalid assembly loaded, or left the runtime running with nothing to run");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("An invalid assembly was not logged as an error");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, "could not be loaded"));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not keep running after an invalid assembly");
+        {
+            INFO("The app did not keep running after an invalid assembly");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
     }
 
     void MissingBridgeIsLoggedAndTheAppRuns()
@@ -301,11 +353,19 @@ namespace
         auto config = ConfigFor(fixture);
         config.bridgeDirectory = noBridge.path;
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing bridge started scripting");
-        Check(headless.Logger().Contains(LogLevel::Error, ".NET could not be started"),
-              "A missing bridge was not logged as an error");
+        {
+            INFO("A missing bridge started scripting");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("A missing bridge was not logged as an error");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, ".NET could not be started"));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not keep running without the bridge");
+        {
+            INFO("The app did not keep running without the bridge");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
     }
 
     void MissingContractIsLoggedAndTheAppRuns()
@@ -315,54 +375,100 @@ namespace
         auto config = ConfigFor(fixture);
         config.bridgeDirectory = noContract.path;
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A missing contract started scripting");
-        Check(headless.Logger().Contains(LogLevel::Error, "Fenrir.Scripting.dll"),
-              "A missing contract was not logged as an error naming it");
+        {
+            INFO("A missing contract started scripting");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("A missing contract was not logged as an error naming it");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, "Fenrir.Scripting.dll"));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not keep running without the contract");
+        {
+            INFO("The app did not keep running without the contract");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
     }
 
     void ASecondActiveInstallIsRefused()
     {
         HeadlessApp first;
         auto firstScripting = Scripting::Install(first.Get(), ConfigFor(fixture));
-        Check(firstScripting.HasScripts(), "The first install did not load");
+        {
+            INFO("The first install did not load");
+            REQUIRE(firstScripting.HasScripts());
+        }
         HeadlessApp second;
         auto secondScripting = Scripting::Install(second.Get(), ConfigFor(fixture));
-        Check(!secondScripting.HasScripts(), "A second active install loaded scripts");
-        Check(second.Logger().Contains(LogLevel::Error, "already active"), "A second install was not explained");
+        {
+            INFO("A second active install loaded scripts");
+            REQUIRE(!secondScripting.HasScripts());
+        }
+        {
+            INFO("A second install was not explained");
+            REQUIRE(second.Logger().Contains(LogLevel::Error, "already active"));
+        }
         second.Run(2);
-        Check(second.FramesRun() == 2, "The second app did not run");
+        {
+            INFO("The second app did not run");
+            REQUIRE(second.FramesRun() == 2);
+        }
         // The first is untouched, and a new install works once it is gone.
-        Check(Call<int>(firstScripting, "Answer") == 42, "The first install stopped working");
+        {
+            INFO("The first install stopped working");
+            REQUIRE(Call<int>(firstScripting, "Answer") == 42);
+        }
     }
 
     void ScriptsLogThroughTheEngineLogger()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         Call<void>(scripting, "LogAll");
         const auto& logger = headless.Logger();
-        Check(logger.Contains(LogLevel::Info, "hello from C#"), "Log.Info did not reach the engine logger");
-        Check(logger.Contains(LogLevel::Warn, "careful now"), "Log.Warn did not reach the engine logger");
-        Check(logger.Contains(LogLevel::Error, "boom"), "Log.Error did not reach the engine logger");
+        {
+            INFO("Log.Info did not reach the engine logger");
+            REQUIRE(logger.Contains(LogLevel::Info, "hello from C#"));
+        }
+        {
+            INFO("Log.Warn did not reach the engine logger");
+            REQUIRE(logger.Contains(LogLevel::Warn, "careful now"));
+        }
+        {
+            INFO("Log.Error did not reach the engine logger");
+            REQUIRE(logger.Contains(LogLevel::Error, "boom"));
+        }
         // UTF-8 survives, and braces are text rather than a format string.
-        Check(logger.Contains(LogLevel::Info, "pi \xCF\x80 {0} {} {name}"), "Non-ASCII text or braces were mangled");
+        {
+            INFO("Non-ASCII text or braces were mangled");
+            REQUIRE(logger.Contains(LogLevel::Info, "pi \xCF\x80 {0} {} {name}"));
+        }
         // There is no length limit, and null is an empty message.
-        Check(logger.Contains(LogLevel::Info, std::string(2000, 'x')), "A long message was truncated");
+        {
+            INFO("A long message was truncated");
+            REQUIRE(logger.Contains(LogLevel::Info, std::string(2000, 'x')));
+        }
         const auto messages = logger.Messages();
-        Check(std::any_of(
-                  messages.begin(), messages.end(),
-                  [](const LoggedMessage& message) { return message.level == LogLevel::Info && message.text.empty(); }),
-              "A null message was not logged as an empty one");
+        {
+            INFO("A null message was not logged as an empty one");
+            REQUIRE(std::any_of(messages.begin(), messages.end(), [](const LoggedMessage& message) {
+                return message.level == LogLevel::Info && message.text.empty();
+            }));
+        }
     }
 
     void ScriptsReadTheEngineClock()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         bool sawDelta = false;
         bool matched = true;
         headless.Get().AddSequentialSystems(SchedulePriority::Update, {[&](App& app) {
@@ -374,81 +480,131 @@ namespace
                                                 sawDelta = sawDelta || delta > 0.0F;
                                             }});
         headless.Run(Frames);
-        Check(matched, "Time did not match the engine's clock");
-        Check(sawDelta, "Time.DeltaTime was never positive");
+        {
+            INFO("Time did not match the engine's clock");
+            REQUIRE(matched);
+        }
+        {
+            INFO("Time.DeltaTime was never positive");
+            REQUIRE(sawDelta);
+        }
     }
 
     void EntityValidityFollowsTheActiveScene()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const auto isValid = [&](std::uint32_t value) { return Call<bool>(scripting, "IsValid", value); };
 
         const auto first = entities.CreateEntity().GetId();
-        Check(isValid(first), "A live entity was not valid");
+        {
+            INFO("A live entity was not valid");
+            REQUIRE(isValid(first));
+        }
         entities.DestroyEntity(first);
-        Check(!isValid(first), "A destroyed entity was still valid");
+        {
+            INFO("A destroyed entity was still valid");
+            REQUIRE(!isValid(first));
+        }
 
         // The slot is reused with a new version, so the old value stays invalid and the new one is valid.
         const auto second = entities.CreateEntity().GetId();
-        Check((second & 0xFFFFFU) == (first & 0xFFFFFU) && second != first,
-              "The test did not reuse the entity's slot with a new version");
-        Check(isValid(second), "The entity that reused the slot was not valid");
-        Check(!isValid(first), "A stale entity became valid when its slot was reused");
-        Check(!isValid(0xFFFFFFFFU), "The null entity was valid");
+        {
+            INFO("The test did not reuse the entity's slot with a new version");
+            REQUIRE(((second & 0xFFFFFU) == (first & 0xFFFFFU) && second != first));
+        }
+        {
+            INFO("The entity that reused the slot was not valid");
+            REQUIRE(isValid(second));
+        }
+        {
+            INFO("A stale entity became valid when its slot was reused");
+            REQUIRE(!isValid(first));
+        }
+        {
+            INFO("The null entity was valid");
+            REQUIRE(!isValid(0xFFFFFFFFU));
+        }
     }
 
     void RefWritesThroughGeneratedAccessorsIntoNativeMemory()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
 
         // t.Position.X += 1 on a nested struct field, a plain assignment, a compound multiply and a flag: all land in
         // memory this test owns, with no ref at the call site.
         NativeTransform transform{{1, 2, 3}, 4, 1};
         Access<void>(scripting, "Nudge", AddressOf(&transform));
-        Check(transform.Position.X == 2 && transform.Position.Y == 5 && transform.Position.Z == 3 &&
-                  transform.Scale == 8 && transform.Flags == 5,
-              "Writes through the generated accessors did not reach native memory");
-        Check(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 18.0F,
-              "Reads through the generated accessors did not see native memory");
+        {
+            INFO("Writes through the generated accessors did not reach native memory");
+            REQUIRE((transform.Position.X == 2 && transform.Position.Y == 5 && transform.Position.Z == 3 &&
+                     transform.Scale == 8 && transform.Flags == 5));
+        }
+        {
+            INFO("Reads through the generated accessors did not see native memory");
+            REQUIRE(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 18.0F);
+        }
 
         // Writes from C++ are seen too: it is the same memory.
         transform.Position.Z = 10;
-        Check(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 25.0F,
-              "A native write was not seen by the script");
+        {
+            INFO("A native write was not seen by the script");
+            REQUIRE(Access<float>(scripting, "ReadSum", AddressOf(&transform)) == 25.0F);
+        }
 
         NativeNested nested{1.0};
-        Check(Access<double>(scripting, "NudgeNested", AddressOf(&nested)) == 1.5 && nested.Weight == 1.5,
-              "A nested component type got no accessors");
+        {
+            INFO("A nested component type got no accessors");
+            REQUIRE((Access<double>(scripting, "NudgeNested", AddressOf(&nested)) == 1.5 && nested.Weight == 1.5));
+        }
         NativeHidden hidden{4};
-        Check(Access<std::int32_t>(scripting, "NudgeHidden", AddressOf(&hidden)) == 7 && hidden.Count == 7,
-              "An internal component got no accessors");
+        {
+            INFO("An internal component got no accessors");
+            REQUIRE((Access<std::int32_t>(scripting, "NudgeHidden", AddressOf(&hidden)) == 7 && hidden.Count == 7));
+        }
         NativeClash clash{0, 0, 0};
-        Check(Access<std::int32_t>(scripting, "NudgeClash", AddressOf(&clash)) == 24 && clash.Fine == 7 &&
-                  clash.Value == 8 && clash.IsNull == 9,
-              "Fields named like Ref<T> members were not reachable through Value");
+        {
+            INFO("Fields named like Ref<T> members were not reachable through Value");
+            REQUIRE((Access<std::int32_t>(scripting, "NudgeClash", AddressOf(&clash)) == 24 && clash.Fine == 7 &&
+                     clash.Value == 8 && clash.IsNull == 9));
+        }
         NativeSplit split{100, 200};
-        Check(Access<std::int32_t>(scripting, "NudgeSplit", AddressOf(&split)) == 303 && split.A == 101 &&
-                  split.B == 202,
-              "A partial component did not get accessors for all of its fields");
+        {
+            INFO("A partial component did not get accessors for all of its fields");
+            REQUIRE((Access<std::int32_t>(scripting, "NudgeSplit", AddressOf(&split)) == 303 && split.A == 101 &&
+                     split.B == 202));
+        }
         NativeReserved reserved{10, 20};
-        Check(Access<std::int32_t>(scripting, "NudgeReserved", AddressOf(&reserved)) == 33 && reserved.Class == 11 &&
-                  reserved.Event == 22,
-              "Keyword-named fields were not exposed");
+        {
+            INFO("Keyword-named fields were not exposed");
+            REQUIRE((Access<std::int32_t>(scripting, "NudgeReserved", AddressOf(&reserved)) == 33 &&
+                     reserved.Class == 11 && reserved.Event == 22));
+        }
     }
 
     void ANullRefSaysSoInsteadOfCrashing()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(Access<bool>(scripting, "NullRefIsNull"), "A null Ref was not reported as null");
+        {
+            INFO("A null Ref was not reported as null");
+            REQUIRE(Access<bool>(scripting, "NullRefIsNull"));
+        }
         const auto message = Access<std::optional<std::string>>(scripting, "NullRefMessage");
-        Check(message.has_value() && message->find("Pose") != std::string::npos,
-              "Reading a null Ref did not throw a clear exception");
+        {
+            INFO("Reading a null Ref did not throw a clear exception");
+            REQUIRE((message.has_value() && message->find("Pose") != std::string::npos));
+        }
     }
 
     // ---- the native component registry
@@ -457,7 +613,10 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
 
         auto entity = entities.CreateEntity();
@@ -465,33 +624,56 @@ namespace
         const auto id = entity.GetId();
 
         // C++ wrote it; C# reads the same values (Rotation.W is the first float in glm's layout).
-        Check(Registry<float>(scripting, "ReadPositionX", id) == 1.0F,
-              "C# did not read the position C++ wrote (got " +
-                  std::to_string(Registry<float>(scripting, "ReadPositionX", id)) + ")");
-        Check(Registry<float>(scripting, "ReadRotationW", id) == 1.0F, "C# did not read the rotation C++ wrote");
-        Check(Registry<float>(scripting, "ReadScaleZ", id) == 1.0F, "C# did not read the scale C++ wrote");
+        {
+            INFO("C# did not read the position C++ wrote (got " +
+                 std::to_string(Registry<float>(scripting, "ReadPositionX", id)) + ")");
+            REQUIRE(Registry<float>(scripting, "ReadPositionX", id) == 1.0F);
+        }
+        {
+            INFO("C# did not read the rotation C++ wrote");
+            REQUIRE(Registry<float>(scripting, "ReadRotationW", id) == 1.0F);
+        }
+        {
+            INFO("C# did not read the scale C++ wrote");
+            REQUIRE(Registry<float>(scripting, "ReadScaleZ", id) == 1.0F);
+        }
 
         // C# writes through its Ref<Transform>; C++ sees it through GetComponent.
         Registry<void>(scripting, "Move", id);
         const auto& transform = entity.GetComponent<Transform>();
-        Check(transform.pos.x == 2 && transform.pos.y == 2 && transform.pos.z == 3,
-              "C# writes to the position were not seen");
-        Check(transform.rot.w == 0.5F && transform.rot.x == 0 && transform.rot.y == 0 && transform.rot.z == 0,
-              "C# writes to the rotation were not seen");
-        Check(transform.scale.x == 3 && transform.scale.y == 3 && transform.scale.z == 3,
-              "C# writes to the scale were not seen");
+        {
+            INFO("C# writes to the position were not seen");
+            REQUIRE((transform.pos.x == 2 && transform.pos.y == 2 && transform.pos.z == 3));
+        }
+        {
+            INFO("C# writes to the rotation were not seen");
+            REQUIRE((transform.rot.w == 0.5F && transform.rot.x == 0 && transform.rot.y == 0 && transform.rot.z == 0));
+        }
+        {
+            INFO("C# writes to the scale were not seen");
+            REQUIRE((transform.scale.x == 3 && transform.scale.y == 3 && transform.scale.z == 3));
+        }
 
         // And the other way round, in the same memory.
         entity.GetComponent<Transform>().pos.x = 10;
-        Check(Registry<float>(scripting, "ReadPositionX", id) == 10.0F, "C# did not see a later C++ write");
+        {
+            INFO("C# did not see a later C++ write");
+            REQUIRE(Registry<float>(scripting, "ReadPositionX", id) == 10.0F);
+        }
 
         // Has: live state, for an entity with and without the component (every engine entity starts with a Transform).
         auto bare = entities.CreateEntity();
         bare.RemoveComponent<Transform>();
-        Check(Registry<bool>(scripting, "HasTransform", id) && !Registry<bool>(scripting, "HasTransform", bare.GetId()),
-              "Has<Transform> was wrong");
+        {
+            INFO("Has<Transform> was wrong");
+            REQUIRE((Registry<bool>(scripting, "HasTransform", id) &&
+                     !Registry<bool>(scripting, "HasTransform", bare.GetId())));
+        }
         entities.DestroyEntity(id);
-        Check(!Registry<bool>(scripting, "HasTransform", id), "Has<Transform> was true for a destroyed entity");
+        {
+            INFO("Has<Transform> was true for a destroyed entity");
+            REQUIRE(!Registry<bool>(scripting, "HasTransform", id));
+        }
     }
 
     void ANameRoundTripsBothWays()
@@ -505,14 +687,21 @@ namespace
         // C++ to C#, with a multi-byte character.
         entity.GetComponent<Name>().Set("h\xC3\xA9llo");
         const auto read = Registry<std::optional<std::string>>(scripting, "ReadName", id);
-        Check(read.has_value() && *read == "h\xC3\xA9llo", "C# did not read the name C++ wrote");
+        {
+            INFO("C# did not read the name C++ wrote");
+            REQUIRE((read.has_value() && *read == "h\xC3\xA9llo"));
+        }
 
         // C# to C++.
         Registry<void>(scripting, "WriteName", id, std::string_view("from C# \xCF\x80"));
-        Check(std::string(entity.GetComponent<Name>().Get()) == "from C# \xCF\x80",
-              "C++ did not read the name C# wrote");
-        Check(Registry<std::optional<std::string>>(scripting, "ReadName", id).value() == "from C# \xCF\x80",
-              "C# did not read back its own name");
+        {
+            INFO("C++ did not read the name C# wrote");
+            REQUIRE(std::string(entity.GetComponent<Name>().Get()) == "from C# \xCF\x80");
+        }
+        {
+            INFO("C# did not read back its own name");
+            REQUIRE(Registry<std::optional<std::string>>(scripting, "ReadName", id).value() == "from C# \xCF\x80");
+        }
 
         // A name longer than the buffer is cut between characters, and stays terminated.
         std::string tooLong;
@@ -522,12 +711,18 @@ namespace
         }
         Registry<void>(scripting, "WriteName", id, std::string_view(tooLong));
         const std::string stored = entity.GetComponent<Name>().Get();
-        Check(stored.size() == 254 && stored.size() % 2 == 0 && stored.substr(0, 4) == "\xC3\xA9\xC3\xA9",
-              "A long name was not cut on a character boundary (it was " + std::to_string(stored.size()) + " bytes)");
+        {
+            INFO("A long name was not cut on a character boundary (it was " + std::to_string(stored.size()) +
+                 " bytes)");
+            REQUIRE((stored.size() == 254 && stored.size() % 2 == 0 && stored.substr(0, 4) == "\xC3\xA9\xC3\xA9"));
+        }
 
         // An empty name clears the buffer.
         Registry<void>(scripting, "WriteName", id, std::string_view(""));
-        Check(entity.GetComponent<Name>().IsEmpty(), "An empty name did not clear the buffer");
+        {
+            INFO("An empty name did not clear the buffer");
+            REQUIRE(entity.GetComponent<Name>().IsEmpty());
+        }
     }
 
     void TheHierarchyIsReadableButNotWritable()
@@ -542,64 +737,107 @@ namespace
         parent.AddChild(second);
 
         // C# reads exactly the links C++ made (the layout of the stand-in is the layout of the real thing).
-        Check(Registry<std::uint32_t>(scripting, "ParentOf", first.GetId()) == parent.GetId(),
-              "The parent link was wrong");
-        Check(Registry<std::uint32_t>(scripting, "ParentOf", second.GetId()) == parent.GetId(),
-              "The second parent link was wrong");
-        Check(Registry<std::uint32_t>(scripting, "FirstChildOf", parent.GetId()) == first.GetId(),
-              "The first child link was wrong");
-        Check(Registry<std::uint32_t>(scripting, "NextSiblingOf", first.GetId()) == second.GetId(),
-              "The sibling link was wrong");
-        Check(Registry<std::uint32_t>(scripting, "ParentOf", parent.GetId()) == NullEntity,
-              "A missing parent was not a null link");
-        Check(Registry<std::uint32_t>(scripting, "NextSiblingOf", second.GetId()) == NullEntity,
-              "A missing sibling was not null");
+        {
+            INFO("The parent link was wrong");
+            REQUIRE(Registry<std::uint32_t>(scripting, "ParentOf", first.GetId()) == parent.GetId());
+        }
+        {
+            INFO("The second parent link was wrong");
+            REQUIRE(Registry<std::uint32_t>(scripting, "ParentOf", second.GetId()) == parent.GetId());
+        }
+        {
+            INFO("The first child link was wrong");
+            REQUIRE(Registry<std::uint32_t>(scripting, "FirstChildOf", parent.GetId()) == first.GetId());
+        }
+        {
+            INFO("The sibling link was wrong");
+            REQUIRE(Registry<std::uint32_t>(scripting, "NextSiblingOf", first.GetId()) == second.GetId());
+        }
+        {
+            INFO("A missing parent was not a null link");
+            REQUIRE(Registry<std::uint32_t>(scripting, "ParentOf", parent.GetId()) == NullEntity);
+        }
+        {
+            INFO("A missing sibling was not null");
+            REQUIRE(Registry<std::uint32_t>(scripting, "NextSiblingOf", second.GetId()) == NullEntity);
+        }
 
         // It cannot be written from C#: no Ref<Relationship>, and assignments through ReadOnlyRef do not compile (see
         // the RefCompile-Relationship* tests). Native code can still change it, and C# sees that.
         parent.RemoveChild(first);
-        Check(Registry<std::uint32_t>(scripting, "FirstChildOf", parent.GetId()) == second.GetId(),
-              "C# did not see the hierarchy change");
+        {
+            INFO("C# did not see the hierarchy change");
+            REQUIRE(Registry<std::uint32_t>(scripting, "FirstChildOf", parent.GetId()) == second.GetId());
+        }
     }
 
     void ACustomComponentRegisteredByTheTestWorksWithNoEngineChanges()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto entity = entities.CreateEntity();
         const auto id = entity.GetId();
 
         // Looking Health up before it is registered finds nothing...
         const auto early = Registry<std::optional<std::string>>(scripting, "HealthLookup", id);
-        Check(early.has_value() && early->find("Test.Health") != std::string::npos,
-              "An unregistered Health was not explained");
+        {
+            INFO("An unregistered Health was not explained");
+            REQUIRE((early.has_value() && early->find("Test.Health") != std::string::npos));
+        }
 
         // Before it is registered, the engine knows nothing of it.
         const auto unregistered = Registry<std::optional<std::string>>(scripting, "NotRegistered", id);
-        Check(unregistered.has_value() && unregistered->find("Test.Nothing") != std::string::npos,
-              "A component nobody registered was not explained");
+        {
+            INFO("A component nobody registered was not explained");
+            REQUIRE((unregistered.has_value() && unregistered->find("Test.Nothing") != std::string::npos));
+        }
 
         const auto registered = scripting.RegisterComponent<Health>("Test.Health");
-        Check(registered.Succeeded() && scripting.HasScripts(),
-              "A matching component was not registered: " + registered.diagnostic);
-        Check(!scripting.RegisterComponent<Health>("Test.Health").Succeeded(), "A duplicate name was accepted");
+        {
+            INFO("A matching component was not registered: " + registered.diagnostic);
+            REQUIRE((registered.Succeeded() && scripting.HasScripts()));
+        }
+        {
+            INFO("A duplicate name was accepted");
+            REQUIRE(!scripting.RegisterComponent<Health>("Test.Health").Succeeded());
+        }
 
         // ...but registering it later is seen: the earlier "not registered" is not remembered past a change. It is now
         // found, and the entity simply does not have it yet.
         const auto late = Registry<std::optional<std::string>>(scripting, "HealthLookup", id);
-        Check(late.has_value() && late->find("has no Health") != std::string::npos,
-              "A component registered after a failed lookup was still reported as unregistered: " +
-                  late.value_or("<no exception>"));
-        Check(!scripting.RegisterComponent<Health>("").Succeeded(), "An empty name was accepted");
+        {
+            INFO("A component registered after a failed lookup was still reported as unregistered: " +
+                 late.value_or("<no exception>"));
+            REQUIRE((late.has_value() && late->find("has no Health") != std::string::npos));
+        }
+        {
+            INFO("An empty name was accepted");
+            REQUIRE(!scripting.RegisterComponent<Health>("").Succeeded());
+        }
 
-        Check(!Registry<bool>(scripting, "HasHealth", id), "Has<Health> was true before it was added");
+        {
+            INFO("Has<Health> was true before it was added");
+            REQUIRE(!Registry<bool>(scripting, "HasHealth", id));
+        }
         entity.AddComponent<Health>();
         entity.GetComponent<Health>() = Health{20, 30};
-        Check(Registry<bool>(scripting, "HasHealth", id), "Has<Health> was false after it was added");
-        Check(Registry<std::int32_t>(scripting, "HealthSum", id) == 55, "C# did not read the custom component");
-        Check(entity.GetComponent<Health>().Current == 25, "C# writes to the custom component were not seen");
+        {
+            INFO("Has<Health> was false after it was added");
+            REQUIRE(Registry<bool>(scripting, "HasHealth", id));
+        }
+        {
+            INFO("C# did not read the custom component");
+            REQUIRE(Registry<std::int32_t>(scripting, "HealthSum", id) == 55);
+        }
+        {
+            INFO("C# writes to the custom component were not seen");
+            REQUIRE(entity.GetComponent<Health>().Current == 25);
+        }
     }
 
     void LookupFailuresSayWhatWentWrong()
@@ -614,10 +852,15 @@ namespace
         entities.DestroyEntity(goneId);
 
         const auto missing = Registry<std::optional<std::string>>(scripting, "MissingComponent", bare.GetId());
-        Check(missing.has_value() && missing->find("has no Transform") != std::string::npos,
-              "A missing component was not explained (got " + missing.value_or("<no exception>") + ")");
+        {
+            INFO("A missing component was not explained (got " + missing.value_or("<no exception>") + ")");
+            REQUIRE((missing.has_value() && missing->find("has no Transform") != std::string::npos));
+        }
         const auto dead = Registry<std::optional<std::string>>(scripting, "MissingComponent", goneId);
-        Check(dead.has_value() && dead->find("not alive") != std::string::npos, "A dead entity was not explained");
+        {
+            INFO("A dead entity was not explained");
+            REQUIRE((dead.has_value() && dead->find("not alive") != std::string::npos));
+        }
     }
 
     void AMismatchedComponentFailsTheLoadAndNamesTheField()
@@ -628,18 +871,29 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), config);
 
         // All or nothing: the assembly is not left loaded with a component that does not match.
-        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A mismatched component left scripts loaded");
-        Check(headless.Logger().Contains(LogLevel::Error, "Test.BadHealth") &&
-                  headless.Logger().Contains(LogLevel::Error, "'Current'") &&
-                  headless.Logger().Contains(LogLevel::Error, "'Max'"),
-              "The mismatch did not name the component and the field");
+        {
+            INFO("A mismatched component left scripts loaded");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("The mismatch did not name the component and the field");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "Test.BadHealth") &&
+                     headless.Logger().Contains(LogLevel::Error, "'Current'") &&
+                     headless.Logger().Contains(LogLevel::Error, "'Max'")));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not keep running after a failed load");
+        {
+            INFO("The app did not keep running after a failed load");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
 
         // The engine's own components still load once the bad one is gone.
         HeadlessApp again;
         auto fine = Scripting::Install(again.Get(), ConfigFor(fixture));
-        Check(fine.HasScripts(), "A later install without the bad component did not load");
+        {
+            INFO("A later install without the bad component did not load");
+            REQUIRE(fine.HasScripts());
+        }
     }
 
     void AScriptCannotClaimANativeComponentWithAStructOfItsOwn()
@@ -651,8 +905,10 @@ namespace
         // The fixture declares a writable component that names the hierarchy ("Fenrir.Relationship"). The engine only
         // hands out a native component to the C# type it validated, so the claim is refused.
         const auto refused = Registry<std::optional<std::string>>(scripting, "FakeHierarchy", entity.GetId());
-        Check(refused.has_value() && refused->find("different C# type") != std::string::npos,
-              "A script's own struct got a native component: " + refused.value_or("<no exception>"));
+        {
+            INFO("A script's own struct got a native component: " + refused.value_or("<no exception>"));
+            REQUIRE((refused.has_value() && refused->find("different C# type") != std::string::npos));
+        }
     }
 
     void AWrongFieldTypeIsCaughtToo()
@@ -660,24 +916,40 @@ namespace
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         const auto registered = scripting.RegisterComponent<FloatHealth>("Test.FloatHealth");
-        Check(registered.status == Iris::CallStatus::InvalidArgument &&
-                  registered.diagnostic.find("'Current'") != std::string::npos,
-              "A field of the wrong type was accepted or undiagnosed: " + registered.diagnostic);
-        Check(!scripting.HasScripts(), "A mismatched registration left the script assembly loaded");
+        {
+            INFO("A field of the wrong type was accepted or undiagnosed: " + registered.diagnostic);
+            REQUIRE((registered.status == Iris::CallStatus::InvalidArgument &&
+                     registered.diagnostic.find("'Current'") != std::string::npos));
+        }
+        {
+            INFO("A mismatched registration left the script assembly loaded");
+            REQUIRE(!scripting.HasScripts());
+        }
     }
 
     void AComponentRegisteredLaterIsCheckedAtOnce()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         const auto registered = scripting.RegisterComponent<BadHealth>("Test.BadHealth");
-        Check(registered.status == Iris::CallStatus::InvalidArgument &&
-                  registered.diagnostic.find("'Current'") != std::string::npos &&
-                  registered.diagnostic.find("Test.BadHealth") != std::string::npos,
-              "A mismatched registration was accepted or undiagnosed: " + registered.diagnostic);
-        Check(!scripting.HasScripts(), "A mismatched registration left the script assembly loaded");
-        Check(headless.Logger().Contains(LogLevel::Error, "'Current'"), "The mismatch was not logged");
+        {
+            INFO("A mismatched registration was accepted or undiagnosed: " + registered.diagnostic);
+            REQUIRE((registered.status == Iris::CallStatus::InvalidArgument &&
+                     registered.diagnostic.find("'Current'") != std::string::npos &&
+                     registered.diagnostic.find("Test.BadHealth") != std::string::npos));
+        }
+        {
+            INFO("A mismatched registration left the script assembly loaded");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The mismatch was not logged");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, "'Current'"));
+        }
     }
 
     // ---- components defined in C#
@@ -705,29 +977,50 @@ namespace
         auto& scene = headless.Get().GetActiveScene().GetEntityList();
         const std::size_t poolsBefore = PoolCount(scene);
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
 
         // Registering components creates no storage, and neither does asking about them: a pool appears when a
         // component is first added in a scene. (So "a failed load leaves no pools" is a real property, not an accident
         // of timing.)
-        Check(PoolCount(scene) == poolsBefore, "Loading a script assembly created storage");
+        {
+            INFO("Loading a script assembly created storage");
+            REQUIRE(PoolCount(scene) == poolsBefore);
+        }
         const auto* velocity = scripting.FindComponent(VelocityName);
         const auto probe = scene.CreateEntity().GetId();
         const std::size_t poolsWithEntity = PoolCount(scene);
-        Check(!velocity->has(scene, probe) && velocity->get(scene, probe) == nullptr && velocity->remove(scene, probe),
-              "Reading or removing an absent script component misbehaved");
-        Check(PoolCount(scene) == poolsWithEntity, "Asking about a script component created storage");
-        Check(velocity->add(scene, probe) && PoolCount(scene) == poolsWithEntity + 1,
-              "Adding a script component did not create its pool");
+        {
+            INFO("Reading or removing an absent script component misbehaved");
+            REQUIRE((!velocity->has(scene, probe) && velocity->get(scene, probe) == nullptr &&
+                     velocity->remove(scene, probe)));
+        }
+        {
+            INFO("Asking about a script component created storage");
+            REQUIRE(PoolCount(scene) == poolsWithEntity);
+        }
+        {
+            INFO("Adding a script component did not create its pool");
+            REQUIRE((velocity->add(scene, probe) && PoolCount(scene) == poolsWithEntity + 1));
+        }
 
         const auto expect = [&](const char* name, std::size_t size, std::size_t alignment) {
             const auto* registration = scripting.FindComponent(name);
-            Check(registration != nullptr, std::string("The script component ") + name + " was not registered");
-            Check(registration->scriptDefined && !registration->readOnly && registration->typeName == name,
-                  std::string(name) + " was not described as a script component");
-            Check(registration->size == size && registration->alignment == alignment,
-                  std::string(name) + " has the wrong size or alignment: " + std::to_string(registration->size) +
-                      " / " + std::to_string(registration->alignment));
+            {
+                INFO(std::string("The script component ") + name + " was not registered");
+                REQUIRE(registration != nullptr);
+            }
+            {
+                INFO(std::string(name) + " was not described as a script component");
+                REQUIRE((registration->scriptDefined && !registration->readOnly && registration->typeName == name));
+            }
+            {
+                INFO(std::string(name) + " has the wrong size or alignment: " + std::to_string(registration->size) +
+                     " / " + std::to_string(registration->alignment));
+                REQUIRE((registration->size == size && registration->alignment == alignment));
+            }
         };
         expect(VelocityName, 12, 4);
         expect(CounterName, 16, 8);
@@ -736,10 +1029,14 @@ namespace
 
         // Native components are not script-defined, and a [NativeComponent] struct in the script is not reported as
         // one.
-        Check(!scripting.FindComponent("Fenrir.Transform")->scriptDefined,
-              "A native component was described as script-defined");
-        Check(scripting.FindComponent("Fenrir.ScriptFixture.Health") == nullptr,
-              "A [NativeComponent] struct was reported as a script-defined component");
+        {
+            INFO("A native component was described as script-defined");
+            REQUIRE(!scripting.FindComponent("Fenrir.Transform")->scriptDefined);
+        }
+        {
+            INFO("A [NativeComponent] struct was reported as a script-defined component");
+            REQUIRE(scripting.FindComponent("Fenrir.ScriptFixture.Health") == nullptr);
+        }
     }
 
     void AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity()
@@ -748,58 +1045,111 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const auto* velocity = scripting.FindComponent(VelocityName);
-        Check(velocity != nullptr, "Velocity was not registered");
+        {
+            INFO("Velocity was not registered");
+            REQUIRE(velocity != nullptr);
+        }
 
         auto first = entities.CreateEntity();
         auto second = entities.CreateEntity();
         auto third = entities.CreateEntity();
-        Check(!velocity->has(entities, first.GetId()), "A component was there before it was added");
+        {
+            INFO("A component was there before it was added");
+            REQUIRE(!velocity->has(entities, first.GetId()));
+        }
         for (auto* entity : {&first, &second, &third})
         {
-            Check(velocity->add(entities, entity->GetId()), "A component was not added");
+            {
+                INFO("A component was not added");
+                REQUIRE(velocity->add(entities, entity->GetId()));
+            }
         }
-        Check(velocity->add(entities, first.GetId()), "Adding twice failed"); // Harmless, and keeps the one it has.
+        {
+            INFO("Adding twice failed");
+            REQUIRE(velocity->add(entities, first.GetId()));
+        } // Harmless, and keeps the one it has.
 
         // A new component is all zero bytes, which is a C# default.
-        Check(Scripted<float>(scripting, "SpeedX", first.GetId()) == 0.0F, "A new script component was not zeroed");
+        {
+            INFO("A new script component was not zeroed");
+            REQUIRE(Scripted<float>(scripting, "SpeedX", first.GetId()) == 0.0F);
+        }
 
         // C# writes to it; native code sees the same bytes.
         Scripted<void>(scripting, "Accelerate", first.GetId());
         Scripted<void>(scripting, "Accelerate", first.GetId());
         Scripted<void>(scripting, "Accelerate", third.GetId());
         const auto* values = static_cast<const float*>(velocity->get(entities, first.GetId()));
-        Check(values != nullptr && values[0] == 2 && values[1] == 4 && values[2] == 6,
-              "C# writes were not in the engine's storage");
-        Check(Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F, "A second entity's component was wrong");
-        Check(Scripted<float>(scripting, "SpeedX", second.GetId()) == 0.0F,
-              "A write reached the wrong entity's component");
+        {
+            INFO("C# writes were not in the engine's storage");
+            REQUIRE((values != nullptr && values[0] == 2 && values[1] == 4 && values[2] == 6));
+        }
+        {
+            INFO("A second entity's component was wrong");
+            REQUIRE(Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F);
+        }
+        {
+            INFO("A write reached the wrong entity's component");
+            REQUIRE(Scripted<float>(scripting, "SpeedX", second.GetId()) == 0.0F);
+        }
 
         // Native code writes it too, and C# reads that.
         static_cast<float*>(velocity->get(entities, second.GetId()))[0] = 42;
-        Check(Scripted<float>(scripting, "SpeedX", second.GetId()) == 42.0F, "C# did not read a native write");
+        {
+            INFO("C# did not read a native write");
+            REQUIRE(Scripted<float>(scripting, "SpeedX", second.GetId()) == 42.0F);
+        }
 
         // The pool holds one element per entity that has the component.
-        Check(velocity->count(entities) == 3, "The pool did not hold three elements");
+        {
+            INFO("The pool did not hold three elements");
+            REQUIRE(velocity->count(entities) == 3);
+        }
 
         // Destroying an entity removes its element, and the others keep their values.
         entities.DestroyEntity(second.GetId());
-        Check(velocity->count(entities) == 2, "Destroying an entity left its component in the pool");
-        Check(!velocity->has(entities, second.GetId()), "A destroyed entity still had the component");
-        Check(Scripted<float>(scripting, "SpeedX", first.GetId()) == 2.0F &&
-                  Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F,
-              "Removing an element disturbed the others");
+        {
+            INFO("Destroying an entity left its component in the pool");
+            REQUIRE(velocity->count(entities) == 2);
+        }
+        {
+            INFO("A destroyed entity still had the component");
+            REQUIRE(!velocity->has(entities, second.GetId()));
+        }
+        {
+            INFO("Removing an element disturbed the others");
+            REQUIRE((Scripted<float>(scripting, "SpeedX", first.GetId()) == 2.0F &&
+                     Scripted<float>(scripting, "SpeedX", third.GetId()) == 1.0F));
+        }
 
         // The slot is reused by a new entity, which does not inherit the old component.
         const auto reused = entities.CreateEntity().GetId();
-        Check(!velocity->has(entities, reused), "A new entity inherited a destroyed entity's component");
-        Check(!Scripted<bool>(scripting, "HasVelocity", reused), "C# saw a component on an entity that has none");
-        Check(Scripted<bool>(scripting, "HasVelocity", first.GetId()), "C# did not see a component that is there");
+        {
+            INFO("A new entity inherited a destroyed entity's component");
+            REQUIRE(!velocity->has(entities, reused));
+        }
+        {
+            INFO("C# saw a component on an entity that has none");
+            REQUIRE(!Scripted<bool>(scripting, "HasVelocity", reused));
+        }
+        {
+            INFO("C# did not see a component that is there");
+            REQUIRE(Scripted<bool>(scripting, "HasVelocity", first.GetId()));
+        }
 
         // Removing one explicitly, and again (harmless).
-        Check(velocity->remove(entities, first.GetId()) && !velocity->has(entities, first.GetId()),
-              "A component was not removed");
-        Check(velocity->remove(entities, first.GetId()), "Removing twice failed");
-        Check(velocity->count(entities) == 1, "The pool did not shrink");
+        {
+            INFO("A component was not removed");
+            REQUIRE((velocity->remove(entities, first.GetId()) && !velocity->has(entities, first.GetId())));
+        }
+        {
+            INFO("Removing twice failed");
+            REQUIRE(velocity->remove(entities, first.GetId()));
+        }
+        {
+            INFO("The pool did not shrink");
+            REQUIRE(velocity->count(entities) == 1);
+        }
     }
 
     void ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities()
@@ -820,13 +1170,22 @@ namespace
         // Transform: entity 4.
         for (const int index : {0, 2, 4})
         {
-            Check(velocity->add(entities, ids[static_cast<std::size_t>(index)]), "Velocity was not added");
+            {
+                INFO("Velocity was not added");
+                REQUIRE(velocity->add(entities, ids[static_cast<std::size_t>(index)]));
+            }
         }
         for (const int index : {2, 3, 4, 5})
         {
-            Check(counter->add(entities, ids[static_cast<std::size_t>(index)]), "Counter was not added");
+            {
+                INFO("Counter was not added");
+                REQUIRE(counter->add(entities, ids[static_cast<std::size_t>(index)]));
+            }
         }
-        Check(transform->remove(entities, ids[4]), "Transform was not removed");
+        {
+            INFO("Transform was not removed");
+            REQUIRE(transform->remove(entities, ids[4]));
+        }
 
         // A query over any mix of native and script components, through the ECS own API.
         const auto iterate = [&](std::initializer_list<const ComponentRegistration*> registrations) {
@@ -840,18 +1199,33 @@ namespace
             return found;
         };
         using Ids = std::set<std::uint32_t>;
-        Check(iterate({transform, velocity}) == Ids{ids[0], ids[2]},
-              "Native + script view was wrong (Transform and Velocity)");
-        Check(iterate({velocity, counter}) == Ids{ids[2], ids[4]},
-              "Script + script view was wrong (Velocity and Counter)");
-        Check(iterate({transform, velocity, counter}) == Ids{ids[2]}, "A three-pool view was wrong");
-        Check(iterate({counter}) == Ids{ids[2], ids[3], ids[4], ids[5]},
-              "A single script pool iterated the wrong entities");
+        {
+            INFO("Native + script view was wrong (Transform and Velocity)");
+            REQUIRE(iterate({transform, velocity}) == Ids{ids[0], ids[2]});
+        }
+        {
+            INFO("Script + script view was wrong (Velocity and Counter)");
+            REQUIRE(iterate({velocity, counter}) == Ids{ids[2], ids[4]});
+        }
+        {
+            INFO("A three-pool view was wrong");
+            REQUIRE(iterate({transform, velocity, counter}) == Ids{ids[2]});
+        }
+        {
+            INFO("A single script pool iterated the wrong entities");
+            REQUIRE(iterate({counter}) == Ids{ids[2], ids[3], ids[4], ids[5]});
+        }
 
         // Destroying an entity drops it from every pool, native and script.
         entities.DestroyEntity(ids[2]);
-        Check(iterate({transform, velocity}) == Ids{ids[0]}, "A destroyed entity stayed in a view");
-        Check(iterate({counter}) == Ids{ids[3], ids[4], ids[5]}, "A destroyed entity stayed in a script pool");
+        {
+            INFO("A destroyed entity stayed in a view");
+            REQUIRE(iterate({transform, velocity}) == Ids{ids[0]});
+        }
+        {
+            INFO("A destroyed entity stayed in a script pool");
+            REQUIRE(iterate({counter}) == Ids{ids[3], ids[4], ids[5]});
+        }
     }
 
     void ScriptComponentStorageHonoursAlignmentAndNeverMovesElements()
@@ -860,16 +1234,24 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const auto* aligned = scripting.FindComponent(AlignedName);
-        Check(aligned != nullptr, "Aligned was not registered");
+        {
+            INFO("Aligned was not registered");
+            REQUIRE(aligned != nullptr);
+        }
 
         // More elements than one page holds (a page is 256), each on a 16-byte boundary.
         std::vector<std::uint32_t> ids;
         for (int index = 0; index < 700; ++index)
         {
             ids.push_back(entities.CreateEntity().GetId());
-            Check(aligned->add(entities, ids.back()), "Aligned was not added");
-            Check(reinterpret_cast<std::uintptr_t>(aligned->get(entities, ids.back())) % 16 == 0,
-                  "An element was not 16-byte aligned");
+            {
+                INFO("Aligned was not added");
+                REQUIRE(aligned->add(entities, ids.back()));
+            }
+            {
+                INFO("An element was not 16-byte aligned");
+                REQUIRE(reinterpret_cast<std::uintptr_t>(aligned->get(entities, ids.back())) % 16 == 0);
+            }
         }
 
         // Growing the storage does not move what is already in it.
@@ -878,25 +1260,40 @@ namespace
         for (int index = 0; index < 3000; ++index)
         {
             const auto id = entities.CreateEntity().GetId();
-            Check(aligned->add(entities, id), "Aligned was not added while growing");
+            {
+                INFO("Aligned was not added while growing");
+                REQUIRE(aligned->add(entities, id));
+            }
         }
-        Check(aligned->get(entities, ids.front()) == first && aligned->get(entities, ids[400]) == middle,
-              "Growing the storage moved an existing element");
-        Check(aligned->count(entities) == 3700, "The pool did not hold every element");
+        {
+            INFO("Growing the storage moved an existing element");
+            REQUIRE((aligned->get(entities, ids.front()) == first && aligned->get(entities, ids[400]) == middle));
+        }
+        {
+            INFO("The pool did not hold every element");
+            REQUIRE(aligned->count(entities) == 3700);
+        }
 
         // C# reads and writes a Vector128 in it.
         Scripted<void>(scripting, "FillAligned", ids[400]);
         const auto* lanes = static_cast<const float*>(aligned->get(entities, ids[400]));
-        Check(lanes[0] == 1 && lanes[3] == 4 &&
-                  static_cast<const std::uint8_t*>(aligned->get(entities, ids[400]))[16] == 7,
-              "C# writes to an aligned component were not in the storage");
-        Check(Scripted<float>(scripting, "AlignedLane", ids[400], 2) == 3.0F, "C# did not read a lane back");
+        {
+            INFO("C# writes to an aligned component were not in the storage");
+            REQUIRE((lanes[0] == 1 && lanes[3] == 4 &&
+                     static_cast<const std::uint8_t*>(aligned->get(entities, ids[400]))[16] == 7));
+        }
+        {
+            INFO("C# did not read a lane back");
+            REQUIRE(Scripted<float>(scripting, "AlignedLane", ids[400], 2) == 3.0F);
+        }
 
         // A tag with no data is still a component.
         const auto* tagged = scripting.FindComponent(TaggedName);
-        Check(tagged->add(entities, ids[1]) && Scripted<bool>(scripting, "HasTagged", ids[1]) &&
-                  !Scripted<bool>(scripting, "HasTagged", ids[2]),
-              "An empty component did not work as a tag");
+        {
+            INFO("An empty component did not work as a tag");
+            REQUIRE((tagged->add(entities, ids[1]) && Scripted<bool>(scripting, "HasTagged", ids[1]) &&
+                     !Scripted<bool>(scripting, "HasTagged", ids[2])));
+        }
     }
 
     // The ECS own dynamic components, through its public API only (no scripting involved).
@@ -907,44 +1304,77 @@ namespace
         const auto entity = entities.CreateEntity().GetId();
 
         // Nothing is stored until one is added, and an invalid description is refused.
-        Check(entities.GetDynamic(small, entity) == nullptr && !entities.HasDynamic(small, entity) &&
-                  entities.CountDynamic(small) == 0,
-              "A type nobody added had components");
-        Check(!entities.AddDynamic(DynamicComponentType("Test.Bad", 7, 4), entity) &&
-                  !entities.AddDynamic(DynamicComponentType("Test.Bad", 8, 3), entity) &&
-                  !entities.AddDynamic(DynamicComponentType("", 8, 4), entity) &&
-                  !entities.AddDynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4), entity),
-              "An impossible description was accepted");
-        Check(small.IsValid() && !DynamicComponentType("x", 0, 1).IsValid(), "IsValid was wrong");
+        {
+            INFO("A type nobody added had components");
+            REQUIRE((entities.GetDynamic(small, entity) == nullptr && !entities.HasDynamic(small, entity) &&
+                     entities.CountDynamic(small) == 0));
+        }
+        {
+            INFO("An impossible description was accepted");
+            REQUIRE((
+                !entities.AddDynamic(DynamicComponentType("Test.Bad", 7, 4), entity) &&
+                !entities.AddDynamic(DynamicComponentType("Test.Bad", 8, 3), entity) &&
+                !entities.AddDynamic(DynamicComponentType("", 8, 4), entity) &&
+                !entities.AddDynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4), entity)));
+        }
+        {
+            INFO("IsValid was wrong");
+            REQUIRE((small.IsValid() && !DynamicComponentType("x", 0, 1).IsValid()));
+        }
 
-        Check(entities.AddDynamic(small, entity) && entities.AddDynamic(small, entity),
-              "Adding a component, or adding it twice, failed");
+        {
+            INFO("Adding a component, or adding it twice, failed");
+            REQUIRE((entities.AddDynamic(small, entity) && entities.AddDynamic(small, entity)));
+        }
         auto* bytes = static_cast<std::uint8_t*>(entities.GetDynamic(small, entity));
-        Check(bytes != nullptr && std::all_of(bytes, bytes + 8, [](std::uint8_t byte) { return byte == 0; }) &&
-                  entities.CountDynamic(small) == 1,
-              "A new component was not zeroed, or was counted twice");
-        Check(reinterpret_cast<std::uintptr_t>(bytes) % 4 == 0, "The component was not aligned");
+        {
+            INFO("A new component was not zeroed, or was counted twice");
+            REQUIRE((bytes != nullptr && std::all_of(bytes, bytes + 8, [](std::uint8_t byte) { return byte == 0; }) &&
+                     entities.CountDynamic(small) == 1));
+        }
+        {
+            INFO("The component was not aligned");
+            REQUIRE(reinterpret_cast<std::uintptr_t>(bytes) % 4 == 0);
+        }
 
         // The same name with another shape is refused while components of the first shape exist.
         const DynamicComponentType wider("Test.Small", 16, 8);
-        Check(wider.Id() == small.Id(), "The same name did not give the same id");
-        Check(!entities.AddDynamic(wider, entity), "A component of another shape was added under the same name");
-        Check(entities.GetDynamic(small, entity) == bytes, "A refused add disturbed the storage");
+        {
+            INFO("The same name did not give the same id");
+            REQUIRE(wider.Id() == small.Id());
+        }
+        {
+            INFO("A component of another shape was added under the same name");
+            REQUIRE(!entities.AddDynamic(wider, entity));
+        }
+        {
+            INFO("A refused add disturbed the storage");
+            REQUIRE(entities.GetDynamic(small, entity) == bytes);
+        }
 
         // Once none are left, the name can take a new shape.
-        Check(entities.RemoveDynamic(small, entity) && !entities.HasDynamic(small, entity) &&
-                  entities.CountDynamic(small) == 0,
-              "Removing a component did not empty the storage");
-        Check(entities.AddDynamic(wider, entity) &&
-                  reinterpret_cast<std::uintptr_t>(entities.GetDynamic(wider, entity)) % 8 == 0,
-              "An emptied storage did not accept a new shape");
+        {
+            INFO("Removing a component did not empty the storage");
+            REQUIRE((entities.RemoveDynamic(small, entity) && !entities.HasDynamic(small, entity) &&
+                     entities.CountDynamic(small) == 0));
+        }
+        {
+            INFO("An emptied storage did not accept a new shape");
+            REQUIRE((entities.AddDynamic(wider, entity) &&
+                     reinterpret_cast<std::uintptr_t>(entities.GetDynamic(wider, entity)) % 8 == 0));
+        }
 
         // A destroyed entity has no components, and cannot be given any.
         entities.DestroyEntity(entity);
-        Check(!entities.HasDynamic(wider, entity) && !entities.RemoveDynamic(wider, entity) &&
-                  !entities.AddDynamic(wider, entity),
-              "A destroyed entity still had a dynamic component");
-        Check(entities.CountDynamic(wider) == 0, "A destroyed entity component stayed in the storage");
+        {
+            INFO("A destroyed entity still had a dynamic component");
+            REQUIRE((!entities.HasDynamic(wider, entity) && !entities.RemoveDynamic(wider, entity) &&
+                     !entities.AddDynamic(wider, entity)));
+        }
+        {
+            INFO("A destroyed entity component stayed in the storage");
+            REQUIRE(entities.CountDynamic(wider) == 0);
+        }
 
         // A name whose id (a hash) equals another name id must not share its storage: the first to use it owns it.
         // Found by brute force against the FNV-1a ids: these two names hash to the same 32-bit id.
@@ -952,15 +1382,25 @@ namespace
         const std::string second = "Test.Collide.644126";
         const DynamicComponentType owner(first, 8, 4);
         const DynamicComponentType intruder(second, 8, 4);
-        Check(owner.Id() == intruder.Id() && owner.Name() != intruder.Name(), "The two names did not collide");
+        {
+            INFO("The two names did not collide");
+            REQUIRE((owner.Id() == intruder.Id() && owner.Name() != intruder.Name()));
+        }
         const auto holder = entities.CreateEntity().GetId();
-        Check(entities.AddDynamic(owner, holder), "The first name could not use the storage");
-        Check(!entities.AddDynamic(intruder, holder) && !entities.HasDynamic(intruder, holder) &&
-                  entities.GetDynamic(intruder, holder) == nullptr && entities.CountDynamic(intruder) == 0,
-              "A second name shared the first name storage");
+        {
+            INFO("The first name could not use the storage");
+            REQUIRE(entities.AddDynamic(owner, holder));
+        }
+        {
+            INFO("A second name shared the first name storage");
+            REQUIRE((!entities.AddDynamic(intruder, holder) && !entities.HasDynamic(intruder, holder) &&
+                     entities.GetDynamic(intruder, holder) == nullptr && entities.CountDynamic(intruder) == 0));
+        }
         (void)entities.RemoveDynamic(intruder, holder); // Must not remove the owner component.
-        Check(entities.HasDynamic(owner, holder) && entities.CountDynamic(owner) == 1,
-              "The intruder disturbed the owner");
+        {
+            INFO("The intruder disturbed the owner");
+            REQUIRE((entities.HasDynamic(owner, holder) && entities.CountDynamic(owner) == 1));
+        }
 
         // The largest allowed component costs a page of its own size, not 256 of them, and is still aligned.
         const DynamicComponentType big("Test.Big", DynamicComponentType::MaxSize, 16);
@@ -968,22 +1408,31 @@ namespace
         for (int index = 0; index < 3; ++index)
         {
             const auto id = entities.CreateEntity().GetId();
-            Check(entities.AddDynamic(big, id), "A maximum-size component was not added");
+            {
+                INFO("A maximum-size component was not added");
+                REQUIRE(entities.AddDynamic(big, id));
+            }
             void* at = entities.GetDynamic(big, id);
-            Check(at != nullptr && reinterpret_cast<std::uintptr_t>(at) % 16 == 0,
-                  "A maximum-size component was not aligned");
+            {
+                INFO("A maximum-size component was not aligned");
+                REQUIRE((at != nullptr && reinterpret_cast<std::uintptr_t>(at) % 16 == 0));
+            }
             addresses.insert(at);
         }
-        Check(addresses.size() == 3 && entities.CountOf(ComponentSelector::Dynamic(big)) == 3,
-              "Maximum-size components overlapped");
+        {
+            INFO("Maximum-size components overlapped");
+            REQUIRE((addresses.size() == 3 && entities.CountOf(ComponentSelector::Dynamic(big)) == 3));
+        }
 
         // A query over a dynamic type nobody has added visits nothing, and makes no storage.
         const std::size_t storages = entities.ComponentStorageCount();
         std::size_t visited = 0;
         const ComponentSelector never = ComponentSelector::Dynamic(DynamicComponentType("Test.Never", 4, 4));
         entities.ForEachWith(std::span<const ComponentSelector>(&never, 1), [&](std::uint32_t) { ++visited; });
-        Check(visited == 0 && entities.ComponentStorageCount() == storages,
-              "A query over an unused dynamic type visited entities or made storage");
+        {
+            INFO("A query over an unused dynamic type visited entities or made storage");
+            REQUIRE((visited == 0 && entities.ComponentStorageCount() == storages));
+        }
     }
 
     constexpr const char* ChangesType = "Fenrir.ScriptFixture.Changes";
@@ -998,14 +1447,20 @@ namespace
     std::uint32_t EntityWithVelocity(Scripting& scripting, EntityList& entities)
     {
         const auto id = entities.CreateEntity().GetId();
-        Check(scripting.FindComponent(VelocityName)->add(entities, id), "Velocity was not added");
+        {
+            INFO("Velocity was not added");
+            REQUIRE(scripting.FindComponent(VelocityName)->add(entities, id));
+        }
         return id;
     }
 
     float VelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id)
     {
         const auto* values = static_cast<const float*>(scripting.FindComponent(VelocityName)->get(entities, id));
-        Check(values != nullptr, "The entity had no Velocity");
+        {
+            INFO("The entity had no Velocity");
+            REQUIRE(values != nullptr);
+        }
         return values[0];
     }
 
@@ -1013,33 +1468,58 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const auto* velocity = scripting.FindComponent(VelocityName);
 
         const auto id = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
         // Alive and usable (the script added to it), but nothing is in the storage until playback.
-        Check(id != NullEntity && entities.HasEntity(id), "The new entity was not alive at once");
-        Check(ScriptingProbe::PendingChanges(scripting) == 3, "The script's changes were not recorded");
-        Check(!velocity->has(entities, id) && !entities.GetEntity(id).HasComponent<Transform>(),
-              "A change reached the storage before playback");
+        {
+            INFO("The new entity was not alive at once");
+            REQUIRE((id != NullEntity && entities.HasEntity(id)));
+        }
+        {
+            INFO("The script's changes were not recorded");
+            REQUIRE(ScriptingProbe::PendingChanges(scripting) == 3);
+        }
+        {
+            INFO("A change reached the storage before playback");
+            REQUIRE((!velocity->has(entities, id) && !entities.GetEntity(id).HasComponent<Transform>()));
+        }
 
         const auto summary = scripting.ApplyChanges();
-        Check(summary.applied == 3 && summary.skipped == 0 && ScriptingProbe::PendingChanges(scripting) == 0,
-              "Playback did not apply all");
+        {
+            INFO("Playback did not apply all");
+            REQUIRE((summary.applied == 3 && summary.skipped == 0 && ScriptingProbe::PendingChanges(scripting) == 0));
+        }
         auto entity = entities.GetEntity(id);
-        Check(entity.HasComponent<Transform>() && entity.HasComponent<Name>() && entity.HasComponent<Relationship>(),
-              "A created entity did not get the engine's components");
-        Check(std::string(entity.GetComponent<Name>().Get()).starts_with("Entity "),
-              "A created entity did not get a name");
+        {
+            INFO("A created entity did not get the engine's components");
+            REQUIRE((entity.HasComponent<Transform>() && entity.HasComponent<Name>() &&
+                     entity.HasComponent<Relationship>()));
+        }
+        {
+            INFO("A created entity did not get a name");
+            REQUIRE(std::string(entity.GetComponent<Name>().Get()).starts_with("Entity "));
+        }
         const auto* values = static_cast<const float*>(velocity->get(entities, id));
-        Check(values != nullptr && values[0] == 1 && values[1] == 2 && values[2] == 3,
-              "The added value was not applied");
-        Check(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->has(entities, id),
-              "A default component was not added");
+        {
+            INFO("The added value was not applied");
+            REQUIRE((values != nullptr && values[0] == 1 && values[1] == 2 && values[2] == 3));
+        }
+        {
+            INFO("A default component was not added");
+            REQUIRE(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->has(entities, id));
+        }
 
         // Nothing left over to play back.
-        Check(scripting.ApplyChanges().applied == 0, "Playing back twice applied something twice");
+        {
+            INFO("Playing back twice applied something twice");
+            REQUIRE(scripting.ApplyChanges().applied == 0);
+        }
     }
 
     void ARefStaysValidWhileTheSameComponentIsAddedAndRemovedElsewhere()
@@ -1055,18 +1535,33 @@ namespace
 
         // The script holds a Ref to `kept` while the victim loses its component and thousands of entities gain one.
         const auto sum = Changes<float>(scripting, "RefSurvivesChanges", kept, victim);
-        Check(sum == 22.0F, "The Ref did not keep reading and writing the same memory");
-        Check(scripting.FindComponent(VelocityName)->has(entities, victim),
-              "A removal reached the storage before playback");
+        {
+            INFO("The Ref did not keep reading and writing the same memory");
+            REQUIRE(sum == 22.0F);
+        }
+        {
+            INFO("A removal reached the storage before playback");
+            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, victim));
+        }
 
         const auto summary = scripting.ApplyChanges();
-        Check(summary.skipped == 0 && summary.applied > 5000, "Playback did not apply every change");
-        Check(!scripting.FindComponent(VelocityName)->has(entities, victim), "The removal was not applied");
-        Check(VelocityX(scripting, entities, kept) == 9.0F,
-              "The write through the Ref did not stay with the kept entity when the pool changed");
+        {
+            INFO("Playback did not apply every change");
+            REQUIRE((summary.skipped == 0 && summary.applied > 5000));
+        }
+        {
+            INFO("The removal was not applied");
+            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, victim));
+        }
+        {
+            INFO("The write through the Ref did not stay with the kept entity when the pool changed");
+            REQUIRE(VelocityX(scripting, entities, kept) == 9.0F);
+        }
         // 3 to begin with, minus the victim, plus 5000 new entities and the one made before them.
-        Check(scripting.FindComponent(VelocityName)->count(entities) == 5003,
-              "The pool did not end up with the right entities");
+        {
+            INFO("The pool did not end up with the right entities");
+            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 5003);
+        }
     }
 
     void ReadsSeeLiveStateAndChangesWaitForPlayback()
@@ -1078,16 +1573,36 @@ namespace
         const auto holder = EntityWithVelocity(scripting, entities);
         const auto doomed = entities.CreateEntity().GetId();
 
-        Check(!Changes<bool>(scripting, "AddThenHas", bare), "Has saw a component that was only recorded");
-        Check(Changes<bool>(scripting, "RemoveThenHas", holder),
-              "Has missed a component that was only recorded as removed");
-        Check(Changes<bool>(scripting, "DestroyThenIsValid", doomed), "A destroyed entity was gone before playback");
-        Check(entities.HasEntity(doomed), "A destroy reached the ECS before playback");
+        {
+            INFO("Has saw a component that was only recorded");
+            REQUIRE(!Changes<bool>(scripting, "AddThenHas", bare));
+        }
+        {
+            INFO("Has missed a component that was only recorded as removed");
+            REQUIRE(Changes<bool>(scripting, "RemoveThenHas", holder));
+        }
+        {
+            INFO("A destroyed entity was gone before playback");
+            REQUIRE(Changes<bool>(scripting, "DestroyThenIsValid", doomed));
+        }
+        {
+            INFO("A destroy reached the ECS before playback");
+            REQUIRE(entities.HasEntity(doomed));
+        }
 
         (void)scripting.ApplyChanges();
-        Check(scripting.FindComponent(VelocityName)->has(entities, bare), "The add was not applied");
-        Check(!scripting.FindComponent(VelocityName)->has(entities, holder), "The removal was not applied");
-        Check(!entities.HasEntity(doomed), "The destroy was not applied");
+        {
+            INFO("The add was not applied");
+            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, bare));
+        }
+        {
+            INFO("The removal was not applied");
+            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, holder));
+        }
+        {
+            INFO("The destroy was not applied");
+            REQUIRE(!entities.HasEntity(doomed));
+        }
     }
 
     void ChangesApplyInTheOrderTheyWereMade()
@@ -1098,20 +1613,32 @@ namespace
         const auto entity = entities.CreateEntity().GetId();
 
         Changes<void>(scripting, "ChangesApplyInOrder", entity);
-        Check(scripting.ApplyChanges().applied == 4, "Not every change was applied");
-        Check(VelocityX(scripting, entities, entity) == 3.0F, "The last add did not win: the order was not kept");
+        {
+            INFO("Not every change was applied");
+            REQUIRE(scripting.ApplyChanges().applied == 4);
+        }
+        {
+            INFO("The last add did not win: the order was not kept");
+            REQUIRE(VelocityX(scripting, entities, entity) == 3.0F);
+        }
 
         // Remove then add leaves a fresh default one.
         Changes<void>(scripting, "RemoveThenAdd", entity);
         (void)scripting.ApplyChanges();
-        Check(VelocityX(scripting, entities, entity) == 0.0F, "Remove then add did not give a default component");
+        {
+            INFO("Remove then add did not give a default component");
+            REQUIRE(VelocityX(scripting, entities, entity) == 0.0F);
+        }
 
         // A native component takes a value too.
         Changes<void>(scripting, "SetTransform", entity);
         (void)scripting.ApplyChanges();
         const auto& transform = entities.GetEntity(entity).GetComponent<Transform>();
-        Check(transform.pos == glm::vec3(9, 8, 7) && transform.scale == glm::vec3(2, 2, 2) && transform.rot.w == 1.0F,
-              "A native component did not take the value");
+        {
+            INFO("A native component did not take the value");
+            REQUIRE((transform.pos == glm::vec3(9, 8, 7) && transform.scale == glm::vec3(2, 2, 2) &&
+                     transform.rot.w == 1.0F));
+        }
     }
 
     void DestroyThenAddOnTheSameEntityLeavesItDestroyed()
@@ -1124,28 +1651,50 @@ namespace
         const auto first = entities.CreateEntity().GetId();
         Changes<void>(scripting, "DestroyThenAdd", first);
         const auto summary = scripting.ApplyChanges();
-        Check(summary.applied == 1 && summary.skipped == 1, "Destroy-then-add did not apply one and skip one");
-        Check(!entities.HasEntity(first), "The entity survived being destroyed");
-        Check(headless.Logger().Contains(LogLevel::Warn, "skipped adding a component for entity"),
-              "The skipped change was not reported");
+        {
+            INFO("Destroy-then-add did not apply one and skip one");
+            REQUIRE((summary.applied == 1 && summary.skipped == 1));
+        }
+        {
+            INFO("The entity survived being destroyed");
+            REQUIRE(!entities.HasEntity(first));
+        }
+        {
+            INFO("The skipped change was not reported");
+            REQUIRE(headless.Logger().Contains(LogLevel::Warn, "skipped adding a component for entity"));
+        }
 
         // The slot is reused by a later entity: the skipped add did not leak onto it.
         const auto reused = entities.CreateEntity().GetId();
-        Check(!scripting.FindComponent(VelocityName)->has(entities, reused), "A skipped add reached a new entity");
-        Check(scripting.FindComponent(VelocityName)->count(entities) == 0, "A skipped add left a component behind");
+        {
+            INFO("A skipped add reached a new entity");
+            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, reused));
+        }
+        {
+            INFO("A skipped add left a component behind");
+            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 0);
+        }
 
         // Add first, destroy after: the entity is gone and takes the component with it.
         const auto second = entities.CreateEntity().GetId();
         Changes<void>(scripting, "AddThenDestroy", second);
         const auto both = scripting.ApplyChanges();
-        Check(both.applied == 2 && both.skipped == 0 && !entities.HasEntity(second),
-              "Add-then-destroy was not well defined");
-        Check(scripting.FindComponent(VelocityName)->count(entities) == 0, "A destroyed entity kept its component");
+        {
+            INFO("Add-then-destroy was not well defined");
+            REQUIRE((both.applied == 2 && both.skipped == 0 && !entities.HasEntity(second)));
+        }
+        {
+            INFO("A destroyed entity kept its component");
+            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 0);
+        }
 
         // Destroying twice is the same as once.
         const auto third = entities.CreateEntity().GetId();
         Changes<void>(scripting, "DestroyTwice", third);
-        Check(scripting.ApplyChanges().skipped == 0 && !entities.HasEntity(third), "Destroying twice was not harmless");
+        {
+            INFO("Destroying twice was not harmless");
+            REQUIRE((scripting.ApplyChanges().skipped == 0 && !entities.HasEntity(third)));
+        }
 
         // Created and destroyed in one go, leaving nothing behind.
         std::size_t before = 0;
@@ -1154,7 +1703,10 @@ namespace
         (void)scripting.ApplyChanges();
         std::size_t after = 0;
         entities.ForEachEntity([&](auto) { ++after; });
-        Check(!entities.HasEntity(gone) && after == before, "A created-then-destroyed entity was left behind");
+        {
+            INFO("A created-then-destroyed entity was left behind");
+            REQUIRE((!entities.HasEntity(gone) && after == before));
+        }
     }
 
     void GetAndStructuralChangesFailClearly()
@@ -1170,19 +1722,39 @@ namespace
         };
 
         const auto missing = message("TryGetMissing", bare);
-        Check(missing.find("has no Velocity") != std::string::npos, "Get on a missing component said: " + missing);
+        {
+            INFO("Get on a missing component said: " + missing);
+            REQUIRE(missing.find("has no Velocity") != std::string::npos);
+        }
         const auto staleGet = message("TryGetMissing", stale);
-        Check(staleGet.find("not alive") != std::string::npos, "Get on a stale entity said: " + staleGet);
-        Check(message("TryAddOnStale", stale).find("not alive") != std::string::npos,
-              "Add on a stale entity did not say so");
-        Check(message("TryDestroyStale", stale).find("not alive") != std::string::npos,
-              "Destroy of a stale entity did not say so");
-        Check(message("TryRemoveRequired", bare).find("needs every entity") != std::string::npos,
-              "Removing Transform was not refused clearly");
-        Check(message("TryRemoveName", bare).find("needs every entity") != std::string::npos,
-              "Removing Name was not refused");
-        Check(ScriptingProbe::PendingChanges(scripting) == 0, "A refused change was recorded");
-        Check(entities.GetEntity(bare).HasComponent<Transform>(), "A refused removal changed the entity");
+        {
+            INFO("Get on a stale entity said: " + staleGet);
+            REQUIRE(staleGet.find("not alive") != std::string::npos);
+        }
+        {
+            INFO("Add on a stale entity did not say so");
+            REQUIRE(message("TryAddOnStale", stale).find("not alive") != std::string::npos);
+        }
+        {
+            INFO("Destroy of a stale entity did not say so");
+            REQUIRE(message("TryDestroyStale", stale).find("not alive") != std::string::npos);
+        }
+        {
+            INFO("Removing Transform was not refused clearly");
+            REQUIRE(message("TryRemoveRequired", bare).find("needs every entity") != std::string::npos);
+        }
+        {
+            INFO("Removing Name was not refused");
+            REQUIRE(message("TryRemoveName", bare).find("needs every entity") != std::string::npos);
+        }
+        {
+            INFO("A refused change was recorded");
+            REQUIRE(ScriptingProbe::PendingChanges(scripting) == 0);
+        }
+        {
+            INFO("A refused removal changed the entity");
+            REQUIRE(entities.GetEntity(bare).HasComponent<Transform>());
+        }
     }
 
     void DiscardingChangesLeavesNoEntitiesBehind()
@@ -1194,16 +1766,26 @@ namespace
 
         const auto created = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
         Changes<void>(scripting, "RemoveThenAdd", existing);
-        Check(ScriptingProbe::PendingChanges(scripting) > 0 && entities.HasEntity(created), "Nothing was recorded");
+        {
+            INFO("Nothing was recorded");
+            REQUIRE((ScriptingProbe::PendingChanges(scripting) > 0 && entities.HasEntity(created)));
+        }
         scripting.DiscardChanges();
-        Check(ScriptingProbe::PendingChanges(scripting) == 0 && !entities.HasEntity(created),
-              "Discarding left the created entity");
-        Check(scripting.FindComponent(VelocityName)->has(entities, existing), "Discarding applied a change");
+        {
+            INFO("Discarding left the created entity");
+            REQUIRE((ScriptingProbe::PendingChanges(scripting) == 0 && !entities.HasEntity(created)));
+        }
+        {
+            INFO("Discarding applied a change");
+            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, existing));
+        }
 
         // After Shutdown there is nothing to play back, and it says so rather than crashing.
         scripting.Shutdown();
-        Check(scripting.ApplyChanges().applied == 0 && ScriptingProbe::PendingChanges(scripting) == 0,
-              "Changes outlived Shutdown");
+        {
+            INFO("Changes outlived Shutdown");
+            REQUIRE((scripting.ApplyChanges().applied == 0 && ScriptingProbe::PendingChanges(scripting) == 0));
+        }
     }
 
     constexpr const char* QueriesType = "Fenrir.ScriptFixture.Queries";
@@ -1217,7 +1799,10 @@ namespace
     void SetVelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id, float x)
     {
         auto* values = static_cast<float*>(scripting.FindComponent(VelocityName)->get(entities, id));
-        Check(values != nullptr, "The entity had no Velocity");
+        {
+            INFO("The entity had no Velocity");
+            REQUIRE(values != nullptr);
+        }
         values[0] = x;
         values[1] = 0;
         values[2] = 0;
@@ -1227,7 +1812,10 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
 
         // Two entities with a Transform (native) and a Velocity (script), one with only a Velocity, one with only a
@@ -1235,36 +1823,64 @@ namespace
         const auto first = EntityWithVelocity(scripting, entities);
         const auto second = EntityWithVelocity(scripting, entities);
         const auto velocityOnly = entities.CreateEntity().GetId();
-        Check(scripting.FindComponent(VelocityName)->add(entities, velocityOnly), "Velocity was not added");
+        {
+            INFO("Velocity was not added");
+            REQUIRE(scripting.FindComponent(VelocityName)->add(entities, velocityOnly));
+        }
         entities.GetEntity(velocityOnly).RemoveComponent<Transform>();
         const auto transformOnly = entities.CreateEntity().GetId();
         SetVelocityX(scripting, entities, first, 1);
         SetVelocityX(scripting, entities, second, 10);
         SetVelocityX(scripting, entities, velocityOnly, 100);
-        Check(Queries<float>(scripting, "SumVelocityX") == 111.0F, "A single-component query missed an entity");
+        {
+            INFO("A single-component query missed an entity");
+            REQUIRE(Queries<float>(scripting, "SumVelocityX") == 111.0F);
+        }
 
         // A query over a native and a script component visits exactly the entities that have both, and its writes land
         // in the engine's own storage.
-        Check(Queries<std::int32_t>(scripting, "Integrate") == 2, "The two-component query visited the wrong entities");
-        Check(Queries<std::int32_t>(scripting, "Integrate") == 2, "The query was not repeatable");
-        Check(entities.GetEntity(first).GetComponent<Transform>().pos.x == 2.0F &&
-                  entities.GetEntity(second).GetComponent<Transform>().pos.x == 20.0F,
-              "Writes through query rows did not reach the native Transform");
-        Check(entities.GetEntity(transformOnly).GetComponent<Transform>().pos.x == 0.0F,
-              "A query visited an entity it should not");
+        {
+            INFO("The two-component query visited the wrong entities");
+            REQUIRE(Queries<std::int32_t>(scripting, "Integrate") == 2);
+        }
+        {
+            INFO("The query was not repeatable");
+            REQUIRE(Queries<std::int32_t>(scripting, "Integrate") == 2);
+        }
+        {
+            INFO("Writes through query rows did not reach the native Transform");
+            REQUIRE((entities.GetEntity(first).GetComponent<Transform>().pos.x == 2.0F &&
+                     entities.GetEntity(second).GetComponent<Transform>().pos.x == 20.0F));
+        }
+        {
+            INFO("A query visited an entity it should not");
+            REQUIRE(entities.GetEntity(transformOnly).GetComponent<Transform>().pos.x == 0.0F);
+        }
 
         // Each row's entity owns the row's components.
         for (const auto id : {first, second})
         {
-            Check(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->add(entities, id), "Counter was not added");
+            {
+                INFO("Counter was not added");
+                REQUIRE(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->add(entities, id));
+            }
         }
-        Check(Queries<bool>(scripting, "RowsAgree"), "A row's entity and its components disagreed");
+        {
+            INFO("A row's entity and its components disagreed");
+            REQUIRE(Queries<bool>(scripting, "RowsAgree"));
+        }
 
         // The callback form works the same.
-        Check(Queries<std::int32_t>(scripting, "CountUp") == 2, "ForEach visited the wrong entities");
+        {
+            INFO("ForEach visited the wrong entities");
+            REQUIRE(Queries<std::int32_t>(scripting, "CountUp") == 2);
+        }
         const auto* hits = static_cast<const std::int32_t*>(
             scripting.FindComponent("Fenrir.ScriptFixture.Counter")->get(entities, first));
-        Check(hits != nullptr && hits[0] == 1, "A write through ForEach did not reach the component");
+        {
+            INFO("A write through ForEach did not reach the component");
+            REQUIRE((hits != nullptr && hits[0] == 1));
+        }
     }
 
     void AQueryMakesTheSameNumberOfNativeCallsForAnyNumberOfEntities()
@@ -1285,7 +1901,10 @@ namespace
             const auto visited = Queries<std::int32_t>(scripting, "Integrate");
             const auto microseconds =
                 std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
-            Check(visited == count, "The query did not visit every entity");
+            {
+                INFO("The query did not visit every entity");
+                REQUIRE(visited == count);
+            }
             std::cout << "  query over " << count
                       << " entities (Transform + Velocity): " << (ScriptingProbe::QueryCalls(scripting) - before)
                       << " native calls, " << microseconds.count() << " us\n";
@@ -1293,7 +1912,10 @@ namespace
         };
         const auto small = callsFor(10);
         const auto large = callsFor(10000 - 10);
-        Check(small == large && small == 2, "A query's native calls depended on the entity count");
+        {
+            INFO("A query's native calls depended on the entity count");
+            REQUIRE((small == large && small == 2));
+        }
     }
 
     void StructuralChangesDuringIterationAreDeferred()
@@ -1311,23 +1933,48 @@ namespace
 
         // The script removes each entity's Velocity, adds Counter, creates a new Velocity entity and destroys one
         // entity, all inside the loop. The loop still visits exactly the five it started with.
-        Check(Queries<std::int32_t>(scripting, "ChangeWhileIterating") == 5,
-              "Iteration was disturbed by changes made inside it");
-        Check(velocity->count(entities) == 5 && counter->count(entities) == 0,
-              "A change reached the storage during iteration");
+        {
+            INFO("Iteration was disturbed by changes made inside it");
+            REQUIRE(Queries<std::int32_t>(scripting, "ChangeWhileIterating") == 5);
+        }
+        {
+            INFO("A change reached the storage during iteration");
+            REQUIRE((velocity->count(entities) == 5 && counter->count(entities) == 0));
+        }
         const auto summary = scripting.ApplyChanges();
-        Check(summary.skipped == 0, "A change was skipped: the destroy came last, so nothing named a dead entity");
-        Check(velocity->count(entities) == 5, "Velocity should now be on the five new entities");
-        Check(counter->count(entities) == 4, "Counter should be on the four survivors");
+        {
+            INFO("A change was skipped: the destroy came last, so nothing named a dead entity");
+            REQUIRE(summary.skipped == 0);
+        }
+        {
+            INFO("Velocity should now be on the five new entities");
+            REQUIRE(velocity->count(entities) == 5);
+        }
+        {
+            INFO("Counter should be on the four survivors");
+            REQUIRE(counter->count(entities) == 4);
+        }
         for (const auto id : originals)
         {
-            Check(!velocity->has(entities, id), "An original kept its Velocity");
+            {
+                INFO("An original kept its Velocity");
+                REQUIRE(!velocity->has(entities, id));
+            }
         }
 
         // Nested queries each see the whole set.
-        Check(Queries<std::int32_t>(scripting, "Nested") == 5 * 4, "Nested queries did not each see every entity");
-        Check(Queries<std::int32_t>(scripting, "StopEarly") == 2, "Leaving a loop early failed");
-        Check(Queries<float>(scripting, "SumVelocityX") == 500.0F, "A query after breaking out of one was wrong");
+        {
+            INFO("Nested queries did not each see every entity");
+            REQUIRE(Queries<std::int32_t>(scripting, "Nested") == 5 * 4);
+        }
+        {
+            INFO("Leaving a loop early failed");
+            REQUIRE(Queries<std::int32_t>(scripting, "StopEarly") == 2);
+        }
+        {
+            INFO("A query after breaking out of one was wrong");
+            REQUIRE(Queries<float>(scripting, "SumVelocityX") == 500.0F);
+        }
     }
 
     void ForEachDefersStructuralChangesToo()
@@ -1341,12 +1988,23 @@ namespace
             (void)EntityWithVelocity(scripting, entities);
         }
         // Five visited, however many the loop creates; the new ones appear (and the old ones go) at playback.
-        Check(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5,
-              "ForEach was disturbed by changes made inside it");
-        Check(velocity->count(entities) == 5, "A change reached the storage during ForEach");
+        {
+            INFO("ForEach was disturbed by changes made inside it");
+            REQUIRE(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5);
+        }
+        {
+            INFO("A change reached the storage during ForEach");
+            REQUIRE(velocity->count(entities) == 5);
+        }
         (void)scripting.ApplyChanges();
-        Check(velocity->count(entities) == 5, "ForEach's deferred changes were not applied");
-        Check(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5, "The replacements were not queryable");
+        {
+            INFO("ForEach's deferred changes were not applied");
+            REQUIRE(velocity->count(entities) == 5);
+        }
+        {
+            INFO("The replacements were not queryable");
+            REQUIRE(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5);
+        }
     }
 
     void EmptyAndInvalidQueriesBehave()
@@ -1358,16 +2016,30 @@ namespace
 
         // Nothing has the component, and nothing has been added: empty, with no storage made for it.
         const auto storages = entities.ComponentStorageCount();
-        Check(Queries<std::int32_t>(scripting, "VisitEmpty") == 0, "An empty query visited something");
-        Check(Queries<float>(scripting, "SumVelocityX") == 0.0F, "An empty sum was not zero");
-        Check(entities.ComponentStorageCount() == storages, "An empty query made storage");
+        {
+            INFO("An empty query visited something");
+            REQUIRE(Queries<std::int32_t>(scripting, "VisitEmpty") == 0);
+        }
+        {
+            INFO("An empty sum was not zero");
+            REQUIRE(Queries<float>(scripting, "SumVelocityX") == 0.0F);
+        }
+        {
+            INFO("An empty query made storage");
+            REQUIRE(entities.ComponentStorageCount() == storages);
+        }
 
         // A component the engine never registered, and the same component twice: clear errors.
         const auto unregistered = Queries<std::optional<std::string>>(scripting, "QueryUnregistered").value_or("");
-        Check(unregistered.find("Test.Nothing") != std::string::npos,
-              "Querying an unregistered component said: " + unregistered);
+        {
+            INFO("Querying an unregistered component said: " + unregistered);
+            REQUIRE(unregistered.find("Test.Nothing") != std::string::npos);
+        }
         const auto twice = Queries<std::optional<std::string>>(scripting, "QueryTwice").value_or("");
-        Check(twice.find("twice") != std::string::npos, "Querying a component twice said: " + twice);
+        {
+            INFO("Querying a component twice said: " + twice);
+            REQUIRE(twice.find("twice") != std::string::npos);
+        }
     }
 
     void TheWidestQueryHasEightComponents()
@@ -1384,11 +2056,17 @@ namespace
             for (int component = 1; component <= (entityIndex == 3 ? 7 : 8); ++component)
             {
                 const auto* registration = scripting.FindComponent(prefix + std::to_string(component));
-                Check(registration != nullptr && registration->add(entities, id), "A component was not added");
+                {
+                    INFO("A component was not added");
+                    REQUIRE((registration != nullptr && registration->add(entities, id)));
+                }
                 *static_cast<std::int32_t*>(registration->get(entities, id)) = 1;
             }
         }
-        Check(Queries<std::int32_t>(scripting, "AllEight") == 3 * 8, "The eight-component query was wrong");
+        {
+            INFO("The eight-component query was wrong");
+            REQUIRE(Queries<std::int32_t>(scripting, "AllEight") == 3 * 8);
+        }
     }
 
     constexpr const char* ProbeType = "Fenrir.ScriptFixture.SystemProbe";
@@ -1445,7 +2123,10 @@ namespace
             {[&](App&) { dump = Probe<std::optional<std::string>>(*installed, "Dump").value_or(""); }});
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         installed = &scripting;
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         Probe<void>(scripting, "Enable");
         headless.Run(frames);
 
@@ -1459,8 +2140,10 @@ namespace
             {
                 ++scriptTicks;
                 // Fixed steps happen after PreUpdate and before Update, never anywhere else in the frame.
-                Check(previous == "Pre" || previous == "Tick",
-                      "A Tick ran outside the gap between PreUpdate and Update");
+                {
+                    INFO("A Tick ran outside the gap between PreUpdate and Update");
+                    REQUIRE((previous == "Pre" || previous == "Tick"));
+                }
             }
             else
             {
@@ -1481,20 +2164,32 @@ namespace
                 expected.push_back(event);
             }
         }
-        Check(withoutTicks == expected, "The systems did not run in phase and Order, with changes applied after each");
+        {
+            INFO("The systems did not run in phase and Order, with changes applied after each");
+            REQUIRE(withoutTicks == expected);
+        }
 
         // Tick runs once per fixed step, as often as a native Tick system does.
-        Check(scriptTicks == static_cast<std::size_t>(nativeTicks) && nativeTicks > 0,
-              "Tick did not run once per fixed step");
+        {
+            INFO("Tick did not run once per fixed step");
+            REQUIRE((scriptTicks == static_cast<std::size_t>(nativeTicks) && nativeTicks > 0));
+        }
 
         // One transition per phase that has systems, per frame, and per fixed step for Tick.
-        Check(ScriptingProbe::PhaseCalls(scripting) == static_cast<std::size_t>(3 * frames + nativeTicks),
-              "The engine did not enter the script exactly once per phase");
+        {
+            INFO("The engine did not enter the script exactly once per phase");
+            REQUIRE(ScriptingProbe::PhaseCalls(scripting) == static_cast<std::size_t>(3 * frames + nativeTicks));
+        }
 
         // The thrower was logged once with its name, and the others kept running.
-        Check(CountMessages(headless, LogLevel::Error, "ThrowerSystem") == 1,
-              "A throwing system was not logged exactly once");
-        Check(headless.Logger().Contains(LogLevel::Error, "kaboom"), "The exception's message was not logged");
+        {
+            INFO("A throwing system was not logged exactly once");
+            REQUIRE(CountMessages(headless, LogLevel::Error, "ThrowerSystem") == 1);
+        }
+        {
+            INFO("The exception's message was not logged");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, "kaboom"));
+        }
     }
 
     void OnCreateRunsAfterLoadAndOnDestroyBeforeRelease()
@@ -1502,11 +2197,23 @@ namespace
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-            Check(headless.Logger().Contains(LogLevel::Info, "Creator.OnCreate"), "OnCreate did not run after load");
-            Check(!headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"), "OnDestroy ran too early");
+            {
+                INFO("OnCreate did not run after load");
+                REQUIRE(headless.Logger().Contains(LogLevel::Info, "Creator.OnCreate"));
+            }
+            {
+                INFO("OnDestroy ran too early");
+                REQUIRE(!headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"));
+            }
             headless.Run(2); // The Exit phase releases scripting.
-            Check(headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"), "OnDestroy did not run at shutdown");
-            Check(!scripting.IsRunning(), "Scripting was still running after the app finished");
+            {
+                INFO("OnDestroy did not run at shutdown");
+                REQUIRE(headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"));
+            }
+            {
+                INFO("Scripting was still running after the app finished");
+                REQUIRE(!scripting.IsRunning());
+            }
         }
         {
             // An explicit Shutdown says goodbye too, and only once.
@@ -1514,8 +2221,10 @@ namespace
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
             scripting.Shutdown();
             scripting.Shutdown();
-            Check(CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 1,
-                  "Shutdown did not run OnDestroy exactly once");
+            {
+                INFO("Shutdown did not run OnDestroy exactly once");
+                REQUIRE(CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 1);
+            }
         }
     }
 
@@ -1525,7 +2234,10 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         scripting.Shutdown();
         headless.Run(2); // The scheduled phase systems find nothing to run.
-        Check(ScriptingProbe::PhaseCalls(scripting) == 0, "A phase ran after Shutdown");
+        {
+            INFO("A phase ran after Shutdown");
+            REQUIRE(ScriptingProbe::PhaseCalls(scripting) == 0);
+        }
     }
 
     constexpr const char* EventScriptsType = "Fenrir.ScriptFixture.EventScripts";
@@ -1548,14 +2260,21 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
-        Check(scripting.HasScripts(), "The fixture did not load");
-        Check(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?").empty(),
-              "There were events before any was sent");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("There were events before any was sent");
+            REQUIRE(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?").empty());
+        }
 
         headless.Get().SendEvent(TestNative::Alert{5, 0.5F});
         headless.Get().SendEvent(TestNative::Alert{6, 1.0F});
-        Check(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?") == "5,6",
-              "C# did not read the events C++ sent");
+        {
+            INFO("C# did not read the events C++ sent");
+            REQUIRE(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?") == "5,6");
+        }
     }
 
     void ACSharpEventIsReadInCpp()
@@ -1564,39 +2283,59 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
         EventScript<void>(scripting, "SendAlert", std::int32_t{9}, 2.5F);
         // Held until the script returns: nothing has reached the queue yet.
-        Check(headless.Get().ReadEvents<TestNative::Alert>().empty(),
-              "A send reached the queue before the system returned");
+        {
+            INFO("A send reached the queue before the system returned");
+            REQUIRE(headless.Get().ReadEvents<TestNative::Alert>().empty());
+        }
         (void)scripting.ApplyChanges();
         const auto& events = headless.Get().ReadEvents<TestNative::Alert>();
-        Check(events.size() == 1 && events[0].Code == 9 && events[0].Level == 2.5F,
-              "C++ did not read the event C# sent");
+        {
+            INFO("C++ did not read the event C# sent");
+            REQUIRE((events.size() == 1 && events[0].Code == 9 && events[0].Level == 2.5F));
+        }
     }
 
     void ACSharpOnlyEventNeedsNoCpp()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         EventScript<void>(scripting, "SendPing", std::int32_t{3});
         EventScript<void>(scripting, "SendPing", std::int32_t{4});
         (void)scripting.ApplyChanges();
-        Check(EventScript<std::int32_t>(scripting, "SumPings") == 7, "A C#-only event was not delivered");
+        {
+            INFO("A C#-only event was not delivered");
+            REQUIRE(EventScript<std::int32_t>(scripting, "SumPings") == 7);
+        }
 
         // Nothing in C++ knows its type, but the queue is there by name, with the layout C# reported.
         const IEventQueue* queue = headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping");
-        Check(queue != nullptr && queue->EventSize() == 4 && queue->ReadRaw().count == 2,
-              "The C#-only event's queue was not there by name");
+        {
+            INFO("The C#-only event's queue was not there by name");
+            REQUIRE((queue != nullptr && queue->EventSize() == 4 && queue->ReadRaw().count == 2));
+        }
 
         // The queue goes with the script assembly.
         scripting.Shutdown();
-        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr,
-              "The queue outlived the script assembly");
+        {
+            INFO("The queue outlived the script assembly");
+            REQUIRE(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr);
+        }
         auto again = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(again.HasScripts(), "The script assembly did not load again on the same App");
+        {
+            INFO("The script assembly did not load again on the same App");
+            REQUIRE(again.HasScripts());
+        }
         // The reloaded assembly sends and reads through a fresh queue (ids cached for the old registry are not reused).
         EventScript<void>(again, "SendPing", std::int32_t{5});
         (void)again.ApplyChanges();
-        Check(EventScript<std::int32_t>(again, "SumPings") == 5, "A reloaded script assembly could not use its events");
+        {
+            INFO("A reloaded script assembly could not use its events");
+            REQUIRE(EventScript<std::int32_t>(again, "SumPings") == 5);
+        }
     }
 
     void EventsHaveTheSameFrameWindowInBothLanguages()
@@ -1642,29 +2381,49 @@ namespace
             expected += std::string(index == 0 ? "" : ",") + "Own=" + pingOwn[index] + ",Later=" + pingSeen[index] +
                         ",Alerts=" + std::to_string(nativeSeen.at(static_cast<std::size_t>(index)));
         }
-        Check(dump == expected, "C# saw the events differently from the frame window: " + dump + " vs " + expected);
-        Check((nativeSeen == std::vector<std::size_t>{1, 1, 0, 0}),
-              "The native frame window was not what the test assumes");
+        {
+            INFO("C# saw the events differently from the frame window: " + dump + " vs " + expected);
+            REQUIRE(dump == expected);
+        }
+        {
+            INFO("The native frame window was not what the test assumes");
+            REQUIRE((nativeSeen == std::vector<std::size_t>{1, 1, 0, 0}));
+        }
         // And the other direction: what C# sent is in C++'s window for the same two frames, then gone.
-        Check((nativePingSeen == std::vector<std::size_t>{1, 1, 0, 0}),
-              "C++ did not see the event C# sent for the frame window");
+        {
+            INFO("C++ did not see the event C# sent for the frame window");
+            REQUIRE((nativePingSeen == std::vector<std::size_t>{1, 1, 0, 0}));
+        }
     }
 
     void ASystemNeverSeesItsOwnSendsAndAViewStaysValid()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{1}) == 0,
-              "A send was readable by its own sender");
+        {
+            INFO("A send was readable by its own sender");
+            REQUIRE(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{1}) == 0);
+        }
         (void)scripting.ApplyChanges();
-        Check(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{2}) == 1,
-              "A send was visible before its system returned, or the earlier one was lost");
+        {
+            INFO("A send was visible before its system returned, or the earlier one was lost");
+            REQUIRE(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{2}) == 1);
+        }
         (void)scripting.ApplyChanges();
-        Check(EventScript<std::int32_t>(scripting, "SumPings") == 3, "Both sends did not arrive");
+        {
+            INFO("Both sends did not arrive");
+            REQUIRE(EventScript<std::int32_t>(scripting, "SumPings") == 3);
+        }
 
         // A hundred sends in one system do not move or change the view the system already holds.
-        Check(EventScript<bool>(scripting, "ViewStaysValid"), "A view of events changed while its system sent more");
-        Check(scripting.ApplyChanges().applied == 100, "The sends made in that system were not delivered together");
+        {
+            INFO("A view of events changed while its system sent more");
+            REQUIRE(EventScript<bool>(scripting, "ViewStaysValid"));
+        }
+        {
+            INFO("The sends made in that system were not delivered together");
+            REQUIRE(scripting.ApplyChanges().applied == 100);
+        }
     }
 
     void EventLookupFailuresSayWhatWentWrong()
@@ -1672,10 +2431,15 @@ namespace
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
         const auto orphan = EventScript<std::optional<std::string>>(scripting, "TryReadOrphan").value_or("");
-        Check(orphan.find("no event registered as 'Test.NoSuchEvent'") != std::string::npos,
-              "An unknown event said: " + orphan);
+        {
+            INFO("An unknown event said: " + orphan);
+            REQUIRE(orphan.find("no event registered as 'Test.NoSuchEvent'") != std::string::npos);
+        }
         const auto fake = EventScript<std::optional<std::string>>(scripting, "TryReadFake").value_or("");
-        Check(fake.find("different C# type") != std::string::npos, "A script claiming a native event said: " + fake);
+        {
+            INFO("A script claiming a native event said: " + fake);
+            REQUIRE(fake.find("different C# type") != std::string::npos);
+        }
     }
 
     void AMismatchedEventFailsTheLoadAndNamesTheField()
@@ -1684,12 +2448,19 @@ namespace
         ScriptingConfig config = ConfigFor(fixture);
         config.events.push_back(MakeEvent<TestNative::BadAlert>("Test.Alert"));
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A mismatched event left scripts loaded");
-        Check(headless.Logger().Contains(LogLevel::Error, "Test.Alert") &&
-                  headless.Logger().Contains(LogLevel::Error, "'Code'"),
-              "The mismatch did not name the event and the field");
-        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr,
-              "A failed load left a queue behind");
+        {
+            INFO("A mismatched event left scripts loaded");
+            REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
+        }
+        {
+            INFO("The mismatch did not name the event and the field");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "Test.Alert") &&
+                     headless.Logger().Contains(LogLevel::Error, "'Code'")));
+        }
+        {
+            INFO("A failed load left a queue behind");
+            REQUIRE(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr);
+        }
     }
 
     void CppEventUsersAreUnchangedByNamedAndByteQueues()
@@ -1711,39 +2482,64 @@ namespace
 
         app.SendEvent(Plain{1});
         app.SendEvent(Plain{2});
-        Check(app.ReadEvents<Plain>().size() == 2, "Typed events changed");
-        Check(app.NameEvent<Plain>("Plain") && app.NameEvent<Plain>("Plain"),
-              "A queue could not be named, or naming twice failed");
-        Check(!app.NameEvent<Other>("Plain"), "A name was given to two different queues");
+        {
+            INFO("Typed events changed");
+            REQUIRE(app.ReadEvents<Plain>().size() == 2);
+        }
+        {
+            INFO("A queue could not be named, or naming twice failed");
+            REQUIRE((app.NameEvent<Plain>("Plain") && app.NameEvent<Plain>("Plain")));
+        }
+        {
+            INFO("A name was given to two different queues");
+            REQUIRE(!app.NameEvent<Other>("Plain"));
+        }
         const IEventQueue* named = app.FindEventQueue("Plain");
-        Check(named != nullptr && named->EventSize() == sizeof(Plain) && named->ReadRaw().count == 2,
-              "The named queue is not the typed queue");
+        {
+            INFO("The named queue is not the typed queue");
+            REQUIRE((named != nullptr && named->EventSize() == sizeof(Plain) && named->ReadRaw().count == 2));
+        }
         const int third = 3;
-        Check(app.FindEventQueue("Plain")->SendRaw(&third) && app.ReadEvents<Plain>().size() == 3 &&
-                  app.ReadEvents<Plain>()[2].value == 3,
-              "Sending by name did not reach the typed queue");
+        {
+            INFO("Sending by name did not reach the typed queue");
+            REQUIRE((app.FindEventQueue("Plain")->SendRaw(&third) && app.ReadEvents<Plain>().size() == 3 &&
+                     app.ReadEvents<Plain>()[2].value == 3));
+        }
 
         // An event that is not plain bytes still works as before and cannot be used by name.
         app.SendEvent(Heavy{"a string"});
-        Check(app.ReadEvents<Heavy>().size() == 1 && app.ReadEvents<Heavy>()[0].text == "a string",
-              "A non-trivial event changed");
-        Check(app.NameEvent<Heavy>("Heavy") && app.FindEventQueue("Heavy")->EventSize() == 0 &&
-                  !app.FindEventQueue("Heavy")->SendRaw(&third),
-              "A non-trivial event was usable as bytes");
+        {
+            INFO("A non-trivial event changed");
+            REQUIRE((app.ReadEvents<Heavy>().size() == 1 && app.ReadEvents<Heavy>()[0].text == "a string"));
+        }
+        {
+            INFO("A non-trivial event was usable as bytes");
+            REQUIRE((app.NameEvent<Heavy>("Heavy") && app.FindEventQueue("Heavy")->EventSize() == 0 &&
+                     !app.FindEventQueue("Heavy")->SendRaw(&third)));
+        }
 
         // A byte queue: the same two buffers, and it rotates with the frame.
         IEventQueue* bytes = app.CreateEventQueue("Bytes", 8, 4);
-        Check(bytes != nullptr && app.CreateEventQueue("Bytes", 8, 4) == nullptr &&
-                  app.CreateEventQueue("Plain", 8, 4) == nullptr,
-              "A byte queue could be made twice, or over a typed one");
-        Check(app.CreateEventQueue("Odd", 6, 4) == nullptr && app.CreateEventQueue("Wide", 32, 32) == nullptr &&
-                  app.CreateEventQueue("", 4, 4) == nullptr,
-              "An unusable byte queue was made");
+        {
+            INFO("A byte queue could be made twice, or over a typed one");
+            REQUIRE((bytes != nullptr && app.CreateEventQueue("Bytes", 8, 4) == nullptr &&
+                     app.CreateEventQueue("Plain", 8, 4) == nullptr));
+        }
+        {
+            INFO("An unusable byte queue was made");
+            REQUIRE((app.CreateEventQueue("Odd", 6, 4) == nullptr && app.CreateEventQueue("Wide", 32, 32) == nullptr &&
+                     app.CreateEventQueue("", 4, 4) == nullptr));
+        }
         const std::int64_t value = 42;
-        Check(bytes->SendRaw(&value) && bytes->ReadRaw().count == 1, "A byte queue did not hold its event");
-        Check(app.RemoveEventQueue("Bytes") && app.FindEventQueue("Bytes") == nullptr &&
-                  !app.RemoveEventQueue("Bytes") && !app.RemoveEventQueue("Plain"),
-              "Removing a byte queue went wrong, or a typed queue could be removed");
+        {
+            INFO("A byte queue did not hold its event");
+            REQUIRE((bytes->SendRaw(&value) && bytes->ReadRaw().count == 1));
+        }
+        {
+            INFO("Removing a byte queue went wrong, or a typed queue could be removed");
+            REQUIRE((app.RemoveEventQueue("Bytes") && app.FindEventQueue("Bytes") == nullptr &&
+                     !app.RemoveEventQueue("Bytes") && !app.RemoveEventQueue("Plain")));
+        }
     }
 
     // A scratch directory of the test's own, removed afterwards.
@@ -1785,11 +2581,23 @@ namespace
         ScriptingConfig config = ConfigFor(fixture);
         config.reloadDirectory = scratch.path;
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(scripting.HasScripts() && scripting.Generation() == 1, "The fixture did not load as generation one");
-        Check(scratch.Entries() > 0, "The assembly was not loaded from a copy");
+        {
+            INFO("The fixture did not load as generation one");
+            REQUIRE((scripting.HasScripts() && scripting.Generation() == 1));
+        }
+        {
+            INFO("The assembly was not loaded from a copy");
+            REQUIRE(scratch.Entries() > 0);
+        }
         scripting.Shutdown();
-        Check(scripting.PendingUnloadCount() == 0, "The released generation did not unload");
-        Check(scratch.Entries() == 0, "The copy of the assembly was not deleted once it unloaded");
+        {
+            INFO("The released generation did not unload");
+            REQUIRE(scripting.PendingUnloadCount() == 0);
+        }
+        {
+            INFO("The copy of the assembly was not deleted once it unloaded");
+            REQUIRE(scratch.Entries() == 0);
+        }
     }
 
     // A copy of the fixture the test may overwrite the way a build would, while an app has it loaded.
@@ -1871,7 +2679,10 @@ namespace
     std::int32_t StampedValue(Scripting& scripting, EntityList& entities, std::uint32_t id)
     {
         const auto* values = static_cast<const std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, id));
-        Check(values != nullptr, "The entity had no Stamped");
+        {
+            INFO("The entity had no Stamped");
+            REQUIRE(values != nullptr);
+        }
         return values[0];
     }
 
@@ -1912,13 +2723,19 @@ namespace
                                  }});
         auto scripting = Scripting::Install(app, build.Config(false));
         installed = &scripting;
-        Check(scripting.HasScripts() && scripting.Generation() == 1, "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE((scripting.HasScripts() && scripting.Generation() == 1));
+        }
 
         // The data to carry: a Stamped (unchanged in version 2), a Velocity (unchanged), a Counter (its layout
         // changes).
         const auto add = [&](const char* name, std::uint32_t& holder) {
             holder = entities.CreateEntity().GetId();
-            Check(scripting.FindComponent(name)->add(entities, holder), "A component was not added");
+            {
+                INFO("A component was not added");
+                REQUIRE(scripting.FindComponent(name)->add(entities, holder));
+            }
         };
         add(StampedName, stamped);
         add(VelocityName, velocityHolder);
@@ -1929,19 +2746,31 @@ namespace
 
         headless.Run(6);
 
-        Check(reloadedOk && answers == std::vector<std::int32_t>{1, 2},
-              "The new build's code did not take effect without a restart");
+        {
+            INFO("The new build's code did not take effect without a restart");
+            REQUIRE((reloadedOk && answers == std::vector<std::int32_t>{1, 2}));
+        }
         // Frames one to three added 1 each (version 1), frames four to six added 2 each (version 2): the value carried
         // over.
-        Check((stampedAfterFrame == std::vector<std::int32_t>{6, 7, 8, 10, 12, 14}),
-              "Stamped did not keep its value across the reload and change its step: " + Join(stampedAfterFrame));
+        {
+            INFO("Stamped did not keep its value across the reload and change its step: " + Join(stampedAfterFrame));
+            REQUIRE((stampedAfterFrame == std::vector<std::int32_t>{6, 7, 8, 10, 12, 14}));
+        }
         // One generation said goodbye at the reload and the other at shutdown; a new set of systems was made for each
         // load.
-        Check(CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 2 &&
-                  CountMessages(headless, LogLevel::Info, "Creator.OnCreate") == 2,
-              "The old systems did not say goodbye, or the new ones were not created");
-        Check(headless.Logger().Contains(LogLevel::Info, "reloaded"), "The reload was not logged");
-        Check(app.FindEventQueue("Fenrir.ScriptFixture.Echo") == nullptr, "Shutdown should have removed the queues");
+        {
+            INFO("The old systems did not say goodbye, or the new ones were not created");
+            REQUIRE((CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 2 &&
+                     CountMessages(headless, LogLevel::Info, "Creator.OnCreate") == 2));
+        }
+        {
+            INFO("The reload was not logged");
+            REQUIRE(headless.Logger().Contains(LogLevel::Info, "reloaded"));
+        }
+        {
+            INFO("Shutdown should have removed the queues");
+            REQUIRE(app.FindEventQueue("Fenrir.ScriptFixture.Echo") == nullptr);
+        }
     }
 
     void AChangedLayoutDropsTheComponentAndTheEventsAndNothingReadsStaleBytes()
@@ -1951,60 +2780,102 @@ namespace
         auto& app = headless.Get();
         auto& entities = app.GetActiveScene().GetEntityList();
         auto scripting = Scripting::Install(app, build.Config(false));
-        Check(scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
 
         const auto* counter = scripting.FindComponent(CounterName);
         std::vector<std::uint32_t> holders;
         for (int index = 0; index < 3; ++index)
         {
             holders.push_back(entities.CreateEntity().GetId());
-            Check(counter->add(entities, holders.back()), "A Counter was not added");
+            {
+                INFO("A Counter was not added");
+                REQUIRE(counter->add(entities, holders.back()));
+            }
             static_cast<std::int32_t*>(counter->get(entities, holders.back()))[0] = 100 + index;
         }
         const auto stamped = entities.CreateEntity().GetId();
-        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+        {
+            INFO("A Stamped was not added");
+            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+        }
         static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 41;
-        Check(counter->size == 16, "The test assumes version 1 of Counter is sixteen bytes");
+        {
+            INFO("The test assumes version 1 of Counter is sixteen bytes");
+            REQUIRE(counter->size == 16);
+        }
 
         Reloaded<void>(scripting, "SendEcho", std::int32_t{9});
         Reloaded<void>(scripting, "SendEcho", std::int32_t{10});
         Reloaded<void>(scripting, "SendRipple", std::int32_t{1});
         (void)scripting.ApplyChanges();
-        Check(app.FindEventQueue("Fenrir.ScriptFixture.Ripple")->EventSize() == 4,
-              "The test assumes version 1 of Ripple is four bytes");
+        {
+            INFO("The test assumes version 1 of Ripple is four bytes");
+            REQUIRE(app.FindEventQueue("Fenrir.ScriptFixture.Ripple")->EventSize() == 4);
+        }
 
         build.Overwrite(fixtureV2);
-        Check(scripting.Reload().Succeeded() && scripting.Generation() == 2, "The new build did not load");
+        {
+            INFO("The new build did not load");
+            REQUIRE((scripting.Reload().Succeeded() && scripting.Generation() == 2));
+        }
 
         // The component whose layout changed is gone from every entity, with a warning, and is the new size.
         const auto* changed = scripting.FindComponent(CounterName);
-        Check(changed != nullptr && changed->size == 24, "The new Counter layout was not registered");
-        Check(changed->count(entities) == 0, "Old Counter bytes are still on entities");
+        {
+            INFO("The new Counter layout was not registered");
+            REQUIRE((changed != nullptr && changed->size == 24));
+        }
+        {
+            INFO("Old Counter bytes are still on entities");
+            REQUIRE(changed->count(entities) == 0);
+        }
         for (const auto id : holders)
         {
-            Check(!changed->has(entities, id) && changed->get(entities, id) == nullptr,
-                  "An entity still has the old Counter");
+            {
+                INFO("An entity still has the old Counter");
+                REQUIRE((!changed->has(entities, id) && changed->get(entities, id) == nullptr));
+            }
         }
-        Check(headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Counter' changed its layout") &&
-                  headless.Logger().Contains(LogLevel::Warn, "3 component(s) were removed"),
-              "The dropped component was not reported with how many were removed");
+        {
+            INFO("The dropped component was not reported with how many were removed");
+            REQUIRE((headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Counter' changed its layout") &&
+                     headless.Logger().Contains(LogLevel::Warn, "3 component(s) were removed")));
+        }
         // A new one starts zeroed, at the new size, rather than inheriting bytes.
-        Check(changed->add(entities, holders.front()), "A Counter of the new layout was not added");
+        {
+            INFO("A Counter of the new layout was not added");
+            REQUIRE(changed->add(entities, holders.front()));
+        }
         const auto* fresh = static_cast<const std::uint8_t*>(changed->get(entities, holders.front()));
-        Check(fresh != nullptr && std::all_of(fresh, fresh + 24, [](std::uint8_t byte) { return byte == 0; }),
-              "A new Counter was not zeroed");
+        {
+            INFO("A new Counter was not zeroed");
+            REQUIRE((fresh != nullptr && std::all_of(fresh, fresh + 24, [](std::uint8_t byte) { return byte == 0; })));
+        }
 
         // The unchanged component kept its value.
-        Check(StampedValue(scripting, entities, stamped) == 41, "An unchanged component lost its value");
+        {
+            INFO("An unchanged component lost its value");
+            REQUIRE(StampedValue(scripting, entities, stamped) == 41);
+        }
 
         // The event queue whose layout is unchanged kept its events, and the one that changed was recreated empty.
         const IEventQueue* echo = app.FindEventQueue("Fenrir.ScriptFixture.Echo");
         const IEventQueue* ripple = app.FindEventQueue("Fenrir.ScriptFixture.Ripple");
-        Check(echo != nullptr && echo->ReadRaw().count == 2, "An unchanged event queue lost its events");
-        Check(ripple != nullptr && ripple->EventSize() == 8 && ripple->ReadRaw().count == 0,
-              "A changed event queue was not recreated empty");
-        Check(headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Ripple' changed its layout"),
-              "The dropped event was not reported");
+        {
+            INFO("An unchanged event queue lost its events");
+            REQUIRE((echo != nullptr && echo->ReadRaw().count == 2));
+        }
+        {
+            INFO("A changed event queue was not recreated empty");
+            REQUIRE((ripple != nullptr && ripple->EventSize() == 8 && ripple->ReadRaw().count == 0));
+        }
+        {
+            INFO("The dropped event was not reported");
+            REQUIRE(headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Ripple' changed its layout"));
+        }
     }
 
     void ABrokenBuildKeepsTheOldGenerationRunning()
@@ -2043,20 +2914,32 @@ namespace
         auto scripting = Scripting::Install(app, build.Config(false));
         installed = &scripting;
         stamped = entities.CreateEntity().GetId();
-        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+        {
+            INFO("A Stamped was not added");
+            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+        }
 
         headless.Run(6);
 
-        Check(failed, "A build that is not an assembly was reported as loaded");
-        Check(headless.Logger().Contains(LogLevel::Error, "did not load") &&
-                  headless.Logger().Contains(LogLevel::Warn, "previous build"),
-              "The failed build and the restore were not logged");
+        {
+            INFO("A build that is not an assembly was reported as loaded");
+            REQUIRE(failed);
+        }
+        {
+            INFO("The failed build and the restore were not logged");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "did not load") &&
+                     headless.Logger().Contains(LogLevel::Warn, "previous build")));
+        }
         // Version one kept running through the broken build: +1 a frame, no gap, no restart of the data; then version
         // two adds 2.
-        Check((stampedAfterFrame == std::vector<std::int32_t>{1, 2, 3, 4, 6, 8}),
-              "The old generation did not keep running through a broken build: " + Join(stampedAfterFrame));
-        Check((answers == std::vector<std::int32_t>{1, 2}) && fixed,
-              "A later good build did not load after a broken one");
+        {
+            INFO("The old generation did not keep running through a broken build: " + Join(stampedAfterFrame));
+            REQUIRE((stampedAfterFrame == std::vector<std::int32_t>{1, 2, 3, 4, 6, 8}));
+        }
+        {
+            INFO("A later good build did not load after a broken one");
+            REQUIRE(((answers == std::vector<std::int32_t>{1, 2}) && fixed));
+        }
     }
 
     void RepeatedReloadsLeaveNoGenerationsBehind()
@@ -2100,17 +2983,30 @@ namespace
         auto scripting = Scripting::Install(app, build.Config(false));
         installed = &scripting;
         stamped = entities.CreateEntity().GetId();
-        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+        {
+            INFO("A Stamped was not added");
+            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+        }
         static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 1234;
 
         headless.Run(2);
 
-        Check(problems.empty(), problems.empty() ? "" : problems.front());
-        Check(scripting.Generation() == 1 + cycles,
-              "The generation count was off: " + std::to_string(scripting.Generation()));
-        Check(finalValue == 1234, "Data was lost over repeated reloads");
-        Check(scripting.PendingUnloadCount() == 0 && build.Generations() == 0,
-              "A generation or its copy outlived shutdown");
+        {
+            INFO((problems.empty() ? "" : problems.front()));
+            REQUIRE(problems.empty());
+        }
+        {
+            INFO("The generation count was off: " + std::to_string(scripting.Generation()));
+            REQUIRE(scripting.Generation() == 1 + cycles);
+        }
+        {
+            INFO("Data was lost over repeated reloads");
+            REQUIRE(finalValue == 1234);
+        }
+        {
+            INFO("A generation or its copy outlived shutdown");
+            REQUIRE((scripting.PendingUnloadCount() == 0 && build.Generations() == 0));
+        }
     }
 
     void TheWatcherReloadsAStableBuildBetweenFrames()
@@ -2155,14 +3051,23 @@ namespace
 
         headless.Run(80);
 
-        Check(answerAtExit == 2 && generationAtExit == 2, "The watcher did not reload the new build");
+        {
+            INFO("The watcher did not reload the new build");
+            REQUIRE((answerAtExit == 2 && generationAtExit == 2));
+        }
         // Not before the build landed, and only once it had been stable for the debounce.
-        Check(generationByFrame.size() >= 6 && generationByFrame[3] == 1 && generationByFrame.back() == 2,
-              "The reload did not happen after the build, between frames");
-        Check(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1,
-              "One build caused more or fewer than one reload");
-        Check(CountMessages(headless, LogLevel::Error, "did not load") == 0,
-              "A build that was still changing was loaded");
+        {
+            INFO("The reload did not happen after the build, between frames");
+            REQUIRE((generationByFrame.size() >= 6 && generationByFrame[3] == 1 && generationByFrame.back() == 2));
+        }
+        {
+            INFO("One build caused more or fewer than one reload");
+            REQUIRE(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1);
+        }
+        {
+            INFO("A build that was still changing was loaded");
+            REQUIRE(CountMessages(headless, LogLevel::Error, "did not load") == 0);
+        }
     }
 
     void WithHotReloadOffTheWatcherNeverActsButReloadStillWorks()
@@ -2204,10 +3109,18 @@ namespace
 
         headless.Run(40);
 
-        Check(generationBeforeManualReload == 1, "The watcher reloaded a build although hot reload was off");
-        Check(reloaded && generationAtExit == 2 && answerAtExit == 2, "An explicit Reload did not load the new build");
-        Check(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1,
-              "Something other than the one explicit Reload reloaded");
+        {
+            INFO("The watcher reloaded a build although hot reload was off");
+            REQUIRE(generationBeforeManualReload == 1);
+        }
+        {
+            INFO("An explicit Reload did not load the new build");
+            REQUIRE((reloaded && generationAtExit == 2 && answerAtExit == 2));
+        }
+        {
+            INFO("Something other than the one explicit Reload reloaded");
+            REQUIRE(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1);
+        }
     }
 
     void ReloadingWithNothingLoadedFailsCleanly()
@@ -2217,18 +3130,25 @@ namespace
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{});
             const auto result = scripting.Reload();
-            Check(!result.Succeeded() && result.status == Iris::CallStatus::NotInitialized,
-                  "Reloading with no script assembly configured did not say so");
+            {
+                INFO("Reloading with no script assembly configured did not say so");
+                REQUIRE((!result.Succeeded() && result.status == Iris::CallStatus::NotInitialized));
+            }
             headless.Run(Frames);
-            Check(headless.FramesRun() == Frames, "The app did not keep running after a refused reload");
+            {
+                INFO("The app did not keep running after a refused reload");
+                REQUIRE(headless.FramesRun() == Frames);
+            }
         }
         // A configured assembly that does not exist.
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture.parent_path() / "missing.dll"));
             const auto result = scripting.Reload();
-            Check(!result.Succeeded() && !scripting.HasScripts(),
-                  "Reloading a script assembly that never loaded worked");
+            {
+                INFO("Reloading a script assembly that never loaded worked");
+                REQUIRE((!result.Succeeded() && !scripting.HasScripts()));
+            }
         }
     }
 
@@ -2242,19 +3162,33 @@ namespace
         ScriptingConfig config = ConfigFor(fixture);
         config.components.push_back(MakeComponent<BadHealth>("Test.BadHealth"));
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(!scripting.HasScripts(), "A mismatched component left scripts loaded");
-        Check(scripting.FindComponent(VelocityName) == nullptr && scripting.FindComponent(CounterName) == nullptr &&
-                  scripting.FindComponent(AlignedName) == nullptr && scripting.FindComponent(TaggedName) == nullptr,
-              "A failed load left script components registered");
-        Check(scripting.FindComponent("Fenrir.Transform") != nullptr &&
-                  scripting.FindComponent("Test.BadHealth") != nullptr,
-              "A failed load disturbed the components that were registered before it");
-        Check(PoolCount(entities) == poolsBefore, "A failed load left storage behind");
+        {
+            INFO("A mismatched component left scripts loaded");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("A failed load left script components registered");
+            REQUIRE(
+                (scripting.FindComponent(VelocityName) == nullptr && scripting.FindComponent(CounterName) == nullptr &&
+                 scripting.FindComponent(AlignedName) == nullptr && scripting.FindComponent(TaggedName) == nullptr));
+        }
+        {
+            INFO("A failed load disturbed the components that were registered before it");
+            REQUIRE((scripting.FindComponent("Fenrir.Transform") != nullptr &&
+                     scripting.FindComponent("Test.BadHealth") != nullptr));
+        }
+        {
+            INFO("A failed load left storage behind");
+            REQUIRE(PoolCount(entities) == poolsBefore);
+        }
 
         // And a clean load afterwards registers them, with nothing carried over from the failure.
         HeadlessApp again;
         auto fine = Scripting::Install(again.Get(), ConfigFor(fixture));
-        Check(fine.FindComponent(VelocityName) != nullptr, "A later clean load did not register the script components");
+        {
+            INFO("A later clean load did not register the script components");
+            REQUIRE(fine.FindComponent(VelocityName) != nullptr);
+        }
     }
 
     // Tells the bad-report fixture what to report as it loads (see BadReports.cs); restored to a sound report on exit.
@@ -2289,9 +3223,18 @@ namespace
         const BadReportMode mode("");
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(badReports));
-        Check(scripting.HasScripts(), "The sound bad-report fixture did not load");
-        Check(scripting.FindComponent(BadAlphaName) != nullptr, "The script component was not registered");
-        Check(headless.Get().FindEventQueue(BadBeepName) != nullptr, "The script event's queue was not made");
+        {
+            INFO("The sound bad-report fixture did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("The script component was not registered");
+            REQUIRE(scripting.FindComponent(BadAlphaName) != nullptr);
+        }
+        {
+            INFO("The script event's queue was not made");
+            REQUIRE(headless.Get().FindEventQueue(BadBeepName) != nullptr);
+        }
     }
 
     // A script assembly that reports something the engine cannot accept is refused whole: nothing it reported stays
@@ -2303,15 +3246,30 @@ namespace
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const std::size_t poolsBefore = PoolCount(entities);
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(badReports));
-        Check(!scripting.HasScripts(), std::string("A script assembly that reported ") + reportMode + " was kept");
-        Check(headless.Logger().Contains(LogLevel::Error, explanation),
-              std::string("The refusal of ") + reportMode + " was not explained");
-        Check(scripting.FindComponent(BadAlphaName) == nullptr,
-              std::string(reportMode) + " left a component registered");
-        Check(headless.Get().FindEventQueue(BadBeepName) == nullptr, std::string(reportMode) + " left an event queue");
-        Check(PoolCount(entities) == poolsBefore, std::string(reportMode) + " left storage behind");
-        Check(scripting.FindComponent("Fenrir.Transform") != nullptr,
-              std::string(reportMode) + " disturbed the engine's own components");
+        {
+            INFO(std::string("A script assembly that reported ") + reportMode + " was kept");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO(std::string("The refusal of ") + reportMode + " was not explained");
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, explanation));
+        }
+        {
+            INFO(std::string(reportMode) + " left a component registered");
+            REQUIRE(scripting.FindComponent(BadAlphaName) == nullptr);
+        }
+        {
+            INFO(std::string(reportMode) + " left an event queue");
+            REQUIRE(headless.Get().FindEventQueue(BadBeepName) == nullptr);
+        }
+        {
+            INFO(std::string(reportMode) + " left storage behind");
+            REQUIRE(PoolCount(entities) == poolsBefore);
+        }
+        {
+            INFO(std::string(reportMode) + " disturbed the engine's own components");
+            REQUIRE(scripting.FindComponent("Fenrir.Transform") != nullptr);
+        }
     }
 
     void ADuplicateScriptComponentIsRefused()
@@ -2338,17 +3296,28 @@ namespace
     {
         HeadlessApp headless;
         // The App already owns a queue under the name the script's Ping event would use.
-        Check(headless.Get().CreateEventQueue("Fenrir.ScriptFixture.Ping", 4, 4) != nullptr,
-              "The test could not make the queue");
+        {
+            INFO("The test could not make the queue");
+            REQUIRE(headless.Get().CreateEventQueue("Fenrir.ScriptFixture.Ping", 4, 4) != nullptr);
+        }
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(!scripting.HasScripts(), "A script event took the name of an existing queue");
-        Check(headless.Logger().Contains(LogLevel::Error, "already has an event of that name") &&
-                  headless.Logger().Contains(LogLevel::Error, "Fenrir.ScriptFixture.Ping"),
-              "The name clash was not explained");
-        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") != nullptr,
-              "The refusal removed a queue the script did not own");
-        Check(scripting.FindComponent(VelocityName) == nullptr,
-              "The clash left part of the script's components registered");
+        {
+            INFO("A script event took the name of an existing queue");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The name clash was not explained");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "already has an event of that name") &&
+                     headless.Logger().Contains(LogLevel::Error, "Fenrir.ScriptFixture.Ping")));
+        }
+        {
+            INFO("The refusal removed a queue the script did not own");
+            REQUIRE(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") != nullptr);
+        }
+        {
+            INFO("The clash left part of the script's components registered");
+            REQUIRE(scripting.FindComponent(VelocityName) == nullptr);
+        }
     }
 
     void AScriptComponentCannotTakeANativeComponentsName()
@@ -2358,12 +3327,19 @@ namespace
         // A native component already holds the name the script's Velocity would use.
         config.components.push_back(MakeComponent<Health>(VelocityName));
         auto scripting = Scripting::Install(headless.Get(), config);
-        Check(!scripting.HasScripts(), "A script component took a native component's name");
-        Check(headless.Logger().Contains(LogLevel::Error, "already has a component of that name") &&
-                  headless.Logger().Contains(LogLevel::Error, VelocityName),
-              "The name clash was not explained");
-        Check(scripting.FindComponent(CounterName) == nullptr,
-              "The clash left part of the script's components registered");
+        {
+            INFO("A script component took a native component's name");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The name clash was not explained");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "already has a component of that name") &&
+                     headless.Logger().Contains(LogLevel::Error, VelocityName)));
+        }
+        {
+            INFO("The clash left part of the script's components registered");
+            REQUIRE(scripting.FindComponent(CounterName) == nullptr);
+        }
     }
 
     void TheContractIsOneSharedCopyAcrossGenerations()
@@ -2372,22 +3348,34 @@ namespace
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-            Check(Call<bool>(scripting, "ContractIsShared"),
-                  "The contract was not the host's shared copy in the default load context");
+            {
+                INFO("The contract was not the host's shared copy in the default load context");
+                REQUIRE(Call<bool>(scripting, "ContractIsShared"));
+            }
             firstIdentity = Call<int>(scripting, "ContractIdentity");
             // And it is the host's deployed file (beside the executable), not a copy a script brought along.
             const auto reported = Call<std::optional<std::string>>(scripting, "ContractLocation");
-            Check(reported.has_value(), "The contract reported no location");
+            {
+                INFO("The contract reported no location");
+                REQUIRE(reported.has_value());
+            }
             const auto& location = *reported;
-            Check(std::filesystem::equivalent(location, executableDirectory / "Fenrir.Scripting.dll"),
-                  "The contract was not loaded from the host's directory: " + location);
+            {
+                INFO("The contract was not loaded from the host's directory: " + location);
+                REQUIRE(std::filesystem::equivalent(location, executableDirectory / "Fenrir.Scripting.dll"));
+            }
         }
         // A fresh install loads the script assembly again; the contract it sees is the very same assembly.
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(Call<bool>(scripting, "ContractIsShared"), "The contract was not shared on the second install");
-        Check(Call<int>(scripting, "ContractIdentity") == firstIdentity,
-              "The contract changed identity between generations");
+        {
+            INFO("The contract was not shared on the second install");
+            REQUIRE(Call<bool>(scripting, "ContractIsShared"));
+        }
+        {
+            INFO("The contract changed identity between generations");
+            REQUIRE(Call<int>(scripting, "ContractIdentity") == firstIdentity);
+        }
     }
 
     void TheBuildDeploysTheBridgeNextToTheExecutable()
@@ -2395,33 +3383,55 @@ namespace
         // iris_deploy puts these beside the executable, which is where Scripting looks by default.
         for (const char* name : {"Iris.Bridge.dll", "Iris.Bridge.runtimeconfig.json", "Iris.Bridge.deps.json"})
         {
-            Check(std::filesystem::exists(executableDirectory / name),
-                  std::string(name) + " is not next to the executable");
+            {
+                INFO(std::string(name) + " is not next to the executable");
+                REQUIRE(std::filesystem::exists(executableDirectory / name));
+            }
         }
-        Check(!std::filesystem::is_empty(executableDirectory), "The executable directory is empty");
+        {
+            INFO("The executable directory is empty");
+            REQUIRE(!std::filesystem::is_empty(executableDirectory));
+        }
     }
 
     void NoAssemblyConfiguredDoesNothing()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{});
-        Check(!scripting.IsRunning() && !scripting.HasScripts(), "An empty config started scripting");
+        {
+            INFO("An empty config started scripting");
+            REQUIRE((!scripting.IsRunning() && !scripting.HasScripts()));
+        }
         headless.Run(Frames);
-        Check(headless.FramesRun() == Frames, "The app did not run");
+        {
+            INFO("The app did not run");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
     }
 
     // What every public call answers when scripting is not live: nothing runs, nothing is recorded, nothing throws.
     void ExpectNotLive(Scripting& scripting, const char* what)
     {
         const std::string name = what;
-        Check(!scripting.IsRunning() && !scripting.HasScripts(), name + " claimed to be running");
+        {
+            INFO(name + " claimed to be running");
+            REQUIRE((!scripting.IsRunning() && !scripting.HasScripts()));
+        }
         const auto summary = scripting.ApplyChanges();
-        Check(summary.applied == 0 && summary.skipped == 0, name + " applied changes");
+        {
+            INFO(name + " applied changes");
+            REQUIRE((summary.applied == 0 && summary.skipped == 0));
+        }
         scripting.DiscardChanges();
         const auto reloaded = scripting.Reload();
-        Check(!reloaded.Succeeded() && reloaded.status == Iris::CallStatus::NotInitialized,
-              name + " did not refuse a reload");
-        Check(scripting.PendingUnloadCount() == 0, name + " reported generations waiting to unload");
+        {
+            INFO(name + " did not refuse a reload");
+            REQUIRE((!reloaded.Succeeded() && reloaded.status == Iris::CallStatus::NotInitialized));
+        }
+        {
+            INFO(name + " reported generations waiting to unload");
+            REQUIRE(scripting.PendingUnloadCount() == 0);
+        }
     }
 
     void ScriptingThatIsNotLiveAnswersEveryCallTheSameWay()
@@ -2430,33 +3440,49 @@ namespace
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{});
             ExpectNotLive(scripting, "A scripting with no assembly configured");
-            Check(scripting.Generation() == 0, "No assembly was reported as a generation");
+            {
+                INFO("No assembly was reported as a generation");
+                REQUIRE(scripting.Generation() == 0);
+            }
         }
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture.parent_path() / "missing.dll"));
             ExpectNotLive(scripting, "A scripting whose install failed");
-            Check(scripting.Generation() == 0, "A failed install was reported as a generation");
+            {
+                INFO("A failed install was reported as a generation");
+                REQUIRE(scripting.Generation() == 0);
+            }
         }
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-            Check(scripting.HasScripts(), "The fixture did not load");
+            {
+                INFO("The fixture did not load");
+                REQUIRE(scripting.HasScripts());
+            }
             const Scripting taken = std::move(scripting);
             ExpectNotLive(scripting, "A moved-from scripting"); // NOLINT(bugprone-use-after-move): that is the case
-            Check(scripting.Generation() == 0 && scripting.FindComponent("Fenrir.Transform") == nullptr,
-                  "A moved-from scripting reported state");
+            {
+                INFO("A moved-from scripting reported state");
+                REQUIRE((scripting.Generation() == 0 && scripting.FindComponent("Fenrir.Transform") == nullptr));
+            }
             // Registering needs a Scripting that started, so a moved-from one refuses both kinds the same way.
             const auto component = scripting.RegisterComponent<Health>("Test.Late");
             const auto event = scripting.RegisterEvent<TestNative::Alert>("Test.LateEvent");
-            Check(component.status == Iris::CallStatus::NotInitialized &&
-                      event.status == Iris::CallStatus::NotInitialized,
-                  "A moved-from scripting accepted a registration");
+            {
+                INFO("A moved-from scripting accepted a registration");
+                REQUIRE((component.status == Iris::CallStatus::NotInitialized &&
+                         event.status == Iris::CallStatus::NotInitialized));
+            }
         }
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-            Check(scripting.HasScripts(), "The fixture did not load");
+            {
+                INFO("The fixture did not load");
+                REQUIRE(scripting.HasScripts());
+            }
             scripting.Shutdown();
             ExpectNotLive(scripting, "A shut-down scripting");
         }
@@ -2466,13 +3492,22 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        Check(scripting.IsRunning() && scripting.HasScripts(), "The fixture did not load");
+        {
+            INFO("The fixture did not load");
+            REQUIRE((scripting.IsRunning() && scripting.HasScripts()));
+        }
         headless.Run(Frames);
         // The App's Exit phase has released the script assembly and the runtime host: nothing of Iris remains
         // before the owner is even destroyed.
-        Check(!scripting.IsRunning() && !scripting.HasScripts(), "Iris still held the runtime after the app finished");
+        {
+            INFO("Iris still held the runtime after the app finished");
+            REQUIRE((!scripting.IsRunning() && !scripting.HasScripts()));
+        }
         scripting.Shutdown(); // Idempotent.
-        Check(!scripting.IsRunning(), "Shutdown twice restarted something");
+        {
+            INFO("Shutdown twice restarted something");
+            REQUIRE(!scripting.IsRunning());
+        }
     }
 
     void DestroyingTheOwnerWithoutRunningReleasesEverything()
@@ -2481,13 +3516,22 @@ namespace
         {
             HeadlessApp headless;
             auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-            Check(scripting.HasScripts(), "The first install did not load");
+            {
+                INFO("The first install did not load");
+                REQUIRE(scripting.HasScripts());
+            }
         }
         HeadlessApp second;
         auto scripting = Scripting::Install(second.Get(), ConfigFor(fixture));
-        Check(scripting.HasScripts(), "A second install after a destroyed one did not load");
+        {
+            INFO("A second install after a destroyed one did not load");
+            REQUIRE(scripting.HasScripts());
+        }
         second.Run(2);
-        Check(second.FramesRun() == 2, "The second app did not run");
+        {
+            INFO("The second app did not run");
+            REQUIRE(second.FramesRun() == 2);
+        }
     }
 } // namespace
 
@@ -2844,28 +3888,4 @@ TEST_CASE("everything Iris owns is released when the app finishes", "[scripting]
 TEST_CASE("destroying the owner releases everything, and a later install works", "[scripting]")
 {
     DestroyingTheOwnerWithoutRunningReleasesEverything();
-}
-
-// The fixture assemblies are built by CMake and named on the command line, ahead of Catch2's own arguments:
-//   FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll Fenrir.BadReportFixture.dll [Catch2
-//   options]
-int main(int argc, char* argv[])
-{
-    constexpr int Fixtures = 3;
-    if (argc < Fixtures + 1)
-    {
-        std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll "
-                     "Fenrir.BadReportFixture.dll [Catch2 options]\n";
-        return EXIT_FAILURE;
-    }
-    const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
-    fixture = std::filesystem::absolute(arguments[1]);
-    fixtureV2 = std::filesystem::absolute(arguments[2]);
-    badReports = std::filesystem::absolute(arguments[3]);
-    executableDirectory = std::filesystem::absolute(arguments[0]).parent_path();
-
-    // Catch2 gets the program name and whatever follows the fixtures.
-    std::vector<char*> forwarded{argv[0]};
-    forwarded.insert(forwarded.end(), arguments.begin() + Fixtures + 1, arguments.end());
-    return Catch::Session().run(static_cast<int>(forwarded.size()), forwarded.data());
 }

@@ -37,7 +37,9 @@ if(TARGET IrisBridge)
 endif()
 
 # The checks use Catch2: the repository's libs/catch2 submodule when this project is built inside it, otherwise an
-# installed Catch2 v3 (find_package(Catch2 3)). Catch2 is linked without its own main: the checks take their paths first.
+# installed Catch2 v3 (find_package(Catch2 3)). The checks find the files they run against in the environment, which CTest
+# fills in; to run one by hand set the IRIS_TEST_* variables of the test (see `ctest -V -R <name>`) and give the executable
+# Catch2's options. Their test cases are hidden, so a run names a tag: [real], [fixture], [components], [unbound], ...
 set(iris_catch2_module "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 if(EXISTS "${iris_catch2_module}")
     include("${iris_catch2_module}")
@@ -47,8 +49,8 @@ elseif(NOT TARGET Catch2::Catch2)
 endif()
 
 function(iris_add_native_checks target source)
-    add_executable(${target} ${source} TestHarness.hpp)
-    target_link_libraries(${target} PRIVATE Iris::Iris Catch2::Catch2)
+    add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE Iris::Iris Catch2::Catch2WithMain)
     add_dependencies(${target} IrisManagedBuild)
     # The checks pass bridge paths explicitly; this deploys nethost (and a bridge they do not use).
     iris_deploy(${target})
@@ -73,21 +75,20 @@ foreach(iris_checks_mode IN ITEMS real fixture legacy oversized missing notbridg
     else()
         set(iris_checks_variant "${iris_checks_fixture}")
     endif()
-    add_test(NAME "Bridge-${iris_checks_mode}"
-        COMMAND IrisBridgeChecks "${iris_checks_mode}" "${iris_checks_runtimeconfig}"
-            "${iris_checks_variant}" "${iris_checks_fixture}")
-    set_tests_properties("Bridge-${iris_checks_mode}" PROPERTIES
-        ENVIRONMENT "IRIS_TEST_BRIDGE_MODE=${iris_checks_mode}")
+    add_test(NAME "Bridge-${iris_checks_mode}" COMMAND IrisBridgeChecks "[${iris_checks_mode}]" --order decl)
+    set_tests_properties("Bridge-${iris_checks_mode}" PROPERTIES ENVIRONMENT
+        "IRIS_TEST_BRIDGE_MODE=${iris_checks_mode};IRIS_TEST_RUNTIMECONFIG=${iris_checks_runtimeconfig};IRIS_TEST_BRIDGE=${iris_checks_variant};IRIS_TEST_SECOND_BRIDGE=${iris_checks_fixture}")
 endforeach()
 
 iris_add_native_checks(IrisComponentChecks components.cpp)
-add_test(NAME Components
-    COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}")
-set_tests_properties(Components PROPERTIES TIMEOUT 120 ENVIRONMENT "IRIS_TEST_COMPONENT_B=${iris_checks_component_b}")
+set(iris_checks_component_environment
+    "IRIS_TEST_RUNTIMECONFIG=${iris_checks_runtimeconfig};IRIS_TEST_BRIDGE=${iris_checks_bridge};IRIS_TEST_COMPONENT=${iris_checks_component};IRIS_TEST_COMPONENT_B=${iris_checks_component_b}")
+add_test(NAME Components COMMAND IrisComponentChecks "[components]" --order decl)
+set_tests_properties(Components PROPERTIES TIMEOUT 120 ENVIRONMENT "${iris_checks_component_environment}")
 
 # The same checks' unbound mode: nothing is registered, so the component's internal calls are missing.
-add_test(NAME Components-unbound
-    COMMAND IrisComponentChecks "${iris_checks_runtimeconfig}" "${iris_checks_bridge}" "${iris_checks_component}" --unbound)
+add_test(NAME Components-unbound COMMAND IrisComponentChecks "[unbound]" --order decl)
+set_tests_properties(Components-unbound PROPERTIES ENVIRONMENT "${iris_checks_component_environment}")
 
 # Install this build and use it from the standalone consumer project, through find_package(Iris).
 if(IRIS_INSTALL)
