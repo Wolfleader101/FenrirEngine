@@ -7,7 +7,14 @@ namespace Fenrir.ScriptFixture;
 // at what the engine saw.
 public static class Fixture
 {
-    public static int Answer() => 42;
+    public static int Answer()
+    {
+#if VARIANT2
+        return 43;
+#else
+        return 42;
+#endif
+    }
 
     // Log: all three levels, then text that must not be taken for a format string and is not ASCII.
     public static void LogAll()

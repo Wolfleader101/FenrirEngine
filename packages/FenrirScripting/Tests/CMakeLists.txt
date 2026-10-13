@@ -11,17 +11,25 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
 file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# Built twice, in one command so the two builds never run side by side: the fixture, and "version 2" of it (the same sources
+# with VARIANT2 defined), which the reload tests copy over the first while an app is running.
+set(fenrir_fixture_v2_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture-v2")
 add_custom_command(
-    OUTPUT "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll"
+    OUTPUT "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll" "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
         --configuration Release --output "${fenrir_fixture_dir}" -nologo -v:q
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
+        --configuration Release --output "${fenrir_fixture_v2_dir}" -nologo -v:q
+        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" -p:FixtureVariant=2
+        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/fixture-v2-obj/"
     DEPENDS ${fenrir_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
         FenrirScriptingContract
-    COMMENT "Building the scripting test fixture assembly"
+    COMMENT "Building the scripting test fixture assembly (and its version 2)"
     VERBATIM
 )
-add_custom_target(FenrirScriptFixture DEPENDS "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll")
+add_custom_target(FenrirScriptFixture DEPENDS "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll"
+    "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll")
 add_dependencies(FenrirScriptFixture FenrirScriptingContract)
 add_dependencies(FenrirScriptingTests FenrirScriptFixture)
 
@@ -31,7 +39,7 @@ add_test(NAME ScriptingDoesNotUseEnTT
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.." -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/NoEnTT.cmake")
 
 add_test(NAME FenrirScripting
-    COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll")
+    COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll" "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll")
 set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120)
 
 

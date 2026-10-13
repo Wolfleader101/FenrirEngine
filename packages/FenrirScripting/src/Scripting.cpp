@@ -6,12 +6,19 @@
 
 #include <Iris/Iris.hpp>
 
+#include <algorithm>
+#include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdint>
+#include <fstream>
+#include <iterator>
+#include <map>
 #include <exception>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <regex>
 #include <string>
 #include <system_error>
 #include <thread>
@@ -27,8 +34,11 @@
 #define NOMINMAX
 #endif
 #include <Windows.h>
-#elif defined(__APPLE__)
+#else
+#if defined(__APPLE__)
 #include <mach-o/dyld.h>
+#endif
+#include <unistd.h>
 #endif
 
 namespace Fenrir
@@ -70,11 +80,93 @@ namespace Fenrir
         }
     } // namespace
 
+    namespace
+    {
+        // A directory holding one generation's private copy of the script assembly. It is deleted when the last owner lets go:
+        // the generation loaded from it, a released generation that has not unloaded yet (Windows will not delete a loaded
+        // assembly), or the "previous" slot that keeps it in case the next build fails to load.
+        struct CopyDirectory
+        {
+            explicit CopyDirectory(std::filesystem::path path) : directory(std::move(path))
+            {
+            }
+            ~CopyDirectory()
+            {
+                std::error_code ignored;
+                std::filesystem::remove_all(directory, ignored);
+            }
+            CopyDirectory(const CopyDirectory&) = delete;
+            CopyDirectory& operator=(const CopyDirectory&) = delete;
+
+            std::filesystem::path directory;
+        };
+
+        // What a script component or event looked like when its data was last in use, so a reload can tell whether the data
+        // still means the same thing: the size and alignment, and each field's name, type, kind and offset.
+        struct OwnedLayout
+        {
+            std::string fingerprint;
+            std::size_t size = 0;
+            std::size_t alignment = 0;
+        };
+        using OwnedLayouts = std::map<std::string, OwnedLayout>;
+
+        struct FileStamp
+        {
+            std::filesystem::file_time_type modified{};
+            std::uintmax_t size = 0;
+            bool operator==(const FileStamp&) const = default;
+        };
+
+        std::optional<FileStamp> StampOf(const std::filesystem::path& path)
+        {
+            std::error_code error;
+            const auto modified = std::filesystem::last_write_time(path, error);
+            if (error)
+            {
+                return std::nullopt;
+            }
+            const auto size = std::filesystem::file_size(path, error);
+            if (error)
+            {
+                return std::nullopt;
+            }
+            return FileStamp{modified, size};
+        }
+
+        // Whether the file can be opened for reading right now: a build still writing it, or a virus scanner holding it, says no.
+        bool CanBeRead(const std::filesystem::path& path)
+        {
+            std::ifstream stream(path, std::ios::binary);
+            return stream.good();
+        }
+
+        int ProcessId()
+        {
+#if defined(_WIN32)
+            return static_cast<int>(GetCurrentProcessId());
+#else
+            return static_cast<int>(getpid());
+#endif
+        }
+    } // namespace
+
     struct Scripting::State
     {
         // Iris's messages arrive through a sink the host keeps until it is cleared, so the logger is borrowed
         // only until Shutdown clears the sink. The mutex guards the logger against a sink call racing Shutdown.
         std::mutex mutex;
+
+        // A State that goes away without Shutdown (Install threw halfway, say) must not leave the process-wide context
+        // pointing at it.
+        ~State()
+        {
+            Shutdown();
+        }
+        State() = default;
+        State(const State&) = delete;
+        State& operator=(const State&) = delete;
+
         ILogger* logger = nullptr;
         Detail::ComponentRegistry components;
         Detail::ChangeBuffer changes;
@@ -90,13 +182,70 @@ namespace Fenrir
         std::optional<Iris::InstanceMethod<void()>> runnerDestroy;
         std::thread::id mainThread;
         std::size_t phaseCalls = 0;
+        int phaseMask = 0; // Bit n is set when the loaded generation has a system in phase n.
 
-        // The queues the loaded script assembly made for the events it defines, removed again when it is released.
-        std::vector<std::string> createdEventQueues;
+        // Hot reload. The assembly named by the config is only ever copied; the copy is what loads.
+        std::filesystem::path scriptAssembly;
+        std::filesystem::path scratchRoot;
+        bool hotReload = true;
+        std::chrono::milliseconds reloadInterval{250};
+        std::chrono::milliseconds reloadDebounce{400};
+        std::chrono::milliseconds unloadTimeout{2000};
+        int generation = 0;
+        int copyCounter = 0;
+        std::shared_ptr<CopyDirectory> activeCopy;
+        std::shared_ptr<CopyDirectory> previousCopy; // Kept until the next generation loads, to restore if it does not.
 
-        // Makes the runner if the script assembly has systems, schedules one sequential native system for each phase that has
-        // any, and runs OnCreate. Nothing to do (and success) when the script defines no systems.
-        Iris::CallResult<void> StartSystems(App& app, const std::shared_ptr<State>& self)
+        // A released generation waits here until the runtime confirms it was collected.
+        struct Retired
+        {
+            Iris::Component component;
+            std::shared_ptr<CopyDirectory> copy;
+            int generation = 0;
+            bool warned = false;
+        };
+        std::vector<Retired> retired;
+
+        // The script components and events whose data is alive in the ECS and the App, by name.
+        OwnedLayouts ownedComponents;
+        OwnedLayouts ownedEvents;
+
+        std::optional<FileStamp> loadedStamp;
+        struct PendingChange
+        {
+            FileStamp stamp;
+            std::chrono::steady_clock::time_point since;
+        };
+        std::optional<PendingChange> pendingChange;
+        std::chrono::steady_clock::time_point lastPoll{};
+        bool reloading = false;
+
+        // Loads the script assembly as a new generation: a private copy of `assembly` (or the directory `existing` when
+        // restoring a previous copy), then the all-or-nothing checks, then the systems. On failure nothing of the new
+        // generation is left running.
+        Iris::CallResult<void> LoadGeneration(const std::filesystem::path& assembly, std::shared_ptr<CopyDirectory> existing);
+
+        // Says goodbye to the systems and releases the loaded generation. Its data (component storage, event queues) stays.
+        void UnloadGeneration();
+
+        // Waits for released generations to unload, deleting their copies as they do.
+        void SweepRetired(std::chrono::milliseconds timeout);
+
+        // Removes the data of every script component and event: they exist only while a script assembly is loaded.
+        void DropScriptData();
+
+        Iris::CallResult<void> Reload();
+        void PollForReload();
+
+        void Retire(Iris::Component&& released, std::shared_ptr<CopyDirectory> copy)
+        {
+            (void)released.Release();
+            retired.push_back({std::move(released), std::move(copy), generation, false});
+        }
+
+        // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success) when
+        // the script defines no systems. The phases themselves are scheduled once, at Install.
+        Iris::CallResult<void> StartSystems()
         {
             using Result = Iris::CallResult<void>;
             const auto type = component->FindType("Fenrir.Scripting.Generated.SystemHost");
@@ -138,15 +287,7 @@ namespace Fenrir
                 return Result{phases.status, "The script's systems could not be listed: " + phases.diagnostic,
                               phases.diagnosticTruncated};
             }
-            constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick, SchedulePriority::Update,
-                                                       SchedulePriority::PostUpdate};
-            for (int phase = 0; phase < 4; ++phase)
-            {
-                if ((*phases.value & (1 << phase)) != 0)
-                {
-                    app.AddSequentialSystems(priorities[phase], {[self, phase](App&) { self->RunPhase(phase); }});
-                }
-            }
+            phaseMask = *phases.value;
             const auto created = create.value->Invoke(*runner);
             if (!created.Succeeded())
             {
@@ -160,7 +301,7 @@ namespace Fenrir
         // the internal calls they make all assume it.
         void RunPhase(int phase)
         {
-            if (!runner.has_value() || !runnerRun.has_value())
+            if (!runner.has_value() || !runnerRun.has_value() || (phaseMask & (1 << phase)) == 0)
             {
                 return;
             }
@@ -212,28 +353,34 @@ namespace Fenrir
 
         void Shutdown() noexcept
         {
-            // The systems say goodbye while the runtime is still up, then let go of their object; then the script assembly, then
-            // the host that loaded it.
-            if (runner.has_value() && runnerDestroy.has_value() && contextActive)
+            try
             {
-                const auto destroyed = runnerDestroy->Invoke(*runner);
-                if (!destroyed.Succeeded() && logger != nullptr)
+                // The systems say goodbye while the runtime is still up; the generation is released, its data removed and the
+                // runtime asked to unload it; then the host that loaded it goes.
+                if (component.has_value() || runner.has_value())
                 {
-                    logger->Error("Scripting: the script's systems could not shut down cleanly: {}", destroyed.diagnostic);
+                    UnloadGeneration();
+                }
+                if (contextActive && context.app != nullptr)
+                {
+                    DropScriptData();
+                }
+                if (host != nullptr && !retired.empty())
+                {
+                    SweepRetired(unloadTimeout);
                 }
             }
-            runnerRun.reset();
-            runnerDestroy.reset();
-            runner.reset();
-            if (contextActive && context.app != nullptr)
+            catch (...)
             {
-                for (const auto& name : createdEventQueues)
-                {
-                    (void)context.app->RemoveEventQueue(name);
-                }
             }
-            createdEventQueues.clear();
-            component.reset();
+            retired.clear();
+            previousCopy.reset();
+            activeCopy.reset();
+            if (!scratchRoot.empty())
+            {
+                std::error_code ignored;
+                std::filesystem::remove(scratchRoot, ignored); // Only succeeds when it is empty: leaves other work alone.
+            }
             if (host != nullptr)
             {
                 (void)host->SetLogSink({});
@@ -417,7 +564,7 @@ namespace Fenrir
 
         // Whether the events a script reported can live next to the engine's: usable layouts, and names nobody has.
         Iris::CallResult<void> CheckDiscoveredEvents(const std::vector<Detail::ScriptEventDescription>& found,
-                                                     const Detail::ComponentRegistry& registry, App& app)
+                                                     const Detail::ComponentRegistry& registry, App& app, const OwnedLayouts& owned)
         {
             constexpr std::size_t maxAlignment = 16;
             std::unordered_set<std::string> names;
@@ -435,7 +582,8 @@ namespace Fenrir
                     return Failed("The script event '" + description.name + "' reported a size of " + std::to_string(description.size) +
                                   " and an alignment of " + std::to_string(description.alignment) + ", which the engine cannot store.");
                 }
-                if (registry.FindEvent(description.name) >= 0 || app.FindEventQueue(description.name) != nullptr)
+                if (registry.FindEvent(description.name) >= 0 ||
+                    (app.FindEventQueue(description.name) != nullptr && !owned.contains(description.name)))
                 {
                     return Failed("The script defines an event '" + description.name + "', but the engine already has an event of that name.");
                 }
@@ -461,14 +609,40 @@ namespace Fenrir
             return Succeeded();
         }
 
+        // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same fingerprint lay
+        // the same bytes out the same way. A type the assembly does not expose (internal) can only be told apart by its size.
+        std::string Fingerprint(const Iris::Component& component, const std::string& name, std::size_t size, std::size_t alignment)
+        {
+            std::string text = std::to_string(size) + "/" + std::to_string(alignment);
+            const auto type = component.FindType(name);
+            if (!type.Succeeded())
+            {
+                return text + ";opaque";
+            }
+            const auto fields = type.value->GetFields();
+            if (!fields.Succeeded())
+            {
+                return text + ";opaque";
+            }
+            for (const auto& field : *fields.value)
+            {
+                if (!field.isStatic)
+                {
+                    text += ";" + field.name + ":" + field.type.fullName + ":" + std::to_string(static_cast<int>(field.kind)) + "@" +
+                            (field.offset.has_value() ? std::to_string(*field.offset) : std::string("?"));
+                }
+            }
+            return text;
+        }
+
         // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives. Nothing
         // is registered unless all of it passes, so a failure leaves the registry exactly as it was:
         //   1. discover the components the script defines, and check them;
         //   2. check every native component's mapping against its C# struct;
         //   3. only then register the script's components.
-        // (Systems join between 1 and 2 in a later ticket.)
         Iris::CallResult<void> CompleteLoad(Detail::EngineContext& context, Detail::ComponentRegistry& registry,
-                                            const Iris::Component& component, std::vector<std::string>& createdEventQueues)
+                                            const Iris::Component& component, OwnedLayouts& ownedComponents,
+                                            OwnedLayouts& ownedEvents)
         {
             std::vector<Description> found;
             if (auto discovered = DiscoverScriptComponents(component, context, found); !discovered.Succeeded())
@@ -484,7 +658,7 @@ namespace Fenrir
             {
                 return discovered;
             }
-            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app); !checked.Succeeded())
+            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app, ownedEvents); !checked.Succeeded())
             {
                 return checked;
             }
@@ -496,6 +670,52 @@ namespace Fenrir
             {
                 return validated;
             }
+            // Everything checks out, so from here the new generation is kept. What the previous generation left in the ECS and the
+            // App is compared with what this one defines: data whose layout is unchanged stays, anything else goes, with a
+            // warning, so no system ever reads old bytes as a new layout.
+            App& app = *context.app;
+            OwnedLayouts nextComponents;
+            for (const auto& description : found)
+            {
+                nextComponents[description.name] = {Fingerprint(component, description.name, description.size, description.alignment),
+                                                    description.size, description.alignment};
+            }
+            OwnedLayouts nextEvents;
+            for (const auto& description : foundEvents)
+            {
+                nextEvents[description.name] = {Fingerprint(component, description.name, description.size, description.alignment),
+                                                description.size, description.alignment};
+            }
+            for (auto at = ownedComponents.begin(); at != ownedComponents.end();)
+            {
+                const auto next = nextComponents.find(at->first);
+                if (next != nextComponents.end() && next->second.fingerprint == at->second.fingerprint)
+                {
+                    ++at;
+                    continue;
+                }
+                const DynamicComponentType type(at->first, at->second.size, at->second.alignment);
+                std::size_t removed = 0;
+                app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
+                app.Logger()->Warn("Scripting: the script component '{}' {}; {} component(s) were removed so nothing reads the old "
+                                   "bytes as the new layout.",
+                                   at->first, next == nextComponents.end() ? "no longer exists" : "changed its layout", removed);
+                at = ownedComponents.erase(at);
+            }
+            for (auto at = ownedEvents.begin(); at != ownedEvents.end();)
+            {
+                const auto next = nextEvents.find(at->first);
+                if (next != nextEvents.end() && next->second.fingerprint == at->second.fingerprint)
+                {
+                    ++at;
+                    continue;
+                }
+                (void)app.RemoveEventQueue(at->first);
+                app.Logger()->Warn("Scripting: the script event '{}' {}; its queue and the events in it were dropped.", at->first,
+                                   next == nextEvents.end() ? "no longer exists" : "changed its layout");
+                at = ownedEvents.erase(at);
+            }
+
             std::vector<ComponentRegistration> registrations;
             registrations.reserve(found.size());
             for (const auto& description : found)
@@ -525,15 +745,287 @@ namespace Fenrir
             }
             for (const auto& description : foundEvents)
             {
-                if (context.app->CreateEventQueue(description.name, description.size, description.alignment) == nullptr)
+                // A queue whose layout is unchanged is kept, with the events in it.
+                if (!ownedEvents.contains(description.name))
                 {
-                    return Failed("The queue for the script event '" + description.name + "' could not be made.");
+                    if (app.CreateEventQueue(description.name, description.size, description.alignment) == nullptr)
+                    {
+                        return Failed("The queue for the script event '" + description.name + "' could not be made.");
+                    }
+                    // Recorded as soon as it exists, so a failure further on never leaves a queue nobody owns.
+                    ownedEvents[description.name] = nextEvents[description.name];
                 }
-                createdEventQueues.push_back(description.name);
+            }
+            for (auto& [name, layout] : nextComponents)
+            {
+                ownedComponents[name] = std::move(layout);
+            }
+            for (auto& [name, layout] : nextEvents)
+            {
+                ownedEvents[name] = std::move(layout);
             }
             return Succeeded();
         }
     } // namespace
+
+    namespace
+    {
+        // Copies the script assembly and what it needs into a new directory under `root`: the files named like it (its pdb and
+        // deps.json), and every dll its deps.json lists that sits beside it. A build can then overwrite the original while the
+        // copy is loaded. Returns null and says why in `error` if it could not.
+        std::shared_ptr<CopyDirectory> MakeCopy(const std::filesystem::path& assembly, const std::filesystem::path& root, int number,
+                                                std::string& error)
+        {
+            std::error_code code;
+            const auto directory = root / ("gen-" + std::to_string(number));
+            std::filesystem::remove_all(directory, code);
+            std::filesystem::create_directories(directory, code);
+            if (code)
+            {
+                error = "The directory '" + directory.string() + "' could not be made: " + code.message();
+                return nullptr;
+            }
+            auto copy = std::make_shared<CopyDirectory>(directory);
+            const auto source = assembly.parent_path();
+            // Native strings throughout: a file beside the assembly may have a name the narrow code page cannot hold.
+            const std::filesystem::path::string_type prefix = assembly.stem().native() + std::filesystem::path::string_type(1, '.');
+
+            std::vector<std::filesystem::path> files{assembly};
+            for (const auto& entry : std::filesystem::directory_iterator(source, code))
+            {
+                const auto& name = entry.path().filename().native();
+                if (entry.is_regular_file(code) && entry.path() != assembly && name.rfind(prefix, 0) == 0)
+                {
+                    files.push_back(entry.path());
+                }
+            }
+            auto dependencies = source / assembly.stem();
+            dependencies += ".deps.json";
+            if (std::ifstream stream(dependencies); stream.good())
+            {
+                const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+                static const std::regex dll(R"(([A-Za-z0-9_.+\-]+\.dll)\")");
+                for (std::sregex_iterator found(text.begin(), text.end(), dll), end; found != end; ++found)
+                {
+                    const auto path = source / (*found)[1].str();
+                    if (std::filesystem::is_regular_file(path, code) && std::find(files.begin(), files.end(), path) == files.end())
+                    {
+                        files.push_back(path);
+                    }
+                }
+            }
+            for (const auto& file : files)
+            {
+                std::filesystem::copy_file(file, directory / file.filename(), std::filesystem::copy_options::overwrite_existing, code);
+                if (code)
+                {
+                    error = "The file '" + file.string() + "' could not be copied: " + code.message();
+                    return nullptr;
+                }
+            }
+            return copy;
+        }
+    } // namespace
+
+    Iris::CallResult<void> Scripting::State::LoadGeneration(const std::filesystem::path& assembly,
+                                                            std::shared_ptr<CopyDirectory> existing)
+    {
+        using Result = Iris::CallResult<void>;
+        std::shared_ptr<CopyDirectory> copy = std::move(existing);
+        if (copy == nullptr)
+        {
+            std::string error;
+            copy = MakeCopy(assembly, scratchRoot, ++copyCounter, error);
+            if (copy == nullptr)
+            {
+                return Result{Iris::CallStatus::InvalidArgument,
+                              "The script assembly '" + assembly.string() + "' could not be copied for loading. " + error, false};
+            }
+        }
+        auto loaded = host->LoadComponent(copy->directory / assembly.filename());
+        if (!loaded.Succeeded())
+        {
+            return Result{loaded.status,
+                          "The script assembly '" + assembly.string() + "' could not be loaded: " + loaded.diagnostic,
+                          loaded.diagnosticTruncated};
+        }
+        // All or nothing: the assembly stays loaded only if its components and events are discovered and every native
+        // component and event matches its C# struct.
+        if (auto validated = CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents); !validated.Succeeded())
+        {
+            Retire(std::move(*loaded.value), copy);
+            validated.diagnostic = "The script assembly '" + assembly.string() + "' was released. " + validated.diagnostic;
+            return validated;
+        }
+        component.emplace(std::move(*loaded.value));
+        activeCopy = copy;
+        ++generation;
+        if (auto started = StartSystems(); !started.Succeeded())
+        {
+            started.diagnostic = "The script assembly '" + assembly.string() + "' was released. " + started.diagnostic;
+            UnloadGeneration();
+            return started;
+        }
+        return Result{Iris::CallStatus::Success, {}, false};
+    }
+
+    void Scripting::State::UnloadGeneration()
+    {
+        if (runner.has_value() && runnerDestroy.has_value() && contextActive)
+        {
+            const auto destroyed = runnerDestroy->Invoke(*runner);
+            if (!destroyed.Succeeded() && logger != nullptr)
+            {
+                logger->Error("Scripting: the script's systems could not shut down cleanly: {}", destroyed.diagnostic);
+            }
+        }
+        runnerRun.reset();
+        runnerDestroy.reset();
+        runner.reset();
+        phaseMask = 0;
+        components.RemoveScriptDefined();
+        if (component.has_value())
+        {
+            Iris::Component released = std::move(*component);
+            component.reset();
+            Retire(std::move(released), activeCopy);
+            previousCopy = activeCopy;
+            activeCopy.reset();
+        }
+    }
+
+    void Scripting::State::SweepRetired(std::chrono::milliseconds timeout)
+    {
+        for (auto at = retired.begin(); at != retired.end();)
+        {
+            const auto unloaded = at->component.WaitForUnload(timeout);
+            if (unloaded.Succeeded() && *unloaded.value == Iris::ComponentUnloadState::Collected)
+            {
+                at = retired.erase(at);
+                continue;
+            }
+            if (!at->warned && logger != nullptr)
+            {
+                logger->Warn("Scripting: generation {} of the script assembly has not unloaded; something still holds a type from "
+                             "it (a thread it started, or a static that keeps one). Its copy stays on disk until it does.",
+                             at->generation);
+            }
+            at->warned = true;
+            ++at;
+        }
+    }
+
+    void Scripting::State::DropScriptData()
+    {
+        App& app = *context.app;
+        for (const auto& [name, layout] : ownedComponents)
+        {
+            const DynamicComponentType type(name, layout.size, layout.alignment);
+            app.ForEachScene([&type](Scene& scene) { (void)scene.GetEntityList().ClearDynamic(type); });
+        }
+        for (const auto& [name, layout] : ownedEvents)
+        {
+            (void)app.RemoveEventQueue(name);
+        }
+        ownedComponents.clear();
+        ownedEvents.clear();
+    }
+
+    Iris::CallResult<void> Scripting::State::Reload()
+    {
+        using Result = Iris::CallResult<void>;
+        if (reloading || host == nullptr || !contextActive || context.app == nullptr || scriptAssembly.empty())
+        {
+            return Result{Iris::CallStatus::NotInitialized, "Scripting is not running a script assembly that can be reloaded.", false};
+        }
+        reloading = true;
+        struct Done
+        {
+            bool& flag;
+            ~Done()
+            {
+                flag = false;
+            }
+        } done{reloading};
+
+        App& app = *context.app;
+        logger->Info("Scripting: reloading '{}'.", scriptAssembly.filename().string());
+        // Anything a script left recorded is played back first, so no entity is left half made.
+        (void)changes.Apply(app, components);
+        loadedStamp = StampOf(scriptAssembly);
+        pendingChange.reset();
+
+        UnloadGeneration();
+        // What to go back to if the new build does not load. Taken now: a generation that loads and then fails to start
+        // unloads itself, and would otherwise replace it with its own copy.
+        const std::shared_ptr<CopyDirectory> restoreCopy = previousCopy;
+        SweepRetired(unloadTimeout);
+        const auto fresh = LoadGeneration(scriptAssembly, nullptr);
+        if (fresh.Succeeded())
+        {
+            previousCopy.reset();
+            logger->Info("Scripting: reloaded '{}' (generation {}).", scriptAssembly.filename().string(), generation);
+            return fresh;
+        }
+        logger->Error("Scripting: the new build of '{}' did not load. {}", scriptAssembly.filename().string(), fresh.diagnostic);
+        if (restoreCopy == nullptr)
+        {
+            return fresh;
+        }
+        auto restored = LoadGeneration(scriptAssembly, restoreCopy);
+        if (restored.Succeeded())
+        {
+            logger->Warn("Scripting: the previous build of '{}' is running again.", scriptAssembly.filename().string());
+        }
+        else
+        {
+            logger->Error("Scripting: the previous build could not be restored either; no scripts are running. {}",
+                          restored.diagnostic);
+        }
+        return fresh;
+    }
+
+    void Scripting::State::PollForReload()
+    {
+        if (!hotReload || reloading || host == nullptr || !contextActive)
+        {
+            return;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastPoll < reloadInterval)
+        {
+            return;
+        }
+        lastPoll = now;
+        const auto stamp = StampOf(scriptAssembly);
+        if (!stamp.has_value() || stamp == loadedStamp)
+        {
+            pendingChange.reset();
+            return;
+        }
+        // A build is still going if the file changes between looks, so only a stable one is loaded.
+        if (!pendingChange.has_value() || !(pendingChange->stamp == *stamp))
+        {
+            pendingChange = PendingChange{*stamp, now};
+            return;
+        }
+        if (now - pendingChange->since < reloadDebounce || !CanBeRead(scriptAssembly))
+        {
+            return;
+        }
+        try
+        {
+            (void)Reload();
+        }
+        catch (const std::exception& exception)
+        {
+            reloading = false;
+            if (logger != nullptr)
+            {
+                logger->Error("Scripting: reloading failed: {}", exception.what());
+            }
+        }
+    }
 
     const ComponentRegistration* Scripting::FindComponent(std::string_view name) const
     {
@@ -607,6 +1099,32 @@ namespace Fenrir
             m_state->Shutdown();
         }
         return validated;
+    }
+
+    Iris::CallResult<void> Scripting::Reload()
+    {
+        if (m_state == nullptr)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::NotInitialized, "Scripting did not start.", false};
+        }
+        try
+        {
+            return m_state->Reload();
+        }
+        catch (const std::exception& exception)
+        {
+            return Iris::CallResult<void>{Iris::CallStatus::UnexpectedStatus, std::string("The reload failed: ") + exception.what(), false};
+        }
+    }
+
+    int Scripting::Generation() const noexcept
+    {
+        return m_state == nullptr ? 0 : m_state->generation;
+    }
+
+    std::size_t Scripting::PendingUnloadCount() const noexcept
+    {
+        return m_state == nullptr ? 0 : m_state->retired.size();
     }
 
     std::size_t Scripting::PhaseCallCount() const noexcept
@@ -793,30 +1311,46 @@ namespace Fenrir
             logger.Warn("Scripting: Iris's log messages will not be shown. {}", sink.diagnostic);
         }
 
-        auto loaded = state->host->LoadComponent(assembly);
-        if (!loaded.Succeeded())
+        state->scriptAssembly = assembly;
+        state->hotReload = config.hotReload;
+        state->reloadInterval = config.reloadInterval;
+        state->reloadDebounce = config.reloadDebounce;
+        state->unloadTimeout = config.unloadTimeout;
+        // Each Install has a directory of its own, so one that is still waiting for a generation to unload never gets in the
+        // way of the next.
+        static std::atomic<int> installs{0};
+        state->scratchRoot = (config.reloadDirectory.empty() ? std::filesystem::temp_directory_path(error) /
+                                                                   ("FenrirScripting-" + std::to_string(ProcessId()))
+                                                             : std::filesystem::absolute(config.reloadDirectory, error)) /
+                             ("install-" + std::to_string(++installs));
+
+        // The watcher looks before anything else runs in a frame, so a reload happens between frames. The phases are
+        // scheduled once; each runs the current generation's systems, if it has any in that phase.
+        if (state->hotReload)
         {
-            logger.Error("Scripting: the script assembly '{}' could not be loaded; running without scripts. {}",
-                         assembly.string(), loaded.diagnostic);
+            app.AddSequentialSystems(SchedulePriority::PreUpdate, {[state](App&) { state->PollForReload(); }});
+        }
+        constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick, SchedulePriority::Update,
+                                                   SchedulePriority::PostUpdate};
+        for (int phase = 0; phase < 4; ++phase)
+        {
+            app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});
+        }
+
+        if (error || state->scratchRoot.empty())
+        {
+            logger.Error("Scripting: the folder for the script copies could not be chosen; running without scripts.");
+            state->Shutdown();
+            return Scripting(std::move(state));
+        }
+        if (const auto loaded = state->LoadGeneration(assembly, nullptr); !loaded.Succeeded())
+        {
+            logger.Error("Scripting: running without scripts. {}", loaded.diagnostic);
             // Nothing runs, so give back the runtime and the process-wide slot.
             state->Shutdown();
             return Scripting(std::move(state));
         }
-        // All or nothing: the assembly stays loaded only if its components are discovered and every native component
-        // matches its C# struct.
-        if (auto validated = CompleteLoad(state->context, state->components, *loaded.value, state->createdEventQueues); !validated.Succeeded())
-        {
-            logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), validated.diagnostic);
-            state->Shutdown();
-            return Scripting(std::move(state));
-        }
-        state->component.emplace(std::move(*loaded.value));
-        if (auto started = state->StartSystems(app, state); !started.Succeeded())
-        {
-            logger.Error("Scripting: the script assembly '{}' was released. {}", assembly.string(), started.diagnostic);
-            state->Shutdown();
-            return Scripting(std::move(state));
-        }
+        state->loadedStamp = StampOf(assembly);
         logger.Info("Scripting: loaded '{}'.", assembly.filename().string());
         return Scripting(std::move(state));
     }
