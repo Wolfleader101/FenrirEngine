@@ -6,6 +6,12 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
+option(FENRIR_BUILD_TESTS "Build the package tests that use Catch2 (needs the packages/FenrirECS/libs/catch2 submodule)" OFF)
+
+# One CTest run for every package that has tests.
+if(FENRIR_BUILD_TESTS OR FENRIR_ENABLE_SCRIPTING)
+    enable_testing()
+endif()
 
 
 # Compiler-specific flags
@@ -40,7 +46,6 @@ add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
 
 if(FENRIR_ENABLE_SCRIPTING)
-    enable_testing()
     add_subdirectory(packages/FenrirScripting)
 endif()
 

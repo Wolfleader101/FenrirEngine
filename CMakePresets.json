@@ -10,7 +10,8 @@
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",
         "CMAKE_CXX_COMPILER": "clang++",
-        "FENRIR_ENABLE_SCRIPTING": "ON"
+        "FENRIR_ENABLE_SCRIPTING": "ON",
+        "FENRIR_BUILD_TESTS": "ON"
       },
       "condition": {
         "type": "equals",
@@ -80,7 +81,8 @@
       },
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "FENRIR_ENABLE_SCRIPTING": "ON"
+        "FENRIR_ENABLE_SCRIPTING": "ON",
+        "FENRIR_BUILD_TESTS": "ON"
       }
     },
     {
