@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Test FenrirECS's dynamic components directly, with Catch2
 

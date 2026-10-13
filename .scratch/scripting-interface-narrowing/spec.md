@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Narrow Scripting's public interface to features, behind one liveness check
 
