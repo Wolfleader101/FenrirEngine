@@ -14,6 +14,9 @@ public struct Counter : IComponent
 {
     public int Hits;
     public long Total;
+#if VARIANT2
+    public int Extra; // Version 2 of the fixture changes this component's layout.
+#endif
 }
 
 // 16-byte aligned: a Vector128 must start on a 16-byte boundary, and the engine's storage has to honour that.

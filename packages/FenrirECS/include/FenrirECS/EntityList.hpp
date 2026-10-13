@@ -189,6 +189,12 @@ namespace Fenrir
 
         /** @brief How many entities have a component of this type. */
         [[nodiscard]] std::size_t CountDynamic(const DynamicComponentType& type);
+
+        /**
+         * @brief Removes every component of this type from every entity, and returns how many there were. Afterwards the type
+         * may be added again with a different size or alignment. Do nothing if no entity has one.
+         */
+        std::size_t ClearDynamic(const DynamicComponentType& type);
         /** @} */
 
         /**

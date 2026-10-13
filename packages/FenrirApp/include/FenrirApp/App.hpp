@@ -276,6 +276,19 @@ namespace Fenrir
 
         Scene& GetScene(const std::string& name);
 
+        /**
+         * @brief Calls `func(Scene&)` for every scene, active or not. For code that must reach all the entities there are (a
+         * component type that stops existing), not for per-frame work.
+         */
+        template <typename Func>
+        void ForEachScene(Func&& func)
+        {
+            for (Scene& scene : m_scenes)
+            {
+                func(scene);
+            }
+        }
+
       private:
         Time m_time;
         Scheduler m_scheduler;

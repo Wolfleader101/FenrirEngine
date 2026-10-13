@@ -17,6 +17,7 @@
 #include <optional>
 #include <type_traits>
 #include <span>
+#include <thread>
 
 // A component the tests register from outside FenrirScripting, and a deliberately wrong mapping of the same C# struct.
 namespace TestNative
@@ -106,6 +107,7 @@ namespace
     using TestNative::Health;
 
     std::filesystem::path fixture;
+    std::filesystem::path fixtureV2; // The same fixture built with VARIANT2: the "new build" the reload tests swap in.
     std::filesystem::path executableDirectory;
 
     constexpr int Frames = 5;
@@ -1653,6 +1655,402 @@ namespace
               "Removing a byte queue went wrong, or a typed queue could be removed");
     }
 
+    // A scratch directory of the test's own, removed afterwards.
+    struct ScratchDirectory
+    {
+        std::filesystem::path path;
+        ScratchDirectory()
+        {
+            static int counter = 0;
+            path = std::filesystem::temp_directory_path() / ("fenrir-scripting-test-" + std::to_string(++counter));
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+        ~ScratchDirectory()
+        {
+            std::error_code ignored;
+            std::filesystem::remove_all(path, ignored);
+        }
+        [[nodiscard]] std::size_t Entries() const
+        {
+            std::error_code ignored;
+            std::size_t count = 0;
+            if (std::filesystem::exists(path, ignored))
+            {
+                for (const auto& entry : std::filesystem::recursive_directory_iterator(path, ignored))
+                {
+                    (void)entry;
+                    ++count;
+                }
+            }
+            return count;
+        }
+    };
+
+    void AReleasedGenerationUnloadsAndItsCopyIsDeleted()
+    {
+        ScratchDirectory scratch;
+        HeadlessApp headless;
+        ScriptingConfig config = ConfigFor(fixture);
+        config.reloadDirectory = scratch.path;
+        auto scripting = Scripting::Install(headless.Get(), config);
+        Check(scripting.HasScripts() && scripting.Generation() == 1, "The fixture did not load as generation one");
+        Check(scratch.Entries() > 0, "The assembly was not loaded from a copy");
+        scripting.Shutdown();
+        Check(scripting.PendingUnloadCount() == 0, "The released generation did not unload");
+        Check(scratch.Entries() == 0, "The copy of the assembly was not deleted once it unloaded");
+    }
+
+    // A copy of the fixture the test may overwrite the way a build would, while an app has it loaded.
+    struct WorkingFixture
+    {
+        ScratchDirectory directory;
+        std::filesystem::path assembly;
+
+        WorkingFixture()
+        {
+            std::filesystem::create_directories(directory.path / "build");
+            Overwrite(fixture);
+            assembly = directory.path / "build" / fixture.filename();
+        }
+
+        // Replaces the build with another one (a whole directory, as a build writes it).
+        void Overwrite(const std::filesystem::path& assemblyFile) const
+        {
+            std::filesystem::copy(assemblyFile.parent_path(), directory.path / "build",
+                                  std::filesystem::copy_options::recursive | std::filesystem::copy_options::overwrite_existing);
+        }
+
+        // A build that is not an assembly at all.
+        void Break() const
+        {
+            std::ofstream out(directory.path / "build" / fixture.filename(), std::ios::binary | std::ios::trunc);
+            out << "this is not a .NET assembly";
+        }
+
+        [[nodiscard]] ScriptingConfig Config(bool hotReload) const
+        {
+            ScriptingConfig config = ConfigFor(assembly);
+            config.hotReload = hotReload;
+            config.reloadDirectory = directory.path / "copies";
+            return config;
+        }
+
+        [[nodiscard]] std::size_t Generations() const
+        {
+            std::size_t count = 0;
+            std::error_code ignored;
+            const auto copies = directory.path / "copies";
+            if (!std::filesystem::exists(copies, ignored))
+            {
+                return 0;
+            }
+            for (const auto& install : std::filesystem::directory_iterator(copies, ignored))
+            {
+                for (const auto& generation : std::filesystem::directory_iterator(install.path(), ignored))
+                {
+                    (void)generation;
+                    ++count;
+                }
+            }
+            return count;
+        }
+    };
+
+    std::string Join(const std::vector<std::int32_t>& values)
+    {
+        std::string text;
+        for (const auto value : values)
+        {
+            text += (text.empty() ? "" : ",") + std::to_string(value);
+        }
+        return "[" + text + "]";
+    }
+
+    constexpr const char* StampedName = "Fenrir.ScriptFixture.Stamped";
+    constexpr const char* ReloadProbeType = "Fenrir.ScriptFixture.ReloadProbe";
+
+    template <typename Result, typename... Args>
+    Result Reloaded(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(ReloadProbeType, scripting, method, arguments...);
+    }
+
+    std::int32_t StampedValue(Scripting& scripting, EntityList& entities, std::uint32_t id)
+    {
+        const auto* values = static_cast<const std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, id));
+        Check(values != nullptr, "The entity had no Stamped");
+        return values[0];
+    }
+
+    void ARebuiltAssemblyChangesBehaviourWithoutARestartAndKeepsUnchangedData()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        auto& entities = app.GetActiveScene().GetEntityList();
+        Scripting* installed = nullptr;
+        int frame = 0;
+        std::vector<std::int32_t> stampedAfterFrame;
+        std::vector<std::int32_t> answers;
+        std::uint32_t stamped = 0;
+        std::uint32_t velocityHolder = 0;
+        std::uint32_t counterHolder = 0;
+        bool reloadedOk = false;
+
+        // Before anything else in the frame (so between frames): at the start of frame four, a build lands and is reloaded.
+        app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App&) {
+            if (++frame != 4)
+            {
+                return;
+            }
+            // Data to carry across: a Ping-like event that is unchanged (Echo) and one whose layout changes (Ripple).
+            Reloaded<void>(*installed, "SendEcho", std::int32_t{9});
+            Reloaded<void>(*installed, "SendRipple", std::int32_t{1});
+            (void)installed->ApplyChanges();
+            answers.push_back(Reloaded<std::int32_t>(*installed, "Answer"));
+            build.Overwrite(fixtureV2);
+            reloadedOk = installed->Reload().Succeeded();
+            answers.push_back(Reloaded<std::int32_t>(*installed, "Answer"));
+        }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App&) {
+            stampedAfterFrame.push_back(StampedValue(*installed, entities, stamped));
+        }});
+        auto scripting = Scripting::Install(app, build.Config(false));
+        installed = &scripting;
+        Check(scripting.HasScripts() && scripting.Generation() == 1, "The fixture did not load");
+
+        // The data to carry: a Stamped (unchanged in version 2), a Velocity (unchanged), a Counter (its layout changes).
+        const auto add = [&](const char* name, std::uint32_t& holder) {
+            holder = entities.CreateEntity().GetId();
+            Check(scripting.FindComponent(name)->add(entities, holder), "A component was not added");
+        };
+        add(StampedName, stamped);
+        add(VelocityName, velocityHolder);
+        add(CounterName, counterHolder);
+        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 5;
+        static_cast<float*>(scripting.FindComponent(VelocityName)->get(entities, velocityHolder))[0] = 3.0F;
+        static_cast<std::int32_t*>(scripting.FindComponent(CounterName)->get(entities, counterHolder))[0] = 77;
+
+        headless.Run(6);
+
+        Check(reloadedOk && answers == std::vector<std::int32_t>{1, 2}, "The new build's code did not take effect without a restart");
+        // Frames one to three added 1 each (version 1), frames four to six added 2 each (version 2): the value carried over.
+        Check((stampedAfterFrame == std::vector<std::int32_t>{6, 7, 8, 10, 12, 14}),
+              "Stamped did not keep its value across the reload and change its step: " + Join(stampedAfterFrame));
+        // One generation said goodbye at the reload and the other at shutdown; a new set of systems was made for each load.
+        Check(CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 2 && CountMessages(headless, LogLevel::Info, "Creator.OnCreate") == 2,
+              "The old systems did not say goodbye, or the new ones were not created");
+        Check(headless.Logger().Contains(LogLevel::Info, "reloaded"), "The reload was not logged");
+        Check(app.FindEventQueue("Fenrir.ScriptFixture.Echo") == nullptr, "Shutdown should have removed the queues");
+    }
+
+    void AChangedLayoutDropsTheComponentAndTheEventsAndNothingReadsStaleBytes()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        auto& entities = app.GetActiveScene().GetEntityList();
+        auto scripting = Scripting::Install(app, build.Config(false));
+        Check(scripting.HasScripts(), "The fixture did not load");
+
+        const auto* counter = scripting.FindComponent(CounterName);
+        std::vector<std::uint32_t> holders;
+        for (int index = 0; index < 3; ++index)
+        {
+            holders.push_back(entities.CreateEntity().GetId());
+            Check(counter->add(entities, holders.back()), "A Counter was not added");
+            static_cast<std::int32_t*>(counter->get(entities, holders.back()))[0] = 100 + index;
+        }
+        const auto stamped = entities.CreateEntity().GetId();
+        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 41;
+        Check(counter->size == 16, "The test assumes version 1 of Counter is sixteen bytes");
+
+        Reloaded<void>(scripting, "SendEcho", std::int32_t{9});
+        Reloaded<void>(scripting, "SendEcho", std::int32_t{10});
+        Reloaded<void>(scripting, "SendRipple", std::int32_t{1});
+        (void)scripting.ApplyChanges();
+        Check(app.FindEventQueue("Fenrir.ScriptFixture.Ripple")->EventSize() == 4, "The test assumes version 1 of Ripple is four bytes");
+
+        build.Overwrite(fixtureV2);
+        Check(scripting.Reload().Succeeded() && scripting.Generation() == 2, "The new build did not load");
+
+        // The component whose layout changed is gone from every entity, with a warning, and is the new size.
+        const auto* changed = scripting.FindComponent(CounterName);
+        Check(changed != nullptr && changed->size == 24, "The new Counter layout was not registered");
+        Check(changed->count(entities) == 0, "Old Counter bytes are still on entities");
+        for (const auto id : holders)
+        {
+            Check(!changed->has(entities, id) && changed->get(entities, id) == nullptr, "An entity still has the old Counter");
+        }
+        Check(headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Counter' changed its layout") &&
+                  headless.Logger().Contains(LogLevel::Warn, "3 component(s) were removed"),
+              "The dropped component was not reported with how many were removed");
+        // A new one starts zeroed, at the new size, rather than inheriting bytes.
+        Check(changed->add(entities, holders.front()), "A Counter of the new layout was not added");
+        const auto* fresh = static_cast<const std::uint8_t*>(changed->get(entities, holders.front()));
+        Check(fresh != nullptr && std::all_of(fresh, fresh + 24, [](std::uint8_t byte) { return byte == 0; }),
+              "A new Counter was not zeroed");
+
+        // The unchanged component kept its value.
+        Check(StampedValue(scripting, entities, stamped) == 41, "An unchanged component lost its value");
+
+        // The event queue whose layout is unchanged kept its events, and the one that changed was recreated empty.
+        const IEventQueue* echo = app.FindEventQueue("Fenrir.ScriptFixture.Echo");
+        const IEventQueue* ripple = app.FindEventQueue("Fenrir.ScriptFixture.Ripple");
+        Check(echo != nullptr && echo->ReadRaw().count == 2, "An unchanged event queue lost its events");
+        Check(ripple != nullptr && ripple->EventSize() == 8 && ripple->ReadRaw().count == 0, "A changed event queue was not recreated empty");
+        Check(headless.Logger().Contains(LogLevel::Warn, "'Fenrir.ScriptFixture.Ripple' changed its layout"), "The dropped event was not reported");
+    }
+
+    void ABrokenBuildKeepsTheOldGenerationRunning()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        auto& entities = app.GetActiveScene().GetEntityList();
+        Scripting* installed = nullptr;
+        int frame = 0;
+        bool failed = false;
+        bool fixed = false;
+        std::vector<std::int32_t> stampedAfterFrame;
+        std::vector<std::int32_t> answers;
+        std::uint32_t stamped = 0;
+
+        app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App&) {
+            ++frame;
+            if (frame == 3)
+            {
+                build.Break();
+                failed = !installed->Reload().Succeeded();
+                answers.push_back(Reloaded<std::int32_t>(*installed, "Answer")); // Still version one.
+            }
+            if (frame == 5)
+            {
+                build.Overwrite(fixtureV2);
+                fixed = installed->Reload().Succeeded();
+                answers.push_back(Reloaded<std::int32_t>(*installed, "Answer"));
+            }
+        }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App&) {
+            stampedAfterFrame.push_back(StampedValue(*installed, entities, stamped));
+        }});
+        auto scripting = Scripting::Install(app, build.Config(false));
+        installed = &scripting;
+        stamped = entities.CreateEntity().GetId();
+        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+
+        headless.Run(6);
+
+        Check(failed, "A build that is not an assembly was reported as loaded");
+        Check(headless.Logger().Contains(LogLevel::Error, "did not load") && headless.Logger().Contains(LogLevel::Warn, "previous build"),
+              "The failed build and the restore were not logged");
+        // Version one kept running through the broken build: +1 a frame, no gap, no restart of the data; then version two adds 2.
+        Check((stampedAfterFrame == std::vector<std::int32_t>{1, 2, 3, 4, 6, 8}),
+              "The old generation did not keep running through a broken build: " + Join(stampedAfterFrame));
+        Check((answers == std::vector<std::int32_t>{1, 2}) && fixed, "A later good build did not load after a broken one");
+    }
+
+    void RepeatedReloadsLeaveNoGenerationsBehind()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        auto& entities = app.GetActiveScene().GetEntityList();
+        Scripting* installed = nullptr;
+        std::vector<std::string> problems;
+        std::int32_t finalValue = 0;
+        std::uint32_t stamped = 0;
+        constexpr int cycles = 12;
+
+        bool done = false;
+        app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App&) {
+            if (std::exchange(done, true))
+            {
+                return;
+            }
+            for (int cycle = 0; cycle < cycles; ++cycle)
+            {
+                build.Overwrite(cycle % 2 == 0 ? fixtureV2 : fixture);
+                if (!installed->Reload().Succeeded())
+                {
+                    problems.push_back("cycle " + std::to_string(cycle) + " did not reload");
+                }
+                if (installed->PendingUnloadCount() != 0)
+                {
+                    problems.push_back("cycle " + std::to_string(cycle) + " left a generation pending");
+                }
+                if (build.Generations() != 1)
+                {
+                    problems.push_back("cycle " + std::to_string(cycle) + " left " + std::to_string(build.Generations()) + " copies");
+                }
+            }
+            finalValue = StampedValue(*installed, entities, stamped);
+        }});
+        auto scripting = Scripting::Install(app, build.Config(false));
+        installed = &scripting;
+        stamped = entities.CreateEntity().GetId();
+        Check(scripting.FindComponent(StampedName)->add(entities, stamped), "A Stamped was not added");
+        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 1234;
+
+        headless.Run(2);
+
+        Check(problems.empty(), problems.empty() ? "" : problems.front());
+        Check(scripting.Generation() == 1 + cycles, "The generation count was off: " + std::to_string(scripting.Generation()));
+        Check(finalValue == 1234, "Data was lost over repeated reloads");
+        Check(scripting.PendingUnloadCount() == 0 && build.Generations() == 0, "A generation or its copy outlived shutdown");
+    }
+
+    void TheWatcherReloadsAStableBuildBetweenFrames()
+    {
+        WorkingFixture build;
+        HeadlessApp headless;
+        auto& app = headless.Get();
+        int frame = 0;
+        Scripting* installed = nullptr;
+        std::int32_t answerAtExit = 0;
+        int generationAtExit = 0;
+        std::vector<int> generationByFrame;
+
+        app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App&) {
+            // A build that is still being written: it lands, is replaced by a broken file, and lands again, all inside the
+            // debounce. Only the last, stable one may be loaded.
+            ++frame;
+            if (frame == 5 || frame == 9)
+            {
+                build.Overwrite(fixtureV2);
+            }
+            else if (frame == 7)
+            {
+                build.Break();
+            }
+        }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App&) {
+            generationByFrame.push_back(installed->Generation());
+            std::this_thread::sleep_for(std::chrono::milliseconds(5)); // Frames take real time, so the debounce can pass.
+        }});
+        // Read before scripting is released in the Exit phase.
+        app.AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+            answerAtExit = Reloaded<std::int32_t>(*installed, "Answer");
+            generationAtExit = installed->Generation();
+        }});
+        ScriptingConfig config = build.Config(true);
+        config.reloadInterval = std::chrono::milliseconds(0);
+        config.reloadDebounce = std::chrono::milliseconds(60);
+        auto scripting = Scripting::Install(app, config);
+        installed = &scripting;
+
+        headless.Run(80);
+
+        Check(answerAtExit == 2 && generationAtExit == 2, "The watcher did not reload the new build");
+        // Not before the build landed, and only once it had been stable for the debounce.
+        Check(generationByFrame.size() >= 6 && generationByFrame[3] == 1 && generationByFrame.back() == 2,
+              "The reload did not happen after the build, between frames");
+        Check(CountMessages(headless, LogLevel::Info, "Scripting: reloading") == 1, "One build caused more or fewer than one reload");
+        Check(CountMessages(headless, LogLevel::Error, "did not load") == 0, "A build that was still changing was loaded");
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -1766,12 +2164,13 @@ namespace
 int main(int argc, char* argv[])
 {
     const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
-    if (arguments.size() != 2)
+    if (arguments.size() != 3)
     {
-        std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll\n";
+        std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll\n";
         return EXIT_FAILURE;
     }
     fixture = std::filesystem::absolute(arguments[1]);
+    fixtureV2 = std::filesystem::absolute(arguments[2]);
     executableDirectory = std::filesystem::absolute(arguments[0]).parent_path();
     return RunCases({
         {"the fixture loads, frames run and Iris's messages reach the engine logger", RunsFramesWithTheFixture},
@@ -1828,6 +2227,14 @@ int main(int argc, char* argv[])
         {"event lookup failures say what went wrong", EventLookupFailuresSayWhatWentWrong},
         {"a mismatched event fails the load and names the field", AMismatchedEventFailsTheLoadAndNamesTheField},
         {"C++ event users are unchanged by named and byte queues", CppEventUsersAreUnchangedByNamedAndByteQueues},
+        {"a released generation unloads and its copy is deleted", AReleasedGenerationUnloadsAndItsCopyIsDeleted},
+        {"a rebuilt assembly changes behaviour without a restart and keeps unchanged data",
+         ARebuiltAssemblyChangesBehaviourWithoutARestartAndKeepsUnchangedData},
+        {"a changed layout drops the component and the events, and nothing reads stale bytes",
+         AChangedLayoutDropsTheComponentAndTheEventsAndNothingReadsStaleBytes},
+        {"a broken build keeps the old generation running", ABrokenBuildKeepsTheOldGenerationRunning},
+        {"repeated reloads leave no generations behind", RepeatedReloadsLeaveNoGenerationsBehind},
+        {"the watcher reloads a stable build between frames", TheWatcherReloadsAStableBuildBetweenFrames},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

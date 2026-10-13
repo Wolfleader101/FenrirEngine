@@ -33,12 +33,12 @@ namespace Fenrir::Testing
             try
             {
                 testCase.run();
-                std::cout << "PASS " << testCase.name << '\n';
+                std::cout << "PASS " << testCase.name << std::endl;
             }
             catch (const std::exception& exception)
             {
                 ++failures;
-                std::cout << "FAIL " << testCase.name << ": " << exception.what() << '\n';
+                std::cout << "FAIL " << testCase.name << ": " << exception.what() << std::endl;
             }
         }
         std::cout << (failures == 0 ? "All cases passed.\n" : std::to_string(failures) + " case(s) failed.\n");

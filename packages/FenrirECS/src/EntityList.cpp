@@ -169,6 +169,22 @@ namespace Fenrir
         return true;
     }
 
+    std::size_t EntityList::ClearDynamic(const DynamicComponentType& type)
+    {
+        Detail::ByteStorage* pool = ExistingPool(m_registry, type);
+        if (pool == nullptr)
+        {
+            return 0;
+        }
+        // Copied first: removing from the storage while walking it would move the element being visited.
+        const std::vector<entt::entity> holders(pool->begin(), pool->end());
+        for (const entt::entity entity : holders)
+        {
+            pool->remove(entity);
+        }
+        return holders.size();
+    }
+
     std::size_t EntityList::CountDynamic(const DynamicComponentType& type)
     {
         const Detail::ByteStorage* pool = ExistingPool(m_registry, type);

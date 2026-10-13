@@ -4,6 +4,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The two builds of the fixture have separate intermediate folders; neither may compile the other's generated files. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The reload tests build this project twice: -p:FixtureVariant=2 is the "new build" that replaces the first. -->
+  <PropertyGroup Condition="'$(FixtureVariant)' == '2'">
+    <DefineConstants>$(DefineConstants);VARIANT2</DefineConstants>
   </PropertyGroup>
   <!-- A script project needs only the scripting SDK: its contract, and the source generator behind Ref<T>. The build
        passes -p:FenrirScriptingSdk=<the SDK folder>/. -->

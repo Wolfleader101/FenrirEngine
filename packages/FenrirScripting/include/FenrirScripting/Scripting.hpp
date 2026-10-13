@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <memory>
@@ -54,6 +55,32 @@ namespace Fenrir
          * shared, from `bridgeDirectory`, so it does not belong here.
          */
         std::vector<std::filesystem::path> sharedAssemblies;
+
+        /**
+         * @brief Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way the
+         * assembly is loaded from a private copy, so a build can always overwrite the original.
+         */
+        bool hotReload = true;
+
+        /**
+         * @brief Where the per-generation copies of the script assembly go. Empty means a directory of its own under the
+         * system temporary directory. Each loaded generation has a subdirectory, deleted once that generation is unloaded.
+         */
+        std::filesystem::path reloadDirectory;
+
+        /** @brief How often the watcher looks at the file. Zero looks every frame. */
+        std::chrono::milliseconds reloadInterval{250};
+
+        /**
+         * @brief How long the file must stay unchanged, and openable, before it counts as a finished build.
+         */
+        std::chrono::milliseconds reloadDebounce{400};
+
+        /**
+         * @brief How long a reload waits for the old generation to unload. A generation that has not unloaded by then is kept
+         * track of (see Scripting::PendingUnloadCount) and the reload goes on.
+         */
+        std::chrono::milliseconds unloadTimeout{2000};
     };
 
     /**
@@ -159,6 +186,24 @@ namespace Fenrir
          * reported.
          */
         ChangeSummary ApplyChanges();
+
+        /**
+         * @brief Reloads the script assembly now, from the file `scriptAssembly` names, instead of waiting for the watcher. The
+         * order is the one the watcher uses: the old systems' OnDestroy, release and unload the old generation, load the new
+         * one all-or-nothing, and if that fails load the previous generation again. Call it between frames, not from a script.
+         * Returns success if the new generation is running; a failure names why, and the previous generation is running again
+         * if it could be restored (see HasScripts).
+         */
+        Iris::CallResult<void> Reload();
+
+        /** @brief How many generations of the script assembly have been loaded (successfully) since Install. */
+        [[nodiscard]] int Generation() const noexcept;
+
+        /**
+         * @brief How many released generations have not unloaded yet. Normally zero after a reload; a generation stays here when
+         * something still holds a type from it, and its copy of the assembly stays on disk until it is collected.
+         */
+        [[nodiscard]] std::size_t PendingUnloadCount() const noexcept;
 
         /**
          * @brief How many times the engine has called into the script's systems since Install: once per phase that has systems,

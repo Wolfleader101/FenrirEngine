@@ -1,6 +1,8 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -78,6 +80,12 @@ namespace Fenrir::Testing
         {
             const std::lock_guard<std::mutex> lock(m_mutex);
             m_messages.push_back({level, std::string(message)});
+            // FENRIR_TEST_ECHO=1 shows what the app logged as it happens, for finding out why a case failed.
+            static const bool echo = std::getenv("FENRIR_TEST_ECHO") != nullptr;
+            if (echo)
+            {
+                std::cerr << "[log] " << message << std::endl;
+            }
         }
 
         mutable std::mutex m_mutex;

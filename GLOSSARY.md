@@ -42,7 +42,7 @@ A cheap, copyable C++ value that names something in a loaded component without k
 The bridge's internal number for one loaded component, and the thing every handle is bound to. Never reused. Not part of the public API.
 
 **Generation**
-One load of a component, identified by its token. Loading the same assembly again, or a new build of it, is a new generation. Handles from one generation never resolve in another. The code says "component token"; tickets say "generation".
+One load of a component, identified by its token. Loading the same assembly again, or a new build of it, is a new generation. Handles from one generation never resolve in another. The code says "component token"; tickets say "generation". During hot reload the engine keeps the data of script components and events whose layout is unchanged from one generation to the next.
 
 **Signature**
 The C++ function type that names a managed method, such as `std::int32_t(std::int32_t, std::int32_t)` for `int Add(int, int)`. Lookups match it exactly. The C++ types decide the managed types, and an unsupported type does not compile.

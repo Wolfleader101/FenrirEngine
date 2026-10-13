@@ -48,6 +48,42 @@ namespace Fenrir::Detail
             return id;
         }
 
+        // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the native
+        // ones. Ids are positions, so the ids of what remains may change; the generation changes with them, and C# looks its
+        // ids up again.
+        void RemoveScriptDefined()
+        {
+            std::vector<ComponentRegistration> keptComponents;
+            for (auto& registration : m_components)
+            {
+                if (!registration.scriptDefined)
+                {
+                    keptComponents.push_back(std::move(registration));
+                }
+            }
+            std::vector<EventRegistration> keptEvents;
+            for (auto& registration : m_events)
+            {
+                if (!registration.scriptDefined)
+                {
+                    keptEvents.push_back(std::move(registration));
+                }
+            }
+            m_components = std::move(keptComponents);
+            m_events = std::move(keptEvents);
+            m_ids.clear();
+            m_eventIds.clear();
+            for (std::size_t index = 0; index < m_components.size(); ++index)
+            {
+                m_ids.emplace(m_components[index].name, static_cast<std::int32_t>(index));
+            }
+            for (std::size_t index = 0; index < m_events.size(); ++index)
+            {
+                m_eventIds.emplace(m_events[index].name, static_cast<std::int32_t>(index));
+            }
+            m_generation = ++s_generations;
+        }
+
         // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or the same name
         // twice.
         bool AddAll(std::vector<ComponentRegistration> registrations)

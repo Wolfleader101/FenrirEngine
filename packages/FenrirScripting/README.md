@@ -323,6 +323,32 @@ C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the las
 - **By name from C++.** `App::NameEvent<T>("name")` gives a typed queue a name, `App::FindEventQueue("name")` finds any named
   queue and reads or sends it as bytes (`IEventQueue::ReadRaw/SendRaw`). Existing `SendEvent`/`ReadEvents` code is unchanged.
 
+## Hot reload
+
+Build the script project while the game runs and the new code takes over between frames, with the game's data intact.
+
+- **The assembly is never loaded in place.** `Scripting::Install` copies the script assembly (and its `.pdb`, `.deps.json` and the
+  dlls the deps file lists) into a private per-generation folder and loads the copy, so the build is free to overwrite the original
+  even on Windows, which locks a loaded dll. The folder is deleted once that generation has been collected.
+  (`ScriptingConfig::reloadDirectory` chooses where; the default is under the system temp folder.)
+- **The watcher** (`ScriptingConfig::hotReload`, on by default) looks at the file at the start of each frame, at most every
+  `reloadInterval`. A new build is loaded once it has stayed unchanged and openable for `reloadDebounce`, so a half-written dll is
+  never loaded. `Scripting::Reload()` does the same on demand (call it between frames, not from a script).
+- **The order** is: play back anything a script left recorded; the old systems' `OnDestroy`; release the old generation and wait for
+  the runtime to confirm it unloaded (`unloadTimeout`; if a root still holds it the reload goes on, warns that the generation has not
+  unloaded, and `PendingUnloadCount()` stays above zero); then load the new generation. System instances are always recreated, so
+  `OnCreate` runs again.
+- **A broken build keeps the game running.** If the new generation does not load (not a valid assembly, a native component or event
+  that no longer matches its C# struct, ...) the error is logged and the previous copy is loaded again. Nothing was touched before the
+  checks passed, so its data is as it was. The same broken file is not retried until it changes.
+- **What survives.** A script component's data stays in the ECS, and a C#-only event's queue (with the events in it) stays in the App,
+  when its *fingerprint* is unchanged: size, alignment, and each field's name, type, kind and offset. Anything whose fingerprint
+  changed, or that the new build no longer defines, is removed with a warning that says how many components went (a component) or that
+  the queue was dropped (an event), before any system runs, so nothing ever reads old bytes as a new layout. A struct that is not
+  public cannot be inspected and is compared by size and alignment alone.
+- **Limits.** The fingerprint does not look inside a nested struct, so changing the fields of a nested type without changing the outer
+  struct's size or offsets is not noticed. Native components and events (the ones C++ registers) are not reloaded: they belong to the engine.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
