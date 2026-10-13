@@ -9,13 +9,8 @@
 
 namespace Fenrir::Detail
 {
-    // An event type a script assembly reported while it loaded.
-    struct ScriptEventDescription
-    {
-        std::string name;
-        std::size_t size = 0;
-        std::size_t alignment = 0;
-    };
+    // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component.
+    using ScriptEventDescription = ScriptComponentDescription;
 
     // What the engine's internal calls act on. An internal call is a plain function pointer with no user data, so
     // the App it serves is process-wide state: one Scripting is active at a time, and every script call happens on

@@ -3,6 +3,7 @@
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
 #include "ScriptComponents.hpp"
+#include "ScriptSchema.hpp"
 
 #include <Iris/Iris.hpp>
 
@@ -101,16 +102,6 @@ namespace Fenrir
             std::filesystem::path directory;
         };
 
-        // What a script component or event looked like when its data was last in use, so a reload can tell whether the
-        // data still means the same thing: the size and alignment, and each field's name, type, kind and offset.
-        struct OwnedLayout
-        {
-            std::string fingerprint;
-            std::size_t size = 0;
-            std::size_t alignment = 0;
-        };
-        using OwnedLayouts = std::map<std::string, OwnedLayout>;
-
         struct FileStamp
         {
             std::filesystem::file_time_type modified{};
@@ -208,8 +199,8 @@ namespace Fenrir
         std::vector<Retired> retired;
 
         // The script components and events whose data is alive in the ECS and the App, by name.
-        OwnedLayouts ownedComponents;
-        OwnedLayouts ownedEvents;
+        Detail::OwnedLayouts ownedComponents;
+        Detail::OwnedLayouts ownedEvents;
 
         std::optional<FileStamp> loadedStamp;
         struct PendingChange
@@ -434,371 +425,6 @@ namespace Fenrir
 
     namespace
     {
-        // Checks every registered component against its C# struct. The first mismatch is the answer, naming the field.
-        Iris::CallResult<void> ValidateRegistration(const ComponentRegistration& registration,
-                                                    const Iris::Component& component)
-        {
-            if (!registration.validate)
-            {
-                return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
-            }
-            auto validated = registration.validate(component);
-            if (!validated.Succeeded())
-            {
-                validated.diagnostic =
-                    "Component '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
-            }
-            return validated;
-        }
-
-        Iris::CallResult<void> ValidateAll(const std::vector<ComponentRegistration>& registrations,
-                                           const Iris::Component& component)
-        {
-            for (const auto& registration : registrations)
-            {
-                if (auto validated = ValidateRegistration(registration, component); !validated.Succeeded())
-                {
-                    return validated;
-                }
-            }
-            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
-        }
-    } // namespace
-
-    namespace
-    {
-        using Description = Detail::ScriptComponentDescription;
-
-        Iris::CallResult<void> Succeeded()
-        {
-            return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
-        }
-
-        Iris::CallResult<void> Failed(std::string diagnostic)
-        {
-            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, std::move(diagnostic), false};
-        }
-
-        // Runs the table the SDK's generator wrote into the script assembly, which reports each component type the
-        // script defines (full name, size, alignment) through an internal call. A script assembly without the table
-        // defines none.
-        Iris::CallResult<void> DiscoverScriptComponents(const Iris::Component& component,
-                                                        Detail::EngineContext& context, std::vector<Description>& found)
-        {
-            const auto table = component.FindType("Fenrir.Scripting.Generated.ComponentTable");
-            if (table.status == Iris::CallStatus::NotFound)
-            {
-                return Succeeded();
-            }
-            if (!table.Succeeded())
-            {
-                return Iris::CallResult<void>{table.status,
-                                              "The component table could not be read: " + table.diagnostic, false};
-            }
-            const auto report = table.value->FindMethod<void()>("Register");
-            if (!report.Succeeded())
-            {
-                return Iris::CallResult<void>{
-                    report.status, "The component table has no Register method: " + report.diagnostic, false};
-            }
-            context.discovering = &found;
-            const auto ran = report.value->Invoke();
-            context.discovering = nullptr;
-            if (!ran.Succeeded())
-            {
-                return Iris::CallResult<void>{ran.status,
-                                              "The script assembly could not report its components: " + ran.diagnostic,
-                                              ran.diagnosticTruncated};
-            }
-            return Succeeded();
-        }
-
-        // Whether what the script reported can be registered next to what the engine already has.
-        Iris::CallResult<void> CheckDiscovered(const std::vector<Description>& found,
-                                               const Detail::ComponentRegistry& registry)
-        {
-            std::unordered_map<std::uint32_t, std::string> storageIds;
-            std::unordered_set<std::string> names;
-            for (const auto& description : found)
-            {
-                if (!names.insert(description.name).second)
-                {
-                    return Failed("The script reported the component '" + description.name + "' more than once.");
-                }
-                if (!Detail::ToDynamicType(description).IsValid())
-                {
-                    return Failed("The script component '" + description.name + "' reported a size of " +
-                                  std::to_string(description.size) + " and an alignment of " +
-                                  std::to_string(description.alignment) + ", which no C# struct has.");
-                }
-                if (registry.Find(description.name) >= 0)
-                {
-                    return Failed("The script defines a component '" + description.name +
-                                  "', but the engine already has a component of that name.");
-                }
-                const auto [at, added] = storageIds.emplace(Detail::ToDynamicType(description).Id(), description.name);
-                if (!added)
-                {
-                    return Failed("The script components '" + at->second + "' and '" + description.name +
-                                  "' map to the same storage; rename one.");
-                }
-            }
-            return Succeeded();
-        }
-
-        // Runs the table the generator wrote for the events the script defines (full name, size, alignment each).
-        Iris::CallResult<void> DiscoverScriptEvents(const Iris::Component& component, Detail::EngineContext& context,
-                                                    std::vector<Detail::ScriptEventDescription>& found)
-        {
-            const auto table = component.FindType("Fenrir.Scripting.Generated.EventTable");
-            if (table.status == Iris::CallStatus::NotFound)
-            {
-                return Succeeded();
-            }
-            if (!table.Succeeded())
-            {
-                return Iris::CallResult<void>{table.status, "The event table could not be read: " + table.diagnostic,
-                                              false};
-            }
-            const auto report = table.value->FindMethod<void()>("Register");
-            if (!report.Succeeded())
-            {
-                return Iris::CallResult<void>{report.status,
-                                              "The event table has no Register method: " + report.diagnostic, false};
-            }
-            context.discoveringEvents = &found;
-            const auto ran = report.value->Invoke();
-            context.discoveringEvents = nullptr;
-            if (!ran.Succeeded())
-            {
-                return Iris::CallResult<void>{ran.status,
-                                              "The script assembly could not report its events: " + ran.diagnostic,
-                                              ran.diagnosticTruncated};
-            }
-            return Succeeded();
-        }
-
-        // Whether the events a script reported can live next to the engine's: usable layouts, and names nobody has.
-        Iris::CallResult<void> CheckDiscoveredEvents(const std::vector<Detail::ScriptEventDescription>& found,
-                                                     const Detail::ComponentRegistry& registry, App& app,
-                                                     const OwnedLayouts& owned)
-        {
-            constexpr std::size_t maxAlignment = 16;
-            std::unordered_set<std::string> names;
-            for (const auto& description : found)
-            {
-                if (!names.insert(description.name).second)
-                {
-                    return Failed("The script reported the event '" + description.name + "' more than once.");
-                }
-                const bool usable = description.size > 0 && description.alignment > 0 &&
-                                    description.alignment <= maxAlignment &&
-                                    (description.alignment & (description.alignment - 1)) == 0 &&
-                                    description.size % description.alignment == 0;
-                if (!usable)
-                {
-                    return Failed("The script event '" + description.name + "' reported a size of " +
-                                  std::to_string(description.size) + " and an alignment of " +
-                                  std::to_string(description.alignment) + ", which the engine cannot store.");
-                }
-                if (registry.FindEvent(description.name) >= 0 ||
-                    (app.FindEventQueue(description.name) != nullptr && !owned.contains(description.name)))
-                {
-                    return Failed("The script defines an event '" + description.name +
-                                  "', but the engine already has an event of that name.");
-                }
-            }
-            return Succeeded();
-        }
-
-        // Checks every registered native event against its C# struct.
-        Iris::CallResult<void> ValidateAllEvents(const std::vector<EventRegistration>& registrations,
-                                                 const Iris::Component& component)
-        {
-            for (const auto& registration : registrations)
-            {
-                if (!registration.validate)
-                {
-                    continue;
-                }
-                if (auto validated = registration.validate(component); !validated.Succeeded())
-                {
-                    validated.diagnostic =
-                        "Event '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
-                    return validated;
-                }
-            }
-            return Succeeded();
-        }
-
-        // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same
-        // fingerprint lay the same bytes out the same way. A type the assembly does not expose (internal) can only be
-        // told apart by its size.
-        std::string Fingerprint(const Iris::Component& component, const std::string& name, std::size_t size,
-                                std::size_t alignment)
-        {
-            std::string text = std::to_string(size) + "/" + std::to_string(alignment);
-            const auto type = component.FindType(name);
-            if (!type.Succeeded())
-            {
-                return text + ";opaque";
-            }
-            const auto fields = type.value->GetFields();
-            if (!fields.Succeeded())
-            {
-                return text + ";opaque";
-            }
-            for (const auto& field : *fields.value)
-            {
-                if (!field.isStatic)
-                {
-                    text += ";" + field.name + ":" + field.type.fullName + ":" +
-                            std::to_string(static_cast<int>(field.kind)) + "@" +
-                            (field.offset.has_value() ? std::to_string(*field.offset) : std::string("?"));
-                }
-            }
-            return text;
-        }
-
-        // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives.
-        // Nothing is registered unless all of it passes, so a failure leaves the registry exactly as it was:
-        //   1. discover the components the script defines, and check them;
-        //   2. check every native component's mapping against its C# struct;
-        //   3. only then register the script's components.
-        Iris::CallResult<void> CompleteLoad(Detail::EngineContext& context, Detail::ComponentRegistry& registry,
-                                            const Iris::Component& component, OwnedLayouts& ownedComponents,
-                                            OwnedLayouts& ownedEvents)
-        {
-            std::vector<Description> found;
-            if (auto discovered = DiscoverScriptComponents(component, context, found); !discovered.Succeeded())
-            {
-                return discovered;
-            }
-            if (auto checked = CheckDiscovered(found, registry); !checked.Succeeded())
-            {
-                return checked;
-            }
-            std::vector<Detail::ScriptEventDescription> foundEvents;
-            if (auto discovered = DiscoverScriptEvents(component, context, foundEvents); !discovered.Succeeded())
-            {
-                return discovered;
-            }
-            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app, ownedEvents);
-                !checked.Succeeded())
-            {
-                return checked;
-            }
-            if (auto validated = ValidateAll(registry.All(), component); !validated.Succeeded())
-            {
-                return validated;
-            }
-            if (auto validated = ValidateAllEvents(registry.Events(), component); !validated.Succeeded())
-            {
-                return validated;
-            }
-            // Everything checks out, so from here the new generation is kept. What the previous generation left in the
-            // ECS and the App is compared with what this one defines: data whose layout is unchanged stays, anything
-            // else goes, with a warning, so no system ever reads old bytes as a new layout.
-            App& app = *context.app;
-            OwnedLayouts nextComponents;
-            for (const auto& description : found)
-            {
-                nextComponents[description.name] = {
-                    Fingerprint(component, description.name, description.size, description.alignment), description.size,
-                    description.alignment};
-            }
-            OwnedLayouts nextEvents;
-            for (const auto& description : foundEvents)
-            {
-                nextEvents[description.name] = {
-                    Fingerprint(component, description.name, description.size, description.alignment), description.size,
-                    description.alignment};
-            }
-            for (auto at = ownedComponents.begin(); at != ownedComponents.end();)
-            {
-                const auto next = nextComponents.find(at->first);
-                if (next != nextComponents.end() && next->second.fingerprint == at->second.fingerprint)
-                {
-                    ++at;
-                    continue;
-                }
-                const DynamicComponentType type(at->first, at->second.size, at->second.alignment);
-                std::size_t removed = 0;
-                app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
-                app.Logger()->Warn(
-                    "Scripting: the script component '{}' {}; {} component(s) were removed so nothing reads the old "
-                    "bytes as the new layout.",
-                    at->first, next == nextComponents.end() ? "no longer exists" : "changed its layout", removed);
-                at = ownedComponents.erase(at);
-            }
-            for (auto at = ownedEvents.begin(); at != ownedEvents.end();)
-            {
-                const auto next = nextEvents.find(at->first);
-                if (next != nextEvents.end() && next->second.fingerprint == at->second.fingerprint)
-                {
-                    ++at;
-                    continue;
-                }
-                (void)app.RemoveEventQueue(at->first);
-                app.Logger()->Warn("Scripting: the script event '{}' {}; its queue and the events in it were dropped.",
-                                   at->first, next == nextEvents.end() ? "no longer exists" : "changed its layout");
-                at = ownedEvents.erase(at);
-            }
-
-            std::vector<ComponentRegistration> registrations;
-            registrations.reserve(found.size());
-            for (const auto& description : found)
-            {
-                registrations.push_back(Detail::MakeScriptComponent(description));
-            }
-            // All or none: the checks above make a refusal impossible, but if one happens nothing is half-registered.
-            if (!registry.AddAll(std::move(registrations)))
-            {
-                return Failed("The script's components could not be registered together.");
-            }
-            // Likewise for events: the checks above make a refusal impossible.
-            std::vector<EventRegistration> eventRegistrations;
-            for (const auto& description : foundEvents)
-            {
-                EventRegistration registration;
-                registration.name = description.name;
-                registration.typeName = description.name;
-                registration.size = description.size;
-                registration.alignment = description.alignment;
-                registration.scriptDefined = true;
-                eventRegistrations.push_back(std::move(registration));
-            }
-            if (!registry.AddEvents(std::move(eventRegistrations)))
-            {
-                return Failed("The script's events could not be registered together.");
-            }
-            for (const auto& description : foundEvents)
-            {
-                // A queue whose layout is unchanged is kept, with the events in it.
-                if (!ownedEvents.contains(description.name))
-                {
-                    if (app.CreateEventQueue(description.name, description.size, description.alignment) == nullptr)
-                    {
-                        return Failed("The queue for the script event '" + description.name + "' could not be made.");
-                    }
-                    // Recorded as soon as it exists, so a failure further on never leaves a queue nobody owns.
-                    ownedEvents[description.name] = nextEvents[description.name];
-                }
-            }
-            for (auto& [name, layout] : nextComponents)
-            {
-                ownedComponents[name] = std::move(layout);
-            }
-            for (auto& [name, layout] : nextEvents)
-            {
-                ownedEvents[name] = std::move(layout);
-            }
-            return Succeeded();
-        }
-    } // namespace
-
-    namespace
-    {
         // Copies the script assembly and what it needs into a new directory under `root`: the files named like it (its
         // pdb and deps.json), and every dll its deps.json lists that sits beside it. A build can then overwrite the
         // original while the copy is loaded. Returns null and says why in `error` if it could not.
@@ -884,7 +510,7 @@ namespace Fenrir
         }
         // All or nothing: the assembly stays loaded only if its components and events are discovered and every native
         // component and event matches its C# struct.
-        if (auto validated = CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents);
+        if (auto validated = Detail::CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents);
             !validated.Succeeded())
         {
             Retire(std::move(*loaded.value), copy);
@@ -1130,7 +756,7 @@ namespace Fenrir
         {
             return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
         }
-        auto validated = ValidateRegistration(registration, *m_state->component);
+        auto validated = Detail::ValidateRegistration(registration, *m_state->component);
         if (!validated.Succeeded())
         {
             if (ILogger* logger = m_state->logger)
