@@ -1,0 +1,18 @@
+#!/bin/sh
+# Refuses a commit whose staged C++ in packages/ is not clang-format clean: the check CI runs on pull requests.
+# Enable once per clone: git config core.hooksPath .githooks
+# CI uses clang-format 13; a much newer local clang-format can disagree about a few constructs.
+
+files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^packages/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$' | grep -v '/libs/')
+[ -z "$files" ] && exit 0
+
+if ! command -v clang-format >/dev/null 2>&1; then
+    echo "pre-commit: clang-format is not on PATH, so formatting was not checked." >&2
+    exit 0
+fi
+
+if ! report=$(echo "$files" | xargs clang-format --dry-run --Werror 2>&1); then
+    echo "$report" >&2
+    echo "pre-commit: the files above are not clang-format clean. Run 'clang-format -i' on them and 'git add' them again." >&2
+    exit 1
+fi
