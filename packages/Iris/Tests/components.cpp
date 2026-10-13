@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
+#include <iostream>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -457,9 +459,9 @@ namespace
         return *result.value;
     }
 
-    int Run(const Arguments& arguments)
+    void Run(const Arguments& arguments)
     {
-        return Tests::RunCases({
+        Tests::RunCases({
             {"a loaded component reports its identity and NotRequested",
              [&] {
                  Host unready;
@@ -2653,9 +2655,9 @@ namespace
     }
 
     // Nothing is registered in this process: the component cannot load until its internal calls are.
-    int RunUnbound(const Arguments& arguments)
+    void RunUnbound(const Arguments& arguments)
     {
-        return Tests::RunCases({
+        Tests::RunCases({
             {"sharing a contract whose internal call is unregistered fails initialization, then works once registered",
              [&] {
                  auto configuration = arguments.configuration;
@@ -2696,28 +2698,58 @@ namespace
              }},
         });
     }
+
+    Arguments checkArguments;
 } // namespace
 
+TEST_CASE("the component checks", "[components]")
+{
+    Run(checkArguments);
+}
+
+// The same checks with nothing registered, so the component's internal calls are missing.
+TEST_CASE("the component checks without native functions", "[unbound]")
+{
+    RunUnbound(checkArguments);
+}
+
+// IrisComponentChecks runtimeconfig.json bridge.dll component.dll [--unbound] [Catch2 options]
 #if defined(_WIN32)
 int wmain(int argc, wchar_t* argv[])
 #else
 int main(int argc, char* argv[])
 #endif
 {
-    if (argc != 4 && argc != 5)
+    if (argc < 4)
     {
-        std::cerr << "Usage: IrisComponentChecks runtimeconfig.json bridge.dll component.dll\n";
+        std::cerr
+            << "Usage: IrisComponentChecks runtimeconfig.json bridge.dll component.dll [--unbound] [Catch2 options]\n";
         return EXIT_FAILURE;
     }
-    if (argc == 5)
+    checkArguments = Arguments{{argv[1], argv[2], {}}, std::filesystem::absolute(argv[3])};
+    std::vector<std::string> catchArguments{std::filesystem::path(argv[0]).string()};
+    bool unbound = false;
+    for (int index = 4; index < argc; ++index)
     {
-        return RunUnbound({{argv[1], argv[2], {}}, std::filesystem::absolute(argv[3])});
+        const std::string argument = std::filesystem::path(argv[index]).string();
+        if (argument == "--unbound")
+        {
+            unbound = true;
+        }
+        else
+        {
+            catchArguments.push_back(argument);
+        }
     }
-    // Registered before any host exists: registrations apply to components loaded afterwards.
-    if (const auto natives = Iris::Examples::RegisterNatives(); !natives.Succeeded())
+    catchArguments.push_back(unbound ? "[unbound]" : "[components]");
+    if (!unbound)
     {
-        std::cerr << "Registering native functions failed: " << natives.diagnostic << '\n';
-        return EXIT_FAILURE;
+        // Registered before any host exists: registrations apply to components loaded afterwards.
+        if (const auto natives = Iris::Examples::RegisterNatives(); !natives.Succeeded())
+        {
+            std::cerr << "Registering native functions failed: " << natives.diagnostic << '\n';
+            return EXIT_FAILURE;
+        }
     }
-    return Run({{argv[1], argv[2], {}}, std::filesystem::absolute(argv[3])});
+    return Iris::Tests::RunCatch(catchArguments);
 }
