@@ -109,7 +109,8 @@ namespace
     using TestNative::Health;
 
     std::filesystem::path fixture;
-    std::filesystem::path fixtureV2; // The same fixture built with VARIANT2: the "new build" the reload tests swap in.
+    std::filesystem::path fixtureV2;  // The same fixture built with VARIANT2: the "new build" the reload tests swap in.
+    std::filesystem::path badReports; // The hand-written assembly whose tables report what the generator never would.
     std::filesystem::path executableDirectory;
 
     constexpr int Frames = 5;
@@ -2185,6 +2186,100 @@ namespace
         Check(fine.FindComponent(VelocityName) != nullptr, "A later clean load did not register the script components");
     }
 
+    // Tells the bad-report fixture what to report as it loads (see BadReports.cs); restored to a sound report on exit.
+    struct BadReportMode
+    {
+        explicit BadReportMode(const char* mode)
+        {
+            Set(mode);
+        }
+        ~BadReportMode()
+        {
+            Set("");
+        }
+        BadReportMode(const BadReportMode&) = delete;
+        BadReportMode& operator=(const BadReportMode&) = delete;
+
+        static void Set(const char* mode)
+        {
+#ifdef _WIN32
+            _putenv_s("FENRIR_BAD_REPORT", mode);
+#else
+            setenv("FENRIR_BAD_REPORT", mode, 1);
+#endif
+        }
+    };
+
+    constexpr const char* BadAlphaName = "Fenrir.BadReportFixture.Alpha";
+    constexpr const char* BadBeepName = "Fenrir.BadReportFixture.Beep";
+
+    void ASoundReportLoadsAndRegistersEverythingTogether()
+    {
+        const BadReportMode mode("");
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(badReports));
+        Check(scripting.HasScripts(), "The sound bad-report fixture did not load");
+        Check(scripting.FindComponent(BadAlphaName) != nullptr, "The script component was not registered");
+        Check(headless.Get().FindEventQueue(BadBeepName) != nullptr, "The script event's queue was not made");
+    }
+
+    // A script assembly that reports something the engine cannot accept is refused whole: nothing it reported stays
+    // registered or stored, whichever kind the bad report was and whichever kind came before it.
+    void ExpectReportRefusedWholesale(const char* reportMode, const char* explanation)
+    {
+        const BadReportMode mode(reportMode);
+        HeadlessApp headless;
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const std::size_t poolsBefore = PoolCount(entities);
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(badReports));
+        Check(!scripting.HasScripts(), std::string("A script assembly that reported ") + reportMode + " was kept");
+        Check(headless.Logger().Contains(LogLevel::Error, explanation),
+              std::string("The refusal of ") + reportMode + " was not explained");
+        Check(scripting.FindComponent(BadAlphaName) == nullptr,
+              std::string(reportMode) + " left a component registered");
+        Check(headless.Get().FindEventQueue(BadBeepName) == nullptr, std::string(reportMode) + " left an event queue");
+        Check(PoolCount(entities) == poolsBefore, std::string(reportMode) + " left storage behind");
+        Check(scripting.FindComponent("Fenrir.Transform") != nullptr,
+              std::string(reportMode) + " disturbed the engine's own components");
+    }
+
+    void ADuplicateScriptComponentIsRefused()
+    {
+        ExpectReportRefusedWholesale("duplicate-component", "more than once");
+    }
+
+    void AScriptComponentWithAnImpossibleLayoutIsRefused()
+    {
+        ExpectReportRefusedWholesale("bad-component-layout", "which no C# struct has");
+    }
+
+    void ADuplicateScriptEventIsRefused()
+    {
+        ExpectReportRefusedWholesale("duplicate-event", "more than once");
+    }
+
+    void AScriptEventWithAnImpossibleLayoutIsRefused()
+    {
+        ExpectReportRefusedWholesale("bad-event-layout", "the engine cannot store");
+    }
+
+    void AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas()
+    {
+        HeadlessApp headless;
+        // The App already owns a queue under the name the script's Ping event would use.
+        Check(headless.Get().CreateEventQueue("Fenrir.ScriptFixture.Ping", 4, 4) != nullptr,
+              "The test could not make the queue");
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(!scripting.HasScripts(), "A script event took the name of an existing queue");
+        Check(headless.Logger().Contains(LogLevel::Error, "already has an event of that name") &&
+                  headless.Logger().Contains(LogLevel::Error, "Fenrir.ScriptFixture.Ping"),
+              "The name clash was not explained");
+        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") != nullptr,
+              "The refusal removed a queue the script did not own");
+        Check(scripting.FindComponent(VelocityName) == nullptr,
+              "The clash left part of the script's components registered");
+    }
+
     void AScriptComponentCannotTakeANativeComponentsName()
     {
         HeadlessApp headless;
@@ -2276,13 +2371,15 @@ namespace
 int main(int argc, char* argv[])
 {
     const std::span<char*> arguments(argv, static_cast<std::size_t>(argc));
-    if (arguments.size() != 3)
+    if (arguments.size() != 4)
     {
-        std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll\n";
+        std::cerr << "Usage: FenrirScriptingTests Fenrir.ScriptFixture.dll Fenrir.ScriptFixture.v2.dll "
+                     "Fenrir.BadReportFixture.dll\n";
         return EXIT_FAILURE;
     }
     fixture = std::filesystem::absolute(arguments[1]);
     fixtureV2 = std::filesystem::absolute(arguments[2]);
+    badReports = std::filesystem::absolute(arguments[3]);
     executableDirectory = std::filesystem::absolute(arguments[0]).parent_path();
     return RunCases({
         {"the fixture loads, frames run and Iris's messages reach the engine logger", RunsFramesWithTheFixture},
@@ -2353,6 +2450,15 @@ int main(int argc, char* argv[])
         {"the watcher reloads a stable build between frames", TheWatcherReloadsAStableBuildBetweenFrames},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
+        {"a sound report loads and registers everything together", ASoundReportLoadsAndRegistersEverythingTogether},
+        {"a duplicate script component is refused and leaves nothing behind", ADuplicateScriptComponentIsRefused},
+        {"a script component with an impossible layout is refused and leaves nothing behind",
+         AScriptComponentWithAnImpossibleLayoutIsRefused},
+        {"a duplicate script event is refused and leaves nothing behind", ADuplicateScriptEventIsRefused},
+        {"a script event with an impossible layout is refused and leaves nothing behind",
+         AScriptEventWithAnImpossibleLayoutIsRefused},
+        {"a script event cannot take the name of a queue the app already has",
+         AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},
         {"a script cannot claim a native component with a struct of its own",
          AScriptCannotClaimANativeComponentWithAStructOfItsOwn},
