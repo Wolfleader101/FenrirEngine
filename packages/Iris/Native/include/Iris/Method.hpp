@@ -28,11 +28,11 @@ namespace Iris
      * accepted only as the elements of an inline array, where they are bytes).
      */
     template <typename T>
-    concept PrimitiveValue = std::same_as<T, bool> || std::same_as<T, float> || std::same_as<T, double> ||
-                             std::same_as<T, char16_t> ||
-                             (std::integral<T> && !std::same_as<T, char> && !std::same_as<T, wchar_t> &&
-                              !std::same_as<T, char8_t> && !std::same_as<T, char16_t> && !std::same_as<T, char32_t> &&
-                              (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8));
+    concept PrimitiveValue =
+        std::same_as<T, bool> || std::same_as<T, float> || std::same_as<T, double> || std::same_as<T, char16_t> ||
+        (std::integral<T> && !std::same_as<T, char> && !std::same_as<T, wchar_t> && !std::same_as<T, char8_t> &&
+         !std::same_as<T, char16_t> && !std::same_as<T, char32_t> &&
+         (sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4 || sizeof(T) == 8));
 
     /**
      * @brief Declares how a C++ struct mirrors a managed blittable struct. Specialize it for each struct:
@@ -86,12 +86,11 @@ namespace Iris
      * property or mapped-struct field. Its underlying type must be a sized integer.
      */
     template <typename T>
-    concept EnumValue = std::is_enum_v<T> && requires { EnumMapping<T>::typeName; } &&
-                        std::integral<std::underlying_type_t<T>> && !std::same_as<std::underlying_type_t<T>, bool> &&
-                        !std::same_as<std::underlying_type_t<T>, char> && !std::same_as<std::underlying_type_t<T>, wchar_t> &&
-                        !std::same_as<std::underlying_type_t<T>, char8_t> &&
-                        !std::same_as<std::underlying_type_t<T>, char16_t> &&
-                        !std::same_as<std::underlying_type_t<T>, char32_t>;
+    concept EnumValue =
+        std::is_enum_v<T> && requires { EnumMapping<T>::typeName; } && std::integral<std::underlying_type_t<T>> &&
+        !std::same_as<std::underlying_type_t<T>, bool> && !std::same_as<std::underlying_type_t<T>, char> &&
+        !std::same_as<std::underlying_type_t<T>, wchar_t> && !std::same_as<std::underlying_type_t<T>, char8_t> &&
+        !std::same_as<std::underlying_type_t<T>, char16_t> && !std::same_as<std::underlying_type_t<T>, char32_t>;
 
     /**
      * @brief What an Array can hold: a PrimitiveValue, a mapped struct (see StructMapping), or
@@ -176,10 +175,9 @@ namespace Iris
      * matches any managed class or interface parameter, or an Array (`const Array<T>*` passes a nullable array).
      */
     template <typename T>
-    concept Argument =
-        PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> || StructValue<std::remove_cvref_t<T>> ||
-        EnumValue<std::remove_cvref_t<T>> ||
-        std::same_as<std::remove_cvref_t<T>, Object> || Detail::ArrayInfo<std::remove_cvref_t<T>>::value;
+    concept Argument = PrimitiveValue<std::remove_cvref_t<T>> || StringArgument<T> ||
+                       StructValue<std::remove_cvref_t<T>> || EnumValue<std::remove_cvref_t<T>> ||
+                       std::same_as<std::remove_cvref_t<T>, Object> || Detail::ArrayInfo<std::remove_cvref_t<T>>::value;
 
     /**
      * @brief An argument as declared in a method signature: a PrimitiveValue or mapped struct by value, a
@@ -192,15 +190,15 @@ namespace Iris
                                 std::same_as<T, const Object&> || Detail::ArraySignature<T>;
 
     /**
-     * @brief What a managed method can return: void, a PrimitiveValue, a mapped struct or enum, `std::optional<Object>`,
-     * `std::optional<std::string>`, or `std::optional<Array<T>>`. In each optional an empty value is a null
-     * return, which a string keeps distinct from the empty string and an array from an empty array. A returned
-     * string is an owned copy; a returned Object or Array is a new, independently owned handle.
+     * @brief What a managed method can return: void, a PrimitiveValue, a mapped struct or enum,
+     * `std::optional<Object>`, `std::optional<std::string>`, or `std::optional<Array<T>>`. In each optional an empty
+     * value is a null return, which a string keeps distinct from the empty string and an array from an empty array. A
+     * returned string is an owned copy; a returned Object or Array is a new, independently owned handle.
      */
     template <typename T>
-    concept Returnable =
-        std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || EnumValue<T> || std::same_as<T, std::optional<Object>> ||
-        std::same_as<T, std::optional<std::string>> || Detail::OptionalArrayInfo<T>::value;
+    concept Returnable = std::is_void_v<T> || PrimitiveValue<T> || StructValue<T> || EnumValue<T> ||
+                         std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>> ||
+                         Detail::OptionalArrayInfo<T>::value;
 
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
     // any release, so always build against the headers of the library you link.
@@ -224,7 +222,7 @@ namespace Iris
             Object = 12,
             String = 13,
             Struct = 14,
-            Array = 15, // Only in a KindSpec; on the wire it is combined with the element kind.
+            Array = 15,   // Only in a KindSpec; on the wire it is combined with the element kind.
             Pointer = 17, // Only in internal call signatures.
             Char = 18,
             Enum = 19,       // On the wire combined with the enum's handle, like Struct.
@@ -263,7 +261,8 @@ namespace Iris
         constexpr ValueKind KindOf() noexcept;
 
         template <EnumValue T>
-        inline constexpr StructInfo EnumInfoOf{EnumMapping<T>::typeName, sizeof(T), {}, KindOf<std::underlying_type_t<T>>()};
+        inline constexpr StructInfo EnumInfoOf{
+            EnumMapping<T>::typeName, sizeof(T), {}, KindOf<std::underlying_type_t<T>>()};
 
         // The struct or enum mapping a declared type needs registered, or null.
         template <typename Declared>
@@ -407,8 +406,8 @@ namespace Iris
 
         // What an inline array can hold: the values a struct field can, and `char` or `char8_t` as bytes.
         template <typename E>
-        concept InlineArrayElement = PrimitiveValue<E> || StructValue<E> || EnumValue<E> || std::same_as<E, char> ||
-                                     std::same_as<E, char8_t>;
+        concept InlineArrayElement =
+            PrimitiveValue<E> || StructValue<E> || EnumValue<E> || std::same_as<E, char> || std::same_as<E, char8_t>;
 
         // The kind of an inline array's elements: `char` and `char8_t` are bytes (a managed `byte`).
         template <typename E>

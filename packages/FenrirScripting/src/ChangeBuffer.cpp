@@ -47,7 +47,8 @@ namespace Fenrir::Detail
         return ChangeError::None;
     }
 
-    ChangeError ChangeBuffer::SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event, const void* value)
+    ChangeError ChangeBuffer::SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event,
+                                        const void* value)
     {
         const auto* registration = registry.GetEvent(event);
         if (registration == nullptr || value == nullptr)
@@ -123,8 +124,7 @@ namespace Fenrir::Detail
                 entities.DestroyEntity(change.entity);
                 ++result.applied;
                 break;
-            case Kind::Add:
-            {
+            case Kind::Add: {
                 const auto* registration = registry.Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !registration->add(entities, change.entity))
@@ -142,11 +142,11 @@ namespace Fenrir::Detail
                 ++result.applied;
                 break;
             }
-            case Kind::SendEvent:
-            {
+            case Kind::SendEvent: {
                 const auto* registration = registry.GetEvent(change.component);
                 IEventQueue* queue = registration == nullptr ? nullptr : app.FindEventQueue(registration->name);
-                if (queue == nullptr || queue->EventSize() != registration->size || !queue->SendRaw(values.data() + change.valueOffset))
+                if (queue == nullptr || queue->EventSize() != registration->size ||
+                    !queue->SendRaw(values.data() + change.valueOffset))
                 {
                     ++result.skipped;
                     app.Logger()->Warn("Scripting: skipped sending an event: its queue no longer exists.");
@@ -155,8 +155,7 @@ namespace Fenrir::Detail
                 ++result.applied;
                 break;
             }
-            case Kind::Remove:
-            {
+            case Kind::Remove: {
                 const auto* registration = registry.Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !registration->remove(entities, change.entity))

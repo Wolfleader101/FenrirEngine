@@ -39,14 +39,14 @@ namespace Fenrir
         std::filesystem::path dotnetRoot;
 
         /**
-         * @brief Native components to expose to C# besides the engine's own (Transform, Name and Relationship), built with
-         * MakeComponent. They are registered before the script assembly loads and checked against it as it does.
+         * @brief Native components to expose to C# besides the engine's own (Transform, Name and Relationship), built
+         * with MakeComponent. They are registered before the script assembly loads and checked against it as it does.
          */
         std::vector<ComponentRegistration> components;
 
         /**
-         * @brief C++ events to share with C# (see MakeEvent). They are registered before the script assembly loads and checked
-         * against it as it does. Events only C# defines need nothing here.
+         * @brief C++ events to share with C# (see MakeEvent). They are registered before the script assembly loads and
+         * checked against it as it does. Events only C# defines need nothing here.
          */
         std::vector<EventRegistration> events;
 
@@ -57,14 +57,15 @@ namespace Fenrir
         std::vector<std::filesystem::path> sharedAssemblies;
 
         /**
-         * @brief Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way the
-         * assembly is loaded from a private copy, so a build can always overwrite the original.
+         * @brief Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way
+         * the assembly is loaded from a private copy, so a build can always overwrite the original.
          */
         bool hotReload = true;
 
         /**
-         * @brief Where the per-generation copies of the script assembly go. Empty means a directory of its own under the
-         * system temporary directory. Each loaded generation has a subdirectory, deleted once that generation is unloaded.
+         * @brief Where the per-generation copies of the script assembly go. Empty means a directory of its own under
+         * the system temporary directory. Each loaded generation has a subdirectory, deleted once that generation is
+         * unloaded.
          */
         std::filesystem::path reloadDirectory;
 
@@ -77,8 +78,8 @@ namespace Fenrir
         std::chrono::milliseconds reloadDebounce{400};
 
         /**
-         * @brief How long a reload waits for the old generation to unload. A generation that has not unloaded by then is kept
-         * track of (see Scripting::PendingUnloadCount) and the reload goes on.
+         * @brief How long a reload waits for the old generation to unload. A generation that has not unloaded by then
+         * is kept track of (see Scripting::PendingUnloadCount) and the reload goes on.
          */
         std::chrono::milliseconds unloadTimeout{2000};
     };
@@ -124,16 +125,16 @@ namespace Fenrir
         [[nodiscard]] bool HasScripts() const noexcept;
 
         /**
-         * @brief Exposes another native component to C# (see MakeComponent and MakeReadOnlyComponent). If a script assembly
-         * is loaded, the component's C# struct is checked against its layout straight away: a mismatch is
-         * `InvalidArgument` with a diagnostic naming the field, is logged, and releases the script assembly, exactly as a
-         * mismatch at load does (all or nothing). A name that is empty or already taken is `InvalidArgument`.
+         * @brief Exposes another native component to C# (see MakeComponent and MakeReadOnlyComponent). If a script
+         * assembly is loaded, the component's C# struct is checked against its layout straight away: a mismatch is
+         * `InvalidArgument` with a diagnostic naming the field, is logged, and releases the script assembly, exactly as
+         * a mismatch at load does (all or nothing). A name that is empty or already taken is `InvalidArgument`.
          */
         [[nodiscard]] Iris::CallResult<void> RegisterComponent(ComponentRegistration registration);
 
         /**
-         * @brief Shares a C++ event with C# (see MakeEvent). If a script assembly is loaded its C# struct is checked straight
-         * away, exactly as RegisterComponent does. A name that is empty or already taken is `InvalidArgument`.
+         * @brief Shares a C++ event with C# (see MakeEvent). If a script assembly is loaded its C# struct is checked
+         * straight away, exactly as RegisterComponent does. A name that is empty or already taken is `InvalidArgument`.
          */
         [[nodiscard]] Iris::CallResult<void> RegisterEvent(EventRegistration registration);
 
@@ -159,8 +160,8 @@ namespace Fenrir
         }
 
         /**
-         * @brief The component registered under a name (native, or defined by the loaded script assembly), or null. Use its
-         * operations to add, remove and reach a component on an entity from native code, whatever defines it.
+         * @brief The component registered under a name (native, or defined by the loaded script assembly), or null. Use
+         * its operations to add, remove and reach a component on an entity from native code, whatever defines it.
          */
         [[nodiscard]] const ComponentRegistration* FindComponent(std::string_view name) const;
 
@@ -168,18 +169,20 @@ namespace Fenrir
         struct ChangeSummary
         {
             std::size_t applied = 0;
-            /** Changes that named an entity destroyed earlier in the same batch: not applied, and logged as warnings. */
+            /** Changes that named an entity destroyed earlier in the same batch: not applied, and logged as warnings.
+             */
             std::size_t skipped = 0;
         };
 
         /**
          * @brief Plays back the structural changes scripts have made since the last call, in the order they were made.
          *
-         * A script that creates, destroys, adds or removes (Entity.Create, Destroy, Add, Remove) does not touch the ECS storage
-         * at the time: the change is recorded, so every Ref<T> the script holds stays valid until it returns. Whatever calls
-         * into a script (the runner after each system, or `OnCreate`) calls this when the script returns. Reads (Get, Has,
-         * IsValid) are never recorded and see the state as it is now, which does not include changes not yet played back.
-         * A created entity's id is usable at once; it gets its Transform, Name and Relationship here.
+         * A script that creates, destroys, adds or removes (Entity.Create, Destroy, Add, Remove) does not touch the ECS
+         * storage at the time: the change is recorded, so every Ref<T> the script holds stays valid until it returns.
+         * Whatever calls into a script (the runner after each system, or `OnCreate`) calls this when the script
+         * returns. Reads (Get, Has, IsValid) are never recorded and see the state as it is now, which does not include
+         * changes not yet played back. A created entity's id is usable at once; it gets its Transform, Name and
+         * Relationship here.
          *
          * Playback skips, with a warning, a create, add or remove naming an entity an earlier change destroyed, so a
          * destroy-then-add on one entity leaves it destroyed. A second destroy of an entity is not an error and is not
@@ -188,11 +191,11 @@ namespace Fenrir
         ChangeSummary ApplyChanges();
 
         /**
-         * @brief Reloads the script assembly now, from the file `scriptAssembly` names, instead of waiting for the watcher. The
-         * order is the one the watcher uses: the old systems' OnDestroy, release and unload the old generation, load the new
-         * one all-or-nothing, and if that fails load the previous generation again. Call it between frames, not from a script.
-         * Returns success if the new generation is running; a failure names why, and the previous generation is running again
-         * if it could be restored (see HasScripts).
+         * @brief Reloads the script assembly now, from the file `scriptAssembly` names, instead of waiting for the
+         * watcher. The order is the one the watcher uses: the old systems' OnDestroy, release and unload the old
+         * generation, load the new one all-or-nothing, and if that fails load the previous generation again. Call it
+         * between frames, not from a script. Returns success if the new generation is running; a failure names why, and
+         * the previous generation is running again if it could be restored (see HasScripts).
          */
         Iris::CallResult<void> Reload();
 
@@ -200,20 +203,22 @@ namespace Fenrir
         [[nodiscard]] int Generation() const noexcept;
 
         /**
-         * @brief How many released generations have not unloaded yet. Normally zero after a reload; a generation stays here when
-         * something still holds a type from it, and its copy of the assembly stays on disk until it is collected.
+         * @brief How many released generations have not unloaded yet. Normally zero after a reload; a generation stays
+         * here when something still holds a type from it, and its copy of the assembly stays on disk until it is
+         * collected.
          */
         [[nodiscard]] std::size_t PendingUnloadCount() const noexcept;
 
         /**
-         * @brief How many times the engine has called into the script's systems since Install: once per phase that has systems,
-         * per frame (and per fixed step for Tick). A diagnostic, for tests of the one-transition-per-phase rule.
+         * @brief How many times the engine has called into the script's systems since Install: once per phase that has
+         * systems, per frame (and per fixed step for Tick). A diagnostic, for tests of the one-transition-per-phase
+         * rule.
          */
         [[nodiscard]] std::size_t PhaseCallCount() const noexcept;
 
         /**
-         * @brief How many times scripts have called into the engine to run queries, since Install. A diagnostic: a query makes a
-         * fixed number of calls however many entities it visits, and a test can check that.
+         * @brief How many times scripts have called into the engine to run queries, since Install. A diagnostic: a
+         * query makes a fixed number of calls however many entities it visits, and a test can check that.
          */
         [[nodiscard]] std::size_t QueryCallCount() const noexcept;
 

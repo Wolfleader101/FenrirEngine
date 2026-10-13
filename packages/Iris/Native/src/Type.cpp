@@ -322,29 +322,28 @@ namespace Iris
 
     CallResult<std::vector<FieldInfo>> Type::GetFields() const
     {
-        return Snapshot<std::vector<FieldInfo>>(
-            *state->bridge, state->component, state->type, 3, "QueryType",
-            [](Detail::SnapshotReader& reader, std::vector<FieldInfo>& value) {
-                const std::int32_t count = reader.Int32();
-                for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
-                {
-                    FieldInfo field;
-                    field.name = reader.String();
-                    field.type = ReadTypeInfo(reader);
-                    field.kind = ReadKind(reader);
-                    const std::int32_t flags = reader.Int32();
-                    field.isStatic = (flags & 1) != 0;
-                    field.isReadOnly = (flags & 2) != 0;
-                    field.visibility = ReadVisibility(reader);
-                    const std::int64_t offset = reader.Int64();
-                    if (offset >= 0)
-                    {
-                        field.offset = static_cast<std::size_t>(offset);
-                    }
-                    ReadAttributes(reader, field.attributes);
-                    value.push_back(std::move(field));
-                }
-            });
+        return Snapshot<std::vector<FieldInfo>>(*state->bridge, state->component, state->type, 3, "QueryType",
+                                                [](Detail::SnapshotReader& reader, std::vector<FieldInfo>& value) {
+                                                    const std::int32_t count = reader.Int32();
+                                                    for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                                                    {
+                                                        FieldInfo field;
+                                                        field.name = reader.String();
+                                                        field.type = ReadTypeInfo(reader);
+                                                        field.kind = ReadKind(reader);
+                                                        const std::int32_t flags = reader.Int32();
+                                                        field.isStatic = (flags & 1) != 0;
+                                                        field.isReadOnly = (flags & 2) != 0;
+                                                        field.visibility = ReadVisibility(reader);
+                                                        const std::int64_t offset = reader.Int64();
+                                                        if (offset >= 0)
+                                                        {
+                                                            field.offset = static_cast<std::size_t>(offset);
+                                                        }
+                                                        ReadAttributes(reader, field.attributes);
+                                                        value.push_back(std::move(field));
+                                                    }
+                                                });
     }
 
     CallResult<std::vector<PropertyInfo>> Type::GetProperties() const
@@ -372,31 +371,31 @@ namespace Iris
 
     CallResult<std::vector<MethodInfo>> Type::GetMethods() const
     {
-        return Snapshot<std::vector<MethodInfo>>(
-            *state->bridge, state->component, state->type, 5, "QueryType",
-            [](Detail::SnapshotReader& reader, std::vector<MethodInfo>& value) {
-                const std::int32_t count = reader.Int32();
-                for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
-                {
-                    MethodInfo method;
-                    method.name = reader.String();
-                    method.returnType = ReadTypeInfo(reader);
-                    method.returnKind = ReadKind(reader);
-                    method.isStatic = (reader.Int32() & 1) != 0;
-                    method.visibility = ReadVisibility(reader);
-                    const std::int32_t parameters = reader.Int32();
-                    for (std::int32_t position = 0; reader.Ok() && position < parameters; ++position)
-                    {
-                        ParameterInfo parameter;
-                        parameter.name = reader.String();
-                        parameter.type = ReadTypeInfo(reader);
-                        parameter.kind = ReadKind(reader);
-                        method.parameters.push_back(std::move(parameter));
-                    }
-                    ReadAttributes(reader, method.attributes);
-                    value.push_back(std::move(method));
-                }
-            });
+        return Snapshot<std::vector<MethodInfo>>(*state->bridge, state->component, state->type, 5, "QueryType",
+                                                 [](Detail::SnapshotReader& reader, std::vector<MethodInfo>& value) {
+                                                     const std::int32_t count = reader.Int32();
+                                                     for (std::int32_t index = 0; reader.Ok() && index < count; ++index)
+                                                     {
+                                                         MethodInfo method;
+                                                         method.name = reader.String();
+                                                         method.returnType = ReadTypeInfo(reader);
+                                                         method.returnKind = ReadKind(reader);
+                                                         method.isStatic = (reader.Int32() & 1) != 0;
+                                                         method.visibility = ReadVisibility(reader);
+                                                         const std::int32_t parameters = reader.Int32();
+                                                         for (std::int32_t position = 0;
+                                                              reader.Ok() && position < parameters; ++position)
+                                                         {
+                                                             ParameterInfo parameter;
+                                                             parameter.name = reader.String();
+                                                             parameter.type = ReadTypeInfo(reader);
+                                                             parameter.kind = ReadKind(reader);
+                                                             method.parameters.push_back(std::move(parameter));
+                                                         }
+                                                         ReadAttributes(reader, method.attributes);
+                                                         value.push_back(std::move(method));
+                                                     }
+                                                 });
     }
 
     CallResult<bool> Type::IsAssignableTo(const Type& other) const

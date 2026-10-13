@@ -64,13 +64,13 @@ namespace Fenrir::Detail
             return app != nullptr && app->GetActiveScene().GetEntityList().HasEntity(value);
         }
 
-        // Native.ComponentIdOf: the id of the component registered under a UTF-8 name for the C# type with the given full
-        // name; -1 if nothing is registered under the name, -3 if it is registered for a different C# type.
+        // Native.ComponentIdOf: the id of the component registered under a UTF-8 name for the C# type with the given
+        // full name; -1 if nothing is registered under the name, -3 if it is registered for a different C# type.
         std::int32_t ComponentIdOf(const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength)
         {
             const auto* context = activeContext.load();
-            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 || typeName == nullptr ||
-                typeLength < 0)
+            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 ||
+                typeName == nullptr || typeLength < 0)
             {
                 return -1;
             }
@@ -78,8 +78,8 @@ namespace Fenrir::Detail
                                                 std::string_view(typeName, static_cast<std::size_t>(typeLength)));
         }
 
-        // Native.RegisterScriptComponent: a script assembly reports a component type it defines, while it loads. False if
-        // nothing is loading.
+        // Native.RegisterScriptComponent: a script assembly reports a component type it defines, while it loads. False
+        // if nothing is loading.
         bool RegisterScriptComponent(const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment)
         {
             auto* context = activeContext.load();
@@ -125,7 +125,8 @@ namespace Fenrir::Detail
             return component != nullptr && component->has(context->app->GetActiveScene().GetEntityList(), entity);
         }
 
-        // Native.EntityCreate: a new entity id, usable at once; the entity gets its engine components when changes play back.
+        // Native.EntityCreate: a new entity id, usable at once; the entity gets its engine components when changes play
+        // back.
         std::uint32_t EntityCreate()
         {
             const auto* context = activeContext.load();
@@ -136,8 +137,8 @@ namespace Fenrir::Detail
             return context->changes->Create(context->app->GetActiveScene().GetEntityList());
         }
 
-        // Native.EntityDestroy, ComponentAdd and ComponentRemove record a change for playback. They return a ChangeError code:
-        // 0 recorded, negative for the reason it was refused.
+        // Native.EntityDestroy, ComponentAdd and ComponentRemove record a change for playback. They return a
+        // ChangeError code: 0 recorded, negative for the reason it was refused.
         std::int32_t Refuse() noexcept
         {
             return static_cast<std::int32_t>(ChangeError::NotActive);
@@ -150,14 +151,16 @@ namespace Fenrir::Detail
             {
                 return Refuse();
             }
-            return static_cast<std::int32_t>(context->changes->Destroy(context->app->GetActiveScene().GetEntityList(), entity));
+            return static_cast<std::int32_t>(
+                context->changes->Destroy(context->app->GetActiveScene().GetEntityList(), entity));
         }
 
         // `value` is the component's bytes, or null for a default one.
         std::int32_t ComponentAdd(std::int32_t id, std::uint32_t entity, const void* value)
         {
             const auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr ||
+                context->components == nullptr)
             {
                 return Refuse();
             }
@@ -168,7 +171,8 @@ namespace Fenrir::Detail
         std::int32_t ComponentRemove(std::int32_t id, std::uint32_t entity)
         {
             const auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr ||
+                context->components == nullptr)
             {
                 return Refuse();
             }
@@ -180,7 +184,8 @@ namespace Fenrir::Detail
         std::int32_t ChangesApply()
         {
             auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->components == nullptr || context->changes == nullptr)
+            if (context == nullptr || context->app == nullptr || context->components == nullptr ||
+                context->changes == nullptr)
             {
                 return 0;
             }
@@ -197,13 +202,13 @@ namespace Fenrir::Detail
             }
         }
 
-        // Native.EventIdOf: the id of the event registered under a UTF-8 name for the C# type with the given full name; -1 if
-        // there is none, -3 if it is registered for a different C# type.
+        // Native.EventIdOf: the id of the event registered under a UTF-8 name for the C# type with the given full name;
+        // -1 if there is none, -3 if it is registered for a different C# type.
         std::int32_t EventIdOf(const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength)
         {
             const auto* context = activeContext.load();
-            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 || typeName == nullptr ||
-                typeLength < 0)
+            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 ||
+                typeName == nullptr || typeLength < 0)
             {
                 return -1;
             }
@@ -215,13 +220,14 @@ namespace Fenrir::Detail
         bool RegisterScriptEvent(const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment)
         {
             auto* context = activeContext.load();
-            if (context == nullptr || context->discoveringEvents == nullptr || name == nullptr || length <= 0 || size <= 0 ||
-                alignment <= 0)
+            if (context == nullptr || context->discoveringEvents == nullptr || name == nullptr || length <= 0 ||
+                size <= 0 || alignment <= 0)
             {
                 return false;
             }
             context->discoveringEvents->push_back({std::string(name, static_cast<std::size_t>(length)),
-                                                   static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+                                                   static_cast<std::size_t>(size),
+                                                   static_cast<std::size_t>(alignment)});
             return true;
         }
 
@@ -229,15 +235,18 @@ namespace Fenrir::Detail
         std::int32_t EventSend(std::int32_t event, const void* value)
         {
             const auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr ||
+                context->components == nullptr)
             {
                 return Refuse();
             }
-            return static_cast<std::int32_t>(context->changes->SendEvent(*context->app, *context->components, event, value));
+            return static_cast<std::int32_t>(
+                context->changes->SendEvent(*context->app, *context->components, event, value));
         }
 
-        // Native.EventRead: how many events the queue holds for reading (this frame's and the last frame's), and where they
-        // are. -1 if there is no such event. The address is good until something is sent to the queue or the frame ends.
+        // Native.EventRead: how many events the queue holds for reading (this frame's and the last frame's), and where
+        // they are. -1 if there is no such event. The address is good until something is sent to the queue or the frame
+        // ends.
         std::int32_t EventRead(std::int32_t event, std::uintptr_t* data)
         {
             const auto* context = activeContext.load();
@@ -246,7 +255,8 @@ namespace Fenrir::Detail
                 return -1;
             }
             const auto* registration = context->components->GetEvent(event);
-            const IEventQueue* queue = registration == nullptr ? nullptr : context->app->FindEventQueue(registration->name);
+            const IEventQueue* queue =
+                registration == nullptr ? nullptr : context->app->FindEventQueue(registration->name);
             if (queue == nullptr || queue->EventSize() != registration->size)
             {
                 return -1;
@@ -260,26 +270,27 @@ namespace Fenrir::Detail
         std::int32_t QueryCount(const std::int32_t* ids, std::int32_t count)
         {
             auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr || count <= 0)
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr ||
+                count <= 0)
             {
                 return -1;
             }
             ++context->queryCalls;
             return CountQueryRows(context->app->GetActiveScene().GetEntityList(), *context->components,
-                                      std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)));
+                                  std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)));
         }
 
         std::int32_t QueryFill(const std::int32_t* ids, std::int32_t count, std::uintptr_t* rows, std::int32_t capacity)
         {
             auto* context = activeContext.load();
-            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr || count <= 0 ||
-                rows == nullptr || capacity < 0)
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr ||
+                count <= 0 || rows == nullptr || capacity < 0)
             {
                 return -1;
             }
             ++context->queryCalls;
             return FillQueryRows(context->app->GetActiveScene().GetEntityList(), *context->components,
-                                     std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)), rows, capacity);
+                                 std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)), rows, capacity);
         }
     } // namespace
 

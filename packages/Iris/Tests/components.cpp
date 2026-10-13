@@ -4,11 +4,11 @@
 #include "TestHarness.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <array>
+#include <chrono>
 #include <cmath>
-#include <cstring>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -242,8 +242,8 @@ template <>
 struct Iris::StructMapping<Fixture::Glyph>
 {
     static constexpr std::string_view typeName = "Iris.Examples.Component.Glyph";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fixture::Glyph, Letter),
-                                                      IRIS_FIELD(Fixture::Glyph, Bold), IRIS_FIELD(Fixture::Glyph, Code));
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD(Fixture::Glyph, Letter), IRIS_FIELD(Fixture::Glyph, Bold), IRIS_FIELD(Fixture::Glyph, Code));
 };
 
 template <>
@@ -1553,7 +1553,8 @@ namespace
                  Check(flip.value->Invoke(Fixture::FlagValue{false, -3}).value->Flag, "A false bool did not flip");
 
                  // Managed code is only ever given 0 or 1: a stray nonzero byte is true, and comes back as 1.
-                 const auto same = (*component.FindType(ValuesType).value).FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Same");
+                 const auto same =
+                     (*component.FindType(ValuesType).value).FindMethod<Fixture::FlagValue(Fixture::FlagValue)>("Same");
                  Check(same.Succeeded(), "Same was not found: " + same.diagnostic);
                  Fixture::FlagValue odd{false, 9};
                  std::memset(&odd, 2, 1);
@@ -1656,8 +1657,7 @@ namespace
                  Check(tune.Succeeded(), "A struct with enums was not found: " + tune.diagnostic);
                  const auto tuned = tune.value->Invoke(Fixture::Setting{Gear::On, Fixture::Shade::Dark, false, 4});
                  Check(tuned.Succeeded() && tuned.value->Current == Gear::Auto &&
-                           tuned.value->Tint == Fixture::Shade::Light && tuned.value->Locked &&
-                           tuned.value->Level == 5,
+                           tuned.value->Tint == Fixture::Shade::Light && tuned.value->Locked && tuned.value->Level == 5,
                        "A struct with enum fields did not round-trip");
                  const auto badStruct = values.FindMethod<Fixture::WideSetting(Fixture::WideSetting)>("Tune");
                  Check(badStruct.status == CallStatus::InvalidArgument,
@@ -1668,7 +1668,8 @@ namespace
                  const auto object = dial.CreateObject();
                  Check(object.Succeeded(), "An object could not be created: " + object.diagnostic);
                  const auto selected = *dial.FindField<Gear>("Selected").value;
-                 Check(selected.Set(*object.value, Gear::On).Succeeded() && selected.Get(*object.value).value == Gear::On,
+                 Check(selected.Set(*object.value, Gear::On).Succeeded() &&
+                           selected.Get(*object.value).value == Gear::On,
                        "An enum field did not round-trip");
                  const auto tone = *dial.FindProperty<Fixture::Shade>("Tone").value;
                  Check(tone.Get(*object.value).value == Fixture::Shade::Dark &&
@@ -1705,8 +1706,8 @@ namespace
                  using Fixture::Gear;
                  const auto reverse = values.FindMethod<Fixture::Bundle(Fixture::Bundle)>("Reverse");
                  Check(reverse.Succeeded(), "A struct with inline arrays was not found: " + reverse.diagnostic);
-                 Fixture::Bundle bundle{{1, 2, 3, 4}, {{1, 2, 3}, {4, 5, 6}}, {Gear::Off, Gear::On, Gear::Auto},
-                                        {true, false, false}};
+                 Fixture::Bundle bundle{
+                     {1, 2, 3, 4}, {{1, 2, 3}, {4, 5, 6}}, {Gear::Off, Gear::On, Gear::Auto}, {true, false, false}};
                  std::memset(&bundle.Ready[1], 2, 1); // any nonzero byte is true
                  const auto reversed = reverse.value->Invoke(bundle);
                  Check(reversed.Succeeded(), "A struct with inline arrays did not cross: " + reversed.diagnostic);
@@ -1753,18 +1754,21 @@ namespace
                  Check(wide.status == CallStatus::InvalidArgument && wide.diagnostic.find("24") != std::string::npos,
                        "A size mismatch was not diagnosed: " + wide.diagnostic);
                  const auto swapped = component.ValidateStruct<Fixture::SwappedVec3>();
-                 Check(swapped.status == CallStatus::InvalidArgument && swapped.diagnostic.find("order") != std::string::npos,
+                 Check(swapped.status == CallStatus::InvalidArgument &&
+                           swapped.diagnostic.find("order") != std::string::npos,
                        "A field-order mismatch was not diagnosed: " + swapped.diagnostic);
                  const auto nested = component.ValidateStruct<Fixture::WidePose>();
                  Check(nested.status == CallStatus::InvalidArgument,
                        "A nested mismatch was accepted: " + nested.diagnostic);
                  const auto text = component.ValidateStruct<Fixture::TextHolder>();
-                 Check(text.status == CallStatus::InvalidArgument && text.diagnostic.find("blittable") != std::string::npos,
+                 Check(text.status == CallStatus::InvalidArgument &&
+                           text.diagnostic.find("blittable") != std::string::npos,
                        "A non-blittable type was accepted: " + text.diagnostic);
                  Check(component.ValidateStruct<Fixture::Ghost>().status == CallStatus::NotFound,
                        "A missing type was not NotFound");
                  const auto length = component.ValidateStruct<Fixture::ShortLabel>();
-                 Check(length.status == CallStatus::InvalidArgument && length.diagnostic.find("Text") != std::string::npos,
+                 Check(length.status == CallStatus::InvalidArgument &&
+                           length.diagnostic.find("Text") != std::string::npos,
                        "A field mismatch did not name the field: " + length.diagnostic);
 
                  Check(component.ValidateStruct<Vec3>().Succeeded() && component.FindType(StructsType).Succeeded(),
@@ -1813,7 +1817,8 @@ namespace
                  Check(position.kind == TypeKind::Struct && position.type.fullName == "Iris.Examples.Component.Vec3" &&
                            position.offset == std::optional<std::size_t>(4),
                        "A struct field was described wrongly");
-                 Check((*fields.value)[2].kind == TypeKind::Bool && (*fields.value)[2].offset == std::optional<std::size_t>(16),
+                 Check((*fields.value)[2].kind == TypeKind::Bool &&
+                           (*fields.value)[2].offset == std::optional<std::size_t>(16),
                        "A bool field was described wrongly");
                  Check((*fields.value)[3].visibility == MemberVisibility::Private && !(*fields.value)[3].isStatic &&
                            (*fields.value)[3].kind == TypeKind::Int32,
@@ -1821,19 +1826,22 @@ namespace
                  Check((*fields.value)[4].isStatic && !(*fields.value)[4].offset && !(*fields.value)[4].isReadOnly,
                        "A static field has no offset");
                  Check((*fields.value)[5].isStatic && (*fields.value)[5].isReadOnly, "A constant is read-only");
-                 Check((*fields.value)[6].kind == TypeKind::Enum && (*fields.value)[6].type.fullName == "Iris.Examples.Component.Mode",
+                 Check((*fields.value)[6].kind == TypeKind::Enum &&
+                           (*fields.value)[6].type.fullName == "Iris.Examples.Component.Mode",
                        "An enum field was described wrongly");
 
                  // Offsets agree with the layout struct-mapping validation checks.
                  const auto pose = *component.FindType("Iris.Examples.Component.Pose").value;
                  const auto poseFields = pose.GetFields();
-                 Check(poseFields.Succeeded() && poseFields.value->size() == 4 &&
-                           (*poseFields.value)[0].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Position)) &&
-                           (*poseFields.value)[1].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Scale)) &&
-                           (*poseFields.value)[2].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Weight)) &&
-                           (*poseFields.value)[3].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Flags)) &&
-                           component.ValidateStruct<Fixture::Pose>().Succeeded(),
-                       "Reported offsets disagree with the validated layout");
+                 Check(
+                     poseFields.Succeeded() && poseFields.value->size() == 4 &&
+                         (*poseFields.value)[0].offset ==
+                             std::optional<std::size_t>(offsetof(Fixture::Pose, Position)) &&
+                         (*poseFields.value)[1].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Scale)) &&
+                         (*poseFields.value)[2].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Weight)) &&
+                         (*poseFields.value)[3].offset == std::optional<std::size_t>(offsetof(Fixture::Pose, Flags)) &&
+                         component.ValidateStruct<Fixture::Pose>().Succeeded(),
+                     "Reported offsets disagree with the validated layout");
 
                  const auto probeProperties = probe.GetProperties();
                  Check(probeProperties.Succeeded() && names(*probeProperties.value) == Names{"Hidden"} &&
@@ -1843,7 +1851,8 @@ namespace
                  // A class: only declared members, no backing fields, no indexer, no accessors.
                  const auto probed = *component.FindType("Iris.Examples.Component.Probed").value;
                  const auto classFields = probed.GetFields();
-                 Check(classFields.Succeeded() && names(*classFields.value) == Names{"Legacy", "Wide", "Fixed", "Shared"},
+                 Check(classFields.Succeeded() &&
+                           names(*classFields.value) == Names{"Legacy", "Wide", "Fixed", "Shared"},
                        "A class's declared fields were wrong (inherited and compiler-generated ones are excluded)");
                  const auto& legacy = (*classFields.value)[0];
                  Check(!legacy.offset && legacy.attributes.size() == 1 &&
@@ -1851,9 +1860,9 @@ namespace
                            std::get<std::string>(legacy.attributes[0].arguments[0].value) == "old",
                        "A class field's offset or attribute was wrong");
                  Check((*classFields.value)[1].visibility == MemberVisibility::ProtectedInternal &&
-                           (*classFields.value)[1].kind == TypeKind::Int64 &&
-                           (*classFields.value)[2].isReadOnly && (*classFields.value)[2].kind == TypeKind::String &&
-                           (*classFields.value)[3].isStatic && (*classFields.value)[3].kind == TypeKind::Double,
+                           (*classFields.value)[1].kind == TypeKind::Int64 && (*classFields.value)[2].isReadOnly &&
+                           (*classFields.value)[2].kind == TypeKind::String && (*classFields.value)[3].isStatic &&
+                           (*classFields.value)[3].kind == TypeKind::Double,
                        "A class field's visibility, kind or flags were wrong");
 
                  const auto properties = probed.GetProperties();
@@ -1876,18 +1885,20 @@ namespace
                  Check(methods.Succeeded() && names(*methods.value) == Names{"Scale", "Reset", "Secret"},
                        "A class's methods were wrong (accessors, constructors and inherited methods are excluded)");
                  const auto& scale = (*methods.value)[0];
-                 Check(scale.returnKind == TypeKind::Float && !scale.isStatic && scale.parameters.size() == 2 &&
-                           scale.parameters[0].name == "factor" && scale.parameters[0].kind == TypeKind::Float &&
-                           scale.parameters[1].name == "label" && scale.parameters[1].kind == TypeKind::String &&
-                           std::any_of(scale.attributes.begin(), scale.attributes.end(),
-                                       [&](const AttributeInfo& attribute) { return attribute.type.fullName == script; }),
-                       "A method was described wrongly");
+                 Check(
+                     scale.returnKind == TypeKind::Float && !scale.isStatic && scale.parameters.size() == 2 &&
+                         scale.parameters[0].name == "factor" && scale.parameters[0].kind == TypeKind::Float &&
+                         scale.parameters[1].name == "label" && scale.parameters[1].kind == TypeKind::String &&
+                         std::any_of(scale.attributes.begin(), scale.attributes.end(),
+                                     [&](const AttributeInfo& attribute) { return attribute.type.fullName == script; }),
+                     "A method was described wrongly");
                  Check((*methods.value)[1].isStatic && (*methods.value)[1].returnKind == TypeKind::Void &&
                            (*methods.value)[1].parameters.empty(),
                        "A static void method was described wrongly");
                  const auto& secret = (*methods.value)[2];
                  Check(secret.visibility == MemberVisibility::Private && secret.parameters.size() == 3 &&
-                           secret.parameters[0].kind == TypeKind::Struct && secret.parameters[1].kind == TypeKind::Array &&
+                           secret.parameters[0].kind == TypeKind::Struct &&
+                           secret.parameters[1].kind == TypeKind::Array &&
                            secret.parameters[2].kind == TypeKind::Object,
                        "Parameter kinds were wrong");
 
@@ -1942,8 +1953,7 @@ namespace
                        "A leaked component was reported as unloaded");
                  Check(elapsed >= std::chrono::milliseconds(250) && elapsed < std::chrono::seconds(20),
                        "The wait did not honour its timeout");
-                 Check(component.WaitForUnload(std::chrono::milliseconds(0)).Succeeded(),
-                       "A zero timeout failed");
+                 Check(component.WaitForUnload(std::chrono::milliseconds(0)).Succeeded(), "A zero timeout failed");
 
                  // The host works throughout: another component loads and runs.
                  auto other = Load(*host, arguments.component);
@@ -1955,7 +1965,8 @@ namespace
                  const auto collected = component.WaitForUnload(std::chrono::seconds(20));
                  Check(collected.Succeeded() && *collected.value == ComponentUnloadState::Collected,
                        "The component was not collected after its root ended");
-                 Check(other.WaitForUnload(std::chrono::seconds(20)).Succeeded(), "The other component was not collected");
+                 Check(other.WaitForUnload(std::chrono::seconds(20)).Succeeded(),
+                       "The other component was not collected");
              }},
             {"a struct defined in a shared assembly can be validated and passed, under managed field names",
              [&] {
@@ -1974,7 +1985,6 @@ namespace
                  const auto shifted = shift.value->Invoke(Fixture::SharedPoint{10, 20});
                  Check(shifted.Succeeded() && shifted.value->x == 11 && shifted.value->y == 22,
                        "A shared struct did not round-trip");
-
              }},
             {"arrays of primitives, strings and structs: create, access, bulk copy and ranges",
              [&] {
@@ -2592,8 +2602,7 @@ namespace
                          .value->Invoke(14)
                          .value;
                  };
-                 Check(triple(first) == 42 && triple(second) == 42,
-                       "A shared contract's internal call was not bound");
+                 Check(triple(first) == 42 && triple(second) == 42, "A shared contract's internal call was not bound");
                  // Sharing the same file again is a no-op; a contract cannot also be a component.
                  Check(host->Initialize(configuration).success, "Re-sharing the same file failed");
                  const auto asComponent = host->LoadComponent(configuration.sharedAssemblies.front());
@@ -2654,13 +2663,15 @@ namespace
                  Host host;
                  const auto failed = host.Initialize(configuration);
                  Check(!failed.success && !host.IsInitialized() &&
-                           failed.diagnostic.find("Iris.Examples.Contracts.SharedNatives.Triple") != std::string::npos &&
+                           failed.diagnostic.find("Iris.Examples.Contracts.SharedNatives.Triple") !=
+                               std::string::npos &&
                            failed.diagnostic.find("no internal call is registered") != std::string::npos,
                        "An unbound shared contract field was not diagnosed: " + failed.diagnostic);
                  // The failed attempt shared nothing: once the function is registered the same sharing works.
-                 Check(Iris::RegisterInternalCall<&Iris::Examples::Triple>("Iris.Examples.Contracts.SharedNatives.Triple")
-                           .Succeeded(),
-                       "Registering the shared contract's function failed");
+                 Check(
+                     Iris::RegisterInternalCall<&Iris::Examples::Triple>("Iris.Examples.Contracts.SharedNatives.Triple")
+                         .Succeeded(),
+                     "Registering the shared contract's function failed");
                  Host again;
                  const auto shared = again.Initialize(configuration);
                  Check(shared.success, "Sharing after registering failed: " + shared.diagnostic);

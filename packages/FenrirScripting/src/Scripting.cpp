@@ -11,10 +11,10 @@
 #include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <map>
-#include <exception>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -82,9 +82,9 @@ namespace Fenrir
 
     namespace
     {
-        // A directory holding one generation's private copy of the script assembly. It is deleted when the last owner lets go:
-        // the generation loaded from it, a released generation that has not unloaded yet (Windows will not delete a loaded
-        // assembly), or the "previous" slot that keeps it in case the next build fails to load.
+        // A directory holding one generation's private copy of the script assembly. It is deleted when the last owner
+        // lets go: the generation loaded from it, a released generation that has not unloaded yet (Windows will not
+        // delete a loaded assembly), or the "previous" slot that keeps it in case the next build fails to load.
         struct CopyDirectory
         {
             explicit CopyDirectory(std::filesystem::path path) : directory(std::move(path))
@@ -101,8 +101,8 @@ namespace Fenrir
             std::filesystem::path directory;
         };
 
-        // What a script component or event looked like when its data was last in use, so a reload can tell whether the data
-        // still means the same thing: the size and alignment, and each field's name, type, kind and offset.
+        // What a script component or event looked like when its data was last in use, so a reload can tell whether the
+        // data still means the same thing: the size and alignment, and each field's name, type, kind and offset.
         struct OwnedLayout
         {
             std::string fingerprint;
@@ -134,7 +134,8 @@ namespace Fenrir
             return FileStamp{modified, size};
         }
 
-        // Whether the file can be opened for reading right now: a build still writing it, or a virus scanner holding it, says no.
+        // Whether the file can be opened for reading right now: a build still writing it, or a virus scanner holding
+        // it, says no.
         bool CanBeRead(const std::filesystem::path& path)
         {
             std::ifstream stream(path, std::ios::binary);
@@ -223,9 +224,11 @@ namespace Fenrir
         // Loads the script assembly as a new generation: a private copy of `assembly` (or the directory `existing` when
         // restoring a previous copy), then the all-or-nothing checks, then the systems. On failure nothing of the new
         // generation is left running.
-        Iris::CallResult<void> LoadGeneration(const std::filesystem::path& assembly, std::shared_ptr<CopyDirectory> existing);
+        Iris::CallResult<void> LoadGeneration(const std::filesystem::path& assembly,
+                                              std::shared_ptr<CopyDirectory> existing);
 
-        // Says goodbye to the systems and releases the loaded generation. Its data (component storage, event queues) stays.
+        // Says goodbye to the systems and releases the loaded generation. Its data (component storage, event queues)
+        // stays.
         void UnloadGeneration();
 
         // Waits for released generations to unload, deleting their copies as they do.
@@ -243,8 +246,8 @@ namespace Fenrir
             retired.push_back({std::move(released), std::move(copy), generation, false});
         }
 
-        // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success) when
-        // the script defines no systems. The phases themselves are scheduled once, at Install.
+        // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success)
+        // when the script defines no systems. The phases themselves are scheduled once, at Install.
         Iris::CallResult<void> StartSystems()
         {
             using Result = Iris::CallResult<void>;
@@ -271,8 +274,9 @@ namespace Fenrir
             {
                 if (*found != Iris::CallStatus::Success)
                 {
-                    return Result{*found, "The script's system host is missing a method: " + mask.diagnostic + create.diagnostic +
-                                              run.diagnostic + destroy.diagnostic,
+                    return Result{*found,
+                                  "The script's system host is missing a method: " + mask.diagnostic +
+                                      create.diagnostic + run.diagnostic + destroy.diagnostic,
                                   false};
                 }
             }
@@ -297,8 +301,8 @@ namespace Fenrir
             return Result{Iris::CallStatus::Success, {}, false};
         }
 
-        // One transition into managed code for the whole phase. Only ever on the main thread: Iris calls, script calls and
-        // the internal calls they make all assume it.
+        // One transition into managed code for the whole phase. Only ever on the main thread: Iris calls, script calls
+        // and the internal calls they make all assume it.
         void RunPhase(int phase)
         {
             if (!runner.has_value() || !runnerRun.has_value() || (phaseMask & (1 << phase)) == 0)
@@ -355,8 +359,8 @@ namespace Fenrir
         {
             try
             {
-                // The systems say goodbye while the runtime is still up; the generation is released, its data removed and the
-                // runtime asked to unload it; then the host that loaded it goes.
+                // The systems say goodbye while the runtime is still up; the generation is released, its data removed
+                // and the runtime asked to unload it; then the host that loaded it goes.
                 if (component.has_value() || runner.has_value())
                 {
                     UnloadGeneration();
@@ -379,7 +383,8 @@ namespace Fenrir
             if (!scratchRoot.empty())
             {
                 std::error_code ignored;
-                std::filesystem::remove(scratchRoot, ignored); // Only succeeds when it is empty: leaves other work alone.
+                std::filesystem::remove(scratchRoot,
+                                        ignored); // Only succeeds when it is empty: leaves other work alone.
             }
             if (host != nullptr)
             {
@@ -430,7 +435,8 @@ namespace Fenrir
     namespace
     {
         // Checks every registered component against its C# struct. The first mismatch is the answer, naming the field.
-        Iris::CallResult<void> ValidateRegistration(const ComponentRegistration& registration, const Iris::Component& component)
+        Iris::CallResult<void> ValidateRegistration(const ComponentRegistration& registration,
+                                                    const Iris::Component& component)
         {
             if (!registration.validate)
             {
@@ -439,12 +445,14 @@ namespace Fenrir
             auto validated = registration.validate(component);
             if (!validated.Succeeded())
             {
-                validated.diagnostic = "Component '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+                validated.diagnostic =
+                    "Component '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
             }
             return validated;
         }
 
-        Iris::CallResult<void> ValidateAll(const std::vector<ComponentRegistration>& registrations, const Iris::Component& component)
+        Iris::CallResult<void> ValidateAll(const std::vector<ComponentRegistration>& registrations,
+                                           const Iris::Component& component)
         {
             for (const auto& registration : registrations)
             {
@@ -471,10 +479,11 @@ namespace Fenrir
             return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, std::move(diagnostic), false};
         }
 
-        // Runs the table the SDK's generator wrote into the script assembly, which reports each component type the script
-        // defines (full name, size, alignment) through an internal call. A script assembly without the table defines none.
-        Iris::CallResult<void> DiscoverScriptComponents(const Iris::Component& component, Detail::EngineContext& context,
-                                                        std::vector<Description>& found)
+        // Runs the table the SDK's generator wrote into the script assembly, which reports each component type the
+        // script defines (full name, size, alignment) through an internal call. A script assembly without the table
+        // defines none.
+        Iris::CallResult<void> DiscoverScriptComponents(const Iris::Component& component,
+                                                        Detail::EngineContext& context, std::vector<Description>& found)
         {
             const auto table = component.FindType("Fenrir.Scripting.Generated.ComponentTable");
             if (table.status == Iris::CallStatus::NotFound)
@@ -483,26 +492,30 @@ namespace Fenrir
             }
             if (!table.Succeeded())
             {
-                return Iris::CallResult<void>{table.status, "The component table could not be read: " + table.diagnostic, false};
+                return Iris::CallResult<void>{table.status,
+                                              "The component table could not be read: " + table.diagnostic, false};
             }
             const auto report = table.value->FindMethod<void()>("Register");
             if (!report.Succeeded())
             {
-                return Iris::CallResult<void>{report.status, "The component table has no Register method: " + report.diagnostic, false};
+                return Iris::CallResult<void>{
+                    report.status, "The component table has no Register method: " + report.diagnostic, false};
             }
             context.discovering = &found;
             const auto ran = report.value->Invoke();
             context.discovering = nullptr;
             if (!ran.Succeeded())
             {
-                return Iris::CallResult<void>{ran.status, "The script assembly could not report its components: " + ran.diagnostic,
+                return Iris::CallResult<void>{ran.status,
+                                              "The script assembly could not report its components: " + ran.diagnostic,
                                               ran.diagnosticTruncated};
             }
             return Succeeded();
         }
 
         // Whether what the script reported can be registered next to what the engine already has.
-        Iris::CallResult<void> CheckDiscovered(const std::vector<Description>& found, const Detail::ComponentRegistry& registry)
+        Iris::CallResult<void> CheckDiscovered(const std::vector<Description>& found,
+                                               const Detail::ComponentRegistry& registry)
         {
             std::unordered_map<std::uint32_t, std::string> storageIds;
             std::unordered_set<std::string> names;
@@ -544,19 +557,22 @@ namespace Fenrir
             }
             if (!table.Succeeded())
             {
-                return Iris::CallResult<void>{table.status, "The event table could not be read: " + table.diagnostic, false};
+                return Iris::CallResult<void>{table.status, "The event table could not be read: " + table.diagnostic,
+                                              false};
             }
             const auto report = table.value->FindMethod<void()>("Register");
             if (!report.Succeeded())
             {
-                return Iris::CallResult<void>{report.status, "The event table has no Register method: " + report.diagnostic, false};
+                return Iris::CallResult<void>{report.status,
+                                              "The event table has no Register method: " + report.diagnostic, false};
             }
             context.discoveringEvents = &found;
             const auto ran = report.value->Invoke();
             context.discoveringEvents = nullptr;
             if (!ran.Succeeded())
             {
-                return Iris::CallResult<void>{ran.status, "The script assembly could not report its events: " + ran.diagnostic,
+                return Iris::CallResult<void>{ran.status,
+                                              "The script assembly could not report its events: " + ran.diagnostic,
                                               ran.diagnosticTruncated};
             }
             return Succeeded();
@@ -564,7 +580,8 @@ namespace Fenrir
 
         // Whether the events a script reported can live next to the engine's: usable layouts, and names nobody has.
         Iris::CallResult<void> CheckDiscoveredEvents(const std::vector<Detail::ScriptEventDescription>& found,
-                                                     const Detail::ComponentRegistry& registry, App& app, const OwnedLayouts& owned)
+                                                     const Detail::ComponentRegistry& registry, App& app,
+                                                     const OwnedLayouts& owned)
         {
             constexpr std::size_t maxAlignment = 16;
             std::unordered_set<std::string> names;
@@ -574,25 +591,29 @@ namespace Fenrir
                 {
                     return Failed("The script reported the event '" + description.name + "' more than once.");
                 }
-                const bool usable = description.size > 0 && description.alignment > 0 && description.alignment <= maxAlignment &&
+                const bool usable = description.size > 0 && description.alignment > 0 &&
+                                    description.alignment <= maxAlignment &&
                                     (description.alignment & (description.alignment - 1)) == 0 &&
                                     description.size % description.alignment == 0;
                 if (!usable)
                 {
-                    return Failed("The script event '" + description.name + "' reported a size of " + std::to_string(description.size) +
-                                  " and an alignment of " + std::to_string(description.alignment) + ", which the engine cannot store.");
+                    return Failed("The script event '" + description.name + "' reported a size of " +
+                                  std::to_string(description.size) + " and an alignment of " +
+                                  std::to_string(description.alignment) + ", which the engine cannot store.");
                 }
                 if (registry.FindEvent(description.name) >= 0 ||
                     (app.FindEventQueue(description.name) != nullptr && !owned.contains(description.name)))
                 {
-                    return Failed("The script defines an event '" + description.name + "', but the engine already has an event of that name.");
+                    return Failed("The script defines an event '" + description.name +
+                                  "', but the engine already has an event of that name.");
                 }
             }
             return Succeeded();
         }
 
         // Checks every registered native event against its C# struct.
-        Iris::CallResult<void> ValidateAllEvents(const std::vector<EventRegistration>& registrations, const Iris::Component& component)
+        Iris::CallResult<void> ValidateAllEvents(const std::vector<EventRegistration>& registrations,
+                                                 const Iris::Component& component)
         {
             for (const auto& registration : registrations)
             {
@@ -602,16 +623,19 @@ namespace Fenrir
                 }
                 if (auto validated = registration.validate(component); !validated.Succeeded())
                 {
-                    validated.diagnostic = "Event '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+                    validated.diagnostic =
+                        "Event '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
                     return validated;
                 }
             }
             return Succeeded();
         }
 
-        // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same fingerprint lay
-        // the same bytes out the same way. A type the assembly does not expose (internal) can only be told apart by its size.
-        std::string Fingerprint(const Iris::Component& component, const std::string& name, std::size_t size, std::size_t alignment)
+        // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same
+        // fingerprint lay the same bytes out the same way. A type the assembly does not expose (internal) can only be
+        // told apart by its size.
+        std::string Fingerprint(const Iris::Component& component, const std::string& name, std::size_t size,
+                                std::size_t alignment)
         {
             std::string text = std::to_string(size) + "/" + std::to_string(alignment);
             const auto type = component.FindType(name);
@@ -628,15 +652,16 @@ namespace Fenrir
             {
                 if (!field.isStatic)
                 {
-                    text += ";" + field.name + ":" + field.type.fullName + ":" + std::to_string(static_cast<int>(field.kind)) + "@" +
+                    text += ";" + field.name + ":" + field.type.fullName + ":" +
+                            std::to_string(static_cast<int>(field.kind)) + "@" +
                             (field.offset.has_value() ? std::to_string(*field.offset) : std::string("?"));
                 }
             }
             return text;
         }
 
-        // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives. Nothing
-        // is registered unless all of it passes, so a failure leaves the registry exactly as it was:
+        // Everything that must hold before a freshly loaded script assembly is kept, in the order the design gives.
+        // Nothing is registered unless all of it passes, so a failure leaves the registry exactly as it was:
         //   1. discover the components the script defines, and check them;
         //   2. check every native component's mapping against its C# struct;
         //   3. only then register the script's components.
@@ -658,7 +683,8 @@ namespace Fenrir
             {
                 return discovered;
             }
-            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app, ownedEvents); !checked.Succeeded())
+            if (auto checked = CheckDiscoveredEvents(foundEvents, registry, *context.app, ownedEvents);
+                !checked.Succeeded())
             {
                 return checked;
             }
@@ -670,21 +696,23 @@ namespace Fenrir
             {
                 return validated;
             }
-            // Everything checks out, so from here the new generation is kept. What the previous generation left in the ECS and the
-            // App is compared with what this one defines: data whose layout is unchanged stays, anything else goes, with a
-            // warning, so no system ever reads old bytes as a new layout.
+            // Everything checks out, so from here the new generation is kept. What the previous generation left in the
+            // ECS and the App is compared with what this one defines: data whose layout is unchanged stays, anything
+            // else goes, with a warning, so no system ever reads old bytes as a new layout.
             App& app = *context.app;
             OwnedLayouts nextComponents;
             for (const auto& description : found)
             {
-                nextComponents[description.name] = {Fingerprint(component, description.name, description.size, description.alignment),
-                                                    description.size, description.alignment};
+                nextComponents[description.name] = {
+                    Fingerprint(component, description.name, description.size, description.alignment), description.size,
+                    description.alignment};
             }
             OwnedLayouts nextEvents;
             for (const auto& description : foundEvents)
             {
-                nextEvents[description.name] = {Fingerprint(component, description.name, description.size, description.alignment),
-                                                description.size, description.alignment};
+                nextEvents[description.name] = {
+                    Fingerprint(component, description.name, description.size, description.alignment), description.size,
+                    description.alignment};
             }
             for (auto at = ownedComponents.begin(); at != ownedComponents.end();)
             {
@@ -697,9 +725,10 @@ namespace Fenrir
                 const DynamicComponentType type(at->first, at->second.size, at->second.alignment);
                 std::size_t removed = 0;
                 app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
-                app.Logger()->Warn("Scripting: the script component '{}' {}; {} component(s) were removed so nothing reads the old "
-                                   "bytes as the new layout.",
-                                   at->first, next == nextComponents.end() ? "no longer exists" : "changed its layout", removed);
+                app.Logger()->Warn(
+                    "Scripting: the script component '{}' {}; {} component(s) were removed so nothing reads the old "
+                    "bytes as the new layout.",
+                    at->first, next == nextComponents.end() ? "no longer exists" : "changed its layout", removed);
                 at = ownedComponents.erase(at);
             }
             for (auto at = ownedEvents.begin(); at != ownedEvents.end();)
@@ -711,8 +740,8 @@ namespace Fenrir
                     continue;
                 }
                 (void)app.RemoveEventQueue(at->first);
-                app.Logger()->Warn("Scripting: the script event '{}' {}; its queue and the events in it were dropped.", at->first,
-                                   next == nextEvents.end() ? "no longer exists" : "changed its layout");
+                app.Logger()->Warn("Scripting: the script event '{}' {}; its queue and the events in it were dropped.",
+                                   at->first, next == nextEvents.end() ? "no longer exists" : "changed its layout");
                 at = ownedEvents.erase(at);
             }
 
@@ -770,11 +799,11 @@ namespace Fenrir
 
     namespace
     {
-        // Copies the script assembly and what it needs into a new directory under `root`: the files named like it (its pdb and
-        // deps.json), and every dll its deps.json lists that sits beside it. A build can then overwrite the original while the
-        // copy is loaded. Returns null and says why in `error` if it could not.
-        std::shared_ptr<CopyDirectory> MakeCopy(const std::filesystem::path& assembly, const std::filesystem::path& root, int number,
-                                                std::string& error)
+        // Copies the script assembly and what it needs into a new directory under `root`: the files named like it (its
+        // pdb and deps.json), and every dll its deps.json lists that sits beside it. A build can then overwrite the
+        // original while the copy is loaded. Returns null and says why in `error` if it could not.
+        std::shared_ptr<CopyDirectory> MakeCopy(const std::filesystem::path& assembly,
+                                                const std::filesystem::path& root, int number, std::string& error)
         {
             std::error_code code;
             const auto directory = root / ("gen-" + std::to_string(number));
@@ -788,7 +817,8 @@ namespace Fenrir
             auto copy = std::make_shared<CopyDirectory>(directory);
             const auto source = assembly.parent_path();
             // Native strings throughout: a file beside the assembly may have a name the narrow code page cannot hold.
-            const std::filesystem::path::string_type prefix = assembly.stem().native() + std::filesystem::path::string_type(1, '.');
+            const std::filesystem::path::string_type prefix =
+                assembly.stem().native() + std::filesystem::path::string_type(1, '.');
 
             std::vector<std::filesystem::path> files{assembly};
             for (const auto& entry : std::filesystem::directory_iterator(source, code))
@@ -808,7 +838,8 @@ namespace Fenrir
                 for (std::sregex_iterator found(text.begin(), text.end(), dll), end; found != end; ++found)
                 {
                     const auto path = source / (*found)[1].str();
-                    if (std::filesystem::is_regular_file(path, code) && std::find(files.begin(), files.end(), path) == files.end())
+                    if (std::filesystem::is_regular_file(path, code) &&
+                        std::find(files.begin(), files.end(), path) == files.end())
                     {
                         files.push_back(path);
                     }
@@ -816,7 +847,8 @@ namespace Fenrir
             }
             for (const auto& file : files)
             {
-                std::filesystem::copy_file(file, directory / file.filename(), std::filesystem::copy_options::overwrite_existing, code);
+                std::filesystem::copy_file(file, directory / file.filename(),
+                                           std::filesystem::copy_options::overwrite_existing, code);
                 if (code)
                 {
                     error = "The file '" + file.string() + "' could not be copied: " + code.message();
@@ -838,8 +870,9 @@ namespace Fenrir
             copy = MakeCopy(assembly, scratchRoot, ++copyCounter, error);
             if (copy == nullptr)
             {
-                return Result{Iris::CallStatus::InvalidArgument,
-                              "The script assembly '" + assembly.string() + "' could not be copied for loading. " + error, false};
+                return Result{
+                    Iris::CallStatus::InvalidArgument,
+                    "The script assembly '" + assembly.string() + "' could not be copied for loading. " + error, false};
             }
         }
         auto loaded = host->LoadComponent(copy->directory / assembly.filename());
@@ -851,10 +884,12 @@ namespace Fenrir
         }
         // All or nothing: the assembly stays loaded only if its components and events are discovered and every native
         // component and event matches its C# struct.
-        if (auto validated = CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents); !validated.Succeeded())
+        if (auto validated = CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents);
+            !validated.Succeeded())
         {
             Retire(std::move(*loaded.value), copy);
-            validated.diagnostic = "The script assembly '" + assembly.string() + "' was released. " + validated.diagnostic;
+            validated.diagnostic =
+                "The script assembly '" + assembly.string() + "' was released. " + validated.diagnostic;
             return validated;
         }
         component.emplace(std::move(*loaded.value));
@@ -906,9 +941,11 @@ namespace Fenrir
             }
             if (!at->warned && logger != nullptr)
             {
-                logger->Warn("Scripting: generation {} of the script assembly has not unloaded; something still holds a type from "
-                             "it (a thread it started, or a static that keeps one). Its copy stays on disk until it does.",
-                             at->generation);
+                logger->Warn(
+                    "Scripting: generation {} of the script assembly has not unloaded; something still holds a type "
+                    "from "
+                    "it (a thread it started, or a static that keeps one). Its copy stays on disk until it does.",
+                    at->generation);
             }
             at->warned = true;
             ++at;
@@ -936,7 +973,8 @@ namespace Fenrir
         using Result = Iris::CallResult<void>;
         if (reloading || host == nullptr || !contextActive || context.app == nullptr || scriptAssembly.empty())
         {
-            return Result{Iris::CallStatus::NotInitialized, "Scripting is not running a script assembly that can be reloaded.", false};
+            return Result{Iris::CallStatus::NotInitialized,
+                          "Scripting is not running a script assembly that can be reloaded.", false};
         }
         reloading = true;
         struct Done
@@ -967,7 +1005,8 @@ namespace Fenrir
             logger->Info("Scripting: reloaded '{}' (generation {}).", scriptAssembly.filename().string(), generation);
             return fresh;
         }
-        logger->Error("Scripting: the new build of '{}' did not load. {}", scriptAssembly.filename().string(), fresh.diagnostic);
+        logger->Error("Scripting: the new build of '{}' did not load. {}", scriptAssembly.filename().string(),
+                      fresh.diagnostic);
         if (restoreCopy == nullptr)
         {
             return fresh;
@@ -1046,14 +1085,16 @@ namespace Fenrir
             (registration.bind && !registration.bind(*m_state->context.app)))
         {
             return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
-                                          "The event name '" + registration.name + "' is empty, already registered, or already names another queue.",
+                                          "The event name '" + registration.name +
+                                              "' is empty, already registered, or already names another queue.",
                                           false};
         }
         const std::string name = registration.name;
         const auto validate = registration.validate;
         if (m_state->components.AddEvent(std::move(registration)) < 0)
         {
-            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, "The event '" + name + "' could not be registered.", false};
+            return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
+                                          "The event '" + name + "' could not be registered.", false};
         }
         if (!m_state->component.has_value() || !validate)
         {
@@ -1113,7 +1154,8 @@ namespace Fenrir
         }
         catch (const std::exception& exception)
         {
-            return Iris::CallResult<void>{Iris::CallStatus::UnexpectedStatus, std::string("The reload failed: ") + exception.what(), false};
+            return Iris::CallResult<void>{Iris::CallStatus::UnexpectedStatus,
+                                          std::string("The reload failed: ") + exception.what(), false};
         }
     }
 
@@ -1263,15 +1305,18 @@ namespace Fenrir
         {
             if (state->components.Add(std::move(registration)) < 0)
             {
-                logger.Error("Scripting: a component in the config has an empty or duplicate name; running without scripts.");
+                logger.Error(
+                    "Scripting: a component in the config has an empty or duplicate name; running without scripts.");
                 return Scripting(std::move(state));
             }
         }
         for (auto& registration : config.events)
         {
-            if ((registration.bind && !registration.bind(app)) || state->components.AddEvent(std::move(registration)) < 0)
+            if ((registration.bind && !registration.bind(app)) ||
+                state->components.AddEvent(std::move(registration)) < 0)
             {
-                logger.Error("Scripting: an event in the config has an empty or duplicate name; running without scripts.");
+                logger.Error(
+                    "Scripting: an event in the config has an empty or duplicate name; running without scripts.");
                 return Scripting(std::move(state));
             }
         }
@@ -1300,12 +1345,13 @@ namespace Fenrir
             return Scripting(std::move(state));
         }
         // The sink may be called from any managed thread; State::Forward serialises it against Shutdown.
-        const auto sink = state->host->SetLogSink([weak = std::weak_ptr<State>(state)](const Iris::LogMessage& message) {
-            if (const auto live = weak.lock())
-            {
-                live->Forward(message);
-            }
-        });
+        const auto sink =
+            state->host->SetLogSink([weak = std::weak_ptr<State>(state)](const Iris::LogMessage& message) {
+                if (const auto live = weak.lock())
+                {
+                    live->Forward(message);
+                }
+            });
         if (!sink.Succeeded())
         {
             logger.Warn("Scripting: Iris's log messages will not be shown. {}", sink.diagnostic);
@@ -1316,13 +1362,14 @@ namespace Fenrir
         state->reloadInterval = config.reloadInterval;
         state->reloadDebounce = config.reloadDebounce;
         state->unloadTimeout = config.unloadTimeout;
-        // Each Install has a directory of its own, so one that is still waiting for a generation to unload never gets in the
-        // way of the next.
+        // Each Install has a directory of its own, so one that is still waiting for a generation to unload never gets
+        // in the way of the next.
         static std::atomic<int> installs{0};
-        state->scratchRoot = (config.reloadDirectory.empty() ? std::filesystem::temp_directory_path(error) /
-                                                                   ("FenrirScripting-" + std::to_string(ProcessId()))
-                                                             : std::filesystem::absolute(config.reloadDirectory, error)) /
-                             ("install-" + std::to_string(++installs));
+        state->scratchRoot =
+            (config.reloadDirectory.empty()
+                 ? std::filesystem::temp_directory_path(error) / ("FenrirScripting-" + std::to_string(ProcessId()))
+                 : std::filesystem::absolute(config.reloadDirectory, error)) /
+            ("install-" + std::to_string(++installs));
 
         // The watcher looks before anything else runs in a frame, so a reload happens between frames. The phases are
         // scheduled once; each runs the current generation's systems, if it has any in that phase.
@@ -1330,8 +1377,8 @@ namespace Fenrir
         {
             app.AddSequentialSystems(SchedulePriority::PreUpdate, {[state](App&) { state->PollForReload(); }});
         }
-        constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick, SchedulePriority::Update,
-                                                   SchedulePriority::PostUpdate};
+        constexpr SchedulePriority priorities[] = {SchedulePriority::PreUpdate, SchedulePriority::Tick,
+                                                   SchedulePriority::Update, SchedulePriority::PostUpdate};
         for (int phase = 0; phase < 4; ++phase)
         {
             app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});

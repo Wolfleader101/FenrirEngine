@@ -20,7 +20,8 @@ namespace Fenrir::Detail
         return DynamicComponentType(description.name, description.size, description.alignment);
     }
 
-    // A registration whose operations act on the ECS's dynamic components of that type. The ECS creates storage in a scene
-    // the first time one is added there, so registering this, and then discarding it, leaves no trace in any scene.
+    // A registration whose operations act on the ECS's dynamic components of that type. The ECS creates storage in a
+    // scene the first time one is added there, so registering this, and then discarding it, leaves no trace in any
+    // scene.
     [[nodiscard]] ComponentRegistration MakeScriptComponent(const ScriptComponentDescription& description);
 } // namespace Fenrir::Detail

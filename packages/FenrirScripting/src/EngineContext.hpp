@@ -31,8 +31,8 @@ namespace Fenrir::Detail
         // How many times a script has called into the engine to run a query (diagnostic: a query makes a fixed number).
         std::size_t queryCalls = 0;
 
-        // Set only while a script assembly reports the components it defines (while it loads): where to put them. Null at any
-        // other time, so a stray call from a script is ignored.
+        // Set only while a script assembly reports the components it defines (while it loads): where to put them. Null
+        // at any other time, so a stray call from a script is ignored.
         std::vector<ScriptComponentDescription>* discovering = nullptr;
         std::vector<ScriptEventDescription>* discoveringEvents = nullptr;
     };
