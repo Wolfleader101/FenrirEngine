@@ -64,4 +64,6 @@ add_library(FenrirScripting STATIC
 target_include_directories(FenrirScripting PUBLIC include)
 target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 
-add_subdirectory(Tests)
+if(FENRIR_BUILD_TESTS)
+    add_subdirectory(Tests)
+endif()
