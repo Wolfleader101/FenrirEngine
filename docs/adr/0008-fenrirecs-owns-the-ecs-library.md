@@ -34,4 +34,4 @@ Be precise about it, because the goal is easy to overstate.
 ## Consequences
 
 - A feature that needs the ECS to do something it cannot yet do adds a method to `FenrirECS`; the other package calls it. It does not reach for the registry.
-- The ECS code is only tested through the scripting package's tests today (there is no `FenrirECS` test target), including a test that drives `EntityList`'s dynamic components directly. A test target for `FenrirECS` would be the right home for them.
+- `FenrirECS` has its own test target (`FenrirECSTests`, Catch2, built with `FENRIR_BUILD_TESTS`), which drives `EntityList`'s dynamic components and mixed queries through its public interface with no .NET. The scripting package's tests still exercise the same behaviour from C#.

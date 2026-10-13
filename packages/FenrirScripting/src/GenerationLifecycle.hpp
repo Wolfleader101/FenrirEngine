@@ -15,103 +15,128 @@
 
 namespace Fenrir::Detail
 {
-    // A directory holding one generation's private copy of the script assembly (see GenerationLifecycle.cpp).
+    /** @brief A directory holding one generation's private copy of the script assembly (see GenerationLifecycle.cpp).
+     */
     struct ScriptCopy;
 
-    // The life of the script assembly's generations: each one a private copy of the file loaded into its own Iris
-    // component, replaced by the next build with the previous one restored if the next fails, released, and waited for
-    // until the runtime has collected it. It also decides when the file on disk is ready to be loaded again.
-    //
-    // It knows nothing of what a generation contains. The host supplies that through hooks.
+    /**
+     * @brief The life of the script assembly's generations: each one a private copy of the file loaded into its own
+     * Iris component, replaced by the next build with the previous one restored if the next fails, released, and waited
+     * for until the runtime has collected it. It also decides when the file on disk is ready to be loaded again.
+     *
+     * It knows nothing of what a generation contains: the host supplies that through Hooks. It is set up in two steps,
+     * because the host that owns it exists before the settings are known; until Configure every operation does nothing
+     * and reports nothing loaded.
+     */
     class GenerationLifecycle
     {
       public:
         using Result = Iris::CallResult<void>;
 
+        /** @brief Where the script assembly is, and how to watch and unload it. */
         struct Settings
         {
-            // The build the project names. It is only ever copied; the copy is what loads.
+            /** @brief The build the project names. It is only ever copied; the copy is what loads. */
             std::filesystem::path assembly;
-            // Where the per-generation copies go. Removed at Release if nothing else is in it.
+            /** @brief Where the per-generation copies go. Removed at Release if nothing else is in it. */
             std::filesystem::path scratchRoot;
+            /** @brief Whether ReloadIfReady reloads at all. */
             bool hotReload = true;
+            /** @brief How often the watcher looks at the file. Zero looks every call. */
             std::chrono::milliseconds reloadInterval{250};
+            /** @brief How long the file must stay unchanged before it counts as a finished build. */
             std::chrono::milliseconds reloadDebounce{400};
+            /** @brief How long a reload waits for the old generation to unload. */
             std::chrono::milliseconds unloadTimeout{2000};
         };
 
+        /** @brief What the host does at the points where a generation comes and goes. */
         struct Hooks
         {
-            // All-or-nothing checks on a freshly loaded component. Nothing may change if this fails.
-            std::function<Result(const Iris::Component&)> completeLoad;
-            // Starts what runs inside the loaded generation (its systems). A failure releases the generation again.
+            /** @brief All-or-nothing checks on a freshly loaded component. Nothing may change if this fails. */
+            std::function<Result(const Iris::Component&)> reconcile;
+            /** @brief Starts what runs inside the loaded generation (its systems). A failure releases it again. */
             std::function<Result(const Iris::Component&)> start;
-            // Stops what ran inside the generation, before it is released, and forgets what it defined.
+            /** @brief Stops what ran inside the generation, before it is released, and forgets what it defined. */
             std::function<void()> stop;
-            // Runs before a reload takes the old generation down, so nothing a script recorded is left half done.
+            /** @brief Runs before a reload takes the old generation down, so nothing a script recorded is left half
+             * done. */
             std::function<void()> beforeReload;
         };
 
-        // What the watcher makes of the file at one moment.
+        /** @brief What the watcher makes of the file at one moment. */
         enum class Watch
         {
-            Idle,     // The file is the one that is loaded, or cannot be looked at.
-            Settling, // It changed, and a build may still be writing it.
-            Ready,    // It changed, has stayed the same for the debounce, and can be opened.
+            /** The file is the one that is loaded, or cannot be looked at. */
+            Idle,
+            /** It changed, and a build may still be writing it. */
+            Settling,
+            /** It changed, has stayed the same for the debounce, and can be opened. */
+            Ready,
         };
 
-        // Not usable until Configure. Until then every operation does nothing and reports nothing loaded.
         GenerationLifecycle() = default;
         GenerationLifecycle(const GenerationLifecycle&) = delete;
         GenerationLifecycle& operator=(const GenerationLifecycle&) = delete;
 
+        /** @brief Gives the lifecycle what it needs. `host` and `logger` are borrowed and must outlive it. */
         void Configure(Iris::Host* host, ILogger* logger, Settings settings, Hooks hooks);
 
-        // The first generation, from the file as it is now.
+        /** @brief Loads the first generation, from the file as it is now. */
         [[nodiscard]] Result Load();
 
-        // Replaces the running generation with a new load of the file: the hook `beforeReload`, then the old
-        // generation's `stop`, release, a wait for it to unload, the new generation all-or-nothing, and if that fails
-        // the previous generation again. Success means the new generation is running; a failure names why, and the
-        // previous generation is running again if it could be restored. Refuses (NotInitialized) when nothing is
-        // configured, and when a reload is already under way.
+        /**
+         * @brief Replaces the running generation with a new load of the file: the hook `beforeReload`, then the old
+         * generation's `stop`, release, a wait for it to unload, the new generation all-or-nothing, and if that fails
+         * the previous generation again.
+         *
+         * @return success if the new generation is running; otherwise why not (the previous generation is running
+         * again if it could be restored). NotInitialized when nothing is configured, and when a reload is already under
+         * way.
+         */
         [[nodiscard]] Result Reload();
 
-        // What the watcher decides at `now`. A change must be seen twice, unchanged, and for the debounce, before it is
-        // Ready. Looks at the file at most once per reloadInterval; in between it reports Idle.
+        /**
+         * @brief What the watcher decides at `now`. A change must be seen twice, unchanged, and for the debounce,
+         * before it is Ready. Looks at the file at most once per reloadInterval; in between it reports Idle.
+         */
         [[nodiscard]] Watch Poll(std::chrono::steady_clock::time_point now);
 
-        // Poll, and Reload when the file is Ready. Nothing escapes: a throw is logged.
+        /** @brief Poll, and Reload when the file is Ready. Nothing escapes: a throw is logged. */
         void ReloadIfReady(std::chrono::steady_clock::time_point now) noexcept;
 
-        // Releases the loaded generation (after `stop`). Its copy is kept for a restore.
+        /** @brief Releases the loaded generation (after `stop`). Its copy is kept for a restore. */
         void Unload();
 
-        // Waits up to the unload timeout for each released generation, deleting its copy once it is collected.
+        /** @brief Waits up to the unload timeout for each released generation, deleting its copy once it is collected.
+         */
         void Sweep();
 
-        // Gives everything back: the retired generations, the copies, the scratch directory if it is empty.
+        /** @brief Gives everything back: the retired generations, the copies, the scratch directory if it is empty. */
         void Release() noexcept;
 
+        /** @brief Whether a generation is loaded. */
         [[nodiscard]] bool HasGeneration() const noexcept
         {
             return m_component.has_value();
         }
+
+        /** @brief The loaded generation, or null. Valid until it is unloaded. */
         [[nodiscard]] Iris::Component* Component() noexcept
         {
             return m_component.has_value() ? &*m_component : nullptr;
         }
+
+        /** @brief How many generations have been loaded (successfully) since the first. */
         [[nodiscard]] int Generation() const noexcept
         {
             return m_generation;
         }
+
+        /** @brief How many released generations have not been collected yet. */
         [[nodiscard]] std::size_t PendingUnloadCount() const noexcept
         {
             return m_retired.size();
-        }
-        [[nodiscard]] bool Configured() const noexcept
-        {
-            return m_host != nullptr;
         }
 
       private:
