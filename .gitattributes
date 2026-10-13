@@ -1,0 +1,46 @@
+# Text is stored with LF line endings. Git decides what is text; the lines below are for the files people and agents edit by hand,
+# which are LF in the working tree as well, whatever core.autocrlf says. A file with one line-ending style everywhere can be matched
+# and edited exactly as it appears in a diff.
+* text=auto
+
+# Source
+*.c text eol=lf
+*.cc text eol=lf
+*.cpp text eol=lf
+*.cxx text eol=lf
+*.h text eol=lf
+*.hh text eol=lf
+*.hpp text eol=lf
+*.hxx text eol=lf
+*.inl text eol=lf
+*.cs text eol=lf
+*.glsl text eol=lf
+*.vert text eol=lf
+*.frag text eol=lf
+
+# Build and project files
+CMakeLists.txt text eol=lf
+*.cmake text eol=lf
+*.in text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.json text eol=lf
+*.feproj text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# Docs and config
+*.md text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+.clang-format text eol=lf
+.gitattributes text eol=lf
+.gitignore text eol=lf
+.gitmodules text eol=lf
+
+# These are CRLF in the working tree (Visual Studio and Windows shells expect it); the repository still stores LF.
+*.sln text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
