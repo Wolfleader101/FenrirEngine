@@ -44,6 +44,12 @@ namespace Fenrir
         std::vector<ComponentRegistration> components;
 
         /**
+         * @brief C++ events to share with C# (see MakeEvent). They are registered before the script assembly loads and checked
+         * against it as it does. Events only C# defines need nothing here.
+         */
+        std::vector<EventRegistration> events;
+
+        /**
          * @brief Further assemblies every script load shares as one copy. The Fenrir.Scripting contract is always
          * shared, from `bridgeDirectory`, so it does not belong here.
          */
@@ -97,6 +103,19 @@ namespace Fenrir
          * mismatch at load does (all or nothing). A name that is empty or already taken is `InvalidArgument`.
          */
         [[nodiscard]] Iris::CallResult<void> RegisterComponent(ComponentRegistration registration);
+
+        /**
+         * @brief Shares a C++ event with C# (see MakeEvent). If a script assembly is loaded its C# struct is checked straight
+         * away, exactly as RegisterComponent does. A name that is empty or already taken is `InvalidArgument`.
+         */
+        [[nodiscard]] Iris::CallResult<void> RegisterEvent(EventRegistration registration);
+
+        /** @brief MakeEvent<T, Mapping>(name), registered. */
+        template <typename T, typename Mapping = T>
+        [[nodiscard]] Iris::CallResult<void> RegisterEvent(std::string name)
+        {
+            return RegisterEvent(MakeEvent<T, Mapping>(std::move(name)));
+        }
 
         /** @brief MakeComponent<T, Mapping>(name), registered. */
         template <typename T, typename Mapping = T>

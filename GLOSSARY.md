@@ -98,6 +98,9 @@ Plain data attached to an entity, with no behaviour. A *native component* is a C
 Logic that runs once per frame phase over the entities a query selects. Native systems are C++ functions, and C# systems are `ISystem` classes.
 *Avoid:* script, behaviour, manager.
 
+**Event**
+Plain data one system sends and others read, kept in a queue with two buffers: a read sees the current frame's events and the previous frame's. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
+
 **Query**
 A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
 

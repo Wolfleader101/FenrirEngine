@@ -41,6 +41,112 @@ namespace Fenrir
         {
             queue->Update();
         }
+        for (auto& [name, queue] : m_byteEventQueues)
+        {
+            queue->Update();
+        }
+    }
+
+    namespace
+    {
+        // The queue for an event that has no C++ type: the same two buffers and the same rotation as EventQueue<T>, over bytes.
+        class ByteEventQueue final : public IEventQueue
+        {
+          public:
+            ByteEventQueue(std::size_t size, std::size_t alignment) : m_size(size), m_alignment(alignment)
+            {
+            }
+
+            void Update() override
+            {
+                m_previous.clear();
+                std::swap(m_current, m_previous);
+                m_dirty = true;
+            }
+
+            [[nodiscard]] std::size_t EventSize() const noexcept override
+            {
+                return m_size;
+            }
+
+            [[nodiscard]] std::size_t EventAlignment() const noexcept override
+            {
+                return m_alignment;
+            }
+
+            bool SendRaw(const void* event) override
+            {
+                const auto* bytes = static_cast<const std::byte*>(event);
+                m_current.insert(m_current.end(), bytes, bytes + m_size);
+                m_dirty = true;
+                return true;
+            }
+
+            [[nodiscard]] RawEvents ReadRaw() const override
+            {
+                // Rebuilt only when something changed, so a view handed out earlier stays good while nothing is sent.
+                if (m_dirty)
+                {
+                    m_combined.clear();
+                    m_combined.insert(m_combined.end(), m_previous.begin(), m_previous.end());
+                    m_combined.insert(m_combined.end(), m_current.begin(), m_current.end());
+                    m_dirty = false;
+                }
+                return {m_combined.data(), m_combined.size() / m_size};
+            }
+
+          private:
+            std::size_t m_size;
+            std::size_t m_alignment;
+            std::vector<std::byte> m_current;
+            std::vector<std::byte> m_previous;
+            mutable std::vector<std::byte> m_combined;
+            mutable bool m_dirty = true;
+        };
+    } // namespace
+
+    bool App::BindEventName(std::string name, IEventQueue* queue)
+    {
+        if (name.empty() || m_byteEventQueues.contains(name))
+        {
+            return false;
+        }
+        const auto [at, added] = m_namedEventQueues.emplace(std::move(name), queue);
+        return added || at->second == queue;
+    }
+
+    IEventQueue* App::FindEventQueue(std::string_view name) const
+    {
+        const auto found = m_namedEventQueues.find(std::string(name));
+        return found == m_namedEventQueues.end() ? nullptr : found->second;
+    }
+
+    IEventQueue* App::CreateEventQueue(std::string name, std::size_t size, std::size_t alignment)
+    {
+        // The storage is a std::vector of bytes, which is aligned for anything up to the allocator's guarantee.
+        constexpr std::size_t maxAlignment = 16;
+        const bool usable = !name.empty() && size > 0 && alignment > 0 && alignment <= maxAlignment &&
+                            (alignment & (alignment - 1)) == 0 && size % alignment == 0;
+        if (!usable || m_namedEventQueues.contains(name))
+        {
+            return nullptr;
+        }
+        auto queue = std::make_unique<ByteEventQueue>(size, alignment);
+        IEventQueue* raw = queue.get();
+        m_namedEventQueues.emplace(name, raw);
+        m_byteEventQueues.emplace(std::move(name), std::move(queue));
+        return raw;
+    }
+
+    bool App::RemoveEventQueue(std::string_view name)
+    {
+        const std::string key(name);
+        if (m_byteEventQueues.erase(key) == 0)
+        {
+            return false;
+        }
+        m_namedEventQueues.erase(key);
+        return true;
     }
 
     void App::Run()

@@ -66,6 +66,37 @@ struct Iris::StructMapping<TestNative::FloatHealth>
         Iris::StructFields(IRIS_FIELD(TestNative::FloatHealth, Current), IRIS_FIELD(TestNative::FloatHealth, Max));
 };
 
+// Events the tests register from outside FenrirScripting, and a deliberately wrong mapping of the same C# struct.
+namespace TestNative
+{
+    struct Alert
+    {
+        std::int32_t Code;
+        float Level;
+    };
+
+    // Code has the wrong type.
+    struct BadAlert
+    {
+        float Code;
+        float Level;
+    };
+} // namespace TestNative
+
+template <>
+struct Iris::StructMapping<TestNative::Alert>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Alert";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestNative::Alert, Code), IRIS_FIELD(TestNative::Alert, Level));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::BadAlert>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Alert";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestNative::BadAlert, Code), IRIS_FIELD(TestNative::BadAlert, Level));
+};
+
 namespace
 {
     using namespace Fenrir;
@@ -1422,6 +1453,206 @@ namespace
         Check(scripting.PhaseCallCount() == 0, "A phase ran after Shutdown");
     }
 
+    constexpr const char* EventScriptsType = "Fenrir.ScriptFixture.EventScripts";
+    constexpr const char* EventProbeType = "Fenrir.ScriptFixture.EventProbe";
+
+    template <typename Result, typename... Args>
+    Result EventScript(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(EventScriptsType, scripting, method, arguments...);
+    }
+
+    ScriptingConfig ConfigWithAlert()
+    {
+        ScriptingConfig config = ConfigFor(fixture);
+        config.events.push_back(MakeEvent<TestNative::Alert>("Test.Alert"));
+        return config;
+    }
+
+    void ACppEventIsReadInCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        Check(scripting.HasScripts(), "The fixture did not load");
+        Check(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?").empty(), "There were events before any was sent");
+
+        headless.Get().SendEvent(TestNative::Alert{5, 0.5F});
+        headless.Get().SendEvent(TestNative::Alert{6, 1.0F});
+        Check(EventScript<std::optional<std::string>>(scripting, "ReadAlerts").value_or("?") == "5,6",
+              "C# did not read the events C++ sent");
+    }
+
+    void ACSharpEventIsReadInCpp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        EventScript<void>(scripting, "SendAlert", std::int32_t{9}, 2.5F);
+        // Held until the script returns: nothing has reached the queue yet.
+        Check(headless.Get().ReadEvents<TestNative::Alert>().empty(), "A send reached the queue before the system returned");
+        (void)scripting.ApplyChanges();
+        const auto& events = headless.Get().ReadEvents<TestNative::Alert>();
+        Check(events.size() == 1 && events[0].Code == 9 && events[0].Level == 2.5F, "C++ did not read the event C# sent");
+    }
+
+    void ACSharpOnlyEventNeedsNoCpp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        EventScript<void>(scripting, "SendPing", std::int32_t{3});
+        EventScript<void>(scripting, "SendPing", std::int32_t{4});
+        (void)scripting.ApplyChanges();
+        Check(EventScript<std::int32_t>(scripting, "SumPings") == 7, "A C#-only event was not delivered");
+
+        // Nothing in C++ knows its type, but the queue is there by name, with the layout C# reported.
+        const IEventQueue* queue = headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping");
+        Check(queue != nullptr && queue->EventSize() == 4 && queue->ReadRaw().count == 2, "The C#-only event's queue was not there by name");
+
+        // The queue goes with the script assembly.
+        scripting.Shutdown();
+        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr, "The queue outlived the script assembly");
+        auto again = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(again.HasScripts(), "The script assembly did not load again on the same App");
+        // The reloaded assembly sends and reads through a fresh queue (ids cached for the old registry are not reused).
+        EventScript<void>(again, "SendPing", std::int32_t{5});
+        (void)again.ApplyChanges();
+        Check(EventScript<std::int32_t>(again, "SumPings") == 5, "A reloaded script assembly could not use its events");
+    }
+
+    void EventsHaveTheSameFrameWindowInBothLanguages()
+    {
+        constexpr int frames = 4;
+        HeadlessApp headless;
+        int frame = 0;
+        std::vector<std::size_t> nativeSeen;
+        std::vector<std::size_t> nativePingSeen; // The C#-only Ping, read by name from C++ with no C++ type.
+        // C++ sends an event on the first frame; C# sends a Ping on the first frame.
+        headless.Get().AddSequentialSystems(SchedulePriority::Update, {[&](App& app) {
+            if (++frame == 1)
+            {
+                app.SendEvent(TestNative::Alert{1, 0});
+            }
+        }});
+        Scripting* installed = nullptr;
+        std::string dump;
+        headless.Get().AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+            dump = CallIn<std::optional<std::string>>(EventProbeType, *installed, "Dump").value_or("");
+        }});
+        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        installed = &scripting;
+        // After all of C#'s Update systems, so it reads where they read.
+        headless.Get().AddSequentialSystems(SchedulePriority::Update, {[&](App& app) {
+            nativeSeen.push_back(app.ReadEvents<TestNative::Alert>().size());
+            const IEventQueue* pings = app.FindEventQueue("Fenrir.ScriptFixture.Ping");
+            nativePingSeen.push_back(pings == nullptr ? 99 : pings->ReadRaw().count);
+        }});
+        CallIn<void>(EventProbeType, scripting, "Enable");
+        headless.Run(frames);
+
+        // The Ping is sent in frame one by a system and is read by the system after it, in frame one and again in frame two,
+        // then it is gone: the window native events have. The sender never reads its own send.
+        // The Alert from C++ follows the same window, and C# sees exactly what C++ sees.
+        std::string expected;
+        const char* pingSeen[] = {"1", "1", "0", "0"};
+        const char* pingOwn[] = {"0", "1", "0", "0"};
+        for (int index = 0; index < frames; ++index)
+        {
+            expected += std::string(index == 0 ? "" : ",") + "Own=" + pingOwn[index] + ",Later=" + pingSeen[index] +
+                        ",Alerts=" + std::to_string(nativeSeen.at(static_cast<std::size_t>(index)));
+        }
+        Check(dump == expected, "C# saw the events differently from the frame window: " + dump + " vs " + expected);
+        Check((nativeSeen == std::vector<std::size_t>{1, 1, 0, 0}), "The native frame window was not what the test assumes");
+        // And the other direction: what C# sent is in C++'s window for the same two frames, then gone.
+        Check((nativePingSeen == std::vector<std::size_t>{1, 1, 0, 0}), "C++ did not see the event C# sent for the frame window");
+    }
+
+    void ASystemNeverSeesItsOwnSendsAndAViewStaysValid()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{1}) == 0, "A send was readable by its own sender");
+        (void)scripting.ApplyChanges();
+        Check(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{2}) == 1,
+              "A send was visible before its system returned, or the earlier one was lost");
+        (void)scripting.ApplyChanges();
+        Check(EventScript<std::int32_t>(scripting, "SumPings") == 3, "Both sends did not arrive");
+
+        // A hundred sends in one system do not move or change the view the system already holds.
+        Check(EventScript<bool>(scripting, "ViewStaysValid"), "A view of events changed while its system sent more");
+        Check(scripting.ApplyChanges().applied == 100, "The sends made in that system were not delivered together");
+    }
+
+    void EventLookupFailuresSayWhatWentWrong()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        const auto orphan = EventScript<std::optional<std::string>>(scripting, "TryReadOrphan").value_or("");
+        Check(orphan.find("no event registered as 'Test.NoSuchEvent'") != std::string::npos, "An unknown event said: " + orphan);
+        const auto fake = EventScript<std::optional<std::string>>(scripting, "TryReadFake").value_or("");
+        Check(fake.find("different C# type") != std::string::npos, "A script claiming a native event said: " + fake);
+    }
+
+    void AMismatchedEventFailsTheLoadAndNamesTheField()
+    {
+        HeadlessApp headless;
+        ScriptingConfig config = ConfigFor(fixture);
+        config.events.push_back(MakeEvent<TestNative::BadAlert>("Test.Alert"));
+        auto scripting = Scripting::Install(headless.Get(), config);
+        Check(!scripting.HasScripts() && !scripting.IsRunning(), "A mismatched event left scripts loaded");
+        Check(headless.Logger().Contains(LogLevel::Error, "Test.Alert") && headless.Logger().Contains(LogLevel::Error, "'Code'"),
+              "The mismatch did not name the event and the field");
+        Check(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") == nullptr, "A failed load left a queue behind");
+    }
+
+    void CppEventUsersAreUnchangedByNamedAndByteQueues()
+    {
+        struct Plain
+        {
+            int value;
+        };
+        struct Other
+        {
+            int value;
+        };
+        struct Heavy
+        {
+            std::string text;
+        };
+        HeadlessApp headless;
+        App& app = headless.Get();
+
+        app.SendEvent(Plain{1});
+        app.SendEvent(Plain{2});
+        Check(app.ReadEvents<Plain>().size() == 2, "Typed events changed");
+        Check(app.NameEvent<Plain>("Plain") && app.NameEvent<Plain>("Plain"), "A queue could not be named, or naming twice failed");
+        Check(!app.NameEvent<Other>("Plain"), "A name was given to two different queues");
+        const IEventQueue* named = app.FindEventQueue("Plain");
+        Check(named != nullptr && named->EventSize() == sizeof(Plain) && named->ReadRaw().count == 2,
+              "The named queue is not the typed queue");
+        const int third = 3;
+        Check(app.FindEventQueue("Plain")->SendRaw(&third) && app.ReadEvents<Plain>().size() == 3 && app.ReadEvents<Plain>()[2].value == 3,
+              "Sending by name did not reach the typed queue");
+
+        // An event that is not plain bytes still works as before and cannot be used by name.
+        app.SendEvent(Heavy{"a string"});
+        Check(app.ReadEvents<Heavy>().size() == 1 && app.ReadEvents<Heavy>()[0].text == "a string", "A non-trivial event changed");
+        Check(app.NameEvent<Heavy>("Heavy") && app.FindEventQueue("Heavy")->EventSize() == 0 && !app.FindEventQueue("Heavy")->SendRaw(&third),
+              "A non-trivial event was usable as bytes");
+
+        // A byte queue: the same two buffers, and it rotates with the frame.
+        IEventQueue* bytes = app.CreateEventQueue("Bytes", 8, 4);
+        Check(bytes != nullptr && app.CreateEventQueue("Bytes", 8, 4) == nullptr && app.CreateEventQueue("Plain", 8, 4) == nullptr,
+              "A byte queue could be made twice, or over a typed one");
+        Check(app.CreateEventQueue("Odd", 6, 4) == nullptr && app.CreateEventQueue("Wide", 32, 32) == nullptr &&
+                  app.CreateEventQueue("", 4, 4) == nullptr,
+              "An unusable byte queue was made");
+        const std::int64_t value = 42;
+        Check(bytes->SendRaw(&value) && bytes->ReadRaw().count == 1, "A byte queue did not hold its event");
+        Check(app.RemoveEventQueue("Bytes") && app.FindEventQueue("Bytes") == nullptr && !app.RemoveEventQueue("Bytes") &&
+                  !app.RemoveEventQueue("Plain"),
+              "Removing a byte queue went wrong, or a typed queue could be removed");
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -1589,6 +1820,14 @@ int main(int argc, char* argv[])
          SystemsRunInPhaseAndOrderAndChangesApplyAfterEachOne},
         {"OnCreate runs after load and OnDestroy before release", OnCreateRunsAfterLoadAndOnDestroyBeforeRelease},
         {"a phase does nothing after Shutdown", ASystemsCallsAfterShutdownDoNothing},
+        {"a C++ event is read in C#", ACppEventIsReadInCSharp},
+        {"a C# event is read in C++", ACSharpEventIsReadInCpp},
+        {"a C#-only event needs no C++", ACSharpOnlyEventNeedsNoCpp},
+        {"events have the same frame window in both languages", EventsHaveTheSameFrameWindowInBothLanguages},
+        {"a system never sees its own sends and a view stays valid", ASystemNeverSeesItsOwnSendsAndAViewStaysValid},
+        {"event lookup failures say what went wrong", EventLookupFailuresSayWhatWentWrong},
+        {"a mismatched event fails the load and names the field", AMismatchedEventFailsTheLoadAndNamesTheField},
+        {"C++ event users are unchanged by named and byte queues", CppEventUsersAreUnchangedByNamedAndByteQueues},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

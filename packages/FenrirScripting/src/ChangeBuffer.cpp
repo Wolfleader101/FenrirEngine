@@ -47,6 +47,24 @@ namespace Fenrir::Detail
         return ChangeError::None;
     }
 
+    ChangeError ChangeBuffer::SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event, const void* value)
+    {
+        const auto* registration = registry.GetEvent(event);
+        if (registration == nullptr || value == nullptr)
+        {
+            return ChangeError::UnknownEvent;
+        }
+        const IEventQueue* queue = app.FindEventQueue(registration->name);
+        if (queue == nullptr || queue->EventSize() != registration->size)
+        {
+            return ChangeError::UnknownEvent;
+        }
+        m_changes.push_back({Kind::SendEvent, true, event, 0, m_values.size()});
+        const auto* bytes = static_cast<const std::byte*>(value);
+        m_values.insert(m_values.end(), bytes, bytes + registration->size);
+        return ChangeError::None;
+    }
+
     ChangeError ChangeBuffer::Remove(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                      std::uint32_t entity)
     {
@@ -120,6 +138,19 @@ namespace Fenrir::Detail
                     {
                         std::memcpy(target, values.data() + change.valueOffset, registration->size);
                     }
+                }
+                ++result.applied;
+                break;
+            }
+            case Kind::SendEvent:
+            {
+                const auto* registration = registry.GetEvent(change.component);
+                IEventQueue* queue = registration == nullptr ? nullptr : app.FindEventQueue(registration->name);
+                if (queue == nullptr || queue->EventSize() != registration->size || !queue->SendRaw(values.data() + change.valueOffset))
+                {
+                    ++result.skipped;
+                    app.Logger()->Warn("Scripting: skipped sending an event: its queue no longer exists.");
+                    break;
                 }
                 ++result.applied;
                 break;

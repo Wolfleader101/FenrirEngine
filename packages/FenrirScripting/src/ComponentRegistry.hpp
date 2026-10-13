@@ -68,6 +68,68 @@ namespace Fenrir::Detail
             return true;
         }
 
+        // Events: a second table with its own ids, under the same generation.
+
+        // The id of an event by name for the C# type that claims it: the id, -1 if no event has the name, -3 if the name belongs
+        // to an event of a different C# type.
+        [[nodiscard]] std::int32_t ResolveEvent(std::string_view name, std::string_view typeName) const
+        {
+            const auto found = m_eventIds.find(std::string(name));
+            if (found == m_eventIds.end())
+            {
+                return -1;
+            }
+            return m_events[static_cast<std::size_t>(found->second)].typeName == typeName ? found->second : -3;
+        }
+
+        // The id of the new event, or -1 if its name is empty or taken.
+        std::int32_t AddEvent(EventRegistration registration)
+        {
+            if (registration.name.empty() || m_eventIds.contains(registration.name))
+            {
+                return -1;
+            }
+            const auto id = static_cast<std::int32_t>(m_events.size());
+            m_eventIds.emplace(registration.name, id);
+            m_events.push_back(std::move(registration));
+            m_generation = ++s_generations;
+            return id;
+        }
+
+        // Adds every event or none: false (and nothing added) if any has an empty or taken name, or the same name twice.
+        bool AddEvents(std::vector<EventRegistration> registrations)
+        {
+            std::unordered_map<std::string, int> seen;
+            for (const auto& registration : registrations)
+            {
+                if (registration.name.empty() || m_eventIds.contains(registration.name) || !seen.emplace(registration.name, 0).second)
+                {
+                    return false;
+                }
+            }
+            for (auto& registration : registrations)
+            {
+                (void)AddEvent(std::move(registration));
+            }
+            return true;
+        }
+
+        [[nodiscard]] std::int32_t FindEvent(std::string_view name) const
+        {
+            const auto found = m_eventIds.find(std::string(name));
+            return found == m_eventIds.end() ? -1 : found->second;
+        }
+
+        [[nodiscard]] const EventRegistration* GetEvent(std::int32_t id) const noexcept
+        {
+            return id >= 0 && static_cast<std::size_t>(id) < m_events.size() ? &m_events[static_cast<std::size_t>(id)] : nullptr;
+        }
+
+        [[nodiscard]] const std::vector<EventRegistration>& Events() const noexcept
+        {
+            return m_events;
+        }
+
         // The id registered under a name, or -1.
         [[nodiscard]] std::int32_t Find(std::string_view name) const
         {
@@ -97,6 +159,8 @@ namespace Fenrir::Detail
         std::uint32_t m_generation;
         std::vector<ComponentRegistration> m_components;
         std::unordered_map<std::string, std::int32_t> m_ids;
+        std::vector<EventRegistration> m_events;
+        std::unordered_map<std::string, std::int32_t> m_eventIds;
     };
 
     // Adds the components the engine itself provides to C#: Transform, Name and Relationship (read-only).

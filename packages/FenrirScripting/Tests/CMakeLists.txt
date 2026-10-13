@@ -75,3 +75,6 @@ fenrir_expect_compile(SystemControl OK)
 fenrir_expect_compile(SystemNotASystem FENRIR0010)
 fenrir_expect_compile(SystemPrivateConstructor FENRIR0011)
 fenrir_expect_compile(SystemBadPhase FENRIR0013)
+fenrir_expect_compile(EventControl OK)
+fenrir_expect_compile(EventManaged FENRIR0014)
+fenrir_expect_compile(EventReadOnly CS8332)    # a read view cannot be written through

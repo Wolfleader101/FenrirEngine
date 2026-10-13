@@ -19,6 +19,7 @@ namespace Fenrir::Detail
         ReadOnlyComponent = -3,
         RequiredComponent = -4,
         NotActive = -5, // Scripting is not running, so there is no scene to change.
+        UnknownEvent = -6,
     };
 
     struct ApplyResult
@@ -46,6 +47,10 @@ namespace Fenrir::Detail
         [[nodiscard]] ChangeError Remove(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                          std::uint32_t entity);
 
+        // Records an event to send: `value` is registration.size bytes of event, copied now. It is put in the event's queue at
+        // playback, so a system never reads its own sends and a view it took stays valid.
+        [[nodiscard]] ChangeError SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event, const void* value);
+
         // Plays every recorded change back in order and empties the buffer. A change whose entity died in the meantime
         // (an earlier change in the buffer destroyed it) is skipped with a warning, never applied to a reused slot.
         ApplyResult Apply(App& app, const ComponentRegistry& registry);
@@ -70,6 +75,7 @@ namespace Fenrir::Detail
             Destroy,
             Add,
             Remove,
+            SendEvent,
         };
 
         struct Change

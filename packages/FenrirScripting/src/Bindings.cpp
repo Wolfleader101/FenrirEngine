@@ -197,6 +197,65 @@ namespace Fenrir::Detail
             }
         }
 
+        // Native.EventIdOf: the id of the event registered under a UTF-8 name for the C# type with the given full name; -1 if
+        // there is none, -3 if it is registered for a different C# type.
+        std::int32_t EventIdOf(const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->components == nullptr || name == nullptr || length < 0 || typeName == nullptr ||
+                typeLength < 0)
+            {
+                return -1;
+            }
+            return context->components->ResolveEvent(std::string_view(name, static_cast<std::size_t>(length)),
+                                                     std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        }
+
+        // Native.RegisterScriptEvent: a script assembly reports an event type it defines, while it loads.
+        bool RegisterScriptEvent(const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment)
+        {
+            auto* context = activeContext.load();
+            if (context == nullptr || context->discoveringEvents == nullptr || name == nullptr || length <= 0 || size <= 0 ||
+                alignment <= 0)
+            {
+                return false;
+            }
+            context->discoveringEvents->push_back({std::string(name, static_cast<std::size_t>(length)),
+                                                   static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+            return true;
+        }
+
+        // Native.EventSend: records an event to send when the script returns (see ChangeBuffer::SendEvent).
+        std::int32_t EventSend(std::int32_t event, const void* value)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            {
+                return Refuse();
+            }
+            return static_cast<std::int32_t>(context->changes->SendEvent(*context->app, *context->components, event, value));
+        }
+
+        // Native.EventRead: how many events the queue holds for reading (this frame's and the last frame's), and where they
+        // are. -1 if there is no such event. The address is good until something is sent to the queue or the frame ends.
+        std::int32_t EventRead(std::int32_t event, std::uintptr_t* data)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || data == nullptr)
+            {
+                return -1;
+            }
+            const auto* registration = context->components->GetEvent(event);
+            const IEventQueue* queue = registration == nullptr ? nullptr : context->app->FindEventQueue(registration->name);
+            if (queue == nullptr || queue->EventSize() != registration->size)
+            {
+                return -1;
+            }
+            const RawEvents events = queue->ReadRaw();
+            *data = reinterpret_cast<std::uintptr_t>(events.data);
+            return static_cast<std::int32_t>(events.count);
+        }
+
         // Native.QueryCount and Native.QueryFill: see Queries.hpp.
         std::int32_t QueryCount(const std::int32_t* ids, std::int32_t count)
         {
@@ -253,6 +312,10 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&EntityDestroy>(prefix + "EntityDestroy"),
             Iris::RegisterInternalCall<&ComponentAdd>(prefix + "ComponentAdd"),
             Iris::RegisterInternalCall<&ComponentRemove>(prefix + "ComponentRemove"),
+            Iris::RegisterInternalCall<&EventIdOf>(prefix + "EventIdOf"),
+            Iris::RegisterInternalCall<&RegisterScriptEvent>(prefix + "RegisterScriptEvent"),
+            Iris::RegisterInternalCall<&EventSend>(prefix + "EventSend"),
+            Iris::RegisterInternalCall<&EventRead>(prefix + "EventRead"),
             Iris::RegisterInternalCall<&ChangesApply>(prefix + "ChangesApply"),
             Iris::RegisterInternalCall<&ChangesDiscard>(prefix + "ChangesDiscard"),
             Iris::RegisterInternalCall<&QueryCount>(prefix + "QueryCount"),
