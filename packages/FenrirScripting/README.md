@@ -388,19 +388,28 @@ therefore never become a null call. Rules to remember:
 - A native function must not assume a thread: every script call happens on the main thread today, but the function
   should only touch what the App owns.
 - Test it with a method on the fixture script assembly (`Tests/Fixture/Fixture.cs`) that calls the new wrapper, and a
-  case in `Tests/ScriptingTests.cpp` that calls that method with `Call<...>` and checks what the engine saw.
+  `TEST_CASE` in `Tests/ScriptingTests.cpp` that calls that method with `Call<...>` and checks what the engine saw.
 
 ## Tests
 
 `FenrirScriptingTests` runs an `App` with no window for a few frames around a small fixture script assembly
 (`Tests/Fixture`), built with the same .NET SDK Iris uses against the scripting SDK folder. The `RefCompile-*` tests
-build the small projects in `Tests/CompileFail` and check the compiler's verdict. Run everything with CTest:
+build the small projects in `Tests/CompileFail` and check the compiler's verdict. The tests are Catch2 test cases, so they
+build only with `FENRIR_BUILD_TESTS=ON` (and need the `libs/catch2` submodule: `git submodule update --init libs/catch2`).
+Run everything with CTest:
 
 ```sh
-cmake -S . -B out/build/engine-scripting -DFENRIR_ENABLE_SCRIPTING=ON
+cmake -S . -B out/build/engine-scripting -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_BUILD_TESTS=ON
 cmake --build out/build/engine-scripting --config Debug --target FenrirScriptingTests
 ctest --test-dir out/build/engine-scripting -C Debug --output-on-failure
 ```
+
+To run one case, give the executable the fixture assemblies CMake builds, then Catch2's own options. CTest shows the
+exact command line (`ctest -V -R FenrirScripting`); after the three assemblies add a name, a `"[scripting]"` tag or
+`--list-tests`. `Check(condition, message)` in `Tests/TestHarness.hpp` is a Catch2 assertion that carries its message.
+
+The counters and the loaded Iris component the tests need are not on `Scripting`; the tests read them through
+`ScriptingProbe` (`Tests/ScriptingProbe.hpp`), which `Scripting` names as a friend.
 
 `Tests/HeadlessApp.hpp` is the harness later tickets build on: `HeadlessApp` owns an `App` and a recording
 logger, and `Run(n)` runs exactly `n` frames.

@@ -23,7 +23,9 @@ changes add to it, and a breaking change needs its own ADR. Only Windows has bee
 
 ## Requirements and build
 
-You need a C++20 compiler, CMake 3.20 or later and the .NET 10 SDK.
+You need a C++20 compiler, CMake 3.20 or later and the .NET 10 SDK. The checks (`IRIS_BUILD_TESTS`) also need
+Catch2 v3: inside the FenrirEngine repository they use its `libs/catch2` submodule (`git submodule update --init libs/catch2`),
+and anywhere else an installed Catch2 that `find_package(Catch2 3)` finds.
 
 ```sh
 cmake -S packages/Iris -B out/build/iris -DIRIS_BUILD_TESTS=ON
@@ -36,7 +38,7 @@ ctest --test-dir out/build/iris -C Debug --output-on-failure
 | `IRIS_BUILD_BRIDGE` | `ON` | Builds the managed bridge with `dotnet` (always in Release). |
 | `IRIS_PREBUILT_BRIDGE_DIR` | empty | With `IRIS_BUILD_BRIDGE=OFF`: a directory holding a built bridge to deploy and install. |
 | `IRIS_BUILD_EXAMPLES` | `ON` when Iris is the top-level project | Builds `IrisHostingExample` and its component. |
-| `IRIS_BUILD_TESTS` | `OFF` | Builds the checks and their managed projects. |
+| `IRIS_BUILD_TESTS` | `OFF` | Builds the checks (Catch2 test cases) and their managed projects. Needs Catch2 v3, see above. |
 | `IRIS_INSTALL` | `ON` when Iris is the top-level project | Generates install rules and the `find_package(Iris)` package. |
 | `IRIS_DOTNET_NATIVE_DIR` | empty | Use this exact host pack `native` directory instead of discovering one. |
 | `IRIS_DOTNET_TARGET_RID` | empty | Override the target runtime identifier, for example `linux-musl-x64`. |
