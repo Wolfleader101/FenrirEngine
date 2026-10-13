@@ -103,8 +103,8 @@ namespace Iris
         {
             return Detail::Failure<void>(CallStatus::InvalidHandle, ReleasedOwner);
         }
-        const auto kind = Detail::ResolveWireKind(*state->bridge, state->token,
-                                                  Detail::KindSpec{Detail::ValueKind::Struct, &info});
+        const auto kind =
+            Detail::ResolveWireKind(*state->bridge, state->token, Detail::KindSpec{Detail::ValueKind::Struct, &info});
         if (!kind.Succeeded())
         {
             return Detail::PropagateFailure<void>(kind);

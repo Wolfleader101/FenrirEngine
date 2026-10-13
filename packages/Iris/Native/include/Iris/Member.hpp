@@ -23,8 +23,8 @@ namespace Iris
      * string; an empty optional is null (distinct from an empty string). Arrays are not member values.
      */
     template <typename T>
-    concept MemberValue = PrimitiveValue<T> || StructValue<T> || EnumValue<T> || std::same_as<T, std::optional<Object>> ||
-                          std::same_as<T, std::optional<std::string>>;
+    concept MemberValue = PrimitiveValue<T> || StructValue<T> || EnumValue<T> ||
+                          std::same_as<T, std::optional<Object>> || std::same_as<T, std::optional<std::string>>;
 
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
     // any release, so always build against the headers of the library you link.

@@ -30,8 +30,7 @@ namespace Iris
         void ReportInternalCallException(const char* what) noexcept;
 
         template <typename T>
-        concept InternalCallType =
-            std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
+        concept InternalCallType = std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
 
         template <InternalCallType T>
         constexpr ValueKind InternalKindOf() noexcept

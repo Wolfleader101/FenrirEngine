@@ -11,8 +11,9 @@
 
 namespace Fenrir::Detail
 {
-    // The table behind the engine's component lookups. Ids are positions, so they are only meaningful to the registry that
-    // issued them: each registry has its own generation, and C# re-resolves a cached id when the generation changes.
+    // The table behind the engine's component lookups. Ids are positions, so they are only meaningful to the registry
+    // that issued them: each registry has its own generation, and C# re-resolves a cached id when the generation
+    // changes.
     class ComponentRegistry
     {
       public:
@@ -48,9 +49,9 @@ namespace Fenrir::Detail
             return id;
         }
 
-        // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the native
-        // ones. Ids are positions, so the ids of what remains may change; the generation changes with them, and C# looks its
-        // ids up again.
+        // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the
+        // native ones. Ids are positions, so the ids of what remains may change; the generation changes with them, and
+        // C# looks its ids up again.
         void RemoveScriptDefined()
         {
             std::vector<ComponentRegistration> keptComponents;
@@ -84,15 +85,15 @@ namespace Fenrir::Detail
             m_generation = ++s_generations;
         }
 
-        // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or the same name
-        // twice.
+        // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or the
+        // same name twice.
         bool AddAll(std::vector<ComponentRegistration> registrations)
         {
             std::unordered_map<std::string, int> seen;
             for (const auto& registration : registrations)
             {
-                if (registration.name.empty() || !registration.get || !registration.has || m_ids.contains(registration.name) ||
-                    !seen.emplace(registration.name, 0).second)
+                if (registration.name.empty() || !registration.get || !registration.has ||
+                    m_ids.contains(registration.name) || !seen.emplace(registration.name, 0).second)
                 {
                     return false;
                 }
@@ -106,8 +107,8 @@ namespace Fenrir::Detail
 
         // Events: a second table with its own ids, under the same generation.
 
-        // The id of an event by name for the C# type that claims it: the id, -1 if no event has the name, -3 if the name belongs
-        // to an event of a different C# type.
+        // The id of an event by name for the C# type that claims it: the id, -1 if no event has the name, -3 if the
+        // name belongs to an event of a different C# type.
         [[nodiscard]] std::int32_t ResolveEvent(std::string_view name, std::string_view typeName) const
         {
             const auto found = m_eventIds.find(std::string(name));
@@ -132,13 +133,15 @@ namespace Fenrir::Detail
             return id;
         }
 
-        // Adds every event or none: false (and nothing added) if any has an empty or taken name, or the same name twice.
+        // Adds every event or none: false (and nothing added) if any has an empty or taken name, or the same name
+        // twice.
         bool AddEvents(std::vector<EventRegistration> registrations)
         {
             std::unordered_map<std::string, int> seen;
             for (const auto& registration : registrations)
             {
-                if (registration.name.empty() || m_eventIds.contains(registration.name) || !seen.emplace(registration.name, 0).second)
+                if (registration.name.empty() || m_eventIds.contains(registration.name) ||
+                    !seen.emplace(registration.name, 0).second)
                 {
                     return false;
                 }
@@ -158,7 +161,8 @@ namespace Fenrir::Detail
 
         [[nodiscard]] const EventRegistration* GetEvent(std::int32_t id) const noexcept
         {
-            return id >= 0 && static_cast<std::size_t>(id) < m_events.size() ? &m_events[static_cast<std::size_t>(id)] : nullptr;
+            return id >= 0 && static_cast<std::size_t>(id) < m_events.size() ? &m_events[static_cast<std::size_t>(id)]
+                                                                             : nullptr;
         }
 
         [[nodiscard]] const std::vector<EventRegistration>& Events() const noexcept
@@ -175,8 +179,9 @@ namespace Fenrir::Detail
 
         [[nodiscard]] const ComponentRegistration* Get(std::int32_t id) const noexcept
         {
-            return id >= 0 && static_cast<std::size_t>(id) < m_components.size() ? &m_components[static_cast<std::size_t>(id)]
-                                                                                  : nullptr;
+            return id >= 0 && static_cast<std::size_t>(id) < m_components.size()
+                       ? &m_components[static_cast<std::size_t>(id)]
+                       : nullptr;
         }
 
         [[nodiscard]] const std::vector<ComponentRegistration>& All() const noexcept

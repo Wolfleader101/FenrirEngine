@@ -44,18 +44,20 @@ namespace Fenrir::Detail
         [[nodiscard]] ChangeError Add(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                       std::uint32_t entity, const void* value);
 
-        [[nodiscard]] ChangeError Remove(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
-                                         std::uint32_t entity);
+        [[nodiscard]] ChangeError Remove(EntityList& entities, const ComponentRegistry& registry,
+                                         std::int32_t component, std::uint32_t entity);
 
-        // Records an event to send: `value` is registration.size bytes of event, copied now. It is put in the event's queue at
-        // playback, so a system never reads its own sends and a view it took stays valid.
-        [[nodiscard]] ChangeError SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event, const void* value);
+        // Records an event to send: `value` is registration.size bytes of event, copied now. It is put in the event's
+        // queue at playback, so a system never reads its own sends and a view it took stays valid.
+        [[nodiscard]] ChangeError SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event,
+                                            const void* value);
 
         // Plays every recorded change back in order and empties the buffer. A change whose entity died in the meantime
         // (an earlier change in the buffer destroyed it) is skipped with a warning, never applied to a reused slot.
         ApplyResult Apply(App& app, const ComponentRegistry& registry);
 
-        // Forgets every recorded change. Entities created and not yet played back are destroyed, so none are left behind.
+        // Forgets every recorded change. Entities created and not yet played back are destroyed, so none are left
+        // behind.
         void Discard(EntityList& entities);
 
         [[nodiscard]] bool Empty() const noexcept
