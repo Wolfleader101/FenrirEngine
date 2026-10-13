@@ -99,6 +99,8 @@ namespace Fenrir
      * is active in a process at a time: the engine's native functions act on that one App, so a second Install
      * while another is active logs an error and runs without scripts.
      */
+    struct ScriptingProbe;
+
     class Scripting
     {
       public:
@@ -210,32 +212,10 @@ namespace Fenrir
         [[nodiscard]] std::size_t PendingUnloadCount() const noexcept;
 
         /**
-         * @brief How many times the engine has called into the script's systems since Install: once per phase that has
-         * systems, per frame (and per fixed step for Tick). A diagnostic, for tests of the one-transition-per-phase
-         * rule.
-         */
-        [[nodiscard]] std::size_t PhaseCallCount() const noexcept;
-
-        /**
-         * @brief How many times scripts have called into the engine to run queries, since Install. A diagnostic: a
-         * query makes a fixed number of calls however many entities it visits, and a test can check that.
-         */
-        [[nodiscard]] std::size_t QueryCallCount() const noexcept;
-
-        /** @brief How many changes are recorded and not yet played back. */
-        [[nodiscard]] std::size_t PendingChangeCount() const noexcept;
-
-        /**
          * @brief Drops the recorded changes instead of playing them back (a script threw, say). Entities it created are
          * destroyed. Reads are unaffected.
          */
         void DiscardChanges();
-
-        /**
-         * @brief The loaded script assembly, or null when there are no scripts. The pointer stays valid until
-         * Shutdown. This is the hook the runner and the tests call into scripts through.
-         */
-        [[nodiscard]] Iris::Component* GetComponent() noexcept;
 
         /**
          * @brief Releases the script assembly and the runtime host, and stops forwarding Iris's log messages.
@@ -244,7 +224,26 @@ namespace Fenrir
         void Shutdown() noexcept;
 
       private:
+        // The scripting package's tests look inside through this one probe (diagnostic counters and the loaded Iris
+        // component); nothing else does.
+        friend struct ScriptingProbe;
+
         struct State;
+
+        // What the tests read: how many times the engine called into the script's systems (once per phase that has
+        // systems, per frame, and per fixed step for Tick), how many times scripts called into the engine to run
+        // queries, and how many changes are recorded and not yet played back.
+        struct Diagnostics
+        {
+            std::size_t phaseCalls = 0;
+            std::size_t queryCalls = 0;
+            std::size_t pendingChanges = 0;
+        };
+        [[nodiscard]] Diagnostics ReadDiagnostics() const noexcept;
+
+        // The loaded script assembly, or null when there are no scripts. Valid until Shutdown.
+        [[nodiscard]] Iris::Component* LoadedComponent() noexcept;
+
         explicit Scripting(std::shared_ptr<State> state) noexcept;
         [[nodiscard]] static Scripting InstallImpl(App& app, ScriptingConfig config);
         static void ReportFailure(App& app, const char* what) noexcept;

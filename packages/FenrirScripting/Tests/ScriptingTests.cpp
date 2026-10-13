@@ -1,4 +1,5 @@
 #include "HeadlessApp.hpp"
+#include "ScriptingProbe.hpp"
 #include "TestHarness.hpp"
 
 #include "FenrirECS/DefaultComponents.hpp"
@@ -124,7 +125,7 @@ namespace
     template <typename Result, typename... Args>
     Result CallIn(const char* typeName, Scripting& scripting, const char* method, Args... arguments)
     {
-        auto* component = scripting.GetComponent();
+        auto* component = ScriptingProbe::Component(scripting);
         Check(component != nullptr, "There is no loaded script assembly");
         const auto type = component->FindType(typeName);
         Check(type.Succeeded(), std::string("The fixture type was not found: ") + type.diagnostic);
@@ -1016,12 +1017,12 @@ namespace
         const auto id = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
         // Alive and usable (the script added to it), but nothing is in the storage until playback.
         Check(id != NullEntity && entities.HasEntity(id), "The new entity was not alive at once");
-        Check(scripting.PendingChangeCount() == 3, "The script's changes were not recorded");
+        Check(ScriptingProbe::PendingChanges(scripting) == 3, "The script's changes were not recorded");
         Check(!velocity->has(entities, id) && !entities.GetEntity(id).HasComponent<Transform>(),
               "A change reached the storage before playback");
 
         const auto summary = scripting.ApplyChanges();
-        Check(summary.applied == 3 && summary.skipped == 0 && scripting.PendingChangeCount() == 0,
+        Check(summary.applied == 3 && summary.skipped == 0 && ScriptingProbe::PendingChanges(scripting) == 0,
               "Playback did not apply all");
         auto entity = entities.GetEntity(id);
         Check(entity.HasComponent<Transform>() && entity.HasComponent<Name>() && entity.HasComponent<Relationship>(),
@@ -1177,7 +1178,7 @@ namespace
               "Removing Transform was not refused clearly");
         Check(message("TryRemoveName", bare).find("needs every entity") != std::string::npos,
               "Removing Name was not refused");
-        Check(scripting.PendingChangeCount() == 0, "A refused change was recorded");
+        Check(ScriptingProbe::PendingChanges(scripting) == 0, "A refused change was recorded");
         Check(entities.GetEntity(bare).HasComponent<Transform>(), "A refused removal changed the entity");
     }
 
@@ -1190,15 +1191,15 @@ namespace
 
         const auto created = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
         Changes<void>(scripting, "RemoveThenAdd", existing);
-        Check(scripting.PendingChangeCount() > 0 && entities.HasEntity(created), "Nothing was recorded");
+        Check(ScriptingProbe::PendingChanges(scripting) > 0 && entities.HasEntity(created), "Nothing was recorded");
         scripting.DiscardChanges();
-        Check(scripting.PendingChangeCount() == 0 && !entities.HasEntity(created),
+        Check(ScriptingProbe::PendingChanges(scripting) == 0 && !entities.HasEntity(created),
               "Discarding left the created entity");
         Check(scripting.FindComponent(VelocityName)->has(entities, existing), "Discarding applied a change");
 
         // After Shutdown there is nothing to play back, and it says so rather than crashing.
         scripting.Shutdown();
-        Check(scripting.ApplyChanges().applied == 0 && scripting.PendingChangeCount() == 0,
+        Check(scripting.ApplyChanges().applied == 0 && ScriptingProbe::PendingChanges(scripting) == 0,
               "Changes outlived Shutdown");
     }
 
@@ -1276,16 +1277,16 @@ namespace
             }
             total += more;
             const int count = total;
-            const auto before = scripting.QueryCallCount();
+            const auto before = ScriptingProbe::QueryCalls(scripting);
             const auto start = std::chrono::steady_clock::now();
             const auto visited = Queries<std::int32_t>(scripting, "Integrate");
             const auto microseconds =
                 std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
             Check(visited == count, "The query did not visit every entity");
             std::cout << "  query over " << count
-                      << " entities (Transform + Velocity): " << (scripting.QueryCallCount() - before)
+                      << " entities (Transform + Velocity): " << (ScriptingProbe::QueryCalls(scripting) - before)
                       << " native calls, " << microseconds.count() << " us\n";
-            return scripting.QueryCallCount() - before;
+            return ScriptingProbe::QueryCalls(scripting) - before;
         };
         const auto small = callsFor(10);
         const auto large = callsFor(10000 - 10);
@@ -1484,7 +1485,7 @@ namespace
               "Tick did not run once per fixed step");
 
         // One transition per phase that has systems, per frame, and per fixed step for Tick.
-        Check(scripting.PhaseCallCount() == static_cast<std::size_t>(3 * frames + nativeTicks),
+        Check(ScriptingProbe::PhaseCalls(scripting) == static_cast<std::size_t>(3 * frames + nativeTicks),
               "The engine did not enter the script exactly once per phase");
 
         // The thrower was logged once with its name, and the others kept running.
@@ -1521,7 +1522,7 @@ namespace
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         scripting.Shutdown();
         headless.Run(2); // The scheduled phase systems find nothing to run.
-        Check(scripting.PhaseCallCount() == 0, "A phase ran after Shutdown");
+        Check(ScriptingProbe::PhaseCalls(scripting) == 0, "A phase ran after Shutdown");
     }
 
     constexpr const char* EventScriptsType = "Fenrir.ScriptFixture.EventScripts";
@@ -2406,6 +2407,52 @@ namespace
         Check(headless.FramesRun() == Frames, "The app did not run");
     }
 
+    // What every public call answers when scripting is not live: nothing runs, nothing is recorded, nothing throws.
+    void ExpectNotLive(Scripting& scripting, const char* what)
+    {
+        const std::string name = what;
+        Check(!scripting.IsRunning() && !scripting.HasScripts(), name + " claimed to be running");
+        const auto summary = scripting.ApplyChanges();
+        Check(summary.applied == 0 && summary.skipped == 0, name + " applied changes");
+        scripting.DiscardChanges();
+        const auto reloaded = scripting.Reload();
+        Check(!reloaded.Succeeded() && reloaded.status == Iris::CallStatus::NotInitialized,
+              name + " did not refuse a reload");
+        Check(scripting.PendingUnloadCount() == 0, name + " reported generations waiting to unload");
+    }
+
+    void ScriptingThatIsNotLiveAnswersEveryCallTheSameWay()
+    {
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ScriptingConfig{});
+            ExpectNotLive(scripting, "A scripting with no assembly configured");
+            Check(scripting.Generation() == 0, "No assembly was reported as a generation");
+        }
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture.parent_path() / "missing.dll"));
+            ExpectNotLive(scripting, "A scripting whose install failed");
+            Check(scripting.Generation() == 0, "A failed install was reported as a generation");
+        }
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            Check(scripting.HasScripts(), "The fixture did not load");
+            const Scripting taken = std::move(scripting);
+            ExpectNotLive(scripting, "A moved-from scripting"); // NOLINT(bugprone-use-after-move): that is the case
+            Check(scripting.Generation() == 0 && scripting.FindComponent("Fenrir.Transform") == nullptr,
+                  "A moved-from scripting reported state");
+        }
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            Check(scripting.HasScripts(), "The fixture did not load");
+            scripting.Shutdown();
+            ExpectNotLive(scripting, "A shut-down scripting");
+        }
+    }
+
     void ShutdownReleasesEverythingWhenTheAppFinishes()
     {
         HeadlessApp headless;
@@ -2534,6 +2581,8 @@ int main(int argc, char* argv[])
          AScriptCannotClaimANativeComponentWithAStructOfItsOwn},
         {"the build deploys the bridge next to the executable", TheBuildDeploysTheBridgeNextToTheExecutable},
         {"no configured assembly does nothing and never starts .NET", NoAssemblyConfiguredDoesNothing},
+        {"a scripting that is not live answers every call the same way",
+         ScriptingThatIsNotLiveAnswersEveryCallTheSameWay},
         {"everything Iris owns is released when the app finishes", ShutdownReleasesEverythingWhenTheAppFinishes},
         {"destroying the owner releases everything, and a later install works",
          DestroyingTheOwnerWithoutRunningReleasesEverything},
