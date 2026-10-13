@@ -404,9 +404,11 @@ cmake --build out/build/engine-scripting --config Debug --target FenrirScripting
 ctest --test-dir out/build/engine-scripting -C Debug --output-on-failure
 ```
 
-To run one case, give the executable the fixture assemblies CMake builds, then Catch2's own options. CTest shows the
-exact command line (`ctest -V -R FenrirScripting`); after the three assemblies add a name, a `"[scripting]"` tag or
-`--list-tests`. `Check(condition, message)` in `Tests/TestHarness.hpp` is a Catch2 assertion that carries its message.
+The tests find the assemblies CMake built in the environment (`FENRIR_TEST_FIXTURE`, `FENRIR_TEST_FIXTURE_V2`,
+`FENRIR_TEST_BAD_REPORTS`, `FENRIR_TEST_EXECUTABLE_DIR`), which CTest sets. To run one case by hand, set those (`ctest -V -R
+FenrirScripting` shows them) and give `FenrirScriptingTests` Catch2's options: a test name, the `"[scripting]"` tag or
+`--list-tests`, and `--order decl`, because some cases rely on the order they are declared in. Checks are plain `REQUIRE`s
+with an `INFO` message.
 
 The counters and the loaded Iris component the tests need are not on `Scripting`; the tests read them through
 `ScriptingProbe` (`Tests/ScriptingProbe.hpp`), which `Scripting` names as a friend.

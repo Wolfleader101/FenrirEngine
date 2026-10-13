@@ -4,4 +4,4 @@ fenrir_add_catch2()
 
 add_executable(FenrirECSTests DynamicComponents.cpp Queries.cpp)
 target_link_libraries(FenrirECSTests PRIVATE FenrirECS Catch2::Catch2WithMain)
-add_test(NAME FenrirECS COMMAND FenrirECSTests)
+add_test(NAME FenrirECS COMMAND FenrirECSTests --order decl)

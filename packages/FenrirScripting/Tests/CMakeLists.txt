@@ -1,14 +1,12 @@
 # The headless scripting tests: an App with no window runs a few frames around a fixture script assembly.
 add_executable(FenrirScriptingTests
     ScriptingTests.cpp
-    TestHarness.hpp
     HeadlessApp.hpp
     ScriptingProbe.hpp
 )
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
-# Catch2 without its own main: the tests take the fixture assemblies on the command line (see main).
-target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2)
+target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
@@ -57,10 +55,11 @@ add_dependencies(FenrirScriptingTests FenrirScriptFixture)
 add_test(NAME ScriptingDoesNotUseEnTT
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.." -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/NoEnTT.cmake")
 
-add_test(NAME FenrirScripting
-    COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll" "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll"
-            "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll")
-set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120)
+# The tests find the assemblies they run against in the environment: to run one case by hand, set these (see
+# `ctest -V -R FenrirScripting`) and give FenrirScriptingTests Catch2's options, for example a test name or "[scripting]".
+add_test(NAME FenrirScripting COMMAND FenrirScriptingTests --order decl)
+set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120 ENVIRONMENT
+    "FENRIR_TEST_FIXTURE=${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_FIXTURE_V2=${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_BAD_REPORTS=${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll;FENRIR_TEST_EXECUTABLE_DIR=$<TARGET_FILE_DIR:FenrirScriptingTests>")
 
 
 # Ref<T> points into storage that can move, so the compiler must refuse every way of keeping it past the call that was
