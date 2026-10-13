@@ -20,8 +20,8 @@ namespace Fenrir
 {
 
     /**
-     * @brief The events a queue holds for reading, as one contiguous array of `count` elements of EventSize() bytes each.
-     * Valid until the queue is next sent to or updated.
+     * @brief The events a queue holds for reading, as one contiguous array of `count` elements of EventSize() bytes
+     * each. Valid until the queue is next sent to or updated.
      */
     struct RawEvents
     {
@@ -50,8 +50,8 @@ namespace Fenrir
 
         /**
          * @name Type-erased access
-         * For code that knows an event by its name and layout rather than its C++ type (scripting). A queue of events that
-         * are not trivially copyable has an EventSize() of zero and cannot be used this way.
+         * For code that knows an event by its name and layout rather than its C++ type (scripting). A queue of events
+         * that are not trivially copyable has an EventSize() of zero and cannot be used this way.
          * @{
          */
 
@@ -61,7 +61,8 @@ namespace Fenrir
         /** @brief Alignment of one event. */
         [[nodiscard]] virtual std::size_t EventAlignment() const noexcept = 0;
 
-        /** @brief Copies one event (EventSize() bytes) into the queue's current frame. False if the queue has no byte size. */
+        /** @brief Copies one event (EventSize() bytes) into the queue's current frame. False if the queue has no byte
+         * size. */
         virtual bool SendRaw(const void* event) = 0;
 
         /** @brief The current and the previous frame's events, the same window ReadEvents gives. */
@@ -116,7 +117,8 @@ namespace Fenrir
         }
 
         // Events that can be copied as bytes (and so sent and read by code that knows only their layout).
-        static constexpr bool ByteCopyable = std::is_trivially_copyable_v<TEvent> && std::is_default_constructible_v<TEvent>;
+        static constexpr bool ByteCopyable =
+            std::is_trivially_copyable_v<TEvent> && std::is_default_constructible_v<TEvent>;
 
         [[nodiscard]] std::size_t EventSize() const noexcept override
         {
@@ -238,9 +240,9 @@ namespace Fenrir
         const std::vector<TEvent>& ReadEvents() const;
 
         /**
-         * @brief Gives the queue of `TEvent` a name, so code that only knows the name can reach the same queue (FindEventQueue).
-         * `SendEvent<TEvent>` and the named queue are one queue. False if the name is already given to a different queue.
-         * Naming the same queue twice is fine.
+         * @brief Gives the queue of `TEvent` a name, so code that only knows the name can reach the same queue
+         * (FindEventQueue). `SendEvent<TEvent>` and the named queue are one queue. False if the name is already given
+         * to a different queue. Naming the same queue twice is fine.
          */
         template <typename TEvent>
         bool NameEvent(std::string name);
@@ -251,8 +253,9 @@ namespace Fenrir
         [[nodiscard]] IEventQueue* FindEventQueue(std::string_view name) const;
 
         /**
-         * @brief Makes a queue of events that have no C++ type: `size` bytes each, aligned to `alignment` (at most 16), with the
-         * same double buffering as every other queue. Null if the name is taken or the size or alignment is unusable.
+         * @brief Makes a queue of events that have no C++ type: `size` bytes each, aligned to `alignment` (at most 16),
+         * with the same double buffering as every other queue. Null if the name is taken or the size or alignment is
+         * unusable.
          */
         IEventQueue* CreateEventQueue(std::string name, std::size_t size, std::size_t alignment);
 
@@ -277,8 +280,8 @@ namespace Fenrir
         Scene& GetScene(const std::string& name);
 
         /**
-         * @brief Calls `func(Scene&)` for every scene, active or not. For code that must reach all the entities there are (a
-         * component type that stops existing), not for per-frame work.
+         * @brief Calls `func(Scene&)` for every scene, active or not. For code that must reach all the entities there
+         * are (a component type that stops existing), not for per-frame work.
          */
         template <typename Func>
         void ForEachScene(Func&& func)
@@ -301,7 +304,8 @@ namespace Fenrir
         // this is mutable because GetEventQueue() is const
         mutable std::unordered_map<std::type_index, std::unique_ptr<IEventQueue>> m_eventQueues;
 
-        // Queues known by name: typed queues given a name (owned above) and byte queues made by CreateEventQueue (owned below).
+        // Queues known by name: typed queues given a name (owned above) and byte queues made by CreateEventQueue (owned
+        // below).
         std::unordered_map<std::string, IEventQueue*> m_namedEventQueues;
         std::unordered_map<std::string, std::unique_ptr<IEventQueue>> m_byteEventQueues;
 
