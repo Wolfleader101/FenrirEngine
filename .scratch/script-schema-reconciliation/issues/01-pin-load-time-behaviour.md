@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Duplicate name refused with a message naming it (components and events)
 - [ ] Invalid size or alignment refused (components and events)

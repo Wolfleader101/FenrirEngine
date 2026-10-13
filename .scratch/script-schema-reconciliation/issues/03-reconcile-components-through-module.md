@@ -4,7 +4,7 @@
 
 **Blocked by:** 01, 02
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Component logic is gone from the main scripting source's load path
 - [ ] Log wording for dropped data unchanged

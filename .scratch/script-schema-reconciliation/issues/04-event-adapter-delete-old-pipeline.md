@@ -4,7 +4,7 @@
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] No event discovery/check/diff logic left outside the module
 - [ ] A third kind of script-defined thing would need only a new adapter

@@ -4,7 +4,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Host state no longer holds copy-directory or retired-list fields
 - [ ] Ticket 01 tests and all existing tests pass unchanged
