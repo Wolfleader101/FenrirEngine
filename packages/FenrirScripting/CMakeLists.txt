@@ -44,6 +44,8 @@ include(cmake/FenrirScriptingDeploy.cmake)
 add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
+    src/ChangeBuffer.cpp
+    src/ChangeBuffer.hpp
     src/EngineComponents.cpp
     src/ScriptComponents.cpp
     src/ScriptComponents.hpp

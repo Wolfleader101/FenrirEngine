@@ -16,6 +16,22 @@ namespace Fenrir
     }
 
 
+    std::uint32_t EntityList::ReserveEntity()
+    {
+        return static_cast<std::uint32_t>(m_registry.create());
+    }
+
+    bool EntityList::CompleteEntity(std::uint32_t id)
+    {
+        if (!m_registry.valid(static_cast<entt::entity>(id)))
+        {
+            return false;
+        }
+        const Entity completed(id, this); // The creating constructor: Transform, Name and Relationship.
+        (void)completed;
+        return true;
+    }
+
     Entity EntityList::GetEntity(uint32_t id)
     {
         if (m_registry.valid(static_cast<entt::entity>(id)))

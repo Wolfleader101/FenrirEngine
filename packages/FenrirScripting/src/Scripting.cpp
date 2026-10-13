@@ -75,6 +75,7 @@ namespace Fenrir
         std::mutex mutex;
         ILogger* logger = nullptr;
         Detail::ComponentRegistry components;
+        Detail::ChangeBuffer changes;
         Detail::EngineContext context;
         bool contextActive = false;
         std::unique_ptr<Iris::Host> host;
@@ -340,6 +341,29 @@ namespace Fenrir
         return validated;
     }
 
+    std::size_t Scripting::PendingChangeCount() const noexcept
+    {
+        return m_state == nullptr ? 0 : m_state->changes.Size();
+    }
+
+    Scripting::ChangeSummary Scripting::ApplyChanges()
+    {
+        if (m_state == nullptr || !m_state->contextActive || m_state->context.app == nullptr)
+        {
+            return {};
+        }
+        const auto result = m_state->changes.Apply(*m_state->context.app, m_state->components);
+        return {result.applied, result.skipped};
+    }
+
+    void Scripting::DiscardChanges()
+    {
+        if (m_state != nullptr && m_state->contextActive && m_state->context.app != nullptr)
+        {
+            m_state->changes.Discard(m_state->context.app->GetActiveScene().GetEntityList());
+        }
+    }
+
     Iris::Component* Scripting::GetComponent() noexcept
     {
         return m_state != nullptr && m_state->component.has_value() ? &*m_state->component : nullptr;
@@ -433,6 +457,7 @@ namespace Fenrir
         // binds the contract's function pointers to them).
         state->context.app = &app;
         state->context.components = &state->components;
+        state->context.changes = &state->changes;
         if (!Detail::RegisterEngineComponents(state->components))
         {
             logger.Error("Scripting: the engine's own components could not be registered; running without scripts.");

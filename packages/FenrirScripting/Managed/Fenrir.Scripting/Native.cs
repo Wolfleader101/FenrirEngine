@@ -36,4 +36,15 @@ internal static unsafe class Native
     public static delegate* unmanaged[Cdecl]<uint> RegistryGeneration;
     public static delegate* unmanaged[Cdecl]<int, uint, void*> ComponentGet;
     public static delegate* unmanaged[Cdecl]<int, uint, bool> ComponentHas;
+
+    // Structural changes. None of them touches the engine's storage: each is recorded and played back, in order, when the
+    // native code that called into the script gets control back, so a Ref<T> taken before stays valid.
+    //   EntityCreate(): a new entity value, alive and usable at once (uint.MaxValue if there is no active scene).
+    //   EntityDestroy(entity), ComponentAdd(id, entity, value), ComponentRemove(id, entity): 0 when recorded, otherwise the
+    //   reason it was refused: -1 the entity is not alive, -2 no such component, -3 the component is read-only, -4 the
+    //   engine requires every entity to have it, -5 scripting is not running. `value` is the component's bytes, or null for a default one.
+    public static delegate* unmanaged[Cdecl]<uint> EntityCreate;
+    public static delegate* unmanaged[Cdecl]<uint, int> EntityDestroy;
+    public static delegate* unmanaged[Cdecl]<int, uint, void*, int> ComponentAdd;
+    public static delegate* unmanaged[Cdecl]<int, uint, int> ComponentRemove;
 }

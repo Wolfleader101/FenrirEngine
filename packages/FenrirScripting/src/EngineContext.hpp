@@ -2,6 +2,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include "ChangeBuffer.hpp"
 #include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
 #include "ScriptComponents.hpp"
@@ -15,6 +16,9 @@ namespace Fenrir::Detail
     {
         App* app = nullptr;
         ComponentRegistry* components = nullptr;
+
+        // The structural changes scripts have made since they were last played back.
+        ChangeBuffer* changes = nullptr;
 
         // Set only while a script assembly reports the components it defines (while it loads): where to put them. Null at any
         // other time, so a stray call from a script is ignored.

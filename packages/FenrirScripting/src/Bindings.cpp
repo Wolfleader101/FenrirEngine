@@ -123,6 +123,57 @@ namespace Fenrir::Detail
             const auto* component = context->components->Get(id);
             return component != nullptr && component->has(context->app->GetActiveScene().GetEntityList(), entity);
         }
+
+        // Native.EntityCreate: a new entity id, usable at once; the entity gets its engine components when changes play back.
+        std::uint32_t EntityCreate()
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr)
+            {
+                return Entity::Null;
+            }
+            return context->changes->Create(context->app->GetActiveScene().GetEntityList());
+        }
+
+        // Native.EntityDestroy, ComponentAdd and ComponentRemove record a change for playback. They return a ChangeError code:
+        // 0 recorded, negative for the reason it was refused.
+        std::int32_t Refuse() noexcept
+        {
+            return static_cast<std::int32_t>(ChangeError::NotActive);
+        }
+
+        std::int32_t EntityDestroy(std::uint32_t entity)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr)
+            {
+                return Refuse();
+            }
+            return static_cast<std::int32_t>(context->changes->Destroy(context->app->GetActiveScene().GetEntityList(), entity));
+        }
+
+        // `value` is the component's bytes, or null for a default one.
+        std::int32_t ComponentAdd(std::int32_t id, std::uint32_t entity, const void* value)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            {
+                return Refuse();
+            }
+            return static_cast<std::int32_t>(context->changes->Add(context->app->GetActiveScene().GetEntityList(),
+                                                                   *context->components, id, entity, value));
+        }
+
+        std::int32_t ComponentRemove(std::int32_t id, std::uint32_t entity)
+        {
+            const auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->changes == nullptr || context->components == nullptr)
+            {
+                return Refuse();
+            }
+            return static_cast<std::int32_t>(context->changes->Remove(context->app->GetActiveScene().GetEntityList(),
+                                                                      *context->components, id, entity));
+        }
     } // namespace
 
     bool ActivateEngineContext(EngineContext* context) noexcept
@@ -150,6 +201,10 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&RegistryGeneration>(prefix + "RegistryGeneration"),
             Iris::RegisterInternalCall<&ComponentGet>(prefix + "ComponentGet"),
             Iris::RegisterInternalCall<&ComponentHas>(prefix + "ComponentHas"),
+            Iris::RegisterInternalCall<&EntityCreate>(prefix + "EntityCreate"),
+            Iris::RegisterInternalCall<&EntityDestroy>(prefix + "EntityDestroy"),
+            Iris::RegisterInternalCall<&ComponentAdd>(prefix + "ComponentAdd"),
+            Iris::RegisterInternalCall<&ComponentRemove>(prefix + "ComponentRemove"),
         };
         for (auto& result : results)
         {
