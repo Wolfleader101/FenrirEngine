@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- Deliberately not the SDK's props: no source generator, because this assembly writes the component and event tables by
+       hand so it can report what the generator never would (a name twice, a layout no C# struct has). The build passes
+       -p:FenrirScriptingSdk=<the SDK folder>/. -->
+  <ItemGroup>
+    <Reference Include="Fenrir.Scripting">
+      <HintPath>$(FenrirScriptingSdk)Fenrir.Scripting.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

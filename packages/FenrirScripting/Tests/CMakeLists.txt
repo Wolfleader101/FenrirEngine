@@ -28,8 +28,23 @@ add_custom_command(
     COMMENT "Building the scripting test fixture assembly (and its version 2)"
     VERBATIM
 )
+# A second, hand-written assembly whose component and event tables report what the SDK's generator never would (a name
+# twice, a layout no C# struct has), for the tests of what the engine refuses when a script assembly loads.
+set(fenrir_bad_reports_dir "${CMAKE_CURRENT_BINARY_DIR}/bad-reports")
+file(GLOB fenrir_bad_reports_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/BadReports/*.cs")
+add_custom_command(
+    OUTPUT "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll"
+    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/BadReports/Fenrir.BadReportFixture.csproj"
+        --configuration Release --output "${fenrir_bad_reports_dir}" -nologo -v:q
+        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/bad-reports-obj/"
+    DEPENDS ${fenrir_bad_reports_sources} "${CMAKE_CURRENT_SOURCE_DIR}/BadReports/Fenrir.BadReportFixture.csproj"
+        FenrirScriptingContract
+    COMMENT "Building the bad-report test fixture assembly"
+    VERBATIM
+)
 add_custom_target(FenrirScriptFixture DEPENDS "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll"
-    "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll")
+    "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll" "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll")
 add_dependencies(FenrirScriptFixture FenrirScriptingContract)
 add_dependencies(FenrirScriptingTests FenrirScriptFixture)
 
@@ -39,7 +54,8 @@ add_test(NAME ScriptingDoesNotUseEnTT
     COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}/.." -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/NoEnTT.cmake")
 
 add_test(NAME FenrirScripting
-    COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll" "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll")
+    COMMAND FenrirScriptingTests "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll" "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll"
+            "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll")
 set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120)
 
 
