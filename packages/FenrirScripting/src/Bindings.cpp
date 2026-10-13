@@ -1,4 +1,5 @@
 #include "EngineContext.hpp"
+#include "Queries.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -174,6 +175,32 @@ namespace Fenrir::Detail
             return static_cast<std::int32_t>(context->changes->Remove(context->app->GetActiveScene().GetEntityList(),
                                                                       *context->components, id, entity));
         }
+
+        // Native.QueryCount and Native.QueryFill: see Queries.hpp.
+        std::int32_t QueryCount(const std::int32_t* ids, std::int32_t count)
+        {
+            auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr || count <= 0)
+            {
+                return -1;
+            }
+            ++context->queryCalls;
+            return CountQueryRows(context->app->GetActiveScene().GetEntityList(), *context->components,
+                                      std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)));
+        }
+
+        std::int32_t QueryFill(const std::int32_t* ids, std::int32_t count, std::uintptr_t* rows, std::int32_t capacity)
+        {
+            auto* context = activeContext.load();
+            if (context == nullptr || context->app == nullptr || context->components == nullptr || ids == nullptr || count <= 0 ||
+                rows == nullptr || capacity < 0)
+            {
+                return -1;
+            }
+            ++context->queryCalls;
+            return FillQueryRows(context->app->GetActiveScene().GetEntityList(), *context->components,
+                                     std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)), rows, capacity);
+        }
     } // namespace
 
     bool ActivateEngineContext(EngineContext* context) noexcept
@@ -205,6 +232,8 @@ namespace Fenrir::Detail
             Iris::RegisterInternalCall<&EntityDestroy>(prefix + "EntityDestroy"),
             Iris::RegisterInternalCall<&ComponentAdd>(prefix + "ComponentAdd"),
             Iris::RegisterInternalCall<&ComponentRemove>(prefix + "ComponentRemove"),
+            Iris::RegisterInternalCall<&QueryCount>(prefix + "QueryCount"),
+            Iris::RegisterInternalCall<&QueryFill>(prefix + "QueryFill"),
         };
         for (auto& result : results)
         {

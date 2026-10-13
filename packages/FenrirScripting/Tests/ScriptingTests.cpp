@@ -6,6 +6,7 @@
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <set>
@@ -1114,6 +1115,182 @@ namespace
         Check(scripting.ApplyChanges().applied == 0 && scripting.PendingChangeCount() == 0, "Changes outlived Shutdown");
     }
 
+    constexpr const char* QueriesType = "Fenrir.ScriptFixture.Queries";
+
+    template <typename Result, typename... Args>
+    Result Queries(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(QueriesType, scripting, method, arguments...);
+    }
+
+    void SetVelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id, float x)
+    {
+        auto* values = static_cast<float*>(scripting.FindComponent(VelocityName)->get(entities, id));
+        Check(values != nullptr, "The entity had no Velocity");
+        values[0] = x;
+        values[1] = 0;
+        values[2] = 0;
+    }
+
+    void WritesThroughQueryRowsAreVisibleNatively()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        Check(scripting.HasScripts(), "The fixture did not load");
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+
+        // Two entities with a Transform (native) and a Velocity (script), one with only a Velocity, one with only a Transform.
+        const auto first = EntityWithVelocity(scripting, entities);
+        const auto second = EntityWithVelocity(scripting, entities);
+        const auto velocityOnly = entities.CreateEntity().GetId();
+        Check(scripting.FindComponent(VelocityName)->add(entities, velocityOnly), "Velocity was not added");
+        entities.GetEntity(velocityOnly).RemoveComponent<Transform>();
+        const auto transformOnly = entities.CreateEntity().GetId();
+        SetVelocityX(scripting, entities, first, 1);
+        SetVelocityX(scripting, entities, second, 10);
+        SetVelocityX(scripting, entities, velocityOnly, 100);
+        Check(Queries<float>(scripting, "SumVelocityX") == 111.0F, "A single-component query missed an entity");
+
+        // A query over a native and a script component visits exactly the entities that have both, and its writes land in the
+        // engine's own storage.
+        Check(Queries<std::int32_t>(scripting, "Integrate") == 2, "The two-component query visited the wrong entities");
+        Check(Queries<std::int32_t>(scripting, "Integrate") == 2, "The query was not repeatable");
+        Check(entities.GetEntity(first).GetComponent<Transform>().pos.x == 2.0F &&
+                  entities.GetEntity(second).GetComponent<Transform>().pos.x == 20.0F,
+              "Writes through query rows did not reach the native Transform");
+        Check(entities.GetEntity(transformOnly).GetComponent<Transform>().pos.x == 0.0F, "A query visited an entity it should not");
+
+        // Each row's entity owns the row's components.
+        for (const auto id : {first, second})
+        {
+            Check(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->add(entities, id), "Counter was not added");
+        }
+        Check(Queries<bool>(scripting, "RowsAgree"), "A row's entity and its components disagreed");
+
+        // The callback form works the same.
+        Check(Queries<std::int32_t>(scripting, "CountUp") == 2, "ForEach visited the wrong entities");
+        const auto* hits = static_cast<const std::int32_t*>(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->get(entities, first));
+        Check(hits != nullptr && hits[0] == 1, "A write through ForEach did not reach the component");
+    }
+
+    void AQueryMakesTheSameNumberOfNativeCallsForAnyNumberOfEntities()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        int total = 0;
+        const auto callsFor = [&](int more) {
+            for (int index = 0; index < more; ++index)
+            {
+                SetVelocityX(scripting, entities, EntityWithVelocity(scripting, entities), 1);
+            }
+            total += more;
+            const int count = total;
+            const auto before = scripting.QueryCallCount();
+            const auto start = std::chrono::steady_clock::now();
+            const auto visited = Queries<std::int32_t>(scripting, "Integrate");
+            const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start);
+            Check(visited == count, "The query did not visit every entity");
+            std::cout << "  query over " << count << " entities (Transform + Velocity): " << (scripting.QueryCallCount() - before)
+                      << " native calls, " << microseconds.count() << " us\n";
+            return scripting.QueryCallCount() - before;
+        };
+        const auto small = callsFor(10);
+        const auto large = callsFor(10000 - 10);
+        Check(small == large && small == 2, "A query's native calls depended on the entity count");
+    }
+
+    void StructuralChangesDuringIterationAreDeferred()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* velocity = scripting.FindComponent(VelocityName);
+        const auto* counter = scripting.FindComponent("Fenrir.ScriptFixture.Counter");
+        std::vector<std::uint32_t> originals;
+        for (int index = 0; index < 5; ++index)
+        {
+            originals.push_back(EntityWithVelocity(scripting, entities));
+        }
+
+        // The script removes each entity's Velocity, adds Counter, creates a new Velocity entity and destroys one entity, all
+        // inside the loop. The loop still visits exactly the five it started with.
+        Check(Queries<std::int32_t>(scripting, "ChangeWhileIterating") == 5, "Iteration was disturbed by changes made inside it");
+        Check(velocity->count(entities) == 5 && counter->count(entities) == 0, "A change reached the storage during iteration");
+        const auto summary = scripting.ApplyChanges();
+        Check(summary.skipped == 0, "A change was skipped: the destroy came last, so nothing named a dead entity");
+        Check(velocity->count(entities) == 5, "Velocity should now be on the five new entities");
+        Check(counter->count(entities) == 4, "Counter should be on the four survivors");
+        for (const auto id : originals)
+        {
+            Check(!velocity->has(entities, id), "An original kept its Velocity");
+        }
+
+        // Nested queries each see the whole set.
+        Check(Queries<std::int32_t>(scripting, "Nested") == 5 * 4, "Nested queries did not each see every entity");
+        Check(Queries<std::int32_t>(scripting, "StopEarly") == 2, "Leaving a loop early failed");
+        Check(Queries<float>(scripting, "SumVelocityX") == 500.0F, "A query after breaking out of one was wrong");
+    }
+
+    void ForEachDefersStructuralChangesToo()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto* velocity = scripting.FindComponent(VelocityName);
+        for (int index = 0; index < 5; ++index)
+        {
+            (void)EntityWithVelocity(scripting, entities);
+        }
+        // Five visited, however many the loop creates; the new ones appear (and the old ones go) at playback.
+        Check(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5, "ForEach was disturbed by changes made inside it");
+        Check(velocity->count(entities) == 5, "A change reached the storage during ForEach");
+        (void)scripting.ApplyChanges();
+        Check(velocity->count(entities) == 5, "ForEach's deferred changes were not applied");
+        Check(Queries<std::int32_t>(scripting, "ChangeInsideForEach") == 5, "The replacements were not queryable");
+    }
+
+    void EmptyAndInvalidQueriesBehave()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        entities.CreateEntity();
+
+        // Nothing has the component, and nothing has been added: empty, with no storage made for it.
+        const auto storages = entities.ComponentStorageCount();
+        Check(Queries<std::int32_t>(scripting, "VisitEmpty") == 0, "An empty query visited something");
+        Check(Queries<float>(scripting, "SumVelocityX") == 0.0F, "An empty sum was not zero");
+        Check(entities.ComponentStorageCount() == storages, "An empty query made storage");
+
+        // A component the engine never registered, and the same component twice: clear errors.
+        const auto unregistered = Queries<std::optional<std::string>>(scripting, "QueryUnregistered").value_or("");
+        Check(unregistered.find("Test.Nothing") != std::string::npos, "Querying an unregistered component said: " + unregistered);
+        const auto twice = Queries<std::optional<std::string>>(scripting, "QueryTwice").value_or("");
+        Check(twice.find("twice") != std::string::npos, "Querying a component twice said: " + twice);
+    }
+
+    void TheWidestQueryHasEightComponents()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const std::string prefix = "Fenrir.ScriptFixture.Q";
+
+        // Three entities have all eight, with V = 1 in each; one has only seven of them.
+        for (int entityIndex = 0; entityIndex < 4; ++entityIndex)
+        {
+            const auto id = entities.CreateEntity().GetId();
+            for (int component = 1; component <= (entityIndex == 3 ? 7 : 8); ++component)
+            {
+                const auto* registration = scripting.FindComponent(prefix + std::to_string(component));
+                Check(registration != nullptr && registration->add(entities, id), "A component was not added");
+                *static_cast<std::int32_t*>(registration->get(entities, id)) = 1;
+            }
+        }
+        Check(Queries<std::int32_t>(scripting, "AllEight") == 3 * 8, "The eight-component query was wrong");
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -1270,6 +1447,13 @@ int main(int argc, char* argv[])
         {"destroy then add on the same entity leaves it destroyed", DestroyThenAddOnTheSameEntityLeavesItDestroyed},
         {"get and structural changes fail clearly", GetAndStructuralChangesFailClearly},
         {"discarding changes leaves no entities behind", DiscardingChangesLeavesNoEntitiesBehind},
+        {"writes through query rows are visible natively", WritesThroughQueryRowsAreVisibleNatively},
+        {"a query makes the same number of native calls for any number of entities",
+         AQueryMakesTheSameNumberOfNativeCallsForAnyNumberOfEntities},
+        {"structural changes during iteration are deferred", StructuralChangesDuringIterationAreDeferred},
+        {"ForEach defers structural changes too", ForEachDefersStructuralChangesToo},
+        {"empty and invalid queries behave", EmptyAndInvalidQueriesBehave},
+        {"the widest query has eight components", TheWidestQueryHasEightComponents},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

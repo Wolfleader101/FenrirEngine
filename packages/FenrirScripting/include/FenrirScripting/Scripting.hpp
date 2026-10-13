@@ -141,6 +141,12 @@ namespace Fenrir
          */
         ChangeSummary ApplyChanges();
 
+        /**
+         * @brief How many times scripts have called into the engine to run queries, since Install. A diagnostic: a query makes a
+         * fixed number of calls however many entities it visits, and a test can check that.
+         */
+        [[nodiscard]] std::size_t QueryCallCount() const noexcept;
+
         /** @brief How many changes are recorded and not yet played back. */
         [[nodiscard]] std::size_t PendingChangeCount() const noexcept;
 

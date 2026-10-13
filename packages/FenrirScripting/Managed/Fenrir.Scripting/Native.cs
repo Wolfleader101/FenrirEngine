@@ -47,4 +47,11 @@ internal static unsafe class Native
     public static delegate* unmanaged[Cdecl]<uint, int> EntityDestroy;
     public static delegate* unmanaged[Cdecl]<int, uint, void*, int> ComponentAdd;
     public static delegate* unmanaged[Cdecl]<int, uint, int> ComponentRemove;
+
+    // Queries. A row is the entity followed by the address of its component for each id, in order.
+    //   QueryCount(ids, count): how many entities have every component; negative if an id is unknown.
+    //   QueryFill(ids, count, rows, capacity): writes up to `capacity` rows and returns how many; negative if an id is unknown.
+    // A query is these two calls however many entities match.
+    public static delegate* unmanaged[Cdecl]<int*, int, int> QueryCount;
+    public static delegate* unmanaged[Cdecl]<int*, int, nuint*, int, int> QueryFill;
 }

@@ -98,6 +98,9 @@ Plain data attached to an entity, with no behaviour. A *native component* is a C
 Logic that runs once per frame phase over the entities a query selects. Native systems are C++ functions, and C# systems are `ISystem` classes.
 *Avoid:* script, behaviour, manager.
 
+**Query**
+A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
+
 **Structural change**
 Creating or destroying an entity, or adding or removing a component. A structural change made from a C# system takes effect only when that system returns.
 

@@ -45,6 +45,8 @@ add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
     src/ChangeBuffer.cpp
+    src/Queries.cpp
+    src/Queries.hpp
     src/ChangeBuffer.hpp
     src/EngineComponents.cpp
     src/ScriptComponents.cpp
