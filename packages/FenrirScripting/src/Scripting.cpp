@@ -2,29 +2,23 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "GenerationLifecycle.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptSchema.hpp"
 
 #include <Iris/Iris.hpp>
 
-#include <algorithm>
 #include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <exception>
-#include <fstream>
-#include <iterator>
-#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <regex>
 #include <string>
 #include <system_error>
 #include <thread>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #if defined(_WIN32)
@@ -83,56 +77,6 @@ namespace Fenrir
 
     namespace
     {
-        // A directory holding one generation's private copy of the script assembly. It is deleted when the last owner
-        // lets go: the generation loaded from it, a released generation that has not unloaded yet (Windows will not
-        // delete a loaded assembly), or the "previous" slot that keeps it in case the next build fails to load.
-        struct CopyDirectory
-        {
-            explicit CopyDirectory(std::filesystem::path path) : directory(std::move(path))
-            {
-            }
-            ~CopyDirectory()
-            {
-                std::error_code ignored;
-                std::filesystem::remove_all(directory, ignored);
-            }
-            CopyDirectory(const CopyDirectory&) = delete;
-            CopyDirectory& operator=(const CopyDirectory&) = delete;
-
-            std::filesystem::path directory;
-        };
-
-        struct FileStamp
-        {
-            std::filesystem::file_time_type modified{};
-            std::uintmax_t size = 0;
-            bool operator==(const FileStamp&) const = default;
-        };
-
-        std::optional<FileStamp> StampOf(const std::filesystem::path& path)
-        {
-            std::error_code error;
-            const auto modified = std::filesystem::last_write_time(path, error);
-            if (error)
-            {
-                return std::nullopt;
-            }
-            const auto size = std::filesystem::file_size(path, error);
-            if (error)
-            {
-                return std::nullopt;
-            }
-            return FileStamp{modified, size};
-        }
-
-        // Whether the file can be opened for reading right now: a build still writing it, or a virus scanner holding
-        // it, says no.
-        bool CanBeRead(const std::filesystem::path& path)
-        {
-            std::ifstream stream(path, std::ios::binary);
-            return stream.good();
-        }
-
         int ProcessId()
         {
 #if defined(_WIN32)
@@ -165,7 +109,8 @@ namespace Fenrir
         Detail::EngineContext context;
         bool contextActive = false;
         std::unique_ptr<Iris::Host> host;
-        std::optional<Iris::Component> component;
+        // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
+        Detail::GenerationLifecycle generations;
 
         // The script's systems: one managed object (the generated SystemHost) the engine calls once per phase. Released
         // before the component, which cannot be released while an object it made is alive.
@@ -176,73 +121,29 @@ namespace Fenrir
         std::size_t phaseCalls = 0;
         int phaseMask = 0; // Bit n is set when the loaded generation has a system in phase n.
 
-        // Hot reload. The assembly named by the config is only ever copied; the copy is what loads.
+        // The assembly named by the config is only ever copied; the copy is what loads.
         std::filesystem::path scriptAssembly;
-        std::filesystem::path scratchRoot;
-        bool hotReload = true;
-        std::chrono::milliseconds reloadInterval{250};
-        std::chrono::milliseconds reloadDebounce{400};
-        std::chrono::milliseconds unloadTimeout{2000};
-        int generation = 0;
-        int copyCounter = 0;
-        std::shared_ptr<CopyDirectory> activeCopy;
-        std::shared_ptr<CopyDirectory> previousCopy; // Kept until the next generation loads, to restore if it does not.
-
-        // A released generation waits here until the runtime confirms it was collected.
-        struct Retired
-        {
-            Iris::Component component;
-            std::shared_ptr<CopyDirectory> copy;
-            int generation = 0;
-            bool warned = false;
-        };
-        std::vector<Retired> retired;
 
         // The script components and events whose data is alive in the ECS and the App, by name.
         Detail::OwnedLayouts ownedComponents;
         Detail::OwnedLayouts ownedEvents;
 
-        std::optional<FileStamp> loadedStamp;
-        struct PendingChange
-        {
-            FileStamp stamp;
-            std::chrono::steady_clock::time_point since;
-        };
-        std::optional<PendingChange> pendingChange;
-        std::chrono::steady_clock::time_point lastPoll{};
-        bool reloading = false;
-
-        // Loads the script assembly as a new generation: a private copy of `assembly` (or the directory `existing` when
-        // restoring a previous copy), then the all-or-nothing checks, then the systems. On failure nothing of the new
-        // generation is left running.
-        Iris::CallResult<void> LoadGeneration(const std::filesystem::path& assembly,
-                                              std::shared_ptr<CopyDirectory> existing);
-
-        // Says goodbye to the systems and releases the loaded generation. Its data (component storage, event queues)
-        // stays.
-        void UnloadGeneration();
-
-        // Waits for released generations to unload, deleting their copies as they do.
-        void SweepRetired(std::chrono::milliseconds timeout);
-
         // Removes the data of every script component and event: they exist only while a script assembly is loaded.
         void DropScriptData();
 
+        // Reloads now, if scripting is running; see GenerationLifecycle::Reload.
         Iris::CallResult<void> Reload();
         void PollForReload();
 
-        void Retire(Iris::Component&& released, std::shared_ptr<CopyDirectory> copy)
-        {
-            (void)released.Release();
-            retired.push_back({std::move(released), std::move(copy), generation, false});
-        }
+        // Stops the generation's systems before it is released: they say goodbye, and what they defined goes.
+        void StopSystems();
 
         // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success)
         // when the script defines no systems. The phases themselves are scheduled once, at Install.
-        Iris::CallResult<void> StartSystems()
+        Iris::CallResult<void> StartSystems(const Iris::Component& component)
         {
             using Result = Iris::CallResult<void>;
-            const auto type = component->FindType("Fenrir.Scripting.Generated.SystemHost");
+            const auto type = component.FindType("Fenrir.Scripting.Generated.SystemHost");
             if (type.status == Iris::CallStatus::NotFound)
             {
                 return Result{Iris::CallStatus::Success, {}, false};
@@ -352,31 +253,23 @@ namespace Fenrir
             {
                 // The systems say goodbye while the runtime is still up; the generation is released, its data removed
                 // and the runtime asked to unload it; then the host that loaded it goes.
-                if (component.has_value() || runner.has_value())
+                if (generations.HasGeneration() || runner.has_value())
                 {
-                    UnloadGeneration();
+                    generations.Unload();
                 }
                 if (contextActive && context.app != nullptr)
                 {
                     DropScriptData();
                 }
-                if (host != nullptr && !retired.empty())
+                if (host != nullptr && generations.PendingUnloadCount() != 0)
                 {
-                    SweepRetired(unloadTimeout);
+                    generations.Sweep();
                 }
             }
             catch (...)
             {
             }
-            retired.clear();
-            previousCopy.reset();
-            activeCopy.reset();
-            if (!scratchRoot.empty())
-            {
-                std::error_code ignored;
-                std::filesystem::remove(scratchRoot,
-                                        ignored); // Only succeeds when it is empty: leaves other work alone.
-            }
+            generations.Release();
             if (host != nullptr)
             {
                 (void)host->SetLogSink({});
@@ -420,117 +313,10 @@ namespace Fenrir
 
     bool Scripting::HasScripts() const noexcept
     {
-        return m_state != nullptr && m_state->component.has_value();
+        return m_state != nullptr && m_state->generations.HasGeneration();
     }
 
-    namespace
-    {
-        // Copies the script assembly and what it needs into a new directory under `root`: the files named like it (its
-        // pdb and deps.json), and every dll its deps.json lists that sits beside it. A build can then overwrite the
-        // original while the copy is loaded. Returns null and says why in `error` if it could not.
-        std::shared_ptr<CopyDirectory> MakeCopy(const std::filesystem::path& assembly,
-                                                const std::filesystem::path& root, int number, std::string& error)
-        {
-            std::error_code code;
-            const auto directory = root / ("gen-" + std::to_string(number));
-            std::filesystem::remove_all(directory, code);
-            std::filesystem::create_directories(directory, code);
-            if (code)
-            {
-                error = "The directory '" + directory.string() + "' could not be made: " + code.message();
-                return nullptr;
-            }
-            auto copy = std::make_shared<CopyDirectory>(directory);
-            const auto source = assembly.parent_path();
-            // Native strings throughout: a file beside the assembly may have a name the narrow code page cannot hold.
-            const std::filesystem::path::string_type prefix =
-                assembly.stem().native() + std::filesystem::path::string_type(1, '.');
-
-            std::vector<std::filesystem::path> files{assembly};
-            for (const auto& entry : std::filesystem::directory_iterator(source, code))
-            {
-                const auto& name = entry.path().filename().native();
-                if (entry.is_regular_file(code) && entry.path() != assembly && name.rfind(prefix, 0) == 0)
-                {
-                    files.push_back(entry.path());
-                }
-            }
-            auto dependencies = source / assembly.stem();
-            dependencies += ".deps.json";
-            if (std::ifstream stream(dependencies); stream.good())
-            {
-                const std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
-                static const std::regex dll(R"(([A-Za-z0-9_.+\-]+\.dll)\")");
-                for (std::sregex_iterator found(text.begin(), text.end(), dll), end; found != end; ++found)
-                {
-                    const auto path = source / (*found)[1].str();
-                    if (std::filesystem::is_regular_file(path, code) &&
-                        std::find(files.begin(), files.end(), path) == files.end())
-                    {
-                        files.push_back(path);
-                    }
-                }
-            }
-            for (const auto& file : files)
-            {
-                std::filesystem::copy_file(file, directory / file.filename(),
-                                           std::filesystem::copy_options::overwrite_existing, code);
-                if (code)
-                {
-                    error = "The file '" + file.string() + "' could not be copied: " + code.message();
-                    return nullptr;
-                }
-            }
-            return copy;
-        }
-    } // namespace
-
-    Iris::CallResult<void> Scripting::State::LoadGeneration(const std::filesystem::path& assembly,
-                                                            std::shared_ptr<CopyDirectory> existing)
-    {
-        using Result = Iris::CallResult<void>;
-        std::shared_ptr<CopyDirectory> copy = std::move(existing);
-        if (copy == nullptr)
-        {
-            std::string error;
-            copy = MakeCopy(assembly, scratchRoot, ++copyCounter, error);
-            if (copy == nullptr)
-            {
-                return Result{
-                    Iris::CallStatus::InvalidArgument,
-                    "The script assembly '" + assembly.string() + "' could not be copied for loading. " + error, false};
-            }
-        }
-        auto loaded = host->LoadComponent(copy->directory / assembly.filename());
-        if (!loaded.Succeeded())
-        {
-            return Result{loaded.status,
-                          "The script assembly '" + assembly.string() + "' could not be loaded: " + loaded.diagnostic,
-                          loaded.diagnosticTruncated};
-        }
-        // All or nothing: the assembly stays loaded only if its components and events are discovered and every native
-        // component and event matches its C# struct.
-        if (auto validated = Detail::CompleteLoad(context, components, *loaded.value, ownedComponents, ownedEvents);
-            !validated.Succeeded())
-        {
-            Retire(std::move(*loaded.value), copy);
-            validated.diagnostic =
-                "The script assembly '" + assembly.string() + "' was released. " + validated.diagnostic;
-            return validated;
-        }
-        component.emplace(std::move(*loaded.value));
-        activeCopy = copy;
-        ++generation;
-        if (auto started = StartSystems(); !started.Succeeded())
-        {
-            started.diagnostic = "The script assembly '" + assembly.string() + "' was released. " + started.diagnostic;
-            UnloadGeneration();
-            return started;
-        }
-        return Result{Iris::CallStatus::Success, {}, false};
-    }
-
-    void Scripting::State::UnloadGeneration()
+    void Scripting::State::StopSystems()
     {
         if (runner.has_value() && runnerDestroy.has_value() && contextActive)
         {
@@ -545,37 +331,6 @@ namespace Fenrir
         runner.reset();
         phaseMask = 0;
         components.RemoveScriptDefined();
-        if (component.has_value())
-        {
-            Iris::Component released = std::move(*component);
-            component.reset();
-            Retire(std::move(released), activeCopy);
-            previousCopy = activeCopy;
-            activeCopy.reset();
-        }
-    }
-
-    void Scripting::State::SweepRetired(std::chrono::milliseconds timeout)
-    {
-        for (auto at = retired.begin(); at != retired.end();)
-        {
-            const auto unloaded = at->component.WaitForUnload(timeout);
-            if (unloaded.Succeeded() && *unloaded.value == Iris::ComponentUnloadState::Collected)
-            {
-                at = retired.erase(at);
-                continue;
-            }
-            if (!at->warned && logger != nullptr)
-            {
-                logger->Warn(
-                    "Scripting: generation {} of the script assembly has not unloaded; something still holds a type "
-                    "from "
-                    "it (a thread it started, or a static that keeps one). Its copy stays on disk until it does.",
-                    at->generation);
-            }
-            at->warned = true;
-            ++at;
-        }
     }
 
     void Scripting::State::DropScriptData()
@@ -596,100 +351,21 @@ namespace Fenrir
 
     Iris::CallResult<void> Scripting::State::Reload()
     {
-        using Result = Iris::CallResult<void>;
-        if (reloading || host == nullptr || !contextActive || context.app == nullptr || scriptAssembly.empty())
+        if (host == nullptr || !contextActive || context.app == nullptr)
         {
-            return Result{Iris::CallStatus::NotInitialized,
-                          "Scripting is not running a script assembly that can be reloaded.", false};
+            return Iris::CallResult<void>{Iris::CallStatus::NotInitialized,
+                                          "Scripting is not running a script assembly that can be reloaded.", false};
         }
-        reloading = true;
-        struct Done
-        {
-            bool& flag;
-            ~Done()
-            {
-                flag = false;
-            }
-        } done{reloading};
-
-        App& app = *context.app;
-        logger->Info("Scripting: reloading '{}'.", scriptAssembly.filename().string());
-        // Anything a script left recorded is played back first, so no entity is left half made.
-        (void)changes.Apply(app, components);
-        loadedStamp = StampOf(scriptAssembly);
-        pendingChange.reset();
-
-        UnloadGeneration();
-        // What to go back to if the new build does not load. Taken now: a generation that loads and then fails to start
-        // unloads itself, and would otherwise replace it with its own copy.
-        const std::shared_ptr<CopyDirectory> restoreCopy = previousCopy;
-        SweepRetired(unloadTimeout);
-        const auto fresh = LoadGeneration(scriptAssembly, nullptr);
-        if (fresh.Succeeded())
-        {
-            previousCopy.reset();
-            logger->Info("Scripting: reloaded '{}' (generation {}).", scriptAssembly.filename().string(), generation);
-            return fresh;
-        }
-        logger->Error("Scripting: the new build of '{}' did not load. {}", scriptAssembly.filename().string(),
-                      fresh.diagnostic);
-        if (restoreCopy == nullptr)
-        {
-            return fresh;
-        }
-        auto restored = LoadGeneration(scriptAssembly, restoreCopy);
-        if (restored.Succeeded())
-        {
-            logger->Warn("Scripting: the previous build of '{}' is running again.", scriptAssembly.filename().string());
-        }
-        else
-        {
-            logger->Error("Scripting: the previous build could not be restored either; no scripts are running. {}",
-                          restored.diagnostic);
-        }
-        return fresh;
+        return generations.Reload();
     }
 
     void Scripting::State::PollForReload()
     {
-        if (!hotReload || reloading || host == nullptr || !contextActive)
+        if (host == nullptr || !contextActive)
         {
             return;
         }
-        const auto now = std::chrono::steady_clock::now();
-        if (now - lastPoll < reloadInterval)
-        {
-            return;
-        }
-        lastPoll = now;
-        const auto stamp = StampOf(scriptAssembly);
-        if (!stamp.has_value() || stamp == loadedStamp)
-        {
-            pendingChange.reset();
-            return;
-        }
-        // A build is still going if the file changes between looks, so only a stable one is loaded.
-        if (!pendingChange.has_value() || !(pendingChange->stamp == *stamp))
-        {
-            pendingChange = PendingChange{*stamp, now};
-            return;
-        }
-        if (now - pendingChange->since < reloadDebounce || !CanBeRead(scriptAssembly))
-        {
-            return;
-        }
-        try
-        {
-            (void)Reload();
-        }
-        catch (const std::exception& exception)
-        {
-            reloading = false;
-            if (logger != nullptr)
-            {
-                logger->Error("Scripting: reloading failed: {}", exception.what());
-            }
-        }
+        generations.ReloadIfReady(std::chrono::steady_clock::now());
     }
 
     const ComponentRegistration* Scripting::FindComponent(std::string_view name) const
@@ -722,11 +398,11 @@ namespace Fenrir
             return Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
                                           "The event '" + name + "' could not be registered.", false};
         }
-        if (!m_state->component.has_value() || !validate)
+        if (!m_state->generations.HasGeneration() || !validate)
         {
             return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
         }
-        auto validated = validate(*m_state->component);
+        auto validated = validate(*m_state->generations.Component());
         if (!validated.Succeeded())
         {
             validated.diagnostic = "Event '" + name + "' does not match its C# struct: " + validated.diagnostic;
@@ -752,11 +428,11 @@ namespace Fenrir
                                               "' is empty, already registered, or has no storage operations.",
                                           false};
         }
-        if (!m_state->component.has_value())
+        if (!m_state->generations.HasGeneration())
         {
             return Iris::CallResult<void>{Iris::CallStatus::Success, {}, false};
         }
-        auto validated = Detail::ValidateRegistration(registration, *m_state->component);
+        auto validated = Detail::ValidateRegistration(registration, *m_state->generations.Component());
         if (!validated.Succeeded())
         {
             if (ILogger* logger = m_state->logger)
@@ -787,12 +463,12 @@ namespace Fenrir
 
     int Scripting::Generation() const noexcept
     {
-        return m_state == nullptr ? 0 : m_state->generation;
+        return m_state == nullptr ? 0 : m_state->generations.Generation();
     }
 
     std::size_t Scripting::PendingUnloadCount() const noexcept
     {
-        return m_state == nullptr ? 0 : m_state->retired.size();
+        return m_state == nullptr ? 0 : m_state->generations.PendingUnloadCount();
     }
 
     std::size_t Scripting::PhaseCallCount() const noexcept
@@ -830,7 +506,7 @@ namespace Fenrir
 
     Iris::Component* Scripting::GetComponent() noexcept
     {
-        return m_state != nullptr && m_state->component.has_value() ? &*m_state->component : nullptr;
+        return m_state != nullptr ? m_state->generations.Component() : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -984,22 +660,38 @@ namespace Fenrir
         }
 
         state->scriptAssembly = assembly;
-        state->hotReload = config.hotReload;
-        state->reloadInterval = config.reloadInterval;
-        state->reloadDebounce = config.reloadDebounce;
-        state->unloadTimeout = config.unloadTimeout;
         // Each Install has a directory of its own, so one that is still waiting for a generation to unload never gets
         // in the way of the next.
         static std::atomic<int> installs{0};
-        state->scratchRoot =
+        Detail::GenerationLifecycle::Settings settings;
+        settings.assembly = assembly;
+        settings.scratchRoot =
             (config.reloadDirectory.empty()
                  ? std::filesystem::temp_directory_path(error) / ("FenrirScripting-" + std::to_string(ProcessId()))
                  : std::filesystem::absolute(config.reloadDirectory, error)) /
             ("install-" + std::to_string(++installs));
+        settings.hotReload = config.hotReload;
+        settings.reloadInterval = config.reloadInterval;
+        settings.reloadDebounce = config.reloadDebounce;
+        settings.unloadTimeout = config.unloadTimeout;
+        // The lifecycle knows nothing of what a generation holds: the State supplies that. It owns the lifecycle, so
+        // the raw pointer the hooks keep lives as long as they do.
+        State* const self = state.get();
+        Detail::GenerationLifecycle::Hooks hooks;
+        hooks.completeLoad = [self](const Iris::Component& loaded) {
+            return Detail::CompleteLoad(self->context, self->components, loaded, self->ownedComponents,
+                                        self->ownedEvents);
+        };
+        hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
+        hooks.stop = [self] { self->StopSystems(); };
+        hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context.app, self->components); };
+        const bool hotReload = settings.hotReload;
+        const bool scratchChosen = !error && !settings.scratchRoot.empty();
+        state->generations.Configure(state->host.get(), &logger, std::move(settings), std::move(hooks));
 
         // The watcher looks before anything else runs in a frame, so a reload happens between frames. The phases are
         // scheduled once; each runs the current generation's systems, if it has any in that phase.
-        if (state->hotReload)
+        if (hotReload)
         {
             app.AddSequentialSystems(SchedulePriority::PreUpdate, {[state](App&) { state->PollForReload(); }});
         }
@@ -1010,20 +702,19 @@ namespace Fenrir
             app.AddSequentialSystems(priorities[phase], {[state, phase](App&) { state->RunPhase(phase); }});
         }
 
-        if (error || state->scratchRoot.empty())
+        if (!scratchChosen)
         {
             logger.Error("Scripting: the folder for the script copies could not be chosen; running without scripts.");
             state->Shutdown();
             return Scripting(std::move(state));
         }
-        if (const auto loaded = state->LoadGeneration(assembly, nullptr); !loaded.Succeeded())
+        if (const auto loaded = state->generations.Load(); !loaded.Succeeded())
         {
             logger.Error("Scripting: running without scripts. {}", loaded.diagnostic);
             // Nothing runs, so give back the runtime and the process-wide slot.
             state->Shutdown();
             return Scripting(std::move(state));
         }
-        state->loadedStamp = StampOf(assembly);
         logger.Info("Scripting: loaded '{}'.", assembly.filename().string());
         return Scripting(std::move(state));
     }
