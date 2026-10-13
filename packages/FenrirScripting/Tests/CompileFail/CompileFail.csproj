@@ -8,7 +8,7 @@
     <!-- Only the shared component and the one case named by -p:Case=<Name> are compiled. -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
-  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" />
+  <Import Project="$(MSBuildThisFileDirectory)../../Managed/Fenrir.Scripting.InRepo.props" />
   <ItemGroup>
     <Compile Include="Component.cs;$(Case).cs" />
   </ItemGroup>

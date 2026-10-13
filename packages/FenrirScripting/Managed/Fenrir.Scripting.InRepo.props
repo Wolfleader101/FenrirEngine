@@ -1,0 +1,27 @@
+<Project>
+  <!--
+    For script projects that live in this repository (the demo, the test fixture, the compile-fail cases). They import this file
+    instead of Fenrir.Scripting.props, and it picks one of two ways to get the scripting SDK:
+
+      * CMake builds pass -p:FenrirScriptingSdk=<the built SDK folder>/, and this file just imports that folder's props, which is
+        exactly what a project outside the repo does.
+      * An editor does not pass it (VS Code's C# extension, Visual Studio, Rider open the .csproj on its own). Then the contract
+        and the source generator are referenced from their source projects, so completion, go-to-definition and the generated
+        Ref<T> accessors work without anyone building the SDK first.
+
+    A script project of your own, outside this repo, imports the SDK folder's Fenrir.Scripting.props directly (see the package README).
+  -->
+  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" Condition="'$(FenrirScriptingSdk)' != ''" />
+
+  <PropertyGroup Condition="'$(FenrirScriptingSdk)' == ''">
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(FenrirScriptingSdk)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Fenrir.Scripting/Fenrir.Scripting.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Fenrir.Scripting.Generators/Fenrir.Scripting.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false"
+                      GlobalPropertiesToRemove="OutputPath;_CommandLineDefinedOutputPath" />
+  </ItemGroup>
+</Project>

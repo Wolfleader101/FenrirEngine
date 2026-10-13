@@ -5,8 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
-  <!-- The scripting SDK: the Fenrir.Scripting contract and the source generator. CMake passes -p:FenrirScriptingSdk=<folder>/ when
-       it builds this project (see examples/DemoApp/CMakeLists.txt); building it by hand needs the same, for example
-       dotnet build -p:FenrirScriptingSdk=<build>/fenrir-scripting/contract/ -->
-  <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" />
+  <!-- The scripting SDK: the Fenrir.Scripting contract and the source generator. A project outside this repository imports the SDK
+       folder's props directly: <Import Project="$(FenrirScriptingSdk)Fenrir.Scripting.props" /> with -p:FenrirScriptingSdk=<folder>/.
+       This one is in the repo, so it uses the in-repo props: CMake passes the built SDK folder, and an editor (which opens this file
+       alone) gets the contract and generator from their sources, so IntelliSense works with nothing built. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
 </Project>

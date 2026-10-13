@@ -29,6 +29,7 @@
 
 #ifdef FENRIR_SCRIPTING
 #include "FenrirScripting/Scripting.hpp"
+#include "ScriptingDemo.hpp"
 #endif
 
 template <>
@@ -194,6 +195,11 @@ static void InitBackpacks(Fenrir::App& app)
 
     backpack2_ent.GetComponent<Fenrir::Transform>() = backpack2Transform;
 
+#ifdef FENRIR_SCRIPTING
+    // Backpack 2 bobs up and down: C++ sets how, a C# system does it (see ScriptingDemo.hpp and scripts/Bobbing.cs).
+    ScriptingDemo::AttachBob(backpack2_ent, backpack2Transform.pos.y);
+#endif
+
     Material backpackMaterial = {myShader};
 
     // directional light
@@ -343,8 +349,12 @@ int main(int argc, char* argv[])
 
 #ifdef FENRIR_SCRIPTING
     // Declared after the app, so .NET is released before the app is destroyed and before main returns.
-    auto scripting =
-        Fenrir::Scripting::Install(app, Fenrir::ScriptingConfig{.scriptAssembly = projectSettings.scriptAssembly});
+    Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly};
+    ScriptingDemo::Share(scriptingConfig); // The component and events C++ and C# share.
+    auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
+    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just wrote.
+    app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                             {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
 #endif
 
     Fenrir::Camera camera;

@@ -42,7 +42,7 @@ public sealed class SpinSetup : ISystem
 
         if (found > 0)
         {
-            context.Log.Info($"Spinning {found} entities from C#.");
+            context.Log.Info($"Spinning {found} entities from C#. Press R to reverse them, Space for sparks.");
             done = true;
         }
     }
