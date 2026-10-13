@@ -51,6 +51,8 @@ add_library(FenrirScripting STATIC
     src/EngineComponents.cpp
     src/ScriptComponents.cpp
     src/ScriptSchema.cpp
+    src/GenerationLifecycle.cpp
+    src/GenerationLifecycle.hpp
     src/ScriptSchema.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
