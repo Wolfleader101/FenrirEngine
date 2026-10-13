@@ -5,6 +5,9 @@ project(FenrirEngine)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# compile_commands.json in the build directory, for clangd and other tools (see .clangd).
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 

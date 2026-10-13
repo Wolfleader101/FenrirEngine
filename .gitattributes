@@ -44,3 +44,6 @@ CMakeLists.txt text eol=lf
 *.sln text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# Git hooks run under sh, which cannot read CRLF.
+.githooks/* text eol=lf
