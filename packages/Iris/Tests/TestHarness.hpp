@@ -1,21 +1,20 @@
 #pragma once
 
-#include <cstdlib>
-#include <exception>
+#include <catch2/catch_session.hpp>
+#include <catch2/catch_test_macros.hpp>
+
 #include <functional>
 #include <initializer_list>
-#include <iostream>
-#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace Iris::Tests
 {
+    // A Catch2 assertion that carries `message`: the case fails, with the message shown, unless `condition` holds.
     inline void Check(bool condition, const std::string& message)
     {
-        if (!condition)
-        {
-            throw std::runtime_error(message);
-        }
+        INFO(message);
+        REQUIRE(condition);
     }
 
     struct TestCase
@@ -24,25 +23,29 @@ namespace Iris::Tests
         std::function<void()> run;
     };
 
-    // Runs every case in order, reporting each by name, and keeps going after a failure.
-    // Returns the process exit code: failure if any case failed.
-    inline int RunCases(std::initializer_list<TestCase> cases)
+    // Runs each case as a Catch2 section of the test case that calls this, so a failing case is reported by its name
+    // and the others still run. Call it from inside a TEST_CASE.
+    inline void RunCases(std::initializer_list<TestCase> cases)
     {
-        int failures = 0;
         for (const auto& testCase : cases)
         {
-            try
+            DYNAMIC_SECTION(testCase.name)
             {
                 testCase.run();
-                std::cout << "PASS " << testCase.name << '\n';
-            }
-            catch (const std::exception& exception)
-            {
-                ++failures;
-                std::cout << "FAIL " << testCase.name << ": " << exception.what() << '\n';
             }
         }
-        std::cout << (failures == 0 ? "All cases passed.\n" : std::to_string(failures) + " case(s) failed.\n");
-        return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+
+    // Runs Catch2 with `arguments` (the program name first). The checks take their paths ahead of Catch2's own options,
+    // so they build this list themselves.
+    inline int RunCatch(const std::vector<std::string>& arguments)
+    {
+        std::vector<const char*> pointers;
+        pointers.reserve(arguments.size());
+        for (const auto& argument : arguments)
+        {
+            pointers.push_back(argument.c_str());
+        }
+        return Catch::Session().run(static_cast<int>(pointers.size()), pointers.data());
     }
 } // namespace Iris::Tests

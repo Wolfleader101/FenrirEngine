@@ -36,9 +36,19 @@ if(TARGET IrisBridge)
     add_dependencies(IrisManagedBuild IrisBridge)
 endif()
 
+# The checks use Catch2: the repository's libs/catch2 submodule when this project is built inside it, otherwise an
+# installed Catch2 v3 (find_package(Catch2 3)). Catch2 is linked without its own main: the checks take their paths first.
+set(iris_catch2_module "${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
+if(EXISTS "${iris_catch2_module}")
+    include("${iris_catch2_module}")
+    fenrir_add_catch2()
+elseif(NOT TARGET Catch2::Catch2)
+    find_package(Catch2 3 REQUIRED)
+endif()
+
 function(iris_add_native_checks target source)
     add_executable(${target} ${source} TestHarness.hpp)
-    target_link_libraries(${target} PRIVATE Iris::Iris)
+    target_link_libraries(${target} PRIVATE Iris::Iris Catch2::Catch2)
     add_dependencies(${target} IrisManagedBuild)
     # The checks pass bridge paths explicitly; this deploys nethost (and a bridge they do not use).
     iris_deploy(${target})

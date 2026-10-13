@@ -6,7 +6,10 @@
 #include "Iris/Host.hpp"
 #include "TestHarness.hpp"
 
+#include <filesystem>
+#include <iostream>
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace
@@ -73,27 +76,27 @@ namespace
         return expected;
     }
 
-    int RunRejected(const Arguments& arguments, const char* name, const char* expectedText,
-                    std::optional<std::int32_t> expectedVersion, bool expectAssemblyLoaded)
+    void RunRejected(const Arguments& arguments, const char* name, const char* expectedText,
+                     std::optional<std::int32_t> expectedVersion, bool expectAssemblyLoaded)
     {
-        return Tests::RunCases(
-            {{name, [&] {
-                  Host host;
-                  const auto initialized = host.Initialize({arguments.runtimeConfig, arguments.bridge, {}});
-                  Check(!initialized.success && !host.IsInitialized(), "The bridge was accepted");
-                  Check(initialized.diagnostic.find(expectedText) != std::string::npos,
-                        "Diagnostic does not mention '" + std::string(expectedText) + "': " + initialized.diagnostic);
-                  Check(initialized.bridgeVersion == expectedVersion, "Unexpected reported bridge version");
-                  Check(initialized.bridgeAssemblyLoaded == expectAssemblyLoaded,
-                        "Unexpected bridge assembly progress");
-                  Check(host.LoadComponent(arguments.bridge).status == CallStatus::NotInitialized,
-                        "A rejected bridge published readiness");
-              }}});
+        Tests::RunCases({{name, [&] {
+                              Host host;
+                              const auto initialized = host.Initialize({arguments.runtimeConfig, arguments.bridge, {}});
+                              Check(!initialized.success && !host.IsInitialized(), "The bridge was accepted");
+                              Check(initialized.diagnostic.find(expectedText) != std::string::npos,
+                                    "Diagnostic does not mention '" + std::string(expectedText) +
+                                        "': " + initialized.diagnostic);
+                              Check(initialized.bridgeVersion == expectedVersion, "Unexpected reported bridge version");
+                              Check(initialized.bridgeAssemblyLoaded == expectAssemblyLoaded,
+                                    "Unexpected bridge assembly progress");
+                              Check(host.LoadComponent(arguments.bridge).status == CallStatus::NotInitialized,
+                                    "A rejected bridge published readiness");
+                          }}});
     }
 
-    int RunReal(const Arguments& arguments)
+    void RunReal(const Arguments& arguments)
     {
-        return Tests::RunCases({
+        Tests::RunCases({
             {"the real bridge completes the handshake",
              [&] {
                  Host host;
@@ -116,10 +119,10 @@ namespace
         });
     }
 
-    int RunFixture(const Arguments& arguments)
+    void RunFixture(const Arguments& arguments)
     {
         const auto expected = TruncatedPi();
-        return Tests::RunCases({
+        Tests::RunCases({
             {"failures carry bounded, owning managed details",
              [&] {
                  CallResult<std::int32_t> retained;
@@ -296,35 +299,66 @@ namespace
              }},
         });
     }
+
+    Arguments checkArguments;
 } // namespace
 
+TEST_CASE("the real bridge", "[real]")
+{
+    RunReal(checkArguments);
+}
+
+TEST_CASE("the scripted fixture bridge", "[fixture]")
+{
+    RunFixture(checkArguments);
+}
+
+TEST_CASE("an older bridge version is rejected", "[legacy]")
+{
+    RunRejected(checkArguments, "an older bridge version is rejected", "expected 22, received 21", 21, true);
+}
+
+TEST_CASE("a bridge table of another size is rejected", "[oversized]")
+{
+    RunRejected(checkArguments, "a bridge table of another size is rejected", "table size", 22, true);
+}
+
+TEST_CASE("a bridge table with a null entry is rejected", "[missing]")
+{
+    RunRejected(checkArguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 22, true);
+}
+
+TEST_CASE("an assembly without the bridge entry point is rejected", "[notbridge]")
+{
+    RunRejected(checkArguments, "an assembly without the bridge entry point is rejected", "GetBridgeFunctions",
+                std::nullopt, true);
+}
+
+// IrisBridgeChecks mode runtimeconfig.json bridge.dll second-bridge.dll [Catch2 options]
+// The mode picks the bridge variant, and so which test case runs: each variant needs its own process.
 #if defined(_WIN32)
 int wmain(int argc, wchar_t* argv[])
 #else
 int main(int argc, char* argv[])
 #endif
 {
-    if (argc != 5)
+    if (argc < 5)
     {
-        std::cerr << "Usage: IrisBridgeChecks mode runtimeconfig.json bridge.dll second-bridge.dll\n";
+        std::cerr << "Usage: IrisBridgeChecks mode runtimeconfig.json bridge.dll second-bridge.dll [Catch2 options]\n";
         return EXIT_FAILURE;
     }
-    const std::filesystem::path mode = argv[1];
-    const Arguments arguments{argv[2], argv[3], argv[4]};
-    if (mode == "real")
-        return RunReal(arguments);
-    if (mode == "fixture")
-        return RunFixture(arguments);
-    if (mode == "legacy")
-        return RunRejected(arguments, "an older bridge version is rejected", "expected 22, received 21", 21, true);
-    if (mode == "oversized")
-        return RunRejected(arguments, "a bridge table of another size is rejected", "table size", 22, true);
-    if (mode == "missing")
-        return RunRejected(arguments, "a bridge table with a null entry is rejected", "GetComponentUnloadState", 22,
-                           true);
-    if (mode == "notbridge")
-        return RunRejected(arguments, "an assembly without the bridge entry point is rejected", "GetBridgeFunctions",
-                           std::nullopt, true);
-    std::cerr << "Unknown mode.\n";
-    return EXIT_FAILURE;
+    const std::string mode = std::filesystem::path(argv[1]).string();
+    if (mode != "real" && mode != "fixture" && mode != "legacy" && mode != "oversized" && mode != "missing" &&
+        mode != "notbridge")
+    {
+        std::cerr << "Unknown mode.\n";
+        return EXIT_FAILURE;
+    }
+    checkArguments = Arguments{argv[2], argv[3], argv[4]};
+    std::vector<std::string> catchArguments{std::filesystem::path(argv[0]).string(), "[" + mode + "]"};
+    for (int index = 5; index < argc; ++index)
+    {
+        catchArguments.push_back(std::filesystem::path(argv[index]).string());
+    }
+    return Iris::Tests::RunCatch(catchArguments);
 }
