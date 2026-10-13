@@ -254,6 +254,42 @@ systems have a context (ticket 08).
 - **The generated part** is written by the SDK's source generator into the contract itself (`Query<...>`, `QueryRow<...>`,
   `QueryAction<...>`, arities 1 to 8), because each arity has its own shape.
 
+## Systems
+
+```csharp
+[System(Phase.Update, Order = 10)]
+public sealed class Mover : ISystem
+{
+    public void OnUpdate(in SystemContext ctx)
+    {
+        foreach (var (entity, transform, velocity) in ctx.Query<Transform, Velocity>())
+            transform.Position += velocity.Linear * ctx.Time.DeltaTime;
+    }
+}
+```
+
+A system is a class with a public or internal parameterless constructor that implements `ISystem` and carries `[System(Phase, Order)]`.
+The phases are `PreUpdate`, `Tick`, `Update` and `PostUpdate`, in the order a frame runs them; `Tick` runs once per fixed step.
+Within a phase, the lowest `Order` runs first (ties by full name). `OnCreate` and `OnDestroy` are optional.
+
+- **Found at build time.** The SDK's generator lists the systems in a generated `SystemHost`, with no reflection. `[System]` on a
+  class that is not an `ISystem` (FENRIR0010), that the engine cannot construct (abstract, generic, no accessible
+  parameterless constructor: FENRIR0011) or that names a phase that does not exist (FENRIR0013) is a build error. An `ISystem` without `[System]` is a warning (FENRIR0012): it would
+  never run.
+- **What the engine does.** `Scripting::Install` makes the `SystemHost` (one managed object), runs every system's `OnCreate`,
+  and registers one *sequential* native system for each phase that has systems. Each frame the phase system calls into the
+  script **once**, and the runner runs that phase's systems in order. `Scripting::PhaseCallCount()` counts those calls.
+  `OnDestroy` runs, last system first, when the app finishes (the Exit phase) or on `Scripting::Shutdown()`, before the
+  script assembly is released.
+- **Changes land between systems.** After every system (and every `OnCreate`/`OnDestroy`) the runner plays back what that system
+  recorded, so the next system sees a created entity or a new component.
+- **A throwing system.** The exception is logged once with the system's name, the changes that call recorded are dropped (and
+  the entities it created are destroyed), and that system does not run again until the next reload. Other systems carry on.
+- **Main thread only.** Scripts run on the thread that installed scripting (the one running the App's sequential systems).
+  A phase asked to run elsewhere asserts in a debug build and is skipped, with an error, in a release build. This is not
+  covered by a test, because the debug assert aborts the process.
+- `SystemContext` has `Time`, `Log`, `CreateEntity()` and `Query<...>()`. Events join it in ticket 09.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the

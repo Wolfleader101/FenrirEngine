@@ -1291,6 +1291,137 @@ namespace
         Check(Queries<std::int32_t>(scripting, "AllEight") == 3 * 8, "The eight-component query was wrong");
     }
 
+    constexpr const char* ProbeType = "Fenrir.ScriptFixture.SystemProbe";
+
+    template <typename Result, typename... Args>
+    Result Probe(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(ProbeType, scripting, method, arguments...);
+    }
+
+    std::vector<std::string> SplitEvents(const std::string& dump)
+    {
+        std::vector<std::string> events;
+        std::string current;
+        for (const char character : dump)
+        {
+            if (character == ',')
+            {
+                events.push_back(current);
+                current.clear();
+            }
+            else
+            {
+                current += character;
+            }
+        }
+        if (!current.empty())
+        {
+            events.push_back(current);
+        }
+        return events;
+    }
+
+    std::size_t CountMessages(const HeadlessApp& headless, LogLevel level, const std::string& text)
+    {
+        const auto messages = headless.Logger().Messages();
+        return static_cast<std::size_t>(std::count_if(messages.begin(), messages.end(), [&](const LoggedMessage& message) {
+            return message.level == level && message.text.find(text) != std::string::npos;
+        }));
+    }
+
+    void SystemsRunInPhaseAndOrderAndChangesApplyAfterEachOne()
+    {
+        constexpr int frames = 4;
+        HeadlessApp headless;
+        int nativeTicks = 0;
+        headless.Get().AddSequentialSystems(SchedulePriority::Tick, {[&](App&) { ++nativeTicks; }});
+        // Scripting is released in the Exit phase, so what the systems did is read by an Exit system registered first.
+        Scripting* installed = nullptr;
+        std::string dump;
+        headless.Get().AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+            dump = Probe<std::optional<std::string>>(*installed, "Dump").value_or("");
+        }});
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        installed = &scripting;
+        Check(scripting.HasScripts(), "The fixture did not load");
+        Probe<void>(scripting, "Enable");
+        headless.Run(frames);
+
+        const auto events = SplitEvents(dump);
+        std::vector<std::string> withoutTicks;
+        std::size_t scriptTicks = 0;
+        std::string previous;
+        for (const auto& event : events)
+        {
+            if (event == "Tick")
+            {
+                ++scriptTicks;
+                // Fixed steps happen after PreUpdate and before Update, never anywhere else in the frame.
+                Check(previous == "Pre" || previous == "Tick", "A Tick ran outside the gap between PreUpdate and Update");
+            }
+            else
+            {
+                withoutTicks.push_back(event);
+            }
+            previous = event;
+        }
+        // Each frame: PreUpdate, then Update in Order (Lead 1 although its name sorts last, Creator 5 makes an entity, Early 10
+        // already sees it, TieA and TieB 12 by name, Thrower 15 throws on frame one and is dropped, Late 20, Observer 30), then
+        // PostUpdate. The thrower's entity never appears.
+        std::vector<std::string> expected;
+        for (int frame = 1; frame <= frames; ++frame)
+        {
+            for (const auto& event : {std::string("Pre"), std::string("Lead"), "Early=" + std::to_string(frame), std::string("TieA"),
+                                      std::string("TieB"), std::string("Late"), "Seen=" + std::to_string(frame), std::string("Post")})
+            {
+                expected.push_back(event);
+            }
+        }
+        Check(withoutTicks == expected, "The systems did not run in phase and Order, with changes applied after each");
+
+        // Tick runs once per fixed step, as often as a native Tick system does.
+        Check(scriptTicks == static_cast<std::size_t>(nativeTicks) && nativeTicks > 0, "Tick did not run once per fixed step");
+
+        // One transition per phase that has systems, per frame, and per fixed step for Tick.
+        Check(scripting.PhaseCallCount() == static_cast<std::size_t>(3 * frames + nativeTicks),
+              "The engine did not enter the script exactly once per phase");
+
+        // The thrower was logged once with its name, and the others kept running.
+        Check(CountMessages(headless, LogLevel::Error, "ThrowerSystem") == 1, "A throwing system was not logged exactly once");
+        Check(headless.Logger().Contains(LogLevel::Error, "kaboom"), "The exception's message was not logged");
+    }
+
+    void OnCreateRunsAfterLoadAndOnDestroyBeforeRelease()
+    {
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            Check(headless.Logger().Contains(LogLevel::Info, "Creator.OnCreate"), "OnCreate did not run after load");
+            Check(!headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"), "OnDestroy ran too early");
+            headless.Run(2); // The Exit phase releases scripting.
+            Check(headless.Logger().Contains(LogLevel::Info, "Creator.OnDestroy"), "OnDestroy did not run at shutdown");
+            Check(!scripting.IsRunning(), "Scripting was still running after the app finished");
+        }
+        {
+            // An explicit Shutdown says goodbye too, and only once.
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+            scripting.Shutdown();
+            scripting.Shutdown();
+            Check(CountMessages(headless, LogLevel::Info, "Creator.OnDestroy") == 1, "Shutdown did not run OnDestroy exactly once");
+        }
+    }
+
+    void ASystemsCallsAfterShutdownDoNothing()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        scripting.Shutdown();
+        headless.Run(2); // The scheduled phase systems find nothing to run.
+        Check(scripting.PhaseCallCount() == 0, "A phase ran after Shutdown");
+    }
+
     void AFailedLoadLeavesNoComponentsAndNoPools()
     {
         HeadlessApp headless;
@@ -1454,6 +1585,10 @@ int main(int argc, char* argv[])
         {"ForEach defers structural changes too", ForEachDefersStructuralChangesToo},
         {"empty and invalid queries behave", EmptyAndInvalidQueriesBehave},
         {"the widest query has eight components", TheWidestQueryHasEightComponents},
+        {"systems run in phase and order, with changes applied after each",
+         SystemsRunInPhaseAndOrderAndChangesApplyAfterEachOne},
+        {"OnCreate runs after load and OnDestroy before release", OnCreateRunsAfterLoadAndOnDestroyBeforeRelease},
+        {"a phase does nothing after Shutdown", ASystemsCallsAfterShutdownDoNothing},
         {"a failed load leaves no components and no pools", AFailedLoadLeavesNoComponentsAndNoPools},
         {"a script component cannot take a native component's name", AScriptComponentCannotTakeANativeComponentsName},
         {"a wrong field type is caught too", AWrongFieldTypeIsCaughtToo},

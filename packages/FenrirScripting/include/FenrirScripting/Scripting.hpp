@@ -142,6 +142,12 @@ namespace Fenrir
         ChangeSummary ApplyChanges();
 
         /**
+         * @brief How many times the engine has called into the script's systems since Install: once per phase that has systems,
+         * per frame (and per fixed step for Tick). A diagnostic, for tests of the one-transition-per-phase rule.
+         */
+        [[nodiscard]] std::size_t PhaseCallCount() const noexcept;
+
+        /**
          * @brief How many times scripts have called into the engine to run queries, since Install. A diagnostic: a query makes a
          * fixed number of calls however many entities it visits, and a test can check that.
          */
