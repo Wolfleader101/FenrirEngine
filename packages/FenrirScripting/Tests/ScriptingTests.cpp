@@ -2446,6 +2446,12 @@ namespace
             ExpectNotLive(scripting, "A moved-from scripting"); // NOLINT(bugprone-use-after-move): that is the case
             Check(scripting.Generation() == 0 && scripting.FindComponent("Fenrir.Transform") == nullptr,
                   "A moved-from scripting reported state");
+            // Registering needs a Scripting that started, so a moved-from one refuses both kinds the same way.
+            const auto component = scripting.RegisterComponent<Health>("Test.Late");
+            const auto event = scripting.RegisterEvent<TestNative::Alert>("Test.LateEvent");
+            Check(component.status == Iris::CallStatus::NotInitialized &&
+                      event.status == Iris::CallStatus::NotInitialized,
+                  "A moved-from scripting accepted a registration");
         }
         {
             HeadlessApp headless;

@@ -84,6 +84,8 @@ namespace Fenrir
         std::chrono::milliseconds unloadTimeout{2000};
     };
 
+    struct ScriptingProbe;
+
     /**
      * @brief Owns the .NET runtime and the loaded script assembly for one App.
      *
@@ -99,8 +101,6 @@ namespace Fenrir
      * is active in a process at a time: the engine's native functions act on that one App, so a second Install
      * while another is active logs an error and runs without scripts.
      */
-    struct ScriptingProbe;
-
     class Scripting
     {
       public:
@@ -224,24 +224,27 @@ namespace Fenrir
         void Shutdown() noexcept;
 
       private:
-        // The scripting package's tests look inside through this one probe (diagnostic counters and the loaded Iris
-        // component); nothing else does.
+        /** @brief The scripting package's tests look inside through this one probe; nothing else does. */
         friend struct ScriptingProbe;
 
         struct State;
 
-        // What the tests read: how many times the engine called into the script's systems (once per phase that has
-        // systems, per frame, and per fixed step for Tick), how many times scripts called into the engine to run
-        // queries, and how many changes are recorded and not yet played back.
+        /**
+         * @brief What the tests read: how many times the engine called into the script's systems (once per phase that
+         * has systems, per frame, and per fixed step for Tick), how many times scripts called into the engine to run
+         * queries, and how many changes are recorded and not yet played back.
+         */
         struct Diagnostics
         {
             std::size_t phaseCalls = 0;
             std::size_t queryCalls = 0;
             std::size_t pendingChanges = 0;
         };
+
+        /** @brief The diagnostic counters; zeros when there is no state. */
         [[nodiscard]] Diagnostics ReadDiagnostics() const noexcept;
 
-        // The loaded script assembly, or null when there are no scripts. Valid until Shutdown.
+        /** @brief The loaded script assembly, or null when there are no scripts. Valid until Shutdown. */
         [[nodiscard]] Iris::Component* LoadedComponent() noexcept;
 
         explicit Scripting(std::shared_ptr<State> state) noexcept;

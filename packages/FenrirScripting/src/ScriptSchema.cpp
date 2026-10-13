@@ -84,6 +84,15 @@ namespace Fenrir::Detail
             return text;
         }
 
+        // Removes every component of a script component type from every scene, and says how many there were.
+        std::size_t ClearComponentData(App& app, const std::string& name, const OwnedLayout& layout)
+        {
+            const DynamicComponentType type(name, layout.size, layout.alignment);
+            std::size_t removed = 0;
+            app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
+            return removed;
+        }
+
         // What differs between the kinds of thing a script assembly defines. Everything else (finding what the
         // assembly defines, refusing a name twice, comparing with what the previous generation left, and keeping
         // all-or-nothing) is the same for every kind and lives in SchemaPass.
@@ -228,9 +237,7 @@ namespace Fenrir::Detail
                 return Succeeded();
             };
             kind.dropStale = [&app](const std::string& name, const OwnedLayout& layout, bool gone) {
-                const DynamicComponentType type(name, layout.size, layout.alignment);
-                std::size_t removed = 0;
-                app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
+                const std::size_t removed = ClearComponentData(app, name, layout);
                 app.Logger()->Warn(
                     "Scripting: the script component '{}' {}; {} component(s) were removed so nothing reads the old "
                     "bytes as the new layout.",
@@ -340,13 +347,13 @@ namespace Fenrir::Detail
     //   2. check every native component's and event's mapping against its C# struct;
     //   3. drop what the previous generation left that no longer matches;
     //   4. only then register what the script defines.
-    Result CompleteLoad(EngineContext& context, ComponentRegistry& registry, const Iris::Component& component,
-                        OwnedLayouts& ownedComponents, OwnedLayouts& ownedEvents)
+    Result Reconcile(EngineContext& context, ComponentRegistry& registry, const Iris::Component& component,
+                     OwnedScriptData& owned)
     {
         App& app = *context.app;
         std::vector<SchemaPass> passes;
-        passes.emplace_back(ComponentKind(registry, app), ownedComponents);
-        passes.emplace_back(EventKind(registry, app, ownedEvents), ownedEvents);
+        passes.emplace_back(ComponentKind(registry, app), owned.components);
+        passes.emplace_back(EventKind(registry, app, owned.events), owned.events);
 
         for (auto& pass : passes)
         {
@@ -376,5 +383,19 @@ namespace Fenrir::Detail
             }
         }
         return Succeeded();
+    }
+
+    void DropScriptData(App& app, OwnedScriptData& owned)
+    {
+        for (const auto& [name, layout] : owned.components)
+        {
+            (void)ClearComponentData(app, name, layout);
+        }
+        for (const auto& [name, layout] : owned.events)
+        {
+            (void)app.RemoveEventQueue(name);
+        }
+        owned.components.clear();
+        owned.events.clear();
     }
 } // namespace Fenrir::Detail

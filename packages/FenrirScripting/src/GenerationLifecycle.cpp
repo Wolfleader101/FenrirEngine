@@ -159,7 +159,7 @@ namespace Fenrir::Detail
                           loaded.diagnosticTruncated};
         }
         // All or nothing: the assembly stays loaded only if the host accepts what it defines.
-        if (auto validated = m_hooks.completeLoad(*loaded.value); !validated.Succeeded())
+        if (auto validated = m_hooks.reconcile(*loaded.value); !validated.Succeeded())
         {
             Retire(std::move(*loaded.value), copy);
             validated.diagnostic =

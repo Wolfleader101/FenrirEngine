@@ -132,12 +132,8 @@ namespace Fenrir
         // The assembly named by the config is only ever copied; the copy is what loads.
         std::filesystem::path scriptAssembly;
 
-        // The script components and events whose data is alive in the ECS and the App, by name.
-        Detail::OwnedLayouts ownedComponents;
-        Detail::OwnedLayouts ownedEvents;
-
-        // Removes the data of every script component and event: they exist only while a script assembly is loaded.
-        void DropScriptData();
+        // The script components and events whose data is alive in the ECS and the App.
+        Detail::OwnedScriptData owned;
 
         // Reloads now, if scripting is running; see GenerationLifecycle::Reload.
         Iris::CallResult<void> Reload();
@@ -267,7 +263,7 @@ namespace Fenrir
                 }
                 if (IsLive())
                 {
-                    DropScriptData();
+                    Detail::DropScriptData(*context.app, owned);
                 }
                 if (host != nullptr && generations.PendingUnloadCount() != 0)
                 {
@@ -339,22 +335,6 @@ namespace Fenrir
         runner.reset();
         phaseMask = 0;
         components.RemoveScriptDefined();
-    }
-
-    void Scripting::State::DropScriptData()
-    {
-        App& app = *context.app;
-        for (const auto& [name, layout] : ownedComponents)
-        {
-            const DynamicComponentType type(name, layout.size, layout.alignment);
-            app.ForEachScene([&type](Scene& scene) { (void)scene.GetEntityList().ClearDynamic(type); });
-        }
-        for (const auto& [name, layout] : ownedEvents)
-        {
-            (void)app.RemoveEventQueue(name);
-        }
-        ownedComponents.clear();
-        ownedEvents.clear();
     }
 
     Iris::CallResult<void> Scripting::State::Reload()
@@ -700,9 +680,8 @@ namespace Fenrir
                 // lifecycle, so the raw pointer the hooks keep lives as long as they do.
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
-                hooks.completeLoad = [self](const Iris::Component& loaded) {
-                    return Detail::CompleteLoad(self->context, self->components, loaded, self->ownedComponents,
-                                                self->ownedEvents);
+                hooks.reconcile = [self](const Iris::Component& loaded) {
+                    return Detail::Reconcile(self->context, self->components, loaded, self->owned);
                 };
                 hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
                 hooks.stop = [self] { self->StopSystems(); };
