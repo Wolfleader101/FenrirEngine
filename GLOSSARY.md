@@ -119,5 +119,16 @@ A user's C# assembly holding C# components and systems. The engine loads it as o
 The shared assembly `Fenrir.Scripting` that every script assembly compiles against. It holds the stable engine API and never reloads.
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
+**Scripting extension**
+What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components and C++ events, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension.
+*Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).
+
+**Native function**
+A C++ function that C# calls, declared once on each side and named by the full name of the C# method that calls it (`Namespace.Type.Method`). In C++ its first parameter is the call context; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
+*Avoid:* binding, internal call (the Iris-level term), engine API.
+
+**Call context**
+What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities. A native function may read and write component data through it, but makes no structural changes.
+
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.

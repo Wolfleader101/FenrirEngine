@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The C# contract of a test-only scripting extension, built the way an engine package's contract would be: against the
+       scripting SDK (for IComponent and its generated accessors), and shared by the host at run time. The build passes
+       -p:FenrirScriptingSdk=<the SDK folder>/. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../Managed/Fenrir.Scripting.InRepo.props" />
+</Project>

@@ -12,6 +12,7 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
 
 namespace Fenrir
 {
@@ -49,6 +50,13 @@ namespace Fenrir
          * checked against it as it does. Events only C# defines need nothing here.
          */
         std::vector<EventRegistration> events;
+
+        /**
+         * @brief What engine packages (and the app) give scripting: native functions, components, events and their C#
+         * contracts. A package left out here is simply not scriptable. Two extensions declaring one native function
+         * name fail Install.
+         */
+        std::vector<ScriptingExtension> extensions;
 
         /**
          * @brief Further assemblies every script load shares as one copy. The Fenrir.Scripting contract is always

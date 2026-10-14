@@ -103,6 +103,78 @@ struct Iris::StructMapping<TestNative::BadAlert>
         Iris::StructFields(IRIS_FIELD(TestNative::BadAlert, Code), IRIS_FIELD(TestNative::BadAlert, Level));
 };
 
+// The native side of a test-only scripting extension: what an engine package would write. Its C# contract is
+// Tests/Extension, and Tests/ExtensionScript is a script assembly that uses it.
+namespace TestExtension
+{
+    struct Charge
+    {
+        std::int32_t Level;
+    };
+
+    struct Ping
+    {
+        std::int32_t Value;
+    };
+
+    std::int32_t Add(const Fenrir::CallContext&, std::int32_t left, std::int32_t right)
+    {
+        return left + right;
+    }
+
+    std::uint32_t EchoEntity(const Fenrir::CallContext&, std::uint32_t entity)
+    {
+        return entity;
+    }
+
+    // The entity's Transform height in the active scene, or -1 if it has none.
+    float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity)
+    {
+        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        return found.IsValid() && found.HasComponent<Fenrir::Transform>()
+                   ? found.GetComponent<Fenrir::Transform>().pos.y
+                   : -1.0F;
+    }
+
+    void Lift(const Fenrir::CallContext& context, std::uint32_t entity, float by)
+    {
+        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        if (found.IsValid() && found.HasComponent<Fenrir::Transform>())
+        {
+            found.GetComponent<Fenrir::Transform>().pos.y += by;
+        }
+    }
+
+    // The last text Label received, so a test can compare it with what C# sent.
+    std::string labelled;
+
+    std::int32_t Label(const Fenrir::CallContext&, std::string_view text, std::int32_t number)
+    {
+        labelled = std::string(text);
+        return static_cast<std::int32_t>(text.size()) * 10 + number;
+    }
+
+    // Declared for the broken contract's Mismatched field, which takes an int: this takes a float.
+    std::int32_t Mismatched(const Fenrir::CallContext&, float)
+    {
+        return 0;
+    }
+} // namespace TestExtension
+
+template <>
+struct Iris::StructMapping<TestExtension::Charge>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Charge";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::Charge, Level));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::Ping>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Ping";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::Ping, Value));
+};
+
 namespace
 {
     using namespace Fenrir;
@@ -128,6 +200,10 @@ namespace
     const std::filesystem::path fixtureV2 = FromEnvironment("FENRIR_TEST_FIXTURE_V2");
     // The hand-written assembly whose tables report what the generator never would.
     const std::filesystem::path badReports = FromEnvironment("FENRIR_TEST_BAD_REPORTS");
+    // The test extension's contract, the script assembly that uses it, and a contract no extension satisfies.
+    const std::filesystem::path testExtension = FromEnvironment("FENRIR_TEST_EXTENSION");
+    const std::filesystem::path extensionScript = FromEnvironment("FENRIR_TEST_EXTENSION_SCRIPT");
+    const std::filesystem::path brokenExtension = FromEnvironment("FENRIR_TEST_BROKEN_EXTENSION");
     const std::filesystem::path executableDirectory = FromEnvironment("FENRIR_TEST_EXECUTABLE_DIR");
 
     constexpr int Frames = 5;
@@ -3292,6 +3368,204 @@ namespace
             REQUIRE(second.FramesRun() == 2);
         }
     }
+
+    constexpr const char* ExtensionCallsType = "Fenrir.TestExtensionScript.Calls";
+
+    template <typename Result, typename... Args>
+    Result ExtensionCall(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(ExtensionCallsType, scripting, method, arguments...);
+    }
+
+    // The test extension, as an engine package would describe what it gives scripting.
+    ScriptingExtension TheTestExtension()
+    {
+        ScriptingExtension extension;
+        extension.name = "test extension";
+        extension.sharedAssemblies = {testExtension};
+        extension.functions = {
+            NativeFunction::Make<&TestExtension::Add>("Fenrir.TestExtension.Gadgets.Add"),
+            NativeFunction::Make<&TestExtension::EchoEntity>("Fenrir.TestExtension.Gadgets.EchoEntity"),
+            NativeFunction::Make<&TestExtension::HeightOf>("Fenrir.TestExtension.Gadgets.HeightOf"),
+            NativeFunction::Make<&TestExtension::Lift>("Fenrir.TestExtension.Gadgets.Lift"),
+            NativeFunction::Make<&TestExtension::Label>("Fenrir.TestExtension.Gadgets.Label"),
+        };
+        extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
+        extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
+        return extension;
+    }
+
+    ScriptingConfig ExtensionConfig(std::vector<ScriptingExtension> extensions)
+    {
+        ScriptingConfig config = ConfigFor(extensionScript);
+        config.extensions = std::move(extensions);
+        return config;
+    }
+
+    void ANativeFunctionGetsCSharpArgumentsAndItsResultReachesCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("The script assembly using the extension did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("20 + 22 through the extension's native function was not 42");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Add", std::int32_t{20}, std::int32_t{22}) == 42);
+        }
+        const auto entity = headless.Get().GetActiveScene().GetEntityList().CreateEntity().GetId();
+        {
+            INFO("An entity did not cross to the native function and back unchanged");
+            REQUIRE(ExtensionCall<std::uint32_t>(scripting, "EchoEntity", entity) == entity);
+        }
+    }
+
+    void ANativeFunctionReceivesAStringFromCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        TestExtension::labelled = "untouched";
+        {
+            INFO("Multi-byte text and a number did not both arrive (6 UTF-8 bytes * 10 + 3 is 63)");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Label", std::string_view("\xCF\x80 \xE2\x82\xAC"),
+                                                std::int32_t{3}) == 63);
+            REQUIRE(TestExtension::labelled == "\xCF\x80 \xE2\x82\xAC");
+        }
+        {
+            INFO("Empty text did not arrive as an empty string");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Label", std::string_view(), std::int32_t{4}) == 4);
+            REQUIRE(TestExtension::labelled.empty());
+        }
+    }
+
+    void ANativeFunctionReachesTheActiveSceneThroughItsCallContext()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto entity = entities.CreateEntity();
+        entity.GetComponent<Transform>().pos.y = 2.5F;
+        {
+            INFO("The native function did not read the entity's Transform through its call context");
+            REQUIRE(ExtensionCall<float>(scripting, "HeightOf", entity.GetId()) == 2.5F);
+        }
+        ExtensionCall<void>(scripting, "Lift", entity.GetId(), 1.0F);
+        {
+            INFO("The native function's write did not reach the engine's storage");
+            REQUIRE(entity.GetComponent<Transform>().pos.y == 3.5F);
+        }
+        {
+            INFO("C# did not see what the native function wrote");
+            REQUIRE(ExtensionCall<float>(scripting, "ScriptHeightOf", entity.GetId()) == 3.5F);
+        }
+    }
+
+    void AnExtensionsComponentsAndEventsAreRegisteredAndCheckedAgainstCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("The extension's component and event did not pass their checks against C#");
+            REQUIRE(scripting.HasScripts());
+        }
+        const auto* charge = scripting.FindComponent("Fenrir.TestExtension.Charge");
+        {
+            INFO("The extension's component was not registered");
+            REQUIRE(charge != nullptr);
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto entity = entities.CreateEntity().GetId();
+        {
+            INFO("The extension's component could not be added natively");
+            REQUIRE(entities.Add(charge->type, entity));
+        }
+        static_cast<TestExtension::Charge*>(entities.Get(charge->type, entity))->Level = 7;
+        {
+            INFO("C# did not read the extension's component");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "ChargeLevel", entity) == 7);
+        }
+        {
+            INFO("The extension's event has no named queue");
+            REQUIRE(headless.Get().FindEventQueue("Fenrir.TestExtension.Ping") != nullptr);
+        }
+    }
+
+    void ACSharpFieldWithNoNativeFunctionFailsInstallAndNamesIt()
+    {
+        HeadlessApp headless;
+        ScriptingExtension broken;
+        broken.name = "broken extension";
+        broken.sharedAssemblies = {brokenExtension};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), broken}));
+        {
+            INFO("Scripts ran although a C# field has no native function");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the unbound field and say the app runs without scripts");
+            REQUIRE((headless.Logger().Contains(Testing::LogLevel::Error, "Broken.__native_Unregistered") &&
+                     headless.Logger().Contains(Testing::LogLevel::Error, "running without scripts")));
+        }
+    }
+
+    void ANativeFunctionWhoseSignatureDiffersFromItsFieldFailsInstallAndNamesIt()
+    {
+        HeadlessApp headless;
+        ScriptingExtension broken;
+        broken.name = "broken extension";
+        broken.sharedAssemblies = {brokenExtension};
+        broken.functions = {
+            NativeFunction::Make<&TestExtension::Mismatched>("Fenrir.BrokenExtension.Broken.Mismatched")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), broken}));
+        {
+            INFO("Scripts ran although a native function's signature differs from its C# field");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the mismatched field and say the signatures differ");
+            REQUIRE((headless.Logger().Contains(Testing::LogLevel::Error, "Broken.__native_Mismatched") &&
+                     headless.Logger().Contains(Testing::LogLevel::Error, "does not match")));
+        }
+    }
+
+    void TwoExtensionsDeclaringOneNativeFunctionFailInstallAndNameBoth()
+    {
+        HeadlessApp headless;
+        ScriptingExtension copy;
+        copy.name = "copying extension";
+        copy.functions = {NativeFunction::Make<&TestExtension::Add>("Fenrir.TestExtension.Gadgets.Add")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), copy}));
+        {
+            INFO("Scripts ran although two extensions declare one native function");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the function and both extensions");
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.TestExtension.Gadgets.Add"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'test extension'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'copying extension'"));
+        }
+    }
+
+    void TheBindingNameOfANativeFunctionFollowsOneRule()
+    {
+        {
+            INFO("Namespace.Type.Method did not bind to the field __native_Method of Namespace.Type");
+            REQUIRE(NativeFunction::BindingNameFor("Fenrir.Physics.Raycast") == "Fenrir.Physics.__native_Raycast");
+        }
+        {
+            INFO("A nested type's name (Outer+Inner) did not carry over");
+            REQUIRE(NativeFunction::BindingNameFor("Game.Outer+Inner.Run") == "Game.Outer+Inner.__native_Run");
+        }
+        {
+            INFO("A name with no type part had a binding name");
+            REQUIRE(NativeFunction::BindingNameFor("Run").empty());
+            REQUIRE(NativeFunction::BindingNameFor(".Run").empty());
+            REQUIRE(NativeFunction::BindingNameFor("Game.").empty());
+        }
+    }
+
 } // namespace
 
 TEST_CASE("the fixture loads, frames run and Iris's messages reach the engine logger", "[scripting]")
@@ -3612,6 +3886,46 @@ TEST_CASE("a wrong field type is caught too", "[scripting]")
 TEST_CASE("a script cannot claim a native component with a struct of its own", "[scripting]")
 {
     AScriptCannotClaimANativeComponentWithAStructOfItsOwn();
+}
+
+TEST_CASE("a native function from an extension gets C#'s arguments and its result reaches C#", "[scripting]")
+{
+    ANativeFunctionGetsCSharpArgumentsAndItsResultReachesCSharp();
+}
+
+TEST_CASE("a native function receives a string from C#", "[scripting]")
+{
+    ANativeFunctionReceivesAStringFromCSharp();
+}
+
+TEST_CASE("a native function reaches the active scene through its call context", "[scripting]")
+{
+    ANativeFunctionReachesTheActiveSceneThroughItsCallContext();
+}
+
+TEST_CASE("an extension's components and events are registered and checked against C#", "[scripting]")
+{
+    AnExtensionsComponentsAndEventsAreRegisteredAndCheckedAgainstCSharp();
+}
+
+TEST_CASE("a C# field with no native function fails Install and names it", "[scripting]")
+{
+    ACSharpFieldWithNoNativeFunctionFailsInstallAndNamesIt();
+}
+
+TEST_CASE("a native function whose signature differs from its C# field fails Install and names it", "[scripting]")
+{
+    ANativeFunctionWhoseSignatureDiffersFromItsFieldFailsInstallAndNamesIt();
+}
+
+TEST_CASE("two extensions declaring one native function fail Install and name both", "[scripting]")
+{
+    TwoExtensionsDeclaringOneNativeFunctionFailInstallAndNameBoth();
+}
+
+TEST_CASE("the binding name of a native function follows one rule", "[scripting]")
+{
+    TheBindingNameOfANativeFunctionFollowsOneRule();
 }
 
 TEST_CASE("the build deploys the bridge next to the executable", "[scripting]")

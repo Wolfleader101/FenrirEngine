@@ -20,6 +20,8 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <tuple>
+#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -529,6 +531,16 @@ namespace Fenrir
         }
     }
 
+    std::string NativeFunction::BindingNameFor(std::string_view name)
+    {
+        const auto split = name.rfind('.');
+        if (split == std::string_view::npos || split == 0 || split + 1 == name.size())
+        {
+            return {};
+        }
+        return std::string(name.substr(0, split + 1)) + "__native_" + std::string(name.substr(split + 1));
+    }
+
     // Why a stage of starting scripting failed: what went wrong, and the diagnostic that came with it, if any.
     struct StartupFailure
     {
@@ -586,29 +598,75 @@ namespace Fenrir
                 }
                 return std::nullopt;
             },
-            // The engine's native functions act on this App, and are registered before the contract is shared (sharing
+            // The engine's internal calls act on this App, and are registered before the contract is shared (sharing
             // binds the contract's function pointers to them).
             [&]() -> std::optional<StartupFailure> {
                 state->context.app = &app;
+                state->context.call = Detail::CallContextAccess::Make(app);
                 state->context.components = &state->components;
                 state->context.changes = &state->changes;
                 if (!Detail::RegisterEngineComponents(state->components))
                 {
                     return StartupFailure{"the engine's own components could not be registered", {}};
                 }
-                for (auto& registration : config.components)
+                // The config's own components and events, then every extension's, by the same rules.
+                std::vector<
+                    std::tuple<std::string, std::vector<ComponentRegistration>*, std::vector<EventRegistration>*>>
+                    sources{{"the config", &config.components, &config.events}};
+                for (auto& extension : config.extensions)
                 {
-                    if (state->components.Add(std::move(registration)) < 0)
+                    sources.emplace_back("extension '" + extension.name + "'", &extension.components,
+                                         &extension.events);
+                }
+                for (auto& [source, components, events] : sources)
+                {
+                    for (auto& registration : *components)
                     {
-                        return StartupFailure{"a component in the config has an empty or duplicate name", {}};
+                        if (state->components.Add(std::move(registration)) < 0)
+                        {
+                            return StartupFailure{"a component in " + source + " has an empty or duplicate name", {}};
+                        }
+                    }
+                    for (auto& registration : *events)
+                    {
+                        if (registration.bind && !registration.bind(app))
+                        {
+                            return StartupFailure{"the event '" + registration.name + "' in " + source +
+                                                      " names a queue the app already has under another type",
+                                                  {}};
+                        }
+                        if (state->components.AddEvent(std::move(registration)) < 0)
+                        {
+                            return StartupFailure{"an event in " + source + " has an empty or duplicate name", {}};
+                        }
                     }
                 }
-                for (auto& registration : config.events)
+                return std::nullopt;
+            },
+            // Every extension's native functions are named Namespace.Type.Method, and no name is declared twice.
+            [&]() -> std::optional<StartupFailure> {
+                std::unordered_map<std::string, std::string> declaredBy;
+                for (const auto& extension : config.extensions)
                 {
-                    if ((registration.bind && !registration.bind(app)) ||
-                        state->components.AddEvent(std::move(registration)) < 0)
+                    for (const auto& function : extension.functions)
                     {
-                        return StartupFailure{"an event in the config has an empty or duplicate name", {}};
+                        if (function.BindingName().empty())
+                        {
+                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
+                                                      extension.name + "' is not named Namespace.Type.Method",
+                                                  {}};
+                        }
+                        const auto [first, added] = declaredBy.emplace(function.Name(), extension.name);
+                        if (!added)
+                        {
+                            return StartupFailure{first->second == extension.name
+                                                      ? "the native function '" + function.Name() +
+                                                            "' is declared twice by extension '" + extension.name + "'"
+                                                      : "the native function '" + function.Name() +
+                                                            "' is declared by both extension '" + first->second +
+                                                            "' and extension '" + extension.name + "'",
+                                                  {}};
+                        }
                     }
                 }
                 return std::nullopt;
@@ -622,7 +680,20 @@ namespace Fenrir
                 state->contextActive = true;
                 if (const auto bound = Detail::RegisterEngineBindings(); !bound.Succeeded())
                 {
-                    return StartupFailure{"the engine's native functions could not be registered", bound.diagnostic};
+                    return StartupFailure{"the engine's internal calls could not be registered", bound.diagnostic};
+                }
+                // Before the host shares the extensions' contracts: sharing binds their fields to these.
+                for (const auto& extension : config.extensions)
+                {
+                    for (const auto& function : extension.functions)
+                    {
+                        if (const auto registered = function.Register(); !registered.Succeeded())
+                        {
+                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
+                                                      extension.name + "' could not be registered",
+                                                  registered.diagnostic};
+                        }
+                    }
                 }
                 return std::nullopt;
             },
@@ -632,8 +703,16 @@ namespace Fenrir
                 configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
                 configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
                 configuration.dotnetRoot = config.dotnetRoot;
-                configuration.sharedAssemblies = config.sharedAssemblies;
-                configuration.sharedAssemblies.push_back(contract);
+                // The scripting contract first: the others may refer to it, and each is bound as it is shared.
+                configuration.sharedAssemblies = {contract};
+                configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
+                                                      config.sharedAssemblies.begin(), config.sharedAssemblies.end());
+                for (const auto& extension : config.extensions)
+                {
+                    configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
+                                                          extension.sharedAssemblies.begin(),
+                                                          extension.sharedAssemblies.end());
+                }
 
                 state->logger = &logger;
                 state->host = std::make_unique<Iris::Host>();

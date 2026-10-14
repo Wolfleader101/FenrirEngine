@@ -296,6 +296,12 @@ namespace Fenrir::Detail
         }
     } // namespace
 
+    const CallContext* ActiveCallContext() noexcept
+    {
+        const auto* context = activeContext.load();
+        return context == nullptr || !context->call ? nullptr : &*context->call;
+    }
+
     bool ActivateEngineContext(EngineContext* context) noexcept
     {
         EngineContext* none = nullptr;

@@ -45,8 +45,43 @@ add_custom_command(
     COMMENT "Building the bad-report test fixture assembly"
     VERBATIM
 )
+# A test-only scripting extension: its C# contract (shared by the host, as a package's would be), a script assembly that
+# uses it, and a contract whose fields no extension satisfies, for the tests of what Install refuses.
+set(fenrir_extension_dir "${CMAKE_CURRENT_BINARY_DIR}/extension")
+set(fenrir_extension_script_dir "${CMAKE_CURRENT_BINARY_DIR}/extension-script")
+set(fenrir_broken_extension_dir "${CMAKE_CURRENT_BINARY_DIR}/broken-extension")
+file(GLOB fenrir_extension_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Extension/*.cs")
+file(GLOB fenrir_extension_script_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/ExtensionScript/*.cs")
+file(GLOB fenrir_broken_extension_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/BrokenExtension/*.cs")
+add_custom_command(
+    OUTPUT "${fenrir_extension_dir}/Fenrir.TestExtension.dll" "${fenrir_extension_script_dir}/Fenrir.TestExtensionScript.dll"
+    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Extension/Fenrir.TestExtension.csproj"
+        --configuration Release --output "${fenrir_extension_dir}" -nologo -v:q
+        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/extension-obj/"
+    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/ExtensionScript/Fenrir.TestExtensionScript.csproj"
+        --configuration Release --output "${fenrir_extension_script_dir}" -nologo -v:q
+        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" "-p:TestExtensionDir=${fenrir_extension_dir}/"
+        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/extension-script-obj/"
+    DEPENDS ${fenrir_extension_sources} ${fenrir_extension_script_sources}
+        "${CMAKE_CURRENT_SOURCE_DIR}/Extension/Fenrir.TestExtension.csproj"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ExtensionScript/Fenrir.TestExtensionScript.csproj" FenrirScriptingContract
+    COMMENT "Building the test extension's contract and the script assembly that uses it"
+    VERBATIM
+)
+add_custom_command(
+    OUTPUT "${fenrir_broken_extension_dir}/Fenrir.BrokenExtension.dll"
+    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/BrokenExtension/Fenrir.BrokenExtension.csproj"
+        --configuration Release --output "${fenrir_broken_extension_dir}" -nologo -v:q
+        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/broken-extension-obj/"
+    DEPENDS ${fenrir_broken_extension_sources} "${CMAKE_CURRENT_SOURCE_DIR}/BrokenExtension/Fenrir.BrokenExtension.csproj"
+    COMMENT "Building the broken test extension's contract"
+    VERBATIM
+)
 add_custom_target(FenrirScriptFixture DEPENDS "${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll"
-    "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll" "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll")
+    "${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll" "${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll"
+    "${fenrir_extension_dir}/Fenrir.TestExtension.dll" "${fenrir_extension_script_dir}/Fenrir.TestExtensionScript.dll"
+    "${fenrir_broken_extension_dir}/Fenrir.BrokenExtension.dll")
 add_dependencies(FenrirScriptFixture FenrirScriptingContract)
 add_dependencies(FenrirScriptingTests FenrirScriptFixture)
 
@@ -59,7 +94,7 @@ add_test(NAME ScriptingDoesNotUseEnTT
 # `ctest -V -R FenrirScripting`) and give FenrirScriptingTests Catch2's options, for example a test name or "[scripting]".
 add_test(NAME FenrirScripting COMMAND FenrirScriptingTests --order decl)
 set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120 ENVIRONMENT
-    "FENRIR_TEST_FIXTURE=${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_FIXTURE_V2=${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_BAD_REPORTS=${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll;FENRIR_TEST_EXECUTABLE_DIR=$<TARGET_FILE_DIR:FenrirScriptingTests>")
+    "FENRIR_TEST_FIXTURE=${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_FIXTURE_V2=${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_BAD_REPORTS=${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll;FENRIR_TEST_EXTENSION=${fenrir_extension_dir}/Fenrir.TestExtension.dll;FENRIR_TEST_EXTENSION_SCRIPT=${fenrir_extension_script_dir}/Fenrir.TestExtensionScript.dll;FENRIR_TEST_BROKEN_EXTENSION=${fenrir_broken_extension_dir}/Fenrir.BrokenExtension.dll;FENRIR_TEST_EXECUTABLE_DIR=$<TARGET_FILE_DIR:FenrirScriptingTests>")
 
 
 # Ref<T> points into storage that can move, so the compiler must refuse every way of keeping it past the call that was

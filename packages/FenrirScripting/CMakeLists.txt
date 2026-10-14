@@ -58,6 +58,7 @@ add_library(FenrirScripting STATIC
     include/FenrirScripting/ComponentRegistry.hpp
     src/EngineContext.hpp
     include/FenrirScripting/Scripting.hpp
+    include/FenrirScripting/ScriptingExtension.hpp
 )
 
 target_include_directories(FenrirScripting PUBLIC include)
