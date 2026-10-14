@@ -1,0 +1,82 @@
+# The numbering the native and managed sides of the bridge must agree on, in one place. Each line is
+# "<group> <name> <number>". The native check (numbering.cpp) and the managed check (ManagedChecks/NumberingChecks.cs)
+# both read this file, so a number changed on either side, or an item added to one side only, fails there and names
+# the item. Native-only items are in the "NativeStatus" group, which only the native check reads.
+
+# Value kinds (Detail::ValueKind / ValueKind). Array is combined with the element kind on the wire.
+ValueKind Void 0
+ValueKind Bool 1
+ValueKind Int8 2
+ValueKind UInt8 3
+ValueKind Int16 4
+ValueKind UInt16 5
+ValueKind Int32 6
+ValueKind UInt32 7
+ValueKind Int64 8
+ValueKind UInt64 9
+ValueKind Float 10
+ValueKind Double 11
+ValueKind Object 12
+ValueKind String 13
+ValueKind Struct 14
+ValueKind Array 15
+ValueKind StructArray 16
+ValueKind Pointer 17
+ValueKind Char 18
+ValueKind Enum 19
+ValueKind InlineArray 20
+
+# The kind of a managed type in a type snapshot (TypeKind / TypeQueries.Kind).
+TypeKind Other 0
+TypeKind Void 1
+TypeKind Bool 2
+TypeKind Char 3
+TypeKind Int8 4
+TypeKind UInt8 5
+TypeKind Int16 6
+TypeKind UInt16 7
+TypeKind Int32 8
+TypeKind UInt32 9
+TypeKind Int64 10
+TypeKind UInt64 11
+TypeKind Float 12
+TypeKind Double 13
+TypeKind String 14
+TypeKind Enum 15
+TypeKind Struct 16
+TypeKind Object 17
+TypeKind Array 18
+
+# A member's accessibility in a type snapshot (MemberVisibility / TypeQueries.Visibility).
+Visibility Private 0
+Visibility PrivateProtected 1
+Visibility Internal 2
+Visibility Protected 3
+Visibility ProtectedInternal 4
+Visibility Public 5
+
+# The statuses of the wire (CallStatus / BridgeStatus). BufferTooSmall is not a public CallStatus: native code reports
+# it as InvalidResponse, and names the number as Detail::WireBufferTooSmall.
+Status Success 0
+Status InvalidArgument 1
+Status ManagedException 3
+Status BufferTooSmall 4
+Status InvalidHandle 5
+Status NotFound 6
+Status InUse 7
+
+# Statuses only the native side produces.
+NativeStatus NotInitialized -1
+NativeStatus UnexpectedStatus -2
+NativeStatus InvalidResponse -3
+
+# Log levels (LogLevel / LogLevel).
+LogLevel Debug 0
+LogLevel Info 1
+LogLevel Warning 2
+LogLevel Error 3
+
+# What a released component is doing (ComponentUnloadState / ComponentUnloadState).
+UnloadState NotRequested 0
+UnloadState Pending 1
+UnloadState Collected 2

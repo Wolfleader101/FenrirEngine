@@ -93,12 +93,21 @@ set_tests_properties(Components-unbound PROPERTIES ENVIRONMENT "${iris_checks_co
 # The native modules against a scripted bridge function table that lives in the test process (Fake/FakeBridge.hpp): any
 # response the bridge could give reaches them with no .NET runtime and no managed build. The table and the way a component is
 # built over it are private to the library's sources, so this executable (and only this one) is given that directory.
-add_executable(IrisFakeChecks fake.cpp Fake/FakeBridge.hpp)
+add_executable(IrisFakeChecks fake.cpp numbering.cpp Fake/FakeBridge.hpp)
 target_link_libraries(IrisFakeChecks PRIVATE Iris::Iris Catch2::Catch2WithMain)
 target_include_directories(IrisFakeChecks PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Native/src" "${CMAKE_CURRENT_SOURCE_DIR}")
 iris_deploy(IrisFakeChecks)
 add_test(NAME Fake COMMAND IrisFakeChecks "[fake]" --order decl)
 set_tests_properties(Fake PROPERTIES TIMEOUT 60)
+
+# The numbers both sides of the bridge give to the same things (value kinds, snapshot kinds, visibilities, statuses, log
+# levels, unload states) are written once, in numbering.txt. This check reads it against the native definitions and the
+# managed check (the "numbering" group of ManagedContracts) reads it against the bridge's.
+set(iris_checks_numbering_file "${CMAKE_CURRENT_SOURCE_DIR}/numbering.txt")
+target_compile_definitions(IrisFakeChecks PRIVATE "IRIS_NUMBERING_FILE=\"${iris_checks_numbering_file}\"")
+add_test(NAME Numbering-native COMMAND IrisFakeChecks "[numbering]" --order decl)
+set_tests_properties(Numbering-native PROPERTIES TIMEOUT 60)
+set_tests_properties(ManagedContracts PROPERTIES ENVIRONMENT "IRIS_NUMBERING_FILE=${iris_checks_numbering_file}")
 
 # Install this build and use it from the standalone consumer project, through find_package(Iris).
 if(IRIS_INSTALL)

@@ -39,6 +39,7 @@ static class Checks
             ("export contracts", ExportContractChecks.Run),
             ("value codec", ValueCodecChecks.Run),
             ("struct mapping", StructMappingChecks.Run),
+            ("numbering", NumberingChecks.Run),
             ("components", () => ComponentChecks.Run(component)),
             ("invocation", () => InvocationChecks.Run(component)),
             ("dependencies", () => DependencyChecks.Run(component)),
