@@ -36,6 +36,7 @@ static class Checks
         return RunGroups(
             ("handshake", HandshakeChecks.Run),
             ("diagnostic text", DiagnosticTextChecks),
+            ("export contracts", ExportContractChecks.Run),
             ("components", () => ComponentChecks.Run(component)),
             ("invocation", () => InvocationChecks.Run(component)),
             ("dependencies", () => DependencyChecks.Run(component)),
