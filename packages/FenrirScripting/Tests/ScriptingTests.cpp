@@ -3439,6 +3439,22 @@ namespace
         }
     }
 
+    void ALoneSurrogateInAStringArrivesAsTheReplacementCharacter()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        TestExtension::labelled = "untouched";
+        {
+            INFO("'a', a lone surrogate and 'b' (1 + 3 + 1 UTF-8 bytes, times 10, plus 7) did not give 57");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "LabelWithLoneSurrogate", std::int32_t{7}) == 57);
+        }
+        {
+            INFO("The lone surrogate did not arrive as U+FFFD");
+            REQUIRE(TestExtension::labelled == "a\xEF\xBF\xBD"
+                                               "b");
+        }
+    }
+
     void ANativeFunctionReachesTheActiveSceneThroughItsCallContext()
     {
         HeadlessApp headless;
@@ -3896,6 +3912,11 @@ TEST_CASE("a native function from an extension gets C#'s arguments and its resul
 TEST_CASE("a native function receives a string from C#", "[scripting]")
 {
     ANativeFunctionReceivesAStringFromCSharp();
+}
+
+TEST_CASE("a lone surrogate in a string arrives as the replacement character", "[scripting]")
+{
+    ALoneSurrogateInAStringArrivesAsTheReplacementCharacter();
 }
 
 TEST_CASE("a native function reaches the active scene through its call context", "[scripting]")

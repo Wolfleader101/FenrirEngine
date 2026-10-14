@@ -44,9 +44,13 @@ The README's "Exposing a native function" section describes the new process. "Ad
 
 Review follow-ups: fixed here are parameters named by C# keywords (`@class`), a `ref` result (now FENRIR0026), and the comments that state the compile-test rule.
 
-Still open, for a follow-up ticket:
-- **Generic containing type.** The refusal stub goes into a non-generic `partial class Box`, so the build also reports CS0759 and CS8795 next to FENRIR0023. `Containers()` should carry the type parameters. Only a generic method is tested.
-- **Partial type split across files.** If one partial type has native functions in two files whose `using` directives differ (for example conflicting aliases), the single merged generated part can fail. The fix is one generated part per declaring file.
-- **No lone-surrogate test.** The code is right, since `Encoding.UTF8` replaces with U+FFFD by default.
-- **Stack buffer size.** It is 256 bytes, against `Log`'s 512.
-- **Generator smells:** a diagnostic record duplicated from `ComponentFieldsGenerator`, a `Report` switch on id strings, the container walk written three times, and a `Model` with 11 positional fields.
+Follow-ups, done afterwards:
+- **Generic containing type.** The container headers now carry the type parameters, so the refusal stub compiles and only FENRIR0023 is reported. Pinned by `RefCompile-NativeFunctionGenericType`, which failed before the change.
+- **Partial type split across files.** One generated part is written per declaring file, with that file's `using` directives, and overloads are still found across all of a type's files. Pinned by `RefCompile-NativeFunctionTwoFiles` (two files giving one alias two meanings), which failed before the change.
+- **Lone surrogate.** A scripting test sends text with a lone surrogate through the generated body and checks C++ receives U+FFFD. It was a missing test, not a bug. It has to be sent from C#, because UTF-8 from C++ cannot carry one.
+- **Stack buffer size.** It is now 512 bytes, as in `Log`.
+- **Generator cleanup.** `LocationInfo` and `DiagnosticInfo` moved out of `ComponentFieldsGenerator` into a shared file and the native function generator uses them, so it no longer carries its own copy and its `Report` switch on id strings is gone. The container chain is walked in one place, `Model` is split into a `Part` (where the code goes) and the declaration's own data, the `ref readonly` value is a named constant, and diagnostic arguments are an array.
+
+A regression from the per-file change was found in review and fixed: one file opening the same namespace twice, each time with its own `using`s, made two parts with one hint name, so the generator threw. The hint name now hashes the namespace usings as well as the path. Pinned by `RefCompile-NativeFunctionTwoNamespaceBlocks`, which failed before the fix.
+
+Not changed: `EventGenerator` and `SystemGenerator` still hold their own location data inline, and the `Error(...)` descriptor helper stays (shorter than the sibling generators' `new(...)`).

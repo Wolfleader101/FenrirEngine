@@ -152,6 +152,9 @@ fenrir_expect_compile(NativeFunctionNotStatic FENRIR0020)
 fenrir_expect_compile(NativeFunctionNotPartial FENRIR0021)
 fenrir_expect_compile(NativeFunctionTypeNotPartial FENRIR0022 CS8795)  # the compiler adds: no implementation part
 fenrir_expect_compile(NativeFunctionGeneric FENRIR0023)
+fenrir_expect_compile(NativeFunctionGenericType FENRIR0023)    # a generic containing type, with no other error
+fenrir_expect_compile(NativeFunctionTwoFiles OK)               # one type, two files, conflicting using aliases
+fenrir_expect_compile(NativeFunctionTwoNamespaceBlocks OK)    # one type, one file, two namespace blocks with their own usings
 fenrir_expect_compile(NativeFunctionOverload FENRIR0024)
 fenrir_expect_compile(NativeFunctionStringResult FENRIR0025)
 fenrir_expect_compile(NativeFunctionUnsupported FENRIR0026)

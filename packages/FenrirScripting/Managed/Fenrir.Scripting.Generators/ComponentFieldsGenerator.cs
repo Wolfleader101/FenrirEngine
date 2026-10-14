@@ -223,24 +223,4 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
 
         public override int GetHashCode() => (TypeName, Source, TableEntry).GetHashCode();
     }
-
-    // A source position as plain data. A Location holds a syntax tree, which would keep the previous compilation alive
-    // in the generator's cache and make every edit regenerate everything.
-    private sealed record LocationInfo(string Path, TextSpan Span, LinePositionSpan LineSpan)
-    {
-        public static LocationInfo From(Location location) =>
-            new(location.SourceTree?.FilePath ?? "", location.SourceSpan, location.GetLineSpan().Span);
-
-        public Location ToLocation() => Location.Create(Path, Span, LineSpan);
-    }
-
-    private sealed record DiagnosticInfo(DiagnosticDescriptor Descriptor, LocationInfo Location, string[] Arguments)
-    {
-        public Diagnostic ToDiagnostic() => Diagnostic.Create(Descriptor, Location.ToLocation(), Arguments.Cast<object>().ToArray());
-
-        public bool Equals(DiagnosticInfo? other) =>
-            other is not null && Descriptor.Id == other.Descriptor.Id && Location == other.Location && Arguments.SequenceEqual(other.Arguments);
-
-        public override int GetHashCode() => (Descriptor.Id, Location).GetHashCode();
-    }
 }

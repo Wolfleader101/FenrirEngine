@@ -18,6 +18,9 @@ namespace Fenrir.Scripting.Generators;
 /// A declaration it refuses still gets a body (one that throws), so the build reports the FENRIR error and not also a
 /// partial method without an implementation. The exception is a native function inside a type that is not partial, where
 /// nothing can be written.
+///
+/// One part is written for each file a type's native functions are declared in, with that file's <c>using</c> directives,
+/// so a signature copied from a file means what it means there even when another file of the same type says otherwise.
 /// </remarks>
 [Generator]
 public sealed class NativeFunctionGenerator : IIncrementalGenerator
@@ -25,7 +28,12 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
     private const string AttributeName = "Fenrir.Scripting.NativeFunctionAttribute";
     private const string EntityName = "Fenrir.Scripting.Entity";
     private const string FieldPrefix = "__native_";
-    private const int StackBytes = 256;
+
+    // Text up to this many UTF-8 bytes is encoded on the stack (as Log does), longer text into a new array.
+    private const int StackBytes = 512;
+
+    // RefKind.RefReadOnlyParameter in newer versions of Roslyn than the one this generator builds against.
+    private const RefKind RefReadOnlyParameter = (RefKind)4;
 
     private static readonly DiagnosticDescriptor NotStatic = Error("FENRIR0020", "A native function must be static",
         "Native function '{0}' must be static");
@@ -45,13 +53,15 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
     private static DiagnosticDescriptor Error(string id, string title, string message) =>
         new(id, title, message, "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
-    // A diagnostic, as plain data so the model stays equatable.
-    private sealed record Problem(string Id, string First, string Second, string Third, string Path,
-        Microsoft.CodeAnalysis.Text.TextSpan Span, Microsoft.CodeAnalysis.Text.LinePositionSpan LineSpan);
+    // Where a declaration's generated code goes: a part of its type, in a file of its own, opened the way the declaration
+    // opened it. Plain data, so an unchanged declaration is not regenerated.
+    private sealed record Part(string TypeKey, string FilePath, string Namespace, string Containers, int Depth,
+        string FileUsings, string NamespaceUsings);
 
-    // What one [NativeFunction] declaration contributes to its type's generated part.
-    private sealed record Model(string TypeKey, string Namespace, string Containers, string Name, string? Field,
-        string? Implementation, string? Stub, Problem? Problem, Problem Overload, string FileUsings, string NamespaceUsings);
+    // What one [NativeFunction] declaration contributes: its field and body, a body that throws in their place if it was
+    // refused, or nothing at all if even that could not be written.
+    private sealed record Model(Part Part, string Name, string Display, LocationInfo At, string? Field, string? Implementation,
+        string? Stub, DiagnosticInfo? Refusal);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
@@ -63,49 +73,56 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(functions.Collect(), static (output, models) =>
         {
-            foreach (var type in models.GroupBy(static model => model.TypeKey))
+            foreach (var type in models.GroupBy(static model => model.Part.TypeKey))
             {
-                var parts = new List<(string? Field, string Body)>();
+                // Overloads are found across every file of the type; the code is written file by file.
+                var written = new List<(Part Part, string? Field, string Body)>();
                 var named = new HashSet<string>(StringComparer.Ordinal);
                 foreach (Model model in type)
                 {
-                    Problem? problem = model.Problem;
-                    bool first = named.Add(model.Name);
-                    if (problem == null && !first)
-                        problem = model.Overload;
+                    DiagnosticInfo? problem = model.Refusal;
+                    if (!named.Add(model.Name) && problem == null)
+                        problem = Refuse(Overloaded, model.At, model.Display);
                     if (problem != null)
-                        Report(output, problem);
+                        output.ReportDiagnostic(problem.ToDiagnostic());
                     if (problem == null && model.Implementation != null)
-                        parts.Add((model.Field, model.Implementation));
+                        written.Add((model.Part, model.Field, model.Implementation));
                     else if (model.Stub != null)
-                        parts.Add((null, model.Stub));
+                        written.Add((model.Part, null, model.Stub));
                 }
-                if (parts.Count == 0)
-                    continue;
-                Model sample = type.First();
-                var source = new StringBuilder();
-                source.Append("// <auto-generated>Fenrir.Scripting.Generators: native function bodies and the fields the host binds.</auto-generated>\n");
-                source.Append("#pragma warning disable CS0649 // The host assigns the fields when it shares this assembly.\n");
-                // The declarations' own using directives, so the copied signatures mean what they mean there.
-                foreach (string line in Lines(type.Select(static model => model.FileUsings)))
-                    source.Append(line).Append('\n');
-                if (sample.Namespace.Length > 0)
-                    source.Append("namespace ").Append(sample.Namespace).Append("\n{\n");
-                foreach (string line in Lines(type.Select(static model => model.NamespaceUsings)))
-                    source.Append(line).Append('\n');
-                source.Append(sample.Containers).Append("{\n");
-                foreach ((string? field, string body) in parts)
-                {
-                    if (field != null)
-                        source.Append("    ").Append(field).Append('\n');
-                    source.Append("    ").Append(body.Replace("\n", "\n    ")).Append("\n\n");
-                }
-                source.Append(new string('}', CountOpenings(sample.Containers))).Append('\n');
-                if (sample.Namespace.Length > 0)
-                    source.Append("}\n");
-                output.AddSource(HintName(type.Key), source.ToString());
+                foreach (var file in written.GroupBy(static member => member.Part))
+                    output.AddSource(HintName(file.Key), Source(file.Key, file.Select(static member => (member.Field, member.Body))));
             }
         });
+    }
+
+    private static string Source(Part part, IEnumerable<(string? Field, string Body)> members)
+    {
+        var source = new StringBuilder();
+        source.Append("// <auto-generated>Fenrir.Scripting.Generators: native function bodies and the fields the host binds.</auto-generated>\n");
+        source.Append("#pragma warning disable CS0649 // The host assigns the fields when it shares this assembly.\n");
+        // The declarations' own using directives, so the copied signatures mean what they mean there.
+        AppendLines(source, part.FileUsings);
+        if (part.Namespace.Length > 0)
+            source.Append("namespace ").Append(part.Namespace).Append("\n{\n");
+        AppendLines(source, part.NamespaceUsings);
+        source.Append(part.Containers).Append("{\n");
+        foreach ((string? field, string body) in members)
+        {
+            if (field != null)
+                source.Append("    ").Append(field).Append('\n');
+            source.Append("    ").Append(body.Replace("\n", "\n    ")).Append("\n\n");
+        }
+        source.Append(new string('}', part.Depth)).Append('\n');
+        if (part.Namespace.Length > 0)
+            source.Append("}\n");
+        return source.ToString();
+    }
+
+    private static void AppendLines(StringBuilder source, string lines)
+    {
+        foreach (string line in lines.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            source.Append(line).Append('\n');
     }
 
     private static Model? Describe(GeneratorAttributeSyntaxContext attributed, System.Threading.CancellationToken cancellation)
@@ -114,44 +131,36 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         if (attributed.TargetSymbol is not IMethodSymbol method)
             return null;
         INamedTypeSymbol type = method.ContainingType;
+        List<INamedTypeSymbol> chain = ContainerChain(type);
         string name = method.Name;
         string display = $"{type.ToDisplayString()}.{name}";
-        Location at = declaration.Identifier.GetLocation();
-        string typeKey = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        string ns = type.ContainingNamespace.IsGlobalNamespace ? "" : type.ContainingNamespace.ToDisplayString();
-        Problem overload = Make(Overloaded, at, display);
-        string fileUsings = string.Join("\n", declaration.SyntaxTree.GetCompilationUnitRoot(cancellation).Usings
-            .Where(static directive => directive.GlobalKeyword.IsKind(SyntaxKind.None))
-            .Select(static directive => directive.WithoutTrivia().ToString()));
-        string namespaceUsings = string.Join("\n", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse()
-            .SelectMany(static space => space.Usings).Select(static directive => directive.WithoutTrivia().ToString()));
+        LocationInfo at = LocationInfo.From(declaration.Identifier.GetLocation());
+
+        Part PartWith(string containers, int depth) => new(
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), at.Path,
+            type.ContainingNamespace.IsGlobalNamespace ? "" : type.ContainingNamespace.ToDisplayString(), containers, depth,
+            string.Join("\n", declaration.SyntaxTree.GetCompilationUnitRoot(cancellation).Usings
+                .Where(static directive => directive.GlobalKeyword.IsKind(SyntaxKind.None))
+                .Select(static directive => directive.WithoutTrivia().ToString())),
+            string.Join("\n", declaration.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().Reverse()
+                .SelectMany(static space => space.Usings).Select(static directive => directive.WithoutTrivia().ToString())));
+        Model Unwritten(DiagnosticInfo refusal) => new(PartWith("", 0), name, display, at, null, null, null, refusal);
 
         // A type the generator cannot add to: nothing can be written at all.
-        for (INamedTypeSymbol? container = type; container != null; container = container.ContainingType)
-        {
-            bool partial = container.DeclaringSyntaxReferences.All(reference =>
-                reference.GetSyntax(cancellation) is TypeDeclarationSyntax typeDeclaration &&
-                typeDeclaration.Modifiers.Any(SyntaxKind.PartialKeyword));
-            if (!partial)
-                return new Model(typeKey, ns, "", name, null, null, null, Make(ContainerNotPartial, at, display, container.ToDisplayString()), overload, fileUsings, namespaceUsings);
-        }
-        string containers = Containers(type);
+        INamedTypeSymbol? notPartial = chain.LastOrDefault(container => !IsPartial(container, cancellation));
+        if (notPartial != null)
+            return Unwritten(Refuse(ContainerNotPartial, at, display, notPartial.ToDisplayString()));
+        if (!declaration.Modifiers.Any(SyntaxKind.PartialKeyword) || declaration.Body != null || declaration.ExpressionBody != null)
+            return Unwritten(Refuse(NotPartial, at, display));
 
-        bool isPartial = declaration.Modifiers.Any(SyntaxKind.PartialKeyword);
-        bool hasBody = declaration.Body != null || declaration.ExpressionBody != null;
-        if (!isPartial || hasBody)
-            return new Model(typeKey, ns, containers, name, null, null, null, Make(NotPartial, at, display), overload, fileUsings, namespaceUsings);
-
+        Part part = PartWith(Containers(chain), chain.Count);
         string stub = Signature(declaration) + "\n    => throw new global::System.NotSupportedException(\"This native function was refused when it was compiled.\");";
-        Model Refused(Problem problem) => new(typeKey, ns, containers, name, null, null, stub, problem, overload, fileUsings, namespaceUsings);
+        Model Refused(DiagnosticInfo refusal) => new(part, name, display, at, null, null, stub, refusal);
 
         if (!method.IsStatic)
-            return Refused(Make(NotStatic, at, display));
-        bool generic = method.IsGenericMethod;
-        for (INamedTypeSymbol? container = type; container != null && !generic; container = container.ContainingType)
-            generic = container.IsGenericType;
-        if (generic)
-            return Refused(Make(Generic, at, display));
+            return Refused(Refuse(NotStatic, at, display));
+        if (method.IsGenericMethod || chain.Any(static container => container.IsGenericType))
+            return Refused(Refuse(Generic, at, display));
 
         var fieldTypes = new List<string>();
         var arguments = new List<string>();
@@ -166,12 +175,12 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
             if (parameter.RefKind != RefKind.None)
             {
                 if (!parameterType.IsValueType || !parameterType.IsUnmanagedType)
-                    return Refused(Make(Unsupported, at, display, parameterType.ToDisplayString(), "parameter " + p));
+                    return Refused(Refuse(Unsupported, at, display, parameterType.ToDisplayString(), "parameter " + p));
                 string pointer = parameterType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "*";
                 fieldTypes.Add(pointer);
                 if (parameter.RefKind == RefKind.Out)
                     prelude.Append(p).Append(" = default;\n");
-                string address = parameter.RefKind == RefKind.In || parameter.RefKind == (RefKind)4 // ref readonly
+                string address = parameter.RefKind == RefKind.In || parameter.RefKind == RefReadOnlyParameter
                     ? "&global::System.Runtime.CompilerServices.Unsafe.AsRef(in " + p + ")"
                     : "&" + p;
                 fixedStatements.Add($"fixed ({pointer} {local} = {address})");
@@ -201,7 +210,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
             }
             else
             {
-                return Refused(Make(Unsupported, at, display, parameterType.ToDisplayString(), "parameter " + p));
+                return Refused(Refuse(Unsupported, at, display, parameterType.ToDisplayString(), "parameter " + p));
             }
         }
 
@@ -216,11 +225,11 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         }
         else if (method.ReturnsByRef || method.ReturnsByRefReadonly)
         {
-            return Refused(Make(Unsupported, at, display, result.ToDisplayString(), "a ref result"));
+            return Refused(Refuse(Unsupported, at, display, result.ToDisplayString(), "a ref result"));
         }
         else if (result.SpecialType == SpecialType.System_String)
         {
-            return Refused(Make(StringResult, at, display));
+            return Refused(Refuse(StringResult, at, display));
         }
         else if (IsEntity(result))
         {
@@ -234,7 +243,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         }
         else
         {
-            return Refused(Make(Unsupported, at, display, result.ToDisplayString(), "the result"));
+            return Refused(Refuse(Unsupported, at, display, result.ToDisplayString(), "the result"));
         }
 
         string field = $"public static delegate* unmanaged[Cdecl]<{string.Join("", fieldTypes.Select(static t => t + ", "))}{fieldResult}> {FieldPrefix}{name};";
@@ -246,7 +255,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
             body.Append("    ").Append(statementLine).Append('\n');
         body.Append(fixedStatements.Count > 0 ? "    {\n        " + statement + "\n    }\n" : "    " + statement + "\n");
         body.Append('}');
-        return new Model(typeKey, ns, containers, name, field, body.ToString(), stub, null, overload, fileUsings, namespaceUsings);
+        return new Model(part, name, display, at, field, body.ToString(), stub, null);
     }
 
     // The declaration's signature as the implementing part repeats it: modifiers, result, name, parameters and constraints,
@@ -254,33 +263,44 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
     private static string Signature(MethodDeclarationSyntax declaration) =>
         declaration.WithAttributeLists(default).WithSemicolonToken(default).WithoutTrivia().NormalizeWhitespace().ToFullString();
 
-    // The opening of every type around the method, outermost first; the innermost is unsafe, for its pointers.
-    private static string Containers(INamedTypeSymbol type)
+    // The type and every type around it, outermost first.
+    private static List<INamedTypeSymbol> ContainerChain(INamedTypeSymbol type)
     {
         var chain = new List<INamedTypeSymbol>();
         for (INamedTypeSymbol? container = type; container != null; container = container.ContainingType)
             chain.Insert(0, container);
+        return chain;
+    }
+
+    private static bool IsPartial(INamedTypeSymbol type, System.Threading.CancellationToken cancellation) =>
+        type.DeclaringSyntaxReferences.All(reference =>
+            reference.GetSyntax(cancellation) is TypeDeclarationSyntax declaration &&
+            declaration.Modifiers.Any(SyntaxKind.PartialKeyword));
+
+    // The opening of every type around the method, outermost first, each with its type parameters (the declarations state
+    // the constraints); the innermost is unsafe, for its pointers.
+    private static string Containers(List<INamedTypeSymbol> chain)
+    {
         var text = new StringBuilder();
-        foreach (INamedTypeSymbol container in chain)
+        for (int index = 0; index < chain.Count; index++)
         {
+            INamedTypeSymbol container = chain[index];
             string kind = container.TypeKind switch
             {
                 TypeKind.Struct => container.IsRecord ? "record struct" : "struct",
                 TypeKind.Interface => "interface",
                 _ => container.IsRecord ? "record" : "class",
             };
-            text.Append(SymbolEqualityComparer.Default.Equals(container, type) ? "unsafe partial " : "partial ")
-                .Append(kind).Append(' ').Append(container.Name).Append('\n');
-            if (!SymbolEqualityComparer.Default.Equals(container, type))
+            string parameters = container.TypeParameters.Length == 0
+                ? ""
+                : "<" + string.Join(", ", container.TypeParameters.Select(static parameter => parameter.Name)) + ">";
+            bool innermost = index == chain.Count - 1;
+            text.Append(innermost ? "unsafe partial " : "partial ").Append(kind).Append(' ').Append(container.Name).Append(parameters).Append('\n');
+            if (!innermost)
                 text.Append("{\n");
         }
         return text.ToString();
     }
-
-    private static IEnumerable<string> Lines(IEnumerable<string> blocks) =>
-        blocks.SelectMany(static block => block.Split(new[] { '\n' }, StringSplitOptions.RemoveEmptyEntries)).Distinct(StringComparer.Ordinal);
-
-    private static int CountOpenings(string containers) => containers.Count(static c => c == '{') + 1;
 
     private static bool IsText(ITypeSymbol type) =>
         type.SpecialType == SpecialType.System_String ||
@@ -315,30 +335,26 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
             : null;
     }
 
-    private static Problem Make(DiagnosticDescriptor descriptor, Location at, string first, string second = "", string third = "") =>
-        new(descriptor.Id, first, second, third, at.SourceTree?.FilePath ?? "", at.SourceSpan, at.GetLineSpan().Span);
+    private static DiagnosticInfo Refuse(DiagnosticDescriptor descriptor, LocationInfo at, params string[] arguments) =>
+        new(descriptor, at, arguments);
 
-    private static void Report(SourceProductionContext output, Problem problem)
-    {
-        DiagnosticDescriptor descriptor = problem.Id switch
-        {
-            "FENRIR0020" => NotStatic,
-            "FENRIR0021" => NotPartial,
-            "FENRIR0022" => ContainerNotPartial,
-            "FENRIR0023" => Generic,
-            "FENRIR0024" => Overloaded,
-            "FENRIR0025" => StringResult,
-            _ => Unsupported,
-        };
-        var location = Location.Create(problem.Path, problem.Span, problem.LineSpan);
-        output.ReportDiagnostic(Diagnostic.Create(descriptor, location, problem.First, problem.Second, problem.Third));
-    }
-
-    private static string HintName(string typeKey)
+    // The type's name with a hash of what tells its parts apart: the file's whole path (so two files of one name in
+    // different folders never share a hint name) and the usings of its namespace blocks (a file can open one namespace
+    // twice, each time with usings of its own).
+    private static string HintName(Part part)
     {
         var name = new StringBuilder("Fenrir.Scripting.NativeFunctions.");
-        foreach (char c in typeKey.Replace("global::", ""))
+        foreach (char c in part.TypeKey.Replace("global::", ""))
             name.Append(char.IsLetterOrDigit(c) || c == '.' ? c : '_');
-        return name.Append(".g.cs").ToString();
+        return name.Append('.').Append(Hash(part.FilePath + "\n" + part.NamespaceUsings).ToString("x8")).Append(".g.cs").ToString();
+    }
+
+    // 32-bit FNV-1a, so a hint name is the same on every build.
+    private static uint Hash(string text)
+    {
+        uint hash = 2166136261U;
+        foreach (char c in text)
+            hash = (hash ^ c) * 16777619U;
+        return hash;
     }
 }

@@ -11,5 +11,7 @@
   <Import Project="$(MSBuildThisFileDirectory)../../Managed/Fenrir.Scripting.InRepo.props" />
   <ItemGroup>
     <Compile Include="Component.cs;$(Case).cs" />
+    <!-- A case that needs a second file of its own (a type declared in two files) names it <Case>Other.cs. -->
+    <Compile Include="$(Case)Other.cs" Condition="Exists('$(Case)Other.cs')" />
   </ItemGroup>
 </Project>
