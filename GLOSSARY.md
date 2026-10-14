@@ -133,6 +133,12 @@ What a native function receives first (`CallContext`): the App the running Scrip
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.
 
+## FenrirEngine core
+
+**Scene resource**
+State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
+*Avoid:* singleton, global, scene component (a *component* belongs to an entity).
+
 ## FenrirEngine physics
 
 **FenrirPhysics**
@@ -144,7 +150,7 @@ The third-party library that does the simulation behind FenrirPhysics (Jolt toda
 *Avoid:* physics engine, physics library.
 
 **Physics world**
-One running simulation, holding the bodies of one scene.
+One running simulation, holding the bodies of one scene. Each scene that uses physics has its own; it is paused while its scene is inactive and ends with its scene.
 *Avoid:* physics scene, physics system (*system* is ECS logic).
 
 **Rigid body**
