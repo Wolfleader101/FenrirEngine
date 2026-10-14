@@ -191,6 +191,74 @@ namespace Fenrir
         return pool == nullptr ? 0 : pool->size();
     }
 
+    void* EntityList::Get(const ComponentType& type, std::uint32_t entity)
+    {
+        if (type.IsDynamic())
+        {
+            return GetDynamic(*type.m_dynamic, entity);
+        }
+        return m_registry.valid(AsEntity(entity)) ? type.m_native->get(*this, entity) : nullptr;
+    }
+
+    bool EntityList::Has(const ComponentType& type, std::uint32_t entity)
+    {
+        if (type.IsDynamic())
+        {
+            return HasDynamic(*type.m_dynamic, entity);
+        }
+        return m_registry.valid(AsEntity(entity)) &&
+               static_cast<entt::sparse_set*>(type.m_native->storage(*this))->contains(AsEntity(entity));
+    }
+
+    bool EntityList::Add(const ComponentType& type, std::uint32_t entity)
+    {
+        if (type.IsDynamic())
+        {
+            return AddDynamic(*type.m_dynamic, entity);
+        }
+        if (!m_registry.valid(AsEntity(entity)))
+        {
+            return false;
+        }
+        type.m_native->add(*this, entity);
+        return true;
+    }
+
+    bool EntityList::Remove(const ComponentType& type, std::uint32_t entity)
+    {
+        if (type.IsDynamic())
+        {
+            return RemoveDynamic(*type.m_dynamic, entity);
+        }
+        if (!m_registry.valid(AsEntity(entity)))
+        {
+            return false;
+        }
+        static_cast<entt::sparse_set*>(type.m_native->storage(*this))->remove(AsEntity(entity));
+        return true;
+    }
+
+    std::size_t EntityList::Count(const ComponentType& type)
+    {
+        if (type.IsDynamic())
+        {
+            return CountDynamic(*type.m_dynamic);
+        }
+        return static_cast<const entt::sparse_set*>(type.m_native->storage(*this))->size();
+    }
+
+    std::size_t EntityList::Clear(const ComponentType& type)
+    {
+        if (type.IsDynamic())
+        {
+            return ClearDynamic(*type.m_dynamic);
+        }
+        auto* storage = static_cast<entt::sparse_set*>(type.m_native->storage(*this));
+        const std::size_t removed = storage->size();
+        storage->clear();
+        return removed;
+    }
+
     std::size_t EntityList::ComponentStorageCount() const
     {
         std::size_t count = 0;
@@ -232,6 +300,32 @@ namespace Fenrir
             if (pool == nullptr)
             {
                 return; // A type with no usable storage: no entity has all of them.
+            }
+            view.iterate(*pool);
+        }
+        for (const entt::entity entity : view)
+        {
+            visit(context, static_cast<std::uint32_t>(entity));
+        }
+    }
+
+    void EntityList::ForEachWithImpl(std::span<const ComponentType> types, void (*visit)(void*, std::uint32_t),
+                                     void* context)
+    {
+        if (types.empty())
+        {
+            return;
+        }
+        entt::runtime_view view;
+        for (const ComponentType& type : types)
+        {
+            // No pool for a dynamic type means nobody has added one, so nothing can match: the query visits nothing,
+            // and makes no storage.
+            auto* pool = type.IsDynamic() ? static_cast<entt::sparse_set*>(ExistingPool(m_registry, *type.m_dynamic))
+                                          : static_cast<entt::sparse_set*>(type.m_native->storage(*this));
+            if (pool == nullptr)
+            {
+                return;
             }
             view.iterate(*pool);
         }

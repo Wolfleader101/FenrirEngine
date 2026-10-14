@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/DynamicComponent.hpp"
 
 namespace Fenrir
@@ -219,6 +220,56 @@ namespace Fenrir
          */
         [[nodiscard]] std::size_t CountOf(const ComponentSelector& selector);
 
+        /**
+         * @name Components by their ComponentType
+         * The same operations for every kind of component, native or dynamic, for code that knows a component only at
+         * run time. A dynamic type's storage is created in this list when the first one is added; asking about one
+         * nobody has added creates nothing. A native type's (empty) storage may be created by any of these, as asking
+         * the ECS for a view of it would.
+         * @{
+         */
+
+        /**
+         * @brief The entity's component of this type, or null if the entity is not alive or has none. Never creates
+         * the entity or gives it components. A dynamic component's pointer is good until a component of that type is
+         * removed or this list is cleared; adding more does not move it.
+         */
+        [[nodiscard]] void* Get(const ComponentType& type, std::uint32_t entity);
+
+        /** @brief Whether the entity is alive and has a component of this type. */
+        [[nodiscard]] bool Has(const ComponentType& type, std::uint32_t entity);
+
+        /**
+         * @brief Gives the entity a default component of this type (default-constructed if native, zeroed if dynamic),
+         * or keeps the one it has. False if the entity is not alive, a dynamic type is not valid, or this list already
+         * holds components of that dynamic name with a different size or alignment.
+         */
+        bool Add(const ComponentType& type, std::uint32_t entity);
+
+        /** @brief Removes the entity's component of this type, if it has one. False only if the entity is not alive. */
+        bool Remove(const ComponentType& type, std::uint32_t entity);
+
+        /** @brief How many entities have a component of this type. Constant time. */
+        [[nodiscard]] std::size_t Count(const ComponentType& type);
+
+        /**
+         * @brief Removes every component of this type from every entity, and returns how many there were. The entities
+         * stay. Afterwards a dynamic type's name may be added again with a different size or alignment.
+         */
+        std::size_t Clear(const ComponentType& type);
+
+        /**
+         * @brief Calls `func(entity)` for every entity that has a component of every listed type, in no particular
+         * order. The types may mix native and dynamic. Do not add or remove components of the listed types, or destroy
+         * entities, inside `func`. With no types nothing is visited.
+         *
+         * @param types the components an entity must have
+         * @param func a callable taking the entity's id (std::uint32_t)
+         */
+        template <typename Func>
+        void ForEachWith(std::span<const ComponentType> types, Func&& func);
+        /** @} */
+
         /** @brief How many different kinds of component this list is holding storage for. A diagnostic, mostly. */
         [[nodiscard]] std::size_t ComponentStorageCount() const;
 
@@ -227,6 +278,8 @@ namespace Fenrir
 
         void ForEachWithImpl(std::span<const ComponentSelector> selectors,
                              void (*visit)(void* context, std::uint32_t entity), void* context);
+        void ForEachWithImpl(std::span<const ComponentType> types, void (*visit)(void* context, std::uint32_t entity),
+                             void* context);
 
         // The storage for a native component type, as the opaque pointer a ComponentSelector hands back.
         template <typename T>
@@ -235,9 +288,41 @@ namespace Fenrir
             return static_cast<entt::sparse_set*>(&m_registry.storage<T>());
         }
 
+        // The operations ComponentType::Native<T> hands out, one static table per type.
+        template <typename T>
+        static const ComponentType::NativeOperations& NativeOperationsFor()
+        {
+            static constexpr ComponentType::NativeOperations operations{
+                [](EntityList& entities) -> void* { return entities.NativePool<T>(); },
+                [](EntityList& entities, std::uint32_t entity) -> void* {
+                    auto& storage = entities.m_registry.storage<T>();
+                    const auto id = static_cast<entt::entity>(entity);
+                    return storage.contains(id) ? static_cast<void*>(&storage.get(id)) : nullptr;
+                },
+                [](EntityList& entities, std::uint32_t entity) {
+                    auto& storage = entities.m_registry.storage<T>();
+                    const auto id = static_cast<entt::entity>(entity);
+                    if (!storage.contains(id))
+                    {
+                        storage.emplace(id);
+                    }
+                },
+            };
+            return operations;
+        }
+
         friend class Entity;
         friend class ComponentSelector;
+        friend class ComponentType;
     };
+
+    template <typename T>
+    ComponentType ComponentType::Native()
+    {
+        static_assert(std::is_default_constructible_v<T>, "A component type must be default constructible.");
+        static_assert(!std::is_empty_v<T>, "A component type reached by pointer must hold data.");
+        return ComponentType(&EntityList::NativeOperationsFor<T>(), nullptr, sizeof(T), alignof(T));
+    }
 
     template <typename T>
     ComponentSelector ComponentSelector::Native()
@@ -250,6 +335,17 @@ namespace Fenrir
     {
         ForEachWithImpl(
             selectors,
+            [](void* context, std::uint32_t entity) {
+                (*static_cast<std::remove_reference_t<Func>*>(context))(entity);
+            },
+            const_cast<std::remove_const_t<std::remove_reference_t<Func>>*>(std::addressof(func)));
+    }
+
+    template <typename Func>
+    void EntityList::ForEachWith(std::span<const ComponentType> types, Func&& func)
+    {
+        ForEachWithImpl(
+            types,
             [](void* context, std::uint32_t entity) {
                 (*static_cast<std::remove_reference_t<Func>*>(context))(entity);
             },

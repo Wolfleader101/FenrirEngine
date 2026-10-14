@@ -7,6 +7,8 @@ add_library(FenrirECS STATIC
 
     include/FenrirECS/DefaultComponents.hpp
 
+    include/FenrirECS/ComponentType.hpp
+
     include/FenrirECS/DynamicComponent.hpp
     src/DynamicComponent.cpp
     src/ByteStorage.hpp
