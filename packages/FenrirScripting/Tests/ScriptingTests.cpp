@@ -3005,11 +3005,6 @@ namespace
         ExpectReportRefusedWholesale("duplicate-component", "more than once");
     }
 
-    void AScriptComponentWithAnImpossibleLayoutIsRefused()
-    {
-        ExpectReportRefusedWholesale("bad-component-layout", "which no C# struct has");
-    }
-
     void ADuplicateScriptEventIsRefused()
     {
         ExpectReportRefusedWholesale("duplicate-event", "more than once");
@@ -3045,28 +3040,6 @@ namespace
         {
             INFO("The clash left part of the script's components registered");
             REQUIRE(scripting.FindComponent(VelocityName) == nullptr);
-        }
-    }
-
-    void AScriptComponentCannotTakeANativeComponentsName()
-    {
-        HeadlessApp headless;
-        ScriptingConfig config = ConfigFor(fixture);
-        // A native component already holds the name the script's Velocity would use.
-        config.components.push_back(MakeComponent<Health>(VelocityName));
-        auto scripting = Scripting::Install(headless.Get(), config);
-        {
-            INFO("A script component took a native component's name");
-            REQUIRE(!scripting.HasScripts());
-        }
-        {
-            INFO("The name clash was not explained");
-            REQUIRE((headless.Logger().Contains(LogLevel::Error, "already has a component of that name") &&
-                     headless.Logger().Contains(LogLevel::Error, VelocityName)));
-        }
-        {
-            INFO("The clash left part of the script's components registered");
-            REQUIRE(scripting.FindComponent(CounterName) == nullptr);
         }
     }
 
@@ -3742,11 +3715,6 @@ TEST_CASE("a failed load leaves no components and no pools", "[scripting]")
     AFailedLoadLeavesNoComponentsAndNoPools();
 }
 
-TEST_CASE("a script component cannot take a native component's name", "[scripting]")
-{
-    AScriptComponentCannotTakeANativeComponentsName();
-}
-
 TEST_CASE("a sound report loads and registers everything together", "[scripting]")
 {
     ASoundReportLoadsAndRegistersEverythingTogether();
@@ -3755,11 +3723,6 @@ TEST_CASE("a sound report loads and registers everything together", "[scripting]
 TEST_CASE("a duplicate script component is refused and leaves nothing behind", "[scripting]")
 {
     ADuplicateScriptComponentIsRefused();
-}
-
-TEST_CASE("a script component with an impossible layout is refused and leaves nothing behind", "[scripting]")
-{
-    AScriptComponentWithAnImpossibleLayoutIsRefused();
 }
 
 TEST_CASE("a duplicate script event is refused and leaves nothing behind", "[scripting]")

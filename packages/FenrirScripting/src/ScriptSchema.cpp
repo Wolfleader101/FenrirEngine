@@ -59,7 +59,7 @@ namespace Fenrir::Detail
         // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same
         // fingerprint lay the same bytes out the same way. A type the assembly does not expose (internal) can only be
         // told apart by its size.
-        std::string Fingerprint(const Iris::Component& component, const Description& description)
+        std::string FingerprintOf(const Iris::Component& component, const Description& description)
         {
             std::string text = std::to_string(description.size) + "/" + std::to_string(description.alignment);
             const auto type = component.FindType(description.name);
@@ -84,6 +84,72 @@ namespace Fenrir::Detail
             return text;
         }
 
+        // The script assembly as a loaded Iris component: it reports what it defines by running the tables the SDK's
+        // generator wrote into it, reads its types for fingerprints, and holds the C# structs the native components are
+        // checked against.
+        class IrisScriptAssembly final : public ScriptAssembly
+        {
+          public:
+            IrisScriptAssembly(EngineContext& context, const Iris::Component& component)
+                : m_context(context), m_component(component)
+            {
+            }
+
+            Result Report(ScriptKind kind, std::vector<Description>& found) override
+            {
+                const bool components = kind == ScriptKind::Component;
+                const std::string noun = components ? "component" : "event";
+                const char* tableType =
+                    components ? "Fenrir.Scripting.Generated.ComponentTable" : "Fenrir.Scripting.Generated.EventTable";
+                auto EngineContext::* slot =
+                    components ? &EngineContext::discovering : &EngineContext::discoveringEvents;
+
+                const auto table = m_component.FindType(tableType);
+                if (table.status == Iris::CallStatus::NotFound)
+                {
+                    return Succeeded();
+                }
+                if (!table.Succeeded())
+                {
+                    return Result{table.status, "The " + noun + " table could not be read: " + table.diagnostic, false};
+                }
+                const auto report = table.value->FindMethod<void()>("Register");
+                if (!report.Succeeded())
+                {
+                    return Result{report.status, "The " + noun + " table has no Register method: " + report.diagnostic,
+                                  false};
+                }
+                m_context.*slot = &found;
+                const auto ran = report.value->Invoke();
+                m_context.*slot = nullptr;
+                if (!ran.Succeeded())
+                {
+                    return Result{ran.status,
+                                  "The script assembly could not report its " + noun + "s: " + ran.diagnostic,
+                                  ran.diagnosticTruncated};
+                }
+                return Succeeded();
+            }
+
+            std::string Fingerprint(const Description& description) override
+            {
+                return FingerprintOf(m_component, description);
+            }
+
+            Result CheckNativeAgainstCSharp(const ComponentRegistry& registry) override
+            {
+                if (auto validated = ValidateAll(registry.All(), m_component); !validated.Succeeded())
+                {
+                    return validated;
+                }
+                return ValidateAllEvents(registry.Events(), m_component);
+            }
+
+          private:
+            EngineContext& m_context;
+            const Iris::Component& m_component;
+        };
+
         // Removes every component of a script component type from every scene, and says how many there were.
         std::size_t ClearComponentData(App& app, const std::string& name, const OwnedLayout& layout)
         {
@@ -98,12 +164,9 @@ namespace Fenrir::Detail
         // all-or-nothing) is the same for every kind and lives in SchemaPass.
         struct SchemaKind
         {
-            // "component" or "event", as it appears in messages.
+            // Which kind this is, and its name as it appears in messages.
+            ScriptKind which;
             const char* noun;
-            // The table the SDK's generator wrote into the script assembly, which reports each definition.
-            const char* tableType;
-            // Where the engine's native function puts a definition while the table runs.
-            std::vector<Description>* EngineContext::* slot;
             // The rules this kind adds to "a name appears once": usable layouts, and names nobody else holds.
             std::function<Result(const std::vector<Description>&)> check;
             // Removes what the ECS or the App still holds for a definition that is gone (`gone`) or changed layout,
@@ -122,34 +185,14 @@ namespace Fenrir::Detail
             {
             }
 
-            // Runs the table in the script assembly, which reports each definition through a native function. An
-            // assembly without the table defines none. Then the checks, which change nothing.
-            Result Discover(const Iris::Component& component, EngineContext& context)
+            // Asks the script assembly what it defines. Then the checks, which change nothing.
+            Result Discover(ScriptAssembly& assembly)
             {
                 const std::string noun = m_kind.noun;
-                const auto table = component.FindType(m_kind.tableType);
-                if (table.status == Iris::CallStatus::NotFound)
+                m_found.clear();
+                if (auto reported = assembly.Report(m_kind.which, m_found); !reported.Succeeded())
                 {
-                    return Succeeded();
-                }
-                if (!table.Succeeded())
-                {
-                    return Result{table.status, "The " + noun + " table could not be read: " + table.diagnostic, false};
-                }
-                const auto report = table.value->FindMethod<void()>("Register");
-                if (!report.Succeeded())
-                {
-                    return Result{report.status, "The " + noun + " table has no Register method: " + report.diagnostic,
-                                  false};
-                }
-                context.*m_kind.slot = &m_found;
-                const auto ran = report.value->Invoke();
-                context.*m_kind.slot = nullptr;
-                if (!ran.Succeeded())
-                {
-                    return Result{ran.status,
-                                  "The script assembly could not report its " + noun + "s: " + ran.diagnostic,
-                                  ran.diagnosticTruncated};
+                    return reported;
                 }
                 std::unordered_set<std::string> names;
                 for (const auto& description : m_found)
@@ -165,11 +208,11 @@ namespace Fenrir::Detail
 
             // Compares the definitions with what the previous generation left: data whose layout is unchanged stays,
             // anything else goes, with a warning, so no system ever reads old bytes as a new layout.
-            void DropStale(const Iris::Component& component)
+            void DropStale(ScriptAssembly& assembly)
             {
                 for (const auto& description : m_found)
                 {
-                    m_next[description.name] = {Fingerprint(component, description), description.size,
+                    m_next[description.name] = {assembly.Fingerprint(description), description.size,
                                                 description.alignment};
                 }
                 for (auto at = m_owned.begin(); at != m_owned.end();)
@@ -209,9 +252,8 @@ namespace Fenrir::Detail
         SchemaKind ComponentKind(ComponentRegistry& registry, App& app)
         {
             SchemaKind kind;
+            kind.which = ScriptKind::Component;
             kind.noun = "component";
-            kind.tableType = "Fenrir.Scripting.Generated.ComponentTable";
-            kind.slot = &EngineContext::discovering;
             kind.check = [&registry](const std::vector<Description>& found) {
                 std::unordered_map<std::uint32_t, std::string> storageIds;
                 for (const auto& description : found)
@@ -267,9 +309,8 @@ namespace Fenrir::Detail
         SchemaKind EventKind(ComponentRegistry& registry, App& app, const OwnedLayouts& ownedEvents)
         {
             SchemaKind kind;
+            kind.which = ScriptKind::Event;
             kind.noun = "event";
-            kind.tableType = "Fenrir.Scripting.Generated.EventTable";
-            kind.slot = &EngineContext::discoveringEvents;
             kind.check = [&registry, &app, &ownedEvents](const std::vector<Description>& found) {
                 constexpr std::size_t maxAlignment = 16;
                 for (const auto& description : found)
@@ -353,33 +394,27 @@ namespace Fenrir::Detail
     //   2. check every native component's and event's mapping against its C# struct;
     //   3. drop what the previous generation left that no longer matches;
     //   4. only then register what the script defines.
-    Result Reconcile(EngineContext& context, ComponentRegistry& registry, const Iris::Component& component,
-                     OwnedScriptData& owned)
+    Result Reconcile(App& app, ComponentRegistry& registry, ScriptAssembly& assembly, OwnedScriptData& owned)
     {
-        App& app = *context.app;
         std::vector<SchemaPass> passes;
         passes.emplace_back(ComponentKind(registry, app), owned.components);
         passes.emplace_back(EventKind(registry, app, owned.events), owned.events);
 
         for (auto& pass : passes)
         {
-            if (auto discovered = pass.Discover(component, context); !discovered.Succeeded())
+            if (auto discovered = pass.Discover(assembly); !discovered.Succeeded())
             {
                 return discovered;
             }
         }
-        if (auto validated = ValidateAll(registry.All(), component); !validated.Succeeded())
-        {
-            return validated;
-        }
-        if (auto validated = ValidateAllEvents(registry.Events(), component); !validated.Succeeded())
+        if (auto validated = assembly.CheckNativeAgainstCSharp(registry); !validated.Succeeded())
         {
             return validated;
         }
         // Everything checks out, so from here the new generation is kept.
         for (auto& pass : passes)
         {
-            pass.DropStale(component);
+            pass.DropStale(assembly);
         }
         for (auto& pass : passes)
         {
@@ -389,6 +424,13 @@ namespace Fenrir::Detail
             }
         }
         return Succeeded();
+    }
+
+    Result Reconcile(EngineContext& context, ComponentRegistry& registry, const Iris::Component& component,
+                     OwnedScriptData& owned)
+    {
+        IrisScriptAssembly assembly(context, component);
+        return Reconcile(*context.app, registry, assembly, owned);
     }
 
     void DropScriptData(App& app, OwnedScriptData& owned)

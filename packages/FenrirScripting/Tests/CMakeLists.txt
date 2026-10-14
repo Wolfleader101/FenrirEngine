@@ -16,6 +16,7 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/ReloadWatcherTests.cpp
+    Rules/ReconcileTests.cpp
     HeadlessApp.hpp
 )
 target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
