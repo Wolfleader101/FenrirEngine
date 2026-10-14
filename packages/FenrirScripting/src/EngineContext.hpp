@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <optional>
 
 #include "ChangeBuffer.hpp"
@@ -57,7 +58,11 @@ namespace Fenrir::Detail
     // Clears the active context if it is `context`.
     void DeactivateEngineContext(EngineContext* context) noexcept;
 
-    // The engine's own native functions (Log, Time, Entity, components, events, queries, changes) as the extension
-    // every Scripting includes: "Fenrir.Scripting.Native.<Method>", the methods of the contract's Native class.
-    [[nodiscard]] ScriptingExtension BuiltInExtension();
+    /**
+     * @brief What the engine itself gives scripting, as the extension every Scripting includes first: its native
+     * functions (Log, Time, Entity, components, events, queries, changes; "Fenrir.Scripting.Native.<Method>", the
+     * methods of the scripting contract's Native class), its components (EngineComponents), and `contract`, the path of
+     * the scripting contract, as its shared assembly.
+     */
+    [[nodiscard]] ScriptingExtension BuiltInExtension(const std::filesystem::path& contract);
 } // namespace Fenrir::Detail

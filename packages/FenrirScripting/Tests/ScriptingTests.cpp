@@ -3397,6 +3397,50 @@ namespace
         }
     }
 
+    void TheEngineComponentsComeWithTheirRules()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        const auto* transform = scripting.FindComponent("Fenrir.Transform");
+        const auto* name = scripting.FindComponent("Fenrir.Name");
+        const auto* relationship = scripting.FindComponent("Fenrir.Relationship");
+        {
+            INFO("An engine component was not registered");
+            REQUIRE((transform != nullptr && name != nullptr && relationship != nullptr));
+        }
+        {
+            INFO("Transform or Name is not required, or is read-only");
+            REQUIRE((transform->required && !transform->readOnly && name->required && !name->readOnly));
+        }
+        {
+            INFO("Relationship is not both required and read-only");
+            REQUIRE((relationship->required && relationship->readOnly));
+        }
+    }
+
+    void AnExtensionCannotTakeAnEngineComponentsName()
+    {
+        HeadlessApp headless;
+        ScriptingExtension shadowing;
+        shadowing.name = "shadowing extension";
+        shadowing.components = {MakeComponent<TestExtension::Charge>("Fenrir.Transform")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), shadowing}));
+        {
+            INFO("Scripts ran although an extension took an engine component's name");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the extension and say the app runs without scripts");
+            REQUIRE((headless.Logger().Contains(Testing::LogLevel::Error, "'shadowing extension'") &&
+                     headless.Logger().Contains(Testing::LogLevel::Error, "running without scripts")));
+        }
+        headless.Run(Frames);
+        {
+            INFO("The app did not keep running after the failed install");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
+    }
+
     void TheBindingNameOfANativeFunctionFollowsOneRule()
     {
         {
@@ -3775,4 +3819,14 @@ TEST_CASE("everything Iris owns is released when the app finishes", "[scripting]
 TEST_CASE("destroying the owner releases everything, and a later install works", "[scripting]")
 {
     DestroyingTheOwnerWithoutRunningReleasesEverything();
+}
+
+TEST_CASE("the engine components come with their rules", "[scripting]")
+{
+    TheEngineComponentsComeWithTheirRules();
+}
+
+TEST_CASE("an extension cannot take an engine component's name", "[scripting]")
+{
+    AnExtensionCannotTakeAnEngineComponentsName();
 }

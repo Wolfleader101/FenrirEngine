@@ -44,7 +44,7 @@ namespace
 
         World()
         {
-            REQUIRE(Fenrir::Detail::RegisterEngineComponents(registry));
+            RulesTest::AddEngineComponents(registry);
             transform = registry.Find("Fenrir.Transform");
             relationship = registry.Find("Fenrir.Relationship");
             velocity = registry.Add(MakeComponent<Velocity>(VelocityName));

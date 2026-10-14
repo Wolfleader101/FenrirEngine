@@ -422,8 +422,10 @@ into exceptions) only where it wants.
 ## Adding to the engine's own API
 
 The engine's own API (Log, Time, Entity, components, events, queries, changes) is the built-in scripting extension: its
-native functions are the methods of the contract's `Native` class, declared like any package's. To add one, in the order
-a script sees it:
+native functions are the methods of the contract's `Native` class, declared like any package's. It also carries the
+engine's components (Transform, Name and Relationship, from `EngineComponents`) and, as its shared assembly, the
+`Fenrir.Scripting` contract. It is always the first extension, so the engine's components take their names before any
+other extension's, and the contract is shared before any other. To add a native function, in the order a script sees it:
 
 1. **The C++ function**, in `src/Bindings.cpp`, over the `CallContext` like any native function. The engine's own state
    (the component registry, the change buffer) comes from the context's internal part. A C++ exception that escapes it is

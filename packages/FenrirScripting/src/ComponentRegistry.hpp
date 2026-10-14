@@ -213,6 +213,9 @@ namespace Fenrir::Detail
         std::unordered_map<std::string, std::int32_t> m_eventIds;
     };
 
-    // Adds the components the engine itself provides to C#: Transform, Name and Relationship (read-only).
-    [[nodiscard]] bool RegisterEngineComponents(ComponentRegistry& registry);
+    /**
+     * @brief The components the engine itself gives C#, for the built-in extension: Transform, Name and Relationship
+     * (read-only), all required.
+     */
+    [[nodiscard]] std::vector<ComponentRegistration> EngineComponents();
 } // namespace Fenrir::Detail

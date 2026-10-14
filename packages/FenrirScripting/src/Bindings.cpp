@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <string_view>
 
@@ -253,7 +254,7 @@ namespace Fenrir::Detail
         activeContext.compare_exchange_strong(expected, nullptr);
     }
 
-    ScriptingExtension BuiltInExtension()
+    ScriptingExtension BuiltInExtension(const std::filesystem::path& contract)
     {
         constexpr auto notActive = static_cast<std::int32_t>(ChangeError::NotActive);
         constexpr std::int32_t unknown = -1;
@@ -285,6 +286,8 @@ namespace Fenrir::Detail
             NativeFunction::Make<&QueryCount>(prefix + "QueryCount", unknown),
             NativeFunction::Make<&QueryFill>(prefix + "QueryFill", unknown),
         };
+        extension.components = EngineComponents();
+        extension.sharedAssemblies = {contract};
         return extension;
     }
 } // namespace Fenrir::Detail

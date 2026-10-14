@@ -563,10 +563,6 @@ namespace Fenrir
             return Scripting(std::move(state));
         }
 
-        // The engine's own API is the first extension: its native functions are declared, checked and registered like
-        // any package's.
-        config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension());
-
         // What the stages build up for the ones after them.
         std::error_code error;
         std::filesystem::path assembly;
@@ -600,27 +596,31 @@ namespace Fenrir
                 {
                     return StartupFailure{"the contract '" + contract.string() + "' is missing", {}};
                 }
+                // The engine's own API is the first extension: its native functions, components and contract are
+                // declared, checked and registered like any package's. Being first, its components take their names
+                // before anyone else's, and its contract is shared before any other.
+                config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(contract));
                 return std::nullopt;
             },
-            // The engine's native functions act on this App; they are registered before the contract is shared (sharing
-            // binds the contract's function pointers to them).
+            // The App the native functions act on, and every extension's components and events.
             [&]() -> std::optional<StartupFailure> {
                 state->context.app = &app;
                 state->context.call = Detail::CallContextAccess::Make(app, state->context);
                 state->context.components = &state->components;
                 state->context.changes = &state->changes;
-                if (!Detail::RegisterEngineComponents(state->components))
-                {
-                    return StartupFailure{"the engine's own components could not be registered", {}};
-                }
-                // The config's own components and events, then every extension's, by the same rules.
+                // Every extension's components and events, in order, by the same rules; the config's own come
+                // straight after the built-in extension's.
                 std::vector<
                     std::tuple<std::string, std::vector<ComponentRegistration>*, std::vector<EventRegistration>*>>
-                    sources{{"the config", &config.components, &config.events}};
+                    sources;
                 for (auto& extension : config.extensions)
                 {
                     sources.emplace_back("extension '" + extension.name + "'", &extension.components,
                                          &extension.events);
+                    if (&extension == &config.extensions.front())
+                    {
+                        sources.emplace_back("the config", &config.components, &config.events);
+                    }
                 }
                 for (auto& [source, components, events] : sources)
                 {
@@ -703,15 +703,20 @@ namespace Fenrir
                 configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
                 configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
                 configuration.dotnetRoot = config.dotnetRoot;
-                // The scripting contract first: the others may refer to it, and each is bound as it is shared.
-                configuration.sharedAssemblies = {contract};
-                configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
-                                                      config.sharedAssemblies.begin(), config.sharedAssemblies.end());
+                // Every extension's contract, in order, so the built-in extension's (the scripting contract) comes
+                // first: the others may refer to it, and each is bound as it is shared. The config's own come straight
+                // after it.
                 for (const auto& extension : config.extensions)
                 {
                     configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
                                                           extension.sharedAssemblies.begin(),
                                                           extension.sharedAssemblies.end());
+                    if (&extension == &config.extensions.front())
+                    {
+                        configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
+                                                              config.sharedAssemblies.begin(),
+                                                              config.sharedAssemblies.end());
+                    }
                 }
 
                 state->logger = &logger;
