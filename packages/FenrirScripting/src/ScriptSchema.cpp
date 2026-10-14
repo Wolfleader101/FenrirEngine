@@ -87,9 +87,9 @@ namespace Fenrir::Detail
         // Removes every component of a script component type from every scene, and says how many there were.
         std::size_t ClearComponentData(App& app, const std::string& name, const OwnedLayout& layout)
         {
-            const DynamicComponentType type(name, layout.size, layout.alignment);
+            const auto type = ComponentType::Dynamic(DynamicComponentType(name, layout.size, layout.alignment));
             std::size_t removed = 0;
-            app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().ClearDynamic(type); });
+            app.ForEachScene([&](Scene& scene) { removed += scene.GetEntityList().Clear(type); });
             return removed;
         }
 
@@ -248,7 +248,13 @@ namespace Fenrir::Detail
                 registrations.reserve(found.size());
                 for (const auto& description : found)
                 {
-                    registrations.push_back(MakeScriptComponent(description));
+                    registrations.push_back(ComponentRegistration{
+                        .name = description.name,
+                        .typeName = description.name,
+                        .type = ComponentType::Dynamic(ToDynamicType(description)),
+                        .scriptDefined = true,
+                        .validate = {}, // Its C# struct is the definition: there is no mapping to check it against.
+                    });
                 }
                 // All or none: the checks make a refusal impossible, but if one happens nothing is half-registered.
                 return registry.AddAll(std::move(registrations))

@@ -92,9 +92,9 @@ void Nudge(Ref<Transform> t)
 
 ## Native components
 
-A component the engine stores in EnTT is exposed to C# by name. EnTT has no registry of types by name at run time, so
-FenrirScripting keeps the table: each entry knows how to reach one component's storage for an entity (get a pointer,
-has, add, remove) and how to check its layout against a C# struct.
+A component in the ECS is exposed to C# by name. The ECS has no registry of types by name, so FenrirScripting keeps the
+table: each entry pairs a name and a C# struct with the component's `ComponentType` (which `EntityList` uses to get, add,
+remove, count and query it) and says how to check its layout against the C# struct.
 
 | Name | C# type | Native type | Access |
 | --- | --- | --- | --- |
@@ -174,9 +174,9 @@ lays it out, and the engine registers it under that name.
 
 - **Storage belongs to the ECS.** FenrirScripting does not store anything itself and never touches the ECS library
   ([ADR-0008](../../docs/adr/0008-fenrirecs-owns-the-ecs-library.md)). It describes the component to `FenrirECS` as a
-  `DynamicComponentType` (name, size, alignment) and calls `EntityList::AddDynamic`, `GetDynamic`, `HasDynamic` and
-  `RemoveDynamic`. The ECS stores such components like any other: removed with the entity, found by a query beside native
-  ones. A new component is all zero bytes (a C# `default`). A test fails the build if scripting code names the ECS library.
+  dynamic `ComponentType` (a `DynamicComponentType`: name, size, alignment) and uses `EntityList`'s `Get`, `Has`, `Add`,
+  `Remove`, `Count` and `Clear`, as it does for a native component. The ECS stores such components like any other: removed
+  with the entity, found by a query beside native ones. A new component is all zero bytes (a C# `default`). A test fails the build if scripting code names the ECS library.
 - **Components do not move when the storage grows.** The ECS keeps them in pages of up to 256 (and at most 64 KiB a page), each
   page allocated once and aligned to the component's alignment (a `Vector128` field makes it 16). Removing one moves the last into its place, so a
   pointer is good until a component of that type is next removed.
@@ -185,10 +185,10 @@ lays it out, and the engine registers it under that name.
   away leaves nothing behind.
 - **A storage id is a hash of the name, and the ECS defends it.** If another name hashes to the same id, or the id belongs to
   a native storage, the later user is refused and the first is untouched (tested with two real colliding names).
-- **From native code**, `scripting.FindComponent("Ns.Velocity")` gives the registration: `get`, `has`, `add`, `remove`,
-  `count`, and `selector`, which names the component in `EntityList::ForEachWith(selectors, func)` (every entity with all of
-  them, native and script components mixed). Its `size`, `alignment` and `scriptDefined` say what it is. The same
-  registration works for a native component.
+- **From native code**, `scripting.FindComponent("Ns.Velocity")` gives the registration. Its `type` goes to `EntityList`'s
+  `Get`, `Has`, `Add`, `Remove` and `Count`, and to `EntityList::ForEachWith(types, func)` (every entity with all of them,
+  native and script components mixed). `type.Size()`, `type.Alignment()` and `scriptDefined` say what it is. The same
+  works for a native component.
 - **Rules.** A component is an `unmanaged` struct implementing `IComponent`; one holding a reference is refused when the
   script compiles (`FENRIR0004`). It needs no `[NativeComponent]` attribute (a struct that has one mirrors a native
   component and is not reported). Its name is its full name, so it must not equal a native component's name.

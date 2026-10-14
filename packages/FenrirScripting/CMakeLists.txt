@@ -49,7 +49,6 @@ add_library(FenrirScripting STATIC
     src/Queries.hpp
     src/ChangeBuffer.hpp
     src/EngineComponents.cpp
-    src/ScriptComponents.cpp
     src/ScriptSchema.cpp
     src/GenerationLifecycle.cpp
     src/GenerationLifecycle.hpp

@@ -113,7 +113,7 @@ No caller outside `FenrirECS` and its tests uses them except FenrirScripting, wh
 - `MakeComponent` and `MakeReadOnlyComponent` keep their signatures, and build the registration from `ComponentType::Native<T>()`. `MakeReadOnlyComponent` sets only the flag.
 - The `Detail::LiveEntity` helper goes, since the ECS owns that rule now.
 - `MakeScriptComponent` goes. A script-defined registration is built from `ComponentType::Dynamic` plus its flags where the schema reconciles a generation.
-- Read-only and required components are refused at the scripting layer, using the flags, wherever add or remove is recorded or played back. No refusal may depend on an absent function slot any more. Messages, ordering and skip behaviour are unchanged.
+- Read-only and required components are refused at the scripting layer, using the flags, when an add or remove is recorded (playback only ever sees changes recording accepted). No refusal may depend on an absent function slot any more. Messages, ordering and skip behaviour are unchanged.
 - Queries resolve each id to its registration's component type, and pass the span of component types to `ForEachWith`. The "smallest pool first" early-out uses `Count`.
 - Change playback copies an added value using `type.Size()`.
 - The schema's clear-on-layout-change uses `Clear(ComponentType::Dynamic(...))` on every scene.
