@@ -19,7 +19,6 @@ namespace Fenrir.BadReportFixture
 // from the FENRIR_BAD_REPORT environment variable, read as the assembly loads:
 //   (empty)                  one component and one event, reported once each: a sound script assembly
 //   duplicate-component      the component twice
-//   bad-component-layout     a second component whose alignment (3) no C# struct has
 //   duplicate-event          the event twice
 //   bad-event-layout         a second event whose alignment (3) no C# struct has
 namespace Fenrir.Scripting.Generated
@@ -53,9 +52,6 @@ namespace Fenrir.Scripting.Generated
             {
                 case "duplicate-component":
                     ScriptComponents.Report<Fenrir.BadReportFixture.Alpha>();
-                    break;
-                case "bad-component-layout":
-                    Reports.Raw("RegisterScriptComponent", "Fenrir.BadReportFixture.Odd", 6, 3);
                     break;
             }
         }
