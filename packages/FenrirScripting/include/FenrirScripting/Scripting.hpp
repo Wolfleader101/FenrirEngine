@@ -40,29 +40,13 @@ namespace Fenrir
         std::filesystem::path dotnetRoot;
 
         /**
-         * @brief Native components to expose to C# besides the engine's own (Transform, Name and Relationship), built
-         * with MakeComponent. They are registered before the script assembly loads and checked against it as it does.
-         */
-        std::vector<ComponentRegistration> components;
-
-        /**
-         * @brief C++ events to share with C# (see MakeEvent). They are registered before the script assembly loads and
-         * checked against it as it does. Events only C# defines need nothing here.
-         */
-        std::vector<EventRegistration> events;
-
-        /**
-         * @brief What engine packages (and the app) give scripting: native functions, components, events and their C#
-         * contracts. A package left out here is simply not scriptable. Two extensions declaring one native function
-         * name fail Install.
+         * @brief Everything scripting knows besides the engine's own API: what engine packages give scripting (native
+         * functions, native components, C++ events and their C# contracts), and what the app gives, as an extension of
+         * its own. A package left out here is simply not scriptable. The components and events are registered before
+         * the script assembly loads and checked against it as it does; events only C# defines need nothing here. Two
+         * extensions declaring one native function, component or event name fail Install.
          */
         std::vector<ScriptingExtension> extensions;
-
-        /**
-         * @brief Further assemblies every script load shares as one copy. The Fenrir.Scripting contract is always
-         * shared, from `bridgeDirectory`, so it does not belong here.
-         */
-        std::vector<std::filesystem::path> sharedAssemblies;
 
         /**
          * @brief Whether to watch `scriptAssembly` and reload it, between frames, when a build replaces it. Either way

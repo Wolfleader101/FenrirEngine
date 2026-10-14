@@ -336,6 +336,20 @@ namespace
         return config;
     }
 
+    // The config for `scriptAssembly` with the test's own native components and events, which it gives scripting as an
+    // app does: in an extension of its own.
+    ScriptingConfig ConfigFor(const std::filesystem::path& scriptAssembly,
+                              std::vector<ComponentRegistration> components, std::vector<EventRegistration> events = {})
+    {
+        ScriptingConfig config = ConfigFor(scriptAssembly);
+        ScriptingExtension app;
+        app.name = "test app";
+        app.components = std::move(components);
+        app.events = std::move(events);
+        config.extensions.push_back(std::move(app));
+        return config;
+    }
+
     void RunsFramesWithTheFixture()
     {
         HeadlessApp headless;
@@ -942,9 +956,8 @@ namespace
     void AMismatchedComponentFailsTheLoadAndNamesTheField()
     {
         HeadlessApp headless;
-        ScriptingConfig config = ConfigFor(fixture);
-        config.components.push_back(MakeComponent<BadHealth>("Test.BadHealth"));
-        auto scripting = Scripting::Install(headless.Get(), config);
+        auto scripting =
+            Scripting::Install(headless.Get(), ConfigFor(fixture, {MakeComponent<BadHealth>("Test.BadHealth")}));
 
         // All or nothing: the assembly is not left loaded with a component that does not match.
         {
@@ -1978,9 +1991,7 @@ namespace
 
     ScriptingConfig ConfigWithAlert()
     {
-        ScriptingConfig config = ConfigFor(fixture);
-        config.events.push_back(MakeEvent<TestNative::Alert>("Test.Alert"));
-        return config;
+        return ConfigFor(fixture, {}, {MakeEvent<TestNative::Alert>("Test.Alert")});
     }
 
     void ACppEventIsReadInCSharp()
@@ -2172,9 +2183,8 @@ namespace
     void AMismatchedEventFailsTheLoadAndNamesTheField()
     {
         HeadlessApp headless;
-        ScriptingConfig config = ConfigFor(fixture);
-        config.events.push_back(MakeEvent<TestNative::BadAlert>("Test.Alert"));
-        auto scripting = Scripting::Install(headless.Get(), config);
+        auto scripting =
+            Scripting::Install(headless.Get(), ConfigFor(fixture, {}, {MakeEvent<TestNative::BadAlert>("Test.Alert")}));
         {
             INFO("A mismatched event left scripts loaded");
             REQUIRE((!scripting.HasScripts() && !scripting.IsRunning()));
@@ -2887,9 +2897,8 @@ namespace
         const std::size_t poolsBefore = PoolCount(entities);
 
         // The script assembly defines components and loads fine, then a native mapping fails: the load is rolled back.
-        ScriptingConfig config = ConfigFor(fixture);
-        config.components.push_back(MakeComponent<BadHealth>("Test.BadHealth"));
-        auto scripting = Scripting::Install(headless.Get(), config);
+        auto scripting =
+            Scripting::Install(headless.Get(), ConfigFor(fixture, {MakeComponent<BadHealth>("Test.BadHealth")}));
         {
             INFO("A mismatched component left scripts loaded");
             REQUIRE(!scripting.HasScripts());

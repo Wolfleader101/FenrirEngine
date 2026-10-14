@@ -20,7 +20,6 @@
 #include <string>
 #include <system_error>
 #include <thread>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 
@@ -608,30 +607,18 @@ namespace Fenrir
                 state->context.call = Detail::CallContextAccess::Make(app, state->context);
                 state->context.components = &state->components;
                 state->context.changes = &state->changes;
-                // Every extension's components and events, in order, by the same rules; the config's own come
-                // straight after the built-in extension's.
-                std::vector<
-                    std::tuple<std::string, std::vector<ComponentRegistration>*, std::vector<EventRegistration>*>>
-                    sources;
+                // Every extension's components and events, in order, by the same rules.
                 for (auto& extension : config.extensions)
                 {
-                    sources.emplace_back("extension '" + extension.name + "'", &extension.components,
-                                         &extension.events);
-                    if (&extension == &config.extensions.front())
-                    {
-                        sources.emplace_back("the config", &config.components, &config.events);
-                    }
-                }
-                for (auto& [source, components, events] : sources)
-                {
-                    for (auto& registration : *components)
+                    const std::string source = "extension '" + extension.name + "'";
+                    for (auto& registration : extension.components)
                     {
                         if (state->components.Add(std::move(registration)) < 0)
                         {
                             return StartupFailure{"a component in " + source + " has an empty or duplicate name", {}};
                         }
                     }
-                    for (auto& registration : *events)
+                    for (auto& registration : extension.events)
                     {
                         if (registration.bind && !registration.bind(app))
                         {
@@ -704,19 +691,12 @@ namespace Fenrir
                 configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
                 configuration.dotnetRoot = config.dotnetRoot;
                 // Every extension's contract, in order, so the built-in extension's (the scripting contract) comes
-                // first: the others may refer to it, and each is bound as it is shared. The config's own come straight
-                // after it.
+                // first: the others may refer to it, and each is bound as it is shared.
                 for (const auto& extension : config.extensions)
                 {
                     configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
                                                           extension.sharedAssemblies.begin(),
                                                           extension.sharedAssemblies.end());
-                    if (&extension == &config.extensions.front())
-                    {
-                        configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
-                                                              config.sharedAssemblies.begin(),
-                                                              config.sharedAssemblies.end());
-                    }
                 }
 
                 state->logger = &logger;
