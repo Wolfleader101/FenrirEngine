@@ -136,3 +136,17 @@ What a native function receives first (`CallContext`): the App the running Scrip
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.
+
+## FenrirEngine physics
+
+**FenrirPhysics**
+The engine's physics package: its public API, its components and its systems. An app may leave it out. Nothing in its public interface names, or needs at compile time, the library that simulates underneath.
+*Avoid:* physics library, physics engine (both blur it with the physics backend).
+
+**Physics backend**
+The third-party library that does the simulation behind FenrirPhysics (Jolt today). Only FenrirPhysics's private code names it, so it can be replaced without changing FenrirPhysics's public interface.
+*Avoid:* physics engine, physics library.
+
+**Physics world**
+One running simulation, holding the bodies of one scene.
+*Avoid:* physics scene, physics system (*system* is ECS logic).
