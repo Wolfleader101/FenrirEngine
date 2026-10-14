@@ -350,13 +350,55 @@ Build the script project while the game runs and the new code takes over between
 - **Limits.** The fingerprint does not look inside a nested struct, so changing the fields of a nested type without changing the outer
   struct's size or offsets is not noticed. Native components and events (the ones C++ registers) are not reloaded: they belong to the engine.
 
+## Scripting extensions
+
+An engine package, or the app, makes itself scriptable with a `ScriptingExtension` (ADR-0009), which the app lists in
+`ScriptingConfig::extensions`. FenrirScripting never names the package. An extension carries:
+
+- **native functions**: C++ functions C# calls, made with `NativeFunction::Make<&Function>("Namespace.Type.Method")`, named
+  by the full name of the C# method that calls them;
+- **components and events**, exactly like `ScriptingConfig::components` and `events`;
+- **shared assemblies**: its C# contract, shared with every script load.
+
+A native function's first parameter is the `CallContext`, which gives the App and the active scene's entities. Its other
+parameters and its result are what C# passes and gets: sized numbers, `float`, `double`, `bool`, `char16_t`, pointers,
+and `std::string_view` parameters. It is called only while a Scripting is running. Otherwise C# gets a zero result, or
+the value given as `Make`'s second argument. It may read and write component data, but must not create or destroy
+entities or add or remove components: the calling system holds `Ref<T>`s into the storage.
+
+```cpp
+float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* context.Entities() ... */ }
+
+Fenrir::ScriptingExtension physics;
+physics.name = "physics";
+physics.sharedAssemblies = {"Fenrir.Physics.Scripting.dll"};
+physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf")};
+config.extensions.push_back(std::move(physics));
+```
+
+In the contract, the C# side is a public static unmanaged function pointer field named by the binding-name rule
+(`NativeFunction::BindingNameFor`): the native function `Namespace.Type.Method` is the field `__native_Method` of
+`Namespace.Type`, which the friendly method calls. A string parameter is declared as a `byte*` and an `int` length.
+
+```csharp
+public static unsafe class Queries
+{
+    public static delegate* unmanaged[Cdecl]<uint, float> __native_HeightOf;
+    public static float HeightOf(Entity entity) => __native_HeightOf(entity.Value);
+}
+```
+
+`Install` registers every extension's native functions before it shares the contracts. It fails, logged and running
+without scripts, if a C# field has no native function, if their signatures differ, or if two extensions declare one name.
+The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example.
+
 ## Adding an engine API
 
 Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
 smallest complete example.
 
-1. **A native function** in `src/Bindings.cpp`: a plain C++ function over C types (sized integers, `float`, `double`,
-   `bool`, pointers). It reads the App through `Active()`. A C++ exception that escapes it is stopped by Iris and
+1. **An internal call** in `src/Bindings.cpp` (these move onto native functions, as extensions declare them, later): a plain C++ function over C types (sized integers, `float`, `double`,
+   `bool`, pointers). It reads the App through `ActiveApp()`. A C++ exception that escapes it is stopped by Iris and
    logged; scripts get a zero result.
 
    ```cpp

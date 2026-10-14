@@ -2,9 +2,12 @@
 
 #include <Iris/Iris.hpp>
 
+#include <optional>
+
 #include "ChangeBuffer.hpp"
 #include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
 #include "ScriptComponents.hpp"
 
 namespace Fenrir::Detail
@@ -18,6 +21,9 @@ namespace Fenrir::Detail
     struct EngineContext
     {
         App* app = nullptr;
+
+        // What every native function receives while this context is active.
+        std::optional<CallContext> call;
         ComponentRegistry* components = nullptr;
 
         // The structural changes scripts have made since they were last played back.
@@ -30,6 +36,15 @@ namespace Fenrir::Detail
         // at any other time, so a stray call from a script is ignored.
         std::vector<ScriptComponentDescription>* discovering = nullptr;
         std::vector<ScriptEventDescription>* discoveringEvents = nullptr;
+    };
+
+    // Scripting's way to make the CallContext its native functions receive.
+    struct CallContextAccess
+    {
+        [[nodiscard]] static CallContext Make(App& app) noexcept
+        {
+            return CallContext(app);
+        }
     };
 
     // Makes `context` the active one. False (and nothing changes) if another is already active.

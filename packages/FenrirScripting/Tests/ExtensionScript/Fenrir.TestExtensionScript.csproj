@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that uses the test extension. The build passes -p:FenrirScriptingSdk=<the SDK folder>/ and
+       -p:TestExtensionDir=<the folder holding Fenrir.TestExtension.dll>/. The extension's contract is compile-time only:
+       the host shares its own copy. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup>
+    <Reference Include="Fenrir.TestExtension">
+      <HintPath>$(TestExtensionDir)Fenrir.TestExtension.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>
