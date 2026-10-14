@@ -176,31 +176,6 @@ namespace Fenrir
          */
         [[nodiscard]] const ComponentRegistration* FindComponent(std::string_view name) const;
 
-        /** @brief What ApplyChanges did. */
-        struct ChangeSummary
-        {
-            std::size_t applied = 0;
-            /** Changes that named an entity destroyed earlier in the same batch: not applied, and logged as warnings.
-             */
-            std::size_t skipped = 0;
-        };
-
-        /**
-         * @brief Plays back the structural changes scripts have made since the last call, in the order they were made.
-         *
-         * A script that creates, destroys, adds or removes (Entity.Create, Destroy, Add, Remove) does not touch the ECS
-         * storage at the time: the change is recorded, so every Ref<T> the script holds stays valid until it returns.
-         * Whatever calls into a script (the runner after each system, or `OnCreate`) calls this when the script
-         * returns. Reads (Get, Has, IsValid) are never recorded and see the state as it is now, which does not include
-         * changes not yet played back. A created entity's id is usable at once; it gets its Transform, Name and
-         * Relationship here.
-         *
-         * Playback skips, with a warning, a create, add or remove naming an entity an earlier change destroyed, so a
-         * destroy-then-add on one entity leaves it destroyed. A second destroy of an entity is not an error and is not
-         * reported.
-         */
-        ChangeSummary ApplyChanges();
-
         /**
          * @brief Reloads the script assembly now, from the file `scriptAssembly` names, instead of waiting for the
          * watcher. The order is the one the watcher uses: the old systems' OnDestroy, release and unload the old
@@ -219,12 +194,6 @@ namespace Fenrir
          * collected.
          */
         [[nodiscard]] std::size_t PendingUnloadCount() const noexcept;
-
-        /**
-         * @brief Drops the recorded changes instead of playing them back (a script threw, say). Entities it created are
-         * destroyed. Reads are unaffected.
-         */
-        void DiscardChanges();
 
         /**
          * @brief Releases the script assembly and the runtime host, and stops forwarding Iris's log messages.
@@ -252,6 +221,34 @@ namespace Fenrir
 
         /** @brief The diagnostic counters; zeros when there is no state. */
         [[nodiscard]] Diagnostics ReadDiagnostics() const noexcept;
+
+        /** @brief What ApplyChanges did. */
+        struct ChangeSummary
+        {
+            std::size_t applied = 0;
+            /** Changes that named an entity destroyed earlier in the same batch: not applied, and logged as warnings.
+             */
+            std::size_t skipped = 0;
+        };
+
+        /**
+         * @brief Plays back the structural changes scripts have made since the last call, in the order they were made.
+         * The system runner does this from C# after each system (Native.ChangesApply); native code never needs to, so
+         * only the tests call it, to stand in for the runner. Nothing when there is no state.
+         *
+         * A script that creates, destroys, adds or removes (Entity.Create, Destroy, Add, Remove) does not touch the ECS
+         * storage at the time: the change is recorded, so every Ref<T> the script holds stays valid until it returns.
+         * Reads (Get, Has, IsValid) are never recorded and see the state as it is now. A created entity's id is usable
+         * at once; it gets its Transform, Name and Relationship at playback. Playback skips, with a warning, a change
+         * naming an entity an earlier change destroyed.
+         */
+        ChangeSummary ApplyChanges();
+
+        /**
+         * @brief Drops the recorded changes instead of playing them back. Entities they created are destroyed. Reads
+         * are unaffected.
+         */
+        void DiscardChanges();
 
         /** @brief The loaded script assembly, or null when there are no scripts. Valid until Shutdown. */
         [[nodiscard]] Iris::Component* LoadedComponent() noexcept;

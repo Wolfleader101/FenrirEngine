@@ -10,6 +10,18 @@ target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
+# The rules tests: FenrirScripting's own modules (the change buffer, and the others as they are split out) tested through
+# their interfaces, with no .NET runtime and no fixture assembly. The modules are private to the package, so this one
+# executable is given the package's source directory; nothing else is.
+add_executable(FenrirScriptingRulesTests
+    Rules/ChangeBufferTests.cpp
+    HeadlessApp.hpp
+)
+target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
+target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)
+set_tests_properties(FenrirScriptingRules PROPERTIES TIMEOUT 60)
+
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
 file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
