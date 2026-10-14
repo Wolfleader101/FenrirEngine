@@ -119,41 +119,6 @@ namespace Fenrir
         [[nodiscard]] bool HasScripts() const noexcept;
 
         /**
-         * @brief Exposes another native component to C# (see MakeComponent and MakeReadOnlyComponent). If a script
-         * assembly is loaded, the component's C# struct is checked against its layout straight away: a mismatch is
-         * `InvalidArgument` with a diagnostic naming the field, is logged, and releases the script assembly, exactly as
-         * a mismatch at load does (all or nothing). A name that is empty or already taken is `InvalidArgument`.
-         */
-        [[nodiscard]] Iris::CallResult<void> RegisterComponent(ComponentRegistration registration);
-
-        /**
-         * @brief Shares a C++ event with C# (see MakeEvent). If a script assembly is loaded its C# struct is checked
-         * straight away, exactly as RegisterComponent does. A name that is empty or already taken is `InvalidArgument`.
-         */
-        [[nodiscard]] Iris::CallResult<void> RegisterEvent(EventRegistration registration);
-
-        /** @brief MakeEvent<T, Mapping>(name), registered. */
-        template <typename T, typename Mapping = T>
-        [[nodiscard]] Iris::CallResult<void> RegisterEvent(std::string name)
-        {
-            return RegisterEvent(MakeEvent<T, Mapping>(std::move(name)));
-        }
-
-        /** @brief MakeComponent<T, Mapping>(name), registered. */
-        template <typename T, typename Mapping = T>
-        [[nodiscard]] Iris::CallResult<void> RegisterComponent(std::string name)
-        {
-            return RegisterComponent(MakeComponent<T, Mapping>(std::move(name)));
-        }
-
-        /** @brief MakeReadOnlyComponent<T, Mapping>(name), registered. */
-        template <typename T, typename Mapping = T>
-        [[nodiscard]] Iris::CallResult<void> RegisterReadOnlyComponent(std::string name)
-        {
-            return RegisterComponent(MakeReadOnlyComponent<T, Mapping>(std::move(name)));
-        }
-
-        /**
          * @brief The component registered under a name (native, or defined by the loaded script assembly), or null.
          * Pass its `type` to EntityList's Get, Has, Add, Remove and Count to reach the component on an entity from
          * native code, whatever defines it.

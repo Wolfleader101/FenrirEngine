@@ -18,9 +18,8 @@ namespace Fenrir
      * that the C# struct has exactly its layout.
      *
      * A native component is described by MakeComponent or MakeReadOnlyComponent and listed in the `components` of the
-     * ScriptingExtension that gives it (or registered with Scripting::RegisterComponent). A component a script defines
-     * in C# has no C++ type at all: it is registered, with a dynamic ComponentType, when the script assembly loads.
-     * Copying one is cheap.
+     * ScriptingExtension that gives it. A component a script defines in C# has no C++ type at all: it is registered,
+     * with a dynamic ComponentType, when the script assembly loads. Copying one is cheap.
      */
     struct ComponentRegistration
     {
@@ -66,8 +65,8 @@ namespace Fenrir
      * (App::FindEventQueue), so C++ `SendEvent<T>`/`ReadEvents<T>` and C# `Events.Send/Read` are the same queue with
      * the same frame window.
      *
-     * A C++ event is described by MakeEvent and listed in the `events` of the ScriptingExtension that shares it (or
-     * registered with Scripting::RegisterEvent); its C# struct says `[NativeEvent("Ns.Name")]`. An event only C#
+     * A C++ event is described by MakeEvent and listed in the `events` of the ScriptingExtension that shares it; its
+     * C# struct says `[NativeEvent("Ns.Name")]`. An event only C#
      * defines needs no registration at all: the script assembly reports it as it loads and the engine makes its queue.
      */
     struct EventRegistration
