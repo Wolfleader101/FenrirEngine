@@ -349,11 +349,11 @@ int main(int argc, char* argv[])
 
 #ifdef FENRIR_SCRIPTING
     // Declared after the app, so .NET is released before the app is destroyed and before main returns.
+    // The component and events C++ and C# share, as the app's own scripting extension.
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
                                             .extensions = {ScriptingDemo::Extension()}};
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
-    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just
-    // wrote.
+    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just wrote.
     app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
                              {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
 #endif

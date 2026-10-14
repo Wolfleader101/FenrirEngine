@@ -1,15 +1,12 @@
 #pragma once
 
-// The C++ half of the scripting demo (the C# half is in scripts/). Everything here exists only when scripting is built
-// in.
+// The C++ half of the scripting demo (the C# half is in scripts/). Everything here exists only when scripting is built in.
 //
 // What it shows, with the C# side that goes with each piece:
-//   Bob          a component C++ declares and C# animates: C++ sets Amplitude, Speed and BaseY, C# writes Phase every
-//   frame, and
+//   Bob          a component C++ declares and C# animates: C++ sets Amplitude, Speed and BaseY, C# writes Phase every frame, and
 //                a C++ system reads Phase back (scripts/Bobbing.cs).
 //   KeyboardKey  the window's C++ KeyboardKeyEvent, read from C# unchanged (scripts/Controls.cs).
-//   Burst        an event C# sends when Space is pressed; C# reads it to make sparks and C++ reads it here
-//   (scripts/Sparks.cs).
+//   Burst        an event C# sends when Space is pressed; C# reads it to make sparks and C++ reads it here (scripts/Sparks.cs).
 
 #ifdef FENRIR_SCRIPTING
 
@@ -42,8 +39,8 @@ namespace ScriptingDemo
     };
 } // namespace ScriptingDemo
 
-// How these look to C#. The C# structs (scripts/*.cs) must match field for field, or the script assembly refuses to
-// load and says which field is wrong.
+// How these look to C#. The C# structs (scripts/*.cs) must match field for field, or the script assembly refuses to load and says
+// which field is wrong.
 template <>
 struct Iris::StructMapping<ScriptingDemo::Bob>
 {
@@ -84,8 +81,7 @@ namespace ScriptingDemo
         Fenrir::ScriptingExtension extension;
         extension.name = "DemoApp";
         extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob")};
-        extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"),
-                            Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey")};
+        extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"), Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey")};
         return extension;
     }
 
@@ -99,8 +95,8 @@ namespace ScriptingDemo
         entity.AddComponent<Bob>(bob);
     }
 
-    // Reads what C# wrote (Bob::Phase) and shows it in the entity's name, which the editor's hierarchy displays. This
-    // is the shared component working in the other direction: C# data, read by C++ with no copying or marshalling.
+    // Reads what C# wrote (Bob::Phase) and shows it in the entity's name, which the editor's hierarchy displays. This is the
+    // shared component working in the other direction: C# data, read by C++ with no copying or marshalling.
     inline void ShowBobPhase(Fenrir::App& app)
     {
         static bool saidSo = false;
@@ -116,8 +112,8 @@ namespace ScriptingDemo
         });
     }
 
-    // Logs every burst C# sends. An event stays readable for two frames (this frame's and last frame's), so a reader
-    // that wants each event once remembers how many of the events it can see are this frame's.
+    // Logs every burst C# sends. An event stays readable for two frames (this frame's and last frame's), so a reader that wants
+    // each event once remembers how many of the events it can see are this frame's.
     inline Fenrir::SystemFunc LogBursts()
     {
         auto lastFrameCount = std::make_shared<std::size_t>(0);
@@ -132,9 +128,9 @@ namespace ScriptingDemo
         };
     }
 
-    // Plays the demo without anyone at the keyboard, for showing it off unattended and for checking it still works:
-    // with the environment variable FENRIR_DEMO_AUTOPLAY set, it sends the same KeyboardKeyEvent the window sends, as
-    // if R and then Space were pressed. Without the variable it does nothing.
+    // Plays the demo without anyone at the keyboard, for showing it off unattended and for checking it still works: with the
+    // environment variable FENRIR_DEMO_AUTOPLAY set, it sends the same KeyboardKeyEvent the window sends, as if R and then
+    // Space were pressed. Without the variable it does nothing.
     inline Fenrir::SystemFunc AutoPlay()
     {
         auto frame = std::make_shared<int>(0);

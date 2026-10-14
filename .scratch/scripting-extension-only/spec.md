@@ -68,7 +68,7 @@ Nothing changes for script authors. The engine components keep their names, layo
 20. As a package author, I want two extensions declaring one native function to keep failing Install with a diagnostic naming both, as today.
 21. As a script author, I want my C# components, events and systems to behave exactly as before, so that this change makes no difference to me.
 22. As a script author, I want the engine components to keep their C# names and layouts, so that my scripts still compile and load.
-23. As a script author, I want a lookup that failed before a registry change to succeed afterwards. The registry now changes only on reload, so that is the case that has to keep working.
+23. As a script author, I want a lookup that failed before a registry change to succeed afterwards. The registry now changes only on reload, so that is the case that has to keep working. *(Implementation note: met by construction. A reload brings new script types with empty id caches, so no test over a reload can tell the difference. See ticket 03's Comments.)*
 24. As a maintainer, I want one loop that turns extensions into registrations, so that the rules for empty names, duplicates and event queues live in one place.
 25. As a maintainer, I want the engine components' layout checks to stay with their mappings and run whenever a script assembly loads, as today.
 26. As a maintainer, I want the bug where a failed late check shuts down the host to disappear along with late registration, rather than being fixed separately.
@@ -144,7 +144,7 @@ Nothing changes for script authors. The engine components keep their names, layo
   - The test that a field of the wrong type is caught becomes an Install-time failure through an extension.
   - The duplicate-name and empty-name late-registration checks become Install failures naming the extension.
   - The moved-from `Scripting` test drops its two registration calls.
-- **Test to move:** the test that "a lookup that failed before a registry change succeeds after it" is now expressed over a reload that adds a script-defined component, since a reload is the only remaining registry change. The existing reload tests and their rebuilt fixture assemblies are the prior art.
+- **Test to move:** the test that "a lookup that failed before a registry change succeeds after it" is now expressed over a reload that adds a script-defined component, since a reload is the only remaining registry change. The existing reload tests and their rebuilt fixture assemblies are the prior art. *(Not done: such a test would be tautological. See ticket 03's Comments.)*
 - **New tests:**
   - The engine components are found after Install, with their flags (Transform and Name required, Relationship required and read-only).
   - An extension that declares a component named "Fenrir.Transform" fails Install, and the log names that extension.
