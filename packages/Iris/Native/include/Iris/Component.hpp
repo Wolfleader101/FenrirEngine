@@ -17,7 +17,8 @@ namespace Iris
     namespace Detail
     {
         class RawArray;
-    }
+        struct TestAccess;
+    } // namespace Detail
 
     struct ComponentInfo
     {
@@ -117,6 +118,9 @@ namespace Iris
       private:
         friend class Host;
         friend class Detail::RawArray;
+        // Iris's own tests build a component over a bridge table of their own (Native/src/TestAccess.hpp, not
+        // installed).
+        friend struct Detail::TestAccess;
         struct State;
         explicit Component(std::unique_ptr<State> state) noexcept;
         [[nodiscard]] CallResult<void> ValidateStructRaw(const Detail::StructInfo& info) const;

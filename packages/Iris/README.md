@@ -717,6 +717,7 @@ collection.
 | `Bridge-legacy`, `-oversized`, `-missing`, `-notbridge` | Rejection of a mismatched version, table size, missing entry, or an assembly without the bridge. |
 | `Components` | Every public feature against the real bridge: owners, types, methods, objects, members, strings, structs, arrays, internal calls, discovery, replacement, release, outliving the host, shared assemblies. |
 | `Components-unbound` | The same program with no internal calls registered: loading a component that declares them fails and names them. |
+| `Fake` | The native modules against a scripted bridge function table that lives in the test process (`Tests/Fake/FakeBridge.hpp`), with no .NET runtime: how a response the bridge gives is handled, malformed ones included, and that every block it hands out is given back (type snapshots so far). |
 | `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host: discovery, objects, strings, structs, arrays, an internal call, the log sink) against it. |
 | `UnsupportedTypeDoesNotCompile` | A signature with an unsupported C++ type fails to compile with Iris's own message. |
 

@@ -90,6 +90,16 @@ set_tests_properties(Components PROPERTIES TIMEOUT 120 ENVIRONMENT "${iris_check
 add_test(NAME Components-unbound COMMAND IrisComponentChecks "[unbound]" --order decl)
 set_tests_properties(Components-unbound PROPERTIES ENVIRONMENT "${iris_checks_component_environment}")
 
+# The native modules against a scripted bridge function table that lives in the test process (Fake/FakeBridge.hpp): any
+# response the bridge could give reaches them with no .NET runtime and no managed build. The table and the way a component is
+# built over it are private to the library's sources, so this executable (and only this one) is given that directory.
+add_executable(IrisFakeChecks fake.cpp Fake/FakeBridge.hpp)
+target_link_libraries(IrisFakeChecks PRIVATE Iris::Iris Catch2::Catch2WithMain)
+target_include_directories(IrisFakeChecks PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Native/src" "${CMAKE_CURRENT_SOURCE_DIR}")
+iris_deploy(IrisFakeChecks)
+add_test(NAME Fake COMMAND IrisFakeChecks "[fake]" --order decl)
+set_tests_properties(Fake PROPERTIES TIMEOUT 60)
+
 # Install this build and use it from the standalone consumer project, through find_package(Iris).
 if(IRIS_INSTALL)
     add_test(NAME ConsumerPackage
