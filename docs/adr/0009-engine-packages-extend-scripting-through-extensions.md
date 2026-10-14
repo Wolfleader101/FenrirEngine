@@ -20,7 +20,7 @@ A native function is declared once on each side and tied together by one name, t
 We chose this over two alternatives:
 
 - **Scripting binds every package's API itself.** Every scriptable package would have to be edited into FenrirScripting, which would then depend on all of them. An app could not leave a package out without scripting changing too.
-- **Packages register Iris internal calls directly** (they always could, before `Install`). That leaves each package to reach the running App through a global of its own, to check for a running Scripting in every function, and to add its contract to `ScriptingConfig::sharedAssemblies` separately from its functions. The pieces of one package's contribution would be spread across the app's setup.
+- **Packages register Iris internal calls directly** (they always could, before `Install`). That leaves each package to reach the running App through a global of its own, to check for a running Scripting in every function, and to add its contract to the config's list of shared assemblies (since removed) separately from its functions. The pieces of one package's contribution would be spread across the app's setup.
 
 ## Consequences
 

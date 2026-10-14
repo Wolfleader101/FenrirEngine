@@ -151,8 +151,9 @@ public struct Health : IComponent { public int Current; public int Max; }
   `[NativeComponent("Fenrir.Relationship")]` does not work: the engine hands the component out only to the type whose
   layout it checked, and `Get<T>` throws for any other.
 - **Read-only components.** `MakeReadOnlyComponent` registers data scripts must not change. In C# such a struct
-  implements `IReadOnlyComponent` (not `IComponent`), so there is no `Ref<T>` for it, and `ReadOnlyRef<T>` hands out `ref readonly` accessors: assigning through it is a compile error (`CS8331`, `CS8332`),
-  checked by the `RefCompile-Relationship*` tests.
+  implements `IReadOnlyComponent` (not `IComponent`), so there is no `Ref<T>` for it, and `ReadOnlyRef<T>` hands out
+  `ref readonly` accessors: assigning through it is a compile error (`CS8331`, `CS8332`), checked by the
+  `RefCompile-Relationship*` tests.
 - **A caution for native code.** `Fenrir::Entity(id, list)` is a *creating* constructor: it adds a Transform, a Name and a
   Relationship, replacing existing ones. To look an entity up without touching it, use `EntityList::GetEntity(id)`, which is
   what the registry does.

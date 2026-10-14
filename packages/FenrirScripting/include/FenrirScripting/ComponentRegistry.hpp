@@ -66,8 +66,8 @@ namespace Fenrir
      * the same frame window.
      *
      * A C++ event is described by MakeEvent and listed in the `events` of the ScriptingExtension that shares it; its
-     * C# struct says `[NativeEvent("Ns.Name")]`. An event only C#
-     * defines needs no registration at all: the script assembly reports it as it loads and the engine makes its queue.
+     * C# struct says `[NativeEvent("Ns.Name")]`. An event only C# defines needs no registration at all: the script
+     * assembly reports it as it loads and the engine makes its queue.
      */
     struct EventRegistration
     {

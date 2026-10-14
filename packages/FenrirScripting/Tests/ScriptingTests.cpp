@@ -336,14 +336,17 @@ namespace
         return config;
     }
 
+    // The name of the extension the test gives its own components and events in, as an app would.
+    constexpr const char* TestAppExtension = "test app";
+
     // The config for `scriptAssembly` with the test's own native components and events, which it gives scripting as an
-    // app does: in an extension of its own.
+    // app does: in an extension of its own, named TestAppExtension.
     ScriptingConfig ConfigFor(const std::filesystem::path& scriptAssembly,
                               std::vector<ComponentRegistration> components, std::vector<EventRegistration> events = {})
     {
         ScriptingConfig config = ConfigFor(scriptAssembly);
         ScriptingExtension app;
-        app.name = "test app";
+        app.name = TestAppExtension;
         app.components = std::move(components);
         app.events = std::move(events);
         config.extensions.push_back(std::move(app));
@@ -906,25 +909,45 @@ namespace
         }
     }
 
-    void AnEmptyOrDuplicateComponentNameFailsInstallAndNamesTheExtension()
+    // Installs the fixture with `config` and checks that it failed, explaining `diagnostic` (one message, naming the
+    // test's own extension).
+    void ExpectInstallRefused(ScriptingConfig config, const std::string& diagnostic, const char* what)
     {
-        for (const auto& [components, what] :
-             {std::pair{std::vector{MakeComponent<Health>("Test.Health"), MakeComponent<Health>("Test.Health")},
-                        "A duplicate name"},
-              std::pair{std::vector{MakeComponent<Health>("")}, "An empty name"}})
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), std::move(config));
         {
-            HeadlessApp headless;
-            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, components));
-            {
-                INFO(std::string(what) + " was accepted");
-                REQUIRE(!scripting.HasScripts());
-            }
-            {
-                INFO(std::string(what) + " was not explained, naming the extension");
-                REQUIRE((headless.Logger().Contains(LogLevel::Error, "'test app'") &&
-                         headless.Logger().Contains(LogLevel::Error, "empty or duplicate name")));
-            }
+            INFO(std::string(what) + " was accepted");
+            REQUIRE(!scripting.HasScripts());
         }
+        {
+            INFO(std::string(what) + " was not explained as: " + diagnostic);
+            REQUIRE(headless.Logger().Contains(LogLevel::Error, diagnostic));
+        }
+    }
+
+    void ADuplicateComponentNameFailsInstallAndNamesTheExtension()
+    {
+        ExpectInstallRefused(
+            ConfigFor(fixture, {MakeComponent<Health>("Test.Health"), MakeComponent<Health>("Test.Health")}),
+            "a component in extension '" + std::string(TestAppExtension) + "' has an empty or duplicate name",
+            "A duplicate component name");
+    }
+
+    void AnEmptyComponentNameFailsInstallAndNamesTheExtension()
+    {
+        ExpectInstallRefused(ConfigFor(fixture, {MakeComponent<Health>("")}),
+                             "a component in extension '" + std::string(TestAppExtension) +
+                                 "' has an empty or duplicate name",
+                             "An empty component name");
+    }
+
+    void ADuplicateEventNameFailsInstallAndNamesTheExtension()
+    {
+        ExpectInstallRefused(
+            ConfigFor(fixture, {},
+                      {MakeEvent<TestNative::Alert>("Test.Alert"), MakeEvent<TestNative::Alert>("Test.Alert")}),
+            "an event in extension '" + std::string(TestAppExtension) + "' has an empty or duplicate name",
+            "A duplicate event name");
     }
 
     void LookupFailuresSayWhatWentWrong()
@@ -3524,9 +3547,19 @@ TEST_CASE("a mismatched component fails the load and names the field", "[scripti
     AMismatchedComponentFailsTheLoadAndNamesTheField();
 }
 
-TEST_CASE("an empty or duplicate component name fails install and names the extension", "[scripting]")
+TEST_CASE("a duplicate component name fails install and names the extension", "[scripting]")
 {
-    AnEmptyOrDuplicateComponentNameFailsInstallAndNamesTheExtension();
+    ADuplicateComponentNameFailsInstallAndNamesTheExtension();
+}
+
+TEST_CASE("an empty component name fails install and names the extension", "[scripting]")
+{
+    AnEmptyComponentNameFailsInstallAndNamesTheExtension();
+}
+
+TEST_CASE("a duplicate event name fails install and names the extension", "[scripting]")
+{
+    ADuplicateEventNameFailsInstallAndNamesTheExtension();
 }
 
 TEST_CASE("a script assembly reports the components it defines, with size and alignment", "[scripting]")
