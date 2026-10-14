@@ -24,10 +24,10 @@ A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-ticke
 - [What does Jolt require of a host engine?](issues/01-what-jolt-requires-of-a-host.md): Jolt v5.6.0 can run on our `ThreadPool`; bodies are locked during a step; listeners run on job threads unordered and must be buffered; same-binary determinism holds given ordered API calls; much is process-global; several build defaults must be overridden.
 - [How do other engines hide their physics backend?](issues/02-how-other-engines-hide-their-backend.md): seams are runtime interfaces (Godot, O3DE) or build-time typedefs (Unreal); all own opaque handles, simulate in world space with an adapter to the local hierarchy, and buffer contacts for one-thread delivery after the step; the usual leaks are backend tuning settings, documented behaviour differences, native pointers, and threading shaped by the backend.
 - [Where does the backend seam go?](issues/03-where-the-backend-seam-goes.md): ADR-0010. Build-time seam: a private backend class with its only implementation in `src/Backend/Jolt/`; entities and components are the public identity; no tuning settings or escape hatch; tests against real Jolt; `Physics::Install` owns the backend's process-wide state.
+- [How is physics modelled in the ECS?](issues/04-physics-in-the-ecs.md): one `RigidBody` with a motion type; one `Collider` per entity holding a `CollisionShape` tagged union by value, compounds through child entities; optional `PhysicsMaterial`, `CollisionFilter`, `Trigger`; hull and mesh data cooked from caller-supplied vertices behind a FenrirPhysics handle; the ECS owns static and kinematic bodies, physics owns dynamic ones; adds and removes through new FenrirECS notifications, edits found by diffing each tick.
 
 ## Not yet specified
 
-- **Mesh collider data:** a triangle-mesh or convex-hull collider needs vertex data, but FenrirPhysics may not depend on the renderer's `Model`. Where that data comes from, and who owns it.
 - **DemoApp demo scenes:** switching between several demo scenes (one per feature family) in the DemoApp, and what the first physics scene shows.
 - **Feature-family specs:** constraints and joints, character controller, vehicles, ragdolls, soft bodies. Each becomes tickets once the foundation settles the body, shape and stepping vocabulary they build on.
 
@@ -37,3 +37,4 @@ A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-ticke
 - A second physics backend: the seam must allow one, but none is built.
 - Large worlds (double-precision positions): positions are float; the seam must not assume Jolt's types, so this stays addable later.
 - Determinism across platforms or builds.
+- An asset pipeline for collision data: callers supply vertex and index data ("How is physics modelled in the ECS?").
