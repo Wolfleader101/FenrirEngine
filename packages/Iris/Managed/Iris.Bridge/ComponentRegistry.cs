@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -53,6 +54,18 @@ internal static class ComponentRegistry
     private static ulong lastObjectId;
     private static ulong lastMemberId;
     private static ulong lastStructId;
+
+    // The two steps every operation on a component's handles repeats. Callers hold Gate. An operation resolves the
+    // token to the component's active entry, does its work (outside the gate when it can load assemblies or run
+    // component code), and publishes into the entry only if it is still the active one: a component released in the
+    // meantime has dropped its handle tables, and nothing may be added to them.
+    private static bool TryActive(ulong token, [NotNullWhen(true)] out Entry? entry)
+    {
+        entry = Registrations.TryGetValue(token, out Registration? record) ? record.Active : null;
+        return entry != null;
+    }
+
+    private static bool IsActive(ulong token, Entry entry) => TryActive(token, out Entry? active) && ReferenceEquals(active, entry);
 
     internal enum FindResult { Found, NotFound, InvalidHandle }
     internal enum ReleaseResult { Released, InvalidHandle, InUse }
@@ -121,7 +134,7 @@ internal static class ComponentRegistry
         Entry entry;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active)
+            if (!TryActive(token, out Entry? active))
                 return FindResult.InvalidHandle;
             entry = active;
         }
@@ -132,7 +145,7 @@ internal static class ComponentRegistry
         lock (Gate)
         {
             // The component may have been released while the type was resolved.
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 return FindResult.InvalidHandle;
             if (!entry.Handles.TypeIds.TryGetValue(type, out typeId))
             {
@@ -167,7 +180,7 @@ internal static class ComponentRegistry
         Entry entry;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active) return false;
+            if (!TryActive(token, out Entry? active)) return false;
             entry = active;
         }
         Type[] types;
@@ -185,7 +198,7 @@ internal static class ComponentRegistry
             if (!type.IsVisible || type.ContainsGenericParameters) continue;
             lock (Gate)
             {
-                if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return false;
+                if (!IsActive(token, entry)) return false;
             }
             ids.Add(TypeIdFor(entry, type));
         }
@@ -200,7 +213,7 @@ internal static class ComponentRegistry
         Type type;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Types.TryGetValue(typeId, out Type? found)) return false;
             type = found;
         }
@@ -219,7 +232,7 @@ internal static class ComponentRegistry
         Type type, target;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Types.TryGetValue(typeId, out Type? found)) return AssignResult.InvalidHandle;
             entry = active;
             type = found;
@@ -251,7 +264,7 @@ internal static class ComponentRegistry
             lock (Gate)
             {
                 // The component may have been released while the name was resolved.
-                if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return AssignResult.InvalidHandle;
+                if (!IsActive(token, entry)) return AssignResult.InvalidHandle;
             }
             target = resolved;
         }
@@ -266,7 +279,7 @@ internal static class ComponentRegistry
         if (field != 0 && field != 1) throw new BridgeArgumentException("Unknown type name field.");
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry entry ||
+            if (!TryActive(token, out Entry? entry) ||
                 !entry.Handles.Types.TryGetValue(typeId, out Type? type)) return false;
             text = field == 0 ? type.FullName ?? type.Name : type.Assembly.GetName().Name ?? "";
             return true;
@@ -351,7 +364,7 @@ internal static class ComponentRegistry
         Type type;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Types.TryGetValue(typeId, out Type? found)) return FindResult.InvalidHandle;
             entry = active;
             type = found;
@@ -379,7 +392,7 @@ internal static class ComponentRegistry
         if (method == null) return FindResult.NotFound;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 return FindResult.InvalidHandle;
             if (!entry.Handles.MethodIds.TryGetValue(method, out methodId))
             {
@@ -427,7 +440,7 @@ internal static class ComponentRegistry
         target = null;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Methods.TryGetValue(methodId, out MethodRecord? found)) return false;
             if (requireObject && !active.Handles.Objects.TryGetValue(objectId, out target)) return false;
             entry = active;
@@ -499,7 +512,7 @@ internal static class ComponentRegistry
         lock (Gate)
         {
             // The component may have been released while the method ran; then the object is dropped.
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 throw new BridgeHandleException("The component was released during the call.");
             ulong id = checked(++lastObjectId);
             entry.Handles.Objects.Add(id, returned);
@@ -530,7 +543,7 @@ internal static class ComponentRegistry
         Type type;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Types.TryGetValue(typeId, out Type? found)) return CreateResult.InvalidHandle;
             entry = active;
             type = found;
@@ -554,7 +567,7 @@ internal static class ComponentRegistry
         lock (Gate)
         {
             // The component may have been released while the constructor ran; then the object is dropped.
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 return CreateResult.InvalidHandle;
             objectId = checked(++lastObjectId);
             entry.Handles.Objects.Add(objectId, instance);
@@ -573,7 +586,7 @@ internal static class ComponentRegistry
         Type type;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Types.TryGetValue(typeId, out Type? found)) return FindResult.InvalidHandle;
             entry = active;
             type = found;
@@ -611,7 +624,7 @@ internal static class ComponentRegistry
         if (member == null || info == null) return FindResult.NotFound;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 return FindResult.InvalidHandle;
             if (!entry.Handles.MemberIds.TryGetValue(info, out memberId))
             {
@@ -645,7 +658,7 @@ internal static class ComponentRegistry
         target = null;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Members.TryGetValue(memberId, out MemberRecord? found)) return false;
             if (found.IsStatic)
             {
@@ -738,7 +751,7 @@ internal static class ComponentRegistry
         Entry entry;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active)
+            if (!TryActive(token, out Entry? active))
                 return FindResult.InvalidHandle;
             entry = active;
         }
@@ -752,7 +765,7 @@ internal static class ComponentRegistry
         StructRecord created = StructMapping.Describe(type, parsed, new RegisteredStructs(entry));
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry))
+            if (!IsActive(token, entry))
                 return FindResult.InvalidHandle;
             if (!entry.Handles.StructIds.TryGetValue(type, out structId))
             {
@@ -786,7 +799,7 @@ internal static class ComponentRegistry
         Entry entry;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active) return false;
+            if (!TryActive(token, out Entry? active)) return false;
             entry = active;
         }
         if (!ValueKinds.IsArray(kind)) throw new BridgeArgumentException($"Unsupported array kind {kind}.");
@@ -794,7 +807,7 @@ internal static class ComponentRegistry
         Array array = Array.CreateInstance(ElementTypeOf(entry, kind), length);
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || !ReferenceEquals(record.Active, entry)) return false;
+            if (!IsActive(token, entry)) return false;
             objectId = checked(++lastObjectId);
             entry.Handles.Objects.Add(objectId, array);
             return true;
@@ -810,7 +823,7 @@ internal static class ComponentRegistry
         object? found;
         lock (Gate)
         {
-            if (!Registrations.TryGetValue(token, out Registration? record) || record.Active is not Entry active ||
+            if (!TryActive(token, out Entry? active) ||
                 !active.Handles.Objects.TryGetValue(objectId, out found)) return false;
             entry = active;
         }
@@ -914,7 +927,7 @@ internal static class ComponentRegistry
     {
         lock (Gate)
         {
-            return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry &&
+            return TryActive(token, out Entry? entry) &&
                    entry.Handles.Objects.Remove(objectId);
         }
     }
@@ -922,14 +935,14 @@ internal static class ComponentRegistry
     // Verification seams, never native-visible.
     internal static int LiveObjectCount(ulong token)
     {
-        lock (Gate) return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry ? entry.Handles.Objects.Count : 0;
+        lock (Gate) return TryActive(token, out Entry? entry) ? entry.Handles.Objects.Count : 0;
     }
 
     internal static object? PeekObject(ulong token, ulong objectId)
     {
         lock (Gate)
         {
-            return Registrations.TryGetValue(token, out Registration? record) && record.Active is Entry entry &&
+            return TryActive(token, out Entry? entry) &&
                    entry.Handles.Objects.TryGetValue(objectId, out object? target) ? target : null;
         }
     }
