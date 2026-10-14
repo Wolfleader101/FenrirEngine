@@ -1,5 +1,6 @@
 #include "Iris/Array.hpp"
 
+#include "ComponentCall.hpp"
 #include "ComponentState.hpp"
 #include "ManagedDiagnosticBuffer.hpp"
 #include "ObjectState.hpp"
@@ -102,19 +103,8 @@ namespace Iris
         const auto status = array.state->bridge->arrayGet(
             array.state->component, array.state->object, kind, static_cast<std::int64_t>(index), &slot,
             diagnostic.bytes.data(), diagnostic.Capacity, &diagnostic.written, &diagnostic.truncated);
-        try
-        {
-            return CompleteCall<std::uint64_t>(status, "GetArrayElement", diagnostic, slot);
-        }
-        catch (...)
-        {
-            // A string or struct element is a block nothing owns yet; give it back rather than leak it.
-            if (returnsBlock && status == 0 && slot != 0)
-            {
-                array.state->bridge->freeString(slot);
-            }
-            throw;
-        }
+        return ComponentCall::CompleteReturningSlot<std::uint64_t>(*array.state->bridge, returnsBlock, status,
+                                                                   "GetArrayElement", diagnostic, slot);
     }
 
     CallResult<void> Detail::RawArray::Set(const Object& array, std::int32_t kind, std::size_t index,
@@ -154,13 +144,8 @@ namespace Iris
         return CompleteCall<void>(status, "CopyArray", diagnostic);
     }
 
-    std::optional<std::string> Detail::RawArray::TakeString(const Object& array, std::uint64_t block)
+    Detail::CallOrigin Detail::RawArray::Origin(const Object& array) noexcept
     {
-        return Detail::TakeString(*array.state->bridge, block);
-    }
-
-    void Detail::RawArray::TakeStruct(const Object& array, std::uint64_t block, void* out, std::size_t size) noexcept
-    {
-        Detail::TakeBytes(*array.state->bridge, block, out, size);
+        return CallOrigin(array.state->bridge, array.state->component);
     }
 } // namespace Iris

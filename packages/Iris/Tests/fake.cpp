@@ -791,3 +791,116 @@ TEST_CASE("a copy out of an array that fails reports the bridge's status and exp
     INFO("The bridge's explanation should reach the caller");
     REQUIRE(copied.diagnostic == "range");
 }
+
+namespace
+{
+    // Makes every lookup of a method or member succeed with a handle, so a case can reach the call that follows.
+    void LookupsFindHandles(FakeBridge& fake)
+    {
+        fake.findMethod = [](std::uint64_t, std::uint64_t, const std::uint8_t*, std::int32_t, std::int32_t,
+                             const std::int32_t*, std::int32_t, std::uint64_t* id, std::uint8_t*, std::int32_t,
+                             std::int32_t*, std::int32_t*) {
+            *id = 7;
+            return 0;
+        };
+        fake.findInstanceMethod = fake.findMethod;
+        fake.findMember = [](std::uint64_t, std::uint64_t, const std::uint8_t*, std::int32_t, std::int32_t,
+                             std::int32_t, std::uint64_t* id, std::uint8_t*, std::int32_t, std::int32_t*,
+                             std::int32_t*) {
+            *id = 8;
+            return 0;
+        };
+    }
+} // namespace
+
+TEST_CASE("an object argument that was released is refused before the call, naming its position", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    LookupsFindHandles(fake);
+    auto object = ObjectFrom(fake, component);
+    REQUIRE(object.Release().Succeeded());
+    const auto method = TypeOf(component).FindMethod<std::int32_t(const Object&, const Object&)>("Total");
+    REQUIRE(method.Succeeded());
+    auto fresh = ObjectFrom(fake, component);
+
+    const auto result = method.value->Invoke(fresh, object);
+
+    INFO("A released object should be refused");
+    REQUIRE(result.status == CallStatus::InvalidHandle);
+    INFO("The explanation should name the argument");
+    REQUIRE(result.diagnostic == "Argument 1 is an object that has been released or moved.");
+    INFO("The bridge should not have been asked to invoke");
+    REQUIRE(fake.Calls("InvokeMethod") == 0);
+}
+
+TEST_CASE("an object argument from another component is refused before the call, naming its position", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent(1);
+    auto other = fake.MakeComponent(2);
+    LookupsFindHandles(fake);
+    auto foreign = ObjectFrom(fake, other);
+    const auto method = TypeOf(component).FindMethod<std::int32_t(const Object&, const Object&)>("Total");
+    REQUIRE(method.Succeeded());
+    auto own = ObjectFrom(fake, component);
+
+    const auto result = method.value->Invoke(foreign, own);
+
+    INFO("An object of another component should be refused");
+    REQUIRE(result.status == CallStatus::InvalidArgument);
+    INFO("The explanation should name the argument");
+    REQUIRE(result.diagnostic == "Argument 0 is an object from another component.");
+    INFO("The bridge should not have been asked to invoke");
+    REQUIRE(fake.Calls("InvokeMethod") == 0);
+}
+
+TEST_CASE("an instance method refuses a released target and one from another component", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent(1);
+    auto other = fake.MakeComponent(2);
+    LookupsFindHandles(fake);
+    const auto method = TypeOf(component).FindInstanceMethod<std::int32_t()>("Value");
+    REQUIRE(method.Succeeded());
+    auto released = ObjectFrom(fake, component);
+    REQUIRE(released.Release().Succeeded());
+    auto foreign = ObjectFrom(fake, other);
+
+    const auto releasedResult = method.value->Invoke(released);
+    const auto foreignResult = method.value->Invoke(foreign);
+
+    INFO("A released target should be refused");
+    REQUIRE(releasedResult.status == CallStatus::InvalidHandle);
+    REQUIRE(releasedResult.diagnostic == "The object has been released or moved.");
+    INFO("A target of another component should be refused");
+    REQUIRE(foreignResult.status == CallStatus::InvalidArgument);
+    REQUIRE(foreignResult.diagnostic == "The object belongs to another component.");
+    INFO("The bridge should not have been asked to invoke either");
+    REQUIRE(fake.Calls("InvokeInstanceMethod") == 0);
+}
+
+TEST_CASE("a member refuses a released target and one from another component with the same words", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent(1);
+    auto other = fake.MakeComponent(2);
+    LookupsFindHandles(fake);
+    const auto field = TypeOf(component).FindField<std::int32_t>("Health");
+    REQUIRE(field.Succeeded());
+    auto released = ObjectFrom(fake, component);
+    REQUIRE(released.Release().Succeeded());
+    auto foreign = ObjectFrom(fake, other);
+
+    const auto releasedResult = field.value->Get(released);
+    const auto foreignResult = field.value->Get(foreign);
+
+    INFO("A released target should be refused");
+    REQUIRE(releasedResult.status == CallStatus::InvalidHandle);
+    REQUIRE(releasedResult.diagnostic == "The object has been released or moved.");
+    INFO("A target of another component should be refused");
+    REQUIRE(foreignResult.status == CallStatus::InvalidArgument);
+    REQUIRE(foreignResult.diagnostic == "The object belongs to another component.");
+    INFO("The bridge should not have been asked to read");
+    REQUIRE(fake.Calls("GetMember") == 0);
+}

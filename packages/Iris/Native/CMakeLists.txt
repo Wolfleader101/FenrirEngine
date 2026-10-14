@@ -4,6 +4,7 @@ add_library(Iris STATIC
     src/Host.cpp
     src/BridgeFunctions.hpp
     src/Component.cpp
+    src/ComponentCall.cpp
     src/ComponentState.hpp
     src/LogSink.cpp
     src/LogSink.hpp

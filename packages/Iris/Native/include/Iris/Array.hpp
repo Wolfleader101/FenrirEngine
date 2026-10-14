@@ -42,7 +42,7 @@ namespace Iris
             [[nodiscard]] static CallResult<std::int32_t> ResolveKind(const Object& array, const KindSpec& element);
 
             [[nodiscard]] static CallResult<std::uint64_t> Length(const Object& array);
-            // The element's slot: bits for a primitive, a block for a string or struct (see TakeString/TakeStruct).
+            // The element's slot: bits for a primitive, a block for a string or struct (see CallOrigin).
             [[nodiscard]] static CallResult<std::uint64_t> Get(const Object& array, std::int32_t kind,
                                                                std::size_t index, bool returnsBlock);
             [[nodiscard]] static CallResult<void> Set(const Object& array, std::int32_t kind, std::size_t index,
@@ -50,8 +50,8 @@ namespace Iris
             // Bulk copy of `count` elements starting at `start`, between the array and `buffer`.
             [[nodiscard]] static CallResult<void> Copy(const Object& array, std::int32_t kind, std::size_t start,
                                                        std::size_t count, void* buffer, bool intoArray);
-            [[nodiscard]] static std::optional<std::string> TakeString(const Object& array, std::uint64_t block);
-            static void TakeStruct(const Object& array, std::uint64_t block, void* out, std::size_t size) noexcept;
+            // Where the array's element results go (see CallOrigin).
+            [[nodiscard]] static CallOrigin Origin(const Object& array) noexcept;
         };
     } // namespace Detail
 
@@ -131,12 +131,12 @@ namespace Iris
             {
                 if constexpr (std::same_as<T, std::string>)
                 {
-                    result.value.emplace(Detail::RawArray::TakeString(object, *raw.value));
+                    result.value.emplace(Detail::RawArray::Origin(object).TakeString(*raw.value));
                 }
                 else if constexpr (StructValue<T>)
                 {
                     T value;
-                    Detail::RawArray::TakeStruct(object, *raw.value, &value, sizeof(T));
+                    Detail::RawArray::Origin(object).TakeStruct(*raw.value, &value, sizeof(T));
                     result.value = value;
                 }
                 else
