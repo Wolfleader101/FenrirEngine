@@ -11,8 +11,9 @@ namespace Fenrir
      * alignment, identified by a name. A scripting layer uses this for components that scripts define, which have no
      * C++ type.
      *
-     * An EntityList stores the components of such a type like any other: one per entity, destroyed with the entity, and
-     * reachable by a query beside the native components (see ComponentSelector). A new component is all zero bytes.
+     * Wrapped in a ComponentType (ComponentType::Dynamic), it is used with EntityList like any other component type:
+     * one per entity, destroyed with the entity, and reachable by a query beside native components. A new component is
+     * all zero bytes.
      *
      * Two descriptions with the same name are the same type, and must agree on size and alignment: an EntityList
      * refuses to add a component whose shape differs from the components of that name it already holds. This class says

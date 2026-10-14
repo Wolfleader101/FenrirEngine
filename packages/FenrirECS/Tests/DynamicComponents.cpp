@@ -1,17 +1,21 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/DynamicComponent.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
-#include <set>
-#include <string>
 #include <vector>
 
+using Fenrir::ComponentType;
 using Fenrir::DynamicComponentType;
 using Fenrir::EntityList;
+
+// What only dynamic component types do. What every component type does, and the rest of the dynamic-only behaviour
+// (impossible types, shape conflicts, colliding names, storage made only on add, alignment), is in ComponentTypes.cpp.
 
 namespace
 {
@@ -29,235 +33,114 @@ namespace
 
 TEST_CASE("a dynamic type is valid only with a name, a power-of-two alignment and a size that fits", "[dynamic]")
 {
-    CHECK(DynamicComponentType("Test.Ok", 8, 4).IsValid());
-    CHECK(DynamicComponentType("Test.Tag", 1, 1).IsValid());
-    CHECK(DynamicComponentType("Test.Largest", DynamicComponentType::MaxSize, 16).IsValid());
+    INFO("a name, a size that is a multiple of a power-of-two alignment, and at most the maximum size are valid");
+    REQUIRE(DynamicComponentType("Test.Ok", 8, 4).IsValid());
+    REQUIRE(DynamicComponentType("Test.Tag", 1, 1).IsValid());
+    REQUIRE(DynamicComponentType("Test.Largest", DynamicComponentType::MaxSize, 16).IsValid());
 
-    CHECK_FALSE(DynamicComponentType("", 8, 4).IsValid());
-    CHECK_FALSE(DynamicComponentType("Test.Empty", 0, 1).IsValid());
-    CHECK_FALSE(DynamicComponentType("Test.NotMultiple", 7, 4).IsValid());
-    CHECK_FALSE(DynamicComponentType("Test.AlignThree", 6, 3).IsValid());
-    CHECK_FALSE(DynamicComponentType("Test.AlignZero", 8, 0).IsValid());
-    CHECK_FALSE(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4).IsValid());
+    INFO("no name, no size, a size not a multiple of the alignment, a bad alignment or too big a size are not");
+    REQUIRE(!DynamicComponentType("", 8, 4).IsValid());
+    REQUIRE(!DynamicComponentType("Test.Empty", 0, 1).IsValid());
+    REQUIRE(!DynamicComponentType("Test.NotMultiple", 7, 4).IsValid());
+    REQUIRE(!DynamicComponentType("Test.AlignThree", 6, 3).IsValid());
+    REQUIRE(!DynamicComponentType("Test.AlignZero", 8, 0).IsValid());
+    REQUIRE(!DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4).IsValid());
 }
 
 TEST_CASE("the same name gives the same id", "[dynamic]")
 {
-    CHECK(DynamicComponentType("Test.Same", 8, 4).Id() == DynamicComponentType("Test.Same", 16, 8).Id());
+    INFO("two descriptions with one name have one id, whatever their shapes");
+    REQUIRE(DynamicComponentType("Test.Same", 8, 4).Id() == DynamicComponentType("Test.Same", 16, 8).Id());
 }
 
-TEST_CASE("an impossible description is refused when added", "[dynamic]")
+TEST_CASE("a dynamic component is zeroed every time it is added", "[dynamic]")
 {
     EntityList entities;
+    const ComponentType type = ComponentType::Dynamic(DynamicComponentType("Test.Zeroed", 16, 8));
     const auto entity = entities.CreateEntity().GetId();
-
-    CHECK_FALSE(entities.AddDynamic(DynamicComponentType("Test.Bad", 7, 4), entity));
-    CHECK_FALSE(entities.AddDynamic(DynamicComponentType("Test.Bad", 8, 3), entity));
-    CHECK_FALSE(entities.AddDynamic(DynamicComponentType("", 8, 4), entity));
-    CHECK_FALSE(entities.AddDynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4), entity));
-}
-
-TEST_CASE("asking about a dynamic type nobody added finds nothing and makes no storage", "[dynamic]")
-{
-    EntityList entities;
-    const DynamicComponentType unused("Test.Unused", 8, 4);
-    const auto entity = entities.CreateEntity().GetId();
-    const std::size_t storages = entities.ComponentStorageCount();
-
-    CHECK(entities.GetDynamic(unused, entity) == nullptr);
-    CHECK_FALSE(entities.HasDynamic(unused, entity));
-    CHECK(entities.CountDynamic(unused) == 0);
-    CHECK(entities.RemoveDynamic(unused, entity));
-    CHECK(entities.ClearDynamic(unused) == 0);
-    CHECK(entities.ComponentStorageCount() == storages);
-}
-
-TEST_CASE("a dynamic component is zeroed when added, every time", "[dynamic]")
-{
-    EntityList entities;
-    const DynamicComponentType type("Test.Zeroed", 16, 8);
-    const auto entity = entities.CreateEntity().GetId();
-
-    REQUIRE(entities.AddDynamic(type, entity));
-    auto* bytes = static_cast<std::uint8_t*>(entities.GetDynamic(type, entity));
-    REQUIRE(bytes != nullptr);
-    CHECK(AllZero(bytes, 16));
-
+    INFO("the first add succeeds");
+    REQUIRE(entities.Add(type, entity));
+    auto* bytes = static_cast<std::uint8_t*>(entities.Get(type, entity));
     std::fill(bytes, bytes + 16, std::uint8_t{0xFF});
-    REQUIRE(entities.RemoveDynamic(type, entity));
-    REQUIRE(entities.AddDynamic(type, entity));
-    CHECK(AllZero(entities.GetDynamic(type, entity), 16));
-}
 
-TEST_CASE("adding a dynamic component twice keeps the one it has", "[dynamic]")
-{
-    EntityList entities;
-    const DynamicComponentType type("Test.Twice", 8, 4);
-    const auto entity = entities.CreateEntity().GetId();
-
-    REQUIRE(entities.AddDynamic(type, entity));
-    auto* bytes = static_cast<std::uint8_t*>(entities.GetDynamic(type, entity));
-    bytes[0] = 7;
-
-    CHECK(entities.AddDynamic(type, entity));
-    CHECK(entities.GetDynamic(type, entity) == bytes);
-    CHECK(bytes[0] == 7);
-    CHECK(entities.CountDynamic(type) == 1);
-}
-
-TEST_CASE("a dynamic component goes with its entity, and a dead entity cannot be given one", "[dynamic]")
-{
-    EntityList entities;
-    const DynamicComponentType type("Test.Mortal", 8, 4);
-    const auto entity = entities.CreateEntity().GetId();
-    REQUIRE(entities.AddDynamic(type, entity));
-    REQUIRE(entities.CountDynamic(type) == 1);
-
-    entities.DestroyEntity(entity);
-
-    CHECK_FALSE(entities.HasDynamic(type, entity));
-    CHECK(entities.GetDynamic(type, entity) == nullptr);
-    CHECK_FALSE(entities.RemoveDynamic(type, entity));
-    CHECK_FALSE(entities.AddDynamic(type, entity));
-    CHECK(entities.CountDynamic(type) == 0);
-}
-
-TEST_CASE("components honour their alignment and do not move when more are added", "[dynamic]")
-{
-    EntityList entities;
-    const DynamicComponentType type("Test.Aligned", 32, 16);
-    constexpr int Count = 300;
-
-    std::vector<std::uint32_t> ids;
-    std::vector<void*> addresses;
-    for (int index = 0; index < Count; ++index)
-    {
-        ids.push_back(entities.CreateEntity().GetId());
-        REQUIRE(entities.AddDynamic(type, ids.back()));
-        addresses.push_back(entities.GetDynamic(type, ids.back()));
-        CHECK(IsAligned(addresses.back(), 16));
-    }
-    CHECK(std::set<void*>(addresses.begin(), addresses.end()).size() == static_cast<std::size_t>(Count));
-
-    // Adding for more entities, of this type and of another, moves nobody's component. (Removing one does: the
-    // documented pointer is good only until a component of the type is removed.)
-    const DynamicComponentType other("Test.Other", 8, 8);
-    for (int index = 0; index < 500; ++index)
-    {
-        const auto id = entities.CreateEntity().GetId();
-        REQUIRE(entities.AddDynamic(type, id));
-        REQUIRE(entities.AddDynamic(other, id));
-    }
-    for (std::size_t index = 0; index < ids.size(); ++index)
-    {
-        CHECK(entities.GetDynamic(type, ids[index]) == addresses[index]);
-    }
-    CHECK(entities.CountDynamic(type) == static_cast<std::size_t>(Count + 500));
+    INFO("removed and added again, it is all zero, not the bytes written before");
+    REQUIRE(entities.Remove(type, entity));
+    REQUIRE(entities.Add(type, entity));
+    REQUIRE(AllZero(entities.Get(type, entity), 16));
 }
 
 TEST_CASE("the largest allowed component is aligned and does not overlap its neighbours", "[dynamic]")
 {
     EntityList entities;
-    const DynamicComponentType big("Test.Big", DynamicComponentType::MaxSize, 16);
+    const ComponentType big =
+        ComponentType::Dynamic(DynamicComponentType("Test.Big", DynamicComponentType::MaxSize, 16));
 
     std::vector<std::uint8_t*> starts;
     for (int index = 0; index < 3; ++index)
     {
         const auto id = entities.CreateEntity().GetId();
-        REQUIRE(entities.AddDynamic(big, id));
-        starts.push_back(static_cast<std::uint8_t*>(entities.GetDynamic(big, id)));
+        INFO("component " << index << " is added and aligned to 16");
+        REQUIRE(entities.Add(big, id));
+        starts.push_back(static_cast<std::uint8_t*>(entities.Get(big, id)));
         REQUIRE(starts.back() != nullptr);
-        CHECK(IsAligned(starts.back(), 16));
+        REQUIRE(IsAligned(starts.back(), 16));
     }
     std::sort(starts.begin(), starts.end());
-    CHECK(starts[1] - starts[0] >= static_cast<std::ptrdiff_t>(DynamicComponentType::MaxSize));
-    CHECK(starts[2] - starts[1] >= static_cast<std::ptrdiff_t>(DynamicComponentType::MaxSize));
+
+    INFO("each component starts at least the maximum size after the one before it");
+    REQUIRE(starts[1] - starts[0] >= static_cast<std::ptrdiff_t>(DynamicComponentType::MaxSize));
+    REQUIRE(starts[2] - starts[1] >= static_cast<std::ptrdiff_t>(DynamicComponentType::MaxSize));
 }
 
-TEST_CASE("two names keep separate storage", "[dynamic]")
+TEST_CASE("two dynamic names keep separate storage", "[dynamic]")
 {
     EntityList entities;
-    const DynamicComponentType first("Test.First", 8, 4);
-    const DynamicComponentType second("Test.Second", 8, 4);
+    const ComponentType first = ComponentType::Dynamic(DynamicComponentType("Test.First", 8, 4));
+    const ComponentType second = ComponentType::Dynamic(DynamicComponentType("Test.Second", 8, 4));
     const auto entity = entities.CreateEntity().GetId();
     const auto other = entities.CreateEntity().GetId();
+    INFO("each name is added to a different entity");
+    REQUIRE(entities.Add(first, entity));
+    REQUIRE(entities.Add(second, other));
 
-    REQUIRE(entities.AddDynamic(first, entity));
-    REQUIRE(entities.AddDynamic(second, other));
+    INFO("each entity has only the component it was given");
+    REQUIRE(entities.Has(first, entity));
+    REQUIRE(!entities.Has(second, entity));
+    REQUIRE(entities.Has(second, other));
+    REQUIRE(!entities.Has(first, other));
 
-    CHECK(entities.HasDynamic(first, entity));
-    CHECK_FALSE(entities.HasDynamic(second, entity));
-    CHECK(entities.HasDynamic(second, other));
-    CHECK_FALSE(entities.HasDynamic(first, other));
-    CHECK(entities.CountDynamic(first) == 1);
-    CHECK(entities.CountDynamic(second) == 1);
+    INFO("each name counts one");
+    REQUIRE(entities.Count(first) == 1);
+    REQUIRE(entities.Count(second) == 1);
 }
 
-TEST_CASE("a name cannot take another shape while components of the first shape exist", "[dynamic]")
+TEST_CASE("clearing one dynamic type leaves the others", "[dynamic]")
 {
     EntityList entities;
-    const DynamicComponentType small("Test.Shape", 8, 4);
-    const DynamicComponentType wider("Test.Shape", 16, 8);
+    const ComponentType cleared = ComponentType::Dynamic(DynamicComponentType("Test.Cleared", 8, 4));
+    const ComponentType kept = ComponentType::Dynamic(DynamicComponentType("Test.Kept", 8, 4));
     const auto entity = entities.CreateEntity().GetId();
-    REQUIRE(entities.AddDynamic(small, entity));
-    void* const where = entities.GetDynamic(small, entity);
+    INFO("the entity is given both");
+    REQUIRE(entities.Add(cleared, entity));
+    REQUIRE(entities.Add(kept, entity));
 
-    CHECK_FALSE(entities.AddDynamic(wider, entity));
-    CHECK(entities.GetDynamic(small, entity) == where);
-
-    // Once none are left, the name takes the new shape.
-    REQUIRE(entities.RemoveDynamic(small, entity));
-    REQUIRE(entities.AddDynamic(wider, entity));
-    CHECK(IsAligned(entities.GetDynamic(wider, entity), 8));
+    INFO("clearing one removes only that one");
+    REQUIRE(entities.Clear(cleared) == 1);
+    REQUIRE(!entities.Has(cleared, entity));
+    REQUIRE(entities.Has(kept, entity));
 }
 
-TEST_CASE("two names with the same id do not share storage", "[dynamic]")
-{
-    // Found by brute force against the name hash: these two names have the same 32-bit id.
-    const DynamicComponentType owner("Test.Collide.39238", 8, 4);
-    const DynamicComponentType intruder("Test.Collide.644126", 8, 4);
-    REQUIRE(owner.Id() == intruder.Id());
-    REQUIRE(owner.Name() != intruder.Name());
-
-    EntityList entities;
-    const auto holder = entities.CreateEntity().GetId();
-    REQUIRE(entities.AddDynamic(owner, holder));
-
-    CHECK_FALSE(entities.AddDynamic(intruder, holder));
-    CHECK_FALSE(entities.HasDynamic(intruder, holder));
-    CHECK(entities.GetDynamic(intruder, holder) == nullptr);
-    CHECK(entities.CountDynamic(intruder) == 0);
-
-    // Removing and clearing through the intruder leaves the owner alone.
-    (void)entities.RemoveDynamic(intruder, holder);
-    CHECK(entities.ClearDynamic(intruder) == 0);
-    CHECK(entities.HasDynamic(owner, holder));
-    CHECK(entities.CountDynamic(owner) == 1);
-}
-
-TEST_CASE("clearing a type removes it from every entity and reports how many", "[dynamic]")
+TEST_CASE("a dynamic name takes a new shape once its last component is removed", "[dynamic]")
 {
     EntityList entities;
-    const DynamicComponentType type("Test.Cleared", 8, 4);
-    const DynamicComponentType kept("Test.Kept", 8, 4);
-    std::vector<std::uint32_t> ids;
-    for (int index = 0; index < 5; ++index)
-    {
-        ids.push_back(entities.CreateEntity().GetId());
-        REQUIRE(entities.AddDynamic(type, ids.back()));
-    }
-    REQUIRE(entities.AddDynamic(kept, ids.front()));
+    const ComponentType small = ComponentType::Dynamic(DynamicComponentType("Test.Shape", 8, 4));
+    const ComponentType wider = ComponentType::Dynamic(DynamicComponentType("Test.Shape", 16, 8));
+    const auto entity = entities.CreateEntity().GetId();
+    INFO("the first shape is added and then removed");
+    REQUIRE(entities.Add(small, entity));
+    REQUIRE(entities.Remove(small, entity));
 
-    CHECK(entities.ClearDynamic(type) == 5);
-
-    CHECK(entities.CountDynamic(type) == 0);
-    for (const auto id : ids)
-    {
-        CHECK_FALSE(entities.HasDynamic(type, id));
-        CHECK(entities.HasEntity(id));
-    }
-    CHECK(entities.HasDynamic(kept, ids.front()));
-
-    // Afterwards the name may be used with a different shape.
-    CHECK(entities.AddDynamic(DynamicComponentType("Test.Cleared", 32, 16), ids.front()));
+    INFO("with none left, the name is added with the new shape, aligned to it");
+    REQUIRE(entities.Add(wider, entity));
+    REQUIRE(IsAligned(entities.Get(wider, entity), 8));
 }

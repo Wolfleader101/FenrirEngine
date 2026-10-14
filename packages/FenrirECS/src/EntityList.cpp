@@ -76,9 +76,10 @@ namespace Fenrir
 
     namespace
     {
-        // Whatever the registry holds under a dynamic type id, if it is one of our pools. An id is a hash, so it can in
-        // principle belong to a storage of something else; the typed lookup trusts the id, so this checks first.
-        Detail::ByteStorage* PoolUnder(entt::registry& registry, const DynamicComponentType& type)
+        // Whatever the registry holds under a dynamic type id, if it is one of our byte storages. An id is a hash, so
+        // it can in principle belong to a storage of something else; the typed lookup trusts the id, so this checks
+        // first.
+        Detail::ByteStorage* DynamicStorageUnder(entt::registry& registry, const DynamicComponentType& type)
         {
             entt::sparse_set* storage = registry.storage(type.Id());
             return storage != nullptr && storage->type() == entt::type_id<Detail::DynamicComponentTag>()
@@ -86,18 +87,18 @@ namespace Fenrir
                        : nullptr;
         }
 
-        // The list's pool for a dynamic type if it has one. Reading never creates a pool. A pool under the id that
+        // The list's storage for a dynamic type if it has one. Reading never creates one. A storage under the id that
         // belongs to a different type name (the same hash) is not this type's.
-        Detail::ByteStorage* ExistingPool(entt::registry& registry, const DynamicComponentType& type)
+        Detail::ByteStorage* ExistingDynamicStorage(entt::registry& registry, const DynamicComponentType& type)
         {
-            Detail::ByteStorage* pool = PoolUnder(registry, type);
-            return pool != nullptr && pool->Owner() == type.Name() ? pool : nullptr;
+            Detail::ByteStorage* storage = DynamicStorageUnder(registry, type);
+            return storage != nullptr && storage->Owner() == type.Name() ? storage : nullptr;
         }
 
-        // The pool, created and shaped for the type if the list has none yet. Null if the type is not valid, if it
+        // The storage, created and shaped for the type if the list has none yet. Null if the type is not valid, if it
         // exists with a different shape, or if the id is taken by something else (another name with the same hash, or a
         // native storage).
-        Detail::ByteStorage* Pool(entt::registry& registry, const DynamicComponentType& type)
+        Detail::ByteStorage* DynamicStorageForAdding(entt::registry& registry, const DynamicComponentType& type)
         {
             if (!type.IsValid())
             {
@@ -105,7 +106,7 @@ namespace Fenrir
             }
             if (registry.storage(type.Id()) != nullptr)
             {
-                Detail::ByteStorage* existing = PoolUnder(registry, type);
+                Detail::ByteStorage* existing = DynamicStorageUnder(registry, type);
                 if (existing == nullptr || !existing->MayBeUsedBy(type.Name()))
                 {
                     return nullptr;
@@ -126,134 +127,79 @@ namespace Fenrir
         }
     } // namespace
 
-    void* EntityList::GetDynamic(const DynamicComponentType& type, std::uint32_t entity)
+    entt::sparse_set* EntityList::FindStorage(const ComponentType& type)
+    {
+        return type.IsDynamic() ? ExistingDynamicStorage(m_registry, *type.m_dynamic)
+                                : static_cast<entt::sparse_set*>(type.m_findNativeStorage(*this));
+    }
+
+    entt::sparse_set* EntityList::StorageForAdding(const ComponentType& type)
+    {
+        return type.IsDynamic() ? DynamicStorageForAdding(m_registry, *type.m_dynamic)
+                                : static_cast<entt::sparse_set*>(type.m_findNativeStorage(*this));
+    }
+
+    void* EntityList::Get(const ComponentType& type, std::uint32_t entity)
     {
         if (!m_registry.valid(AsEntity(entity)))
         {
             return nullptr;
         }
-        Detail::ByteStorage* pool = ExistingPool(m_registry, type);
-        return pool == nullptr ? nullptr : pool->Find(AsEntity(entity));
-    }
-
-    bool EntityList::HasDynamic(const DynamicComponentType& type, std::uint32_t entity)
-    {
-        if (!m_registry.valid(AsEntity(entity)))
-        {
-            return false;
-        }
-        Detail::ByteStorage* pool = ExistingPool(m_registry, type);
-        return pool != nullptr && pool->contains(AsEntity(entity));
-    }
-
-    bool EntityList::AddDynamic(const DynamicComponentType& type, std::uint32_t entity)
-    {
-        if (!m_registry.valid(AsEntity(entity)))
-        {
-            return false;
-        }
-        Detail::ByteStorage* pool = Pool(m_registry, type);
-        return pool != nullptr && pool->Emplace(AsEntity(entity)) != nullptr;
-    }
-
-    bool EntityList::RemoveDynamic(const DynamicComponentType& type, std::uint32_t entity)
-    {
-        if (!m_registry.valid(AsEntity(entity)))
-        {
-            return false;
-        }
-        if (Detail::ByteStorage* pool = ExistingPool(m_registry, type))
-        {
-            pool->remove(AsEntity(entity));
-        }
-        return true;
-    }
-
-    std::size_t EntityList::ClearDynamic(const DynamicComponentType& type)
-    {
-        Detail::ByteStorage* pool = ExistingPool(m_registry, type);
-        if (pool == nullptr)
-        {
-            return 0;
-        }
-        // Copied first: removing from the storage while walking it would move the element being visited.
-        const std::vector<entt::entity> holders(pool->begin(), pool->end());
-        for (const entt::entity entity : holders)
-        {
-            pool->remove(entity);
-        }
-        return holders.size();
-    }
-
-    std::size_t EntityList::CountDynamic(const DynamicComponentType& type)
-    {
-        const Detail::ByteStorage* pool = ExistingPool(m_registry, type);
-        return pool == nullptr ? 0 : pool->size();
-    }
-
-    void* EntityList::Get(const ComponentType& type, std::uint32_t entity)
-    {
-        if (type.IsDynamic())
-        {
-            return GetDynamic(*type.m_dynamic, entity);
-        }
-        return m_registry.valid(AsEntity(entity)) ? type.m_native->get(*this, entity) : nullptr;
+        entt::sparse_set* storage = FindStorage(type);
+        return storage != nullptr && storage->contains(AsEntity(entity)) ? storage->value(AsEntity(entity)) : nullptr;
     }
 
     bool EntityList::Has(const ComponentType& type, std::uint32_t entity)
     {
-        if (type.IsDynamic())
+        if (!m_registry.valid(AsEntity(entity)))
         {
-            return HasDynamic(*type.m_dynamic, entity);
+            return false;
         }
-        return m_registry.valid(AsEntity(entity)) &&
-               static_cast<entt::sparse_set*>(type.m_native->storage(*this))->contains(AsEntity(entity));
+        const entt::sparse_set* storage = FindStorage(type);
+        return storage != nullptr && storage->contains(AsEntity(entity));
     }
 
     bool EntityList::Add(const ComponentType& type, std::uint32_t entity)
     {
-        if (type.IsDynamic())
-        {
-            return AddDynamic(*type.m_dynamic, entity);
-        }
         if (!m_registry.valid(AsEntity(entity)))
         {
             return false;
         }
-        type.m_native->add(*this, entity);
-        return true;
+        entt::sparse_set* storage = StorageForAdding(type);
+        if (storage == nullptr)
+        {
+            return false;
+        }
+        // With no value, a storage default-constructs a native component and zeroes a dynamic one.
+        return storage->contains(AsEntity(entity)) || storage->push(AsEntity(entity)) != storage->end();
     }
 
     bool EntityList::Remove(const ComponentType& type, std::uint32_t entity)
     {
-        if (type.IsDynamic())
-        {
-            return RemoveDynamic(*type.m_dynamic, entity);
-        }
         if (!m_registry.valid(AsEntity(entity)))
         {
             return false;
         }
-        static_cast<entt::sparse_set*>(type.m_native->storage(*this))->remove(AsEntity(entity));
+        if (entt::sparse_set* storage = FindStorage(type))
+        {
+            storage->remove(AsEntity(entity));
+        }
         return true;
     }
 
     std::size_t EntityList::Count(const ComponentType& type)
     {
-        if (type.IsDynamic())
-        {
-            return CountDynamic(*type.m_dynamic);
-        }
-        return static_cast<const entt::sparse_set*>(type.m_native->storage(*this))->size();
+        const entt::sparse_set* storage = FindStorage(type);
+        return storage == nullptr ? 0 : storage->size();
     }
 
     std::size_t EntityList::Clear(const ComponentType& type)
     {
-        if (type.IsDynamic())
+        entt::sparse_set* storage = FindStorage(type);
+        if (storage == nullptr)
         {
-            return ClearDynamic(*type.m_dynamic);
+            return 0;
         }
-        auto* storage = static_cast<entt::sparse_set*>(type.m_native->storage(*this));
         const std::size_t removed = storage->size();
         storage->clear();
         return removed;
@@ -271,44 +217,6 @@ namespace Fenrir
         return count;
     }
 
-    std::size_t EntityList::CountOf(const ComponentSelector& selector)
-    {
-        const auto* pool = static_cast<const entt::sparse_set*>(selector.m_find(*this));
-        return pool == nullptr ? 0 : pool->size();
-    }
-
-    ComponentSelector ComponentSelector::Dynamic(DynamicComponentType type)
-    {
-        return ComponentSelector([type = std::move(type)](EntityList& entities) -> void* {
-            // No pool yet means nobody has added one, so nothing can match: the query visits nothing, and makes no
-            // storage.
-            return static_cast<entt::sparse_set*>(ExistingPool(entities.m_registry, type));
-        });
-    }
-
-    void EntityList::ForEachWithImpl(std::span<const ComponentSelector> selectors, void (*visit)(void*, std::uint32_t),
-                                     void* context)
-    {
-        if (selectors.empty())
-        {
-            return;
-        }
-        entt::runtime_view view;
-        for (const ComponentSelector& selector : selectors)
-        {
-            auto* pool = static_cast<entt::sparse_set*>(selector.m_find(*this));
-            if (pool == nullptr)
-            {
-                return; // A type with no usable storage: no entity has all of them.
-            }
-            view.iterate(*pool);
-        }
-        for (const entt::entity entity : view)
-        {
-            visit(context, static_cast<std::uint32_t>(entity));
-        }
-    }
-
     void EntityList::ForEachWithImpl(std::span<const ComponentType> types, void (*visit)(void*, std::uint32_t),
                                      void* context)
     {
@@ -319,15 +227,14 @@ namespace Fenrir
         entt::runtime_view view;
         for (const ComponentType& type : types)
         {
-            // No pool for a dynamic type means nobody has added one, so nothing can match: the query visits nothing,
-            // and makes no storage.
-            auto* pool = type.IsDynamic() ? static_cast<entt::sparse_set*>(ExistingPool(m_registry, *type.m_dynamic))
-                                          : static_cast<entt::sparse_set*>(type.m_native->storage(*this));
-            if (pool == nullptr)
+            // No storage for a dynamic type means nobody has added one, so nothing can match: the query visits
+            // nothing, and makes no storage.
+            entt::sparse_set* storage = FindStorage(type);
+            if (storage == nullptr)
             {
                 return;
             }
-            view.iterate(*pool);
+            view.iterate(*storage);
         }
         for (const entt::entity entity : view)
         {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 
 #include "FenrirECS/DynamicComponent.hpp"
@@ -52,22 +51,18 @@ namespace Fenrir
       private:
         friend class EntityList;
 
-        // What EntityList needs that only the C++ type knows. One static table per type; the storage comes back as an
+        // What EntityList needs that only the C++ type knows: where its components are. The storage comes back as an
         // opaque pointer so that no ECS library type appears here.
-        struct NativeOperations
-        {
-            void* (*storage)(EntityList& entities);
-            void* (*get)(EntityList& entities, std::uint32_t entity);
-            void (*add)(EntityList& entities, std::uint32_t entity);
-        };
+        using NativeStorageFinder = void* (*)(EntityList& entities);
 
-        ComponentType(const NativeOperations* native, std::shared_ptr<const DynamicComponentType> dynamic,
+        ComponentType(NativeStorageFinder findNativeStorage, std::shared_ptr<const DynamicComponentType> dynamic,
                       std::size_t size, std::size_t alignment)
-            : m_native(native), m_dynamic(std::move(dynamic)), m_size(size), m_alignment(alignment)
+            : m_findNativeStorage(findNativeStorage), m_dynamic(std::move(dynamic)), m_size(size),
+              m_alignment(alignment)
         {
         }
 
-        const NativeOperations* m_native;
+        NativeStorageFinder m_findNativeStorage;
         std::shared_ptr<const DynamicComponentType> m_dynamic;
         std::size_t m_size;
         std::size_t m_alignment;

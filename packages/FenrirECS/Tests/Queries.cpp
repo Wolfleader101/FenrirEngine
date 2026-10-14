@@ -1,16 +1,16 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/DynamicComponent.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 
-#include <algorithm>
 #include <cstdint>
 #include <set>
 #include <span>
 #include <vector>
 
-using Fenrir::ComponentSelector;
+using Fenrir::ComponentType;
 using Fenrir::DynamicComponentType;
 using Fenrir::EntityList;
 
@@ -27,10 +27,10 @@ namespace
     };
 
     // The entities a query visits, as a set so that order does not matter.
-    std::set<std::uint32_t> Visited(EntityList& entities, std::vector<ComponentSelector> selectors)
+    std::set<std::uint32_t> Visited(EntityList& entities, const std::vector<ComponentType>& types)
     {
         std::set<std::uint32_t> visited;
-        entities.ForEachWith(std::span<const ComponentSelector>(selectors),
+        entities.ForEachWith(std::span<const ComponentType>(types),
                              [&](std::uint32_t entity) { visited.insert(entity); });
         return visited;
     }
@@ -47,111 +47,97 @@ TEST_CASE("a query over native components visits exactly the entities that have 
     auto onlyArmour = entities.CreateEntity();
     onlyArmour.AddComponent<Armour>();
     (void)entities.CreateEntity();
+    const ComponentType health = ComponentType::Native<Health>();
+    const ComponentType armour = ComponentType::Native<Armour>();
 
-    CHECK(Visited(entities, {ComponentSelector::Native<Health>(), ComponentSelector::Native<Armour>()}) ==
-          std::set<std::uint32_t>{both.GetId()});
-    CHECK(Visited(entities, {ComponentSelector::Native<Health>()}) ==
-          std::set<std::uint32_t>{both.GetId(), onlyHealth.GetId()});
+    INFO("only the entity with Health and Armour is visited for both");
+    REQUIRE(Visited(entities, {health, armour}) == std::set<std::uint32_t>{both.GetId()});
+
+    INFO("both entities with Health are visited for Health alone");
+    REQUIRE(Visited(entities, {health}) == std::set<std::uint32_t>{both.GetId(), onlyHealth.GetId()});
 }
 
 TEST_CASE("a query over a dynamic component visits exactly the entities that have it", "[query]")
 {
     EntityList entities;
-    const DynamicComponentType type("Test.Marked", 4, 4);
+    const ComponentType type = ComponentType::Dynamic(DynamicComponentType("Test.Marked", 4, 4));
     const auto marked = entities.CreateEntity().GetId();
     const auto alsoMarked = entities.CreateEntity().GetId();
     (void)entities.CreateEntity();
-    REQUIRE(entities.AddDynamic(type, marked));
-    REQUIRE(entities.AddDynamic(type, alsoMarked));
+    INFO("both adds succeed");
+    REQUIRE(entities.Add(type, marked));
+    REQUIRE(entities.Add(type, alsoMarked));
 
-    CHECK(Visited(entities, {ComponentSelector::Dynamic(type)}) == std::set<std::uint32_t>{marked, alsoMarked});
+    INFO("the two marked entities, and only they, are visited");
+    REQUIRE(Visited(entities, {type}) == std::set<std::uint32_t>{marked, alsoMarked});
 }
 
-TEST_CASE("a query can mix native and dynamic components", "[query]")
+TEST_CASE("the order of the types in a query does not change what it visits", "[query]")
 {
     EntityList entities;
-    const DynamicComponentType type("Test.Mixed", 4, 4);
+    const ComponentType health = ComponentType::Native<Health>();
+    const ComponentType mixed = ComponentType::Dynamic(DynamicComponentType("Test.Mixed", 4, 4));
     auto both = entities.CreateEntity();
     both.AddComponent<Health>();
-    REQUIRE(entities.AddDynamic(type, both.GetId()));
     auto onlyNative = entities.CreateEntity();
     onlyNative.AddComponent<Health>();
     const auto onlyDynamic = entities.CreateEntity().GetId();
-    REQUIRE(entities.AddDynamic(type, onlyDynamic));
+    INFO("both dynamic adds succeed");
+    REQUIRE(entities.Add(mixed, both.GetId()));
+    REQUIRE(entities.Add(mixed, onlyDynamic));
 
-    CHECK(Visited(entities, {ComponentSelector::Native<Health>(), ComponentSelector::Dynamic(type)}) ==
-          std::set<std::uint32_t>{both.GetId()});
-    CHECK(Visited(entities, {ComponentSelector::Dynamic(type), ComponentSelector::Native<Health>()}) ==
-          std::set<std::uint32_t>{both.GetId()});
-}
+    INFO("native first visits only the entity with both");
+    REQUIRE(Visited(entities, {health, mixed}) == std::set<std::uint32_t>{both.GetId()});
 
-TEST_CASE("a query with no selectors visits nothing", "[query]")
-{
-    EntityList entities;
-    (void)entities.CreateEntity();
-
-    CHECK(Visited(entities, {}).empty());
+    INFO("dynamic first visits the same entity");
+    REQUIRE(Visited(entities, {mixed, health}) == std::set<std::uint32_t>{both.GetId()});
 }
 
 TEST_CASE("a query nobody matches visits nothing", "[query]")
 {
     EntityList entities;
-    const DynamicComponentType type("Test.Rare", 4, 4);
+    const ComponentType health = ComponentType::Native<Health>();
+    const ComponentType rare = ComponentType::Dynamic(DynamicComponentType("Test.Rare", 4, 4));
     entities.CreateEntity().AddComponent<Health>();
-    REQUIRE(entities.AddDynamic(type, entities.CreateEntity().GetId()));
+    INFO("the dynamic add succeeds");
+    REQUIRE(entities.Add(rare, entities.CreateEntity().GetId()));
 
-    CHECK(Visited(entities, {ComponentSelector::Native<Health>(), ComponentSelector::Dynamic(type)}).empty());
+    INFO("no entity has both, so none is visited");
+    REQUIRE(Visited(entities, {health, rare}).empty());
 }
 
-TEST_CASE("selecting a dynamic type nobody added makes no storage, but selecting a native one does", "[query]")
+TEST_CASE("querying a native type nobody added makes its empty storage", "[query]")
 {
     EntityList entities;
     const std::size_t storages = entities.ComponentStorageCount();
 
-    CHECK(Visited(entities, {ComponentSelector::Dynamic(DynamicComponentType("Test.Never", 4, 4))}).empty());
-    CHECK(entities.ComponentStorageCount() == storages);
-
-    CHECK(Visited(entities, {ComponentSelector::Native<Armour>()}).empty());
-    CHECK(entities.ComponentStorageCount() == storages + 1);
-}
-
-TEST_CASE("CountOf agrees with what was added, for native and dynamic components", "[query]")
-{
-    EntityList entities;
-    const DynamicComponentType type("Test.Counted", 4, 4);
-    for (int index = 0; index < 7; ++index)
-    {
-        entities.CreateEntity().AddComponent<Health>();
-    }
-    for (int index = 0; index < 4; ++index)
-    {
-        REQUIRE(entities.AddDynamic(type, entities.CreateEntity().GetId()));
-    }
-
-    CHECK(entities.CountOf(ComponentSelector::Native<Health>()) == 7);
-    CHECK(entities.CountOf(ComponentSelector::Dynamic(type)) == 4);
-    CHECK(entities.CountDynamic(type) == 4);
-    CHECK(entities.CountOf(ComponentSelector::Dynamic(DynamicComponentType("Test.None", 4, 4))) == 0);
+    INFO("the query visits nothing but the list now has storage for Armour, as ADR-0008 documents");
+    REQUIRE(Visited(entities, {ComponentType::Native<Armour>()}).empty());
+    REQUIRE(entities.ComponentStorageCount() == storages + 1);
 }
 
 TEST_CASE("changes made between queries are seen by the next query", "[query]")
 {
     EntityList entities;
-    const DynamicComponentType type("Test.Changing", 4, 4);
+    const ComponentType health = ComponentType::Native<Health>();
+    const ComponentType changing = ComponentType::Dynamic(DynamicComponentType("Test.Changing", 4, 4));
     auto first = entities.CreateEntity();
     auto second = entities.CreateEntity();
     first.AddComponent<Health>();
-    REQUIRE(entities.AddDynamic(type, first.GetId()));
-    const std::vector<ComponentSelector> both{ComponentSelector::Native<Health>(), ComponentSelector::Dynamic(type)};
-    REQUIRE(Visited(entities, both) == std::set<std::uint32_t>{first.GetId()});
+    INFO("the first entity is given both");
+    REQUIRE(entities.Add(changing, first.GetId()));
+    REQUIRE(Visited(entities, {health, changing}) == std::set<std::uint32_t>{first.GetId()});
 
+    INFO("a second entity given both is visited too");
     second.AddComponent<Health>();
-    REQUIRE(entities.AddDynamic(type, second.GetId()));
-    CHECK(Visited(entities, both) == std::set<std::uint32_t>{first.GetId(), second.GetId()});
+    REQUIRE(entities.Add(changing, second.GetId()));
+    REQUIRE(Visited(entities, {health, changing}) == std::set<std::uint32_t>{first.GetId(), second.GetId()});
 
-    REQUIRE(entities.RemoveDynamic(type, first.GetId()));
-    CHECK(Visited(entities, both) == std::set<std::uint32_t>{second.GetId()});
+    INFO("the first, once it loses the dynamic component, is not");
+    REQUIRE(entities.Remove(changing, first.GetId()));
+    REQUIRE(Visited(entities, {health, changing}) == std::set<std::uint32_t>{second.GetId()});
 
+    INFO("the second, once destroyed, is not");
     entities.DestroyEntity(second.GetId());
-    CHECK(Visited(entities, both).empty());
+    REQUIRE(Visited(entities, {health, changing}).empty());
 }
