@@ -36,8 +36,7 @@ namespace Fenrir::Detail
         // The id of the new registration, or -1 if the name is empty or already taken.
         std::int32_t Add(ComponentRegistration registration)
         {
-            if (registration.name.empty() || !registration.get || !registration.has ||
-                m_ids.contains(registration.name))
+            if (registration.name.empty() || m_ids.contains(registration.name))
             {
                 return -1;
             }
@@ -89,9 +88,8 @@ namespace Fenrir::Detail
         // same name twice.
         bool AddAll(std::vector<ComponentRegistration> registrations)
         {
-            if (!CanAddAll(registrations, m_ids, [](const ComponentRegistration& registration) {
-                    return !registration.name.empty() && registration.get && registration.has;
-                }))
+            if (!CanAddAll(registrations, m_ids,
+                           [](const ComponentRegistration& registration) { return !registration.name.empty(); }))
             {
                 return false;
             }

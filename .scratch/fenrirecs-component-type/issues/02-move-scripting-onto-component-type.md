@@ -14,22 +14,28 @@ App authors' code does not change, and nothing C# sees changes: not behaviour, m
 
 **Blocked by:** 01 (Add `ComponentType` and its `EntityList` operations beside the old ones).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ComponentRegistration` has a component type and no operation slots, selector, size or alignment.
-- [ ] `MakeComponent<T, Mapping>`, `MakeReadOnlyComponent<T, Mapping>` and `Scripting::RegisterComponent<T>` keep their signatures and meaning.
-- [ ] `MakeReadOnlyComponent` sets only the flag.
-- [ ] The `LiveEntity` helper is gone.
-- [ ] `MakeScriptComponent` is gone. Script-defined registrations are built from `ComponentType::Dynamic` plus their flags where a generation is reconciled.
-- [ ] Read-only and required components are refused for add and remove by checking the flags, with the same messages and skip behaviour as before. No refusal depends on an absent function slot.
-- [ ] Queries resolve each component id to its component type and query the span of component types. The empty-pool early-out uses count.
-- [ ] Change playback adds, gets and removes through the component type, and copies an added value using its size.
-- [ ] Dropping a script component whose layout changed clears its component type in every scene.
-- [ ] No scripting code calls `ComponentSelector`, `CountOf` or any `*Dynamic` method.
-- [ ] Scripting tests:
+- [x] `ComponentRegistration` has a component type and no operation slots, selector, size or alignment.
+- [x] `MakeComponent<T, Mapping>`, `MakeReadOnlyComponent<T, Mapping>` and `Scripting::RegisterComponent<T>` keep their signatures and meaning.
+- [x] `MakeReadOnlyComponent` sets only the flag.
+- [x] The `LiveEntity` helper is gone.
+- [x] `MakeScriptComponent` is gone. Script-defined registrations are built from `ComponentType::Dynamic` plus their flags where a generation is reconciled.
+- [x] Read-only and required components are refused for add and remove by checking the flags, with the same messages and skip behaviour as before. No refusal depends on an absent function slot.
+- [x] Queries resolve each component id to its component type and query the span of component types. The empty-pool early-out uses count.
+- [x] Change playback adds, gets and removes through the component type, and copies an added value using its size.
+- [x] Dropping a script component whose layout changed clears its component type in every scene.
+- [x] No scripting code calls `ComponentSelector`, `CountOf` or any `*Dynamic` method.
+- [x] Scripting tests:
   - the cases that called registration slots directly are rewritten to use the component type with `EntityList`, asserting the same things;
   - three ECS-only cases are deleted: "a runtime view over native and script pools iterates the right entities", "script component storage honours alignment and never moves elements" and "the ECS holds dynamic components and refuses to change their shape while in use";
   - no new scripting tests are added.
-- [ ] The scripting test suite passes, and `ScriptingDoesNotUseEnTT` passes.
-- [ ] The DemoApp builds and runs its scripting demo unchanged.
-- [ ] The FenrirScripting README no longer describes registration operation slots.
+- [x] The scripting test suite passes, and `ScriptingDoesNotUseEnTT` passes.
+- [x] The DemoApp builds and runs its scripting demo unchanged.
+- [x] The FenrirScripting README no longer describes registration operation slots.
+
+## Comments
+
+Done. One deviation: "script component storage honours alignment and never moves elements" was not only ECS behaviour. It also drove C# writing and reading a `Vector128` in an aligned component and using an empty component as a tag, which no other test covers. Its ECS part is deleted as planned (FenrirECSTests covers it); its C# part is kept as "C# uses an aligned component, and an empty one as a tag". The scripting suite has 69 cases (71 - 3 + 1).
+
+`ComponentRegistration::type` has no default, so a registration can only be built with one (the factories, or designated initializers). The registry no longer checks for operation slots.

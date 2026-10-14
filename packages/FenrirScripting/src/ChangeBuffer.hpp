@@ -40,7 +40,7 @@ namespace Fenrir::Detail
 
         [[nodiscard]] ChangeError Destroy(EntityList& entities, std::uint32_t entity);
 
-        // `value` is one component's bytes (registration.size of them), or null for a default one.
+        // `value` is one component's bytes (registration.type.Size() of them), or null for a default one.
         [[nodiscard]] ChangeError Add(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                       std::uint32_t entity, const void* value);
 

@@ -994,8 +994,8 @@ namespace
         const std::size_t poolsWithEntity = PoolCount(scene);
         {
             INFO("Reading or removing an absent script component misbehaved");
-            REQUIRE((!velocity->has(scene, probe) && velocity->get(scene, probe) == nullptr &&
-                     velocity->remove(scene, probe)));
+            REQUIRE((!scene.Has(velocity->type, probe) && scene.Get(velocity->type, probe) == nullptr &&
+                     scene.Remove(velocity->type, probe)));
         }
         {
             INFO("Asking about a script component created storage");
@@ -1003,7 +1003,7 @@ namespace
         }
         {
             INFO("Adding a script component did not create its pool");
-            REQUIRE((velocity->add(scene, probe) && PoolCount(scene) == poolsWithEntity + 1));
+            REQUIRE((scene.Add(velocity->type, probe) && PoolCount(scene) == poolsWithEntity + 1));
         }
 
         const auto expect = [&](const char* name, std::size_t size, std::size_t alignment) {
@@ -1017,9 +1017,10 @@ namespace
                 REQUIRE((registration->scriptDefined && !registration->readOnly && registration->typeName == name));
             }
             {
-                INFO(std::string(name) + " has the wrong size or alignment: " + std::to_string(registration->size) +
-                     " / " + std::to_string(registration->alignment));
-                REQUIRE((registration->size == size && registration->alignment == alignment));
+                INFO(std::string(name) +
+                     " has the wrong size or alignment: " + std::to_string(registration->type.Size()) + " / " +
+                     std::to_string(registration->type.Alignment()));
+                REQUIRE((registration->type.Size() == size && registration->type.Alignment() == alignment));
             }
         };
         expect(VelocityName, 12, 4);
@@ -1055,18 +1056,18 @@ namespace
         auto third = entities.CreateEntity();
         {
             INFO("A component was there before it was added");
-            REQUIRE(!velocity->has(entities, first.GetId()));
+            REQUIRE(!entities.Has(velocity->type, first.GetId()));
         }
         for (auto* entity : {&first, &second, &third})
         {
             {
                 INFO("A component was not added");
-                REQUIRE(velocity->add(entities, entity->GetId()));
+                REQUIRE(entities.Add(velocity->type, entity->GetId()));
             }
         }
         {
             INFO("Adding twice failed");
-            REQUIRE(velocity->add(entities, first.GetId()));
+            REQUIRE(entities.Add(velocity->type, first.GetId()));
         } // Harmless, and keeps the one it has.
 
         // A new component is all zero bytes, which is a C# default.
@@ -1079,7 +1080,7 @@ namespace
         Scripted<void>(scripting, "Accelerate", first.GetId());
         Scripted<void>(scripting, "Accelerate", first.GetId());
         Scripted<void>(scripting, "Accelerate", third.GetId());
-        const auto* values = static_cast<const float*>(velocity->get(entities, first.GetId()));
+        const auto* values = static_cast<const float*>(entities.Get(velocity->type, first.GetId()));
         {
             INFO("C# writes were not in the engine's storage");
             REQUIRE((values != nullptr && values[0] == 2 && values[1] == 4 && values[2] == 6));
@@ -1094,7 +1095,7 @@ namespace
         }
 
         // Native code writes it too, and C# reads that.
-        static_cast<float*>(velocity->get(entities, second.GetId()))[0] = 42;
+        static_cast<float*>(entities.Get(velocity->type, second.GetId()))[0] = 42;
         {
             INFO("C# did not read a native write");
             REQUIRE(Scripted<float>(scripting, "SpeedX", second.GetId()) == 42.0F);
@@ -1103,18 +1104,18 @@ namespace
         // The pool holds one element per entity that has the component.
         {
             INFO("The pool did not hold three elements");
-            REQUIRE(velocity->count(entities) == 3);
+            REQUIRE(entities.Count(velocity->type) == 3);
         }
 
         // Destroying an entity removes its element, and the others keep their values.
         entities.DestroyEntity(second.GetId());
         {
             INFO("Destroying an entity left its component in the pool");
-            REQUIRE(velocity->count(entities) == 2);
+            REQUIRE(entities.Count(velocity->type) == 2);
         }
         {
             INFO("A destroyed entity still had the component");
-            REQUIRE(!velocity->has(entities, second.GetId()));
+            REQUIRE(!entities.Has(velocity->type, second.GetId()));
         }
         {
             INFO("Removing an element disturbed the others");
@@ -1126,7 +1127,7 @@ namespace
         const auto reused = entities.CreateEntity().GetId();
         {
             INFO("A new entity inherited a destroyed entity's component");
-            REQUIRE(!velocity->has(entities, reused));
+            REQUIRE(!entities.Has(velocity->type, reused));
         }
         {
             INFO("C# saw a component on an entity that has none");
@@ -1140,298 +1141,55 @@ namespace
         // Removing one explicitly, and again (harmless).
         {
             INFO("A component was not removed");
-            REQUIRE((velocity->remove(entities, first.GetId()) && !velocity->has(entities, first.GetId())));
+            REQUIRE((entities.Remove(velocity->type, first.GetId()) && !entities.Has(velocity->type, first.GetId())));
         }
         {
             INFO("Removing twice failed");
-            REQUIRE(velocity->remove(entities, first.GetId()));
+            REQUIRE(entities.Remove(velocity->type, first.GetId()));
         }
         {
             INFO("The pool did not shrink");
-            REQUIRE(velocity->count(entities) == 1);
+            REQUIRE(entities.Count(velocity->type) == 1);
         }
     }
 
-    void ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities()
-    {
-        HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        auto& entities = headless.Get().GetActiveScene().GetEntityList();
-        const auto* transform = scripting.FindComponent("Fenrir.Transform");
-        const auto* velocity = scripting.FindComponent(VelocityName);
-        const auto* counter = scripting.FindComponent(CounterName);
-
-        std::vector<std::uint32_t> ids;
-        for (int index = 0; index < 6; ++index)
-        {
-            ids.push_back(entities.CreateEntity().GetId());
-        }
-        // Every entity has a Transform (the engine adds it). Velocity on 0, 2, 4. Counter on 2, 3, 4, 5. Without a
-        // Transform: entity 4.
-        for (const int index : {0, 2, 4})
-        {
-            {
-                INFO("Velocity was not added");
-                REQUIRE(velocity->add(entities, ids[static_cast<std::size_t>(index)]));
-            }
-        }
-        for (const int index : {2, 3, 4, 5})
-        {
-            {
-                INFO("Counter was not added");
-                REQUIRE(counter->add(entities, ids[static_cast<std::size_t>(index)]));
-            }
-        }
-        {
-            INFO("Transform was not removed");
-            REQUIRE(transform->remove(entities, ids[4]));
-        }
-
-        // A query over any mix of native and script components, through the ECS own API.
-        const auto iterate = [&](std::initializer_list<const ComponentRegistration*> registrations) {
-            std::vector<ComponentSelector> selectors;
-            for (const auto* registration : registrations)
-            {
-                selectors.push_back(*registration->selector);
-            }
-            std::set<std::uint32_t> found;
-            entities.ForEachWith(selectors, [&](std::uint32_t entity) { found.insert(entity); });
-            return found;
-        };
-        using Ids = std::set<std::uint32_t>;
-        {
-            INFO("Native + script view was wrong (Transform and Velocity)");
-            REQUIRE(iterate({transform, velocity}) == Ids{ids[0], ids[2]});
-        }
-        {
-            INFO("Script + script view was wrong (Velocity and Counter)");
-            REQUIRE(iterate({velocity, counter}) == Ids{ids[2], ids[4]});
-        }
-        {
-            INFO("A three-pool view was wrong");
-            REQUIRE(iterate({transform, velocity, counter}) == Ids{ids[2]});
-        }
-        {
-            INFO("A single script pool iterated the wrong entities");
-            REQUIRE(iterate({counter}) == Ids{ids[2], ids[3], ids[4], ids[5]});
-        }
-
-        // Destroying an entity drops it from every pool, native and script.
-        entities.DestroyEntity(ids[2]);
-        {
-            INFO("A destroyed entity stayed in a view");
-            REQUIRE(iterate({transform, velocity}) == Ids{ids[0]});
-        }
-        {
-            INFO("A destroyed entity stayed in a script pool");
-            REQUIRE(iterate({counter}) == Ids{ids[3], ids[4], ids[5]});
-        }
-    }
-
-    void ScriptComponentStorageHonoursAlignmentAndNeverMovesElements()
+    // What C# sees of a script component the ECS aligns for it (the storage itself is FenrirECS's, tested there).
+    void CSharpUsesAnAlignedComponentAndAnEmptyOneAsATag()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         const auto* aligned = scripting.FindComponent(AlignedName);
+        const auto* tagged = scripting.FindComponent(TaggedName);
         {
-            INFO("Aligned was not registered");
-            REQUIRE(aligned != nullptr);
+            INFO("Aligned or Tagged was not registered");
+            REQUIRE((aligned != nullptr && tagged != nullptr));
         }
-
-        // More elements than one page holds (a page is 256), each on a 16-byte boundary.
-        std::vector<std::uint32_t> ids;
-        for (int index = 0; index < 700; ++index)
+        const auto holder = entities.CreateEntity().GetId();
+        const auto other = entities.CreateEntity().GetId();
         {
-            ids.push_back(entities.CreateEntity().GetId());
-            {
-                INFO("Aligned was not added");
-                REQUIRE(aligned->add(entities, ids.back()));
-            }
-            {
-                INFO("An element was not 16-byte aligned");
-                REQUIRE(reinterpret_cast<std::uintptr_t>(aligned->get(entities, ids.back())) % 16 == 0);
-            }
-        }
-
-        // Growing the storage does not move what is already in it.
-        void* first = aligned->get(entities, ids.front());
-        void* middle = aligned->get(entities, ids[400]);
-        for (int index = 0; index < 3000; ++index)
-        {
-            const auto id = entities.CreateEntity().GetId();
-            {
-                INFO("Aligned was not added while growing");
-                REQUIRE(aligned->add(entities, id));
-            }
-        }
-        {
-            INFO("Growing the storage moved an existing element");
-            REQUIRE((aligned->get(entities, ids.front()) == first && aligned->get(entities, ids[400]) == middle));
-        }
-        {
-            INFO("The pool did not hold every element");
-            REQUIRE(aligned->count(entities) == 3700);
+            INFO("Aligned was not added");
+            REQUIRE(entities.Add(aligned->type, holder));
         }
 
         // C# reads and writes a Vector128 in it.
-        Scripted<void>(scripting, "FillAligned", ids[400]);
-        const auto* lanes = static_cast<const float*>(aligned->get(entities, ids[400]));
+        Scripted<void>(scripting, "FillAligned", holder);
+        const auto* lanes = static_cast<const float*>(entities.Get(aligned->type, holder));
         {
             INFO("C# writes to an aligned component were not in the storage");
             REQUIRE((lanes[0] == 1 && lanes[3] == 4 &&
-                     static_cast<const std::uint8_t*>(aligned->get(entities, ids[400]))[16] == 7));
+                     static_cast<const std::uint8_t*>(entities.Get(aligned->type, holder))[16] == 7));
         }
         {
             INFO("C# did not read a lane back");
-            REQUIRE(Scripted<float>(scripting, "AlignedLane", ids[400], 2) == 3.0F);
+            REQUIRE(Scripted<float>(scripting, "AlignedLane", holder, 2) == 3.0F);
         }
 
         // A tag with no data is still a component.
-        const auto* tagged = scripting.FindComponent(TaggedName);
         {
             INFO("An empty component did not work as a tag");
-            REQUIRE((tagged->add(entities, ids[1]) && Scripted<bool>(scripting, "HasTagged", ids[1]) &&
-                     !Scripted<bool>(scripting, "HasTagged", ids[2])));
-        }
-    }
-
-    // The ECS own dynamic components, through its public API only (no scripting involved).
-    void TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse()
-    {
-        EntityList entities;
-        const DynamicComponentType small("Test.Small", 8, 4);
-        const auto entity = entities.CreateEntity().GetId();
-
-        // Nothing is stored until one is added, and an invalid description is refused.
-        {
-            INFO("A type nobody added had components");
-            REQUIRE((entities.GetDynamic(small, entity) == nullptr && !entities.HasDynamic(small, entity) &&
-                     entities.CountDynamic(small) == 0));
-        }
-        {
-            INFO("An impossible description was accepted");
-            REQUIRE((
-                !entities.AddDynamic(DynamicComponentType("Test.Bad", 7, 4), entity) &&
-                !entities.AddDynamic(DynamicComponentType("Test.Bad", 8, 3), entity) &&
-                !entities.AddDynamic(DynamicComponentType("", 8, 4), entity) &&
-                !entities.AddDynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4), entity)));
-        }
-        {
-            INFO("IsValid was wrong");
-            REQUIRE((small.IsValid() && !DynamicComponentType("x", 0, 1).IsValid()));
-        }
-
-        {
-            INFO("Adding a component, or adding it twice, failed");
-            REQUIRE((entities.AddDynamic(small, entity) && entities.AddDynamic(small, entity)));
-        }
-        auto* bytes = static_cast<std::uint8_t*>(entities.GetDynamic(small, entity));
-        {
-            INFO("A new component was not zeroed, or was counted twice");
-            REQUIRE((bytes != nullptr && std::all_of(bytes, bytes + 8, [](std::uint8_t byte) { return byte == 0; }) &&
-                     entities.CountDynamic(small) == 1));
-        }
-        {
-            INFO("The component was not aligned");
-            REQUIRE(reinterpret_cast<std::uintptr_t>(bytes) % 4 == 0);
-        }
-
-        // The same name with another shape is refused while components of the first shape exist.
-        const DynamicComponentType wider("Test.Small", 16, 8);
-        {
-            INFO("The same name did not give the same id");
-            REQUIRE(wider.Id() == small.Id());
-        }
-        {
-            INFO("A component of another shape was added under the same name");
-            REQUIRE(!entities.AddDynamic(wider, entity));
-        }
-        {
-            INFO("A refused add disturbed the storage");
-            REQUIRE(entities.GetDynamic(small, entity) == bytes);
-        }
-
-        // Once none are left, the name can take a new shape.
-        {
-            INFO("Removing a component did not empty the storage");
-            REQUIRE((entities.RemoveDynamic(small, entity) && !entities.HasDynamic(small, entity) &&
-                     entities.CountDynamic(small) == 0));
-        }
-        {
-            INFO("An emptied storage did not accept a new shape");
-            REQUIRE((entities.AddDynamic(wider, entity) &&
-                     reinterpret_cast<std::uintptr_t>(entities.GetDynamic(wider, entity)) % 8 == 0));
-        }
-
-        // A destroyed entity has no components, and cannot be given any.
-        entities.DestroyEntity(entity);
-        {
-            INFO("A destroyed entity still had a dynamic component");
-            REQUIRE((!entities.HasDynamic(wider, entity) && !entities.RemoveDynamic(wider, entity) &&
-                     !entities.AddDynamic(wider, entity)));
-        }
-        {
-            INFO("A destroyed entity component stayed in the storage");
-            REQUIRE(entities.CountDynamic(wider) == 0);
-        }
-
-        // A name whose id (a hash) equals another name id must not share its storage: the first to use it owns it.
-        // Found by brute force against the FNV-1a ids: these two names hash to the same 32-bit id.
-        const std::string first = "Test.Collide.39238";
-        const std::string second = "Test.Collide.644126";
-        const DynamicComponentType owner(first, 8, 4);
-        const DynamicComponentType intruder(second, 8, 4);
-        {
-            INFO("The two names did not collide");
-            REQUIRE((owner.Id() == intruder.Id() && owner.Name() != intruder.Name()));
-        }
-        const auto holder = entities.CreateEntity().GetId();
-        {
-            INFO("The first name could not use the storage");
-            REQUIRE(entities.AddDynamic(owner, holder));
-        }
-        {
-            INFO("A second name shared the first name storage");
-            REQUIRE((!entities.AddDynamic(intruder, holder) && !entities.HasDynamic(intruder, holder) &&
-                     entities.GetDynamic(intruder, holder) == nullptr && entities.CountDynamic(intruder) == 0));
-        }
-        (void)entities.RemoveDynamic(intruder, holder); // Must not remove the owner component.
-        {
-            INFO("The intruder disturbed the owner");
-            REQUIRE((entities.HasDynamic(owner, holder) && entities.CountDynamic(owner) == 1));
-        }
-
-        // The largest allowed component costs a page of its own size, not 256 of them, and is still aligned.
-        const DynamicComponentType big("Test.Big", DynamicComponentType::MaxSize, 16);
-        std::set<void*> addresses;
-        for (int index = 0; index < 3; ++index)
-        {
-            const auto id = entities.CreateEntity().GetId();
-            {
-                INFO("A maximum-size component was not added");
-                REQUIRE(entities.AddDynamic(big, id));
-            }
-            void* at = entities.GetDynamic(big, id);
-            {
-                INFO("A maximum-size component was not aligned");
-                REQUIRE((at != nullptr && reinterpret_cast<std::uintptr_t>(at) % 16 == 0));
-            }
-            addresses.insert(at);
-        }
-        {
-            INFO("Maximum-size components overlapped");
-            REQUIRE((addresses.size() == 3 && entities.CountOf(ComponentSelector::Dynamic(big)) == 3));
-        }
-
-        // A query over a dynamic type nobody has added visits nothing, and makes no storage.
-        const std::size_t storages = entities.ComponentStorageCount();
-        std::size_t visited = 0;
-        const ComponentSelector never = ComponentSelector::Dynamic(DynamicComponentType("Test.Never", 4, 4));
-        entities.ForEachWith(std::span<const ComponentSelector>(&never, 1), [&](std::uint32_t) { ++visited; });
-        {
-            INFO("A query over an unused dynamic type visited entities or made storage");
-            REQUIRE((visited == 0 && entities.ComponentStorageCount() == storages));
+            REQUIRE((entities.Add(tagged->type, holder) && Scripted<bool>(scripting, "HasTagged", holder) &&
+                     !Scripted<bool>(scripting, "HasTagged", other)));
         }
     }
 
@@ -1449,14 +1207,14 @@ namespace
         const auto id = entities.CreateEntity().GetId();
         {
             INFO("Velocity was not added");
-            REQUIRE(scripting.FindComponent(VelocityName)->add(entities, id));
+            REQUIRE(entities.Add(scripting.FindComponent(VelocityName)->type, id));
         }
         return id;
     }
 
     float VelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id)
     {
-        const auto* values = static_cast<const float*>(scripting.FindComponent(VelocityName)->get(entities, id));
+        const auto* values = static_cast<const float*>(entities.Get(scripting.FindComponent(VelocityName)->type, id));
         {
             INFO("The entity had no Velocity");
             REQUIRE(values != nullptr);
@@ -1487,7 +1245,7 @@ namespace
         }
         {
             INFO("A change reached the storage before playback");
-            REQUIRE((!velocity->has(entities, id) && !entities.GetEntity(id).HasComponent<Transform>()));
+            REQUIRE((!entities.Has(velocity->type, id) && !entities.GetEntity(id).HasComponent<Transform>()));
         }
 
         const auto summary = scripting.ApplyChanges();
@@ -1505,14 +1263,14 @@ namespace
             INFO("A created entity did not get a name");
             REQUIRE(std::string(entity.GetComponent<Name>().Get()).starts_with("Entity "));
         }
-        const auto* values = static_cast<const float*>(velocity->get(entities, id));
+        const auto* values = static_cast<const float*>(entities.Get(velocity->type, id));
         {
             INFO("The added value was not applied");
             REQUIRE((values != nullptr && values[0] == 1 && values[1] == 2 && values[2] == 3));
         }
         {
             INFO("A default component was not added");
-            REQUIRE(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->has(entities, id));
+            REQUIRE(entities.Has(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->type, id));
         }
 
         // Nothing left over to play back.
@@ -1541,7 +1299,7 @@ namespace
         }
         {
             INFO("A removal reached the storage before playback");
-            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, victim));
+            REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, victim));
         }
 
         const auto summary = scripting.ApplyChanges();
@@ -1551,7 +1309,7 @@ namespace
         }
         {
             INFO("The removal was not applied");
-            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, victim));
+            REQUIRE(!entities.Has(scripting.FindComponent(VelocityName)->type, victim));
         }
         {
             INFO("The write through the Ref did not stay with the kept entity when the pool changed");
@@ -1560,7 +1318,7 @@ namespace
         // 3 to begin with, minus the victim, plus 5000 new entities and the one made before them.
         {
             INFO("The pool did not end up with the right entities");
-            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 5003);
+            REQUIRE(entities.Count(scripting.FindComponent(VelocityName)->type) == 5003);
         }
     }
 
@@ -1593,11 +1351,11 @@ namespace
         (void)scripting.ApplyChanges();
         {
             INFO("The add was not applied");
-            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, bare));
+            REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, bare));
         }
         {
             INFO("The removal was not applied");
-            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, holder));
+            REQUIRE(!entities.Has(scripting.FindComponent(VelocityName)->type, holder));
         }
         {
             INFO("The destroy was not applied");
@@ -1668,11 +1426,11 @@ namespace
         const auto reused = entities.CreateEntity().GetId();
         {
             INFO("A skipped add reached a new entity");
-            REQUIRE(!scripting.FindComponent(VelocityName)->has(entities, reused));
+            REQUIRE(!entities.Has(scripting.FindComponent(VelocityName)->type, reused));
         }
         {
             INFO("A skipped add left a component behind");
-            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 0);
+            REQUIRE(entities.Count(scripting.FindComponent(VelocityName)->type) == 0);
         }
 
         // Add first, destroy after: the entity is gone and takes the component with it.
@@ -1685,7 +1443,7 @@ namespace
         }
         {
             INFO("A destroyed entity kept its component");
-            REQUIRE(scripting.FindComponent(VelocityName)->count(entities) == 0);
+            REQUIRE(entities.Count(scripting.FindComponent(VelocityName)->type) == 0);
         }
 
         // Destroying twice is the same as once.
@@ -1777,7 +1535,7 @@ namespace
         }
         {
             INFO("Discarding applied a change");
-            REQUIRE(scripting.FindComponent(VelocityName)->has(entities, existing));
+            REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, existing));
         }
 
         // After Shutdown there is nothing to play back, and it says so rather than crashing.
@@ -1798,7 +1556,7 @@ namespace
 
     void SetVelocityX(Scripting& scripting, EntityList& entities, std::uint32_t id, float x)
     {
-        auto* values = static_cast<float*>(scripting.FindComponent(VelocityName)->get(entities, id));
+        auto* values = static_cast<float*>(entities.Get(scripting.FindComponent(VelocityName)->type, id));
         {
             INFO("The entity had no Velocity");
             REQUIRE(values != nullptr);
@@ -1825,7 +1583,7 @@ namespace
         const auto velocityOnly = entities.CreateEntity().GetId();
         {
             INFO("Velocity was not added");
-            REQUIRE(scripting.FindComponent(VelocityName)->add(entities, velocityOnly));
+            REQUIRE(entities.Add(scripting.FindComponent(VelocityName)->type, velocityOnly));
         }
         entities.GetEntity(velocityOnly).RemoveComponent<Transform>();
         const auto transformOnly = entities.CreateEntity().GetId();
@@ -1862,7 +1620,7 @@ namespace
         {
             {
                 INFO("Counter was not added");
-                REQUIRE(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->add(entities, id));
+                REQUIRE(entities.Add(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->type, id));
             }
         }
         {
@@ -1876,7 +1634,7 @@ namespace
             REQUIRE(Queries<std::int32_t>(scripting, "CountUp") == 2);
         }
         const auto* hits = static_cast<const std::int32_t*>(
-            scripting.FindComponent("Fenrir.ScriptFixture.Counter")->get(entities, first));
+            entities.Get(scripting.FindComponent("Fenrir.ScriptFixture.Counter")->type, first));
         {
             INFO("A write through ForEach did not reach the component");
             REQUIRE((hits != nullptr && hits[0] == 1));
@@ -1939,7 +1697,7 @@ namespace
         }
         {
             INFO("A change reached the storage during iteration");
-            REQUIRE((velocity->count(entities) == 5 && counter->count(entities) == 0));
+            REQUIRE((entities.Count(velocity->type) == 5 && entities.Count(counter->type) == 0));
         }
         const auto summary = scripting.ApplyChanges();
         {
@@ -1948,17 +1706,17 @@ namespace
         }
         {
             INFO("Velocity should now be on the five new entities");
-            REQUIRE(velocity->count(entities) == 5);
+            REQUIRE(entities.Count(velocity->type) == 5);
         }
         {
             INFO("Counter should be on the four survivors");
-            REQUIRE(counter->count(entities) == 4);
+            REQUIRE(entities.Count(counter->type) == 4);
         }
         for (const auto id : originals)
         {
             {
                 INFO("An original kept its Velocity");
-                REQUIRE(!velocity->has(entities, id));
+                REQUIRE(!entities.Has(velocity->type, id));
             }
         }
 
@@ -1994,12 +1752,12 @@ namespace
         }
         {
             INFO("A change reached the storage during ForEach");
-            REQUIRE(velocity->count(entities) == 5);
+            REQUIRE(entities.Count(velocity->type) == 5);
         }
         (void)scripting.ApplyChanges();
         {
             INFO("ForEach's deferred changes were not applied");
-            REQUIRE(velocity->count(entities) == 5);
+            REQUIRE(entities.Count(velocity->type) == 5);
         }
         {
             INFO("The replacements were not queryable");
@@ -2058,9 +1816,9 @@ namespace
                 const auto* registration = scripting.FindComponent(prefix + std::to_string(component));
                 {
                     INFO("A component was not added");
-                    REQUIRE((registration != nullptr && registration->add(entities, id)));
+                    REQUIRE((registration != nullptr && entities.Add(registration->type, id)));
                 }
-                *static_cast<std::int32_t*>(registration->get(entities, id)) = 1;
+                *static_cast<std::int32_t*>(entities.Get(registration->type, id)) = 1;
             }
         }
         {
@@ -2678,7 +2436,8 @@ namespace
 
     std::int32_t StampedValue(Scripting& scripting, EntityList& entities, std::uint32_t id)
     {
-        const auto* values = static_cast<const std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, id));
+        const auto* values =
+            static_cast<const std::int32_t*>(entities.Get(scripting.FindComponent(StampedName)->type, id));
         {
             INFO("The entity had no Stamped");
             REQUIRE(values != nullptr);
@@ -2734,15 +2493,15 @@ namespace
             holder = entities.CreateEntity().GetId();
             {
                 INFO("A component was not added");
-                REQUIRE(scripting.FindComponent(name)->add(entities, holder));
+                REQUIRE(entities.Add(scripting.FindComponent(name)->type, holder));
             }
         };
         add(StampedName, stamped);
         add(VelocityName, velocityHolder);
         add(CounterName, counterHolder);
-        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 5;
-        static_cast<float*>(scripting.FindComponent(VelocityName)->get(entities, velocityHolder))[0] = 3.0F;
-        static_cast<std::int32_t*>(scripting.FindComponent(CounterName)->get(entities, counterHolder))[0] = 77;
+        static_cast<std::int32_t*>(entities.Get(scripting.FindComponent(StampedName)->type, stamped))[0] = 5;
+        static_cast<float*>(entities.Get(scripting.FindComponent(VelocityName)->type, velocityHolder))[0] = 3.0F;
+        static_cast<std::int32_t*>(entities.Get(scripting.FindComponent(CounterName)->type, counterHolder))[0] = 77;
 
         headless.Run(6);
 
@@ -2792,19 +2551,19 @@ namespace
             holders.push_back(entities.CreateEntity().GetId());
             {
                 INFO("A Counter was not added");
-                REQUIRE(counter->add(entities, holders.back()));
+                REQUIRE(entities.Add(counter->type, holders.back()));
             }
-            static_cast<std::int32_t*>(counter->get(entities, holders.back()))[0] = 100 + index;
+            static_cast<std::int32_t*>(entities.Get(counter->type, holders.back()))[0] = 100 + index;
         }
         const auto stamped = entities.CreateEntity().GetId();
         {
             INFO("A Stamped was not added");
-            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+            REQUIRE(entities.Add(scripting.FindComponent(StampedName)->type, stamped));
         }
-        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 41;
+        static_cast<std::int32_t*>(entities.Get(scripting.FindComponent(StampedName)->type, stamped))[0] = 41;
         {
             INFO("The test assumes version 1 of Counter is sixteen bytes");
-            REQUIRE(counter->size == 16);
+            REQUIRE(counter->type.Size() == 16);
         }
 
         Reloaded<void>(scripting, "SendEcho", std::int32_t{9});
@@ -2826,17 +2585,17 @@ namespace
         const auto* changed = scripting.FindComponent(CounterName);
         {
             INFO("The new Counter layout was not registered");
-            REQUIRE((changed != nullptr && changed->size == 24));
+            REQUIRE((changed != nullptr && changed->type.Size() == 24));
         }
         {
             INFO("Old Counter bytes are still on entities");
-            REQUIRE(changed->count(entities) == 0);
+            REQUIRE(entities.Count(changed->type) == 0);
         }
         for (const auto id : holders)
         {
             {
                 INFO("An entity still has the old Counter");
-                REQUIRE((!changed->has(entities, id) && changed->get(entities, id) == nullptr));
+                REQUIRE((!entities.Has(changed->type, id) && entities.Get(changed->type, id) == nullptr));
             }
         }
         {
@@ -2847,9 +2606,9 @@ namespace
         // A new one starts zeroed, at the new size, rather than inheriting bytes.
         {
             INFO("A Counter of the new layout was not added");
-            REQUIRE(changed->add(entities, holders.front()));
+            REQUIRE(entities.Add(changed->type, holders.front()));
         }
-        const auto* fresh = static_cast<const std::uint8_t*>(changed->get(entities, holders.front()));
+        const auto* fresh = static_cast<const std::uint8_t*>(entities.Get(changed->type, holders.front()));
         {
             INFO("A new Counter was not zeroed");
             REQUIRE((fresh != nullptr && std::all_of(fresh, fresh + 24, [](std::uint8_t byte) { return byte == 0; })));
@@ -2916,7 +2675,7 @@ namespace
         stamped = entities.CreateEntity().GetId();
         {
             INFO("A Stamped was not added");
-            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+            REQUIRE(entities.Add(scripting.FindComponent(StampedName)->type, stamped));
         }
 
         headless.Run(6);
@@ -2985,9 +2744,9 @@ namespace
         stamped = entities.CreateEntity().GetId();
         {
             INFO("A Stamped was not added");
-            REQUIRE(scripting.FindComponent(StampedName)->add(entities, stamped));
+            REQUIRE(entities.Add(scripting.FindComponent(StampedName)->type, stamped));
         }
-        static_cast<std::int32_t*>(scripting.FindComponent(StampedName)->get(entities, stamped))[0] = 1234;
+        static_cast<std::int32_t*>(entities.Get(scripting.FindComponent(StampedName)->type, stamped))[0] = 1234;
 
         headless.Run(2);
 
@@ -3640,19 +3399,9 @@ TEST_CASE("a script component is shared with C# and removed with its entity", "[
     AScriptComponentIsSharedWithCSharpAndRemovedWithItsEntity();
 }
 
-TEST_CASE("a runtime view over native and script pools iterates the right entities", "[scripting]")
+TEST_CASE("C# uses an aligned component, and an empty one as a tag", "[scripting]")
 {
-    ARuntimeViewOverNativeAndScriptPoolsIteratesTheRightEntities();
-}
-
-TEST_CASE("script component storage honours alignment and never moves elements", "[scripting]")
-{
-    ScriptComponentStorageHonoursAlignmentAndNeverMovesElements();
-}
-
-TEST_CASE("the ECS holds dynamic components and refuses to change their shape while in use", "[scripting]")
-{
-    TheEcsHoldsDynamicComponentsAndRefusesToChangeTheirShapeWhileInUse();
+    CSharpUsesAnAlignedComponentAndAnEmptyOneAsATag();
 }
 
 TEST_CASE("a created entity is usable at once and exists afterwards", "[scripting]")

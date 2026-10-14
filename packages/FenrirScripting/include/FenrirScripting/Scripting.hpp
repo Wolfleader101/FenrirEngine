@@ -162,8 +162,9 @@ namespace Fenrir
         }
 
         /**
-         * @brief The component registered under a name (native, or defined by the loaded script assembly), or null. Use
-         * its operations to add, remove and reach a component on an entity from native code, whatever defines it.
+         * @brief The component registered under a name (native, or defined by the loaded script assembly), or null.
+         * Pass its `type` to EntityList's Get, Has, Add, Remove and Count to reach the component on an entity from
+         * native code, whatever defines it.
          */
         [[nodiscard]] const ComponentRegistration* FindComponent(std::string_view name) const;
 

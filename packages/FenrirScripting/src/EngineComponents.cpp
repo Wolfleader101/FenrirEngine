@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/Entity.hpp"
 
 // How the engine's own components look to C#. Each mapping is checked against the C# struct in the Fenrir.Scripting
 // contract whenever a script assembly loads, so a drift between the two fails the load and names the field.

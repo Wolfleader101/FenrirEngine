@@ -29,7 +29,7 @@ namespace Fenrir::Detail
         {
             return ChangeError::UnknownComponent;
         }
-        if (registration->readOnly || !registration->add)
+        if (registration->readOnly)
         {
             return ChangeError::ReadOnlyComponent;
         }
@@ -37,11 +37,12 @@ namespace Fenrir::Detail
         {
             return ChangeError::EntityNotAlive;
         }
-        const Change change{Kind::Add, value != nullptr && registration->size > 0, component, entity, m_values.size()};
+        const std::size_t size = registration->type.Size();
+        const Change change{Kind::Add, value != nullptr && size > 0, component, entity, m_values.size()};
         if (change.hasValue)
         {
             const auto* bytes = static_cast<const std::byte*>(value);
-            m_values.insert(m_values.end(), bytes, bytes + registration->size);
+            m_values.insert(m_values.end(), bytes, bytes + size);
         }
         m_changes.push_back(change);
         return ChangeError::None;
@@ -74,7 +75,7 @@ namespace Fenrir::Detail
         {
             return ChangeError::UnknownComponent;
         }
-        if (registration->readOnly || !registration->remove)
+        if (registration->readOnly)
         {
             return ChangeError::ReadOnlyComponent;
         }
@@ -127,16 +128,16 @@ namespace Fenrir::Detail
             case Kind::Add: {
                 const auto* registration = registry.Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
-                    !registration->add(entities, change.entity))
+                    !entities.Add(registration->type, change.entity))
                 {
                     skip("adding a component", change.entity);
                     break;
                 }
                 if (change.hasValue)
                 {
-                    if (void* target = registration->get(entities, change.entity); target != nullptr)
+                    if (void* target = entities.Get(registration->type, change.entity); target != nullptr)
                     {
-                        std::memcpy(target, values.data() + change.valueOffset, registration->size);
+                        std::memcpy(target, values.data() + change.valueOffset, registration->type.Size());
                     }
                 }
                 ++result.applied;
@@ -158,7 +159,7 @@ namespace Fenrir::Detail
             case Kind::Remove: {
                 const auto* registration = registry.Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
-                    !registration->remove(entities, change.entity))
+                    !entities.Remove(registration->type, change.entity))
                 {
                     skip("removing a component", change.entity);
                     break;

@@ -3,27 +3,23 @@
 #include <Iris/Iris.hpp>
 
 #include <cstddef>
-#include <cstdint>
 #include <functional>
-#include <optional>
-#include <span>
 #include <string>
 #include <type_traits>
 
 #include "FenrirApp/App.hpp"
-#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
 
 namespace Fenrir
 {
     /**
-     * @brief One component the engine exposes to C# by name: how to reach its storage for an entity, and (for a native
-     * one) how to check that a C# struct has exactly its layout.
+     * @brief One component the engine exposes to C# by name: the name and C# struct it goes by, what scripts may do
+     * with it, its ComponentType (which reaches its storage through an EntityList), and (for a native one) how to check
+     * that the C# struct has exactly its layout.
      *
-     * EnTT has no registry of types by name at run time, so this is the table that maps a name such as
-     * "Fenrir.Transform" to the operations on the right storage. A native component is described by MakeComponent or
-     * MakeReadOnlyComponent and registered with Scripting::RegisterComponent or ScriptingConfig::components. A
-     * component a script defines in C# has no C++ type at all: it is registered when the script assembly loads. Copying
-     * one is cheap.
+     * A native component is described by MakeComponent or MakeReadOnlyComponent and registered with
+     * Scripting::RegisterComponent or ScriptingConfig::components. A component a script defines in C# has no C++ type
+     * at all: it is registered, with a dynamic ComponentType, when the script assembly loads. Copying one is cheap.
      */
     struct ComponentRegistration
     {
@@ -38,7 +34,13 @@ namespace Fenrir
          */
         std::string typeName;
 
-        /** True if scripts may only read it: it has no add or remove, and C# gets it as a ReadOnlyRef. */
+        /**
+         * The component in the ECS: its size and alignment (which the C# struct must match), and the way to get, add,
+         * remove, count and query it on any EntityList. Every registration has one.
+         */
+        ComponentType type;
+
+        /** True if scripts may only read it: they cannot add or remove it, and C# gets it as a ReadOnlyRef. */
         bool readOnly = false;
 
         /**
@@ -49,29 +51,6 @@ namespace Fenrir
         /** True for a component a script defines in C#. It exists only while the script assembly that defines it is
          * loaded. */
         bool scriptDefined = false;
-
-        /** Size and alignment in bytes of one component, as C# lays it out. */
-        std::size_t size = 0;
-        std::size_t alignment = 0;
-
-        /** Where the component is in the entity's storage, or null if the entity is not alive or lacks it. */
-        std::function<void*(EntityList& entities, std::uint32_t entity)> get;
-
-        /** Whether the entity is alive and has the component. */
-        std::function<bool(EntityList& entities, std::uint32_t entity)> has;
-
-        /** Adds a default-constructed (for a script component, zeroed) component. False for a read-only one or a dead
-         * entity. */
-        std::function<bool(EntityList& entities, std::uint32_t entity)> add;
-
-        /** Removes the component. False for a read-only one or a dead entity. */
-        std::function<bool(EntityList& entities, std::uint32_t entity)> remove;
-
-        /** Names this component in a query (EntityList::ForEachWith), beside any other component, native or dynamic. */
-        std::optional<ComponentSelector> selector;
-
-        /** How many entities in the list have this component. */
-        std::function<std::size_t(EntityList& entities)> count;
 
         /**
          * Checks the C# struct this component mirrors against its Iris StructMapping, in a loaded script assembly. A
@@ -139,16 +118,6 @@ namespace Fenrir
         return registration;
     }
 
-    namespace Detail
-    {
-        // The entity with this value, if it is alive. Not `Entity(id, &list)`: that constructor creates an entity's
-        // Transform, Name and Relationship, replacing whatever is there.
-        inline Entity LiveEntity(EntityList& entities, std::uint32_t entity)
-        {
-            return entities.GetEntity(entity);
-        }
-    } // namespace Detail
-
     /**
      * @brief Registers the native component `T` under `name`, mirrored by the C# struct that `Mapping`'s
      * Iris::StructMapping names. Scripts read and write the component's memory directly.
@@ -166,49 +135,12 @@ namespace Fenrir
                       "The mapping must have the size and alignment of the component it stands for.");
         static_assert(Iris::StructValue<Mapping>,
                       "The mapping needs an Iris::StructMapping and must be trivially copyable standard-layout data.");
-        ComponentRegistration registration;
-        registration.name = std::move(name);
-        registration.typeName = std::string(Iris::StructMapping<Mapping>::typeName);
-        registration.size = sizeof(T);
-        registration.alignment = alignof(T);
-        registration.get = [](EntityList& entities, std::uint32_t entity) -> void* {
-            Entity handle = Detail::LiveEntity(entities, entity);
-            return handle.IsValid() && handle.HasComponent<T>() ? &handle.GetComponent<T>() : nullptr;
+        return ComponentRegistration{
+            .name = std::move(name),
+            .typeName = std::string(Iris::StructMapping<Mapping>::typeName),
+            .type = ComponentType::Native<T>(),
+            .validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); },
         };
-        registration.has = [](EntityList& entities, std::uint32_t entity) {
-            Entity handle = Detail::LiveEntity(entities, entity);
-            return handle.IsValid() && handle.HasComponent<T>();
-        };
-        registration.add = [](EntityList& entities, std::uint32_t entity) {
-            Entity handle = Detail::LiveEntity(entities, entity);
-            if (!handle.IsValid())
-            {
-                return false;
-            }
-            if (!handle.HasComponent<T>())
-            {
-                handle.AddComponent<T>();
-            }
-            return true;
-        };
-        registration.remove = [](EntityList& entities, std::uint32_t entity) {
-            Entity handle = Detail::LiveEntity(entities, entity);
-            if (!handle.IsValid())
-            {
-                return false;
-            }
-            if (handle.HasComponent<T>())
-            {
-                handle.RemoveComponent<T>();
-            }
-            return true;
-        };
-        registration.selector = ComponentSelector::Native<T>();
-        registration.count = [selector = *registration.selector](EntityList& entities) {
-            return entities.CountOf(selector);
-        };
-        registration.validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); };
-        return registration;
     }
 
     /**
@@ -221,8 +153,6 @@ namespace Fenrir
     {
         auto registration = MakeComponent<T, Mapping>(std::move(name));
         registration.readOnly = true;
-        registration.add = nullptr;
-        registration.remove = nullptr;
         return registration;
     }
 } // namespace Fenrir

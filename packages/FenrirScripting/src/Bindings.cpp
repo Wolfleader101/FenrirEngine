@@ -1,6 +1,8 @@
 #include "EngineContext.hpp"
 #include "Queries.hpp"
 
+#include "FenrirECS/Entity.hpp"
+
 #include <atomic>
 #include <cstdint>
 #include <string>
@@ -110,7 +112,7 @@ namespace Fenrir::Detail
             }
             const auto* component = context->components->Get(id);
             return component == nullptr ? nullptr
-                                        : component->get(context->app->GetActiveScene().GetEntityList(), entity);
+                                        : context->app->GetActiveScene().GetEntityList().Get(component->type, entity);
         }
 
         // Native.ComponentHas: whether the entity is alive and has the component.
@@ -122,7 +124,7 @@ namespace Fenrir::Detail
                 return false;
             }
             const auto* component = context->components->Get(id);
-            return component != nullptr && component->has(context->app->GetActiveScene().GetEntityList(), entity);
+            return component != nullptr && context->app->GetActiveScene().GetEntityList().Has(component->type, entity);
         }
 
         // Native.EntityCreate: a new entity id, usable at once; the entity gets its engine components when changes play
