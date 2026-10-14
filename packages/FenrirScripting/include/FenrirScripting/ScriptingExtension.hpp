@@ -20,6 +20,7 @@ namespace Fenrir
     namespace Detail
     {
         struct CallContextAccess;
+        struct EngineContext;
 
         // The active Scripting's call context, or null when no Scripting is running.
         [[nodiscard]] const CallContext* ActiveCallContext() noexcept;
@@ -51,10 +52,12 @@ namespace Fenrir
 
       private:
         friend struct Detail::CallContextAccess;
-        explicit CallContext(App& app) noexcept : m_app(&app)
+        CallContext(App& app, Detail::EngineContext& engine) noexcept : m_app(&app), m_engine(&engine)
         {
         }
         App* m_app;
+        // Scripting's own state, for the engine's built-in native functions. Not part of the interface.
+        Detail::EngineContext* m_engine;
     };
 
     namespace Detail

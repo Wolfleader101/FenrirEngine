@@ -29,11 +29,12 @@ namespace Fenrir.Scripting.Generated
         public static string Mode => Environment.GetEnvironmentVariable("FENRIR_BAD_REPORT") ?? "";
 
         // Reports a type with a size and alignment of the caller's choosing, straight to the engine's native function.
+        // `field` is the name of the native function (a method of Native); the host binds the generated field `__native_<name>`.
         public static void Raw(string field, string name, int size, int alignment)
         {
             var native = typeof(ScriptComponents).Assembly.GetType("Fenrir.Scripting.Native")!;
             var function = (delegate* unmanaged[Cdecl]<byte*, int, int, int, byte>)(nint)(IntPtr)native
-                .GetField(field, BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
+                .GetField("__native_" + field, BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!;
             byte[] utf8 = Encoding.UTF8.GetBytes(name);
             fixed (byte* bytes = utf8)
             {
