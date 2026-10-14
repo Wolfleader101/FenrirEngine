@@ -99,10 +99,15 @@ set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120 ENVIRONMENT
 
 # Ref<T> points into storage that can move, so the compiler must refuse every way of keeping it past the call that was
 # given it. Each case is one small C# file built against the SDK: the control must compile (so a failure below is the
-# rule and not a broken setup), and every misuse must fail with its own diagnostic and no other error. The SDK is built
+# rule and not a broken setup), and every misuse must fail with its own diagnostic and no other error (except one the compiler adds on its own, named as the third argument). The SDK is built
 # by the FenrirScriptingContract target (part of ALL), so build everything before running these.
 set(fenrir_compile_fail_work "${CMAKE_CURRENT_BINARY_DIR}/compile-fail")
+# An optional third argument is one more error the case may also report (the compiler's own, beside the expected one).
 function(fenrir_expect_compile case expect)
+    set(also "")
+    if(ARGC GREATER 2)
+        set(also "${ARGV2}")
+    endif()
     add_test(NAME "RefCompile-${case}"
         COMMAND "${CMAKE_COMMAND}"
             "-DDOTNET=${IRIS_DOTNET_EXECUTABLE}"
@@ -111,6 +116,7 @@ function(fenrir_expect_compile case expect)
             "-DCASE=${case}"
             "-DWORK=${fenrir_compile_fail_work}"
             "-DEXPECT=${expect}"
+            "-DALSO=${also}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/../cmake/ExpectCompile.cmake")
     set_tests_properties("RefCompile-${case}" PROPERTIES TIMEOUT 120)
 endfunction()
@@ -140,3 +146,12 @@ fenrir_expect_compile(SystemBadPhase FENRIR0013)
 fenrir_expect_compile(EventControl OK)
 fenrir_expect_compile(EventManaged FENRIR0014)
 fenrir_expect_compile(EventReadOnly CS8332)    # a read view cannot be written through
+# Native functions are declared once in C#, and the generator refuses at build time what cannot cross or cannot be bound.
+fenrir_expect_compile(NativeFunctionControl OK)
+fenrir_expect_compile(NativeFunctionNotStatic FENRIR0020)
+fenrir_expect_compile(NativeFunctionNotPartial FENRIR0021)
+fenrir_expect_compile(NativeFunctionTypeNotPartial FENRIR0022 CS8795)  # the compiler adds: no implementation part
+fenrir_expect_compile(NativeFunctionGeneric FENRIR0023)
+fenrir_expect_compile(NativeFunctionOverload FENRIR0024)
+fenrir_expect_compile(NativeFunctionStringResult FENRIR0025)
+fenrir_expect_compile(NativeFunctionUnsupported FENRIR0026)

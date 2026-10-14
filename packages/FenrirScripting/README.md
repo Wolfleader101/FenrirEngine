@@ -376,25 +376,54 @@ physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Que
 config.extensions.push_back(std::move(physics));
 ```
 
-In the contract, the C# side is a public static unmanaged function pointer field named by the binding-name rule
-(`NativeFunction::BindingNameFor`): the native function `Namespace.Type.Method` is the field `__native_Method` of
-`Namespace.Type`, which the friendly method calls. A string parameter is declared as a `byte*` and an `int` length.
-
-```csharp
-public static unsafe class Queries
-{
-    public static delegate* unmanaged[Cdecl]<uint, float> __native_HeightOf;
-    public static float HeightOf(Entity entity) => __native_HeightOf(entity.Value);
-}
-```
-
 `Install` registers every extension's native functions before it shares the contracts. It fails, logged and running
 without scripts, if a C# field has no native function, if their signatures differ, or if two extensions declare one name.
 The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example.
 
+## Exposing a native function
+
+A native function is two declarations, one per side, tied together by the C# method's full name, plus a line in an
+extension.
+
+1. **The C++ function**, taking the `CallContext` first:
+
+   ```cpp
+   float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* context.Entities() ... */ }
+   ```
+
+2. **The C# declaration**, in the extension's contract: a `static partial` method marked `[NativeFunction]`, in a partial
+   type. The source generator writes its body and the function pointer field the host binds (`__native_HeightOf`, by the
+   binding-name rule `NativeFunction::BindingNameFor`). The contract project needs `AllowUnsafeBlocks`.
+
+   ```csharp
+   public static partial class Queries
+   {
+       [NativeFunction]
+       public static partial float HeightOf(Entity entity);
+   }
+   ```
+
+3. **The line in the extension**: `NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf")`.
+
+What crosses, and how:
+
+| C# | C++ |
+| --- | --- |
+| sized integers, `float`, `double`, `bool`, `char`, pointers | the same (`char16_t` for `char`); `bool` and `char` need `[assembly: DisableRuntimeMarshalling]` |
+| `Entity` | `std::uint32_t`, its value |
+| `string` or `ReadOnlySpan<char>` parameter | `std::string_view`, UTF-8 (a lone surrogate becomes U+FFFD), valid for the call |
+| `in`, `ref` or `out` unmanaged struct | a pointer to it, valid for the call |
+
+A string is never a result, and a struct does not cross by value. The generator refuses at build time a native function that
+is not `static partial` (FENRIR0020, FENRIR0021), is in a type that is not partial (FENRIR0022), is generic (FENRIR0023),
+shares its name with another in its type (FENRIR0024), returns a string (FENRIR0025) or uses a type that cannot cross
+(FENRIR0026). Your friendly API calls the declared method like any other, and adds behaviour (such as turning error codes
+into exceptions) only where it wants.
+
 ## Adding an engine API
 
-Every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
+The engine's own API does not use native functions yet (they move over in `.scratch/scripting-native-functions`, ticket
+04). Until then every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
 smallest complete example.
 
 1. **An internal call** in `src/Bindings.cpp` (these move onto native functions, as extensions declare them, later): a plain C++ function over C types (sized integers, `float`, `double`,
