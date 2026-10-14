@@ -132,7 +132,8 @@ public static partial class Bootstrap
     internal static unsafe int WaitForComponentUnload(ulong token, int timeoutMs, int* state, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (state != null) *state = -1;
-        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated);
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        bool diagnosticValid = tail.IsValid();
         if (!diagnosticValid || state == null || timeoutMs < 0) return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -142,8 +143,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return tail.Fail(exception, ExceptionMapping.AlwaysManaged);
         }
     }
 
@@ -201,7 +201,8 @@ public static partial class Bootstrap
     internal static unsafe int CopyTypeNameUtf8(ulong token, ulong typeId, int field, byte* destination, int capacity, int* required,
         byte* diagnostic, int diagnosticCapacity, int* written, int* truncated)
     {
-        bool diagnosticValid = ManagedDiagnostic.ValidateOutput(diagnostic, diagnosticCapacity, written, truncated);
+        var tail = new DiagnosticTail(diagnostic, diagnosticCapacity, written, truncated);
+        bool diagnosticValid = tail.IsValid();
         bool outputValid = ValidateUtf8Output(destination, capacity, required);
         if (!diagnosticValid || !outputValid || (field != 0 && field != 1)) return (int)BridgeStatus.InvalidArgument;
         try
@@ -212,8 +213,7 @@ public static partial class Bootstrap
         catch (Exception exception)
         {
             *required = 0;
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, diagnosticCapacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return tail.Fail(exception, ExceptionMapping.AlwaysManaged);
         }
     }
 
@@ -281,7 +281,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (result != null) *result = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || result == null ||
             argCount < 0 || (argCount > 0 && arguments == null))
             return (int)BridgeStatus.InvalidArgument;
         try
@@ -293,8 +294,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -306,41 +306,28 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (structId != null) *structId = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || structId == null ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || structId == null ||
             description == null || length <= 0)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
-            string text = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(description, length));
-            switch (ComponentRegistry.TryRegisterStruct(token, text, out ulong found))
-            {
-                case ComponentRegistry.FindResult.Found:
-                    *structId = found;
-                    return (int)BridgeStatus.Success;
-                case ComponentRegistry.FindResult.InvalidHandle:
-                    return (int)BridgeStatus.InvalidHandle;
-                default:
-                    ManagedDiagnostic.Write(new TypeLoadException("No public struct with that name was found."),
-                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
-                    return (int)BridgeStatus.NotFound;
-            }
+            string text = ExportEnvelope.Decode(description, length);
+            var found = ComponentRegistry.TryRegisterStruct(token, text, out ulong id);
+            if (found == ComponentRegistry.FindResult.Found) *structId = id;
+            else if (found == ComponentRegistry.FindResult.NotFound)
+                tail.Explain(new TypeLoadException("No public struct with that name was found."));
+            return (int)ExportEnvelope.StatusOf(found);
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+            return tail.Fail(exception, ExceptionMapping.ByKindAndDecode);
         }
     }
 
     // Array exports. All validate the output buffers, report the component's exceptions as ManagedException and
     // bad input (a negative or out-of-range index, a wrong element type) as InvalidArgument; an unknown
     // component or object handle is InvalidHandle.
-    private static unsafe int ArrayFailure(Exception exception, byte* diagnostic, int capacity, int* written, int* truncated)
-    {
-        ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-        return (int)StatusFor(exception);
-    }
-
     // Creates an array of the element type in `kind` (see ValueKind.Array) and publishes a nonzero object
     // handle, released with ReleaseObject.
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -348,7 +335,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (objectId != null) *objectId = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || objectId == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || objectId == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -356,7 +344,7 @@ public static partial class Bootstrap
             *objectId = id;
             return (int)BridgeStatus.Success;
         }
-        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+        catch (Exception exception) { return tail.Fail(exception, ExceptionMapping.ByKind); }
     }
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -364,7 +352,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (length != null) *length = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || length == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || length == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -372,7 +361,7 @@ public static partial class Bootstrap
             *length = value;
             return (int)BridgeStatus.Success;
         }
-        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+        catch (Exception exception) { return tail.Fail(exception, ExceptionMapping.ByKind); }
     }
 
     // Reads element `index`. The slot holds a primitive's bits, or for a string or struct element a block (or
@@ -382,7 +371,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (slot != null) *slot = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || slot == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || slot == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -390,7 +380,7 @@ public static partial class Bootstrap
             *slot = value;
             return (int)BridgeStatus.Success;
         }
-        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+        catch (Exception exception) { return tail.Fail(exception, ExceptionMapping.ByKind); }
     }
 
     // Writes element `index` from a slot in the layout GetArrayElement uses for input: bits, or a pointer to a
@@ -399,13 +389,14 @@ public static partial class Bootstrap
     internal static unsafe int SetArrayElement(ulong token, ulong objectId, int kind, long index, ulong slot,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated))
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid())
             return (int)BridgeStatus.InvalidArgument;
         try
         {
             return ComponentRegistry.TrySetArrayElement(token, objectId, kind, index, slot) ? (int)BridgeStatus.Success : (int)BridgeStatus.InvalidHandle;
         }
-        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+        catch (Exception exception) { return tail.Fail(exception, ExceptionMapping.ByKind); }
     }
 
     // Copies `count` primitive or struct elements from `start` to (intoArray 0) or from (intoArray 1) a caller buffer.
@@ -413,13 +404,14 @@ public static partial class Bootstrap
     internal static unsafe int CopyArray(ulong token, ulong objectId, int kind, long start, long count, void* buffer, int intoArray,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || (intoArray != 0 && intoArray != 1))
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || (intoArray != 0 && intoArray != 1))
             return (int)BridgeStatus.InvalidArgument;
         try
         {
             return ComponentRegistry.TryCopyArray(token, objectId, kind, start, count, buffer, intoArray == 1) ? (int)BridgeStatus.Success : (int)BridgeStatus.InvalidHandle;
         }
-        catch (Exception exception) { return ArrayFailure(exception, diagnostic, capacity, written, truncated); }
+        catch (Exception exception) { return tail.Fail(exception, ExceptionMapping.ByKind); }
     }
 
     // Registers a native function that component code can reach through a static function pointer field named
@@ -430,19 +422,19 @@ public static partial class Bootstrap
     internal static unsafe int RegisterInternalCall(byte* name, int nameLength, int returnKind, int* kinds, int count, void* function,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || name == null || nameLength <= 0 ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || name == null || nameLength <= 0 ||
             count < 0 || count > 255 || (count > 0 && kinds == null) || function == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
-            InternalCalls.Register(new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength)), returnKind,
+            InternalCalls.Register(ExportEnvelope.Decode(name, nameLength), returnKind,
                 new ReadOnlySpan<int>(kinds, count).ToArray(), (IntPtr)function);
             return (int)BridgeStatus.Success;
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+            return tail.Fail(exception, ExceptionMapping.ByKindAndDecode);
         }
     }
 
@@ -452,7 +444,8 @@ public static partial class Bootstrap
     internal static unsafe int ListTypes(ulong token, ulong* block, byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (block != null) *block = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || block == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || block == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -465,8 +458,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -477,7 +469,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (block != null) *block = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || block == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || block == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -488,8 +481,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -500,13 +492,13 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (result != null) *result = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || result == null ||
             (otherId == 0) == (name == null) || (name != null && nameLength <= 0))
             return (int)BridgeStatus.InvalidArgument;
         try
         {
-            string? targetName = name == null ? null : new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(name, nameLength));
-            if (targetName != null && targetName.Contains('\0')) throw new BridgeArgumentException("A type name cannot contain null characters.");
+            string? targetName = name == null ? null : ExportEnvelope.DecodeName(name, nameLength, "type name");
             switch (ComponentRegistry.TryIsAssignable(token, typeId, otherId, targetName))
             {
                 case ComponentRegistry.AssignResult.Assignable:
@@ -517,15 +509,13 @@ public static partial class Bootstrap
                 case ComponentRegistry.AssignResult.InvalidHandle:
                     return (int)BridgeStatus.InvalidHandle;
                 default:
-                    ManagedDiagnostic.Write(new TypeLoadException($"No type named '{targetName}' could be resolved from the component."),
-                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    tail.Explain(new TypeLoadException($"No type named '{targetName}' could be resolved from the component."));
                     return (int)BridgeStatus.NotFound;
             }
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)(exception is DecoderFallbackException ? BridgeStatus.InvalidArgument : StatusFor(exception));
+            return tail.Fail(exception, ExceptionMapping.ByKindAndDecode);
         }
     }
 
@@ -543,7 +533,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (result != null) *result = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || result == null ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || result == null ||
             argCount < 0 || (argCount > 0 && arguments == null))
             return (int)BridgeStatus.InvalidArgument;
         try
@@ -555,8 +546,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -569,7 +559,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (objectId != null) *objectId = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || objectId == null ||
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || objectId == null ||
             count < 0 || (count > 0 && (paramKinds == null || arguments == null)))
             return (int)BridgeStatus.InvalidArgument;
         try
@@ -589,15 +580,13 @@ public static partial class Bootstrap
                 case ComponentRegistry.CreateResult.InvalidHandle:
                     return (int)BridgeStatus.InvalidHandle;
                 default:
-                    ManagedDiagnostic.Write(new MissingMethodException("No public constructor with the requested parameter types was found on a concrete type."),
-                        new Span<byte>(diagnostic, capacity), out *written, out *truncated, report: false);
+                    tail.Explain(new MissingMethodException("No public constructor with the requested parameter types was found on a concrete type."));
                     return (int)BridgeStatus.NotFound;
             }
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -606,15 +595,15 @@ public static partial class Bootstrap
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static unsafe int ReleaseObject(ulong token, ulong objectId, byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid()) return (int)BridgeStatus.InvalidArgument;
         try
         {
             return (int)(ComponentRegistry.ReleaseObject(token, objectId) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)BridgeStatus.ManagedException;
+            return tail.Fail(exception, ExceptionMapping.AlwaysManaged);
         }
     }
 
@@ -661,7 +650,8 @@ public static partial class Bootstrap
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
         if (value != null) *value = 0;
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated) || value == null)
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid() || value == null)
             return (int)BridgeStatus.InvalidArgument;
         try
         {
@@ -671,8 +661,7 @@ public static partial class Bootstrap
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
 
@@ -681,19 +670,15 @@ public static partial class Bootstrap
     internal static unsafe int SetMember(ulong token, ulong memberId, ulong objectId, ulong value,
         byte* diagnostic, int capacity, int* written, int* truncated)
     {
-        if (!ManagedDiagnostic.ValidateOutput(diagnostic, capacity, written, truncated)) return (int)BridgeStatus.InvalidArgument;
+        var tail = new DiagnosticTail(diagnostic, capacity, written, truncated);
+        if (!tail.IsValid()) return (int)BridgeStatus.InvalidArgument;
         try
         {
             return (int)(ComponentRegistry.TrySetMemberValue(token, memberId, objectId, value) ? BridgeStatus.Success : BridgeStatus.InvalidHandle);
         }
         catch (Exception exception)
         {
-            ManagedDiagnostic.Write(exception, new Span<byte>(diagnostic, capacity), out *written, out *truncated);
-            return (int)StatusFor(exception);
+            return tail.Fail(exception, ExceptionMapping.ByKind);
         }
     }
-
-    // Bridge validation is InvalidArgument and a stale handle is InvalidHandle; anything else, including
-    // every exception from component code, is ManagedException.
-    private static BridgeStatus StatusFor(Exception exception) => ExportEnvelope.StatusOf(exception, ExceptionMapping.ByKind);
 }
