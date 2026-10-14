@@ -4,7 +4,6 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -18,32 +17,6 @@ namespace Fenrir
 {
     class Entity;
     class EntityList;
-
-    /**
-     * @brief Names one kind of component, native or dynamic, for a query: "entities that have this". A query takes any
-     * mix.
-     *
-     * It says nothing about how the ECS stores components, so code that builds queries from selectors keeps working if
-     * the ECS changes underneath. Cheap to copy; make them once, not per frame.
-     */
-    class ComponentSelector
-    {
-      public:
-        /** @brief A C++ component type. */
-        template <typename T>
-        [[nodiscard]] static ComponentSelector Native();
-
-        /** @brief A component type known only at run time. */
-        [[nodiscard]] static ComponentSelector Dynamic(DynamicComponentType type);
-
-      private:
-        friend class EntityList;
-        using Finder = std::function<void*(EntityList&)>;
-        explicit ComponentSelector(Finder find) : m_find(std::move(find))
-        {
-        }
-        Finder m_find;
-    };
 
     /**
      * @brief EntityList which serves as a container for all entities and components
@@ -166,61 +139,6 @@ namespace Fenrir
         auto Group();
 
         /**
-         * @name Components known only at run time
-         * Components of a DynamicComponentType: plain bytes of a given size and alignment, one per entity, zeroed when
-         * added and removed with the entity. A scripting layer uses these for components that scripts define. The
-         * storage for a type is created in this list when the first one is added; asking about a type nobody has added
-         * creates nothing.
-         * @{
-         */
-
-        /**
-         * @brief The entity's component of this type, or null if the entity is not alive or has none. The pointer is
-         * good until a component of this type is removed or this list is cleared.
-         */
-        [[nodiscard]] void* GetDynamic(const DynamicComponentType& type, std::uint32_t entity);
-
-        /** @brief Whether the entity is alive and has a component of this type. */
-        [[nodiscard]] bool HasDynamic(const DynamicComponentType& type, std::uint32_t entity);
-
-        /**
-         * @brief Gives the entity a zeroed component of this type (or keeps the one it has). False if the entity is not
-         * alive, the type is not valid, or this list already holds components of that name with a different size or
-         * alignment.
-         */
-        bool AddDynamic(const DynamicComponentType& type, std::uint32_t entity);
-
-        /** @brief Removes the entity's component of this type, if any. False if the entity is not alive. */
-        bool RemoveDynamic(const DynamicComponentType& type, std::uint32_t entity);
-
-        /** @brief How many entities have a component of this type. */
-        [[nodiscard]] std::size_t CountDynamic(const DynamicComponentType& type);
-
-        /**
-         * @brief Removes every component of this type from every entity, and returns how many there were. Afterwards
-         * the type may be added again with a different size or alignment. Do nothing if no entity has one.
-         */
-        std::size_t ClearDynamic(const DynamicComponentType& type);
-        /** @} */
-
-        /**
-         * @brief Calls `func(entity)` for every entity that has all of the selected components, in no particular order.
-         * The selectors may mix native and dynamic components. Do not add or remove components of the selected kinds,
-         * or destroy entities, inside `func`. With no selectors nothing is visited.
-         *
-         * @param selectors the components an entity must have
-         * @param func a callable taking the entity's id (std::uint32_t)
-         */
-        template <typename Func>
-        void ForEachWith(std::span<const ComponentSelector> selectors, Func&& func);
-
-        /**
-         * @brief How many entities have the selected component. Constant time. (Selecting a native component makes its
-         * storage if the list has none, as asking the ECS for a view of it would; a dynamic one never does.)
-         */
-        [[nodiscard]] std::size_t CountOf(const ComponentSelector& selector);
-
-        /**
          * @name Components by their ComponentType
          * The same operations for every kind of component, native or dynamic, for code that knows a component only at
          * run time. A dynamic type's storage is created in this list when the first one is added; asking about one
@@ -276,43 +194,26 @@ namespace Fenrir
       private:
         entt::registry m_registry;
 
-        void ForEachWithImpl(std::span<const ComponentSelector> selectors,
-                             void (*visit)(void* context, std::uint32_t entity), void* context);
         void ForEachWithImpl(std::span<const ComponentType> types, void (*visit)(void* context, std::uint32_t entity),
                              void* context);
 
-        // The storage for a native component type, as the opaque pointer a ComponentSelector hands back.
-        template <typename T>
-        void* NativePool()
-        {
-            return static_cast<entt::sparse_set*>(&m_registry.storage<T>());
-        }
+        // The storage the type's components are in. A native type's is created if this list has none; a dynamic type's
+        // is null if none has been added. FindStorage and StorageForAdding are the only places that tell the kinds
+        // apart: everything else works on the storage.
+        entt::sparse_set* FindStorage(const ComponentType& type);
 
-        // The operations ComponentType::Native<T> hands out, one static table per type.
+        // As FindStorage, but a dynamic type's storage is created and shaped for it. Null if the type is not valid, or
+        // its name or id is taken by a storage of another shape or owner.
+        entt::sparse_set* StorageForAdding(const ComponentType& type);
+
+        // The storage of the native component type `T`, as ComponentType::Native<T> hands it out.
         template <typename T>
-        static const ComponentType::NativeOperations& NativeOperationsFor()
+        static void* FindNativeStorage(EntityList& entities)
         {
-            static constexpr ComponentType::NativeOperations operations{
-                [](EntityList& entities) -> void* { return entities.NativePool<T>(); },
-                [](EntityList& entities, std::uint32_t entity) -> void* {
-                    auto& storage = entities.m_registry.storage<T>();
-                    const auto id = static_cast<entt::entity>(entity);
-                    return storage.contains(id) ? static_cast<void*>(&storage.get(id)) : nullptr;
-                },
-                [](EntityList& entities, std::uint32_t entity) {
-                    auto& storage = entities.m_registry.storage<T>();
-                    const auto id = static_cast<entt::entity>(entity);
-                    if (!storage.contains(id))
-                    {
-                        storage.emplace(id);
-                    }
-                },
-            };
-            return operations;
+            return static_cast<entt::sparse_set*>(&entities.m_registry.storage<T>());
         }
 
         friend class Entity;
-        friend class ComponentSelector;
         friend class ComponentType;
     };
 
@@ -321,24 +222,7 @@ namespace Fenrir
     {
         static_assert(std::is_default_constructible_v<T>, "A component type must be default constructible.");
         static_assert(!std::is_empty_v<T>, "A component type reached by pointer must hold data.");
-        return ComponentType(&EntityList::NativeOperationsFor<T>(), nullptr, sizeof(T), alignof(T));
-    }
-
-    template <typename T>
-    ComponentSelector ComponentSelector::Native()
-    {
-        return ComponentSelector([](EntityList& entities) { return entities.NativePool<T>(); });
-    }
-
-    template <typename Func>
-    void EntityList::ForEachWith(std::span<const ComponentSelector> selectors, Func&& func)
-    {
-        ForEachWithImpl(
-            selectors,
-            [](void* context, std::uint32_t entity) {
-                (*static_cast<std::remove_reference_t<Func>*>(context))(entity);
-            },
-            const_cast<std::remove_const_t<std::remove_reference_t<Func>>*>(std::addressof(func)));
+        return ComponentType(&EntityList::FindNativeStorage<T>, nullptr, sizeof(T), alignof(T));
     }
 
     template <typename Func>

@@ -106,13 +106,16 @@ TEMPLATE_TEST_CASE("adding a component the entity already has keeps it", "[compo
     const auto entity = entities.CreateEntity().GetId();
     INFO("the first add succeeds");
     REQUIRE(entities.Add(type, entity));
-    static_cast<Pair*>(entities.Get(type, entity))->First = 7;
+    auto* const before = static_cast<Pair*>(entities.Get(type, entity));
+    before->First = 7;
 
     INFO("adding again succeeds");
     REQUIRE(entities.Add(type, entity));
 
-    INFO("and the component keeps the value written before");
-    REQUIRE(static_cast<const Pair*>(entities.Get(type, entity))->First == 7);
+    INFO("and the component is the same one, in the same place, with the value written before");
+    REQUIRE(entities.Get(type, entity) == before);
+    REQUIRE(before->First == 7);
+    REQUIRE(entities.Count(type) == 1);
 }
 
 TEMPLATE_TEST_CASE("removing a component takes it away", "[component-type]", NativeKind, DynamicKind)
@@ -157,6 +160,20 @@ TEMPLATE_TEST_CASE("a dead entity has no component", "[component-type]", NativeK
 
     INFO("asking does not bring the entity back");
     REQUIRE(!entities.HasEntity(entity));
+}
+
+TEMPLATE_TEST_CASE("a component goes with its entity", "[component-type]", NativeKind, DynamicKind)
+{
+    EntityList entities;
+    const ComponentType type = TestType::Make();
+    const auto entity = entities.CreateEntity().GetId();
+    INFO("the add succeeds");
+    REQUIRE(entities.Add(type, entity));
+    REQUIRE(entities.Count(type) == 1);
+
+    INFO("destroying the entity removes its component");
+    entities.DestroyEntity(entity);
+    REQUIRE(entities.Count(type) == 0);
 }
 
 TEMPLATE_TEST_CASE("a dead entity cannot be given or lose a component", "[component-type]", NativeKind, DynamicKind)
@@ -331,6 +348,10 @@ TEST_CASE("an impossible dynamic type cannot be added", "[component-type]")
 
     INFO("a type with no name is refused");
     REQUIRE(!entities.Add(ComponentType::Dynamic(DynamicComponentType("", 8, 4)), entity));
+
+    INFO("a type four bytes over the maximum size is refused");
+    REQUIRE(!entities.Add(
+        ComponentType::Dynamic(DynamicComponentType("Test.Huge", DynamicComponentType::MaxSize + 4, 4)), entity));
 }
 
 TEST_CASE("a dynamic name cannot take another shape while components of it exist", "[component-type]")
@@ -426,4 +447,8 @@ TEST_CASE("dynamic components honour their alignment and do not move when more a
         INFO("component " << index << " is where it was before more were added");
         REQUIRE(entities.Get(type, ids[index]) == addresses[index]);
     }
+
+    INFO("the first 300 components each have an address of their own, and all 800 are counted");
+    REQUIRE(std::set<void*>(addresses.begin(), addresses.end()).size() == 300);
+    REQUIRE(entities.Count(type) == 800);
 }

@@ -118,27 +118,6 @@ namespace Fenrir::Detail
             return m_size;
         }
 
-        // The entity's element, or null if it has none. The pointer is good until that element is removed or another
-        // is removed from this storage (the last element is moved into the gap).
-        [[nodiscard]] void* Find(entt::entity entity)
-        {
-            return base_type::contains(entity) ? ElementAt(base_type::index(entity)) : nullptr;
-        }
-
-        // Gives the entity an element of zero bytes, or returns the one it has. Null if the storage is not configured.
-        [[nodiscard]] void* Emplace(entt::entity entity)
-        {
-            if (!IsConfigured())
-            {
-                return nullptr;
-            }
-            if (base_type::contains(entity))
-            {
-                return ElementAt(base_type::index(entity));
-            }
-            return ElementAt(static_cast<std::size_t>(base_type::push(entity).index()));
-        }
-
       protected:
         // Erases entities, moving the last element into each gap.
         void pop(underlying_iterator first, underlying_iterator last) override
