@@ -7,7 +7,10 @@
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <mutex>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 namespace Iris::Examples
 {
@@ -56,6 +59,36 @@ namespace Iris::Examples
         return !value;
     }
 
+    // The last text RecordText or StringBetweenNumbers received, so the checks can compare it with what was sent.
+    inline std::mutex recordedTextMutex;
+    inline std::string recordedText;
+    inline void SetRecordedText(std::string_view text)
+    {
+        const std::lock_guard lock(recordedTextMutex);
+        recordedText = std::string(text);
+    }
+    inline void ClearRecordedText()
+    {
+        SetRecordedText({});
+    }
+    inline std::string RecordedText()
+    {
+        const std::lock_guard lock(recordedTextMutex);
+        return recordedText;
+    }
+
+    // A string parameter arrives as UTF-8 bytes in a std::string_view, valid for the call.
+    inline std::int32_t RecordText(std::string_view text)
+    {
+        SetRecordedText(text);
+        return static_cast<std::int32_t>(text.size());
+    }
+    inline std::int64_t StringBetweenNumbers(std::int32_t count, std::string_view label, std::int32_t factor)
+    {
+        SetRecordedText(label);
+        return static_cast<std::int64_t>(count) * factor + static_cast<std::int64_t>(label.size());
+    }
+
     // The unload checks' deliberate leak: a managed thread runs until the host sets this.
     inline std::atomic<bool> leakStop{false};
     inline bool LeakStopped()
@@ -80,6 +113,8 @@ namespace Iris::Examples
             Iris::RegisterInternalCall<&Half>(prefix + "Half"),
             Iris::RegisterInternalCall<&Combine>(prefix + "Combine"),
             Iris::RegisterInternalCall<&Measure>(prefix + "Measure"),
+            Iris::RegisterInternalCall<&RecordText>(prefix + "RecordText"),
+            Iris::RegisterInternalCall<&StringBetweenNumbers>(prefix + "StringBetweenNumbers"),
             Iris::RegisterInternalCall<&Normalize>(prefix + "Normalize"),
             Iris::RegisterInternalCall<&Throws>(prefix + "Throws"),
             Iris::RegisterInternalCall<&Record>(prefix + "Record"),

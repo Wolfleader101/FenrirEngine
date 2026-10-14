@@ -4,10 +4,14 @@
 #include "Method.hpp"
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <span>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 
 #if defined(_WIN32) && !defined(_WIN64)
 #define IRIS_INTERNAL_CALL __cdecl
@@ -29,16 +33,28 @@ namespace Iris
         // Reports a C++ exception caught at an internal call boundary through the log sink.
         void ReportInternalCallException(const char* what) noexcept;
 
-        template <typename T>
-        concept InternalCallType = std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
+        // Reports, through the log sink, a string argument the boundary refused (a negative length, or a null pointer
+        // with a length), so the function was not called.
+        void ReportRefusedInternalCallString() noexcept;
 
-        template <InternalCallType T>
+        template <typename T>
+        concept InternalCallResultType = std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
+
+        // A parameter can also be a std::string_view: UTF-8 bytes, valid for the call.
+        template <typename T>
+        concept InternalCallParameterType =
+            std::is_pointer_v<T> || PrimitiveValue<T> || std::is_same_v<T, std::string_view>;
+
+        template <typename T>
+            requires(InternalCallResultType<T> || InternalCallParameterType<T>)
         constexpr ValueKind InternalKindOf() noexcept
         {
             if constexpr (std::is_void_v<T>)
                 return ValueKind::Void;
             else if constexpr (std::is_pointer_v<T>)
                 return ValueKind::Pointer;
+            else if constexpr (std::is_same_v<T, std::string_view>)
+                return ValueKind::String;
             else
                 return KindOf<T>();
         }
@@ -56,25 +72,118 @@ namespace Iris
             using Type = R(Args...);
         };
 
-        // The function managed code actually calls: it runs `Function` and turns a C++ exception into a
-        // logged error and a value-initialized result, so nothing unwinds through managed frames.
-        template <auto Function, typename Signature>
-        struct InternalCallThunk;
-        template <auto Function, typename R, typename... Args>
-        struct InternalCallThunk<Function, R(Args...)>
+        template <typename... T>
+        struct TypeList
         {
-            static R IRIS_INTERNAL_CALL Call(Args... arguments) noexcept
+        };
+
+        template <typename... Lists>
+        struct ConcatTypes;
+        template <>
+        struct ConcatTypes<>
+        {
+            using Type = TypeList<>;
+        };
+        template <typename... A>
+        struct ConcatTypes<TypeList<A...>>
+        {
+            using Type = TypeList<A...>;
+        };
+        template <typename... A, typename... B, typename... Rest>
+        struct ConcatTypes<TypeList<A...>, TypeList<B...>, Rest...>
+        {
+            using Type = typename ConcatTypes<TypeList<A..., B...>, Rest...>::Type;
+        };
+
+        // How a parameter crosses: its wire types, how many there are, whether the wire values starting at `Offset`
+        // can become the parameter, and the conversion. Most parameters cross as themselves.
+        template <typename T>
+        struct WireOf
+        {
+            using Type = TypeList<T>;
+            static constexpr std::size_t count = 1;
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr bool Valid(const Wire&) noexcept
             {
+                return true;
+            }
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr T From(const Wire& wire) noexcept
+            {
+                return std::get<Offset>(wire);
+            }
+        };
+
+        // A string crosses as a pointer to its bytes followed by their length. A length of zero is an empty view
+        // whatever the pointer; a negative length, or no bytes but a length, cannot become a view.
+        template <>
+        struct WireOf<std::string_view>
+        {
+            using Type = TypeList<const char*, std::int32_t>;
+            static constexpr std::size_t count = 2;
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr bool Valid(const Wire& wire) noexcept
+            {
+                const std::int32_t length = std::get<Offset + 1>(wire);
+                return length == 0 || (length > 0 && std::get<Offset>(wire) != nullptr);
+            }
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr std::string_view From(const Wire& wire) noexcept
+            {
+                const std::int32_t length = std::get<Offset + 1>(wire);
+                return length == 0 ? std::string_view()
+                                   : std::string_view(std::get<Offset>(wire), static_cast<std::size_t>(length));
+            }
+        };
+
+        // Where each parameter starts among the wire parameters.
+        template <typename... Args>
+        constexpr std::array<std::size_t, sizeof...(Args)> WireOffsets() noexcept
+        {
+            std::array<std::size_t, sizeof...(Args)> offsets{};
+            std::size_t next = 0;
+            std::size_t index = 0;
+            ((offsets[index++] = next, next += WireOf<Args>::count), ...);
+            return offsets;
+        }
+
+        // The function managed code actually calls, over the wire parameters. It refuses a string it cannot turn into
+        // a std::string_view, runs `Function`, and turns a C++ exception into a logged error and a value-initialized
+        // result, so nothing unwinds through managed frames.
+        template <auto Function, typename R, typename Args, typename Wire>
+        struct InternalCallThunk;
+        template <auto Function, typename R, typename... Args, typename... Wire>
+        struct InternalCallThunk<Function, R, TypeList<Args...>, TypeList<Wire...>>
+        {
+            static R IRIS_INTERNAL_CALL Call(Wire... wire) noexcept
+            {
+                return Run(std::tuple<Wire...>(wire...), std::index_sequence_for<Args...>{});
+            }
+
+          private:
+            template <std::size_t... Index>
+            static R Run(const std::tuple<Wire...>& wire, std::index_sequence<Index...>) noexcept
+            {
+                constexpr auto offsets = WireOffsets<Args...>();
+                if (!(WireOf<Args>::template Valid<offsets[Index]>(wire) && ...))
+                {
+                    ReportRefusedInternalCallString();
+                    return Default();
+                }
                 try
                 {
                     if constexpr (std::is_void_v<R>)
                     {
-                        Function(arguments...);
+                        Function(WireOf<Args>::template From<offsets[Index]>(wire)...);
                         return;
                     }
                     else
                     {
-                        return Function(arguments...);
+                        return Function(WireOf<Args>::template From<offsets[Index]>(wire)...);
                     }
                 }
                 catch (const std::exception& exception)
@@ -85,6 +194,11 @@ namespace Iris
                 {
                     ReportInternalCallException(nullptr);
                 }
+                return Default();
+            }
+
+            static R Default() noexcept
+            {
                 if constexpr (!std::is_void_v<R>)
                 {
                     return R{};
@@ -93,12 +207,14 @@ namespace Iris
         };
 
         template <auto Function, typename R, typename... Args>
-            requires(InternalCallType<R> && (InternalCallType<Args> && ...))
+            requires(InternalCallResultType<R> && (InternalCallParameterType<Args> && ...))
         CallResult<void> RegisterInternalCallImpl(std::string_view name, std::type_identity<R(Args...)>)
         {
+            using Wire = typename ConcatTypes<typename WireOf<Args>::Type...>::Type;
             const std::array<ValueKind, sizeof...(Args)> kinds = {InternalKindOf<Args>()...};
-            return RegisterInternalCallRaw(name, InternalKindOf<R>(), std::span<const ValueKind>(kinds),
-                                           reinterpret_cast<void*>(&InternalCallThunk<Function, R(Args...)>::Call));
+            return RegisterInternalCallRaw(
+                name, InternalKindOf<R>(), std::span<const ValueKind>(kinds),
+                reinterpret_cast<void*>(&InternalCallThunk<Function, R, TypeList<Args...>, Wire>::Call));
         }
     } // namespace Detail
 
@@ -116,9 +232,15 @@ namespace Iris
      *
      * The signature is taken from the function. Parameters and the result are void, sized integers,
      * `float`, `double`, `bool` (one byte), `char16_t` (a managed `char`) or pointers. A `bool` or `char16_t`
-     * needs `[assembly: DisableRuntimeMarshalling]` on the component, or its load fails. A string crosses as
-     * a UTF-8 `const char*` and a length, and a struct as a pointer to it; the pointers are valid for the
-     * call only.
+     * needs `[assembly: DisableRuntimeMarshalling]` on the component, or its load fails. A struct crosses as a
+     * pointer to it, valid for the call only.
+     *
+     * A parameter (never the result) can also be a `std::string_view`: UTF-8 bytes, valid for the call only, and
+     * not checked for being valid UTF-8. The managed field declares it as two parameters, a `byte*` to the bytes and
+     * an `int` length, in that order; anything else for it fails the load. A length of zero arrives as an empty
+     * view, whatever the pointer. A negative length, or a null pointer with a length, is refused at the boundary:
+     * the function is not called, an Error is reported through the log sink, and managed code receives a
+     * value-initialized result.
      *
      * Registration is process-wide, may happen before or after the host starts, and applies to every
      * component loaded afterwards (already loaded components are not changed). Registering the same name
