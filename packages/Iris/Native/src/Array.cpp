@@ -79,6 +79,10 @@ namespace Iris
         const auto status = array.state->bridge->arrayLength(array.state->component, array.state->object, &length,
                                                              diagnostic.bytes.data(), diagnostic.Capacity,
                                                              &diagnostic.written, &diagnostic.truncated);
+        if (static_cast<CallStatus>(status) == CallStatus::Success && length < 0)
+        {
+            return Failure<std::uint64_t>(CallStatus::InvalidResponse, "GetArrayLength returned a negative length.");
+        }
         return CompleteCall<std::uint64_t>(status, "GetArrayLength", diagnostic, static_cast<std::uint64_t>(length));
     }
 
