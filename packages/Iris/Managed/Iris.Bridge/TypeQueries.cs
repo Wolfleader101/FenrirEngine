@@ -157,7 +157,7 @@ internal static class TypeQueries
         FieldInfo[] fields = type.GetFields(Declared).Where(field => !IsGenerated(field) && !field.IsSpecialName).ToArray();
         Array.Sort(fields, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
         // An instance field of a blittable struct has a byte offset, the same one struct-mapping validation checks.
-        bool hasOffsets = type.IsValueType && !type.IsEnum && ComponentRegistry.BlittableProblem(type) == null;
+        bool hasOffsets = type.IsValueType && !type.IsEnum && StructMapping.BlittableProblem(type) == null;
         writer.Int32(fields.Length);
         foreach (FieldInfo field in fields)
         {

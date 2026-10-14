@@ -60,7 +60,7 @@ internal static class InternalCalls
     {
         if (type == typeof(void)) return (int)ValueKind.Void;
         if (type.IsPointer || type.IsFunctionPointer || type == typeof(IntPtr) || type == typeof(UIntPtr)) return (int)ValueKind.Pointer;
-        return ComponentRegistry.PrimitiveKindOf(type);
+        return StructMapping.PrimitiveKindOf(type);
     }
 
     // The field parameters a registered signature's parameters take: one each, except a string, which is a pointer

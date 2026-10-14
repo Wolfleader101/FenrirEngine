@@ -38,6 +38,7 @@ static class Checks
             ("diagnostic text", DiagnosticTextChecks),
             ("export contracts", ExportContractChecks.Run),
             ("value codec", ValueCodecChecks.Run),
+            ("struct mapping", StructMappingChecks.Run),
             ("components", () => ComponentChecks.Run(component)),
             ("invocation", () => InvocationChecks.Run(component)),
             ("dependencies", () => DependencyChecks.Run(component)),
