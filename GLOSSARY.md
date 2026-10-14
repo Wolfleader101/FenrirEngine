@@ -164,11 +164,15 @@ An entity moved by game code through the physics world with character-style rule
 *Avoid:* character controller (as the name of the thing), player body.
 
 **Collider**
-Geometry attached to a body: a collision shape at an offset from the body, with a physics material, a collision layer, and optionally marked as a trigger.
+Geometry attached to a body: one collision shape, placed where its entity is, with a physics material, a collision layer, and optionally marked as a trigger. An entity has at most one; a collider with no rigid body on its entity or above it is static.
 *Avoid:* hitbox.
 
+**Compound body**
+A rigid body whose colliders sit on several entities: its own and those beneath it that have no rigid body of their own.
+*Avoid:* compound shape (the backend's term for the merged geometry).
+
 **Collision shape**
-The geometry of a collider on its own: a box, sphere, capsule, convex hull or triangle mesh. Several colliders may share one.
+The geometry of a collider on its own, as a value: exactly one kind (box, sphere, capsule, convex hull or triangle mesh) and that kind's dimensions. Convex hull and triangle mesh kinds refer to a *collision mesh*, vertex data that FenrirPhysics prepares once and several colliders may share.
 *Avoid:* mesh (for the shape in general), geometry.
 
 **Physics material**
