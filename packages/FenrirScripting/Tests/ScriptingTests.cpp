@@ -864,52 +864,28 @@ namespace
     void ACustomComponentRegisteredByTheTestWorksWithNoEngineChanges()
     {
         HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {MakeComponent<Health>("Test.Health")}));
         {
-            INFO("The fixture did not load");
+            INFO("The fixture did not load with a matching component");
             REQUIRE(scripting.HasScripts());
         }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto entity = entities.CreateEntity();
         const auto id = entity.GetId();
 
-        // Looking Health up before it is registered finds nothing...
-        const auto early = Registry<std::optional<std::string>>(scripting, "HealthLookup", id);
-        {
-            INFO("An unregistered Health was not explained");
-            REQUIRE((early.has_value() && early->find("Test.Health") != std::string::npos));
-        }
-
-        // Before it is registered, the engine knows nothing of it.
+        // The engine knows nothing of a component nobody registered.
         const auto unregistered = Registry<std::optional<std::string>>(scripting, "NotRegistered", id);
         {
             INFO("A component nobody registered was not explained");
             REQUIRE((unregistered.has_value() && unregistered->find("Test.Nothing") != std::string::npos));
         }
 
-        const auto registered = scripting.RegisterComponent<Health>("Test.Health");
+        // A registered one is found, and the entity simply does not have it yet.
+        const auto lookup = Registry<std::optional<std::string>>(scripting, "HealthLookup", id);
         {
-            INFO("A matching component was not registered: " + registered.diagnostic);
-            REQUIRE((registered.Succeeded() && scripting.HasScripts()));
+            INFO("A registered component the entity lacks was not explained: " + lookup.value_or("<no exception>"));
+            REQUIRE((lookup.has_value() && lookup->find("has no Health") != std::string::npos));
         }
-        {
-            INFO("A duplicate name was accepted");
-            REQUIRE(!scripting.RegisterComponent<Health>("Test.Health").Succeeded());
-        }
-
-        // ...but registering it later is seen: the earlier "not registered" is not remembered past a change. It is now
-        // found, and the entity simply does not have it yet.
-        const auto late = Registry<std::optional<std::string>>(scripting, "HealthLookup", id);
-        {
-            INFO("A component registered after a failed lookup was still reported as unregistered: " +
-                 late.value_or("<no exception>"));
-            REQUIRE((late.has_value() && late->find("has no Health") != std::string::npos));
-        }
-        {
-            INFO("An empty name was accepted");
-            REQUIRE(!scripting.RegisterComponent<Health>("").Succeeded());
-        }
-
         {
             INFO("Has<Health> was true before it was added");
             REQUIRE(!Registry<bool>(scripting, "HasHealth", id));
@@ -927,6 +903,27 @@ namespace
         {
             INFO("C# writes to the custom component were not seen");
             REQUIRE(entity.GetComponent<Health>().Current == 25);
+        }
+    }
+
+    void AnEmptyOrDuplicateComponentNameFailsInstallAndNamesTheExtension()
+    {
+        for (const auto& [components, what] :
+             {std::pair{std::vector{MakeComponent<Health>("Test.Health"), MakeComponent<Health>("Test.Health")},
+                        "A duplicate name"},
+              std::pair{std::vector{MakeComponent<Health>("")}, "An empty name"}})
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, components));
+            {
+                INFO(std::string(what) + " was accepted");
+                REQUIRE(!scripting.HasScripts());
+            }
+            {
+                INFO(std::string(what) + " was not explained, naming the extension");
+                REQUIRE((headless.Logger().Contains(LogLevel::Error, "'test app'") &&
+                         headless.Logger().Contains(LogLevel::Error, "empty or duplicate name")));
+            }
         }
     }
 
@@ -1003,41 +1000,16 @@ namespace
     void AWrongFieldTypeIsCaughtToo()
     {
         HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        const auto registered = scripting.RegisterComponent<FloatHealth>("Test.FloatHealth");
+        auto scripting =
+            Scripting::Install(headless.Get(), ConfigFor(fixture, {MakeComponent<FloatHealth>("Test.FloatHealth")}));
         {
-            INFO("A field of the wrong type was accepted or undiagnosed: " + registered.diagnostic);
-            REQUIRE((registered.status == Iris::CallStatus::InvalidArgument &&
-                     registered.diagnostic.find("'Current'") != std::string::npos));
-        }
-        {
-            INFO("A mismatched registration left the script assembly loaded");
-            REQUIRE(!scripting.HasScripts());
-        }
-    }
-
-    void AComponentRegisteredLaterIsCheckedAtOnce()
-    {
-        HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        {
-            INFO("The fixture did not load");
-            REQUIRE(scripting.HasScripts());
-        }
-        const auto registered = scripting.RegisterComponent<BadHealth>("Test.BadHealth");
-        {
-            INFO("A mismatched registration was accepted or undiagnosed: " + registered.diagnostic);
-            REQUIRE((registered.status == Iris::CallStatus::InvalidArgument &&
-                     registered.diagnostic.find("'Current'") != std::string::npos &&
-                     registered.diagnostic.find("Test.BadHealth") != std::string::npos));
-        }
-        {
-            INFO("A mismatched registration left the script assembly loaded");
+            INFO("A field of the wrong type left the script assembly loaded");
             REQUIRE(!scripting.HasScripts());
         }
         {
-            INFO("The mismatch was not logged");
-            REQUIRE(headless.Logger().Contains(LogLevel::Error, "'Current'"));
+            INFO("A field of the wrong type was not named");
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, "Test.FloatHealth") &&
+                     headless.Logger().Contains(LogLevel::Error, "'Current'")));
         }
     }
 
@@ -3144,14 +3116,6 @@ namespace
                 INFO("A moved-from scripting reported state");
                 REQUIRE((scripting.Generation() == 0 && scripting.FindComponent("Fenrir.Transform") == nullptr));
             }
-            // Registering needs a Scripting that started, so a moved-from one refuses both kinds the same way.
-            const auto component = scripting.RegisterComponent<Health>("Test.Late");
-            const auto event = scripting.RegisterEvent<TestNative::Alert>("Test.LateEvent");
-            {
-                INFO("A moved-from scripting accepted a registration");
-                REQUIRE((component.status == Iris::CallStatus::NotInitialized &&
-                         event.status == Iris::CallStatus::NotInitialized));
-            }
         }
         {
             HeadlessApp headless;
@@ -3560,9 +3524,9 @@ TEST_CASE("a mismatched component fails the load and names the field", "[scripti
     AMismatchedComponentFailsTheLoadAndNamesTheField();
 }
 
-TEST_CASE("a component registered later is checked at once", "[scripting]")
+TEST_CASE("an empty or duplicate component name fails install and names the extension", "[scripting]")
 {
-    AComponentRegisteredLaterIsCheckedAtOnce();
+    AnEmptyOrDuplicateComponentNameFailsInstallAndNamesTheExtension();
 }
 
 TEST_CASE("a script assembly reports the components it defines, with size and alignment", "[scripting]")

@@ -127,7 +127,6 @@ template <> struct Iris::StructMapping<Health> {
 };
 
 game.components.push_back(Fenrir::MakeComponent<Health>("MyGame.Health"));   // `game`: the app's ScriptingExtension
-// or, once Install has run: scripting.RegisterComponent<Health>("MyGame.Health");
 ```
 
 ```csharp
@@ -137,8 +136,9 @@ public struct Health : IComponent { public int Current; public int Max; }
 
 - **The layout is checked, and a mismatch fails.** When a script assembly loads, every registered component is validated
   against its C# struct (name, size, each field's name, offset and kind). The first mismatch fails the whole load: the
-  assembly is released, the app keeps running, and the error names the component and the field. Registering after the
-  assembly loaded is checked at once, with the same all-or-nothing result.
+  assembly is released, the app keeps running, and the error names the component and the field.
+- **Nothing registers after Install.** What scripting knows is fixed by the extensions given to `Install`; afterwards the
+  registry changes only when a reload removes and adds the components and events the script assembly defines.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
@@ -150,9 +150,8 @@ public struct Health : IComponent { public int Current; public int Max; }
 - **A native component is reached only through the C# type that was validated.** Declaring your own struct with
   `[NativeComponent("Fenrir.Relationship")]` does not work: the engine hands the component out only to the type whose
   layout it checked, and `Get<T>` throws for any other.
-- **Read-only components.** `MakeReadOnlyComponent` (or `RegisterReadOnlyComponent`) registers data scripts must not
-  change. In C# such a struct implements `IReadOnlyComponent` (not `IComponent`), so there is no `Ref<T>` for it, and
-  `ReadOnlyRef<T>` hands out `ref readonly` accessors: assigning through it is a compile error (`CS8331`, `CS8332`),
+- **Read-only components.** `MakeReadOnlyComponent` registers data scripts must not change. In C# such a struct
+  implements `IReadOnlyComponent` (not `IComponent`), so there is no `Ref<T>` for it, and `ReadOnlyRef<T>` hands out `ref readonly` accessors: assigning through it is a compile error (`CS8331`, `CS8332`),
   checked by the `RefCompile-Relationship*` tests.
 - **A caution for native code.** `Fenrir::Entity(id, list)` is a *creating* constructor: it adds a Transform, a Name and a
   Relationship, replacing existing ones. To look an entity up without touching it, use `EntityList::GetEntity(id)`, which is
@@ -313,8 +312,8 @@ C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the las
 
 - **C#-only events need no C++.** The SDK generator lists them in an `EventTable`; when the script assembly loads, the engine
   makes a queue for each (the App's `CreateEventQueue`), and removes it when the assembly is released.
-- **Sharing a C++ event.** List it in an extension's `events` with `Fenrir::MakeEvent<T>("Ns.Name")` (or register it later with `Scripting::RegisterEvent<T>`) and
-  mirror it in C# with `[NativeEvent("Ns.Name")]`. The layout is checked like a component's, and a mismatch fails the load
+- **Sharing a C++ event.** List it in an extension's `events` with `Fenrir::MakeEvent<T>("Ns.Name")` and mirror it in
+  C# with `[NativeEvent("Ns.Name")]`. The layout is checked like a component's, and a mismatch fails the load
   naming the field. `SendEvent<T>`/`ReadEvents<T>` in C++ and `Events.Send/Read<T>()` in C# are then one queue. The C++ type
   must be trivially copyable and default constructible: events cross the boundary as bytes.
 - **Sends wait for the system to return.** `Events.Send` is recorded like a structural change, so a system never reads its own
