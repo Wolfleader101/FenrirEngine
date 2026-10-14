@@ -200,7 +200,7 @@ namespace Fenrir
         }
 
         // One transition into managed code for the whole phase. Only ever on the main thread: Iris calls, script calls
-        // and the internal calls they make all assume it.
+        // and the native functions they call all assume it.
         void RunPhase(int phase)
         {
             if (!runner.has_value() || !runnerRun.has_value() || (phaseMask & (1 << phase)) == 0)
@@ -563,6 +563,10 @@ namespace Fenrir
             return Scripting(std::move(state));
         }
 
+        // The engine's own API is the first extension: its native functions are declared, checked and registered like
+        // any package's.
+        config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension());
+
         // What the stages build up for the ones after them.
         std::error_code error;
         std::filesystem::path assembly;
@@ -598,11 +602,11 @@ namespace Fenrir
                 }
                 return std::nullopt;
             },
-            // The engine's internal calls act on this App, and are registered before the contract is shared (sharing
+            // The engine's native functions act on this App; they are registered before the contract is shared (sharing
             // binds the contract's function pointers to them).
             [&]() -> std::optional<StartupFailure> {
                 state->context.app = &app;
-                state->context.call = Detail::CallContextAccess::Make(app);
+                state->context.call = Detail::CallContextAccess::Make(app, state->context);
                 state->context.components = &state->components;
                 state->context.changes = &state->changes;
                 if (!Detail::RegisterEngineComponents(state->components))
@@ -671,17 +675,13 @@ namespace Fenrir
                 }
                 return std::nullopt;
             },
-            // Only one Scripting is active in a process, and the engine's bindings must exist before .NET starts.
+            // Only one Scripting is active in a process, and the native functions are registered before .NET starts.
             [&]() -> std::optional<StartupFailure> {
                 if (!Detail::ActivateEngineContext(&state->context))
                 {
                     return StartupFailure{"another Scripting is already active in this process", {}};
                 }
                 state->contextActive = true;
-                if (const auto bound = Detail::RegisterEngineBindings(); !bound.Succeeded())
-                {
-                    return StartupFailure{"the engine's internal calls could not be registered", bound.diagnostic};
-                }
                 // Before the host shares the extensions' contracts: sharing binds their fields to these.
                 for (const auto& extension : config.extensions)
                 {

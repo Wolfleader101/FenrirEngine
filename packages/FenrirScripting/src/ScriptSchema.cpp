@@ -102,7 +102,7 @@ namespace Fenrir::Detail
             const char* noun;
             // The table the SDK's generator wrote into the script assembly, which reports each definition.
             const char* tableType;
-            // Where the engine's internal call puts a definition while the table runs.
+            // Where the engine's native function puts a definition while the table runs.
             std::vector<Description>* EngineContext::* slot;
             // The rules this kind adds to "a name appears once": usable layouts, and names nobody else holds.
             std::function<Result(const std::vector<Description>&)> check;
@@ -122,7 +122,7 @@ namespace Fenrir::Detail
             {
             }
 
-            // Runs the table in the script assembly, which reports each definition through an internal call. An
+            // Runs the table in the script assembly, which reports each definition through a native function. An
             // assembly without the table defines none. Then the checks, which change nothing.
             Result Discover(const Iris::Component& component, EngineContext& context)
             {

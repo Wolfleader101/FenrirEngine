@@ -420,46 +420,49 @@ shares its name with another in its type (FENRIR0024), returns a string (FENRIR0
 (FENRIR0026). Your friendly API calls the declared method like any other, and adds behaviour (such as turning error codes
 into exceptions) only where it wants.
 
-## Adding an engine API
+## Adding to the engine's own API
 
-The engine's own API does not use native functions yet (they move over in `.scratch/scripting-native-functions`, ticket
-04). Until then every engine API is the same three pieces, which keeps pointers, UTF-8 and lengths out of script code. `Log` is the
-smallest complete example.
+The engine's own API (Log, Time, Entity, components, events, queries, changes) is the built-in scripting extension: its
+native functions are the methods of the contract's `Native` class, declared like any package's. To add one, in the order
+a script sees it:
 
-1. **An internal call** in `src/Bindings.cpp` (these move onto native functions, as extensions declare them, later): a plain C++ function over C types (sized integers, `float`, `double`,
-   `bool`, pointers). It reads the App through `ActiveApp()`. A C++ exception that escapes it is stopped by Iris and
-   logged; scripts get a zero result.
-
-   ```cpp
-   void Log(std::int32_t level, const char* text, std::int32_t length) { /* ... */ }
-   ```
-
-2. **Its registration**, in `RegisterEngineBindings`, under the name `Fenrir.Scripting.Native.<Field>`:
+1. **The C++ function**, in `src/Bindings.cpp`, over the `CallContext` like any native function. The engine's own state
+   (the component registry, the change buffer) comes from the context's internal part. A C++ exception that escapes it is
+   stopped by Iris and logged; scripts get a zero result.
 
    ```cpp
-   Iris::RegisterInternalCall<&Log>(prefix + "Log"),
+   void Log(const CallContext& context, std::int32_t level, const char* text, std::int32_t length) { /* ... */ }
    ```
 
-3. **A field in the contract's `Native` class** (`Managed/Fenrir.Scripting/Native.cs`) with exactly that signature, and a
-   **friendly wrapper** beside it that scripts use:
+2. **Its entry in `BuiltInExtension`**, named `Fenrir.Scripting.Native.<Method>`. Give a second argument if C# should get
+   something other than zero when no Scripting is running:
+
+   ```cpp
+   NativeFunction::Make<&Log>(prefix + "Log"),
+   ```
+
+3. **The declaration in `Managed/Fenrir.Scripting/Native.cs`**: a `[NativeFunction]` method with the same parameters,
+   plus a **friendly wrapper** beside it that scripts use (UTF-8, lengths and `fixed` stay in the wrapper, because
+   `Native` is internal and passes pointers through):
 
    ```csharp
-   public static delegate* unmanaged[Cdecl]<int, byte*, int, void> Log;     // in Native (internal)
+   [NativeFunction]
+   public static partial void Log(int level, byte* text, int length);     // in Native (internal)
 
    public static class Log { public static void Info(string? message) => Write(0, message); /* UTF-8, length, fixed */ }
    ```
 
-Iris binds every public static function pointer field of the shared contract when it is shared, and **sharing fails**
-(so no scripts load, and the engine logs why) if a field has no registration or a different signature. A mismatch can
-therefore never become a null call. Rules to remember:
+Iris binds every generated field of the shared contract when it is shared, and **sharing fails** (so no scripts load, and
+the engine logs why) if a method has no C++ function or a different signature. A mismatch can therefore never become a
+null call. Rules to remember:
 
-- Strings cross as UTF-8 bytes and a length; the wrapper does the encoding. Structs cross by pointer (Iris checks their
-  layout with `Component::ValidateStruct`, from the component tickets onward). `bool` is one byte and `char` two,
-  which is why the contract has `[assembly: DisableRuntimeMarshalling]`.
+- The contract has `[assembly: DisableRuntimeMarshalling]`, which is what makes a `bool` one byte and a `char` two.
 - A native function must not assume a thread: every script call happens on the main thread today, but the function
-  should only touch what the App owns.
+  should only touch what the App owns, and (see "Scripting extensions") must not make structural changes except through
+  the change buffer, as the engine's own entity functions do.
 - Test it with a method on the fixture script assembly (`Tests/Fixture/Fixture.cs`) that calls the new wrapper, and a
   `TEST_CASE` in `Tests/ScriptingTests.cpp` that calls that method with `Call<...>` and checks what the engine saw.
+- A package outside FenrirScripting does not edit any of this: it uses its own extension ("Scripting extensions").
 
 ## Tests
 

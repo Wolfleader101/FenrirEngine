@@ -1,7 +1,5 @@
 #pragma once
 
-#include <Iris/Iris.hpp>
-
 #include <optional>
 
 #include "ChangeBuffer.hpp"
@@ -15,16 +13,16 @@ namespace Fenrir::Detail
     // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component.
     using ScriptEventDescription = ScriptComponentDescription;
 
-    // What the engine's internal calls act on. An internal call is a plain function pointer with no user data, so
-    // the App it serves is process-wide state: one Scripting is active at a time, and every script call happens on
-    // the main thread (the thread that runs the App's sequential systems).
+    // What the engine's native functions act on. Iris calls a native function through a plain function pointer with no
+    // user data, so the running Scripting's context is process-wide state: one Scripting is active at a time, and every
+    // script call happens on the main thread (the thread that runs the App's sequential systems).
     struct EngineContext
     {
         App* app = nullptr;
+        ComponentRegistry* components = nullptr;
 
         // What every native function receives while this context is active.
         std::optional<CallContext> call;
-        ComponentRegistry* components = nullptr;
 
         // The structural changes scripts have made since they were last played back.
         ChangeBuffer* changes = nullptr;
@@ -38,12 +36,18 @@ namespace Fenrir::Detail
         std::vector<ScriptEventDescription>* discoveringEvents = nullptr;
     };
 
-    // Scripting's way to make the CallContext its native functions receive.
+    // Scripting's way to make the CallContext its native functions receive, and for the built-in ones to reach the rest
+    // of the state they act on.
     struct CallContextAccess
     {
-        [[nodiscard]] static CallContext Make(App& app) noexcept
+        [[nodiscard]] static CallContext Make(App& app, EngineContext& engine) noexcept
         {
-            return CallContext(app);
+            return CallContext(app, engine);
+        }
+
+        [[nodiscard]] static EngineContext& Engine(const CallContext& context) noexcept
+        {
+            return *context.m_engine;
         }
     };
 
@@ -53,7 +57,7 @@ namespace Fenrir::Detail
     // Clears the active context if it is `context`.
     void DeactivateEngineContext(EngineContext* context) noexcept;
 
-    // Registers every engine internal call with Iris (idempotent), under the names the Fenrir.Scripting contract
-    // binds: "Fenrir.Scripting.Native.<Field>". Must happen before the Host shares the contract.
-    [[nodiscard]] Iris::CallResult<void> RegisterEngineBindings();
+    // The engine's own native functions (Log, Time, Entity, components, events, queries, changes) as the extension
+    // every Scripting includes: "Fenrir.Scripting.Native.<Method>", the methods of the contract's Native class.
+    [[nodiscard]] ScriptingExtension BuiltInExtension();
 } // namespace Fenrir::Detail

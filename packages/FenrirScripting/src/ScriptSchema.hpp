@@ -51,7 +51,7 @@ namespace Fenrir::Detail
      * in the ECS and the App compared with this one's definitions (unchanged data stays, anything else goes with a
      * warning) and the new definitions registered.
      *
-     * @param context where the engine's internal calls put what the assembly reports
+     * @param context where the engine's native functions put what the assembly reports
      * @param registry the components and events scripts can name; gains the assembly's definitions
      * @param component the freshly loaded script assembly
      * @param owned what the ECS and the App still hold from the previous generation; updated to match this one
