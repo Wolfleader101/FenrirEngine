@@ -137,6 +137,10 @@ namespace Iris::Detail
 
     inline constexpr std::int32_t BridgeVersion = 22;
 
+    // The bridge's wire status 4 (BufferTooSmall). Native code always sizes buffers from the bridge's own
+    // answer, so the bridge reporting it is a malformed response; it is not a public CallStatus.
+    inline constexpr std::int32_t WireBufferTooSmall = 4;
+
     // Managed names of the table slots, in field order, for diagnostics naming a missing entry.
     inline constexpr std::array<const char*, 31> BridgeFunctionNames = {"LoadComponent",
                                                                         "CopyComponentNameUtf8",

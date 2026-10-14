@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BridgeFunctions.hpp"
 #include "Iris/CallResult.hpp"
 #include "StringEncoding.hpp"
 
@@ -91,10 +92,6 @@ namespace Iris::Detail
         result.diagnosticTruncated = failed.diagnosticTruncated;
         return result;
     }
-
-    // The bridge's wire status 4 (BufferTooSmall). Native code always sizes buffers from the bridge's own
-    // answer, so the bridge reporting it is a malformed response; it is not a public CallStatus.
-    inline constexpr std::int32_t WireBufferTooSmall = 4;
 
     // Builds the result of one bridge call from its wire status. Success carries `value`. The bridge's
     // public statuses are passed through with the managed diagnostic, or a fallback naming `operation`;
