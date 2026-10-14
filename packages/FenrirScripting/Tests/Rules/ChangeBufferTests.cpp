@@ -5,6 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "../HeadlessApp.hpp"
+#include "RulesTypes.hpp"
 
 #include "ChangeBuffer.hpp"
 #include "ComponentRegistry.hpp"
@@ -15,37 +16,6 @@
 
 #include <cstdint>
 #include <string>
-
-namespace RulesTest
-{
-    // A native component scripts may add and remove, and a native event they may send.
-    struct Velocity
-    {
-        float X = 0;
-        float Y = 0;
-        float Z = 0;
-    };
-
-    struct Ping
-    {
-        std::int32_t Value = 0;
-    };
-} // namespace RulesTest
-
-template <>
-struct Iris::StructMapping<RulesTest::Velocity>
-{
-    static constexpr std::string_view typeName = "Rules.Velocity";
-    static constexpr auto fields = Iris::StructFields(
-        IRIS_FIELD(RulesTest::Velocity, X), IRIS_FIELD(RulesTest::Velocity, Y), IRIS_FIELD(RulesTest::Velocity, Z));
-};
-
-template <>
-struct Iris::StructMapping<RulesTest::Ping>
-{
-    static constexpr std::string_view typeName = "Rules.Ping";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(RulesTest::Ping, Value));
-};
 
 namespace
 {

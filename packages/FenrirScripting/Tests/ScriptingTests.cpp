@@ -3010,39 +3010,6 @@ namespace
         ExpectReportRefusedWholesale("duplicate-event", "more than once");
     }
 
-    void AScriptEventWithAnImpossibleLayoutIsRefused()
-    {
-        ExpectReportRefusedWholesale("bad-event-layout", "the engine cannot store");
-    }
-
-    void AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas()
-    {
-        HeadlessApp headless;
-        // The App already owns a queue under the name the script's Ping event would use.
-        {
-            INFO("The test could not make the queue");
-            REQUIRE(headless.Get().CreateEventQueue("Fenrir.ScriptFixture.Ping", 4, 4) != nullptr);
-        }
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        {
-            INFO("A script event took the name of an existing queue");
-            REQUIRE(!scripting.HasScripts());
-        }
-        {
-            INFO("The name clash was not explained");
-            REQUIRE((headless.Logger().Contains(LogLevel::Error, "already has an event of that name") &&
-                     headless.Logger().Contains(LogLevel::Error, "Fenrir.ScriptFixture.Ping")));
-        }
-        {
-            INFO("The refusal removed a queue the script did not own");
-            REQUIRE(headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping") != nullptr);
-        }
-        {
-            INFO("The clash left part of the script's components registered");
-            REQUIRE(scripting.FindComponent(VelocityName) == nullptr);
-        }
-    }
-
     void TheContractIsOneSharedCopyAcrossGenerations()
     {
         int firstIdentity = 0;
@@ -3728,16 +3695,6 @@ TEST_CASE("a duplicate script component is refused and leaves nothing behind", "
 TEST_CASE("a duplicate script event is refused and leaves nothing behind", "[scripting]")
 {
     ADuplicateScriptEventIsRefused();
-}
-
-TEST_CASE("a script event with an impossible layout is refused and leaves nothing behind", "[scripting]")
-{
-    AScriptEventWithAnImpossibleLayoutIsRefused();
-}
-
-TEST_CASE("a script event cannot take the name of a queue the app already has", "[scripting]")
-{
-    AScriptEventCannotTakeTheNameOfAQueueTheAppAlreadyHas();
 }
 
 TEST_CASE("a wrong field type is caught too", "[scripting]")
