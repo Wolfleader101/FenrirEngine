@@ -18,11 +18,6 @@ internal static class ComponentRegistry
     private sealed record MemberRecord(FieldInfo? Field, PropertyInfo? Property, MethodInfo? Getter, MethodInfo? Setter,
         Type ValueType, int ValueKind, bool IsStatic, Type DeclaringType);
 
-    // A struct or enum registered from native: its managed type and size in bytes. For a struct, BoolOffsets
-    // lists where its bool bytes are (nested structs and inline arrays included), so a copy from native can
-    // make them 0 or 1. For an enum, UnderlyingKind is the wire kind of its integer type (zero for a struct).
-    private sealed record StructRecord(Type Type, int Size, int[] BoolOffsets, int UnderlyingKind = 0);
-
     // Handles to types, methods and members looked up in one component. They live in the active entry, so
     // releasing the component drops every Type and MethodInfo reference with it; no handle outlives
     // its component.
@@ -450,12 +445,12 @@ internal static class ComponentRegistry
         {
             if (ValueKinds.IsStruct(kinds[index]))
             {
-                values[index] = StructFromSlot(entry, kinds[index], arguments[index]);
+                values[index] = ValueCodec.StructFromSlot(StructOf(entry, kinds[index]), arguments[index]);
                 continue;
             }
             if (ValueKinds.IsEnum(kinds[index]))
             {
-                values[index] = EnumFromSlot(entry, kinds[index], arguments[index]);
+                values[index] = ValueCodec.EnumFromSlot(StructOf(entry, kinds[index]), arguments[index]);
                 continue;
             }
             if (ValueKinds.IsArray(kinds[index]))
@@ -477,7 +472,7 @@ internal static class ComponentRegistry
             }
             if ((ValueKind)kinds[index] != ValueKind.Object)
             {
-                values[index] = ValueKinds.ToObject(kinds[index], arguments[index]);
+                values[index] = ValueCodec.ToObject(kinds[index], arguments[index]);
                 continue;
             }
             object? argument;
@@ -497,9 +492,9 @@ internal static class ComponentRegistry
     // the same managed object. Null is the zero handle.
     private static ulong ReturnSlot(ulong token, Entry entry, int kind, object? returned)
     {
-        if (ValueKinds.IsStruct(kind)) return StructToBlock(entry, kind, returned!);
-        if (ValueKinds.IsEnum(kind)) return EnumToSlot(entry, kind, returned!);
-        if ((ValueKind)kind != ValueKind.Object && !ValueKinds.IsArray(kind)) return ValueKinds.ToSlot(kind, returned);
+        if (ValueKinds.IsStruct(kind)) return ValueCodec.StructToBlock(StructOf(entry, kind), returned!);
+        if (ValueKinds.IsEnum(kind)) return ValueCodec.EnumToSlot(StructOf(entry, kind), returned!);
+        if ((ValueKind)kind != ValueKind.Object && !ValueKinds.IsArray(kind)) return ValueCodec.ToSlot(kind, returned);
         if (returned == null) return 0;
         lock (Gate)
         {
@@ -713,15 +708,15 @@ internal static class ComponentRegistry
         }
         else if (ValueKinds.IsStruct(member.ValueKind))
         {
-            converted = StructFromSlot(entry!, member.ValueKind, value);
+            converted = ValueCodec.StructFromSlot(StructOf(entry!, member.ValueKind), value);
         }
         else if (ValueKinds.IsEnum(member.ValueKind))
         {
-            converted = EnumFromSlot(entry!, member.ValueKind, value);
+            converted = ValueCodec.EnumFromSlot(StructOf(entry!, member.ValueKind), value);
         }
         else
         {
-            converted = ValueKinds.ToObject(member.ValueKind, value);
+            converted = ValueCodec.ToObject(member.ValueKind, value);
         }
         if (member.Field != null)
             member.Field.SetValue(target, converted);
@@ -729,45 +724,6 @@ internal static class ComponentRegistry
             member.Setter!.Invoke(target, BindingFlags.DoNotWrapExceptions, binder: null, new[] { converted }, culture: null);
         return true;
     }
-
-    // Copies a struct out of the caller's bytes: a plain memory copy, then every bool byte made 0 or 1, so a
-    // stray nonzero byte reads as true and managed code never sees an invalid bool.
-    private static unsafe object StructFromSlot(Entry entry, int kind, ulong slot)
-    {
-        if (slot == 0) throw new BridgeArgumentException("A struct argument has no value.");
-        StructRecord record = StructOf(entry, kind);
-        object box = ManagedLayout.Box(record.Type, (byte*)slot, record.Size);
-        if (record.BoolOffsets.Length > 0)
-        {
-            fixed (byte* data = &ManagedLayout.Data(box)) NormalizeBools(data, record.BoolOffsets);
-        }
-        return box;
-    }
-
-    private static unsafe void NormalizeBools(byte* origin, int[] offsets)
-    {
-        foreach (int offset in offsets)
-            if (origin[offset] > 1) origin[offset] = 1;
-    }
-
-    // Copies a struct into a new block the caller gives back with FreeString.
-    private static unsafe ulong StructToBlock(Entry entry, int kind, object value)
-    {
-        StructRecord record = StructOf(entry, kind);
-        byte* block = (byte*)NativeMemory.Alloc((nuint)record.Size);
-        ManagedLayout.Unbox(value, block, record.Size);
-        return (ulong)block;
-    }
-
-    // An enum travels as its underlying integer.
-    private static object EnumFromSlot(Entry entry, int kind, ulong slot)
-    {
-        StructRecord record = StructOf(entry, kind);
-        return Enum.ToObject(record.Type, ValueKinds.ToObject(record.UnderlyingKind, slot)!);
-    }
-
-    private static ulong EnumToSlot(Entry entry, int kind, object value) =>
-        ValueKinds.ToSlot(StructOf(entry, kind).UnderlyingKind, value);
 
     // The wire kind of a primitive, bool or char type, or -1.
     internal static int PrimitiveKindOf(Type type)
@@ -1061,7 +1017,7 @@ internal static class ComponentRegistry
         CheckIndex(array!, index);
         object? value = array!.GetValue(index);
         int elementKind = ValueKinds.ElementKind(kind);
-        slot = ValueKinds.IsStruct(elementKind) ? StructToBlock(entry!, elementKind, value!) : ValueKinds.ToSlot(elementKind, value);
+        slot = ValueKinds.IsStruct(elementKind) ? ValueCodec.StructToBlock(StructOf(entry!, elementKind), value!) : ValueCodec.ToSlot(elementKind, value);
         return true;
     }
 
@@ -1071,7 +1027,7 @@ internal static class ComponentRegistry
         if (!TryGetArray(token, objectId, kind, out Entry? entry, out Array? array)) return false;
         CheckIndex(array!, index);
         int elementKind = ValueKinds.ElementKind(kind);
-        object? value = ValueKinds.IsStruct(elementKind) ? StructFromSlot(entry!, elementKind, slot) : ValueKinds.ToObject(elementKind, slot);
+        object? value = ValueKinds.IsStruct(elementKind) ? ValueCodec.StructFromSlot(StructOf(entry!, elementKind), slot) : ValueCodec.ToObject(elementKind, slot);
         array!.SetValue(value, index);
         return true;
     }
@@ -1109,7 +1065,7 @@ internal static class ComponentRegistry
                 if ((ValueKind)elementKind == ValueKind.Bool)
                     for (long index = 0; index < count; ++index) if (element[index] > 1) element[index] = 1;
                 if (structElement != null && structElement.BoolOffsets.Length > 0)
-                    for (long index = 0; index < count; ++index) NormalizeBools(element + index * size, structElement.BoolOffsets);
+                    for (long index = 0; index < count; ++index) ValueCodec.NormalizeBools(element + index * size, structElement.BoolOffsets);
             }
             else
             {

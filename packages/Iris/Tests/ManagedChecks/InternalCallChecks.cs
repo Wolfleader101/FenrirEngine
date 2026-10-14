@@ -7,7 +7,7 @@ using Iris.Bridge;
 static unsafe class InternalCallChecks
 {
     private const string Natives = "Iris.Examples.Component.Natives.";
-    private const int Void = 0, Bool = 1, Char = 18, Int32 = 6, Int64 = 8, UInt8 = 3, Double = 11, String = 13, Pointer = 17;
+    private const int Void = (int)ValueKind.Void, Bool = (int)ValueKind.Bool, Char = (int)ValueKind.Char, Int32 = (int)ValueKind.Int32, Int64 = (int)ValueKind.Int64, UInt8 = (int)ValueKind.UInt8, Double = (int)ValueKind.Double, String = (int)ValueKind.String, Pointer = (int)ValueKind.Pointer;
     private static int recorded;
 
     private static void Check(bool condition, string message)

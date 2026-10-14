@@ -523,7 +523,7 @@ public static partial class Bootstrap
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     internal static void FreeString(ulong block)
     {
-        if (block != 0) ValueKinds.FreeString(block);
+        if (block != 0) ValueCodec.FreeString(block);
     }
 
     // Runs an instance method on an owned object. Like InvokeMethod, except the object handle must belong

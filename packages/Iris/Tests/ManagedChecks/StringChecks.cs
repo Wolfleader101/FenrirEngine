@@ -9,7 +9,7 @@ static unsafe class StringChecks
 {
     private const string Strings = "Iris.Examples.Component.Strings";
     private const string Component = "Iris.Examples.Component.";
-    private const int Int32 = 6, Bool = 1, Obj = 12, Str = 13;
+    private const int Int32 = (int)ValueKind.Int32, Bool = (int)ValueKind.Bool, Obj = (int)ValueKind.Object, Str = (int)ValueKind.String;
     private const int Field = 0, Property = 1;
 
     private static void Check(bool condition, string message)
