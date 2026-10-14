@@ -21,9 +21,10 @@ A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-ticke
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [What does Jolt require of a host engine?](issues/01-what-jolt-requires-of-a-host.md): Jolt v5.6.0 can run on our `ThreadPool`; bodies are locked during a step; listeners run on job threads unordered and must be buffered; same-binary determinism holds given ordered API calls; much is process-global; several build defaults must be overridden.
+
 ## Not yet specified
 
-- **Build integration:** how Jolt arrives (submodule under `packages/FenrirPhysics/libs/`, as the other packages do), which of its CMake options we pin, and whether the root gets a `FENRIR_ENABLE_PHYSICS` option. Probably sharpens once "What does Jolt require of a host engine?" reports.
 - **Mesh collider data:** a triangle-mesh or convex-hull collider needs vertex data, but FenrirPhysics may not depend on the renderer's `Model`. Where that data comes from, and who owns it.
 - **DemoApp demo scenes:** switching between several demo scenes (one per feature family) in the DemoApp, and what the first physics scene shows.
 - **Feature-family specs:** constraints and joints, character controller, vehicles, ragdolls, soft bodies. Each becomes tickets once the foundation settles the body, shape and stepping vocabulary they build on.

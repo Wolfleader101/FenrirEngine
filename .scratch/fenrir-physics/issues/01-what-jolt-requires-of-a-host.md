@@ -1,7 +1,7 @@
 # What does Jolt require of a host engine?
 
 Type: research
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -21,3 +21,19 @@ What does JoltPhysics require of, and offer to, an engine that embeds it, in the
 - **Scale:** how non-uniform scale is handled on shapes.
 
 Write findings to a Markdown file on the `research/jolt-host-requirements` branch, citing each claim's source, and link it here.
+
+## Answer
+
+Findings: `.scratch/fenrir-physics/research/jolt-host-requirements.md` on branch `research/jolt-host-requirements` (commit `516dfa3`), against Jolt v5.6.0 (`e77f175`), each claim cited.
+
+- **Threading:** `JobSystem` is an interface meant for the host's scheduler; `JobSystemWithBarrier` needs four functions, so FenrirScheduler's `ThreadPool` can back it (gap: it exposes no thread count for `GetMaxConcurrency`). `JobSystemSingleThreaded` is the fallback. `Update` blocks until done.
+- **Locking:** all body and constraint locks are held during `Update`; no reads, writes, adds or removes during a step.
+- **Callbacks:** contact and activation listeners run on job threads, unordered, read-only through NoLock interfaces; `OnContactRemoved` gets only IDs. Buffer under a mutex and sort (Jolt's own sensor sample does this). A body going to sleep ends its contacts.
+- **Determinism:** same binary holds regardless of thread count, given the same API call order and reproducible `BodyID`s (`CreateBodyWithID`). `CROSS_PLATFORM_DETERMINISTIC` (~8% cost) only matters across builds.
+- **Lifetimes:** capacities fixed at `Init`, overflow reported as error flags; batch add is the cheap path; shapes ref-counted, shareable, cooked once. Each body has a `uint64` user data (room for an entity).
+- **Process-global state:** allocator, trace/assert hooks, factory, type registration, debug renderer instance are shared by every physics world.
+- **Stepping:** constant dt suits warm starting; 60 Hz with one collision step is the sweet spot.
+- **Precision:** double precision changes only position types and query base offsets.
+- **Debug rendering:** opt-in draw calls; compiled in Debug/Release, out in Distribution, keyed to Jolt's own configuration names.
+- **Build:** C++17, MIT, `add_subdirectory(<jolt>/Build)`. Defaults that bite: static MSVC runtime, LTO on, no RTTI/exceptions, 5.6 GPU compute backends on (pull in Vulkan/dxc), `/WX`/`-Werror` plus the engine's directory-wide warning flags.
+- **Scale:** non-uniform scale only on some shapes; changing scale means a new shape (`SetShape`).
