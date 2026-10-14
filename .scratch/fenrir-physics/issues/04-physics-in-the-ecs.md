@@ -27,6 +27,8 @@ The user's preferences for the component layout, to weigh against what suits the
 
 ## Answer
 
+Recorded as ADR-0011, `docs/adr/0011-physics-components-are-plain-data-physics-diffs.md`.
+
 **Components** (all plain data):
 
 - **`RigidBody`**: one component with `MotionType { Static, Kinematic, Dynamic }`, mass, damping, gravity scale, and linear and angular velocity as read/write fields. Switching motion type is a field edit, never a structural change. Three components (Godot-style) were rejected: switching would be structural, which C# defers and native functions cannot do, and `RigidBody` + `StaticBody` on one entity would be representable. A collider with no `RigidBody` on itself or an ancestor is static; `RigidBody { Static }` means the same, and is what freezing a body produces.
