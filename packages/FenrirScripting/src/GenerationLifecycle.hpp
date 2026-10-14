@@ -12,6 +12,7 @@
 #include <Iris/Iris.hpp>
 
 #include "FenrirLogger/ILogger.hpp"
+#include "ReloadWatcher.hpp"
 
 namespace Fenrir::Detail
 {
@@ -22,7 +23,8 @@ namespace Fenrir::Detail
     /**
      * @brief The life of the script assembly's generations: each one a private copy of the file loaded into its own
      * Iris component, replaced by the next build with the previous one restored if the next fails, released, and waited
-     * for until the runtime has collected it. It also decides when the file on disk is ready to be loaded again.
+     * for until the runtime has collected it. It reads the file on disk, and a ReloadWatcher decides from that when it
+     * is ready to be loaded again.
      *
      * It knows nothing of what a generation contains: the host supplies that through Hooks. It is set up in two steps,
      * because the host that owns it exists before the settings are known; until Configure every operation does nothing
@@ -64,16 +66,8 @@ namespace Fenrir::Detail
             std::function<void()> beforeReload;
         };
 
-        /** @brief What the watcher makes of the file at one moment. */
-        enum class Watch
-        {
-            /** The file is the one that is loaded, or cannot be looked at. */
-            Idle,
-            /** It changed, and a build may still be writing it. */
-            Settling,
-            /** It changed, has stayed the same for the debounce, and can be opened. */
-            Ready,
-        };
+        /** @brief What the watcher makes of the file at one moment (see ReloadWatcher). */
+        using Watch = ReloadWatcher::Watch;
 
         GenerationLifecycle() = default;
         GenerationLifecycle(const GenerationLifecycle&) = delete;
@@ -140,12 +134,7 @@ namespace Fenrir::Detail
         }
 
       private:
-        struct FileStamp
-        {
-            std::filesystem::file_time_type modified{};
-            std::uintmax_t size = 0;
-            bool operator==(const FileStamp&) const = default;
-        };
+        using FileStamp = ReloadWatcher::Stamp;
 
         [[nodiscard]] std::optional<FileStamp> StampNow() const;
         [[nodiscard]] Result LoadGeneration(std::shared_ptr<ScriptCopy> existing);
@@ -172,11 +161,8 @@ namespace Fenrir::Detail
         };
         std::vector<Retired> m_retired;
 
-        // The watcher.
-        std::optional<FileStamp> m_loadedStamp;
-        std::optional<FileStamp> m_pendingStamp;
-        std::chrono::steady_clock::time_point m_pendingSince{};
-        std::chrono::steady_clock::time_point m_lastPoll{};
+        // Decides when the file on disk is a finished build; this class reads the file and supplies what it asks for.
+        ReloadWatcher m_watcher;
         bool m_reloading = false;
     };
 } // namespace Fenrir::Detail
