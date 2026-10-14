@@ -115,6 +115,10 @@ Creating or destroying an entity, or adding or removing a component. A structura
 A user's C# assembly holding C# components and systems. The engine loads it as one Iris component, and it reloads as a new generation.
 *Avoid:* script (as the name of a type or file), plugin.
 
+**Script report**
+What a script assembly says it defines when it loads: the C# components and events, each with its size and alignment, and a fingerprint of its layout that the engine compares across builds. The engine checks a report before it keeps the assembly, and refuses the whole load if any part of it is wrong.
+*Avoid:* manifest, schema.
+
 **Scripting contract**
 The shared assembly `Fenrir.Scripting` that every script assembly compiles against. It holds the stable engine API and never reloads.
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
