@@ -1,5 +1,7 @@
 #include "Iris/Type.hpp"
 
+#include "ComponentCall.hpp"
+
 #include "ManagedDiagnosticBuffer.hpp"
 #include "MemberState.hpp"
 #include "MethodState.hpp"
@@ -96,7 +98,7 @@ namespace Iris
                                              std::span<std::uint64_t> slots,
                                              std::span<const Object* const> objects) const
     {
-        if (const auto problem = Detail::RawMethod::ResolveObjects(state->component, slots, objects))
+        if (const auto problem = Detail::ComponentCall::ResolveObjects(state->component, slots, objects))
         {
             return Detail::Failure<Object>(problem->first, problem->second);
         }

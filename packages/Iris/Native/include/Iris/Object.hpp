@@ -2,7 +2,11 @@
 
 #include "CallResult.hpp"
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace Iris
 {
@@ -13,6 +17,9 @@ namespace Iris
         class RawMethod;
         class RawMember;
         class RawArray;
+        class CallOrigin;
+        class ComponentCall;
+        struct BridgeFunctions;
     } // namespace Detail
 
     /**
@@ -51,8 +58,41 @@ namespace Iris
         friend class Detail::RawMethod;
         friend class Detail::RawMember;
         friend class Detail::RawArray;
+        friend class Detail::CallOrigin;
+        friend class Detail::ComponentCall;
         struct State;
         explicit Object(std::unique_ptr<State> state) noexcept;
         std::unique_ptr<State> state;
     };
+
+    namespace Detail
+    {
+        /**
+         * @brief Where the results of a call on one component's handle go: an object handle the bridge returned becomes
+         * an owner, and a string or struct block it returned is copied and given back.
+         *
+         * Every raw handle (method, member, array) gives one, so the public templates take results the same way
+         * whichever handle made the call. It refers to the handle's bridge for the length of the call, so it is never
+         * stored.
+         */
+        class CallOrigin
+        {
+          public:
+            CallOrigin(const std::shared_ptr<const BridgeFunctions>& bridge, std::uint64_t component) noexcept
+                : bridge(bridge), component(component)
+            {
+            }
+
+            /** @brief Takes ownership of an object handle the bridge returned. */
+            [[nodiscard]] Object Adopt(std::uint64_t handle) const;
+            /** @brief Copies and releases a string block the bridge returned; zero is null. */
+            [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
+            /** @brief Copies and releases a struct block the bridge returned (zero fills `out` with zeros). */
+            void TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept;
+
+          private:
+            const std::shared_ptr<const BridgeFunctions>& bridge;
+            std::uint64_t component;
+        };
+    } // namespace Detail
 } // namespace Iris

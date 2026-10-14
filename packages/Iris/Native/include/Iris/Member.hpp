@@ -40,20 +40,12 @@ namespace Iris
             // (null stores null). The object's handle is resolved and checked here.
             [[nodiscard]] CallResult<void> Set(const Object* target, std::uint64_t value,
                                                const Object* objectValue) const;
-            // Takes ownership of an object handle the bridge returned from this member's component.
-            [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
-            // Copies and releases a string block the bridge returned from this member's component.
-            [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
-            // Copies and releases a struct block the bridge returned from this member's component.
-            void TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept;
+            // Where this member's results go (see CallOrigin).
+            [[nodiscard]] CallOrigin Origin() const noexcept;
 
           private:
             friend class ::Iris::Type;
             struct State;
-            // The target's handle (zero for a static member), or why the target cannot be used.
-            [[nodiscard]] static std::optional<std::pair<CallStatus, std::string>> TargetHandle(std::uint64_t component,
-                                                                                                const Object* target,
-                                                                                                std::uint64_t& handle);
             explicit RawMember(std::shared_ptr<const State> state) noexcept;
             std::shared_ptr<const State> state;
         };

@@ -521,16 +521,8 @@ namespace Iris
             [[nodiscard]] CallResult<std::uint64_t> InvokeInstance(const Object& target, std::span<std::uint64_t> slots,
                                                                    std::span<const Object* const> objects) const;
 
-            // Takes ownership of an object handle the bridge returned from this method's component.
-            [[nodiscard]] Object AdoptObject(std::uint64_t handle) const;
-            // Copies and releases a string block the bridge returned from this method's component.
-            [[nodiscard]] std::optional<std::string> TakeString(std::uint64_t block) const;
-            // Copies and releases a struct block the bridge returned from this method's component.
-            void TakeStruct(std::uint64_t block, void* out, std::size_t size) const noexcept;
-
-            // Why object arguments cannot be sent, or nothing: shared with Type::CreateObject.
-            [[nodiscard]] static std::optional<std::pair<CallStatus, std::string>> ResolveObjects(
-                std::uint64_t component, std::span<std::uint64_t> slots, std::span<const Object* const> objects);
+            // Where this method's results go (see CallOrigin).
+            [[nodiscard]] CallOrigin Origin() const noexcept;
 
           private:
             friend class ::Iris::Type;
@@ -555,24 +547,24 @@ namespace Iris
                         using Element = typename OptionalArrayInfo<Result>::Element;
                         result.value.emplace(*raw.value == 0 ? std::nullopt
                                                              : Result(ArrayAccess::Adopt<Array<Element>>(
-                                                                   method.AdoptObject(*raw.value))));
+                                                                   method.Origin().Adopt(*raw.value))));
                     }
                     else if constexpr (std::same_as<Result, std::optional<Object>>)
                     {
                         // Zero is a null return; anything else is a new, independently owned handle.
-                        result.value.emplace(*raw.value == 0 ? std::nullopt
-                                                             : std::optional<Object>(method.AdoptObject(*raw.value)));
+                        result.value.emplace(
+                            *raw.value == 0 ? std::nullopt : std::optional<Object>(method.Origin().Adopt(*raw.value)));
                     }
                     else if constexpr (StructValue<Result>)
                     {
                         Result value;
-                        method.TakeStruct(*raw.value, &value, sizeof(Result));
+                        method.Origin().TakeStruct(*raw.value, &value, sizeof(Result));
                         result.value = value;
                     }
                     else if constexpr (std::same_as<Result, std::optional<std::string>>)
                     {
                         // Zero is a null return; anything else is a block to copy and give back.
-                        result.value.emplace(method.TakeString(*raw.value));
+                        result.value.emplace(method.Origin().TakeString(*raw.value));
                     }
                     else
                     {
