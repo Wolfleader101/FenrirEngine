@@ -7,7 +7,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators_range.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cstring>
 #include <functional>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -212,4 +217,577 @@ TEST_CASE("a malformed snapshot explains itself", "[fake]")
 
     INFO("The explanation should say the snapshot is malformed");
     REQUIRE(base.diagnostic == "The bridge returned a malformed type snapshot.");
+}
+
+// ---- Everything below scripts the bridge's answers to calls other than snapshot queries.
+
+namespace
+{
+    struct Pair
+    {
+        std::int32_t first;
+        std::int32_t second;
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<Pair>
+{
+    static constexpr std::string_view typeName = "Rules.Pair";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Pair, first), IRIS_FIELD(Pair, second));
+};
+
+namespace
+{
+    // Makes CreateArray succeed with this object handle.
+    void ArrayCreatedAs(FakeBridge& fake, std::uint64_t handle)
+    {
+        fake.createArray = [handle](std::uint64_t, std::int32_t, std::int64_t, std::uint64_t* object, std::uint8_t*,
+                                    std::int32_t, std::int32_t*, std::int32_t*) {
+            *object = handle;
+            return 0;
+        };
+    }
+
+    // Makes GetArrayLength answer `status` with this length and diagnostic metadata.
+    void LengthAnswers(FakeBridge& fake, std::int32_t status, std::int64_t length, std::vector<std::uint8_t> text = {},
+                       std::int32_t written = 0, std::int32_t truncated = 0)
+    {
+        fake.arrayLength = [=](std::uint64_t, std::uint64_t, std::int64_t* out, std::uint8_t* bytes,
+                               std::int32_t capacity, std::int32_t* writtenOut, std::int32_t* truncatedOut) {
+            *out = length;
+            std::memcpy(bytes, text.data(), std::min<std::size_t>(text.size(), static_cast<std::size_t>(capacity)));
+            *writtenOut = written;
+            *truncatedOut = truncated;
+            return status;
+        };
+    }
+
+    Array<std::int32_t> IntArray(FakeBridge& fake, const Component& component)
+    {
+        ArrayCreatedAs(fake, 5);
+        auto array = Array<std::int32_t>::Create(component, 3);
+        {
+            INFO("The fake should have created an array: " + array.diagnostic);
+            REQUIRE(array.Succeeded());
+        }
+        return std::move(*array.value);
+    }
+
+    std::vector<std::uint8_t> Bytes(std::string_view text)
+    {
+        return {text.begin(), text.end()};
+    }
+} // namespace
+
+TEST_CASE("an array length the bridge reports is passed on", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    LengthAnswers(fake, 0, 3);
+
+    const auto length = array.Length();
+
+    INFO("A good length should be read: " + length.diagnostic);
+    REQUIRE(length.Succeeded());
+    INFO("The length should be the one the bridge wrote");
+    REQUIRE(*length.value == 3);
+}
+
+TEST_CASE("a negative array length is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    LengthAnswers(fake, 0, -1);
+
+    const auto length = array.Length();
+
+    INFO("A length of -1 should not be handed on as a huge size");
+    REQUIRE(!length.Succeeded());
+    REQUIRE(length.status == CallStatus::InvalidResponse);
+    INFO("The explanation should say the length was negative");
+    REQUIRE(length.diagnostic == "GetArrayLength returned a negative length.");
+}
+
+TEST_CASE("an array created with the handle zero is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 0);
+
+    const auto array = Array<std::int32_t>::Create(component, 3);
+
+    INFO("A created array with the handle 0 should not be accepted");
+    REQUIRE(array.status == CallStatus::InvalidResponse);
+    INFO("The explanation should name the call");
+    REQUIRE(array.diagnostic == "CreateArray returned the invalid handle 0.");
+}
+
+TEST_CASE("an array element call that fails reports the bridge's status and explanation", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    fake.arrayGet = [](std::uint64_t, std::uint64_t, std::int32_t, std::int64_t, std::uint64_t*, std::uint8_t* bytes,
+                       std::int32_t, std::int32_t* written, std::int32_t* truncated) {
+        std::memcpy(bytes, "index out of range", 18);
+        *written = 18;
+        *truncated = 0;
+        return 1;
+    };
+
+    const auto element = array.Get(9);
+
+    INFO("A failed element read should fail");
+    REQUIRE(element.status == CallStatus::InvalidArgument);
+    INFO("The bridge's explanation should reach the caller");
+    REQUIRE(element.diagnostic == "index out of range");
+}
+
+TEST_CASE("a struct handle outside the range the native side encodes is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 5);
+    const auto id = GENERATE(std::uint64_t{0}, std::uint64_t{1} << 22, std::uint64_t{0xFFFFFFFF});
+    fake.registerStruct = [id](std::uint64_t, const std::uint8_t*, std::int32_t, std::uint64_t* out, std::uint8_t*,
+                               std::int32_t, std::int32_t*, std::int32_t*) {
+        *out = id;
+        return 0;
+    };
+
+    const auto array = Array<Pair>::Create(component, 1);
+
+    INFO("The struct handle " << id << " should not be accepted");
+    REQUIRE(array.status == CallStatus::InvalidResponse);
+    INFO("The explanation should name the call");
+    REQUIRE(array.diagnostic == "RegisterStruct returned an invalid handle.");
+}
+
+TEST_CASE("the largest struct handle the native side encodes is accepted", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 5);
+    fake.registerStruct = [](std::uint64_t, const std::uint8_t*, std::int32_t, std::uint64_t* out, std::uint8_t*,
+                             std::int32_t, std::int32_t*, std::int32_t*) {
+        *out = (std::uint64_t{1} << 22) - 1;
+        return 0;
+    };
+
+    const auto array = Array<Pair>::Create(component, 1);
+
+    INFO("A handle just inside the range should be accepted: " + array.diagnostic);
+    REQUIRE(array.Succeeded());
+}
+
+TEST_CASE("a struct mapping the bridge refuses fails the call that needed it", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    fake.registerStruct = [](std::uint64_t, const std::uint8_t*, std::int32_t, std::uint64_t*, std::uint8_t*,
+                             std::int32_t, std::int32_t*, std::int32_t*) { return 6; };
+
+    const auto array = Array<Pair>::Create(component, 1);
+
+    INFO("A refused registration should fail the array");
+    REQUIRE(array.status == CallStatus::NotFound);
+    INFO("The explanation should name the call");
+    REQUIRE(array.diagnostic == "RegisterStruct found nothing.");
+    INFO("The bridge should not have been asked to create the array");
+    REQUIRE(fake.Calls("CreateArray") == 0);
+}
+
+namespace
+{
+    // Makes the slot answer Success and write the handle 0 (the one handle the bridge never hands out).
+    void AnswerWithHandleZero(FakeBridge& fake)
+    {
+        fake.createObject = [](std::uint64_t, std::uint64_t, const std::int32_t*, const std::uint64_t*, std::int32_t,
+                               std::uint64_t* id, std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*) {
+            *id = 0;
+            return 0;
+        };
+        fake.findMethod = [](std::uint64_t, std::uint64_t, const std::uint8_t*, std::int32_t, std::int32_t,
+                             const std::int32_t*, std::int32_t, std::uint64_t* id, std::uint8_t*, std::int32_t,
+                             std::int32_t*, std::int32_t*) {
+            *id = 0;
+            return 0;
+        };
+        fake.findMember = [](std::uint64_t, std::uint64_t, const std::uint8_t*, std::int32_t, std::int32_t,
+                             std::int32_t, std::uint64_t* id, std::uint8_t*, std::int32_t, std::int32_t*,
+                             std::int32_t*) {
+            *id = 0;
+            return 0;
+        };
+    }
+} // namespace
+
+TEST_CASE("an object handle of zero from CreateObject is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto type = TypeOf(component);
+    AnswerWithHandleZero(fake);
+
+    const auto object = type.CreateObject();
+
+    INFO("A created object with the handle 0 should not be accepted");
+    REQUIRE(object.status == CallStatus::InvalidResponse);
+    INFO("The explanation should name the call");
+    REQUIRE(object.diagnostic == "CreateObject returned the invalid handle 0.");
+}
+
+TEST_CASE("a method handle of zero from FindMethod is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto type = TypeOf(component);
+    AnswerWithHandleZero(fake);
+
+    const auto method = type.FindMethod<void()>("Run");
+
+    INFO("A found method with the handle 0 should not be accepted");
+    REQUIRE(method.status == CallStatus::InvalidResponse);
+    INFO("The explanation should name the call");
+    REQUIRE(method.diagnostic == "FindMethod returned the invalid handle 0.");
+}
+
+TEST_CASE("a member handle of zero from FindMember is an invalid response", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto type = TypeOf(component);
+    AnswerWithHandleZero(fake);
+
+    const auto field = type.FindField<std::int32_t>("Health");
+
+    INFO("A found field with the handle 0 should not be accepted");
+    REQUIRE(field.status == CallStatus::InvalidResponse);
+    INFO("The explanation should name the call");
+    REQUIRE(field.diagnostic == "FindMember returned the invalid handle 0.");
+}
+
+TEST_CASE("an object handle of zero from a method that may return nothing is an empty object", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto type = TypeOf(component);
+    fake.findMethod = [](std::uint64_t, std::uint64_t, const std::uint8_t*, std::int32_t, std::int32_t,
+                         const std::int32_t*, std::int32_t, std::uint64_t* id, std::uint8_t*, std::int32_t,
+                         std::int32_t*, std::int32_t*) {
+        *id = 7;
+        return 0;
+    };
+    const auto method = type.FindMethod<std::optional<Object>()>("Find");
+    REQUIRE(method.Succeeded());
+    fake.invokeMethod = [](std::uint64_t, std::uint64_t, const std::uint64_t*, std::int32_t, std::uint64_t* result,
+                           std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*) {
+        *result = 0;
+        return 0;
+    };
+
+    const auto result = method.value->Invoke();
+
+    INFO("A zero handle from a nullable object return should succeed: " + result.diagnostic);
+    REQUIRE(result.Succeeded());
+    INFO("It should be an empty object");
+    REQUIRE(!result.value->has_value());
+}
+
+namespace
+{
+    struct TextCase
+    {
+        const char* what;
+        std::string text;
+    };
+} // namespace
+
+TEST_CASE("a string element is copied out whole and its block is given back once", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 5);
+    auto array = Array<std::string>::Create(component, 1);
+    REQUIRE(array.Succeeded());
+    const auto text = GENERATE(TextCase{"plain text", "hello"}, TextCase{"empty text", ""},
+                               TextCase{"text with an embedded NUL", std::string("a\0b", 3)},
+                               TextCase{"bytes that are not valid UTF-8", "\xFF\xFE"});
+    fake.arrayGet = [&fake, bytes = Bytes(text.text)](std::uint64_t, std::uint64_t, std::int32_t, std::int64_t,
+                                                      std::uint64_t* slot, std::uint8_t*, std::int32_t, std::int32_t*,
+                                                      std::int32_t*) {
+        *slot = fake.Block(bytes);
+        return 0;
+    };
+
+    const auto element = array.value->Get(0);
+
+    INFO("Reading " << text.what << " should succeed: " + element.diagnostic);
+    REQUIRE(element.Succeeded());
+    INFO("The string is not null");
+    REQUIRE(element.value->has_value());
+    INFO("The text should arrive as the bridge wrote it");
+    REQUIRE(**element.value == text.text);
+    INFO("The block should have been given back, once");
+    REQUIRE(fake.OutstandingBlocks() == 0);
+    REQUIRE(fake.BadFrees() == 0);
+}
+
+TEST_CASE("a string element the bridge reports as null is an empty optional and nothing is given back", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 5);
+    auto array = Array<std::string>::Create(component, 1);
+    REQUIRE(array.Succeeded());
+    fake.arrayGet = [](std::uint64_t, std::uint64_t, std::int32_t, std::int64_t, std::uint64_t* slot, std::uint8_t*,
+                       std::int32_t, std::int32_t*, std::int32_t*) {
+        *slot = 0;
+        return 0;
+    };
+
+    const auto element = array.value->Get(0);
+
+    INFO("A null string should be a success: " + element.diagnostic);
+    REQUIRE(element.Succeeded());
+    INFO("It should be null, not empty");
+    REQUIRE(!element.value->has_value());
+    INFO("Nothing was handed out, so nothing should be given back");
+    REQUIRE(fake.OutstandingBlocks() == 0);
+    REQUIRE(fake.BadFrees() == 0);
+}
+
+TEST_CASE("a string element the bridge rejects is an error with no block to give back", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    ArrayCreatedAs(fake, 5);
+    auto array = Array<std::string>::Create(component, 1);
+    REQUIRE(array.Succeeded());
+    fake.arrayGet = [](std::uint64_t, std::uint64_t, std::int32_t, std::int64_t, std::uint64_t* slot, std::uint8_t*,
+                       std::int32_t, std::int32_t*, std::int32_t*) {
+        *slot = 0;
+        return 1;
+    };
+
+    const auto element = array.value->Get(0);
+
+    INFO("A rejected read should fail");
+    REQUIRE(element.status == CallStatus::InvalidArgument);
+    INFO("A failure should carry no value");
+    REQUIRE(!element.value.has_value());
+    INFO("Nothing was handed out, so nothing should be given back");
+    REQUIRE(fake.OutstandingBlocks() == 0);
+    REQUIRE(fake.BadFrees() == 0);
+}
+
+namespace
+{
+    struct StatusCase
+    {
+        std::int32_t wire;
+        CallStatus expected;
+        const char* diagnostic;
+    };
+} // namespace
+
+TEST_CASE("every status the bridge can answer maps to the documented result", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    const auto answer = GENERATE(
+        StatusCase{1, CallStatus::InvalidArgument, "GetArrayLength rejected an argument."},
+        StatusCase{3, CallStatus::ManagedException, "GetArrayLength caught a managed exception."},
+        StatusCase{5, CallStatus::InvalidHandle, "GetArrayLength received an invalid or released handle."},
+        StatusCase{6, CallStatus::NotFound, "GetArrayLength found nothing."},
+        StatusCase{7, CallStatus::InUse, "GetArrayLength was refused because the component has live objects."},
+        StatusCase{4, CallStatus::InvalidResponse,
+                   "GetArrayLength reported a buffer too small, but the buffer was sized from its own answer."},
+        StatusCase{2, CallStatus::UnexpectedStatus, "GetArrayLength returned an unknown status: 2."},
+        StatusCase{99, CallStatus::UnexpectedStatus, "GetArrayLength returned an unknown status: 99."},
+        StatusCase{-1, CallStatus::UnexpectedStatus, "GetArrayLength returned an unknown status: -1."});
+    LengthAnswers(fake, answer.wire, 3);
+
+    const auto length = array.Length();
+
+    INFO("The wire status " << answer.wire << " should map to the documented status");
+    REQUIRE(length.status == answer.expected);
+    INFO("The explanation should name the operation and the status");
+    REQUIRE(length.diagnostic == answer.diagnostic);
+    INFO("A failure should carry no value");
+    REQUIRE(!length.value.has_value());
+}
+
+namespace
+{
+    struct DiagnosticCase
+    {
+        const char* what;
+        std::int32_t status;
+        std::vector<std::uint8_t> text;
+        std::int32_t written;
+        std::int32_t truncated;
+        CallStatus expected;
+        std::string diagnostic;
+        bool diagnosticTruncated;
+    };
+} // namespace
+
+TEST_CASE("diagnostics the bridge writes badly are reported without reading out of range", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    const std::string fallback = "GetArrayLength caught a managed exception.";
+    const std::string invalidMetadata = fallback + " Managed diagnostic metadata was invalid.";
+    const auto written = GENERATE_REF(
+        DiagnosticCase{"valid text", 3, Bytes("boom"), 4, 0, CallStatus::ManagedException, "boom", false},
+        DiagnosticCase{"valid text cut by the bridge", 3, Bytes("boom"), 4, 1, CallStatus::ManagedException, "boom",
+                       true},
+        DiagnosticCase{"no text", 3, {}, 0, 0, CallStatus::ManagedException, fallback, false},
+        DiagnosticCase{"a negative count", 3, Bytes("boom"), -1, 0, CallStatus::ManagedException, invalidMetadata,
+                       false},
+        DiagnosticCase{"a count larger than the buffer", 3, Bytes("boom"), 4097, 0, CallStatus::ManagedException,
+                       invalidMetadata, false},
+        DiagnosticCase{"a count of INT32_MAX", 3, Bytes("boom"), 2147483647, 0, CallStatus::ManagedException,
+                       invalidMetadata, false},
+        DiagnosticCase{"a negative count on a success", 0, Bytes("boom"), -1, 0, CallStatus::InvalidResponse,
+                       "A successful managed call returned diagnostic metadata.", false},
+        DiagnosticCase{"a truncation flag of 2", 3, Bytes("boom"), 4, 2, CallStatus::ManagedException, invalidMetadata,
+                       false},
+        DiagnosticCase{"text that is not UTF-8",
+                       3,
+                       {0xFF, 0xFE},
+                       2,
+                       0,
+                       CallStatus::ManagedException,
+                       fallback + " Managed diagnostic text was not valid UTF-8.",
+                       false},
+        DiagnosticCase{"details on a success", 0, Bytes("boom"), 4, 0, CallStatus::InvalidResponse,
+                       "A successful managed call returned diagnostic metadata.", false});
+    LengthAnswers(fake, written.status, 3, written.text, written.written, written.truncated);
+
+    const auto length = array.Length();
+
+    INFO("Reading " << written.what << " should give the documented status");
+    REQUIRE(length.status == written.expected);
+    INFO("The diagnostic should be the documented text");
+    REQUIRE(length.diagnostic == written.diagnostic);
+    INFO("The truncation flag should follow the bridge's, when it was valid");
+    REQUIRE(length.diagnosticTruncated == written.diagnosticTruncated);
+}
+
+namespace
+{
+    struct ReleaseCase
+    {
+        std::int32_t wire;
+        CallStatus expected;
+        bool stillLoaded;
+    };
+} // namespace
+
+TEST_CASE("a refused component release leaves the component usable and any other answer ends the owner", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto answer =
+        GENERATE(ReleaseCase{0, CallStatus::Success, false}, ReleaseCase{7, CallStatus::InUse, true},
+                 ReleaseCase{5, CallStatus::InvalidHandle, false}, ReleaseCase{3, CallStatus::ManagedException, false});
+    fake.release = [answer](std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*) {
+        return answer.wire;
+    };
+
+    const auto released = component.Release();
+
+    INFO("The release answered " << answer.wire);
+    REQUIRE(released.status == answer.expected);
+    INFO("Whether the owner still holds the component should follow the answer");
+    REQUIRE(component.IsLoaded() == answer.stillLoaded);
+}
+
+namespace
+{
+    struct ObjectReleaseCase
+    {
+        std::int32_t wire;
+        CallStatus expected;
+    };
+
+    Object ObjectFrom(FakeBridge& fake, const Component& component)
+    {
+        fake.createObject = [](std::uint64_t, std::uint64_t, const std::int32_t*, const std::uint64_t*, std::int32_t,
+                               std::uint64_t* id, std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*) {
+            *id = 9;
+            return 0;
+        };
+        auto object = TypeOf(component).CreateObject();
+        {
+            INFO("The fake should have created an object: " + object.diagnostic);
+            REQUIRE(object.Succeeded());
+        }
+        return std::move(*object.value);
+    }
+} // namespace
+
+TEST_CASE("an object release answered with InvalidHandle or InUse reports it and ends the owner", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    auto object = ObjectFrom(fake, component);
+    const auto answer =
+        GENERATE(ObjectReleaseCase{5, CallStatus::InvalidHandle}, ObjectReleaseCase{7, CallStatus::InUse});
+    fake.releaseObject = [answer](std::uint64_t, std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*,
+                                  std::int32_t*) { return answer.wire; };
+
+    const auto released = object.Release();
+
+    INFO("The release answered " << answer.wire);
+    REQUIRE(released.status == answer.expected);
+    INFO("The owner should not hold the object any more");
+    REQUIRE(!object.IsValid());
+}
+
+TEST_CASE("an object is not released a second time after a release the bridge refused", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    auto object = ObjectFrom(fake, component);
+    fake.releaseObject = [](std::uint64_t, std::uint64_t, std::uint8_t*, std::int32_t, std::int32_t*, std::int32_t*) {
+        return 7;
+    };
+    (void)object.Release();
+
+    const auto again = object.Release();
+
+    INFO("Releasing an owner that holds nothing should succeed");
+    REQUIRE(again.Succeeded());
+    INFO("The bridge should have been asked once");
+    REQUIRE(fake.Calls("ReleaseObject") == 1);
+}
+
+TEST_CASE("a copy out of an array that fails reports the bridge's status and explanation", "[fake]")
+{
+    FakeBridge fake;
+    auto component = fake.MakeComponent();
+    const auto array = IntArray(fake, component);
+    fake.arrayCopy = [](std::uint64_t, std::uint64_t, std::int32_t, std::int64_t, std::int64_t, void*, std::int32_t,
+                        std::uint8_t* bytes, std::int32_t, std::int32_t* written, std::int32_t* truncated) {
+        std::memcpy(bytes, "range", 5);
+        *written = 5;
+        *truncated = 0;
+        return 1;
+    };
+    std::array<std::int32_t, 2> out{};
+
+    const auto copied = array.CopyOut(2, out);
+
+    INFO("A failed copy should fail");
+    REQUIRE(copied.status == CallStatus::InvalidArgument);
+    INFO("The bridge's explanation should reach the caller");
+    REQUIRE(copied.diagnostic == "range");
 }
