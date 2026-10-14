@@ -26,5 +26,6 @@ We chose this over two alternatives:
 
 - A package's scripting support lives in the package: its C++ native functions, its extension value, and its C# contract project.
 - A native function may read and write component data through the call context, but must not make structural changes. The calling C# system holds `Ref<T>`s into the ECS storage. Deferred structural changes for extensions are a possible later addition.
-- FenrirScripting's own engine API (Log, Time, Entity, components, events, queries, changes) is the built-in extension, declared on the same mechanism: the methods of the contract's `Native` class are native functions named `Fenrir.Scripting.Native.<Method>`. The core and any package's extension are two users of one seam.
+- FenrirScripting's own engine API (Log, Time, Entity, components, events, queries, changes) is the built-in extension, declared on the same mechanism: the methods of the contract's `Native` class are native functions named `Fenrir.Scripting.Native.<Method>`. It also carries the engine's components (Transform, Name, Relationship) and, as its shared assembly, the scripting contract, and it is always the first extension. The core and any package's extension are two users of one seam.
+- `ScriptingConfig` has no component, event or shared-assembly lists of its own: the app gives what it shares with C# as an extension, like any package.
 - Native function names are unique across extensions. Overloads are not supported.

@@ -116,8 +116,8 @@ attribute. (Creating, destroying, adding and removing from C# arrives with defer
 
 ### Adding your own
 
-Register a C++ component from anywhere, with an `Iris::StructMapping` and a C# struct of exactly the same layout carrying
-`[NativeComponent("Name")]`:
+Give scripting a C++ component through a scripting extension (see "Scripting extensions": the app's own, or its package's),
+with an `Iris::StructMapping` and a C# struct of exactly the same layout carrying `[NativeComponent("Name")]`:
 
 ```cpp
 struct Health { std::int32_t Current, Max; };
@@ -126,7 +126,8 @@ template <> struct Iris::StructMapping<Health> {
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Health, Current), IRIS_FIELD(Health, Max));
 };
 
-scripting.RegisterComponent<Health>("MyGame.Health");   // or ScriptingConfig::components, before the assembly loads
+game.components.push_back(Fenrir::MakeComponent<Health>("MyGame.Health"));   // `game`: the app's ScriptingExtension
+// or, once Install has run: scripting.RegisterComponent<Health>("MyGame.Health");
 ```
 
 ```csharp
@@ -312,7 +313,7 @@ C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the las
 
 - **C#-only events need no C++.** The SDK generator lists them in an `EventTable`; when the script assembly loads, the engine
   makes a queue for each (the App's `CreateEventQueue`), and removes it when the assembly is released.
-- **Sharing a C++ event.** Register it with `Scripting::RegisterEvent<T>("Ns.Name")` (or `ScriptingConfig::events`) and
+- **Sharing a C++ event.** List it in an extension's `events` with `Fenrir::MakeEvent<T>("Ns.Name")` (or register it later with `Scripting::RegisterEvent<T>`) and
   mirror it in C# with `[NativeEvent("Ns.Name")]`. The layout is checked like a component's, and a mismatch fails the load
   naming the field. `SendEvent<T>`/`ReadEvents<T>` in C++ and `Events.Send/Read<T>()` in C# are then one queue. The C++ type
   must be trivially copyable and default constructible: events cross the boundary as bytes.
@@ -356,8 +357,20 @@ An engine package, or the app, makes itself scriptable with a `ScriptingExtensio
 
 - **native functions**: C++ functions C# calls, made with `NativeFunction::Make<&Function>("Namespace.Type.Method")`, named
   by the full name of the C# method that calls them;
-- **components and events**, exactly like `ScriptingConfig::components` and `events`;
+- **components and events**: native components (`MakeComponent`, `MakeReadOnlyComponent`) and C++ events (`MakeEvent`),
+  registered before the script assembly loads and checked against it as it does;
 - **shared assemblies**: its C# contract, shared with every script load.
+
+Extensions are the only way to give scripting anything, so the app's own components, events and contract go in an
+extension of its own, just as a package's do. The DemoApp's is a complete example:
+
+```cpp
+Fenrir::ScriptingExtension game;
+game.name = "MyGame";
+game.components = {Fenrir::MakeComponent<Health>("MyGame.Health")};
+game.events = {Fenrir::MakeEvent<Explosion>("MyGame.Explosion")};
+config.extensions.push_back(std::move(game));
+```
 
 A native function's first parameter is the `CallContext`, which gives the App and the active scene's entities. Its other
 parameters and its result are what C# passes and gets: sized numbers, `float`, `double`, `bool`, `char16_t`, pointers,

@@ -200,17 +200,26 @@ namespace Fenrir
         /** @brief Who it is, for diagnostics. */
         std::string name;
 
-        /** @brief Its C# contract: assemblies shared with every script load, as ScriptingConfig::sharedAssemblies are.
+        /**
+         * @brief Its C# contract: assemblies every script load shares as one copy, after the scripting contract (which
+         * the built-in extension shares) and in extension order.
          */
         std::vector<std::filesystem::path> sharedAssemblies;
 
         /** @brief The native functions its contract calls. Their names must be unique across every extension. */
         std::vector<NativeFunction> functions;
 
-        /** @brief Native components it exposes to C#, as ScriptingConfig::components. */
+        /**
+         * @brief Native components it exposes to C# (see MakeComponent). They are registered before the script assembly
+         * loads and checked against it as it does. Their names must be unique across every extension, the engine's own
+         * components (Fenrir.Transform, Fenrir.Name, Fenrir.Relationship) included.
+         */
         std::vector<ComponentRegistration> components;
 
-        /** @brief C++ events it shares with C#, as ScriptingConfig::events. */
+        /**
+         * @brief C++ events it shares with C# (see MakeEvent), registered and checked as `components` are. Events only
+         * C# defines need nothing here.
+         */
         std::vector<EventRegistration> events;
     };
 } // namespace Fenrir
