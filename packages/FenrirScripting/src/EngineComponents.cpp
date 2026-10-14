@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <utility>
+#include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -105,7 +107,7 @@ struct Iris::StructMapping<Fenrir::Detail::RelationshipView>
 
 namespace Fenrir::Detail
 {
-    bool RegisterEngineComponents(ComponentRegistry& registry)
+    std::vector<ComponentRegistration> EngineComponents()
     {
         // Every entity the engine makes has all three, and the renderer and hierarchy rely on it: scripts cannot remove
         // them.
@@ -113,7 +115,6 @@ namespace Fenrir::Detail
         auto name = MakeComponent<Name, NameView>("Fenrir.Name");
         auto relationship = MakeReadOnlyComponent<Relationship, RelationshipView>("Fenrir.Relationship");
         transform.required = name.required = relationship.required = true;
-        return registry.Add(std::move(transform)) >= 0 && registry.Add(std::move(name)) >= 0 &&
-               registry.Add(std::move(relationship)) >= 0;
+        return {std::move(transform), std::move(name), std::move(relationship)};
     }
 } // namespace Fenrir::Detail

@@ -78,7 +78,7 @@ namespace
 
         World()
         {
-            REQUIRE(Fenrir::Detail::RegisterEngineComponents(registry));
+            RulesTest::AddEngineComponents(registry);
         }
 
         EntityList& Entities()
