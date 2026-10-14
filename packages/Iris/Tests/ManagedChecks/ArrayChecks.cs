@@ -6,7 +6,7 @@ using Iris.Bridge;
 static unsafe class ArrayChecks
 {
     private const string Component = "Iris.Examples.Component.";
-    private const int Int32 = 6, Double = 11, Float = 10, Bool = 1, Str = 13, ArrayOf = 15, StructArray = 16;
+    private const int Int32 = (int)ValueKind.Int32, Double = (int)ValueKind.Double, Float = (int)ValueKind.Float, Bool = (int)ValueKind.Bool, Str = (int)ValueKind.String, ArrayOf = (int)ValueKind.Array, StructArray = (int)ValueKind.StructArray;
 
     private static void Check(bool condition, string message)
     {
@@ -49,7 +49,7 @@ static unsafe class ArrayChecks
     {
         if (block == 0) return null;
         string text = new UTF8Encoding(false, true).GetString((byte*)block + 8, checked((int)*(long*)block));
-        ValueKinds.FreeString(block);
+        ValueCodec.FreeString(block);
         return text;
     }
 
@@ -146,7 +146,7 @@ static unsafe class ArrayChecks
             fixed (float* c = coordinates) Check(ComponentRegistry.TryCopyArray(token, line, points, 0, 3, c, true), "Struct copy in failed");
             ulong element = Element(token, line, points, 1);
             Check(((float*)element)[0] == 4 && ((float*)element)[2] == 6, "A struct element was wrong");
-            ValueKinds.FreeString(element);
+            ValueCodec.FreeString(element);
             Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryGetArrayElement(token, array, points, 0, out _)), "An int array was read as structs");
             Check(Throws<BridgeArgumentException>(() => ComponentRegistry.TryCreateArray(other, points, 1, out _)), "A foreign struct handle created an array");
 

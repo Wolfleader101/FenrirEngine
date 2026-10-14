@@ -6,8 +6,8 @@ using Iris.Bridge;
 static unsafe class StructChecks
 {
     private const string Component = "Iris.Examples.Component.";
-    private const int Float = 10, Double = 11, Int32 = 6, UInt8 = 3, Int8 = 2, UInt16 = 5;
-    private const int StructKind = 14;
+    private const int Float = (int)ValueKind.Float, Double = (int)ValueKind.Double, Int32 = (int)ValueKind.Int32, UInt8 = (int)ValueKind.UInt8, Int8 = (int)ValueKind.Int8, UInt16 = (int)ValueKind.UInt16;
+    private const int StructKind = (int)ValueKind.Struct;
 
     private static void Check(bool condition, string message)
     {
@@ -65,7 +65,7 @@ static unsafe class StructChecks
             Check(ComponentRegistry.TryInvokeMethod(token, method, new[] { (ulong)l, (ulong)r }, out ulong block), "Invocation failed");
             result = new float[3];
             for (int index = 0; index < 3; ++index) result[index] = ((float*)block)[index];
-            ValueKinds.FreeString(block);
+            ValueCodec.FreeString(block);
         }
         return Array.Empty<ulong>();
     }
@@ -116,7 +116,7 @@ static unsafe class StructChecks
 
             // Enums are one line: "TypeName|size|underlyingKind". The underlying type, the size and the kind of
             // type are all checked.
-            const int Bool = 1, Char = 18, Enum = 19, InlineArray = 20;
+            const int Bool = (int)ValueKind.Bool, Char = (int)ValueKind.Char, Enum = (int)ValueKind.Enum, InlineArray = (int)ValueKind.InlineArray;
             string gear = Component + "Gear", shade = Component + "Shade", setting = Component + "Setting", label = Component + "Label";
             Check(Register(token, $"{gear}|4|{Int32}", out none, out string enumProblem) == 0 && none != 0, "A matching enum was rejected: " + enumProblem);
             Check(Register(token, $"{gear}|8|8", out none, out string underlyingProblem) == 1 && none == 0 && underlyingProblem.Contains("underlying"),
@@ -221,7 +221,7 @@ static unsafe class StructChecks
                 }
                 Check(ComponentRegistry.TryGetMemberValue(token, member, bodyObject, out ulong block), "Struct get failed: " + name);
                 Check(((float*)block)[0] == 1.5f && ((float*)block)[1] == -2 && ((float*)block)[2] == 3, "A struct member did not round-trip: " + name);
-                ValueKinds.FreeString(block);
+                ValueCodec.FreeString(block);
             }
             Check(ComponentRegistry.TryFindMember(token, body, "Position", 0, Float, out _) == ComponentRegistry.FindResult.NotFound, "A struct field matched a float");
 

@@ -82,7 +82,7 @@ static class UnloadChecks
               ComponentRegistry.TryInvokeMethod(token, makeMethod, new ulong[] { 3 }, out returnedId) && returnedId != 0,
               "Unload fixture returned-object call failed");
         // An array is rooted like an object: it blocks release until freed, and a leaked one is dropped by a forced release.
-        Check(ComponentRegistry.TryCreateArray(token, (6 << 8) | 15, 8, out ulong arrayId) && arrayId != 0, "Unload fixture array creation failed");
+        Check(ComponentRegistry.TryCreateArray(token, ((int)ValueKind.Int32 << 8) | (int)ValueKind.Array, 8, out ulong arrayId) && arrayId != 0, "Unload fixture array creation failed");
         if (!leakObject)
         {
             Check(release(token, null, 0, &written, &truncated) == 7 && State(token) == 0, "A component with a live array was released");
@@ -137,7 +137,7 @@ static class UnloadChecks
         unsafe
         {
             string text = new UTF8Encoding(false, true).GetString((byte*)block + 8, checked((int)*(long*)block));
-            ValueKinds.FreeString(block);
+            ValueCodec.FreeString(block);
             return text;
         }
     }
@@ -167,7 +167,7 @@ static class UnloadChecks
               ComponentRegistry.TrySetMemberValue(token, member, 0, 7) && ComponentRegistry.TryGetMemberValue(token, member, 0, out ulong memberValue) && memberValue == 7, "Member use failed");
         ComponentRegistry.TryFindType(token, ns + "Counter", out ulong counter);
         Check(ComponentRegistry.TryCreateObject(token, counter, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out ulong obj) == ComponentRegistry.CreateResult.Created, "Object creation failed");
-        Check(ComponentRegistry.TryCreateArray(token, (6 << 8) | 15, 4, out ulong array) && ComponentRegistry.TrySetArrayElement(token, array, (6 << 8) | 15, 1, 5), "Array use failed");
+        Check(ComponentRegistry.TryCreateArray(token, ((int)ValueKind.Int32 << 8) | (int)ValueKind.Array, 4, out ulong array) && ComponentRegistry.TrySetArrayElement(token, array, ((int)ValueKind.Int32 << 8) | (int)ValueKind.Array, 1, 5), "Array use failed");
         Check(ComponentRegistry.TryRegisterStruct(token, $"{ns}Vec3|12\nX|0|10|\nY|4|10|\nZ|8|10|", out ulong structId) == ComponentRegistry.FindResult.Found, "Struct registration failed");
         ComponentRegistry.TryFindType(token, ns + "Strings", out ulong strings);
         Check(ComponentRegistry.TryFindMethod(token, strings, "Greeting", 13, Array.Empty<int>(), true, out ulong greeting) == ComponentRegistry.FindResult.Found &&

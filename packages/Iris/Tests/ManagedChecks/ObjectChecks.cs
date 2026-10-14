@@ -8,7 +8,7 @@ using Iris.Bridge;
 static unsafe class ObjectChecks
 {
     private const string Namespace = "Iris.Examples.Component.";
-    private const int Void = 0, Bool = 1, Int32 = 6, Double = 11;
+    private const int Void = (int)ValueKind.Void, Bool = (int)ValueKind.Bool, Int32 = (int)ValueKind.Int32, Double = (int)ValueKind.Double;
     private const int InUse = 7;
 
     private static void Check(bool condition, string message)
@@ -123,7 +123,7 @@ static unsafe class ObjectChecks
     // Objects as arguments and returns: kind 12 is an object handle in a slot.
     internal static void RunPassing(string componentPath)
     {
-        const int Obj = 12;
+        const int Obj = (int)ValueKind.Object;
         string path = System.IO.Path.GetFullPath(componentPath);
         ulong token = ComponentRegistry.Load(path), other = ComponentRegistry.Load(path);
         try

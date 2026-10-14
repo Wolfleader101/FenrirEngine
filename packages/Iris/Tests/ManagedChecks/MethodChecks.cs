@@ -6,8 +6,8 @@ using Iris.Bridge;
 static unsafe class MethodChecks
 {
     private const string Calculations = "Iris.Examples.Component.Calculations";
-    private const int Void = 0, Bool = 1, Int8 = 2, UInt8 = 3, Int16 = 4, UInt16 = 5, Int32 = 6, UInt32 = 7,
-                      Int64 = 8, UInt64 = 9, Float = 10, Double = 11;
+    private const int Void = (int)ValueKind.Void, Bool = (int)ValueKind.Bool, Int8 = (int)ValueKind.Int8, UInt8 = (int)ValueKind.UInt8, Int16 = (int)ValueKind.Int16, UInt16 = (int)ValueKind.UInt16, Int32 = (int)ValueKind.Int32, UInt32 = (int)ValueKind.UInt32,
+                      Int64 = (int)ValueKind.Int64, UInt64 = (int)ValueKind.UInt64, Float = (int)ValueKind.Float, Double = (int)ValueKind.Double;
 
     private static void Check(bool condition, string message)
     {

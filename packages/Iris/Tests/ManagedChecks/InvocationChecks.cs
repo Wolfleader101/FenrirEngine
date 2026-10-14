@@ -10,7 +10,7 @@ static class InvocationChecks
     internal const string TypeName = "Iris.Examples.Component.Calculations";
     internal readonly record struct Result(int Status, int Value, string Diagnostic, int Truncated);
 
-    private const int Int32 = 6;
+    private const int Int32 = (int)ValueKind.Int32;
 
     private static void Check(bool condition, string message)
     {

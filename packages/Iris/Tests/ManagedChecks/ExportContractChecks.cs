@@ -48,6 +48,8 @@ static class ExportContractChecks
 
     private enum Mode { Valid, BadArgument }
 
+    private const int Int32Array = ((int)ValueKind.Int32 << 8) | (int)ValueKind.Array;
+
     // The wire statuses a case expects (BridgeStatus is the bridge's own enum, so the table does not borrow its values).
     private const int InvalidArgument = (int)BridgeStatus.InvalidArgument;
     private const int ManagedException = (int)BridgeStatus.ManagedException;
@@ -143,7 +145,7 @@ static class ExportContractChecks
             (t, a) => t->ReleaseObject(a.Token, 1, a.Diag, a.Capacity, a.Written, a.Truncated)),
         new Row("FindMember", Out.HandleZero, Mapping.ByKind,
             "The name and kind are checked first and any other exception there is ManagedException, with no InvalidHandle path; a member kind other than 0 or 1 is InvalidArgument before that.",
-            (t, a) => t->FindMember(a.Token, 1, a.Name, a.NameLength, a.Mode == Mode.BadArgument ? 2 : 0, 6, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated),
+            (t, a) => t->FindMember(a.Token, 1, a.Name, a.NameLength, a.Mode == Mode.BadArgument ? 2 : 0, (int)ValueKind.Int32, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated),
             TakesName: true, BadArgumentStatus: 1),
         new Row("GetMember", Out.HandleZero, Mapping.ByKind,
             "An exception from a property getter is ManagedException.",
@@ -157,19 +159,19 @@ static class ExportContractChecks
             TakesName: true, RejectsNul: false),
         new Row("CreateArray", Out.HandleZero, Mapping.ByKind,
             "A negative length or a wrong element type is InvalidArgument.",
-            (t, a) => t->CreateArray(a.Token, (6 << 8) | 15, 0, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated)),
+            (t, a) => t->CreateArray(a.Token, Int32Array, 0, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated)),
         new Row("GetArrayLength", Out.LengthZero, Mapping.ByKind,
             "As CreateArray.",
             (t, a) => t->GetArrayLength(a.Token, 1, (long*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated)),
         new Row("GetArrayElement", Out.HandleZero, Mapping.ByKind,
             "An index outside the array is InvalidArgument.",
-            (t, a) => t->GetArrayElement(a.Token, 1, (6 << 8) | 15, 0, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated)),
+            (t, a) => t->GetArrayElement(a.Token, 1, Int32Array, 0, (ulong*)a.Output, a.Diag, a.Capacity, a.Written, a.Truncated)),
         new Row("SetArrayElement", Out.None, Mapping.ByKind,
             "As GetArrayElement.",
-            (t, a) => t->SetArrayElement(a.Token, 1, (6 << 8) | 15, 0, 0, a.Diag, a.Capacity, a.Written, a.Truncated)),
+            (t, a) => t->SetArrayElement(a.Token, 1, Int32Array, 0, 0, a.Diag, a.Capacity, a.Written, a.Truncated)),
         new Row("CopyArray", Out.None, Mapping.ByKind,
             "A direction other than 0 or 1 is InvalidArgument before any handle is read.",
-            (t, a) => t->CopyArray(a.Token, 1, (6 << 8) | 15, 0, 0, null, a.Mode == Mode.BadArgument ? 2 : 0, a.Diag, a.Capacity, a.Written, a.Truncated),
+            (t, a) => t->CopyArray(a.Token, 1, Int32Array, 0, 0, null, a.Mode == Mode.BadArgument ? 2 : 0, a.Diag, a.Capacity, a.Written, a.Truncated),
             BadArgumentStatus: 1),
         new Row("RegisterInternalCall", Out.None, Mapping.ByKindAndDecode,
             "Undecodable text is InvalidArgument; a null character, an unsupported kind or a conflicting registration is a bridge argument error (InvalidArgument); any other exception is ManagedException.",

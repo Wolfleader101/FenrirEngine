@@ -7,7 +7,7 @@ static unsafe class MemberChecks
 {
     private const string Namespace = "Iris.Examples.Component.";
     private const int Field = 0, Property = 1;
-    private const int Bool = 1, Int32 = 6, Int64 = 8, Double = 11, Obj = 12;
+    private const int Bool = (int)ValueKind.Bool, Int32 = (int)ValueKind.Int32, Int64 = (int)ValueKind.Int64, Double = (int)ValueKind.Double, Obj = (int)ValueKind.Object;
 
     private static void Check(bool condition, string message)
     {

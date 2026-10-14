@@ -37,6 +37,7 @@ static class Checks
             ("handshake", HandshakeChecks.Run),
             ("diagnostic text", DiagnosticTextChecks),
             ("export contracts", ExportContractChecks.Run),
+            ("value codec", ValueCodecChecks.Run),
             ("components", () => ComponentChecks.Run(component)),
             ("invocation", () => InvocationChecks.Run(component)),
             ("dependencies", () => DependencyChecks.Run(component)),
