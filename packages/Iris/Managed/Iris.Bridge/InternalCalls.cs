@@ -16,8 +16,9 @@ namespace Iris.Bridge;
 internal static class InternalCalls
 {
     // Kinds an internal call signature can use: the sized numbers, bool (one byte) and char (two bytes), void
-    // for a return, and Pointer for any pointer (strings travel as a UTF-8 pointer and a length, structs as a
-    // pointer). A signature with bool or char needs [assembly: DisableRuntimeMarshalling] (see Bind), since
+    // for a return, Pointer for any pointer (structs travel as a pointer), and String for a parameter only: a
+    // native std::string_view, which the field declares as two parameters, a pointer to UTF-8 bytes and an Int32
+    // length. A signature with bool or char needs [assembly: DisableRuntimeMarshalling] (see Bind), since
     // otherwise the runtime marshals them by its own rules.
     private sealed record Registration(string Name, int ReturnKind, int[] ParameterKinds, IntPtr Function);
 
@@ -25,7 +26,7 @@ internal static class InternalCalls
     private static readonly Dictionary<string, Registration> Table = new();
 
     internal static bool IsValidKind(int kind, bool isReturn) =>
-        kind == (int)ValueKind.Pointer || (isReturn && kind == (int)ValueKind.Void) ||
+        kind == (int)ValueKind.Pointer || (isReturn ? kind == (int)ValueKind.Void : kind == (int)ValueKind.String) ||
         (kind >= (int)ValueKind.Int8 && kind <= (int)ValueKind.Double) || kind == (int)ValueKind.Bool || kind == (int)ValueKind.Char;
 
     // Registering the same name with the same signature and address again is a no-op, so a host can
@@ -62,10 +63,16 @@ internal static class InternalCalls
         return ComponentRegistry.PrimitiveKindOf(type);
     }
 
+    // The field parameters a registered signature's parameters take: one each, except a string, which is a pointer
+    // and an Int32 length.
+    private static IEnumerable<int> FieldKinds(IEnumerable<int> parameterKinds) =>
+        parameterKinds.SelectMany(kind => kind == (int)ValueKind.String ? new[] { (int)ValueKind.Pointer, (int)ValueKind.Int32 } : new[] { kind });
+
     private static string Describe(int kind) => (ValueKind)kind switch
     {
         ValueKind.Void => "void",
         ValueKind.Pointer => "a pointer",
+        ValueKind.String => "a string (a pointer, then an Int32 length)",
         _ => ValueKinds.ToType(kind, allowVoid: false).Name
     };
 
@@ -105,8 +112,7 @@ internal static class InternalCalls
                 if (registration == null) { problems.Add($"{name}: no internal call is registered under this name."); continue; }
                 Type[] parameters = field.FieldType.GetFunctionPointerParameterTypes();
                 int returnKind = KindOf(field.FieldType.GetFunctionPointerReturnType());
-                if (returnKind != registration.ReturnKind || parameters.Length != registration.ParameterKinds.Length ||
-                    !parameters.Select(KindOf).SequenceEqual(registration.ParameterKinds))
+                if (returnKind != registration.ReturnKind || !parameters.Select(KindOf).SequenceEqual(FieldKinds(registration.ParameterKinds)))
                 {
                     problems.Add($"{name}: the field's signature ({Signature(returnKind, parameters.Select(KindOf))}) does not match the registered one ({Signature(registration.ReturnKind, registration.ParameterKinds)}).");
                     continue;

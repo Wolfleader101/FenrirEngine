@@ -11,6 +11,9 @@ public static unsafe class Natives
     public static delegate* unmanaged[Cdecl]<double, double> Half;
     public static delegate* unmanaged[Cdecl]<long, byte, long> Combine;
     public static delegate* unmanaged[Cdecl]<byte*, int, int> Measure;
+    // A native std::string_view parameter: UTF-8 bytes, then their length.
+    public static delegate* unmanaged[Cdecl]<byte*, int, int> RecordText;
+    public static delegate* unmanaged[Cdecl]<int, byte*, int, int, long> StringBetweenNumbers;
     public static delegate* unmanaged[Cdecl]<Vec3*, void> Normalize;
     public static delegate* unmanaged[Cdecl]<int> Throws;
     public static delegate* unmanaged[Cdecl]<int, void> Record;
@@ -34,6 +37,21 @@ public static unsafe class Natives
     {
         byte[] bytes = Encoding.UTF8.GetBytes(text);
         fixed (byte* data = bytes) return Measure(data, bytes.Length);
+    }
+
+    public static int CallRecordText(string text)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(text);
+        fixed (byte* data = bytes) return RecordText(data, bytes.Length);
+    }
+
+    // Passes any address and length, valid or not, so the checks can see what the boundary refuses.
+    public static int CallRecordTextRaw(long address, int length) => RecordText((byte*)address, length);
+
+    public static long CallStringBetweenNumbers(int count, string label, int factor)
+    {
+        byte[] bytes = Encoding.UTF8.GetBytes(label);
+        fixed (byte* data = bytes) return StringBetweenNumbers(count, data, bytes.Length, factor);
     }
 
     public static Vec3 CallNormalize(Vec3 value)

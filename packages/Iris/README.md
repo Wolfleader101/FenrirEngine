@@ -192,7 +192,7 @@ Not supported: generics, delegates, multi-dimensional or jagged arrays, `ref`/`o
 null for a class parameter. A `bool` is one byte (see below), and `char`, `char8_t`, `char32_t` and `wchar_t` do
 not cross on their own, because their managed meaning is ambiguous (`char` and `char8_t` are bytes inside a
 mapped struct's fixed-size array). Internal calls (managed code calling native code) use a different set:
-primitives including `bool` and `char16_t`, and raw pointers.
+primitives including `bool` and `char16_t`, raw pointers, and `std::string_view` parameters.
 
 ### Types
 
@@ -472,8 +472,22 @@ const auto registered = Iris::RegisterInternalCall<&AddImpl>("MyComponent.Native
   assembly failed: ...` naming the field); nothing is shared then, and registering the function and trying again
   works. A component that keeps a private copy of a contract it does not share does not get that copy bound.
 - **Signatures.** Parameters and results are `void`, sized integers, `float`, `double`, `bool`, `char16_t` or
-  pointers. A string is passed as a UTF-8 `const char*` and a length, a struct as a pointer to it; the pointers
-  are valid for the call.
+  pointers. A struct is passed as a pointer to it, valid for the call.
+- **String parameters.** A parameter (never the result) can be a `std::string_view`: UTF-8 bytes, valid for the
+  call, and not checked for being valid UTF-8. The field declares it as two parameters, a `byte*` to the bytes
+  and then an `int` length; any other declaration fails the load and the diagnostic shows both signatures.
+  A length of zero arrives as an empty view whatever the pointer. A negative length, or a null pointer with a
+  length, is refused at the boundary: the function is not called, an Error goes to the log sink, and managed
+  code gets a value-initialized result (zero, or null for a pointer).
+
+  ```cpp
+  int CountBytes(std::string_view text) { return static_cast<int>(text.size()); }
+  Iris::RegisterInternalCall<&CountBytes>("MyComponent.Natives.CountBytes");
+  ```
+
+  ```csharp
+  public static delegate* unmanaged[Cdecl]<byte*, int, int> CountBytes;   // the bytes, then their length
+  ```
 - **`bool` and `char` need `[assembly: DisableRuntimeMarshalling]`.** With runtime marshalling on, the runtime
   chooses a function pointer's `bool` and `char` size itself (a four-byte `BOOL`, an encoding), which would not
   match C++. A component with a `bool` or `char` internal call and without the attribute fails to load with a

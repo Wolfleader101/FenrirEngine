@@ -7,7 +7,7 @@ using Iris.Bridge;
 static unsafe class InternalCallChecks
 {
     private const string Natives = "Iris.Examples.Component.Natives.";
-    private const int Void = 0, Bool = 1, Char = 18, Int32 = 6, Int64 = 8, UInt8 = 3, Double = 11, Pointer = 17;
+    private const int Void = 0, Bool = 1, Char = 18, Int32 = 6, Int64 = 8, UInt8 = 3, Double = 11, String = 13, Pointer = 17;
     private static int recorded;
 
     private static void Check(bool condition, string message)
@@ -23,6 +23,8 @@ static unsafe class InternalCallChecks
     private static long Combine(long left, byte right) => left * 1000 + right;
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static int Measure(byte* text, int length) => length;
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static long StringBetweenNumbers(int count, byte* label, int length, int factor) => (long)count * factor + length;
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static void Normalize(float* vector) { vector[0] = 1; vector[1] = 0; vector[2] = 0; }
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
@@ -51,6 +53,8 @@ static unsafe class InternalCallChecks
         Register("Half", Double, new[] { Double }, (delegate* unmanaged[Cdecl]<double, double>)&Half);
         Register("Combine", Int64, new[] { Int64, UInt8 }, (delegate* unmanaged[Cdecl]<long, byte, long>)&Combine);
         Register("Measure", Int32, new[] { Pointer, Int32 }, (delegate* unmanaged[Cdecl]<byte*, int, int>)&Measure);
+        Register("RecordText", Int32, new[] { String }, (delegate* unmanaged[Cdecl]<byte*, int, int>)&Measure);
+        Register("StringBetweenNumbers", Int64, new[] { Int32, String, Int32 }, (delegate* unmanaged[Cdecl]<int, byte*, int, int, long>)&StringBetweenNumbers);
         Register("Normalize", Void, new[] { Pointer }, (delegate* unmanaged[Cdecl]<float*, void>)&Normalize);
         Register("Throws", Int32, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<int>)&Throws);
         Register("Record", Void, new[] { Int32 }, (delegate* unmanaged[Cdecl]<int, void>)&Record);
@@ -92,7 +96,7 @@ static unsafe class InternalCallChecks
         try
         {
             string unbound = LoadFailure(path);
-            Check(unbound.Contains("10 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
+            Check(unbound.Contains("12 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
                   "Unbound fields were not diagnosed: " + unbound);
             Check(ComponentRegistry.TrackingCount == before, "A failed load left a registration");
 
@@ -140,6 +144,32 @@ static unsafe class InternalCallChecks
             RegisterAll();
         }
 
+        // A string parameter binds to a pointer followed by an Int32 length, and to nothing else; a string is never a
+        // result.
+        try
+        {
+            InternalCalls.Clear();
+            string strings = typeof(StringNatives).FullName + ".";
+            foreach (string field in new[] { "Paired", "Bare", "Swapped" })
+                InternalCalls.Register(strings + field, Int32, new[] { String }, (IntPtr)(delegate* unmanaged[Cdecl]<byte*, int, int>)&Measure);
+            string bound = "";
+            try { InternalCalls.Bind(typeof(StringNatives).Assembly); }
+            catch (BridgeArgumentException exception) { bound = exception.Message; }
+            Check(bound.Contains(strings + "Bare") && bound.Contains(strings + "Swapped") && !bound.Contains(strings + "Paired"),
+                  "A string parameter bound to something other than a pointer and a length, or not to them: " + bound);
+            Check(bound.Contains("does not match") && bound.Contains("a string (a pointer, then an Int32 length)") && bound.Contains("Int32(Int32, a pointer)"),
+                  "A mismatched string field's diagnostic did not show both signatures: " + bound);
+            bool returned = false;
+            try { InternalCalls.Register(strings + "Returned", String, Array.Empty<int>(), (IntPtr)(delegate* unmanaged[Cdecl]<int>)&Throws); }
+            catch (BridgeArgumentException) { returned = true; }
+            Check(returned, "A string result was accepted");
+        }
+        finally
+        {
+            InternalCalls.Clear();
+            RegisterAll();
+        }
+
         // With everything registered the component loads and its fields call native code.
         ulong token = ComponentRegistry.Load(path);
         try
@@ -166,4 +196,12 @@ static unsafe class InternalCallChecks
 public static unsafe class UnmarshalledNatives
 {
     public static delegate* unmanaged[Cdecl]<bool, void> Flag;
+}
+
+// String parameters: one field per way of declaring a registered string parameter.
+public static unsafe class StringNatives
+{
+    public static delegate* unmanaged[Cdecl]<byte*, int, int> Paired;
+    public static delegate* unmanaged[Cdecl]<byte*, int> Bare;
+    public static delegate* unmanaged[Cdecl]<int, byte*, int> Swapped;
 }

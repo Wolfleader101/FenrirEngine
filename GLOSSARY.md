@@ -54,7 +54,7 @@ A C++ struct with a `StructMapping` that mirrors a managed blittable struct fiel
 A managed object that native code owns through an `Iris::Object`. While the `Object` exists, the managed object is rooted and its component can't be released.
 
 **Internal call**
-A native function that managed component code calls, registered with `RegisterInternalCall`. Component code declares a public static unmanaged function pointer field, and the bridge binds the field to the registration by name when the component loads. This is called *binding*. A component with any unbound field fails to load.
+A native function that managed component code calls, registered with `RegisterInternalCall`. Component code declares a public static unmanaged function pointer field, and the bridge binds the field to the registration by name when the component loads. This is called *binding*. A component with any unbound field fails to load. Its parameters and result are numbers, `bool`, `char16_t` and pointers; a parameter can also be a `std::string_view`, which the field declares as a UTF-8 byte pointer and a length.
 *Avoid:* callback, P/Invoke, native export.
 
 **Release**

@@ -124,4 +124,17 @@ namespace Iris::Detail
         {
         }
     }
+
+    void ReportRefusedInternalCallString() noexcept
+    {
+        try
+        {
+            EmitLog(LogLevel::Error,
+                    "An internal call was given a string with a negative length, or with no bytes but a "
+                    "length, and was not called");
+        }
+        catch (...)
+        {
+        }
+    }
 } // namespace Iris::Detail

@@ -3236,6 +3236,116 @@ namespace
         CheckCalculation(Load(*host, checkArguments.component));
     }
 
+    TEST_CASE("a string parameter of an internal call arrives byte for byte", "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        const auto component = Load(*host, checkArguments.component);
+        const auto natives = *component.FindType(NativesType).value;
+        const auto record = *natives.FindMethod<std::int32_t(std::string_view)>("CallRecordText").value;
+        const auto received = [&](std::string_view text) {
+            Examples::ClearRecordedText();
+            const auto length = record.Invoke(text);
+            return length.Succeeded() && length.value == static_cast<std::int32_t>(text.size()) &&
+                   Examples::RecordedText() == text;
+        };
+        {
+            INFO("ASCII text did not arrive as sent");
+            REQUIRE(received("plain text"));
+        }
+        {
+            INFO("Multi-byte UTF-8 did not arrive as sent");
+            REQUIRE(received("\xCF\x80 \xF0\x9F\x90\xBA"));
+        }
+        {
+            INFO("Text with an embedded NUL was cut at the NUL");
+            REQUIRE(received(std::string_view("before\0after", 12)));
+        }
+        {
+            INFO("Empty text did not arrive as an empty view");
+            REQUIRE(received(""));
+        }
+    }
+
+    TEST_CASE("an internal call gets string and numeric parameters each in order", "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        const auto component = Load(*host, checkArguments.component);
+        const auto natives = *component.FindType(NativesType).value;
+        Examples::ClearRecordedText();
+        const auto combined =
+            natives.FindMethod<std::int64_t(std::int32_t, std::string_view, std::int32_t)>("CallStringBetweenNumbers")
+                .value->Invoke(6, "crate", 7);
+        {
+            INFO("The numbers around a string did not arrive in order (6 * 7 + 5 bytes is 47)");
+            REQUIRE((combined.Succeeded() && combined.value == 47));
+        }
+        {
+            INFO("The string between two numbers did not arrive as sent");
+            REQUIRE(Examples::RecordedText() == "crate");
+        }
+    }
+
+    TEST_CASE("a string with a negative length, or no bytes but a length, is refused at the boundary", "[.components]")
+    {
+        SinkGuard guard(checkArguments);
+        auto host = StartHost(checkArguments);
+        std::vector<Logged> logged;
+        std::mutex mutex;
+        {
+            INFO("The log sink was not set");
+            REQUIRE(host->SetLogSink([&](const LogMessage& message) {
+                            const std::lock_guard lock(mutex);
+                            logged.push_back({message.level, std::string(message.text)});
+                        })
+                        .Succeeded());
+        }
+        const auto component = Load(*host, checkArguments.component);
+        const auto natives = *component.FindType(NativesType).value;
+        const auto raw = *natives.FindMethod<std::int32_t(std::int64_t, std::int32_t)>("CallRecordTextRaw").value;
+        const char bytes[] = "text";
+        const auto address = static_cast<std::int64_t>(reinterpret_cast<std::intptr_t>(bytes));
+        const auto refused = [&](std::int64_t data, std::int32_t length) {
+            Examples::SetRecordedText("untouched");
+            const auto result = raw.Invoke(data, length);
+            return result.Succeeded() && result.value == 0 && Examples::RecordedText() == "untouched";
+        };
+        {
+            INFO("A negative length reached the function or did not give zero");
+            REQUIRE(refused(address, -1));
+        }
+        {
+            INFO("A null pointer with a length reached the function or did not give zero");
+            REQUIRE(refused(0, 4));
+        }
+        {
+            const std::lock_guard lock(mutex);
+            const auto errors = std::count_if(logged.begin(), logged.end(), [](const Logged& entry) {
+                return entry.level == LogLevel::Error && entry.text.find("string") != std::string::npos;
+            });
+            INFO("Each refused string was not reported as an Error through the log sink");
+            REQUIRE(errors == 2);
+        }
+    }
+
+    TEST_CASE("a string with no bytes and length zero arrives as empty text", "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        const auto component = Load(*host, checkArguments.component);
+        const auto natives = *component.FindType(NativesType).value;
+        const auto raw = *natives.FindMethod<std::int32_t(std::int64_t, std::int32_t)>("CallRecordTextRaw").value;
+        Examples::SetRecordedText("untouched");
+        const auto empty = raw.Invoke(0, 0);
+        INFO("A null pointer with length zero was not passed on as empty text");
+        REQUIRE((empty.Succeeded() && empty.value == 0 && Examples::RecordedText().empty()));
+    }
+
+    TEST_CASE("registering a string-taking internal call again succeeds", "[.components]")
+    {
+        INFO("Registering the same string-taking function under its name again failed");
+        REQUIRE(Iris::RegisterInternalCall<&Examples::RecordText>("Iris.Examples.Component.Natives.RecordText")
+                    .Succeeded());
+    }
+
     TEST_CASE("a component lists its public types in declaration order", "[.components]")
     {
         auto host = StartHost(checkArguments);
@@ -3829,7 +3939,7 @@ namespace
         {
             INFO("Unbound internal calls were not diagnosed: " + missing.diagnostic);
             REQUIRE((missing.status == CallStatus::InvalidArgument && !missing.value &&
-                     missing.diagnostic.find("10 internal call(s)") != std::string::npos &&
+                     missing.diagnostic.find("12 internal call(s)") != std::string::npos &&
                      missing.diagnostic.find("Iris.Examples.Component.Natives.Add") != std::string::npos &&
                      missing.diagnostic.find("no internal call is registered") != std::string::npos));
         }
