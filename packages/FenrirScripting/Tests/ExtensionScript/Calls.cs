@@ -19,5 +19,8 @@ public static class Calls
 
     public static int Label(string text, int number) => Gadgets.Label(text, number);
 
+    // Text with a lone high surrogate, which has no UTF-8 form of its own: the generated body must send U+FFFD for it.
+    public static int LabelWithLoneSurrogate(int number) => Gadgets.Label("a\uD800b", number);
+
     public static int ChargeLevel(uint entity) => new Entity(entity).Get<Charge>().Value.Level;
 }
