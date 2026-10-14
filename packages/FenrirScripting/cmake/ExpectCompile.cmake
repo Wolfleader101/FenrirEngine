@@ -1,7 +1,8 @@
 # Builds one case of the CompileFail project and checks the result. Run by CTest in script mode:
-#   cmake -DDOTNET=... -DPROJECT=... -DSDK=<sdk dir>/ -DCASE=<name> -DWORK=<dir> -DEXPECT=<OK|error code> -P ExpectCompile.cmake
+#   cmake -DDOTNET=... -DPROJECT=... -DSDK=<sdk dir>/ -DCASE=<name> -DWORK=<dir> -DEXPECT=<OK|error code> [-DALSO=<error code>] -P ExpectCompile.cmake
 # EXPECT=OK means the case must compile. An error code (CS8345) means the build must fail, and every error it reports
-# must be that one, so a case cannot pass because something unrelated broke.
+# must be that one (or ALSO, one error the compiler adds on its own beside it), so a case cannot pass because something
+# unrelated broke.
 foreach(required DOTNET PROJECT SDK CASE WORK EXPECT)
     if(NOT DEFINED ${required})
         message(FATAL_ERROR "ExpectCompile: ${required} is not set")
@@ -29,8 +30,12 @@ else()
     endif()
     string(REGEX MATCHALL "error [A-Z]+[0-9]+" errors "${everything}")
     list(REMOVE_DUPLICATES errors)
+    # ALSO, when set, is one more error the case may report beside EXPECT (one the compiler adds on its own).
+    if(DEFINED ALSO AND NOT ALSO STREQUAL "")
+        list(REMOVE_ITEM errors "error ${ALSO}")
+    endif()
     if(NOT errors STREQUAL "error ${EXPECT}")
-        message(FATAL_ERROR "The case '${CASE}' should fail with only ${EXPECT}, but reported: ${errors}\n${everything}")
+        message(FATAL_ERROR "The case '${CASE}' should fail with only ${EXPECT} (and ALSO, if given), but reported: ${errors}\n${everything}")
     endif()
 endif()
 message(STATUS "${CASE}: ${EXPECT} as expected")

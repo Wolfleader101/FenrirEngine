@@ -1,37 +1,27 @@
-// Iris assigns every function pointer field below when the host shares this assembly.
-#pragma warning disable CS0649
-
 using Fenrir.Scripting;
 
 namespace Fenrir.TestExtension;
 
-// The native functions of the test extension. Each field is named by the binding-name rule for the native function
-// "Fenrir.TestExtension.Gadgets.<Method>", so Iris binds it to the function the test's extension declares under that name.
-// (Ticket 03 replaces these hand-written fields with [NativeFunction] declarations.)
-public static unsafe class Gadgets
+// The native functions of the test extension, declared once: the generator writes each body and the field the host binds
+// to the C++ function the test's extension declares as "Fenrir.TestExtension.Gadgets.<Method>".
+public static partial class Gadgets
 {
-    public static delegate* unmanaged[Cdecl]<int, int, int> __native_Add;
-    public static delegate* unmanaged[Cdecl]<uint, uint> __native_EchoEntity;
-    public static delegate* unmanaged[Cdecl]<uint, float> __native_HeightOf;
-    public static delegate* unmanaged[Cdecl]<uint, float, void> __native_Lift;
-    // A native std::string_view parameter: UTF-8 bytes, then their length.
-    public static delegate* unmanaged[Cdecl]<byte*, int, int, int> __native_Label;
+    [NativeFunction]
+    public static partial int Add(int left, int right);
 
-    public static int Add(int left, int right) => __native_Add(left, right);
-
-    public static Entity EchoEntity(Entity entity) => new(__native_EchoEntity(entity.Value));
+    [NativeFunction]
+    public static partial Entity EchoEntity(Entity entity);
 
     // The entity's Transform height, as native code reads it; -1 if it has none.
-    public static float HeightOf(Entity entity) => __native_HeightOf(entity.Value);
+    [NativeFunction]
+    public static partial float HeightOf(Entity entity);
 
-    public static void Lift(Entity entity, float by) => __native_Lift(entity.Value, by);
+    [NativeFunction]
+    public static partial void Lift(Entity entity, float by);
 
     // The UTF-8 byte count of the text, times ten, plus the number; the native side keeps the text it received.
-    public static int Label(string text, int number)
-    {
-        byte[] bytes = System.Text.Encoding.UTF8.GetBytes(text);
-        fixed (byte* data = bytes) return __native_Label(data, bytes.Length, number);
-    }
+    [NativeFunction]
+    public static partial int Label(string text, int number);
 }
 
 /// <summary>A component the test extension gives C#: the native <c>Charge</c>.</summary>
