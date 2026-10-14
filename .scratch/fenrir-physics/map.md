@@ -23,6 +23,7 @@ A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-ticke
 
 - [What does Jolt require of a host engine?](issues/01-what-jolt-requires-of-a-host.md): Jolt v5.6.0 can run on our `ThreadPool`; bodies are locked during a step; listeners run on job threads unordered and must be buffered; same-binary determinism holds given ordered API calls; much is process-global; several build defaults must be overridden.
 - [How do other engines hide their physics backend?](issues/02-how-other-engines-hide-their-backend.md): seams are runtime interfaces (Godot, O3DE) or build-time typedefs (Unreal); all own opaque handles, simulate in world space with an adapter to the local hierarchy, and buffer contacts for one-thread delivery after the step; the usual leaks are backend tuning settings, documented behaviour differences, native pointers, and threading shaped by the backend.
+- [Where does the backend seam go?](issues/03-where-the-backend-seam-goes.md): ADR-0010. Build-time seam: a private backend class with its only implementation in `src/Backend/Jolt/`; entities and components are the public identity; no tuning settings or escape hatch; tests against real Jolt; `Physics::Install` owns the backend's process-wide state.
 
 ## Not yet specified
 

@@ -146,3 +146,38 @@ The third-party library that does the simulation behind FenrirPhysics (Jolt toda
 **Physics world**
 One running simulation, holding the bodies of one scene.
 *Avoid:* physics scene, physics system (*system* is ECS logic).
+
+**Rigid body**
+An entity the physics world simulates as one solid object that does not deform. Its *motion type* is one of:
+- *static*: never moves;
+- *kinematic*: moved by game code, pushes dynamic bodies, is not pushed;
+- *dynamic*: moved by the simulation.
+
+*Avoid:* physics body, actor.
+
+**Soft body**
+An entity the physics world simulates as a deformable object (cloth, jelly).
+*Avoid:* cloth (one kind of soft body).
+
+**Character body**
+An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body.
+*Avoid:* character controller (as the name of the thing), player body.
+
+**Collider**
+Geometry attached to a body: a collision shape at an offset from the body, with a physics material, a collision layer, and optionally marked as a trigger.
+*Avoid:* hitbox.
+
+**Collision shape**
+The geometry of a collider on its own: a box, sphere, capsule, convex hull or triangle mesh. Several colliders may share one.
+*Avoid:* mesh (for the shape in general), geometry.
+
+**Physics material**
+How a collider's surface responds to contact: its friction and restitution.
+
+**Trigger**
+A collider that reports what overlaps it but never pushes anything.
+*Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
+
+**Collision layer**
+A named group a collider belongs to; with its *collision mask* (the layers it collides with) it decides which colliders can touch.
+*Avoid:* channel, group.
