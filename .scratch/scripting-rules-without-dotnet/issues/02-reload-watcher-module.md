@@ -6,9 +6,13 @@ The decision "Idle, Settling or Ready" becomes its own module. Its inputs are th
 
 **Blocked by:** 01 (Rules test executable, change buffer cases and the probe).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The decision lives in a module with no file access, and the generation lifecycle delegates to it. Real reload behaviour is unchanged.
-- [ ] Cases in the rules executable, driven by literal times and stamps, pin: a look sooner than the interval after the last is Idle; a stamp equal to the loaded one is Idle and clears what was pending; a file that cannot be looked at is Idle; the first sight of a new stamp is Settling; a stamp that changes again while settling restarts the wait; a stable stamp under the debounce is Settling; an unreadable one is Settling even after the debounce; a stable, readable stamp after the debounce is Ready; with hot reload off it is always Idle; marking a generation as loaded resets what was pending.
-- [ ] The two end-to-end cases (the watcher reloads a real stable build between frames; hot reload off never acts but a manual reload works) are kept.
-- [ ] The full CTest suite passes.
+- [x] The decision lives in a module with no file access, and the generation lifecycle delegates to it. Real reload behaviour is unchanged.
+- [x] Cases in the rules executable, driven by literal times and stamps, pin: a look sooner than the interval after the last is Idle; a stamp equal to the loaded one is Idle and clears what was pending; a file that cannot be looked at is Idle; the first sight of a new stamp is Settling; a stamp that changes again while settling restarts the wait; a stable stamp under the debounce is Settling; an unreadable one is Settling even after the debounce; a stable, readable stamp after the debounce is Ready; with hot reload off it is always Idle; marking a generation as loaded resets what was pending.
+- [x] The two end-to-end cases (the watcher reloads a real stable build between frames; hot reload off never acts but a manual reload works) are kept.
+- [x] The full CTest suite passes.
+
+## Comments
+
+Done. The watcher takes the file's two questions as callables (what it looks like now; whether it can be opened) so that it asks the first at most once per interval and the second only for a build that has settled. A case counts the calls. `GenerationLifecycle` keeps its host and reload guards and reads the file; `Watch` there is an alias of the watcher's. A mutation (the equal-stamp branch no longer clears the pending change) fails its case.

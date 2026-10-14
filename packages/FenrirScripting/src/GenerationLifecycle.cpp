@@ -108,6 +108,7 @@ namespace Fenrir::Detail
         m_logger = logger;
         m_settings = std::move(settings);
         m_hooks = std::move(hooks);
+        m_watcher = ReloadWatcher({m_settings.hotReload, m_settings.reloadInterval, m_settings.reloadDebounce});
     }
 
     std::optional<GenerationLifecycle::FileStamp> GenerationLifecycle::StampNow() const
@@ -131,7 +132,7 @@ namespace Fenrir::Detail
         auto loaded = LoadGeneration(nullptr);
         if (loaded.Succeeded())
         {
-            m_loadedStamp = StampNow();
+            m_watcher.MarkLoaded(StampNow());
         }
         return loaded;
     }
@@ -247,8 +248,7 @@ namespace Fenrir::Detail
         {
             m_hooks.beforeReload();
         }
-        m_loadedStamp = StampNow();
-        m_pendingStamp.reset();
+        m_watcher.MarkLoaded(StampNow());
 
         Unload();
         // What to go back to if the new build does not load. Taken now: a generation that loads and then fails to start
@@ -282,33 +282,11 @@ namespace Fenrir::Detail
 
     GenerationLifecycle::Watch GenerationLifecycle::Poll(std::chrono::steady_clock::time_point now)
     {
-        if (!m_settings.hotReload || m_reloading || m_host == nullptr)
+        if (m_reloading || m_host == nullptr)
         {
             return Watch::Idle;
         }
-        if (now - m_lastPoll < m_settings.reloadInterval)
-        {
-            return Watch::Idle;
-        }
-        m_lastPoll = now;
-        const auto stamp = StampNow();
-        if (!stamp.has_value() || stamp == m_loadedStamp)
-        {
-            m_pendingStamp.reset();
-            return Watch::Idle;
-        }
-        // A build is still going if the file changes between looks, so only a stable one is loaded.
-        if (!m_pendingStamp.has_value() || !(*m_pendingStamp == *stamp))
-        {
-            m_pendingStamp = stamp;
-            m_pendingSince = now;
-            return Watch::Settling;
-        }
-        if (now - m_pendingSince < m_settings.reloadDebounce || !CanBeRead(m_settings.assembly))
-        {
-            return Watch::Settling;
-        }
-        return Watch::Ready;
+        return m_watcher.Poll(now, [this] { return StampNow(); }, [this] { return CanBeRead(m_settings.assembly); });
     }
 
     void GenerationLifecycle::ReloadIfReady(std::chrono::steady_clock::time_point now) noexcept

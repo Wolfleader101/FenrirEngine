@@ -15,6 +15,7 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 # executable is given the package's source directory; nothing else is.
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
+    Rules/ReloadWatcherTests.cpp
     HeadlessApp.hpp
 )
 target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
