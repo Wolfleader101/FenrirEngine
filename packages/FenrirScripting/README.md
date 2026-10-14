@@ -212,8 +212,8 @@ victim.Destroy();
 ```
 
 These work for native and C# components alike, on the active scene. They are **recorded, not applied**: the ECS storage does
-not change until the native code that called into the script gets control back and calls `Scripting::ApplyChanges()` (the
-runner will do it after each system). That is what keeps every `Ref<T>` a script took valid for the whole call, even when
+not change until the system that made them returns: the runner plays them back after each system (and `OnCreate`), and drops
+them if a script throws. That is what keeps every `Ref<T>` a script took valid for the whole call, even when
 other entities gain or lose the same component. Reads (`Get`, `Has`, `IsValid`) are never recorded and see the state as it
 is *now*, so a component added a line ago is not there yet, and an entity just destroyed is still alive.
 
@@ -226,9 +226,8 @@ is *now*, so a component added a line ago is not there yet, and an entity just d
 - **Failing clearly.** `Get<T>` on a missing component or a dead entity, and any change on a dead entity or an unregistered
   component, throw `InvalidOperationException` saying which. Transform and Name cannot be removed (the engine assumes every
   entity has them), and read-only components such as Relationship have no `Add` or `Remove` at all.
-- **From C++.** `ApplyChanges()` (returns how many were applied and skipped) and
-  `DiscardChanges()` (drops them, and destroys the entities they created). Native code that changes the ECS directly is not
-  buffered.
+- **From C++.** Nothing to call: playback and discarding belong to the runner, and the tests reach them through
+  `ScriptingProbe`. Native code that changes the ECS directly is not buffered.
 
 ## Queries
 

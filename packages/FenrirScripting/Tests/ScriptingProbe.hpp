@@ -30,6 +30,21 @@ namespace Fenrir
             return scripting.ReadDiagnostics().pendingChanges;
         }
 
+        /**
+         * @brief Plays back the structural changes scripts have recorded, in order, as the system runner does from C#
+         * after each system. Returns how many changes were applied and how many were skipped.
+         */
+        static auto ApplyChanges(Scripting& scripting)
+        {
+            return scripting.ApplyChanges();
+        }
+
+        /** @brief Drops the recorded changes, destroying the entities they created and not yet played back. */
+        static void DiscardChanges(Scripting& scripting)
+        {
+            scripting.DiscardChanges();
+        }
+
         /** @brief The loaded script assembly, or null when there are no scripts: the hook the tests call scripts
          * through. */
         [[nodiscard]] static Iris::Component* Component(Scripting& scripting)

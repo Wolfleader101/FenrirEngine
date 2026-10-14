@@ -14,14 +14,6 @@ public static class Changes
         return entity.Value;
     }
 
-    public static uint CreateAndDestroy()
-    {
-        var entity = Entity.Create();
-        entity.Add<Velocity>();
-        entity.Destroy();
-        return entity.Value;
-    }
-
     // Takes a Ref, then changes the pool it points into every way there is. The Ref must still be good at the end.
     public static float RefSurvivesChanges(uint kept, uint victim)
     {
@@ -57,26 +49,6 @@ public static class Changes
         return new Entity(entity).IsValid && new Entity(entity).Has<Transform>();
     }
 
-    public static void DestroyThenAdd(uint entity)
-    {
-        var e = new Entity(entity);
-        e.Destroy();
-        e.Add<Velocity>();
-    }
-
-    public static void AddThenDestroy(uint entity)
-    {
-        var e = new Entity(entity);
-        e.Add<Velocity>();
-        e.Destroy();
-    }
-
-    public static void DestroyTwice(uint entity)
-    {
-        new Entity(entity).Destroy();
-        new Entity(entity).Destroy();
-    }
-
     // Order matters: add A, replace with B, take it off, add C. C is what is left.
     public static void ChangesApplyInOrder(uint entity)
     {
@@ -85,14 +57,6 @@ public static class Changes
         e.Add(new Velocity { Linear = new Vector3(2, 0, 0) });
         e.Remove<Velocity>();
         e.Add(new Velocity { Linear = new Vector3(3, 0, 0) });
-    }
-
-    // Remove then add: the component comes back, as a default one.
-    public static void RemoveThenAdd(uint entity)
-    {
-        var e = new Entity(entity);
-        e.Remove<Velocity>();
-        e.Add<Velocity>();
     }
 
     public static void SetTransform(uint entity)

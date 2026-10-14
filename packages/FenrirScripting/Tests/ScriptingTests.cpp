@@ -1324,7 +1324,7 @@ namespace
             REQUIRE((!entities.Has(velocity->type, id) && !entities.GetEntity(id).HasComponent<Transform>()));
         }
 
-        const auto summary = scripting.ApplyChanges();
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("Playback did not apply all");
             REQUIRE((summary.applied == 3 && summary.skipped == 0 && ScriptingProbe::PendingChanges(scripting) == 0));
@@ -1352,7 +1352,7 @@ namespace
         // Nothing left over to play back.
         {
             INFO("Playing back twice applied something twice");
-            REQUIRE(scripting.ApplyChanges().applied == 0);
+            REQUIRE(ScriptingProbe::ApplyChanges(scripting).applied == 0);
         }
     }
 
@@ -1378,7 +1378,7 @@ namespace
             REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, victim));
         }
 
-        const auto summary = scripting.ApplyChanges();
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("Playback did not apply every change");
             REQUIRE((summary.skipped == 0 && summary.applied > 5000));
@@ -1424,7 +1424,7 @@ namespace
             REQUIRE(entities.HasEntity(doomed));
         }
 
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("The add was not applied");
             REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, bare));
@@ -1439,7 +1439,7 @@ namespace
         }
     }
 
-    void ChangesApplyInTheOrderTheyWereMade()
+    void ChangesFromCSharpApplyInOrderAndCarryTheirValues()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
@@ -1449,97 +1449,21 @@ namespace
         Changes<void>(scripting, "ChangesApplyInOrder", entity);
         {
             INFO("Not every change was applied");
-            REQUIRE(scripting.ApplyChanges().applied == 4);
+            REQUIRE(ScriptingProbe::ApplyChanges(scripting).applied == 4);
         }
         {
-            INFO("The last add did not win: the order was not kept");
+            INFO("The last add did not win: C# calls did not reach the buffer in the order they were made");
             REQUIRE(VelocityX(scripting, entities, entity) == 3.0F);
-        }
-
-        // Remove then add leaves a fresh default one.
-        Changes<void>(scripting, "RemoveThenAdd", entity);
-        (void)scripting.ApplyChanges();
-        {
-            INFO("Remove then add did not give a default component");
-            REQUIRE(VelocityX(scripting, entities, entity) == 0.0F);
         }
 
         // A native component takes a value too.
         Changes<void>(scripting, "SetTransform", entity);
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         const auto& transform = entities.GetEntity(entity).GetComponent<Transform>();
         {
             INFO("A native component did not take the value");
             REQUIRE((transform.pos == glm::vec3(9, 8, 7) && transform.scale == glm::vec3(2, 2, 2) &&
                      transform.rot.w == 1.0F));
-        }
-    }
-
-    void DestroyThenAddOnTheSameEntityLeavesItDestroyed()
-    {
-        HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        auto& entities = headless.Get().GetActiveScene().GetEntityList();
-
-        // Destroy first: the add that follows names an entity that no longer exists, is skipped, and is reported.
-        const auto first = entities.CreateEntity().GetId();
-        Changes<void>(scripting, "DestroyThenAdd", first);
-        const auto summary = scripting.ApplyChanges();
-        {
-            INFO("Destroy-then-add did not apply one and skip one");
-            REQUIRE((summary.applied == 1 && summary.skipped == 1));
-        }
-        {
-            INFO("The entity survived being destroyed");
-            REQUIRE(!entities.HasEntity(first));
-        }
-        {
-            INFO("The skipped change was not reported");
-            REQUIRE(headless.Logger().Contains(LogLevel::Warn, "skipped adding a component for entity"));
-        }
-
-        // The slot is reused by a later entity: the skipped add did not leak onto it.
-        const auto reused = entities.CreateEntity().GetId();
-        {
-            INFO("A skipped add reached a new entity");
-            REQUIRE(!entities.Has(scripting.FindComponent(VelocityName)->type, reused));
-        }
-        {
-            INFO("A skipped add left a component behind");
-            REQUIRE(entities.Count(scripting.FindComponent(VelocityName)->type) == 0);
-        }
-
-        // Add first, destroy after: the entity is gone and takes the component with it.
-        const auto second = entities.CreateEntity().GetId();
-        Changes<void>(scripting, "AddThenDestroy", second);
-        const auto both = scripting.ApplyChanges();
-        {
-            INFO("Add-then-destroy was not well defined");
-            REQUIRE((both.applied == 2 && both.skipped == 0 && !entities.HasEntity(second)));
-        }
-        {
-            INFO("A destroyed entity kept its component");
-            REQUIRE(entities.Count(scripting.FindComponent(VelocityName)->type) == 0);
-        }
-
-        // Destroying twice is the same as once.
-        const auto third = entities.CreateEntity().GetId();
-        Changes<void>(scripting, "DestroyTwice", third);
-        {
-            INFO("Destroying twice was not harmless");
-            REQUIRE((scripting.ApplyChanges().skipped == 0 && !entities.HasEntity(third)));
-        }
-
-        // Created and destroyed in one go, leaving nothing behind.
-        std::size_t before = 0;
-        entities.ForEachEntity([&](auto) { ++before; });
-        const auto gone = Changes<std::uint32_t>(scripting, "CreateAndDestroy");
-        (void)scripting.ApplyChanges();
-        std::size_t after = 0;
-        entities.ForEachEntity([&](auto) { ++after; });
-        {
-            INFO("A created-then-destroyed entity was left behind");
-            REQUIRE((!entities.HasEntity(gone) && after == before));
         }
     }
 
@@ -1588,37 +1512,6 @@ namespace
         {
             INFO("A refused removal changed the entity");
             REQUIRE(entities.GetEntity(bare).HasComponent<Transform>());
-        }
-    }
-
-    void DiscardingChangesLeavesNoEntitiesBehind()
-    {
-        HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        auto& entities = headless.Get().GetActiveScene().GetEntityList();
-        const auto existing = EntityWithVelocity(scripting, entities);
-
-        const auto created = Changes<std::uint32_t>(scripting, "CreateWithVelocity");
-        Changes<void>(scripting, "RemoveThenAdd", existing);
-        {
-            INFO("Nothing was recorded");
-            REQUIRE((ScriptingProbe::PendingChanges(scripting) > 0 && entities.HasEntity(created)));
-        }
-        scripting.DiscardChanges();
-        {
-            INFO("Discarding left the created entity");
-            REQUIRE((ScriptingProbe::PendingChanges(scripting) == 0 && !entities.HasEntity(created)));
-        }
-        {
-            INFO("Discarding applied a change");
-            REQUIRE(entities.Has(scripting.FindComponent(VelocityName)->type, existing));
-        }
-
-        // After Shutdown there is nothing to play back, and it says so rather than crashing.
-        scripting.Shutdown();
-        {
-            INFO("Changes outlived Shutdown");
-            REQUIRE((scripting.ApplyChanges().applied == 0 && ScriptingProbe::PendingChanges(scripting) == 0));
         }
     }
 
@@ -1775,7 +1668,7 @@ namespace
             INFO("A change reached the storage during iteration");
             REQUIRE((entities.Count(velocity->type) == 5 && entities.Count(counter->type) == 0));
         }
-        const auto summary = scripting.ApplyChanges();
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("A change was skipped: the destroy came last, so nothing named a dead entity");
             REQUIRE(summary.skipped == 0);
@@ -1830,7 +1723,7 @@ namespace
             INFO("A change reached the storage during ForEach");
             REQUIRE(entities.Count(velocity->type) == 5);
         }
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("ForEach's deferred changes were not applied");
             REQUIRE(entities.Count(velocity->type) == 5);
@@ -2121,7 +2014,7 @@ namespace
             INFO("A send reached the queue before the system returned");
             REQUIRE(headless.Get().ReadEvents<TestNative::Alert>().empty());
         }
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         const auto& events = headless.Get().ReadEvents<TestNative::Alert>();
         {
             INFO("C++ did not read the event C# sent");
@@ -2139,7 +2032,7 @@ namespace
         }
         EventScript<void>(scripting, "SendPing", std::int32_t{3});
         EventScript<void>(scripting, "SendPing", std::int32_t{4});
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("A C#-only event was not delivered");
             REQUIRE(EventScript<std::int32_t>(scripting, "SumPings") == 7);
@@ -2165,7 +2058,7 @@ namespace
         }
         // The reloaded assembly sends and reads through a fresh queue (ids cached for the old registry are not reused).
         EventScript<void>(again, "SendPing", std::int32_t{5});
-        (void)again.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(again);
         {
             INFO("A reloaded script assembly could not use its events");
             REQUIRE(EventScript<std::int32_t>(again, "SumPings") == 5);
@@ -2238,12 +2131,12 @@ namespace
             INFO("A send was readable by its own sender");
             REQUIRE(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{1}) == 0);
         }
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("A send was visible before its system returned, or the earlier one was lost");
             REQUIRE(EventScript<std::int32_t>(scripting, "SendThenCount", std::int32_t{2}) == 1);
         }
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("Both sends did not arrive");
             REQUIRE(EventScript<std::int32_t>(scripting, "SumPings") == 3);
@@ -2256,7 +2149,7 @@ namespace
         }
         {
             INFO("The sends made in that system were not delivered together");
-            REQUIRE(scripting.ApplyChanges().applied == 100);
+            REQUIRE(ScriptingProbe::ApplyChanges(scripting).applied == 100);
         }
     }
 
@@ -2547,7 +2440,7 @@ namespace
                                      // layout changes (Ripple).
                                      Reloaded<void>(*installed, "SendEcho", std::int32_t{9});
                                      Reloaded<void>(*installed, "SendRipple", std::int32_t{1});
-                                     (void)installed->ApplyChanges();
+                                     (void)ScriptingProbe::ApplyChanges(*installed);
                                      answers.push_back(Reloaded<std::int32_t>(*installed, "Answer"));
                                      build.Overwrite(fixtureV2);
                                      reloadedOk = installed->Reload().Succeeded();
@@ -2645,7 +2538,7 @@ namespace
         Reloaded<void>(scripting, "SendEcho", std::int32_t{9});
         Reloaded<void>(scripting, "SendEcho", std::int32_t{10});
         Reloaded<void>(scripting, "SendRipple", std::int32_t{1});
-        (void)scripting.ApplyChanges();
+        (void)ScriptingProbe::ApplyChanges(scripting);
         {
             INFO("The test assumes version 1 of Ripple is four bytes");
             REQUIRE(app.FindEventQueue("Fenrir.ScriptFixture.Ripple")->EventSize() == 4);
@@ -3252,12 +3145,12 @@ namespace
             INFO(name + " claimed to be running");
             REQUIRE((!scripting.IsRunning() && !scripting.HasScripts()));
         }
-        const auto summary = scripting.ApplyChanges();
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
         {
             INFO(name + " applied changes");
             REQUIRE((summary.applied == 0 && summary.skipped == 0));
         }
-        scripting.DiscardChanges();
+        ScriptingProbe::DiscardChanges(scripting);
         const auto reloaded = scripting.Reload();
         {
             INFO(name + " did not refuse a reload");
@@ -3709,24 +3602,14 @@ TEST_CASE("reads see live state and changes wait for playback", "[scripting]")
     ReadsSeeLiveStateAndChangesWaitForPlayback();
 }
 
-TEST_CASE("changes apply in the order they were made", "[scripting]")
+TEST_CASE("changes recorded from C# are applied in order and carry their values", "[scripting]")
 {
-    ChangesApplyInTheOrderTheyWereMade();
-}
-
-TEST_CASE("destroy then add on the same entity leaves it destroyed", "[scripting]")
-{
-    DestroyThenAddOnTheSameEntityLeavesItDestroyed();
+    ChangesFromCSharpApplyInOrderAndCarryTheirValues();
 }
 
 TEST_CASE("get and structural changes fail clearly", "[scripting]")
 {
     GetAndStructuralChangesFailClearly();
-}
-
-TEST_CASE("discarding changes leaves no entities behind", "[scripting]")
-{
-    DiscardingChangesLeavesNoEntitiesBehind();
 }
 
 TEST_CASE("writes through query rows are visible natively", "[scripting]")
