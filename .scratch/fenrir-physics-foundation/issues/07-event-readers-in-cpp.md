@@ -4,9 +4,11 @@
 
 **Blocked by:** 01 (App runs one frame at a time with a chosen delta); 02 (Fixed-step phases and a cap on ticks per frame).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Tests (frame seam): an `Update` reader sees each event once, including one sent after it ran (seen next frame, once); a `Tick` reader that runs three times in a frame sees each event on its first run after the send; a `Tick` reader never misses an event across frames that run no tick; a reader that skips two swaps reports the missed count.
 - [ ] Events sent by two systems added with `AddSystems` (parallel) arrive in registration order, run after run (test).
 - [ ] Parallel readers of one queue and parallel senders do not race (no shared mutable read buffer; per-system send buffers).
 - [ ] `ReadEvents` and every existing reader keep working.
+
+**Resolved by:** merge of impl/07-event-readers (e0a3240)
