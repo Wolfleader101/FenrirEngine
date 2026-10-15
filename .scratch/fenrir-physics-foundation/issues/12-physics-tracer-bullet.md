@@ -12,10 +12,13 @@
 
 **Blocked by:** 02 (Fixed-step phases and a cap on ticks per frame); 03 (Stable scenes, and DestroyScene keeps the active scene); 04 (Scene resources); 05 (World transforms everywhere); 06 (Component watches).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] A FenrirPhysics test target (Catch2, through the frame seam) pins: a box and a sphere fall and rest on a static ground (with a tolerance for penetration slop); a collider with no `RigidBody` is static; a kinematic body moved in `Tick` pushes a dynamic one and stops when not moved; writing a dynamic body's `Transform` teleports it; writing its velocity changes it; switching motion type and shape kind take effect; two runs give bit-identical results.
 - [ ] A scene without physics components gets no world; a world is created when one appears; an inactive scene's world does not step and resumes when active again; destroying the scene or the `Physics` owner ends it cleanly.
 - [ ] No public FenrirPhysics header names or includes Jolt, and Jolt's include path reaches no target outside FenrirPhysics.
 - [ ] FenrirPhysics and Jolt build in the Clang and MSVC x64 debug and release presets with no warnings from Jolt's sources; `FENRIR_ENABLE_PHYSICS=OFF` builds the engine without them.
 - [ ] The DemoApp physics scene shows boxes falling, stacking and being pushed by the paddle (checked by hand).
+
+**Resolved by:** merge of impl/12-physics-tracer-bullet (8c7ef72)
+**Hand check pending:** DemoApp physics scene: coloured boxes fall and pile on the grey ground near (0,-4,-12); the orange paddle sweeps x -6..6, pushes boxes, is not pushed, does not drift.
