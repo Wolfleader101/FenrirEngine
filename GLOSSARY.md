@@ -139,6 +139,10 @@ Informal: user C# code in general. Not the name of any type or concept.
 
 ## FenrirEngine core
 
+**World transform**
+Where an entity is in the scene, as opposed to its `Transform`, which is relative to its parent. Always computed from the entity's ancestors, never stored. Its scale is approximate when a parent's non-uniform scale meets a child's rotation (the exact form is the world matrix).
+*Avoid:* global transform, absolute transform.
+
 **Scene resource**
 State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
