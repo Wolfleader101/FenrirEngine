@@ -78,6 +78,36 @@ public readonly struct Entity : IEquatable<Entity>
     /// <summary>Whether this entity is alive in the active scene.</summary>
     public unsafe bool IsValid => Native.EntityIsValid(Value);
 
+    /// <summary>
+    /// Where this entity is in the scene: its <see cref="Transform"/> composed with its parents', read at once (so it
+    /// sees this system's own edits). The scale is approximate when a parent's non-uniform scale meets a child's
+    /// rotation.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The entity is not alive, or has no <see cref="Transform"/>.</exception>
+    public unsafe Transform WorldTransform
+    {
+        get
+        {
+            if (!Native.EntityWorldTransform(Value, out Transform world))
+                throw NoTransform();
+            return world;
+        }
+    }
+
+    /// <summary>
+    /// Sets this entity's <see cref="Transform"/>, relative to its parent, so that its <see cref="WorldTransform"/> is
+    /// <paramref name="world"/>. It is component data, not a structural change, so it takes effect at once.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The entity is not alive, or has no <see cref="Transform"/>.</exception>
+    public unsafe void SetWorldTransform(Transform world)
+    {
+        if (!Native.EntitySetWorldTransform(Value, in world))
+            throw NoTransform();
+    }
+
+    private InvalidOperationException NoTransform() =>
+        new(IsValid ? $"{this} has no Transform." : $"{this} is not alive in the active scene.");
+
     /// <summary>Whether this entity is alive and has a component of type <typeparamref name="T"/>.</summary>
     /// <exception cref="InvalidOperationException">The type is not a component the engine has registered.</exception>
     public unsafe bool Has<T>() where T : unmanaged, IReadOnlyComponent => Native.ComponentHas(IdOf<T>(), Value);
