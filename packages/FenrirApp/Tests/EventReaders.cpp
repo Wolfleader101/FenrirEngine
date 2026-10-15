@@ -1,7 +1,11 @@
 #include <chrono>
+#include <cstddef>
+#include <cstring>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -274,6 +278,82 @@ TEST_CASE("Readers and senders running in parallel each see every event once, fr
         {
             INFO("a parallel reader should see each frame's parallel sends once, in registration order, the next "
                  "frame");
+            REQUIRE(read == expected);
+        }
+    }
+}
+
+namespace
+{
+    // SendsThree, by name and as bytes: what scripting does.
+    Fenrir::SystemFunc SendsThreeByName(std::string name, int first, bool slow)
+    {
+        return [name = std::move(name), first, slow](App& app) {
+            if (slow)
+            {
+                std::this_thread::sleep_for(std::chrono::microseconds(200));
+            }
+            for (int offset = 0; offset < 3; ++offset)
+            {
+                const int value = first + offset;
+                (void)app.FindEventQueue(name)->SendRaw(&value);
+            }
+        };
+    }
+
+    // RecordingReader, by name and as bytes, with a cursor of its own.
+    Fenrir::SystemFunc RecordingRawReader(std::string name, Reads& reads)
+    {
+        return [name = std::move(name), &reads, seen = std::size_t{0}](App& app) mutable {
+            std::vector<int>& run = reads.emplace_back();
+            const Fenrir::RawEventRange events = app.FindEventQueue(name)->ReadRawAfter(seen);
+            for (const auto& [data, count] :
+                 {std::pair{events.older, events.olderCount}, std::pair{events.newer, events.newerCount}})
+            {
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    int value = 0;
+                    std::memcpy(&value, static_cast<const std::byte*>(data) + index * sizeof(int), sizeof(int));
+                    run.push_back(value);
+                }
+            }
+        };
+    }
+} // namespace
+
+TEST_CASE("Sends and reads by name, as bytes, follow the rules typed ones do", "[app][events]")
+{
+    // A named typed queue and a queue with no C++ type: both are reached only by name here.
+    for (const bool typed : {true, false})
+    {
+        App app(Silent());
+        const std::string name = "Ping";
+        if (typed)
+        {
+            REQUIRE(app.NameEvent<Ping>(name));
+        }
+        else
+        {
+            REQUIRE(app.CreateEventQueue(name, sizeof(int), alignof(int)) != nullptr);
+        }
+        std::vector<Reads> reads(2);
+        app.AddSystems(SchedulePriority::Update,
+                       {SendsThreeByName(name, 10, true), RecordingRawReader(name, reads[0]),
+                        RecordingRawReader(name, reads[1]), SendsThreeByName(name, 20, false)});
+
+        constexpr int frames = 20;
+        for (int run = 0; run < frames; ++run)
+        {
+            app.RunFrame(sixtieth);
+        }
+
+        Reads expected(frames, {10, 11, 12, 20, 21, 22});
+        expected.front().clear();
+        for (const Reads& read : reads)
+        {
+            INFO((typed ? "typed queue: " : "byte queue: ")
+                 << "parallel sends by name should arrive after the batch in registration order, and each raw reader "
+                    "should see them once");
             REQUIRE(read == expected);
         }
     }
