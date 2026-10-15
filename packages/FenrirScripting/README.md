@@ -386,7 +386,8 @@ public sealed class Reporter : ISystem
 ```
 
 An event is an unmanaged struct implementing `IEvent`. The engine keeps one queue per event with the same double buffering as
-C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the last frame's, and the queues rotate once a frame.
+C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the last frame's. (C++ systems now read through an
+`EventReader<T>` instead, which sees each event once; the queues swap their buffers at the end of a frame only if a tick ran.)
 
 - **C#-only events need no C++.** The SDK generator lists them in an `EventTable`; when the script assembly loads, the engine
   makes a queue for each (the App's `CreateEventQueue`), and removes it when the assembly is released.
