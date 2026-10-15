@@ -193,5 +193,5 @@ A collider that reports what overlaps it but never pushes anything.
 *Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
 
 **Collision layer**
-A named group a collider belongs to; with its *collision mask* (the layers it collides with) it decides which colliders can touch.
-*Avoid:* channel, group.
+One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
+*Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
