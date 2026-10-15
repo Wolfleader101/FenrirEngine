@@ -94,6 +94,10 @@ An ID in the active scene's ECS, including a version, so an ID that is destroyed
 **Component**
 Plain data attached to an entity, with no behaviour. A *native component* is a C++ struct, and a *C# component* is an `IComponent` struct. Both live in the ECS and are queried the same way. In engine code and docs, *component* always means this. Say *Iris component* for the other sense.
 
+**Component watch**
+A record, kept for whoever asked, of every time one component type was added to or removed from entities in one scene, in order, until it is drained. It reports adds and removes only, never edits.
+*Avoid:* observer, listener, callback (a watch is read later, not called at the time).
+
 **Component type**
 A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name.
 *Avoid:* selector, registration (a registration is scripting's record of what C# sees).
