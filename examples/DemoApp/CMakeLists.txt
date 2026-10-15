@@ -47,6 +47,12 @@ target_link_libraries(DemoApp PRIVATE
     v8lib
 )
 
+# PROTOTYPE (physics spike)
+if(FENRIR_ENABLE_PHYSICS)
+    target_link_libraries(DemoApp PRIVATE FenrirPhysics)
+    target_compile_definitions(DemoApp PRIVATE FENRIR_PHYSICS)
+endif()
+
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(DemoApp PRIVATE FenrirScripting)
     target_compile_definitions(DemoApp PRIVATE FENRIR_SCRIPTING)

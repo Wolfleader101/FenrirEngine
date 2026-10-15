@@ -48,6 +48,12 @@ add_subdirectory(packages/FenrirScene)
 add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
 
+# PROTOTYPE (physics spike)
+option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics (JoltPhysics, the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
+if(FENRIR_ENABLE_PHYSICS)
+    add_subdirectory(packages/FenrirPhysics)
+endif()
+
 if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)
 endif()

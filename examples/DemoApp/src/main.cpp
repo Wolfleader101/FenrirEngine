@@ -32,6 +32,10 @@
 #include "ScriptingDemo.hpp"
 #endif
 
+#ifdef FENRIR_PHYSICS
+#include "FenrirPhysics/Physics.hpp"
+#endif
+
 template <>
 struct glz::meta<ProjectSettings>
 {
@@ -165,6 +169,69 @@ static void InitLights(Fenrir::App& app)
     light3_ent.AddComponent<Model>(cube);
     light4_ent.AddComponent<Model>(cube);
 }
+
+#ifdef FENRIR_PHYSICS
+// PROTOTYPE (physics spike): a static ground, a stack of dynamic boxes and a kinematic paddle, all drawn as the unit
+// cube.
+static void InitPhysicsDemo(Fenrir::App& app)
+{
+    Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+    const Fenrir::Math::Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+
+    Fenrir::Entity physicsRoot = entityList.CreateEntity();
+    physicsRoot.GetComponent<Fenrir::Name>().Set("Physics");
+
+    Fenrir::Entity ground = entityList.CreateEntity();
+    ground.GetComponent<Fenrir::Name>().Set("Ground");
+    ground.GetComponent<Fenrir::Transform>() =
+        Fenrir::Transform(Fenrir::Math::Vec3(0.0f, -4.0f, -12.0f), identity, Fenrir::Math::Vec3(16.0f, 0.5f, 16.0f));
+    ground.AddComponent<Fenrir::Collider>(); // no RigidBody: static
+    ground.AddComponent<Material>(Material{lightShader});
+    ground.AddComponent<Model>(cube);
+    physicsRoot.AddChild(ground);
+
+    for (int i = 0; i < 8; ++i)
+    {
+        Fenrir::Entity box = entityList.CreateEntity();
+        box.GetComponent<Fenrir::Name>().Set(("Box " + std::to_string(i)).c_str());
+        const float tilt = 0.3f * static_cast<float>(i);
+        box.GetComponent<Fenrir::Transform>() = Fenrir::Transform(
+            Fenrir::Math::Vec3(0.3f * static_cast<float>(i % 3) - 0.3f, 1.5f * static_cast<float>(i), -12.0f),
+            Fenrir::Math::AngleAxis(tilt, Fenrir::Math::Normalized(Fenrir::Math::Vec3(1.0f, 1.0f, 0.0f))),
+            Fenrir::Math::Vec3(1.0f));
+        box.AddComponent<Fenrir::RigidBody>();
+        box.AddComponent<Fenrir::Collider>();
+        box.AddComponent<Material>(Material{lightShader});
+        box.AddComponent<Model>(cube);
+        physicsRoot.AddChild(box);
+    }
+
+    // Kinematic: moved by game code in Tick, pushes the boxes, is not pushed.
+    Fenrir::Entity paddle = entityList.CreateEntity();
+    paddle.GetComponent<Fenrir::Name>().Set("Paddle");
+    paddle.GetComponent<Fenrir::Transform>() =
+        Fenrir::Transform(Fenrir::Math::Vec3(-6.0f, -3.0f, -12.0f), identity, Fenrir::Math::Vec3(1.0f, 1.0f, 4.0f));
+    paddle.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
+    paddle.AddComponent<Fenrir::Collider>();
+    paddle.AddComponent<Material>(Material{lightShader});
+    paddle.AddComponent<Model>(cube);
+    physicsRoot.AddChild(paddle);
+}
+
+// PROTOTYPE (physics spike): game code in Tick sweeps the paddle back and forth.
+static void MovePaddle(Fenrir::App& app)
+{
+    static double time = 0.0;
+    time += app.GetTime().tickRate;
+    app.GetActiveScene().GetEntityList().ForEach<Fenrir::Name, Fenrir::Transform>(
+        [](Fenrir::Name& name, Fenrir::Transform& transform) {
+            if (std::string_view(name.Get()) == "Paddle")
+            {
+                transform.pos.x = static_cast<float>(-6.0 + 12.0 * (0.5 + 0.5 * std::sin(time * 0.5)));
+            }
+        });
+}
+#endif
 
 static void InitBackpacks(Fenrir::App& app)
 {
@@ -352,9 +419,17 @@ int main(int argc, char* argv[])
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly};
     ScriptingDemo::Share(scriptingConfig); // The component and events C++ and C# share.
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
-    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just wrote.
+    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just
+    // wrote.
     app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
                              {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
+#endif
+
+#ifdef FENRIR_PHYSICS
+    // PROTOTYPE (physics spike): declared after the app, so worlds and the backend go before the app does.
+    auto physics = Fenrir::Physics::Install(app);
+    app.AddSystems(Fenrir::SchedulePriority::PostInit, {InitPhysicsDemo})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick, {MovePaddle});
 #endif
 
     Fenrir::Camera camera;

@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <type_traits>
@@ -17,6 +18,87 @@ namespace Fenrir
 {
     class Entity;
     class EntityList;
+
+    /**
+     * PROTOTYPE (physics spike): a record of every add and remove of one native component type, in order, until
+     * drained. Native types only, and EnTT shows through this header (the real one hides it, ADR-0008).
+     */
+    class ComponentWatch
+    {
+      public:
+        enum class Kind : std::uint8_t
+        {
+            Added,
+            Removed
+        };
+
+        struct Change
+        {
+            std::uint32_t entity;
+            Kind kind;
+        };
+
+        ComponentWatch() = default;
+        ComponentWatch(const ComponentWatch&) = delete;
+        ComponentWatch& operator=(const ComponentWatch&) = delete;
+
+        ComponentWatch(ComponentWatch&& other) noexcept
+            : m_recorder(std::move(other.m_recorder)), m_disconnect(std::exchange(other.m_disconnect, nullptr))
+        {
+        }
+
+        ComponentWatch& operator=(ComponentWatch&& other) noexcept
+        {
+            if (this != &other)
+            {
+                Disconnect();
+                m_recorder = std::move(other.m_recorder);
+                m_disconnect = std::exchange(other.m_disconnect, nullptr);
+            }
+            return *this;
+        }
+
+        ~ComponentWatch()
+        {
+            Disconnect();
+        }
+
+        /** @brief The changes since the last drain, oldest first; the record is emptied. */
+        std::vector<Change> Drain()
+        {
+            return m_recorder ? std::exchange(m_recorder->changes, {}) : std::vector<Change>{};
+        }
+
+      private:
+        struct Recorder
+        {
+            std::vector<Change> changes;
+
+            void OnAdded(entt::registry&, entt::entity entity)
+            {
+                changes.push_back({static_cast<std::uint32_t>(entity), Kind::Added});
+            }
+
+            void OnRemoved(entt::registry&, entt::entity entity)
+            {
+                changes.push_back({static_cast<std::uint32_t>(entity), Kind::Removed});
+            }
+        };
+
+        void Disconnect()
+        {
+            if (m_disconnect)
+            {
+                m_disconnect();
+                m_disconnect = nullptr;
+            }
+        }
+
+        std::unique_ptr<Recorder> m_recorder;
+        std::function<void()> m_disconnect;
+
+        friend class EntityList;
+    };
 
     /**
      * @brief EntityList which serves as a container for all entities and components
@@ -190,6 +272,23 @@ namespace Fenrir
 
         /** @brief How many different kinds of component this list is holding storage for. A diagnostic, mostly. */
         [[nodiscard]] std::size_t ComponentStorageCount() const;
+
+        /** PROTOTYPE (physics spike): start recording adds and removes of native component type T. */
+        template <typename T>
+        [[nodiscard]] ComponentWatch Watch()
+        {
+            ComponentWatch watch;
+            watch.m_recorder = std::make_unique<ComponentWatch::Recorder>();
+            ComponentWatch::Recorder* recorder = watch.m_recorder.get();
+            entt::registry* registry = &m_registry;
+            registry->on_construct<T>().template connect<&ComponentWatch::Recorder::OnAdded>(*recorder);
+            registry->on_destroy<T>().template connect<&ComponentWatch::Recorder::OnRemoved>(*recorder);
+            watch.m_disconnect = [registry, recorder] {
+                registry->on_construct<T>().disconnect(recorder);
+                registry->on_destroy<T>().disconnect(recorder);
+            };
+            return watch;
+        }
 
       private:
         entt::registry m_registry;

@@ -12,6 +12,7 @@ namespace Fenrir
         double deltaTime = 0.0;
         double tickRate = 1.0 / 60.0;
         double accumulator = 0.0;
+        int maxTicksPerFrame = 5; // PROTOTYPE (physics spike): time owed beyond this many ticks is dropped
 
         /**
          * @brief update the time

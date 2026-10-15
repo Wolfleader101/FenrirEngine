@@ -24,7 +24,9 @@ namespace Fenrir
         Init,
         PostInit,
         PreUpdate,
+        PreTick, // PROTOTYPE (physics spike): runs once per fixed step, before Tick
         Tick,
+        PostTick, // PROTOTYPE (physics spike): runs once per fixed step, after Tick (physics steps here)
         Update,
         PostUpdate,
         // CreateScene,

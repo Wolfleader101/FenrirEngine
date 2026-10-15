@@ -160,11 +160,24 @@ namespace Fenrir
 
             m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
 
+            // PROTOTYPE (physics spike): PreTick/Tick/PostTick per fixed step, and a cap on ticks per frame.
+            int ticks = 0;
             while (m_time.accumulator >= m_time.tickRate)
             {
+                if (ticks == m_time.maxTicksPerFrame)
+                {
+                    m_logger->Warn("Dropping {0}s of simulation time: more than {1} ticks owed in one frame",
+                                   m_time.accumulator, m_time.maxTicksPerFrame);
+                    m_time.accumulator = 0.0;
+                    break;
+                }
+
+                m_scheduler.RunSystems(*this, SchedulePriority::PreTick);
                 m_scheduler.RunSystems(*this, SchedulePriority::Tick);
+                m_scheduler.RunSystems(*this, SchedulePriority::PostTick);
 
                 m_time.accumulator -= m_time.tickRate;
+                ++ticks;
             }
 
             m_scheduler.RunSystems(*this, SchedulePriority::Update);
