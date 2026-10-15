@@ -43,16 +43,19 @@ namespace Fenrir
 
     void App::UpdateEvents()
     {
-        const bool swap = m_tickedSinceSwap;
+        if (!m_tickedSinceSwap)
+        {
+            return;
+        }
         m_tickedSinceSwap = false;
         const std::lock_guard lock(m_eventQueuesMutex);
         for (auto& [type, queue] : m_eventQueues)
         {
-            queue->EndFrame(swap);
+            queue->Swap();
         }
         for (auto& [name, queue] : m_byteEventQueues)
         {
-            queue->EndFrame(swap);
+            queue->Swap();
         }
     }
 
@@ -67,19 +70,13 @@ namespace Fenrir
             {
             }
 
-            void EndFrame(bool swapBuffers) override
+            void Swap() override
             {
                 const std::size_t sent = m_currentStart + m_current.size() / m_size;
-                m_lastFrameStart = m_thisFrameStart;
-                m_thisFrameStart = sent;
-                if (swapBuffers)
-                {
-                    m_previous.clear();
-                    std::swap(m_current, m_previous);
-                    m_previousStart = m_currentStart;
-                    m_currentStart = sent;
-                }
-                m_dirty = true;
+                m_previous.clear();
+                std::swap(m_current, m_previous);
+                m_previousStart = m_currentStart;
+                m_currentStart = sent;
             }
 
             [[nodiscard]] std::size_t EventSize() const noexcept override
@@ -108,6 +105,10 @@ namespace Fenrir
             {
                 const std::size_t previousCount = m_previous.size() / m_size;
                 const std::size_t currentCount = m_current.size() / m_size;
+                if (seen == NewReaderCursor)
+                {
+                    seen = m_previousStart;
+                }
                 const std::size_t from = std::max(seen, m_previousStart);
                 const std::size_t olderSkip = std::min(from - m_previousStart, previousCount);
                 const std::size_t newerSkip = std::min(from > m_currentStart ? from - m_currentStart : 0, currentCount);
@@ -121,50 +122,19 @@ namespace Fenrir
                 return range;
             }
 
-            [[nodiscard]] RawEvents ReadRaw() const override
-            {
-                // Rebuilt only when something changed, so a view handed out earlier stays good while nothing is sent.
-                if (m_dirty)
-                {
-                    // The buffers hold at least the last two frames (they swap at most once a frame); skip anything
-                    // older.
-                    std::size_t skip = (m_lastFrameStart - m_previousStart) * m_size;
-                    m_combined.clear();
-                    if (skip < m_previous.size())
-                    {
-                        m_combined.insert(m_combined.end(), m_previous.begin() + static_cast<std::ptrdiff_t>(skip),
-                                          m_previous.end());
-                        skip = 0;
-                    }
-                    else
-                    {
-                        skip -= m_previous.size();
-                    }
-                    m_combined.insert(m_combined.end(), m_current.begin() + static_cast<std::ptrdiff_t>(skip),
-                                      m_current.end());
-                    m_dirty = false;
-                }
-                return {m_combined.data(), m_combined.size() / m_size};
-            }
-
           private:
             void Append(const std::byte* bytes)
             {
                 m_current.insert(m_current.end(), bytes, bytes + m_size);
-                m_dirty = true;
             }
 
             std::size_t m_size;
             std::size_t m_alignment;
             std::vector<std::byte> m_current;
             std::vector<std::byte> m_previous;
-            mutable std::vector<std::byte> m_combined;
-            mutable bool m_dirty = true;
-            // How many events were sent before each buffer's first, and before the previous frame and this one.
+            // How many events were sent to this queue before the first event of each buffer.
             std::size_t m_previousStart = 0;
             std::size_t m_currentStart = 0;
-            std::size_t m_lastFrameStart = 0;
-            std::size_t m_thisFrameStart = 0;
         };
     } // namespace
 
