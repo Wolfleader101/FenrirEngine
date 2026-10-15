@@ -89,9 +89,30 @@ namespace Fenrir
             bool SendRaw(const void* event) override
             {
                 const auto* bytes = static_cast<const std::byte*>(event);
-                m_current.insert(m_current.end(), bytes, bytes + m_size);
-                m_dirty = true;
+                if (SendBuffer* buffer = SendBuffer::OfThisThread())
+                {
+                    buffer->Add([this, copy = std::vector<std::byte>(bytes, bytes + m_size)] { Append(copy.data()); });
+                    return true;
+                }
+                Append(bytes);
                 return true;
+            }
+
+            [[nodiscard]] RawEventRange ReadRawAfter(std::size_t& seen) const override
+            {
+                const std::size_t previousCount = m_previous.size() / m_size;
+                const std::size_t currentCount = m_current.size() / m_size;
+                const std::size_t from = std::max(seen, m_previousStart);
+                const std::size_t olderSkip = std::min(from - m_previousStart, previousCount);
+                const std::size_t newerSkip = std::min(from > m_currentStart ? from - m_currentStart : 0, currentCount);
+                RawEventRange range;
+                range.older = m_previous.data() + olderSkip * m_size;
+                range.olderCount = previousCount - olderSkip;
+                range.newer = m_current.data() + newerSkip * m_size;
+                range.newerCount = currentCount - newerSkip;
+                range.missed = m_previousStart > seen ? m_previousStart - seen : 0;
+                seen = m_currentStart + currentCount;
+                return range;
             }
 
             [[nodiscard]] RawEvents ReadRaw() const override
@@ -121,6 +142,12 @@ namespace Fenrir
             }
 
           private:
+            void Append(const std::byte* bytes)
+            {
+                m_current.insert(m_current.end(), bytes, bytes + m_size);
+                m_dirty = true;
+            }
+
             std::size_t m_size;
             std::size_t m_alignment;
             std::vector<std::byte> m_current;

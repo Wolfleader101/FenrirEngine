@@ -112,19 +112,14 @@ namespace ScriptingDemo
         });
     }
 
-    // Logs every burst C# sends. An event stays readable for two frames (this frame's and last frame's), so a reader that wants
-    // each event once remembers how many of the events it can see are this frame's.
+    // Logs every burst C# sends, once each: the system's own reader remembers which it has seen.
     inline Fenrir::SystemFunc LogBursts()
     {
-        auto lastFrameCount = std::make_shared<std::size_t>(0);
-        return [lastFrameCount](Fenrir::App& app) {
-            const auto& bursts = app.ReadEvents<BurstEvent>();
-            const std::size_t thisFrame = bursts.size() >= *lastFrameCount ? bursts.size() - *lastFrameCount : 0;
-            for (std::size_t index = bursts.size() - thisFrame; index < bursts.size(); ++index)
+        return [bursts = Fenrir::EventReader<BurstEvent>{}](Fenrir::App& app) mutable {
+            for (const BurstEvent& burst : bursts.Read(app))
             {
-                app.Logger()->Info("C++ saw a burst of {} sparks sent from C#.", bursts[index].Count);
+                app.Logger()->Info("C++ saw a burst of {} sparks sent from C#.", burst.Count);
             }
-            *lastFrameCount = thisFrame;
         };
     }
 

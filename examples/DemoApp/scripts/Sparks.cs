@@ -25,16 +25,14 @@ public struct Expired : IEvent
 [System(Phase.Update, Order = 30)]
 public sealed class Spawner : ISystem
 {
-    private FreshEvents fresh;
+    private readonly EventReader<Burst> bursts = new();
     private int next = 1;
 
     public void OnUpdate(in SystemContext context)
     {
-        var bursts = context.Events.Read<Burst>();
-        int first = bursts.Count - fresh.Next(bursts.Count);
-        for (int index = first; index < bursts.Count; index++)
+        foreach (var burst in bursts.Read())
         {
-            for (int spark = 0; spark < bursts[index].Count; spark++)
+            for (int spark = 0; spark < burst.Count; spark++)
             {
                 // The entity can be used straight away, but it only exists for the rest of the engine, and has its Transform and
                 // Name, when this system returns.
@@ -89,13 +87,11 @@ public sealed class Reaper : ISystem
 [System(Phase.Update, Order = 40)]
 public sealed class SparkLog : ISystem
 {
-    private FreshEvents fresh;
+    private readonly EventReader<Expired> expired = new();
 
     public void OnUpdate(in SystemContext context)
     {
-        var expired = context.Events.Read<Expired>();
-        int first = expired.Count - fresh.Next(expired.Count);
-        for (int index = first; index < expired.Count; index++)
-            context.Log.Info($"Spark {expired[index].Number} burnt out.");
+        foreach (var spark in expired.Read())
+            context.Log.Info($"Spark {spark.Number} burnt out.");
     }
 }
