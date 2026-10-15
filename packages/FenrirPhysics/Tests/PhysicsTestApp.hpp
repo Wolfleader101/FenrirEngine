@@ -3,7 +3,9 @@
 // What the physics tests share: an App with no console output, and helpers that build bodies and run frames.
 
 #include <memory>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -12,10 +14,15 @@
 
 namespace PhysicsTest
 {
-    // A second ConsoleLogger in one process throws (its spdlog name is taken), so the tests log nowhere.
+    // A second ConsoleLogger in one process throws (its spdlog name is taken), so the tests log nowhere. Warnings
+    // are recorded when there is somewhere to put them.
     class SilentLogger final : public Fenrir::ILogger
     {
       public:
+        explicit SilentLogger(std::vector<std::string>* warnings = nullptr) : m_warnings(warnings)
+        {
+        }
+
         void AddLogger(std::shared_ptr<ILogger>) override
         {
         }
@@ -30,8 +37,12 @@ namespace PhysicsTest
         void InfoImpl(std::string_view) override
         {
         }
-        void WarnImpl(std::string_view) override
+        void WarnImpl(std::string_view message) override
         {
+            if (m_warnings != nullptr)
+            {
+                m_warnings->emplace_back(message);
+            }
         }
         void ErrorImpl(std::string_view) override
         {
@@ -39,6 +50,9 @@ namespace PhysicsTest
         void FatalImpl(std::string_view) override
         {
         }
+
+      private:
+        std::vector<std::string>* m_warnings;
     };
 
     inline constexpr double tick = 1.0 / 60.0;
@@ -52,7 +66,9 @@ namespace PhysicsTest
     /** An App with physics installed. The members end in reverse order: physics before the app. */
     struct PhysicsApp
     {
-        Fenrir::App app{std::make_unique<SilentLogger>()};
+        /** Every warning logged, in order. */
+        std::vector<std::string> warnings;
+        Fenrir::App app{std::make_unique<SilentLogger>(&warnings)};
         Fenrir::Physics physics = Fenrir::Physics::Install(app);
 
         Fenrir::EntityList& Entities()

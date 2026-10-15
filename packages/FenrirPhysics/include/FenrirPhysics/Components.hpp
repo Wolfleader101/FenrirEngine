@@ -42,7 +42,10 @@ namespace Fenrir
         Math::Vec3 angularVelocity = Math::Vec3(0.0f);
     };
 
-    /** @brief A box centred on its entity, `halfExtents` from the centre to each face before the entity's scale. */
+    /**
+     * @brief A box centred on its entity, `halfExtents` from the centre to each face before the entity's scale, which
+     * applies per axis. Its edges are rounded slightly (by at most 0.05, less for a thin box).
+     */
     struct BoxShape
     {
         Math::Vec3 halfExtents = Math::Vec3(0.5f);
@@ -54,11 +57,59 @@ namespace Fenrir
         float radius = 0.5f;
     };
 
+    /**
+     * @brief A capsule centred on its entity and standing along its local y axis: a cylinder `2 * halfHeight` tall,
+     * capped by hemispheres of `radius`, so `2 * (halfHeight + radius)` tall in all. Scale stretches `halfHeight` by
+     * the entity's y scale and `radius` by the larger of its x and z scales.
+     */
+    struct CapsuleShape
+    {
+        float halfHeight = 0.5f;
+        float radius = 0.5f;
+    };
+
+    /**
+     * @brief A handle to a collision mesh: vertex and index data FenrirPhysics cooked once
+     * (Physics::CreateCollisionMesh) and colliders share. Plain data; copying it does not keep the mesh alive. Valid
+     * until released (Physics::ReleaseCollisionMesh); a released handle is never handed out again. The default handle
+     * refers to no mesh.
+     */
+    struct CollisionMesh
+    {
+        std::uint64_t id = 0;
+
+        friend bool operator==(const CollisionMesh&, const CollisionMesh&) = default;
+    };
+
+    /**
+     * @brief The convex hull of a collision mesh's vertices (its indices are not used), placed on its entity as the
+     * vertices are placed about the origin. Scale is applied per axis, mirroring included.
+     */
+    struct ConvexHullShape
+    {
+        CollisionMesh hull;
+    };
+
+    /**
+     * @brief A collision mesh's triangles, as they are placed about the origin. Scale is applied per axis, mirroring
+     * included. Triangles collide on their front face only (counter-clockwise when seen from in front).
+     *
+     * A triangle mesh has no volume: on a dynamic body it is weighed as the solid box of its bounds, and two triangle
+     * meshes never collide with each other. Prefer it for static level geometry, and a hull for anything that moves.
+     */
+    struct MeshShape
+    {
+        CollisionMesh mesh;
+    };
+
     /** @brief Which kind of shape a CollisionShape holds. */
     enum class ShapeType : std::uint8_t
     {
         Box,
-        Sphere
+        Sphere,
+        Capsule,
+        ConvexHull,
+        Mesh
     };
 
     /**
@@ -86,13 +137,29 @@ namespace Fenrir
         {
         }
 
+        /** @brief A capsule. Implicit, so a capsule can be assigned where a shape is wanted. */
+        CollisionShape(CapsuleShape capsule) : m_type(ShapeType::Capsule), m_capsule(capsule)
+        {
+        }
+
+        /** @brief A convex hull. Implicit, so a hull can be assigned where a shape is wanted. */
+        CollisionShape(ConvexHullShape hull) : m_type(ShapeType::ConvexHull), m_hull(hull)
+        {
+        }
+
+        /** @brief A triangle mesh. Implicit, so a mesh can be assigned where a shape is wanted. */
+        CollisionShape(MeshShape mesh) : m_type(ShapeType::Mesh), m_mesh(mesh)
+        {
+        }
+
         /** @brief The kind of shape held. */
         [[nodiscard]] ShapeType Type() const
         {
             return m_type;
         }
 
-        /** @brief Whether the shape is of kind `T` (BoxShape, SphereShape). */
+        /** @brief Whether the shape is of kind `T` (BoxShape, SphereShape, CapsuleShape, ConvexHullShape, MeshShape).
+         */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -123,10 +190,23 @@ namespace Fenrir
             {
                 return ShapeType::Box;
             }
+            else if constexpr (std::is_same_v<T, SphereShape>)
+            {
+                return ShapeType::Sphere;
+            }
+            else if constexpr (std::is_same_v<T, CapsuleShape>)
+            {
+                return ShapeType::Capsule;
+            }
+            else if constexpr (std::is_same_v<T, ConvexHullShape>)
+            {
+                return ShapeType::ConvexHull;
+            }
             else
             {
-                static_assert(std::is_same_v<T, SphereShape>, "CollisionShape holds BoxShape or SphereShape");
-                return ShapeType::Sphere;
+                static_assert(std::is_same_v<T, MeshShape>, "CollisionShape holds BoxShape, SphereShape, CapsuleShape, "
+                                                            "ConvexHullShape or MeshShape");
+                return ShapeType::Mesh;
             }
         }
 
@@ -137,9 +217,21 @@ namespace Fenrir
             {
                 return self.m_box;
             }
-            else
+            else if constexpr (TypeOf<T>() == ShapeType::Sphere)
             {
                 return self.m_sphere;
+            }
+            else if constexpr (TypeOf<T>() == ShapeType::Capsule)
+            {
+                return self.m_capsule;
+            }
+            else if constexpr (TypeOf<T>() == ShapeType::ConvexHull)
+            {
+                return self.m_hull;
+            }
+            else
+            {
+                return self.m_mesh;
             }
         }
 
@@ -147,12 +239,20 @@ namespace Fenrir
         union {
             BoxShape m_box;
             SphereShape m_sphere;
+            CapsuleShape m_capsule;
+            ConvexHullShape m_hull;
+            MeshShape m_mesh;
         };
     };
 
     /**
      * @brief Gives the entity collision geometry, placed at its world transform and scaled by its world scale. Without
      * a RigidBody the collider is static.
+     *
+     * The scale is baked into the backend's shape, so changing the shape's dimensions or the entity's scale rebuilds
+     * that shape on the next tick: fine occasionally, costly every tick. Each kind's shape documents how it takes a
+     * non-uniform scale. A box, sphere or capsule is never thinner than 0.001 in any dimension once scaled (a zero size
+     * is clamped to that). Colliders whose box, sphere or capsule is identical once scaled share one backend shape.
      */
     struct Collider
     {
