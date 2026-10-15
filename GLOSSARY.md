@@ -107,7 +107,11 @@ Logic that runs once per frame phase over the entities a query selects. Native s
 *Avoid:* script, behaviour, manager.
 
 **Event**
-Plain data one system sends and others read, kept in a queue with two buffers: a read sees the current frame's events and the previous frame's. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
+Plain data one system sends and others read. Each reader sees each event once, including events sent after it last ran, as long as it reads at least once every two frames (ADR-0012). C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
+
+**Event reader**
+What a system reads events through: it remembers which events of one kind it has already seen, so each reaches it once.
+*Avoid:* listener, subscriber (nothing is called when an event is sent).
 
 **Query**
 A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
