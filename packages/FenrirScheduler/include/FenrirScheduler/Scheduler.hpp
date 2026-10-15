@@ -18,13 +18,19 @@ namespace Fenrir
     // when adding a system it should also have a priority, and what functions it should hook into
 
     // schedule should just be an enum
+    // A frame runs PreUpdate, BeforeTicks once, then PreTick, Tick and PostTick once per fixed step (zero or more
+    // times), then AfterTicks once (even with no tick), Update and PostUpdate.
     enum class SchedulePriority
     {
         PreInit,
         Init,
         PostInit,
         PreUpdate,
+        BeforeTicks,
+        PreTick,
         Tick,
+        PostTick,
+        AfterTicks,
         Update,
         PostUpdate,
         // CreateScene,
