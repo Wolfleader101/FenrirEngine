@@ -184,12 +184,29 @@ namespace Fenrir
 
         m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
 
-        while (m_time.accumulator >= m_time.tickRate)
+        m_scheduler.RunSystems(*this, SchedulePriority::BeforeTicks);
+
+        int ticks = 0;
+        while (m_time.accumulator >= m_time.tickRate && ticks < m_time.maxTicksPerFrame)
         {
+            m_scheduler.RunSystems(*this, SchedulePriority::PreTick);
             m_scheduler.RunSystems(*this, SchedulePriority::Tick);
+            m_scheduler.RunSystems(*this, SchedulePriority::PostTick);
 
             m_time.accumulator -= m_time.tickRate;
+            ++ticks;
         }
+
+        // Still owing a whole tick after the cap: drop everything owed, so a slow frame cannot make the next one
+        // slower still.
+        if (m_time.accumulator >= m_time.tickRate)
+        {
+            m_logger->Warn("A frame owed more than {} ticks; dropped {:.4f} s of simulation time",
+                           m_time.maxTicksPerFrame, m_time.accumulator);
+            m_time.accumulator = 0.0;
+        }
+
+        m_scheduler.RunSystems(*this, SchedulePriority::AfterTicks);
 
         m_scheduler.RunSystems(*this, SchedulePriority::Update);
 
