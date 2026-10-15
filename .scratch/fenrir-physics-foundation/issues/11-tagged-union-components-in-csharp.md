@@ -4,10 +4,12 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] A test native component with a tagged union (described with `IRIS_FIELD_AS`) validates against its C# mirror when the script assembly loads.
 - [ ] A fixture C# system assigns a kind by value, edits a field through its view, and C++ reads the new kind and values (round trip both ways).
 - [ ] Reading a view for the wrong kind throws `InvalidOperationException` in C#.
 - [ ] A mirror with a wrong offset or a wrong field name is rejected at load with a diagnostic naming the field.
 - [ ] FenrirScripting's README documents the pattern, including that script-defined components may use it by hand.
+
+**Resolved by:** merge of impl/11-tagged-unions (f849008)
