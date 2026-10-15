@@ -82,7 +82,7 @@ void GLRenderer::OnWindowFrameBufferResize(const WindowFrameBufferResizeEvent& e
 
 void GLRenderer::Update(Fenrir::App& app)
 {
-    for (const auto& event : app.ReadEvents<WindowFrameBufferResizeEvent>())
+    for (const auto& event : m_resizeReader.Read(app))
     {
         OnWindowFrameBufferResize(event);
     }
