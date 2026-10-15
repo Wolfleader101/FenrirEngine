@@ -8,6 +8,7 @@
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
@@ -68,6 +69,196 @@ struct Iris::StructMapping<TestNative::FloatHealth>
     static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Health";
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD(TestNative::FloatHealth, Current), IRIS_FIELD(TestNative::FloatHealth, Max));
+};
+
+// A component holding a tagged union, shaped like FenrirPhysics's Collider and CollisionShape: a private tag and
+// overlapping storage for one of several kinds, implicit conversions from each kind and a checked view.
+namespace TestNative
+{
+    struct Vec3
+    {
+        float X, Y, Z;
+    };
+
+    enum class ShapeType : std::int32_t
+    {
+        Box,
+        Sphere,
+    };
+
+    struct BoxShape
+    {
+        Vec3 HalfExtents;
+    };
+
+    struct SphereShape
+    {
+        float Radius;
+    };
+
+    class Shape
+    {
+      public:
+        Shape() : m_box{}
+        {
+        }
+        Shape(BoxShape box) : m_type(ShapeType::Box), m_box(box) // NOLINT(google-explicit-constructor)
+        {
+        }
+        Shape(SphereShape sphere) : m_type(ShapeType::Sphere), m_sphere(sphere) // NOLINT(google-explicit-constructor)
+        {
+        }
+
+        [[nodiscard]] ShapeType Type() const
+        {
+            return m_type;
+        }
+
+        template <typename T>
+        [[nodiscard]] bool Is() const
+        {
+            if constexpr (std::is_same_v<T, BoxShape>)
+            {
+                return m_type == ShapeType::Box;
+            }
+            else
+            {
+                static_assert(std::is_same_v<T, SphereShape>, "A Shape is a BoxShape or a SphereShape.");
+                return m_type == ShapeType::Sphere;
+            }
+        }
+
+        // The shape as kind T, which it must be.
+        template <typename T>
+        [[nodiscard]] T& As()
+        {
+            assert(Is<T>());
+            if constexpr (std::is_same_v<T, BoxShape>)
+            {
+                return m_box;
+            }
+            else
+            {
+                return m_sphere;
+            }
+        }
+
+      private:
+        // The mapping names the private members, as FenrirPhysics's does.
+        friend struct Iris::StructMapping<Shape>;
+
+        ShapeType m_type = ShapeType::Box;
+        union {
+            BoxShape m_box;
+            SphereShape m_sphere;
+        };
+    };
+
+    struct Collider
+    {
+        Shape shape;
+    };
+
+    // The same layout as Shape and Collider, mapped to the fixture's deliberately wrong C# mirrors (one per variant).
+    template <int Variant>
+    struct ShapeLayout
+    {
+        ShapeType type;
+        union {
+            BoxShape box;
+            SphereShape sphere;
+        };
+    };
+
+    template <int Variant>
+    struct ColliderLayout
+    {
+        ShapeLayout<Variant> shape;
+    };
+
+    constexpr int Misplaced = 1; // C#'s _sphere is not where the union is
+    constexpr int Misnamed = 2;  // C# calls the sphere something else
+} // namespace TestNative
+
+template <>
+struct Iris::EnumMapping<TestNative::ShapeType>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.ShapeType";
+};
+
+template <>
+struct Iris::StructMapping<TestNative::Vec3>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Vec3";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestNative::Vec3, X), IRIS_FIELD(TestNative::Vec3, Y),
+                                                      IRIS_FIELD(TestNative::Vec3, Z));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::BoxShape>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.BoxShape";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestNative::BoxShape, HalfExtents));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::SphereShape>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.SphereShape";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestNative::SphereShape, Radius));
+};
+
+// The tag and every kind, in declaration order, each kind at the union's offset.
+template <>
+struct Iris::StructMapping<TestNative::Shape>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Shape";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::Shape, m_type, "_type"),
+                                                      IRIS_FIELD_AS(TestNative::Shape, m_box, "_box"),
+                                                      IRIS_FIELD_AS(TestNative::Shape, m_sphere, "_sphere"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::Collider>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Collider";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::Collider, shape, "Shape"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::ShapeLayout<TestNative::Misplaced>>
+{
+    using Layout = TestNative::ShapeLayout<TestNative::Misplaced>;
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.MisplacedShape";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, type, "_type"), IRIS_FIELD_AS(Layout, box, "_box"),
+                           IRIS_FIELD_AS(Layout, sphere, "_sphere"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::ColliderLayout<TestNative::Misplaced>>
+{
+    using Layout = TestNative::ColliderLayout<TestNative::Misplaced>;
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.MisplacedCollider";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Layout, shape, "Shape"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::ShapeLayout<TestNative::Misnamed>>
+{
+    using Layout = TestNative::ShapeLayout<TestNative::Misnamed>;
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.MisnamedShape";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, type, "_type"), IRIS_FIELD_AS(Layout, box, "_box"),
+                           IRIS_FIELD_AS(Layout, sphere, "_sphere"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::ColliderLayout<TestNative::Misnamed>>
+{
+    using Layout = TestNative::ColliderLayout<TestNative::Misnamed>;
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.MisnamedCollider";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Layout, shape, "Shape"));
 };
 
 // Events the tests register from outside FenrirScripting, and a deliberately wrong mapping of the same C# struct.
@@ -1034,6 +1225,126 @@ namespace
             REQUIRE((headless.Logger().Contains(LogLevel::Error, "Test.FloatHealth") &&
                      headless.Logger().Contains(LogLevel::Error, "'Current'")));
         }
+    }
+
+    // ---- a native component holding a tagged union
+
+    // Every error logged, for a failure message.
+    std::string Errors(const HeadlessApp& headless)
+    {
+        std::string errors;
+        for (const auto& message : headless.Logger().Messages())
+        {
+            if (message.level == LogLevel::Error)
+            {
+                errors += message.text + "\n";
+            }
+        }
+        return errors;
+    }
+
+    void ANativeTaggedUnionValidatesAgainstItsCSharpMirror()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(),
+                                            ConfigFor(fixture, {MakeComponent<TestNative::Collider>("Test.Collider")}));
+        {
+            INFO("The tagged union was refused: " + Errors(headless));
+            REQUIRE((scripting.HasScripts() && scripting.FindComponent("Test.Collider") != nullptr));
+        }
+    }
+
+    constexpr const char* ShapeProbeType = "Fenrir.ScriptFixture.ShapeProbe";
+
+    // A C# system finds a sphere (set here), reads its radius, makes it a box by assigning the kind by value, and edits
+    // the box through its view; reading the box view of the sphere first throws.
+    void ATaggedUnionRoundTripsThroughACSharpSystem()
+    {
+        HeadlessApp headless;
+        // Scripting is released in the Exit phase, so what C# saw is read by an Exit system registered first.
+        Scripting* installed = nullptr;
+        float seenRadius = -1.0F;
+        headless.Get().AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+                                                seenRadius = CallIn<float>(ShapeProbeType, *installed, "SeenRadius");
+                                            }});
+        auto scripting = Scripting::Install(headless.Get(),
+                                            ConfigFor(fixture, {MakeComponent<TestNative::Collider>("Test.Collider")}));
+        installed = &scripting;
+        {
+            INFO("The tagged union was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto entity = headless.Get().GetActiveScene().GetEntityList().CreateEntity();
+        entity.AddComponent<TestNative::Collider>().shape = TestNative::SphereShape{0.25F};
+        CallIn<void>(ShapeProbeType, scripting, "Enable");
+
+        headless.Run(1);
+
+        {
+            INFO("C# did not read the sphere C++ wrote");
+            REQUIRE(seenRadius == 0.25F);
+        }
+        auto& shape = entity.GetComponent<TestNative::Collider>().shape;
+        {
+            INFO("The kind C# assigned did not reach C++");
+            REQUIRE(shape.Type() == TestNative::ShapeType::Box);
+        }
+        const auto halfExtents = shape.As<TestNative::BoxShape>().HalfExtents;
+        {
+            INFO("The box C# assigned and edited through its view did not reach C++");
+            REQUIRE((halfExtents.X == 1.0F && halfExtents.Y == 2.0F && halfExtents.Z == 1.0F));
+        }
+        {
+            INFO("The system failed: " + Errors(headless));
+            REQUIRE(Errors(headless).empty());
+        }
+    }
+
+    void ReadingATaggedUnionViewForTheWrongKindThrows()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        // The C# method reads a sphere's box view and returns the InvalidOperationException's message, or null.
+        const auto message = CallIn<std::optional<std::string>>(ShapeProbeType, scripting, "WrongKindMessage");
+        {
+            INFO("Reading a sphere as a box did not throw InvalidOperationException");
+            REQUIRE(message.has_value());
+        }
+        {
+            INFO("The exception did not say which kind the shape is: " + *message);
+            REQUIRE((message->find("Sphere") != std::string::npos && message->find("Box") != std::string::npos));
+        }
+    }
+
+    // Installs the fixture with a component whose C# mirror is wrong, and checks the load fails naming the component
+    // and the field (and, for an offset, where each side puts it).
+    void ExpectTheMirrorRefused(const ComponentRegistration& registration, const std::string& field,
+                                const std::string& detail)
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {registration}));
+        {
+            INFO("A wrong tagged-union mirror left scripts loaded");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The refusal did not name the component, the field and what is wrong: " + Errors(headless));
+            REQUIRE((headless.Logger().Contains(LogLevel::Error, registration.name) &&
+                     headless.Logger().Contains(LogLevel::Error, field) &&
+                     headless.Logger().Contains(LogLevel::Error, detail)));
+        }
+    }
+
+    void ATaggedUnionMirrorWithAWrongOffsetOrNameIsRefusedAtLoad()
+    {
+        // C#'s _sphere is at offset 8; the union is at 4.
+        ExpectTheMirrorRefused(MakeComponent<TestNative::Collider, TestNative::ColliderLayout<TestNative::Misplaced>>(
+                                   "Test.MisplacedCollider"),
+                               "'_sphere'", "offset 8 but the native field is at 4");
+        // C# calls the sphere _ball.
+        ExpectTheMirrorRefused(MakeComponent<TestNative::Collider, TestNative::ColliderLayout<TestNative::Misnamed>>(
+                                   "Test.MisnamedCollider"),
+                               "'_ball'", "'_sphere'");
     }
 
     // ---- components defined in C#
@@ -3745,6 +4056,26 @@ TEST_CASE("a duplicate script component is refused and leaves nothing behind", "
 TEST_CASE("a duplicate script event is refused and leaves nothing behind", "[scripting]")
 {
     ADuplicateScriptEventIsRefused();
+}
+
+TEST_CASE("a native tagged union validates against its C# mirror", "[scripting]")
+{
+    ANativeTaggedUnionValidatesAgainstItsCSharpMirror();
+}
+
+TEST_CASE("a tagged union round-trips through a C# system", "[scripting]")
+{
+    ATaggedUnionRoundTripsThroughACSharpSystem();
+}
+
+TEST_CASE("reading a tagged union's view for the wrong kind throws", "[scripting]")
+{
+    ReadingATaggedUnionViewForTheWrongKindThrows();
+}
+
+TEST_CASE("a tagged-union mirror with a wrong offset or name is refused at load", "[scripting]")
+{
+    ATaggedUnionMirrorWithAWrongOffsetOrNameIsRefusedAtLoad();
 }
 
 TEST_CASE("a wrong field type is caught too", "[scripting]")
