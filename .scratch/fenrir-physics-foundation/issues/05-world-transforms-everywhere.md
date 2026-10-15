@@ -4,10 +4,12 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `FenrirECSTests` pin: no parent returns the local transform; deep chains compose; a rotated parent rotates the child's offset; non-uniform scale composes component-wise; the matrix and the decomposed form agree except under shear (documented); `SetWorldTransform` then `GetWorldTransform` round-trips under rotated, scaled parents.
 - [ ] Composition follows the spec: `pos = parentPos + parentRot·(parentScale ⊙ localPos)`, `rot = parentRot·localRot`, `scale = parentScale ⊙ localScale`.
 - [ ] The DemoApp renderer draws with the world matrix; a child under a rotated parent renders in the right place (checked by hand).
 - [ ] Dragging a child with the editor gizmo moves it where it is dragged (checked by hand).
 - [ ] A scripting test reads and sets a child's world transform from C# and sees its own edit in the same system.
+
+**Resolved by:** merge of impl/05-world-transforms (73d0f41)
