@@ -37,13 +37,16 @@ namespace Fenrir
 
     void App::UpdateEvents()
     {
+        const bool swap = m_tickedSinceSwap;
+        m_tickedSinceSwap = false;
+        const std::lock_guard lock(m_eventQueuesMutex);
         for (auto& [type, queue] : m_eventQueues)
         {
-            queue->Update();
+            queue->EndFrame(swap);
         }
         for (auto& [name, queue] : m_byteEventQueues)
         {
-            queue->Update();
+            queue->EndFrame(swap);
         }
     }
 
@@ -58,10 +61,18 @@ namespace Fenrir
             {
             }
 
-            void Update() override
+            void EndFrame(bool swapBuffers) override
             {
-                m_previous.clear();
-                std::swap(m_current, m_previous);
+                const std::size_t sent = m_currentStart + m_current.size() / m_size;
+                m_lastFrameStart = m_thisFrameStart;
+                m_thisFrameStart = sent;
+                if (swapBuffers)
+                {
+                    m_previous.clear();
+                    std::swap(m_current, m_previous);
+                    m_previousStart = m_currentStart;
+                    m_currentStart = sent;
+                }
                 m_dirty = true;
             }
 
@@ -88,9 +99,22 @@ namespace Fenrir
                 // Rebuilt only when something changed, so a view handed out earlier stays good while nothing is sent.
                 if (m_dirty)
                 {
+                    // The buffers hold at least the last two frames (they swap at most once a frame); skip anything
+                    // older.
+                    std::size_t skip = (m_lastFrameStart - m_previousStart) * m_size;
                     m_combined.clear();
-                    m_combined.insert(m_combined.end(), m_previous.begin(), m_previous.end());
-                    m_combined.insert(m_combined.end(), m_current.begin(), m_current.end());
+                    if (skip < m_previous.size())
+                    {
+                        m_combined.insert(m_combined.end(), m_previous.begin() + static_cast<std::ptrdiff_t>(skip),
+                                          m_previous.end());
+                        skip = 0;
+                    }
+                    else
+                    {
+                        skip -= m_previous.size();
+                    }
+                    m_combined.insert(m_combined.end(), m_current.begin() + static_cast<std::ptrdiff_t>(skip),
+                                      m_current.end());
                     m_dirty = false;
                 }
                 return {m_combined.data(), m_combined.size() / m_size};
@@ -103,11 +127,17 @@ namespace Fenrir
             std::vector<std::byte> m_previous;
             mutable std::vector<std::byte> m_combined;
             mutable bool m_dirty = true;
+            // How many events were sent before each buffer's first, and before the previous frame and this one.
+            std::size_t m_previousStart = 0;
+            std::size_t m_currentStart = 0;
+            std::size_t m_lastFrameStart = 0;
+            std::size_t m_thisFrameStart = 0;
         };
     } // namespace
 
     bool App::BindEventName(std::string name, IEventQueue* queue)
     {
+        const std::lock_guard lock(m_eventQueuesMutex);
         if (name.empty() || m_byteEventQueues.contains(name))
         {
             return false;
@@ -118,6 +148,7 @@ namespace Fenrir
 
     IEventQueue* App::FindEventQueue(std::string_view name) const
     {
+        const std::lock_guard lock(m_eventQueuesMutex);
         const auto found = m_namedEventQueues.find(std::string(name));
         return found == m_namedEventQueues.end() ? nullptr : found->second;
     }
@@ -128,6 +159,7 @@ namespace Fenrir
         constexpr std::size_t maxAlignment = 16;
         const bool usable = !name.empty() && size > 0 && alignment > 0 && alignment <= maxAlignment &&
                             (alignment & (alignment - 1)) == 0 && size % alignment == 0;
+        const std::lock_guard lock(m_eventQueuesMutex);
         if (!usable || m_namedEventQueues.contains(name))
         {
             return nullptr;
@@ -142,6 +174,7 @@ namespace Fenrir
     bool App::RemoveEventQueue(std::string_view name)
     {
         const std::string key(name);
+        const std::lock_guard lock(m_eventQueuesMutex);
         if (m_byteEventQueues.erase(key) == 0)
         {
             return false;
@@ -195,6 +228,7 @@ namespace Fenrir
 
             m_time.accumulator -= m_time.tickRate;
             ++ticks;
+            m_tickedSinceSwap = true;
         }
 
         // Still owing a whole tick after the cap: drop everything owed, so a slow frame cannot make the next one

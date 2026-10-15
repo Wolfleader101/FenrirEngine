@@ -1,9 +1,49 @@
 #include "FenrirScheduler/Scheduler.hpp"
 
 #include <future>
+#include <utility>
 #include <vector>
 namespace Fenrir
 {
+    namespace
+    {
+        thread_local SendBuffer* t_sendBuffer = nullptr;
+
+        // Makes `buffer` this thread's send buffer while a parallel system runs, even if the system throws.
+        class SendBufferScope
+        {
+          public:
+            explicit SendBufferScope(SendBuffer& buffer)
+            {
+                t_sendBuffer = &buffer;
+            }
+            SendBufferScope(const SendBufferScope&) = delete;
+            SendBufferScope& operator=(const SendBufferScope&) = delete;
+            ~SendBufferScope()
+            {
+                t_sendBuffer = nullptr;
+            }
+        };
+    } // namespace
+
+    SendBuffer* SendBuffer::OfThisThread() noexcept
+    {
+        return t_sendBuffer;
+    }
+
+    void SendBuffer::Add(std::function<void()> send)
+    {
+        m_sends.push_back(std::move(send));
+    }
+
+    void SendBuffer::Flush()
+    {
+        for (const std::function<void()>& send : m_sends)
+        {
+            send();
+        }
+        m_sends.clear();
+    }
 
     Scheduler::Scheduler() : m_runOnceSystems(), m_systems(), m_threadPool(std::thread::hardware_concurrency())
     {
@@ -19,16 +59,25 @@ namespace Fenrir
     {
         if (m_systems.find(priority) != m_systems.end())
         {
+            std::vector<SystemFunc>& systems = m_systems[priority];
+            std::vector<SendBuffer> sends(systems.size());
             std::vector<std::future<void>> futures;
-            for (auto& system : m_systems[priority])
+            for (std::size_t index = 0; index < systems.size(); ++index)
             {
-                // system(app);
-                futures.emplace_back(m_threadPool.Enqueue([&app, &system] { system(app); }));
+                futures.emplace_back(m_threadPool.Enqueue([&app, &system = systems[index], &buffer = sends[index]] {
+                    const SendBufferScope scope(buffer);
+                    system(app);
+                }));
             }
 
             for (auto& fut : futures)
             {
                 fut.wait();
+            }
+
+            for (SendBuffer& buffer : sends)
+            {
+                buffer.Flush();
             }
         }
 
