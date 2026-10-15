@@ -4,9 +4,11 @@
 
 **Blocked by:** 01 (App runs one frame at a time with a chosen delta).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `SchedulePriority` has `BeforeTicks`, `PreTick`, `PostTick`, `AfterTicks`, run in the order above.
 - [ ] Tests (through the frame seam): a frame with zero ticks still runs `BeforeTicks` and `AfterTicks` once and no `PreTick`/`Tick`/`PostTick`; a frame with three ticks runs `PreTick`→`Tick`→`PostTick` three times in that interleaving.
 - [ ] A frame owing more than `maxTicksPerFrame` ticks runs exactly that many, empties the accumulator and logs one warning naming the dropped time.
 - [ ] The DemoApp and scripting keep working unchanged.
+
+**Resolved by:** merge of impl/02-phases (ca45ad5)
