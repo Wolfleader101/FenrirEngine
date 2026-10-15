@@ -288,6 +288,10 @@ namespace Fenrir
 
         Scene& CreateScene(const std::string& name);
 
+        /**
+         * @brief Destroys the scene with this name. Other scenes stay where they are, and the active scene stays
+         * active. Destroying the active scene is refused with a logged error: change the active scene first.
+         */
         void DestroyScene(const std::string& name);
 
         Scene& GetScene(const std::string& name);
@@ -299,9 +303,9 @@ namespace Fenrir
         template <typename Func>
         void ForEachScene(Func&& func)
         {
-            for (Scene& scene : m_scenes)
+            for (const std::unique_ptr<Scene>& scene : m_scenes)
             {
-                func(scene);
+                func(*scene);
             }
         }
 
@@ -312,7 +316,9 @@ namespace Fenrir
         bool m_running = true;
         bool m_initialized = false;
 
-        std::vector<Scene> m_scenes;
+        // One heap allocation per scene, so creating or destroying a scene never moves another: Entity handles and
+        // references to a scene stay valid.
+        std::vector<std::unique_ptr<Scene>> m_scenes;
         size_t activeSceneIndex = 0;
 
         // this is mutable because GetEventQueue() is const
