@@ -121,6 +121,42 @@ namespace Fenrir
             return &storage;
         }
 
+        // The storage a watch on a dynamic type listens to: the type's own, made and claimed for its name (but not yet
+        // shaped) if nobody has added one, so that the watch hears the first add. Null if the type is not valid or its
+        // id is taken by something else: then nothing of the type can ever be added here.
+        Detail::ByteStorage* DynamicStorageForWatching(entt::registry& registry, const DynamicComponentType& type)
+        {
+            if (!type.IsValid())
+            {
+                return nullptr;
+            }
+            if (registry.storage(type.Id()) == nullptr)
+            {
+                (void)registry.storage<Detail::DynamicComponentTag>(type.Id());
+            }
+            Detail::ByteStorage* storage = DynamicStorageUnder(registry, type);
+            if (storage == nullptr || !storage->MayBeUsedBy(type.Name()))
+            {
+                return nullptr;
+            }
+            storage->Claim(type.Name());
+            return storage;
+        }
+
+        // A dynamic type's counterpart of ComponentType::NativeWatchHook: records straight from the byte storage.
+        void HookDynamicWatch(void* storage, Detail::WatchRecord& record, bool start)
+        {
+            auto* bytes = static_cast<Detail::ByteStorage*>(static_cast<entt::sparse_set*>(storage));
+            if (start)
+            {
+                bytes->StartRecording(record);
+            }
+            else
+            {
+                bytes->StopRecording(record);
+            }
+        }
+
         entt::entity AsEntity(std::uint32_t id)
         {
             return static_cast<entt::entity>(id);
@@ -203,6 +239,31 @@ namespace Fenrir
         const std::size_t removed = storage->size();
         storage->clear();
         return removed;
+    }
+
+    ComponentWatch EntityList::Watch(const ComponentType& type)
+    {
+        if (m_alive == nullptr)
+        {
+            m_alive = std::make_shared<const int>(0);
+        }
+        auto record = std::make_unique<Detail::WatchRecord>();
+        record->list = m_alive;
+        if (!type.IsDynamic())
+        {
+            record->storage = type.m_findNativeStorage(*this);
+            record->hook = type.m_hookNativeWatch;
+        }
+        else if (Detail::ByteStorage* storage = DynamicStorageForWatching(m_registry, *type.m_dynamic))
+        {
+            record->storage = static_cast<entt::sparse_set*>(storage);
+            record->hook = &HookDynamicWatch;
+        }
+        if (record->hook != nullptr)
+        {
+            record->hook(record->storage, *record, true);
+        }
+        return ComponentWatch(std::move(record));
     }
 
     std::size_t EntityList::ComponentStorageCount() const

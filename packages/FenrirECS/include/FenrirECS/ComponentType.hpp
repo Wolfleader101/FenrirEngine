@@ -9,6 +9,11 @@ namespace Fenrir
 {
     class EntityList;
 
+    namespace Detail
+    {
+        struct WatchRecord;
+    }
+
     /**
      * @brief Names one kind of component, native (a C++ type) or dynamic (a DynamicComponentType), so that code which
      * knows a component only at run time can reach it through EntityList: get, has, add, remove, count, clear and
@@ -55,14 +60,19 @@ namespace Fenrir
         // opaque pointer so that no ECS library type appears here.
         using NativeStorageFinder = void* (*)(EntityList& entities);
 
-        ComponentType(NativeStorageFinder findNativeStorage, std::shared_ptr<const DynamicComponentType> dynamic,
-                      std::size_t size, std::size_t alignment)
-            : m_findNativeStorage(findNativeStorage), m_dynamic(std::move(dynamic)), m_size(size),
-              m_alignment(alignment)
+        // Starts (or stops) a watch's record recording the adds and removes of a native storage, which only the C++
+        // type can reach the signals of.
+        using NativeWatchHook = void (*)(void* storage, Detail::WatchRecord& record, bool start);
+
+        ComponentType(NativeStorageFinder findNativeStorage, NativeWatchHook hookNativeWatch,
+                      std::shared_ptr<const DynamicComponentType> dynamic, std::size_t size, std::size_t alignment)
+            : m_findNativeStorage(findNativeStorage), m_hookNativeWatch(hookNativeWatch), m_dynamic(std::move(dynamic)),
+              m_size(size), m_alignment(alignment)
         {
         }
 
         NativeStorageFinder m_findNativeStorage;
+        NativeWatchHook m_hookNativeWatch;
         std::shared_ptr<const DynamicComponentType> m_dynamic;
         std::size_t m_size;
         std::size_t m_alignment;
@@ -72,6 +82,7 @@ namespace Fenrir
     {
         const std::size_t size = type.Size();
         const std::size_t alignment = type.Alignment();
-        return ComponentType(nullptr, std::make_shared<const DynamicComponentType>(std::move(type)), size, alignment);
+        return ComponentType(nullptr, nullptr, std::make_shared<const DynamicComponentType>(std::move(type)), size,
+                             alignment);
     }
 } // namespace Fenrir
