@@ -15,6 +15,11 @@ namespace Fenrir
     {
         /** @brief The gravity each new physics world starts with, in metres per second squared. */
         Math::Vec3 gravity = Math::Vec3(0.0f, -9.81f, 0.0f);
+        /**
+         * @brief Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App
+         * alone. Results are the same either way.
+         */
+        bool useWorkerThreads = true;
     };
 
     /**

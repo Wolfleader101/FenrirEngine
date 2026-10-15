@@ -1,5 +1,6 @@
 #include "FenrirScheduler/Scheduler.hpp"
 
+#include <algorithm>
 #include <future>
 #include <utility>
 #include <vector>
@@ -45,7 +46,13 @@ namespace Fenrir
         m_sends.clear();
     }
 
-    Scheduler::Scheduler() : m_runOnceSystems(), m_systems(), m_threadPool(std::thread::hardware_concurrency())
+    Scheduler::Scheduler() : Scheduler(std::thread::hardware_concurrency())
+    {
+    }
+
+    // hardware_concurrency may be 0 (unknown); parallel systems need at least one worker.
+    Scheduler::Scheduler(std::size_t workerThreads)
+        : m_runOnceSystems(), m_systems(), m_threadPool(std::max<std::size_t>(workerThreads, 1))
     {
     }
 

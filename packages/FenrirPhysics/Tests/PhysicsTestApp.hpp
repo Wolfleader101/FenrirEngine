@@ -2,8 +2,10 @@
 
 // What the physics tests share: an App with no console output, and helpers that build bodies and run frames.
 
+#include <cstddef>
 #include <memory>
 #include <string_view>
+#include <thread>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -52,8 +54,19 @@ namespace PhysicsTest
     /** An App with physics installed. The members end in reverse order: physics before the app. */
     struct PhysicsApp
     {
-        Fenrir::App app{std::make_unique<SilentLogger>()};
-        Fenrir::Physics physics = Fenrir::Physics::Install(app);
+        PhysicsApp() : PhysicsApp(Fenrir::PhysicsConfig{})
+        {
+        }
+
+        /** Physics installed with `config`, on an App with `workerThreads` worker threads. */
+        explicit PhysicsApp(const Fenrir::PhysicsConfig& config,
+                            std::size_t workerThreads = std::thread::hardware_concurrency())
+            : app(std::make_unique<SilentLogger>(), workerThreads), physics(Fenrir::Physics::Install(app, config))
+        {
+        }
+
+        Fenrir::App app;
+        Fenrir::Physics physics;
 
         Fenrir::EntityList& Entities()
         {

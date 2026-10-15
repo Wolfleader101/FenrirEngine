@@ -1,6 +1,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -235,4 +236,17 @@ TEST_CASE("A frame's delta is the one it was given", "[app][frames]")
     app.RunFrame(0.25);
 
     CHECK(seen == 0.25);
+}
+
+TEST_CASE("The App's worker threads number what it was made with, or one per hardware thread", "[app][workers]")
+{
+    App two(Silent(), 2);
+    CHECK(two.GetThreadPool().ThreadCount() == 2);
+
+    App one(Silent(), 1);
+    CHECK(one.GetThreadPool().ThreadCount() == 1);
+
+    App byDefault(Silent());
+    const std::size_t hardware = std::thread::hardware_concurrency();
+    CHECK(byDefault.GetThreadPool().ThreadCount() == (hardware == 0 ? 1 : hardware));
 }

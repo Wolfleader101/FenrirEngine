@@ -13,7 +13,8 @@
 namespace Fenrir
 {
     class ILogger;
-}
+    class ThreadPool;
+} // namespace Fenrir
 
 namespace Fenrir::Backend
 {
@@ -62,6 +63,11 @@ namespace Fenrir::Backend
     struct WorldSettings
     {
         Math::Vec3 gravity;
+        /**
+         * @brief The threads a step spreads its work over, besides the stepping thread, which also works while it
+         * waits. Null: a step runs on the stepping thread alone. Must outlive the world.
+         */
+        ThreadPool* workers = nullptr;
     };
 
     /**
@@ -80,7 +86,10 @@ namespace Fenrir::Backend
         ILogger* m_logger;
     };
 
-    /** @brief One simulation. Single-threaded: every call is made from the thread that runs the App. */
+    /**
+     * @brief One simulation. Every call is made from the thread that runs the App; only a step's own work runs on the
+     * worker threads.
+     */
     class World
     {
       public:

@@ -44,6 +44,12 @@ namespace Fenrir
         template <class F, class... Args>
         auto Enqueue(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F, Args...>::type>;
 
+        /** @brief How many threads run the enqueued functions. */
+        [[nodiscard]] std::size_t ThreadCount() const noexcept
+        {
+            return m_workers.size();
+        }
+
       private:
         std::vector<std::thread> m_workers;
 
