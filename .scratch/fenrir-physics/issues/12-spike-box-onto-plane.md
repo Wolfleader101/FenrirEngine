@@ -1,7 +1,7 @@
 # Spike: a box dropping onto a plane through the proposed seam
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 03, 04, 05, 13
 
 ## Question
