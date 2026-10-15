@@ -158,4 +158,36 @@ namespace Fenrir
     {
         CollisionShape shape;
     };
+
+    /**
+     * @brief How a collider's surface responds to contact. Optional: a collider without one has these defaults. Edits
+     * take effect on the next tick.
+     *
+     * Where two surfaces touch, their friction is the square root of the product of the two frictions, and their
+     * restitution the larger of the two restitutions.
+     */
+    struct PhysicsMaterial
+    {
+        /** @brief How much the surface resists sliding: 0 is ice, about 1 is rubber on concrete. */
+        float friction = 0.5f;
+        /** @brief How much of its speed into a surface a body keeps when it bounces off: 0 does not bounce, 1 bounces
+         * back at full speed. */
+        float restitution = 0.0f;
+    };
+
+    /**
+     * @brief Which of the 32 collision layers a body is in, and which layers it collides with. Optional: a body without
+     * one is in layer 0 and collides with every layer.
+     *
+     * Two bodies collide when each one's mask includes a layer of the other: `(a.layers & b.mask) != 0 &&
+     * (b.layers & a.mask) != 0`. It is read from the body's entity and applies to all the body's colliders. Edits take
+     * effect on the next tick. Layers can be given names in PhysicsConfig, and looked up through CollisionLayers.
+     */
+    struct CollisionFilter
+    {
+        /** @brief The layers the body is in, one bit per layer (layer `i` is `1u << i`). */
+        std::uint32_t layers = 1u;
+        /** @brief The layers the body collides with, one bit per layer. */
+        std::uint32_t mask = ~0u;
+    };
 } // namespace Fenrir
