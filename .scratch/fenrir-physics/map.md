@@ -4,7 +4,7 @@ Label: wayfinder:map
 
 ## Destination
 
-A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-tickets`, plus ADRs for the hard-to-reverse calls (where the backend seam goes, which side owns body state). The first is the **foundation spec**: the backend seam over Jolt, rigid bodies and shapes, collision layers, stepping, contact and trigger events, queries, debug rendering data, the physics scripting extension, and a physics demo scene in the DemoApp. Then one spec per feature family (constraints and joints, character controller, vehicles, ragdolls, soft bodies), each building on the foundation. The foundation spec is ticketable as soon as its own decisions close, without waiting on the feature families.
+A set of specs, one feature directory each (`.scratch/fenrir-physics-<name>/spec.md`, so each spec's tickets sit beside it), each ready for `/to-tickets`, plus ADRs for the hard-to-reverse calls (where the backend seam goes, which side owns body state). The first is the **foundation spec**: the backend seam over Jolt, rigid bodies and shapes, collision layers, stepping, contact and trigger events, queries, debug rendering data, the physics scripting extension, and a physics demo scene in the DemoApp. Then one spec per feature family (constraints and joints, character controller, vehicles, ragdolls, soft bodies), each building on the foundation. The foundation spec is ticketable as soon as its own decisions close, without waiting on the feature families. **Foundation spec: written, `.scratch/fenrir-physics-foundation/spec.md`.**
 
 ## Notes
 
