@@ -1,0 +1,11 @@
+# 09: DemoApp readers migrate
+
+**What to build:** The DemoApp's camera controller, editor, window and AutoPlay read events through readers, so input is handled once per event no matter where the window polls (ADR-0012; spec: "DemoApp"). Migration batch for the DemoApp.
+
+**Blocked by:** 07 (Event readers in C++).
+
+**Status:** ready-for-agent
+
+- [ ] No DemoApp code calls `ReadEvents`.
+- [ ] AutoPlay's key events are handled once by the window (they were seen twice before).
+- [ ] Camera movement, mouse look, editor selection and window input behave as before (checked by hand).
