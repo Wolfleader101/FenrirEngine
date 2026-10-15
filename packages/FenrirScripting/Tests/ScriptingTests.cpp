@@ -2371,17 +2371,18 @@ namespace
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        EventReader<TestNative::Alert> alerts;
         EventScript<void>(scripting, "SendAlert", std::int32_t{9}, 2.5F);
         // Held until the script returns: nothing has reached the queue yet.
         {
             INFO("A send reached the queue before the system returned");
-            REQUIRE(headless.Get().ReadEvents<TestNative::Alert>().empty());
+            REQUIRE(alerts.Read(headless.Get()).empty());
         }
         (void)ScriptingProbe::ApplyChanges(scripting);
-        const auto& events = headless.Get().ReadEvents<TestNative::Alert>();
+        const auto events = alerts.Read(headless.Get());
         {
             INFO("C++ did not read the event C# sent");
-            REQUIRE((events.size() == 1 && events[0].Code == 9 && events[0].Level == 2.5F));
+            REQUIRE((events.size() == 1 && events.begin()->Code == 9 && events.begin()->Level == 2.5F));
         }
     }
 
@@ -2403,9 +2404,10 @@ namespace
 
         // Nothing in C++ knows its type, but the queue is there by name, with the layout C# reported.
         const IEventQueue* queue = headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping");
+        std::size_t seen = 0;
         {
             INFO("The C#-only event's queue was not there by name");
-            REQUIRE((queue != nullptr && queue->EventSize() == 4 && queue->ReadRaw().count == 2));
+            REQUIRE((queue != nullptr && queue->EventSize() == 4 && queue->ReadRawAfter(seen).Count() == 2));
         }
 
         // The queue goes with the script assembly.
@@ -2428,61 +2430,74 @@ namespace
         }
     }
 
-    void EventsHaveTheSameFrameWindowInBothLanguages()
+    void EachReaderSeesEachEventOnceInBothLanguages()
     {
-        constexpr int frames = 4;
         HeadlessApp headless;
+        App& app = headless.Get();
         int frame = 0;
-        std::vector<std::size_t> nativeSeen;
-        std::vector<std::size_t> nativePingSeen; // The C#-only Ping, read by name from C++ with no C++ type.
-        // C++ sends an event on the first frame; C# sends a Ping on the first frame.
-        headless.Get().AddSequentialSystems(SchedulePriority::Update, {[&](App& app) {
-                                                if (++frame == 1)
-                                                {
-                                                    app.SendEvent(TestNative::Alert{1, 0});
-                                                }
-                                            }});
+        // C++ sends an Alert in Update of the first frame, before C#'s Update systems run, and another in PostUpdate of
+        // the second frame, after they ran (a late send).
+        app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) {
+                                     if (++frame == 1)
+                                     {
+                                         running.SendEvent(TestNative::Alert{1, 0});
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App& running) {
+                                     if (frame == 2)
+                                     {
+                                         running.SendEvent(TestNative::Alert{2, 0});
+                                     }
+                                 }});
         Scripting* installed = nullptr;
         std::string dump;
-        headless.Get().AddSequentialSystems(
+        app.AddSequentialSystems(
             SchedulePriority::Exit, {[&](App&) {
                 dump = CallIn<std::optional<std::string>>(EventProbeType, *installed, "Dump").value_or("");
             }});
-        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        auto scripting = Scripting::Install(app, ConfigWithAlert());
         installed = &scripting;
-        // After all of C#'s Update systems, so it reads where they read.
-        headless.Get().AddSequentialSystems(
-            SchedulePriority::Update, {[&](App& app) {
-                nativeSeen.push_back(app.ReadEvents<TestNative::Alert>().size());
-                const IEventQueue* pings = app.FindEventQueue("Fenrir.ScriptFixture.Ping");
-                nativePingSeen.push_back(pings == nullptr ? 99 : pings->ReadRaw().count);
+        // After all of C#'s Update systems, with readers of its own: the Alert by type, and the C#-only Ping by name,
+        // as bytes, with no C++ type.
+        std::vector<std::size_t> nativeAlerts;
+        std::vector<std::size_t> nativePings;
+        app.AddSequentialSystems(
+            SchedulePriority::Update,
+            {[&, alerts = EventReader<TestNative::Alert>{}, pingsSeen = std::size_t{0}](App& running) mutable {
+                nativeAlerts.push_back(alerts.Read(running).size());
+                const IEventQueue* pings = running.FindEventQueue("Fenrir.ScriptFixture.Ping");
+                nativePings.push_back(pings == nullptr ? 99 : pings->ReadRawAfter(pingsSeen).Count());
             }});
         CallIn<void>(EventProbeType, scripting, "Enable");
-        headless.Run(frames);
 
-        // The Ping is sent in frame one by a system and is read by the system after it, in frame one and again in frame
-        // two, then it is gone: the window native events have. The sender never reads its own send. The Alert from C++
-        // follows the same window, and C# sees exactly what C++ sees.
-        std::string expected;
-        const char* pingSeen[] = {"1", "1", "0", "0"};
-        const char* pingOwn[] = {"0", "1", "0", "0"};
-        for (int index = 0; index < frames; ++index)
+        // One tick, no tick, three ticks, one tick.
+        constexpr double tick = 1.0 / 60.0;
+        for (const double delta : {tick, 0.0, 3.5 * tick, tick})
         {
-            expected += std::string(index == 0 ? "" : ",") + "Own=" + pingOwn[index] + ",Later=" + pingSeen[index] +
-                        ",Alerts=" + std::to_string(nativeSeen.at(static_cast<std::size_t>(index)));
+            app.RunFrame(delta);
         }
+        app.RunExit();
+
+        // Frame 1: the Ping is sent by the sender (which does not see its own send until it returns) and read by the
+        // system after it, and the Alert is read once (the Tick reader ran before it was sent). Frame 2 (no tick): the
+        // sender sees its own Ping, once; nothing else is new. Frame 3: the Tick reader sees both Alerts on its first
+        // run and none on the next two; the late Alert reaches the Update reader once. Frame 4: nothing is seen again.
+        const std::string expected = "Tick=0,Own=0,Later=1,Alerts=1,"
+                                     "Own=1,Later=0,Alerts=0,"
+                                     "Tick=2,Tick=0,Tick=0,Own=0,Later=0,Alerts=1,"
+                                     "Tick=0,Own=0,Later=0,Alerts=0";
         {
-            INFO("C# saw the events differently from the frame window: " + dump + " vs " + expected);
+            INFO("C# readers did not see each event once: " + dump);
             REQUIRE(dump == expected);
         }
+        // C++ readers of the same queues are independent of the C# ones and see each event once too.
         {
-            INFO("The native frame window was not what the test assumes");
-            REQUIRE((nativeSeen == std::vector<std::size_t>{1, 1, 0, 0}));
+            INFO("A C++ reader did not see each Alert once");
+            REQUIRE((nativeAlerts == std::vector<std::size_t>{1, 0, 1, 0}));
         }
-        // And the other direction: what C# sent is in C++'s window for the same two frames, then gone.
         {
-            INFO("C++ did not see the event C# sent for the frame window");
-            REQUIRE((nativePingSeen == std::vector<std::size_t>{1, 1, 0, 0}));
+            INFO("A C++ reader of the C#-only Ping did not see it once");
+            REQUIRE((nativePings == std::vector<std::size_t>{1, 0, 0, 0}));
         }
     }
 
@@ -4026,7 +4041,7 @@ TEST_CASE("a C#-only event needs no C++", "[scripting]")
 
 TEST_CASE("events have the same frame window in both languages", "[scripting]")
 {
-    EventsHaveTheSameFrameWindowInBothLanguages();
+    EachReaderSeesEachEventOnceInBothLanguages();
 }
 
 TEST_CASE("a system never sees its own sends and a view stays valid", "[scripting]")

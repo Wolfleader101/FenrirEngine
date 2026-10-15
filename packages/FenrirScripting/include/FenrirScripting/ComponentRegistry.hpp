@@ -62,8 +62,8 @@ namespace Fenrir
 
     /**
      * @brief One event the engine exposes to C# by name. The event's queue is the App's named queue
-     * (App::FindEventQueue), so C++ `SendEvent<T>`/`ReadEvents<T>` and C# `Events.Send/Read` are the same queue with
-     * the same frame window.
+     * (App::FindEventQueue), so C++ `SendEvent<T>`/`EventReader<T>` and C# `Events.Send`/`EventReader<T>` are the same
+     * queue, and every reader in either language sees each event once.
      *
      * A C++ event is described by MakeEvent and listed in the `events` of the ScriptingExtension that shares it; its
      * C# struct says `[NativeEvent("Ns.Name")]`. An event only C# defines needs no registration at all: the script

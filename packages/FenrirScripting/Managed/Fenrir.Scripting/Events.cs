@@ -5,9 +5,9 @@ using System.Text;
 namespace Fenrir.Scripting;
 
 /// <summary>
-/// Marks a struct as an event: plain unmanaged data one system sends and others read. It is delivered with the engine's
-/// double buffering, so an event sent in a frame can be read in that frame (by systems that run after the sender) and in the
-/// next one. A struct that only C# defines needs nothing else; the build reports it to the engine when the script loads.
+/// Marks a struct as an event: plain unmanaged data one system sends and others read, each through an
+/// <see cref="EventReader{T}"/> of its own that yields each event once. A struct that only C# defines needs nothing else; the
+/// build reports it to the engine when the script loads.
 /// </summary>
 public interface IEvent
 {
@@ -90,22 +90,64 @@ public static unsafe class ScriptEvents
 }
 
 /// <summary>
-/// The events of one type that can be read now: this frame's so far and the last frame's, the same window C++
-/// <c>ReadEvents</c> gives. It points at the engine's queue, so it is a <c>ref struct</c> good for the system that took it, and
-/// it stays valid for that whole system because sends are held until the system returns.
+/// What a system reads events of one type through. It remembers which events it has already yielded, so each event reaches it
+/// once, including events sent after it last ran: the same guarantee a C++ <c>EventReader</c> gives, and independent of every
+/// other reader of the queue, C# or C++. A system keeps its readers in fields (one per event type it reads), never shares them
+/// with other systems, and reads with <c>foreach (var e in reader.Read())</c>. A reader made by a reload starts again from the
+/// events the queue still holds.
 /// </summary>
-public readonly unsafe ref struct EventReader<T> where T : unmanaged, IEvent
+public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
 {
-    private readonly T* data;
+    // How many events of the queue's whole history this reader has gone past (the engine's cursor).
+    private ulong seen;
 
-    internal EventReader(T* data, int count)
+    /// <summary>
+    /// The events sent since this reader last read, oldest first. Each read moves past what it yields, so the next yields only
+    /// newer events. Sends made by the running system are not among them until it returns.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
+    public EventRange<T> Read()
     {
-        this.data = data;
-        Count = count;
+        // older data, older count, newer data, newer count, missed
+        nuint* view = stackalloc nuint[5];
+        int id = EventIds<T>.Id;
+        int code;
+        fixed (ulong* cursor = &seen)
+            code = Native.EventReadAfter(id, cursor, view);
+        if (code != 0)
+            throw new InvalidOperationException($"Cannot read {typeof(T).Name}: the engine has no queue for it.");
+        return new EventRange<T>((T*)view[0], (int)view[1], (T*)view[2], (int)view[3], (int)view[4]);
+    }
+}
+
+/// <summary>
+/// The events one <see cref="EventReader{T}.Read"/> yielded, oldest first. It points into the engine's queue (nothing is
+/// copied), so it is a <c>ref struct</c> good for the system that read it: sends wait until the system returns, so it stays
+/// valid that long.
+/// </summary>
+public readonly unsafe ref struct EventRange<T> where T : unmanaged, IEvent
+{
+    private readonly T* older;
+    private readonly int olderCount;
+    private readonly T* newer;
+
+    internal EventRange(T* older, int olderCount, T* newer, int newerCount, int missed)
+    {
+        this.older = older;
+        this.olderCount = olderCount;
+        this.newer = newer;
+        Count = olderCount + newerCount;
+        Missed = missed;
     }
 
-    /// <summary>How many events there are.</summary>
+    /// <summary>How many events the read yielded.</summary>
     public int Count { get; }
+
+    /// <summary>
+    /// How many events were dropped before the reader got to them, because it went two of the queue's swaps without reading.
+    /// Zero for a reader that reads every frame.
+    /// </summary>
+    public int Missed { get; }
 
     /// <summary>The event at <paramref name="index"/>, oldest first.</summary>
     public ref readonly T this[int index]
@@ -114,42 +156,40 @@ public readonly unsafe ref struct EventReader<T> where T : unmanaged, IEvent
         {
             if ((uint)index >= (uint)Count)
                 throw new ArgumentOutOfRangeException(nameof(index));
-            return ref data[index];
+            return ref index < olderCount ? ref older[index] : ref newer[index - olderCount];
         }
     }
 
-    public Enumerator GetEnumerator() => new(data, Count);
+    public Enumerator GetEnumerator() => new(this);
 
     public ref struct Enumerator
     {
-        private readonly T* data;
-        private readonly int count;
+        private readonly EventRange<T> range;
         private int index;
 
-        internal Enumerator(T* data, int count)
+        internal Enumerator(EventRange<T> range)
         {
-            this.data = data;
-            this.count = count;
+            this.range = range;
             index = -1;
         }
 
         /// <summary>The current event, by readonly reference (a <c>var</c> loop variable copies it).</summary>
-        public readonly ref readonly T Current => ref data[index];
+        public readonly ref readonly T Current => ref range[index];
 
-        public bool MoveNext() => ++index < count;
+        public bool MoveNext() => ++index < range.Count;
     }
 }
 
 public readonly partial struct SystemContext
 {
-    /// <summary>Sending and reading events.</summary>
+    /// <summary>Sending events. Reading is through an <see cref="EventReader{T}"/> field.</summary>
     public EventsView Events => default;
 
     public readonly unsafe struct EventsView
     {
         /// <summary>
-        /// Sends an event. It reaches the queue when the system returns: the sender does not read its own send, and the
-        /// systems after it do.
+        /// Sends an event. It reaches the queue when the system returns, so the systems after it read it this frame and the
+        /// sender's own readers read it the next time they read.
         /// </summary>
         /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
         public void Send<T>(in T value) where T : unmanaged, IEvent
@@ -161,17 +201,6 @@ public readonly partial struct SystemContext
                 throw new InvalidOperationException(code == -6
                     ? $"Cannot send {typeof(T).Name}: the engine has no queue for it."
                     : $"Cannot send {typeof(T).Name}: the engine refused it (code {code}).");
-        }
-
-        /// <summary>The events of this type that can be read now. Sends made by this system are not in it.</summary>
-        /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
-        public EventReader<T> Read<T>() where T : unmanaged, IEvent
-        {
-            nuint data = 0;
-            int count = Native.EventRead(EventIds<T>.Id, &data);
-            if (count < 0)
-                throw new InvalidOperationException($"Cannot read {typeof(T).Name}: the engine has no queue for it.");
-            return new EventReader<T>((T*)data, count);
         }
     }
 }
