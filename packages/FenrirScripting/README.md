@@ -114,6 +114,18 @@ bool has = new Entity(id).Has<Transform>();
 no such component, the engine has nothing registered under the type's name, or the type has no `[NativeComponent]`
 attribute. (Creating, destroying, adding and removing from C# arrives with deferred changes, ticket 06.)
 
+`Transform` is relative to the parent. The world transform (FenrirECS `GetWorldTransform`, composed through the parents
+on each call) is read and set through the entity, and both take effect at once, so a system reads its own edits:
+
+```csharp
+var e = new Entity(id);
+Transform world = e.WorldTransform;              // position, rotation, component-wise scale in the scene
+world.Position = new Vector3(0, 5, 0);
+e.SetWorldTransform(world);                      // sets the local Transform so the world one is this
+```
+
+Both throw `InvalidOperationException` if the entity is not alive or has no `Transform`.
+
 ### Adding your own
 
 Give scripting a C++ component through a scripting extension (see "Scripting extensions": the app's own, or its package's),

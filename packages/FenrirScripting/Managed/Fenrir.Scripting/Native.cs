@@ -27,6 +27,14 @@ internal static unsafe partial class Native
     [NativeFunction]
     public static partial bool EntityIsValid(uint entity);
 
+    // The world transform (FenrirECS GetWorldTransform / SetWorldTransform), composed through the parents on each call.
+    // Both return false, touching nothing, when the entity is not alive or has no Transform.
+    [NativeFunction]
+    public static partial bool EntityWorldTransform(uint entity, out Transform world);
+
+    [NativeFunction]
+    public static partial bool EntitySetWorldTransform(uint entity, in Transform world);
+
     // The engine's registry of native components. A component is found by the name it was registered under, and
     // that name is only good for the registry generation it was looked up in: a new Scripting has a new registry.
     //   ComponentIdOf(name, nameBytes, typeName, typeBytes): the id of the component registered under that name for the C#

@@ -7,6 +7,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
 #include "Events.hpp"
@@ -92,12 +93,13 @@ void GLRenderer::Update(Fenrir::App& app)
 
     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
 
-    entityList.ForEach<Fenrir::Transform, Fenrir::Relationship, Model, Material>(
-        [&](Fenrir::Transform& transform, Fenrir::Relationship& relationship, Model& model, Material& material) {
+    entityList.ForEach<Fenrir::Transform, Model, Material>(
+        [&](auto handle, Fenrir::Transform&, Model& model, Material& material) {
             material.properties["spotLight.pos"] = m_camera.pos;
             material.properties["spotLight.direction"] = m_camera.front;
             SetMatProps(material.shader, material);
-            DrawModel(transform, relationship, model, material.shader);
+            const Fenrir::Entity entity = entityList.GetEntity(static_cast<uint32_t>(handle));
+            DrawModel(Fenrir::GetWorldMatrix(entity), model, material.shader);
         });
 
     if (m_skybox.name != "")
@@ -264,30 +266,19 @@ void GLRenderer::SetMatProps(const Shader& shader, const Material& mat)
     }
 }
 
-void GLRenderer::DrawModel(const Fenrir::Transform& transform, const Fenrir::Relationship& relationship,
-                           const Model& model, const Shader& shader)
+void GLRenderer::DrawModel(const Fenrir::Math::Mat4& worldMatrix, const Model& model, const Shader& shader)
 {
-    Fenrir::Transform tempTran = transform;
-    if (relationship.parent.IsValid())
-    {
-        Fenrir::Transform& parentTransform = relationship.parent.GetComponent<Fenrir::Transform>();
-        tempTran.pos += parentTransform.pos;
-        tempTran.rot *= parentTransform.rot;
-        tempTran.scale *= parentTransform.scale;
-    }
-    Fenrir::Math::Mat4 mdl_mat = TransformToMat4(tempTran);
-
     shader.Use();
     shader.SetMat4("view", m_view);
     shader.SetMat4("projection", m_projection);
-    shader.SetMat4("model", mdl_mat);
+    shader.SetMat4("model", worldMatrix);
 
     for (const auto& mesh : model.meshes)
     {
         DrawMesh(mesh, shader);
     }
 
-    // DrawAABB(model, mdl_mat);
+    // DrawAABB(model, worldMatrix);
 }
 
 void GLRenderer::DrawMesh(const Mesh& mesh, const Shader& shader)
