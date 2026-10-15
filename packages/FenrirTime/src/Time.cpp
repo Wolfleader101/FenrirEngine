@@ -7,13 +7,18 @@ namespace Fenrir
         startTime = prevTime = std::chrono::steady_clock::now();
     }
 
-    void Time::Update()
+    void Time::Advance(double seconds)
+    {
+        deltaTime = seconds;
+        accumulator += seconds;
+    }
+
+    double Time::MeasureFrame()
     {
         auto now = std::chrono::steady_clock::now();
-        deltaTime = std::chrono::duration<double>(now - prevTime).count();
+        const double elapsed = std::chrono::duration<double>(now - prevTime).count();
         prevTime = now;
-
-        accumulator += deltaTime;
+        return elapsed;
     }
 
     double Time::CurrentTime() const

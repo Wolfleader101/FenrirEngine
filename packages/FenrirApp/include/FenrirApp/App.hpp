@@ -216,6 +216,19 @@ namespace Fenrir
         void Run();
 
         /**
+         * @brief Runs one frame as if `deltaTime` seconds had passed: adds it to the accumulator and runs the fixed
+         * step as many times as that covers. Reads no clock, so a test can drive the app deterministically. The first
+         * frame (from here or from Run) runs the PreInit, Init and PostInit phases first; later frames do not.
+         */
+        void RunFrame(double deltaTime);
+
+        /**
+         * @brief Runs the Exit phase. Run does this when it stops; code that drives the app with RunFrame calls it
+         * when it is done with the app.
+         */
+        void RunExit();
+
+        /**
          * @brief Stop the app
          *
          */
@@ -297,6 +310,7 @@ namespace Fenrir
         Scheduler m_scheduler;
         std::unique_ptr<ILogger> m_logger;
         bool m_running = true;
+        bool m_initialized = false;
 
         std::vector<Scene> m_scenes;
         size_t activeSceneIndex = 0;
@@ -310,6 +324,9 @@ namespace Fenrir
         std::unordered_map<std::string, std::unique_ptr<IEventQueue>> m_byteEventQueues;
 
         bool BindEventName(std::string name, IEventQueue* queue);
+
+        /** @brief Runs the init phases, the first time only. */
+        void InitOnce();
 
         /**
          * @brief Update the event queues

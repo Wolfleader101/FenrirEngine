@@ -150,32 +150,52 @@ namespace Fenrir
         return true;
     }
 
+    void App::InitOnce()
+    {
+        if (!m_initialized)
+        {
+            m_initialized = true;
+            m_scheduler.Init(*this);
+        }
+    }
+
     void App::Run()
     {
-        m_scheduler.Init(*this);
+        // Before the first measurement, so the first frame's delta covers the init phases, as it always has.
+        InitOnce();
 
         while (m_running)
         {
-            m_time.Update();
-
-            m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
-
-            while (m_time.accumulator >= m_time.tickRate)
-            {
-                m_scheduler.RunSystems(*this, SchedulePriority::Tick);
-
-                m_time.accumulator -= m_time.tickRate;
-            }
-
-            m_scheduler.RunSystems(*this, SchedulePriority::Update);
-
-            m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
-
-            // m_scheduler.RunSystems(*this, SchedulePriority::LastUpdate);
-
-            UpdateEvents();
+            RunFrame(m_time.MeasureFrame());
         }
+        RunExit();
+    }
+
+    void App::RunExit()
+    {
         m_scheduler.RunSystems(*this, SchedulePriority::Exit);
+    }
+
+    void App::RunFrame(double deltaTime)
+    {
+        InitOnce();
+
+        m_time.Advance(deltaTime);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
+
+        while (m_time.accumulator >= m_time.tickRate)
+        {
+            m_scheduler.RunSystems(*this, SchedulePriority::Tick);
+
+            m_time.accumulator -= m_time.tickRate;
+        }
+
+        m_scheduler.RunSystems(*this, SchedulePriority::Update);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
+
+        UpdateEvents();
     }
 
     const Time& App::GetTime() const
