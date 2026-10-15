@@ -10,12 +10,14 @@ namespace Fenrir
     struct Physics::State
     {
         State(App& installedOn, const PhysicsConfig& installedWith)
-            : app(&installedOn), config(installedWith), context(*installedOn.Logger())
+            : app(&installedOn), config(installedWith), layers(installedWith.collisionLayers, *installedOn.Logger()),
+              context(*installedOn.Logger())
         {
         }
 
         App* app;
         PhysicsConfig config;
+        CollisionLayers layers;
         Backend::Context context;
     };
 
@@ -63,6 +65,11 @@ namespace Fenrir
     Physics::~Physics()
     {
         Shutdown();
+    }
+
+    const CollisionLayers& Physics::Layers() const
+    {
+        return m_state->layers;
     }
 
     void Physics::Shutdown() noexcept

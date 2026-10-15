@@ -34,6 +34,26 @@ namespace Fenrir
     };
 
     /**
+     * @brief What one type-erased read through a cursor yields (IEventQueue::ReadRawAfter): the events sent since the
+     * previous read, oldest first, as up to two arrays of EventSize()-byte elements in the queue's buffers (nothing is
+     * copied). Valid until the queue is next sent to or swapped. The byte form of EventRange.
+     */
+    struct RawEventRange
+    {
+        const void* older = nullptr;
+        std::size_t olderCount = 0;
+        const void* newer = nullptr;
+        std::size_t newerCount = 0;
+        /** @brief How many events were dropped before the reader got to them (it went two swaps without reading). */
+        std::size_t missed = 0;
+
+        [[nodiscard]] std::size_t Count() const noexcept
+        {
+            return olderCount + newerCount;
+        }
+    };
+
+    /**
      * @brief Interface for event queues
      * This is needed because we need to store different event queues in a single container
      */
@@ -66,8 +86,16 @@ namespace Fenrir
         [[nodiscard]] virtual std::size_t EventAlignment() const noexcept = 0;
 
         /** @brief Copies one event (EventSize() bytes) into the queue's current frame. False if the queue has no byte
-         * size. */
+         * size. From a system the scheduler runs in parallel, the copy is held and sent after the batch, as
+         * App::SendEvent does. */
         virtual bool SendRaw(const void* event) = 0;
+
+        /**
+         * @brief The events sent after the first `seen` this queue was ever sent, oldest first; moves `seen` past them.
+         * The cursor of an EventReader, for code that knows the event only by its layout: the caller keeps `seen` (one
+         * per reader, starting at zero), so readers never share state. An empty range if the queue has no byte size.
+         */
+        [[nodiscard]] virtual RawEventRange ReadRawAfter(std::size_t& seen) const = 0;
 
         /** @brief This frame's and the previous frame's events, the same window ReadEvents gives. */
         [[nodiscard]] virtual RawEvents ReadRaw() const = 0;
@@ -184,6 +212,16 @@ namespace Fenrir
             return m_missed;
         }
 
+        /** @brief The part of the events in the older of the queue's buffers, then the part in the newer. */
+        [[nodiscard]] std::span<const TEvent> Older() const noexcept
+        {
+            return m_older;
+        }
+        [[nodiscard]] std::span<const TEvent> Newer() const noexcept
+        {
+            return m_newer;
+        }
+
       private:
         std::span<const TEvent> m_older;
         std::span<const TEvent> m_newer;
@@ -285,7 +323,12 @@ namespace Fenrir
             {
                 TEvent copy;
                 std::memcpy(&copy, event, sizeof(TEvent));
-                currentBuffer.push_back(copy);
+                if (SendBuffer* buffer = SendBuffer::OfThisThread())
+                {
+                    buffer->Add([this, copy] { Send(copy); });
+                    return true;
+                }
+                Send(copy);
                 return true;
             }
             else
@@ -299,6 +342,21 @@ namespace Fenrir
         {
             const auto& events = ReadEvents();
             return {events.data(), events.size()};
+        }
+
+        [[nodiscard]] RawEventRange ReadRawAfter(std::size_t& seen) const override
+        {
+            if constexpr (ByteCopyable)
+            {
+                const EventRange<TEvent> events = ReadAfter(seen);
+                return {events.Older().data(), events.Older().size(), events.Newer().data(), events.Newer().size(),
+                        events.Missed()};
+            }
+            else
+            {
+                (void)seen;
+                return {};
+            }
         }
 
       private:

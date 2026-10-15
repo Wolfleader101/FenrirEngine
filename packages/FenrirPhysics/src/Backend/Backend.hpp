@@ -41,6 +41,8 @@ namespace Fenrir::Backend
         /** @brief False for a collider with no RigidBody: it can never become kinematic or dynamic. */
         bool canMove = false;
         CollisionShape shape;
+        PhysicsMaterial material;
+        CollisionFilter filter;
         Math::Vec3 scale = Math::Vec3(1.0f);
         Math::Vec3 position = Math::Vec3(0.0f);
         Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -115,6 +117,12 @@ namespace Fenrir::Backend
 
         /** @brief Replaces a body's shape, `scale` baked in, keeping its `mass`. */
         void SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass);
+
+        /** @brief Changes a body's surface. */
+        void SetMaterial(BodyId id, const PhysicsMaterial& material);
+
+        /** @brief Changes which layers a body is in and collides with, waking it and the bodies near it. */
+        void SetFilter(BodyId id, const CollisionFilter& filter);
 
         /** @brief Changes how a body moves. The body must have been made with `canMove`. */
         void SetMotion(BodyId id, const Motion& motion);
