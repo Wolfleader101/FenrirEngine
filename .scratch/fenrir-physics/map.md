@@ -39,10 +39,11 @@ A set of specs under `.scratch/fenrir-physics/specs/`, each ready for `/to-ticke
 - [How do C# components hold a tagged union?](issues/16-csharp-tagged-union-components.md): no new mechanism; Iris's existing struct mapping accepts explicit layout, proved by a new scripting test; the physics contract hand-writes `CollisionShape` with checked `[UnscopedRef]` views and implicit conversions; scripts may use the pattern by hand; generator support waits for a second union.
 - [How does a system read each event exactly once?](issues/18-read-each-event-once.md): ADR-0012. Per-reader cursors (`EventReader<T>`, C++ and C#) over the existing two buffers; `ReadEvents` removed; the swap waits for a fixed step; parallel sends buffered per system and appended in registration order; payloads stay plain data.
 - [What does the physics scripting extension give C#?](issues/11-physics-scripting-extension.md): all physics components writable from C# (`Trigger` and `ContactEvents` gain `bool enabled`); native functions for forces, queries, contacts, sleep and bounds, gravity, debug draw and collision meshes; the four events via `EventReader<T>`; silent no-ops without a world or body; contract `Fenrir.Physics` plus a separate `FenrirPhysicsScripting` library, built only with physics and scripting on.
+- [Is there transform interpolation, and who owns it?](issues/19-transform-interpolation.md): on by default (`RigidBody::interpolate`), interpolating between the last two steps into `Transform`; new once-per-frame `BeforeTicks` (restore the true pose, detect edits) and `AfterTicks` (write the blended pose) phases; teleports snap.
 
 ## Not yet specified
 
-- **DemoApp demo scenes:** switching between several demo scenes (one per feature family) in the DemoApp, and what the first physics scene shows.
+- **DemoApp demo scenes:** switching between several demo scenes, one per feature family. (The foundation's own scene is settled: the spike's ground, falling boxes and kinematic paddle, with debug lines on a key.) Becomes a ticket with the first feature-family spec, when there is a second scene to switch to.
 - **Feature-family specs:** constraints and joints, character controller, vehicles, ragdolls, soft bodies. Each becomes tickets once the foundation settles the body, shape and stepping vocabulary they build on.
 
 ## Out of scope
