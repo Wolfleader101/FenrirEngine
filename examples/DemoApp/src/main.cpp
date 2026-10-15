@@ -32,6 +32,13 @@
 #include "ScriptingDemo.hpp"
 #endif
 
+#ifdef FENRIR_PHYSICS
+#include <array>
+#include <cmath>
+
+#include "FenrirPhysics/Physics.hpp"
+#endif
+
 template <>
 struct glz::meta<ProjectSettings>
 {
@@ -268,6 +275,92 @@ static void InitBackpacks(Fenrir::App& app)
     backpack2_ent.AddComponent<Model>(backpack);
 }
 
+#ifdef FENRIR_PHYSICS
+// The physics scene: a static ground, a stack of dynamic boxes and a kinematic paddle that game code sweeps back and
+// forth in Tick, pushing the boxes. Each body is the unit cube in its own flat colour, so they are easy to tell apart.
+class PhysicsDemo
+{
+  public:
+    void Init(Fenrir::App& app)
+    {
+        Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
+        const Fenrir::Math::Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
+
+        Fenrir::Entity physicsRoot = entityList.CreateEntity();
+        physicsRoot.GetComponent<Fenrir::Name>().Set("Physics");
+
+        // A collider with no RigidBody: static. Grey, its top face at y = -3.75.
+        Fenrir::Entity ground = entityList.CreateEntity();
+        ground.GetComponent<Fenrir::Name>().Set("Ground");
+        ground.GetComponent<Fenrir::Transform>() = Fenrir::Transform(Fenrir::Math::Vec3(0.0f, -4.0f, -12.0f), identity,
+                                                                     Fenrir::Math::Vec3(16.0f, 0.5f, 16.0f));
+        ground.AddComponent<Fenrir::Collider>();
+        ground.AddComponent<Material>(FlatColour(Fenrir::Math::Vec3(0.45f, 0.45f, 0.45f)));
+        ground.AddComponent<Model>(cube);
+        physicsRoot.AddChild(ground);
+
+        for (std::size_t i = 0; i < boxColours.size(); ++i)
+        {
+            const float step = static_cast<float>(i);
+            Fenrir::Entity box = entityList.CreateEntity();
+            box.GetComponent<Fenrir::Name>().Set(("Box " + std::to_string(i)).c_str());
+            box.GetComponent<Fenrir::Transform>() = Fenrir::Transform(
+                Fenrir::Math::Vec3(0.3f * static_cast<float>(i % 3) - 0.3f, 1.5f * step, -12.0f),
+                Fenrir::Math::AngleAxis(0.3f * step, Fenrir::Math::Normalized(Fenrir::Math::Vec3(1.0f, 1.0f, 0.0f))),
+                Fenrir::Math::Vec3(1.0f));
+            box.AddComponent<Fenrir::RigidBody>();
+            box.AddComponent<Fenrir::Collider>();
+            box.AddComponent<Material>(FlatColour(boxColours[i]));
+            box.AddComponent<Model>(cube);
+            physicsRoot.AddChild(box);
+        }
+
+        // Kinematic: moved by MovePaddle in Tick, pushes the boxes and is not pushed. Orange.
+        m_paddle = entityList.CreateEntity();
+        m_paddle.GetComponent<Fenrir::Name>().Set("Paddle");
+        m_paddle.GetComponent<Fenrir::Transform>() =
+            Fenrir::Transform(Fenrir::Math::Vec3(-6.0f, -3.0f, -12.0f), identity, Fenrir::Math::Vec3(1.0f, 1.0f, 4.0f));
+        m_paddle.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
+        m_paddle.AddComponent<Fenrir::Collider>();
+        m_paddle.AddComponent<Material>(FlatColour(Fenrir::Math::Vec3(1.0f, 0.55f, 0.0f)));
+        m_paddle.AddComponent<Model>(cube);
+        physicsRoot.AddChild(m_paddle);
+    }
+
+    // Game code in Tick: sweeps the paddle from x = -6 to 6 and back, once every 12.6 seconds.
+    void MovePaddle(Fenrir::App& app)
+    {
+        m_time += app.GetTime().tickRate;
+        m_paddle.GetComponent<Fenrir::Transform>().pos.x = static_cast<float>(-6.0 * std::cos(m_time * 0.5));
+    }
+
+  private:
+    // The editor's debug shader draws one flat colour.
+    static Material FlatColour(const Fenrir::Math::Vec3& colour)
+    {
+        Material material{aabbShader, {}};
+        material.properties["color"] = colour;
+        return material;
+    }
+
+    static constexpr std::array<Fenrir::Math::Vec3, 8> boxColours = {
+        Fenrir::Math::Vec3(0.90f, 0.20f, 0.20f), // red
+        Fenrir::Math::Vec3(0.20f, 0.75f, 0.25f), // green
+        Fenrir::Math::Vec3(0.20f, 0.40f, 0.95f), // blue
+        Fenrir::Math::Vec3(0.95f, 0.90f, 0.20f), // yellow
+        Fenrir::Math::Vec3(0.70f, 0.25f, 0.85f), // purple
+        Fenrir::Math::Vec3(0.20f, 0.85f, 0.85f), // cyan
+        Fenrir::Math::Vec3(0.95f, 0.45f, 0.70f), // pink
+        Fenrir::Math::Vec3(0.95f, 0.95f, 0.95f), // white
+    };
+
+    Fenrir::Entity m_paddle;
+    double m_time = 0.0;
+};
+
+#define BIND_PHYSICS_DEMO_FN(fn, demoInstance) std::bind(&PhysicsDemo::fn, &demoInstance, std::placeholders::_1)
+#endif
+
 class AssetLoader
 {
   public:
@@ -353,9 +446,19 @@ int main(int argc, char* argv[])
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
                                             .extensions = {ScriptingDemo::Extension()}};
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
-    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just wrote.
+    // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just
+    // wrote.
     app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
                              {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
+#endif
+
+#ifdef FENRIR_PHYSICS
+    // Declared after the app, so every scene's physics world and the physics backend end before the app does.
+    auto physics = Fenrir::Physics::Install(app);
+    PhysicsDemo physicsDemo;
+    // PostInit: the cube and the debug shader are loaded in Init.
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, BIND_PHYSICS_DEMO_FN(Init, physicsDemo))
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick, {BIND_PHYSICS_DEMO_FN(MovePaddle, physicsDemo)});
 #endif
 
     Fenrir::Camera camera;

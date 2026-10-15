@@ -1,0 +1,87 @@
+#include "FenrirPhysics/Physics.hpp"
+
+#include "Backend/Backend.hpp"
+#include "FenrirApp/App.hpp"
+#include "FenrirScene/Scene.hpp"
+#include "WorldImpl.hpp"
+
+namespace Fenrir
+{
+    struct Physics::State
+    {
+        State(App& installedOn, const PhysicsConfig& installedWith)
+            : app(&installedOn), config(installedWith), context(*installedOn.Logger())
+        {
+        }
+
+        App* app;
+        PhysicsConfig config;
+        Backend::Context context;
+    };
+
+    namespace
+    {
+        // The PostTick system: the active scene's world, made the first time the scene has physics components, steps.
+        void StepActiveScene(App& app, const Physics::State& state)
+        {
+            Scene& scene = app.GetActiveScene();
+            PhysicsWorld* world = PhysicsWorld::Of(scene);
+            if (world == nullptr)
+            {
+                EntityList& entities = scene.GetEntityList();
+                if (entities.Count(ComponentType::Native<Collider>()) == 0 &&
+                    entities.Count(ComponentType::Native<RigidBody>()) == 0)
+                {
+                    return; // no physics in this scene yet
+                }
+                world = &scene.AddResource<PhysicsWorld>(std::make_unique<PhysicsWorld::Impl>(
+                    entities, Backend::WorldSettings{state.config.gravity}, *app.Logger()));
+            }
+            world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
+        }
+    } // namespace
+
+    Physics::Physics(std::shared_ptr<State> state) : m_state(std::move(state))
+    {
+    }
+
+    Physics::Physics(Physics&& other) noexcept = default;
+
+    Physics& Physics::operator=(Physics&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Shutdown();
+            m_state = std::move(other.m_state);
+        }
+        return *this;
+    }
+
+    Physics::~Physics()
+    {
+        Shutdown();
+    }
+
+    void Physics::Shutdown() noexcept
+    {
+        if (!m_state)
+        {
+            return;
+        }
+        // Worlds first: the backend's process-wide state must outlive every world.
+        m_state->app->ForEachScene([](Scene& scene) { scene.RemoveResource<PhysicsWorld>(); });
+        m_state.reset();
+    }
+
+    Physics Physics::Install(App& app, PhysicsConfig config)
+    {
+        auto state = std::make_shared<State>(app, config);
+        app.AddSequentialSystems(SchedulePriority::PostTick, {[installed = std::weak_ptr<State>(state)](App& running) {
+                                     if (const std::shared_ptr<State> current = installed.lock())
+                                     {
+                                         StepActiveScene(running, *current);
+                                     }
+                                 }});
+        return Physics(std::move(state));
+    }
+} // namespace Fenrir
