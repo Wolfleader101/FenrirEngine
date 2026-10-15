@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -132,4 +133,20 @@ namespace Fenrir::Testing
         App m_app;
         int m_frames = 0;
     };
+
+    // The events of type TEvent the app's queue still holds, oldest first: what a reader made now would read.
+    template <typename TEvent>
+    std::vector<TEvent> HeldEvents(const App& app)
+    {
+        EventReader<TEvent> reader;
+        const EventRange<TEvent> events = reader.Read(app);
+        return {events.begin(), events.end()};
+    }
+
+    // How many events a queue still holds: what a reader made now would read, by name and as bytes.
+    inline std::size_t HeldEventCount(const IEventQueue& queue)
+    {
+        std::size_t cursor = NewReaderCursor;
+        return queue.ReadRawAfter(cursor).Count();
+    }
 } // namespace Fenrir::Testing

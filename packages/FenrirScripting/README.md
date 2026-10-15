@@ -401,14 +401,16 @@ read, including ones sent after it last ran; readers of one queue, C# or C++, ar
 - **Sends wait for the system to return.** `Events.Send` is recorded like a structural change, so what a read yielded stays
   valid for the whole system. The systems after it, and C++, see the send; the sender's own readers see it on their next read.
 - **Reading.** `reader.Read()` gives an `EventRange<T>` (a `ref struct`, so it cannot outlive the system): `Count`, an
-  indexer, `foreach`, and `Missed`, how many events the reader lost by going two of the queue's swaps without reading (zero for
-  a reader that reads every frame). Elements come out oldest first; `var` copies one, `ref readonly var` does not. A reader
-  in a `Tick` system sees an event on its first run after the send, even across frames that run no tick.
-- **After a reload** the new systems' readers start from the events the queue still holds, so one may see an event the
-  previous generation's reader already handled in the frame or two before the reload.
+  indexer, `foreach`, and `Missed`, how many events the reader lost by going two of the queue's swaps without reading (the
+  queue swaps at the end of each frame that ran a tick, so zero for a reader that reads every frame). Elements come out
+  oldest first; `var` copies one, `ref readonly var` does not. A reader in a `Tick` system sees an
+  event on its first run after the send, even across frames that run no tick.
+- **A new reader**, such as one made by a reload, starts at the oldest event the queue still holds and reports nothing
+  missed. After a reload one may see an event the previous generation's reader already handled just before it.
 - **By name from C++.** `App::NameEvent<T>("name")` gives a typed queue a name, `App::FindEventQueue("name")` finds any named
   queue, and `IEventQueue::SendRaw` and `ReadRawAfter` send it and read it as bytes, with a cursor the caller keeps (one
-  per reader). A raw send from a system running in parallel is held until its batch has run, as `SendEvent` is.
+  per reader, starting at `NewReaderCursor`). A raw send from a system running in parallel is held until its batch has
+  run, as `SendEvent` is.
 
 ## Hot reload
 

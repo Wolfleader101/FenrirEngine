@@ -225,10 +225,10 @@ namespace Fenrir::Detail
                 engine.changes->SendEvent(context.GetApp(), *engine.components, event, value));
         }
 
-        // EventReadAfter: one read of a C# EventReader. `seen` is the reader's cursor, kept in C#, so readers share no
-        // state. Fills `view` with the older part's address and count, the newer part's, and how many the reader
-        // missed. 0, or -1 if there is no such event. The addresses are good until something is sent to the queue or it
-        // swaps.
+        // EventReadAfter: one read of a C# EventReader. `seen` is the reader's cursor, kept in C# (NewReaderCursor
+        // before its first read), so readers share no state. Fills `view` with the older part's address and count, the
+        // newer part's, and how many the reader missed. 0, or -1 if there is no such event. The addresses are good
+        // until something is sent to the queue or it swaps.
         std::int32_t EventReadAfter(const CallContext& context, std::int32_t event, std::uint64_t* seen,
                                     std::uintptr_t* view)
         {
