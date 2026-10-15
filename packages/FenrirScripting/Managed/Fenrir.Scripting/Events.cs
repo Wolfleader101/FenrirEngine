@@ -93,13 +93,14 @@ public static unsafe class ScriptEvents
 /// What a system reads events of one type through. It remembers which events it has already yielded, so each event reaches it
 /// once, including events sent after it last ran: the same guarantee a C++ <c>EventReader</c> gives, and independent of every
 /// other reader of the queue, C# or C++. A system keeps its readers in fields (one per event type it reads), never shares them
-/// with other systems, and reads with <c>foreach (var e in reader.Read())</c>. A reader made by a reload starts again from the
-/// events the queue still holds.
+/// with other systems, and reads with <c>foreach (var e in reader.Read())</c>. A new reader's first read (a system added
+/// late, or one made by a reload) starts at the oldest event the queue still holds and reports nothing missed.
 /// </summary>
 public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
 {
-    // How many events of the queue's whole history this reader has gone past (the engine's cursor).
-    private ulong seen;
+    // How many events of the queue's whole history this reader has gone past (the engine's cursor). All ones until the first
+    // read: the engine's NewReaderCursor.
+    private ulong seen = ulong.MaxValue;
 
     /// <summary>
     /// The events sent since this reader last read, oldest first. Each read moves past what it yields, so the next yields only
