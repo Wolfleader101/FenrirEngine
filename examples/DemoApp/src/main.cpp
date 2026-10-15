@@ -1,3 +1,4 @@
+#include <random>
 #include <string>
 #include <unordered_set>
 
@@ -173,6 +174,16 @@ static void InitLights(Fenrir::App& app)
 #ifdef FENRIR_PHYSICS
 // PROTOTYPE (physics spike): a static ground, a stack of dynamic boxes and a kinematic paddle, all drawn as the unit
 // cube.
+// A flat random colour per object (the editor's debug shader), so each body is easy to tell apart.
+static Material RandomColour()
+{
+    static std::mt19937 random(7);
+    std::uniform_real_distribution<float> channel(0.2f, 1.0f);
+    Material material{aabbShader};
+    material.properties["color"] = Fenrir::Math::Vec3(channel(random), channel(random), channel(random));
+    return material;
+}
+
 static void InitPhysicsDemo(Fenrir::App& app)
 {
     Fenrir::EntityList& entityList = app.GetActiveScene().GetEntityList();
@@ -186,7 +197,7 @@ static void InitPhysicsDemo(Fenrir::App& app)
     ground.GetComponent<Fenrir::Transform>() =
         Fenrir::Transform(Fenrir::Math::Vec3(0.0f, -4.0f, -12.0f), identity, Fenrir::Math::Vec3(16.0f, 0.5f, 16.0f));
     ground.AddComponent<Fenrir::Collider>(); // no RigidBody: static
-    ground.AddComponent<Material>(Material{lightShader});
+    ground.AddComponent<Material>(RandomColour());
     ground.AddComponent<Model>(cube);
     physicsRoot.AddChild(ground);
 
@@ -201,7 +212,7 @@ static void InitPhysicsDemo(Fenrir::App& app)
             Fenrir::Math::Vec3(1.0f));
         box.AddComponent<Fenrir::RigidBody>();
         box.AddComponent<Fenrir::Collider>();
-        box.AddComponent<Material>(Material{lightShader});
+        box.AddComponent<Material>(RandomColour());
         box.AddComponent<Model>(cube);
         physicsRoot.AddChild(box);
     }
@@ -213,7 +224,7 @@ static void InitPhysicsDemo(Fenrir::App& app)
         Fenrir::Transform(Fenrir::Math::Vec3(-6.0f, -3.0f, -12.0f), identity, Fenrir::Math::Vec3(1.0f, 1.0f, 4.0f));
     paddle.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
     paddle.AddComponent<Fenrir::Collider>();
-    paddle.AddComponent<Material>(Material{lightShader});
+    paddle.AddComponent<Material>(RandomColour());
     paddle.AddComponent<Model>(cube);
     physicsRoot.AddChild(paddle);
 }
