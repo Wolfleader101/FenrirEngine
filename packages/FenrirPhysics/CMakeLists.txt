@@ -3,10 +3,12 @@
 add_subdirectory(libs)
 
 add_library(FenrirPhysics STATIC
+    include/FenrirPhysics/CollisionLayers.hpp
     include/FenrirPhysics/Components.hpp
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
 
+    src/CollisionLayers.cpp
     src/Physics.cpp
     src/PhysicsWorld.cpp
     src/WorldImpl.hpp
