@@ -202,6 +202,71 @@ fails, the assembly is released and **nothing** from that load is registered: no
 today are a malformed report, a name that clashes with a native component or another script component, two names that would
 share a storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
 
+## Tagged unions
+
+A component can hold a tagged union: a tag saying which kind it holds and overlapping storage for one of several kinds
+(FenrirPhysics's `CollisionShape` is one). Nothing special is needed to share it: Iris's struct mapping accepts C#'s
+explicit layout and checks every field by name, offset and kind, and nothing stops two fields sharing an offset. The C#
+side is written by hand, in one pattern. On the native side, the mapping lists the tag and each kind in declaration order,
+with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend:
+
+```cpp
+class Shape {
+  public:
+    Shape(BoxShape box);       // implicit, one per kind
+    Shape(SphereShape sphere);
+    ShapeType Type() const;
+    template <typename T> T& As();   // asserts the kind
+  private:
+    friend struct Iris::StructMapping<Shape>;
+    ShapeType m_type;
+    union { BoxShape m_box; SphereShape m_sphere; };
+};
+template <> struct Iris::StructMapping<Shape> {
+    static constexpr std::string_view typeName = "MyGame.Shape";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Shape, m_type, "_type"),
+        IRIS_FIELD_AS(Shape, m_box, "_box"), IRIS_FIELD_AS(Shape, m_sphere, "_sphere"));
+};
+```
+
+```csharp
+[StructLayout(LayoutKind.Explicit)]
+public struct Shape
+{
+    [FieldOffset(0)] private ShapeType _type;      // the tag, private so only a conversion changes it
+    [FieldOffset(4)] private BoxShape _box;        // every kind at the union's offset (the C++ offsetof)
+    [FieldOffset(4)] private SphereShape _sphere;
+
+    public readonly ShapeType Type => _type;
+
+    // A checked view per kind: a reference into the shape, so writes land in the component's storage.
+    [UnscopedRef] public ref BoxShape Box { get { Expect(ShapeType.Box); return ref _box; } }
+    [UnscopedRef] public ref SphereShape Sphere { get { Expect(ShapeType.Sphere); return ref _sphere; } }
+
+    // Assigning a kind by value sets the tag with it.
+    public static implicit operator Shape(BoxShape box) => new() { _type = ShapeType.Box, _box = box };
+    public static implicit operator Shape(SphereShape sphere) => new() { _type = ShapeType.Sphere, _sphere = sphere };
+
+    private readonly void Expect(ShapeType wanted)
+    {
+        if (_type != wanted) throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
+    }
+}
+```
+
+So `collider.Shape = new SphereShape { Radius = 1 }` changes the kind, `collider.Shape.Box.HalfExtents.Y = 2` edits a box
+in place, and reading the wrong kind's view throws `InvalidOperationException`, as C++'s asserting `As<T>()` does.
+
+- **The mirror is checked like any other.** A kind at the wrong offset or under the wrong name fails the load, naming the
+  field. The offsets must be the C++ ones: the union starts at its own alignment after the tag.
+- **Components defined in C# may use the pattern too**, by hand: their struct is their definition, so it needs only to be
+  unmanaged. There is no generator for the views and conversions; one may come when a second union shows it is worth it.
+- **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
+  value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
+  bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
+- The `ScriptingTests` tagged-union tests are the proof: a native component holding one validates, round-trips through a C#
+  system both ways, throws for the wrong kind, and is refused with a wrong offset or name.
+
 ## Creating, destroying, adding and removing
 
 ```csharp
