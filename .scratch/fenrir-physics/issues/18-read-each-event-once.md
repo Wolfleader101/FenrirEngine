@@ -15,6 +15,7 @@ Using "How do other engines deliver events to their systems?":
 - How does it behave for readers in `Tick` (zero or several times a frame) and in `Update`, and for an event sent in `Tick` and read in `Update`?
 - How does C# read with the same guarantee (a C# system is a class, so it can hold a cursor)?
 - Can events become more flexible than byte-copyable plain data (the investigation the user asked for), and what would C# need for that?
-- What changes for existing readers (DemoApp input, scripting's `Events.Read`)?
+- What changes for existing readers (DemoApp input, AutoPlay, `LogBursts`'s hand-rolled cursor, scripting's `Events.Read`, the `EventsHaveTheSameFrameWindowInBothLanguages` test)?
+- The research found the queues race when `AddSystems` runs systems in parallel (shared `combinedBuffer`, unlocked `Send`, lazy queue creation). Which concurrency rule fixes that: readers in parallel and writers exclusive (Bevy), locking, or per-system send buffers?
 
 Likely an ADR: it changes a core engine contract.
