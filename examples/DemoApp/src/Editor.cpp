@@ -18,6 +18,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -480,13 +481,11 @@ Fenrir::Entity Editor::SelectEntity(const Fenrir::Math::Ray& ray, Fenrir::Entity
 
     entityList.ForEachEntity([&](auto handle) {
         Fenrir::Entity entity = entityList.GetEntity(static_cast<uint32_t>(handle));
-        auto& transform = entity.GetComponent<Fenrir::Transform>();
-
         if (entity.HasComponent<Model>())
         {
             auto& model = entity.GetComponent<Model>();
 
-            Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
+            const Fenrir::Math::Mat4 mdl_mat = Fenrir::GetWorldMatrix(entity);
             if (Fenrir::Math::RayAABBIntersect(ray, model.boundingBox, mdl_mat))
             {
                 float distance = Fenrir::Math::CalculateDistance(ray.origin, model.boundingBox, mdl_mat);
@@ -1048,7 +1047,6 @@ void Editor::DrawGuizmo()
 {
     if (m_selectedEntity.IsValid())
     {
-        auto& transform = m_selectedEntity.GetComponent<Fenrir::Transform>();
         static ImGuizmo::OPERATION mCurrentGizmoOperation(ImGuizmo::TRANSLATE);
         static ImGuizmo::MODE mCurrentGizmoMode(ImGuizmo::WORLD);
         static bool useSnap = false;
@@ -1067,7 +1065,8 @@ void Editor::DrawGuizmo()
 
         auto projection = m_renderer.GetProjectionMatrix();
 
-        Fenrir::Math::Mat4 mdl_mat = TransformToMat4(transform);
+        // The gizmo shows and edits the world transform, so a child moves where it is dragged whatever its parents are.
+        Fenrir::Math::Mat4 mdl_mat = TransformToMat4(Fenrir::GetWorldTransform(m_selectedEntity));
 
         float* mat = Fenrir::Math::AsArray(mdl_mat);
 
@@ -1078,9 +1077,13 @@ void Editor::DrawGuizmo()
 
             Fenrir::Math::Mat4 newMat = Fenrir::Math::MakeMat4(mat);
 
-            Fenrir::Math::Decompose(newMat, transform.pos, transform.rot, transform.scale);
+            Fenrir::Transform world;
+            Fenrir::Math::Decompose(newMat, world.pos, world.rot, world.scale);
+            Fenrir::SetWorldTransform(m_selectedEntity, world);
 
-            cachedEuler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(transform.rot));
+            // The inspector shows the local rotation.
+            const auto& local = m_selectedEntity.GetComponent<Fenrir::Transform>();
+            cachedEuler = Fenrir::Math::RadToDeg(Fenrir::Math::EulerFromQuat(local.rot));
         }
     }
 }
