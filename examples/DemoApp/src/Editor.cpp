@@ -370,7 +370,7 @@ void Editor::OnMouseClick(const MouseButtonEvent& event)
 
 void Editor::Update(Fenrir::App& app)
 {
-    for (const auto& event : app.ReadEvents<MouseButtonEvent>())
+    for (const auto& event : m_mouseButtonReader.Read(app))
     {
         OnMouseClick(event);
     }
