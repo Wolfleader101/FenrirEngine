@@ -182,12 +182,12 @@ void Window::OnKeyPress(const KeyboardKeyEvent& event)
 
 void Window::PostUpdate(Fenrir::App& app)
 {
-    if (app.ReadEvents<WindowCloseEvent>().size() > 0)
+    if (!m_closeReader.Read(app).empty())
     {
         app.Stop();
     }
 
-    for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
+    for (const auto& event : m_keyReader.Read(app))
     {
         OnKeyPress(event);
     }

@@ -2,6 +2,7 @@
 
 #include <filesystem>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirMath/Math.hpp"
@@ -148,6 +149,7 @@ class Editor
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
     Fenrir::Entity m_selectedEntity;
+    Fenrir::EventReader<MouseButtonEvent> m_mouseButtonReader;
 
     std::shared_ptr<EditorConsoleLogger> m_consoleLogger;
 
