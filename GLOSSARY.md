@@ -188,6 +188,10 @@ The geometry of a collider on its own, as a value: exactly one kind (box, sphere
 **Physics material**
 How a collider's surface responds to contact: its friction and restitution.
 
+**Contact**
+Two solid colliders of different bodies touching. It begins when they first touch and ends when they separate or one is removed; a body falling asleep does not end it.
+*Avoid:* collision (as the name of the state), hit.
+
 **Trigger**
 A collider that reports what overlaps it but never pushes anything.
 *Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
