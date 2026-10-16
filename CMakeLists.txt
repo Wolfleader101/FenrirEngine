@@ -57,4 +57,9 @@ if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)
 endif()
 
+# Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
+if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirPhysics/Scripting)
+endif()
+
 add_subdirectory(examples)
