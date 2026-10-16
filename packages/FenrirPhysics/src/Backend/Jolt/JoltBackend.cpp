@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "FenrirLogger/ILogger.hpp"
@@ -31,10 +32,6 @@ namespace Fenrir::Backend
 {
     namespace
     {
-        // Capacities of every world. Plain limits a later change takes from PhysicsConfig.
-        constexpr JPH::uint maxBodies = 65536;
-        constexpr JPH::uint maxBodyPairs = 65536;
-        constexpr JPH::uint maxContactConstraints = 10240;
         constexpr std::size_t tempAllocatorBytes = 10 * 1024 * 1024;
         constexpr float wakeMargin = 0.1f;
 
@@ -252,6 +249,12 @@ namespace Fenrir::Backend
 #ifdef JPH_ENABLE_ASSERTS
         bool AssertFailed(const char* expression, const char* message, const char* file, JPH::uint line)
         {
+            // Jolt asserts when a step runs out of room for body pairs or contacts: a capacity in PhysicsConfig was too
+            // small, not a FenrirPhysics bug. World::Step reports it, and the step carries on.
+            if (std::string_view(expression) == "errors == EPhysicsUpdateError::None")
+            {
+                return false;
+            }
             const std::string text = "Physics backend assertion failed: " + std::string(expression) + " (" +
                                      (message != nullptr ? message : "") + ") at " + file + ":" + std::to_string(line);
             if (!s_loggers.empty())
@@ -346,13 +349,14 @@ namespace Fenrir::Backend
 
     struct World::Impl
     {
-        explicit Impl(ILogger& worldLogger)
-            : logger(&worldLogger), objectLayers(worldLogger), broadPhaseLayers(objectLayers),
+        Impl(ILogger& worldLogger, JPH::uint bodyCapacity)
+            : logger(&worldLogger), maxBodies(bodyCapacity), objectLayers(worldLogger), broadPhaseLayers(objectLayers),
               objectVsBroadPhase(objectLayers), objectPairs(objectLayers)
         {
         }
 
         ILogger* logger;
+        JPH::uint maxBodies;
         ObjectLayers objectLayers;
         BroadPhaseLayers broadPhaseLayers;
         ObjectVsBroadPhase objectVsBroadPhase;
@@ -419,10 +423,30 @@ namespace Fenrir::Backend
         }
     };
 
-    World::World(const WorldSettings& settings, ILogger& logger) : m_impl(std::make_unique<Impl>(logger))
+    namespace
     {
-        m_impl->system.Init(maxBodies, 0, maxBodyPairs, maxContactConstraints, m_impl->broadPhaseLayers,
-                            m_impl->objectVsBroadPhase, m_impl->objectPairs);
+        // Jolt cannot go beyond its own limits: a larger capacity is lowered to the limit, and that is logged.
+        JPH::uint Capacity(std::uint32_t requested, JPH::uint limit, const char* what, ILogger& logger)
+        {
+            if (requested <= limit)
+            {
+                return requested;
+            }
+            logger.Error("Physics world capacity of " + std::to_string(requested) + " " + what + " is more than the " +
+                         std::to_string(limit) + " the backend allows: using " + std::to_string(limit));
+            return limit;
+        }
+    } // namespace
+
+    World::World(const WorldSettings& settings, ILogger& logger)
+        : m_impl(std::make_unique<Impl>(
+              logger, Capacity(settings.maxBodies, JPH::PhysicsSystem::cMaxBodiesLimit, "bodies", logger)))
+    {
+        m_impl->system.Init(
+            m_impl->maxBodies, 0,
+            Capacity(settings.maxBodyPairs, JPH::PhysicsSystem::cMaxBodyPairsLimit, "body pairs", logger),
+            Capacity(settings.maxContacts, JPH::PhysicsSystem::cMaxContactConstraintsLimit, "contacts", logger),
+            m_impl->broadPhaseLayers, m_impl->objectVsBroadPhase, m_impl->objectPairs);
         m_impl->system.SetGravity(ToJolt(settings.gravity));
     }
 
@@ -464,8 +488,8 @@ namespace Fenrir::Backend
             if (body == nullptr)
             {
                 m_impl->objectLayers.Release(settings.mObjectLayer);
-                m_impl->logger->Error("Physics world is full: a body was not made (" + std::to_string(maxBodies) +
-                                      " at most)");
+                m_impl->logger->Error("Physics world is full: a body was not made (" +
+                                      std::to_string(m_impl->maxBodies) + " at most)");
                 ids[i] = BodyId{};
                 continue;
             }
@@ -580,6 +604,44 @@ namespace Fenrir::Backend
             properties->SetGravityFactor(motion.gravityScale);
             properties->ScaleToMass(motion.mass);
         });
+    }
+
+    void World::AddImpulse(BodyId id, const Math::Vec3& impulse)
+    {
+        m_impl->Bodies().AddImpulse(ToJolt(id), ToJolt(impulse));
+    }
+
+    void World::AddForce(BodyId id, const Math::Vec3& force)
+    {
+        // Jolt clears a body's accumulated force after each step.
+        m_impl->Bodies().AddForce(ToJolt(id), ToJolt(force));
+    }
+
+    void World::AddTorque(BodyId id, const Math::Vec3& torque)
+    {
+        m_impl->Bodies().AddTorque(ToJolt(id), ToJolt(torque));
+    }
+
+    void World::AddAngularImpulse(BodyId id, const Math::Vec3& impulse)
+    {
+        m_impl->Bodies().AddAngularImpulse(ToJolt(id), ToJolt(impulse));
+    }
+
+    Math::Vec3 World::Gravity() const
+    {
+        return FromJolt(m_impl->system.GetGravity());
+    }
+
+    void World::SetGravity(const Math::Vec3& gravity)
+    {
+        m_impl->system.SetGravity(ToJolt(gravity));
+        // Jolt does not wake sleeping bodies for a gravity change, and a body at rest in zero gravity falls asleep.
+        JPH::BodyIDVector ids;
+        m_impl->system.GetBodies(ids);
+        if (!ids.empty())
+        {
+            m_impl->Bodies().ActivateBodies(ids.data(), static_cast<int>(ids.size()));
+        }
     }
 
     BodyState World::GetState(BodyId id) const

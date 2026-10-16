@@ -36,8 +36,11 @@ namespace Fenrir
                 {
                     return; // no physics in this scene yet
                 }
-                world = &scene.AddResource<PhysicsWorld>(std::make_unique<PhysicsWorld::Impl>(
-                    entities, Backend::WorldSettings{state.config.gravity}, *app.Logger()));
+                const PhysicsConfig& config = state.config;
+                const Backend::WorldSettings settings{config.gravity, config.maxBodies, config.maxBodyPairs,
+                                                      config.maxContacts};
+                world = &scene.AddResource<PhysicsWorld>(
+                    std::make_unique<PhysicsWorld::Impl>(entities, settings, *app.Logger()));
             }
             world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
         }

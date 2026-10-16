@@ -60,10 +60,13 @@ namespace Fenrir::Backend
         Math::Vec3 angularVelocity;
     };
 
-    /** @brief A world's fixed settings. */
+    /** @brief A world's settings when it is made. Gravity can change later; the capacities cannot. */
     struct WorldSettings
     {
         Math::Vec3 gravity;
+        std::uint32_t maxBodies;
+        std::uint32_t maxBodyPairs;
+        std::uint32_t maxContacts;
     };
 
     /**
@@ -117,6 +120,24 @@ namespace Fenrir::Backend
 
         /** @brief Changes how a body moves. The body must have been made with `canMove`. */
         void SetMotion(BodyId id, const Motion& motion);
+
+        /** @brief Changes a dynamic body's velocity by `impulse` over its mass, waking it. Other bodies ignore it. */
+        void AddImpulse(BodyId id, const Math::Vec3& impulse);
+
+        /** @brief Pushes a dynamic body with `force` during the next step only, waking it. Other bodies ignore it. */
+        void AddForce(BodyId id, const Math::Vec3& force);
+
+        /** @brief Twists a dynamic body with `torque` during the next step only, waking it. Other bodies ignore it. */
+        void AddTorque(BodyId id, const Math::Vec3& torque);
+
+        /** @brief Changes a dynamic body's angular velocity by `impulse` over its inertia, waking it. Other bodies
+         * ignore it. */
+        void AddAngularImpulse(BodyId id, const Math::Vec3& impulse);
+
+        [[nodiscard]] Math::Vec3 Gravity() const;
+
+        /** @brief Changes the world's gravity, waking every body. */
+        void SetGravity(const Math::Vec3& gravity);
 
         [[nodiscard]] BodyState GetState(BodyId id) const;
 

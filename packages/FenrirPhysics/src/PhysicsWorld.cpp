@@ -105,6 +105,36 @@ namespace Fenrir
         return scene.GetResource<PhysicsWorld>();
     }
 
+    void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddImpulse, impulse);
+    }
+
+    void PhysicsWorld::AddForce(const Entity& entity, const Math::Vec3& force)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddForce, force);
+    }
+
+    void PhysicsWorld::AddTorque(const Entity& entity, const Math::Vec3& torque)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddTorque, torque);
+    }
+
+    void PhysicsWorld::AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddAngularImpulse, impulse);
+    }
+
+    Math::Vec3 PhysicsWorld::Gravity() const
+    {
+        return m_impl->Gravity();
+    }
+
+    void PhysicsWorld::SetGravity(const Math::Vec3& gravity)
+    {
+        m_impl->SetGravity(gravity);
+    }
+
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings, ILogger& logger)
         : m_entities(&entities), m_backend(settings, logger),
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
@@ -119,6 +149,7 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
     }
@@ -193,6 +224,10 @@ namespace Fenrir
         m_backend.CreateBodies(descs, ids);
         for (std::size_t i = 0; i < descs.size(); ++i)
         {
+            if (ids[i].value == Backend::BodyId{}.value)
+            {
+                continue; // the world is full (the backend logged it): the entity has no body
+            }
             const Backend::BodyDesc& desc = descs[i];
             m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
                                                  desc.filter, Transform(desc.position, desc.rotation, desc.scale),
@@ -260,6 +295,25 @@ namespace Fenrir
                 record.angularVelocity = rigidBody->angularVelocity;
             }
         }
+    }
+
+    void PhysicsWorld::Impl::Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount)
+    {
+        m_pushes.push_back(Push{entity, pusher, amount});
+    }
+
+    void PhysicsWorld::Impl::ApplyPushes()
+    {
+        for (const Push& push : m_pushes)
+        {
+            const auto it = m_bodies.find(push.entity);
+            if (it == m_bodies.end())
+            {
+                continue; // no body: nothing to push
+            }
+            (m_backend.*push.pusher)(it->second.id, push.amount);
+        }
+        m_pushes.clear();
     }
 
     void PhysicsWorld::Impl::WriteBack()

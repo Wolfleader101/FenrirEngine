@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <set>
+#include <vector>
 
 #include "Backend/Backend.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
@@ -29,6 +30,23 @@ namespace Fenrir
          */
         void Step(float dt);
 
+        /** @brief A way of pushing a body: one of Backend::World's AddForce, AddImpulse, AddTorque and
+         * AddAngularImpulse. */
+        using Pusher = void (Backend::World::*)(Backend::BodyId, const Math::Vec3&);
+
+        [[nodiscard]] Math::Vec3 Gravity() const
+        {
+            return m_backend.Gravity();
+        }
+
+        void SetGravity(const Math::Vec3& gravity)
+        {
+            m_backend.SetGravity(gravity);
+        }
+
+        /** @brief Queues a push of `entity`'s body for the next step. */
+        void Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount);
+
       private:
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
         struct Record
@@ -46,6 +64,7 @@ namespace Fenrir
 
         void SyncBodies();
         void PushEdits(float dt);
+        void ApplyPushes();
         void WriteBack();
 
         EntityList* m_entities;
@@ -58,5 +77,15 @@ namespace Fenrir
 
         // Ordered by entity, so bodies are made, diffed and written back in a reproducible order (ADR-0011).
         std::map<std::uint32_t, Record> m_bodies;
+
+        struct Push
+        {
+            std::uint32_t entity;
+            Pusher pusher;
+            Math::Vec3 amount;
+        };
+
+        // In the order game code made them, applied after the edits are pushed and before the step.
+        std::vector<Push> m_pushes;
     };
 } // namespace Fenrir
