@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <utility>
 
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
@@ -59,6 +60,60 @@ namespace Fenrir::Backend
         Math::Vec3 linearVelocity;
         Math::Vec3 angularVelocity;
     };
+
+    /** @brief A non-owning reference to a callable, valid while the callable is: a callback with no virtual call and
+     * no allocation. */
+    template <typename Signature>
+    class FunctionRef;
+
+    template <typename Result, typename... Args>
+    class FunctionRef<Result(Args...)>
+    {
+      public:
+        template <typename Callable>
+        FunctionRef(Callable& callable) // NOLINT(google-explicit-constructor): passed straight to a call
+            : m_callable(&callable), m_call([](void* target, Args... args) -> Result {
+                  return (*static_cast<Callable*>(target))(std::forward<Args>(args)...);
+              })
+        {
+        }
+
+        Result operator()(Args... args) const
+        {
+            return m_call(m_callable, std::forward<Args>(args)...);
+        }
+
+      private:
+        void* m_callable;
+        Result (*m_call)(void*, Args...);
+    };
+
+    /** @brief Which bodies a query finds: those in a layer of `mask`, other than `ignoreEntity`'s, and triggers only
+     * if `hitTriggers`. */
+    struct QueryFilter
+    {
+        std::uint32_t mask = ~0u;
+        /** @brief The entity whose body is not found; the default matches no entity. */
+        std::uint32_t ignoreEntity = ~0u;
+        bool hitTriggers = false;
+    };
+
+    /** @brief Where a ray or a cast shape hit a body. */
+    struct QueryHit
+    {
+        /** @brief The body's entity. */
+        std::uint32_t entity;
+        Math::Vec3 point;
+        Math::Vec3 normal;
+        float distance;
+    };
+
+    /** @brief Given each hit nearer than the distance it last returned (at first the query's maximum), in no
+     * particular order; returns the farthest distance still wanted. */
+    using HitSink = FunctionRef<float(const QueryHit&)>;
+
+    /** @brief Given the entity of each body found, once per body; returns false to stop the query. */
+    using BodySink = FunctionRef<bool(std::uint32_t)>;
 
     /** @brief A world's fixed settings. */
     struct WorldSettings
@@ -119,6 +174,31 @@ namespace Fenrir::Backend
         void SetMotion(BodyId id, const Motion& motion);
 
         [[nodiscard]] BodyState GetState(BodyId id) const;
+
+        // Queries only read: they may be made from several threads at once, never during any other call.
+
+        /** @brief Casts a ray from `origin` along the unit `direction` for `maxDistance`. A ray that starts inside a
+         * solid shape hits it at distance 0, its normal against `direction`. */
+        void CastRay(const Math::Vec3& origin, const Math::Vec3& direction, float maxDistance,
+                     const QueryFilter& filter, HitSink sink) const;
+
+        /** @brief Sweeps `shape` (`scale` baked in, as for a body) from a pose along the unit `direction` for
+         * `maxDistance`. Each hit's point is on the cast shape. */
+        void CastShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                       const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
+                       const QueryFilter& filter, HitSink sink) const;
+
+        /** @brief Finds the bodies `shape` (`scale` baked in, as for a body) at a pose overlaps. */
+        void CollideShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                          const Math::Quat& rotation, const QueryFilter& filter, BodySink sink) const;
+
+        /** @brief Finds the bodies containing `point`. */
+        void CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const;
+
+        [[nodiscard]] bool IsSleeping(BodyId id) const;
+
+        /** @brief The body's world-space bounding box. */
+        [[nodiscard]] Math::AABB Bounds(BodyId id) const;
 
         /** @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps. */
         void Step(float dt, int collisionSteps);

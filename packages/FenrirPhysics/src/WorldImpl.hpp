@@ -30,6 +30,9 @@ namespace Fenrir
         void Step(float dt);
 
       private:
+        // The queries, in Queries.cpp, read the bodies and the backend.
+        friend class PhysicsWorld;
+
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
         struct Record
         {
