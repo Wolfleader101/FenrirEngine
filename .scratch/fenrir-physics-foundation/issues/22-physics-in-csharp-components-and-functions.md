@@ -4,10 +4,13 @@
 
 **Blocked by:** 11 (Tagged-union components in C#); 13 (All collision shapes and collision meshes); 16 (Forces, gravity and motion changes); 18 (Queries); 19 (Debug lines in the DemoApp).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] A fixture script adds `RigidBody` and `Collider` to an entity, sets a shape by value, and the body falls (scripting test).
 - [ ] From C#: an impulse moves a body; a raycast and a `RaycastAll` into a `Span` return the expected entities; `IsSleeping`, `Bounds` and gravity work; a collision mesh made from C# spans is usable by a collider.
 - [ ] Calls on an entity without a body, or in a scene without physics, return no hit or `false` without throwing.
 - [ ] Building with scripting off builds FenrirPhysics without FenrirPhysicsScripting or the contract; FenrirPhysics never links FenrirScripting.
 - [ ] The DemoApp registers the physics extension when scripting is on.
+
+**Resolved by:** merge of impl/22-physics-csharp (c25c172)
+**Note:** the extension comes from the owner (physics.ScriptingExtension(), defined in FenrirPhysicsScripting); native functions reach the owner through a file-level weak_ptr slot, so the most recently made extension wins.
