@@ -35,8 +35,8 @@ namespace Fenrir
          */
         void Step(App& app, float dt);
 
-        /** @brief Calls `func` for each contact of the body `body` touching now. */
-        void ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const;
+        /** @brief Calls `func` for each contact of `entity`'s body touching now. */
+        void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
         /**
          * @brief `BeforeTicks`: put back the true pose of each body Blend wrote, so `Tick` systems and the diff see

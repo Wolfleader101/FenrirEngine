@@ -11,6 +11,7 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/PhysicsWorld.hpp
     include/FenrirPhysics/Queries.hpp
 
+    src/BodyComponents.hpp
     src/CollisionLayers.cpp
     src/DebugLines.cpp
     src/Physics.cpp

@@ -59,11 +59,12 @@ namespace Fenrir
         [[nodiscard]] static PhysicsWorld* Of(Scene& scene);
 
         /**
-         * @brief Calls `func` once for each contact the rigid body `body` has now (as of the last step), whether or not
-         * contacts are reported as events. Contacts are as ContactBegin and ContactEnd tell them: one resting on
-         * another that has fallen asleep is still touching. Overlaps with triggers are not contacts.
+         * @brief Calls `func` once for each contact `entity`'s body (for a child collider's entity, the compound body
+         * it belongs to) has now (as of the last step), whether or not contacts are reported as events. Contacts are as
+         * ContactBegin and ContactEnd tell them: one resting on another that has fallen asleep is still touching.
+         * Overlaps with triggers are not contacts.
          */
-        void ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const;
+        void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
         /**
          * @brief The nearest body a ray from `origin` along `direction` (any length) hits within `maxDistance`. A ray
@@ -106,13 +107,13 @@ namespace Fenrir
         std::size_t OverlapPoint(const Math::Vec3& point, std::span<OverlapHit> hits,
                                  const QueryFilter& filter = {}) const;
 
-        /** @brief Whether the body of `body` (the entity with its RigidBody or Collider; a child collider's entity
-         * stands for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it.
-         * False for an entity with no body. */
-        [[nodiscard]] bool IsSleeping(const Entity& body) const;
+        /** @brief Whether `entity`'s body (the entity with its RigidBody or Collider; a child collider's entity stands
+         * for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it. False
+         * for an entity with no body. */
+        [[nodiscard]] bool IsSleeping(const Entity& entity) const;
 
-        /** @brief The world-space box around the body of `body`, or none for an entity with no body. */
-        [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& body) const;
+        /** @brief The world-space box around `entity`'s body, or none for an entity with no body. */
+        [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& entity) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs

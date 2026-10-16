@@ -19,6 +19,14 @@ namespace Fenrir
     [[nodiscard]] Transform GetWorldTransform(const Entity& entity);
 
     /**
+     * @brief One step of GetWorldTransform's composition: where `local`, given relative to `parent`, is in the space
+     * `parent` is given in. `pos = parent.pos + parent.rot * (parent.scale * local.pos)`, `rot = parent.rot *
+     * local.rot`, `scale = parent.scale * local.scale` (component-wise). For code that composes part of a chain, so it
+     * agrees with GetWorldTransform bit for bit.
+     */
+    [[nodiscard]] Transform ComposeTransform(const Transform& parent, const Transform& local);
+
+    /**
      * @brief The entity's exact world matrix: the product of the local matrices (TransformToMat4) from the root down
      * to the entity, shear included, computed on each call. For rendering.
      *

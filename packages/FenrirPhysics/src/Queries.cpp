@@ -199,15 +199,15 @@ namespace Fenrir
         return overlaps.Count();
     }
 
-    bool PhysicsWorld::IsSleeping(const Entity& body) const
+    bool PhysicsWorld::IsSleeping(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        const Impl::Record* record = m_impl->FindBody(entity.GetId());
         return record != nullptr && record->Active() && m_impl->m_backend.IsSleeping(record->id);
     }
 
-    std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& body) const
+    std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        const Impl::Record* record = m_impl->FindBody(entity.GetId());
         if (record == nullptr || !record->Active())
         {
             return std::nullopt; // no body, or an inactive one

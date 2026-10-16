@@ -3,6 +3,7 @@
 #include <cassert>
 
 #include "Backend/Backend.hpp"
+#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "PhysicsState.hpp"
@@ -20,8 +21,7 @@ namespace Fenrir
             if (world == nullptr)
             {
                 EntityList& entities = scene.GetEntityList();
-                if (entities.Count(ComponentType::Native<Collider>()) == 0 &&
-                    entities.Count(ComponentType::Native<RigidBody>()) == 0)
+                if (!HasBodyComponents(entities))
                 {
                     return; // no physics in this scene yet
                 }

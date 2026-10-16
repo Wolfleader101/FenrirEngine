@@ -14,6 +14,7 @@
 #include <tuple>
 #include <vector>
 
+#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Components.hpp"
@@ -307,8 +308,7 @@ namespace Fenrir
                      std::source_location where = std::source_location::current())
         {
             EntityList& entities = context.Entities();
-            if (entities.HasEntity(entity) && (entities.Has(ComponentType::Native<RigidBody>(), entity) ||
-                                               entities.Has(ComponentType::Native<Collider>(), entity)))
+            if (entities.HasEntity(entity) && HasBodyComponent(entities.GetEntity(entity)))
             {
                 return true;
             }
