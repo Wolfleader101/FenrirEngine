@@ -151,6 +151,8 @@ public struct Health : IComponent { public int Current; public int Max; }
   assembly is released, the app keeps running, and the error names the component and the field.
 - **Nothing registers after Install.** What scripting knows is fixed by the extensions given to `Install`; afterwards the
   registry changes only when a reload removes and adds the components and events the script assembly defines.
+- **Engine types as fields.** A component holding a `Math::Vec3`, `Math::Quat` or `Transform` includes
+  `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
@@ -220,7 +222,9 @@ A component can hold a tagged union: a tag saying which kind it holds and overla
 (FenrirPhysics's `CollisionShape` is one). Nothing special is needed to share it: Iris's struct mapping accepts C#'s
 explicit layout and checks every field by name, offset and kind, and nothing stops two fields sharing an offset. The C#
 side is written by hand, in one pattern. On the native side, the mapping lists the tag and each kind in declaration order,
-with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend:
+with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend (or, for a package that must not
+name Iris, as FenrirPhysics's `CollisionShape` does, map a plain stand-in with the same members through
+`MakeComponent<T, Mapping>`):
 
 ```cpp
 class Shape {
@@ -447,7 +451,9 @@ An engine package, or the app, makes itself scriptable with a `ScriptingExtensio
   by the full name of the C# method that calls them;
 - **components and events**: native components (`MakeComponent`, `MakeReadOnlyComponent`) and C++ events (`MakeEvent`),
   registered before the script assembly loads and checked against it as it does;
-- **shared assemblies**: its C# contract, shared with every script load.
+- **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
+  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (FenrirPhysics's
+  `fenrir_deploy_physics_scripting`, say).
 
 Extensions are the only way to give scripting anything, so the app's own components, events and contract go in an
 extension of its own, just as a package's do. The DemoApp's is a complete example:
@@ -471,14 +477,17 @@ float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* co
 
 Fenrir::ScriptingExtension physics;
 physics.name = "physics";
-physics.sharedAssemblies = {"Fenrir.Physics.Scripting.dll"};
+physics.sharedAssemblies = {"Fenrir.Physics.dll"};    // beside Fenrir.Scripting.dll
 physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf")};
 config.extensions.push_back(std::move(physics));
 ```
 
 `Install` registers every extension's native functions before it shares the contracts. It fails, logged and running
 without scripts, if a C# field has no native function, if their signatures differ, or if two extensions declare one name.
-The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example.
+The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example, and
+FenrirPhysics's is a real one: `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
+never links FenrirScripting), its contract `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this
+package's harness in `packages/FenrirPhysics/Scripting/Tests`.
 
 ## Exposing a native function
 

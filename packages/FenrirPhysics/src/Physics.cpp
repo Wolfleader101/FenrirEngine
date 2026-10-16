@@ -5,26 +5,11 @@
 #include "Backend/Backend.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "PhysicsState.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
 {
-    struct Physics::State
-    {
-        State(App& installedOn, const PhysicsConfig& installedWith)
-            : app(&installedOn), config(installedWith), layers(installedWith.collisionLayers, *installedOn.Logger()),
-              context(*installedOn.Logger()), meshes(*installedOn.Logger())
-        {
-        }
-
-        App* app;
-        PhysicsConfig config;
-        CollisionLayers layers;
-        Backend::Context context;
-        // After the context, so it ends first: its shapes need the backend's allocator.
-        Backend::CollisionMeshes meshes;
-    };
-
     namespace
     {
         // The PostTick system: the active scene's world, made the first time the scene has physics components, steps.

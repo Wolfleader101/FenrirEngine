@@ -13,6 +13,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirPhysicsScripting defines Physics::ScriptingExtension().
+    struct ScriptingExtension;
 
     /** @brief How Physics::Install sets physics up for an app. */
     struct PhysicsConfig
@@ -90,6 +92,20 @@ namespace Fenrir
 
         /** @brief The collision layers named in the PhysicsConfig given to Install. */
         [[nodiscard]] const CollisionLayers& Layers() const;
+
+        /**
+         * @brief What physics gives C# (ADR-0009): the physics components, the native functions of
+         * `Fenrir.Physics.PhysicsWorld` and the `Fenrir.Physics` contract. Add it to ScriptingConfig::extensions.
+         *
+         * Its native functions act on the active scene's physics world and, for collision meshes, on this owner (the
+         * last one asked for its extension). With no world, no body, a released mesh or this owner destroyed, they do
+         * nothing and return false or zero, warning once per call site in debug builds.
+         *
+         * Defined by the FenrirPhysicsScripting library, not FenrirPhysics (which never links FenrirScripting), so it
+         * exists only in a build with physics and scripting on. Include "FenrirPhysicsScripting/PhysicsScripting.hpp"
+         * and link FenrirPhysicsScripting to call it.
+         */
+        [[nodiscard]] Fenrir::ScriptingExtension ScriptingExtension() const;
 
         /** @brief Private: what Install set up. */
         struct State;
