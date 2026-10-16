@@ -4,10 +4,14 @@
 
 **Blocked by:** 07 (Event readers in C++); 15 (Physics materials and collision layers).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Tests (reading through `EventReader<T>`): a box landing on the ground with `ContactEvents` gives one `ContactBegin` with the right entities, an upward normal and a plausible closing speed; lifting it gives one `ContactEnd`; without `ContactEvents` on either body, no events.
 - [ ] A body entering and leaving a trigger gives one enter and one exit; a trigger child of a moving body follows it and uses its own filter.
 - [ ] A body resting on the ground or inside a trigger that falls asleep produces no end or exit.
 - [ ] Destroying a body in contact, removing its component, or disabling the trigger sends the matching end or exit on the next step.
 - [ ] Event order is identical across runs; `ForEachContact` lists current contacts.
+
+**Resolved by:** merge of impl/17-triggers-and-contacts (6423e23)
+
+**Note:** events name possibly-destroyed entities through the new EntityList::HandleOf(id); one mutex-guarded contact buffer sorted after the step stands in for per-thread buffers (same result).
