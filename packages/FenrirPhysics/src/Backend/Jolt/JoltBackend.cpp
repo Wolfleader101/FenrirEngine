@@ -29,11 +29,17 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/CollidePointResult.h>
+#include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
+#include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -553,6 +559,46 @@ namespace Fenrir::Backend
             return cooked.GetPtr();
         }
 
+        // For a query, which may run beside other queries: the shape a hull or mesh refers to without changing
+        // anything. Not yet cooked, it is cooked for this query alone; null if the mesh is released or cannot be cooked
+        // as that kind (the error is logged when a body first uses it).
+        JPH::Ref<JPH::Shape> QueryShape(const CollisionShape& shape) const
+        {
+            const auto it = meshes.find(MeshOf(shape).id);
+            if (it == meshes.end())
+            {
+                return nullptr;
+            }
+            const Entry& entry = it->second;
+            const bool hull = shape.Is<ConvexHullShape>();
+            if (const JPH::Ref<JPH::Shape>& cooked = hull ? entry.hull : entry.mesh; cooked != nullptr)
+            {
+                return cooked;
+            }
+            if (hull ? entry.hullFailed : entry.meshFailed)
+            {
+                return nullptr;
+            }
+            if (hull)
+            {
+                const JPH::ShapeSettings::ShapeResult result = JPH::ConvexHullShapeSettings(entry.vertices).Create();
+                return result.HasError() ? nullptr : result.Get();
+            }
+            if (entry.triangles.empty())
+            {
+                return nullptr;
+            }
+            JPH::VertexList vertices;
+            vertices.reserve(entry.vertices.size());
+            for (JPH::Vec3Arg v : entry.vertices)
+            {
+                vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
+            }
+            const JPH::ShapeSettings::ShapeResult result =
+                JPH::MeshShapeSettings(std::move(vertices), entry.triangles).Create();
+            return result.HasError() ? nullptr : result.Get();
+        }
+
         JPH::Ref<JPH::Shape> CookMesh(CollisionMesh handle, const Entry& entry)
         {
             if (entry.triangles.empty())
@@ -667,6 +713,23 @@ namespace Fenrir::Backend
             }
             const JPH::Shape* cooked = meshes->Shape(shape);
             JPH_ASSERT(cooked != nullptr);
+            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
+            return scaled.Get();
+        }
+
+        // The backend shape for a query's shape, by the same rules as MakeShape but touching no cache, so queries can
+        // run side by side. Null for a hull or mesh whose collision mesh was released or cannot be cooked.
+        JPH::Ref<JPH::Shape> MakeQueryShape(const CollisionShape& shape, const Math::Vec3& scale) const
+        {
+            if (IsPrimitive(shape))
+            {
+                return Make(Bake(shape, scale));
+            }
+            const JPH::Ref<JPH::Shape> cooked = meshes->QueryShape(shape);
+            if (cooked == nullptr)
+            {
+                return nullptr;
+            }
             const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
             return scaled.Get();
         }
@@ -951,6 +1014,265 @@ namespace Fenrir::Backend
         bodies.GetPositionAndRotation(body, position, rotation);
         return BodyState{FromJolt(position), FromJolt(rotation), FromJolt(bodies.GetLinearVelocity(body)),
                          FromJolt(bodies.GetAngularVelocity(body))};
+    }
+
+    namespace
+    {
+        // A query's filter, at each of Jolt's three levels.
+        class QueryBroadPhaseFilter final : public JPH::BroadPhaseLayerFilter
+        {
+          public:
+            explicit QueryBroadPhaseFilter(const QueryFilter& filter) : m_filter(&filter)
+            {
+            }
+
+            bool ShouldCollide(JPH::BroadPhaseLayer layer) const override
+            {
+                constexpr JPH::BroadPhaseLayer triggers(static_cast<JPH::BroadPhaseLayer::Type>(BroadPhase::Trigger));
+                return m_filter->hitTriggers || layer != triggers;
+            }
+
+          private:
+            const QueryFilter* m_filter;
+        };
+
+        class QueryLayerFilter final : public JPH::ObjectLayerFilter
+        {
+          public:
+            QueryLayerFilter(const QueryFilter& filter, const ObjectLayers& layers)
+                : m_filter(&filter), m_layers(&layers)
+            {
+            }
+
+            bool ShouldCollide(JPH::ObjectLayer layer) const override
+            {
+                return (m_layers->Key(layer).layers & m_filter->mask) != 0;
+            }
+
+          private:
+            const QueryFilter* m_filter;
+            const ObjectLayers* m_layers;
+        };
+
+        class QueryBodyFilter final : public JPH::BodyFilter
+        {
+          public:
+            explicit QueryBodyFilter(const QueryFilter& filter) : m_filter(&filter)
+            {
+            }
+
+            bool ShouldCollideLocked(const JPH::Body& body) const override
+            {
+                if (body.IsSensor() && !m_filter->hitTriggers)
+                {
+                    return false;
+                }
+                return body.GetUserData() != m_filter->ignoreEntity;
+            }
+
+          private:
+            const QueryFilter* m_filter;
+        };
+
+        // The three filters of one query, built together.
+        struct QueryFilters
+        {
+            QueryFilters(const QueryFilter& filter, const ObjectLayers& layers)
+                : broadPhase(filter), layer(filter, layers), body(filter)
+            {
+            }
+
+            QueryBroadPhaseFilter broadPhase;
+            QueryLayerFilter layer;
+            QueryBodyFilter body;
+        };
+
+        std::uint32_t EntityOf(const JPH::Body& body)
+        {
+            return static_cast<std::uint32_t>(body.GetUserData());
+        }
+
+        // Hands each hit to a sink, narrowing the query to the distance the sink still wants.
+        class RayCollector final : public JPH::CastRayCollector
+        {
+          public:
+            RayCollector(const JPH::RRayCast& ray, float maxDistance, HitSink sink)
+                : m_ray(&ray), m_maxDistance(maxDistance), m_sink(sink)
+            {
+            }
+
+            void OnBody(const JPH::Body& body) override
+            {
+                m_entity = EntityOf(body);
+            }
+
+            void AddHit(const JPH::RayCastResult& result) override
+            {
+                const JPH::Vec3 point = m_ray->GetPointOnRay(result.mFraction);
+                const JPH::Vec3 direction = m_ray->mDirection.Normalized();
+                // A ray that starts inside a solid shape has no surface to take a normal from.
+                const JPH::Vec3 normal = result.mFraction > 0.0f
+                                             ? GetContext()->GetWorldSpaceSurfaceNormal(result.mSubShapeID2, point)
+                                             : -direction;
+                const float wanted =
+                    m_sink(QueryHit{m_entity, FromJolt(point), FromJolt(normal), result.mFraction * m_maxDistance});
+                const float fraction = wanted / m_maxDistance;
+                if (fraction < GetEarlyOutFraction())
+                {
+                    UpdateEarlyOutFraction(fraction);
+                }
+            }
+
+          private:
+            const JPH::RRayCast* m_ray;
+            float m_maxDistance;
+            HitSink m_sink;
+            std::uint32_t m_entity = 0;
+        };
+
+        class ShapeCastCollector final : public JPH::CastShapeCollector
+        {
+          public:
+            ShapeCastCollector(float maxDistance, HitSink sink) : m_maxDistance(maxDistance), m_sink(sink)
+            {
+            }
+
+            void OnBody(const JPH::Body& body) override
+            {
+                m_entity = EntityOf(body);
+            }
+
+            void AddHit(const JPH::ShapeCastResult& result) override
+            {
+                const JPH::Vec3 normal = -result.mPenetrationAxis.NormalizedOr(JPH::Vec3::sZero());
+                const float wanted = m_sink(QueryHit{m_entity, FromJolt(result.mContactPointOn1), FromJolt(normal),
+                                                     result.mFraction * m_maxDistance});
+                // Jolt orders shapes that start overlapping by negative penetration depth, below fraction 0: a sink
+                // that wants nothing farther than distance 0 still sees them.
+                const float fraction = wanted / m_maxDistance;
+                if (fraction > 0.0f && fraction < GetEarlyOutFraction())
+                {
+                    UpdateEarlyOutFraction(fraction);
+                }
+            }
+
+          private:
+            float m_maxDistance;
+            HitSink m_sink;
+            std::uint32_t m_entity = 0;
+        };
+
+        // Reports each body once, however many of its parts are hit; stops when the sink says so.
+        template <typename Base>
+        class BodyCollector final : public Base
+        {
+          public:
+            explicit BodyCollector(BodySink sink) : m_sink(sink)
+            {
+            }
+
+            void OnBody(const JPH::Body& body) override
+            {
+                m_entity = EntityOf(body);
+                m_reported = false;
+            }
+
+            void AddHit(const typename Base::ResultType&) override
+            {
+                if (m_reported)
+                {
+                    return;
+                }
+                m_reported = true;
+                if (!m_sink(m_entity))
+                {
+                    this->ForceEarlyOut();
+                }
+            }
+
+          private:
+            BodySink m_sink;
+            std::uint32_t m_entity = 0;
+            bool m_reported = false;
+        };
+
+        JPH::Mat44 ToJolt(const Math::Vec3& position, const Math::Quat& rotation)
+        {
+            return JPH::Mat44::sRotationTranslation(ToJolt(rotation), ToJolt(position));
+        }
+    } // namespace
+
+    void World::CastRay(const Math::Vec3& origin, const Math::Vec3& direction, float maxDistance,
+                        const QueryFilter& filter, HitSink sink) const
+    {
+        if (!(maxDistance > 0.0f))
+        {
+            return;
+        }
+        const JPH::RRayCast ray(ToJolt(origin), ToJolt(direction) * maxDistance);
+        RayCollector collector(ray, maxDistance, sink);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, JPH::RayCastSettings(), collector, filters.broadPhase,
+                                                           filters.layer, filters.body);
+    }
+
+    void World::CastShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                          const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
+                          const QueryFilter& filter, HitSink sink) const
+    {
+        if (!(maxDistance > 0.0f))
+        {
+            return;
+        }
+        const JPH::Ref<JPH::Shape> cast = m_impl->MakeQueryShape(shape, scale);
+        if (cast == nullptr)
+        {
+            return;
+        }
+        const JPH::RShapeCast shapeCast = JPH::RShapeCast::sFromWorldTransform(
+            cast, JPH::Vec3::sOne(), ToJolt(position, rotation), ToJolt(direction) * maxDistance);
+        ShapeCastCollector collector(maxDistance, sink);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CastShape(shapeCast, JPH::ShapeCastSettings(), JPH::RVec3::sZero(),
+                                                             collector, filters.broadPhase, filters.layer,
+                                                             filters.body);
+    }
+
+    void World::CollideShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                             const Math::Quat& rotation, const QueryFilter& filter, BodySink sink) const
+    {
+        const JPH::Ref<JPH::Shape> overlap = m_impl->MakeQueryShape(shape, scale);
+        if (overlap == nullptr)
+        {
+            return;
+        }
+        const JPH::Mat44 centreOfMass = ToJolt(position, rotation).PreTranslated(overlap->GetCenterOfMass());
+        BodyCollector<JPH::CollideShapeCollector> collector(sink);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CollideShape(
+            overlap, JPH::Vec3::sOne(), centreOfMass, JPH::CollideShapeSettings(), JPH::RVec3::sZero(), collector,
+            filters.broadPhase, filters.layer, filters.body);
+    }
+
+    void World::CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const
+    {
+        BodyCollector<JPH::CollidePointCollector> collector(sink);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CollidePoint(ToJolt(point), collector, filters.broadPhase,
+                                                                filters.layer, filters.body);
+    }
+
+    bool World::IsSleeping(BodyId id) const
+    {
+        const JPH::Body* body = m_impl->system.GetBodyLockInterfaceNoLock().TryGetBody(ToJolt(id));
+        // A static body never moves, so it neither sleeps nor wakes.
+        return body != nullptr && !body->IsStatic() && !body->IsActive();
+    }
+
+    Math::AABB World::Bounds(BodyId id) const
+    {
+        const JPH::AABox bounds = m_impl->Bounds(id);
+        return Math::AABB(FromJolt(bounds.mMin), FromJolt(bounds.mMax));
     }
 
     void World::Step(float dt, int collisionSteps)
