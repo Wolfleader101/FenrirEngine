@@ -5,6 +5,7 @@
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Queries.hpp"
 
 #ifdef JPH_VERSION_MAJOR
 #error "A FenrirPhysics public header includes Jolt."
