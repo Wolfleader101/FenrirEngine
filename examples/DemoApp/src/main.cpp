@@ -21,6 +21,7 @@
 
 #include <iostream>
 
+#include "DemoMesh.hpp"
 #include "Editor.hpp"
 #include "GLRenderer.hpp"
 #include "Material.hpp"
@@ -40,6 +41,7 @@
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
+#include "CSharpPhysicsScene.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #endif
 
@@ -118,11 +120,13 @@ static Shader myShader;
 static Shader lightShader;
 static Shader aabbShader;
 static Shader skyboxShader;
+static Shader shadedShader;
 
 static Skybox skybox;
 
 static Model backpack;
 static Model cube;
+static Model sphere;
 
 static const glm::vec3 pointLightPositions[4] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
                                                  glm::vec3(-4.0f, 2.0f, -12.0f), glm::vec3(0.0f, 0.0f, -3.0f)};
@@ -499,11 +503,14 @@ class AssetLoader
                                   m_assetPath + "shaders/lines_fragment.glsl");
         m_shaderLibrary.AddShader("skybox", m_assetPath + "shaders/skybox_vertex.glsl",
                                   m_assetPath + "shaders/skybox_fragment.glsl");
+        m_shaderLibrary.AddShader("shaded", m_assetPath + "shaders/shaded_vertex.glsl",
+                                  m_assetPath + "shaders/shaded_fragment.glsl");
 
         myShader = m_shaderLibrary.GetShader("lightedObject");
         lightShader = m_shaderLibrary.GetShader("light");
         aabbShader = m_shaderLibrary.GetShader("debug");
         skyboxShader = m_shaderLibrary.GetShader("skybox");
+        shadedShader = m_shaderLibrary.GetShader("shaded");
 
         m_modelLibrary.AddModel(m_assetPath + "models/backpack/backpack.obj");
 
@@ -511,6 +518,9 @@ class AssetLoader
 
         m_modelLibrary.AddModel(m_assetPath + "models/cube/cube.obj");
         cube = m_modelLibrary.GetModel(m_assetPath + "models/cube/cube.obj");
+
+        m_modelLibrary.AddModel(m_assetPath + "models/sphere/sphere.obj");
+        sphere = m_modelLibrary.GetModel(m_assetPath + "models/sphere/sphere.obj");
 
         std::string skyboxPath = m_assetPath + "textures/skybox/";
         m_textureLibrary.AddSkybox(skyboxPath, skyboxPath + "top.png", skyboxPath + "bottom.png",
@@ -569,18 +579,30 @@ int main(int argc, char* argv[])
 
 #ifdef FENRIR_SCRIPTING
     // Declared after the app, so .NET is released before the app is destroyed and before main returns.
-    // The component and events C++ and C# share, as the app's own scripting extension, and physics's, so scripts can
+    // The components and events C++ and C# share, as the app's own scripting extension, and physics's, so scripts can
     // use physics.
+    Fenrir::ScriptingExtension demoExtension = ScriptingDemo::Extension();
+#ifdef FENRIR_PHYSICS
+    demoExtension.components.push_back(CSharpPhysics::Component());
+#endif
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
-                                            .extensions = {ScriptingDemo::Extension()}};
+                                            .extensions = {std::move(demoExtension)}};
 #ifdef FENRIR_PHYSICS
     scriptingConfig.extensions.push_back(physics.ScriptingExtension());
 #endif
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
     // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just
-    // wrote.
+    // wrote. DemoMeshes gives what C# made visible its Model and Material before the renderer draws.
+    DemoMeshes demoMeshes(cube, sphere, shadedShader);
     app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
-                             {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
+                             {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay(),
+                              [&demoMeshes](Fenrir::App& running) { demoMeshes.Update(running); }});
+#ifdef FENRIR_PHYSICS
+    // The second scene, built and run by C# (scripts/Physics/Playground.cs): C++ makes it empty but for a marker, and
+    // F3 switches to it and back.
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, CSharpPhysics::CreateScene)
+        .AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate, {CSharpPhysics::SwitchOnF3()});
+#endif
 #endif
 
     Fenrir::Camera camera;
