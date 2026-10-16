@@ -74,8 +74,9 @@ namespace Fenrir
             m_backend.SetGravity(gravity);
         }
 
-        /** @brief Queues a push of `entity`'s body for the next step. */
-        void Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount);
+        /** @brief Queues a push of `entity`'s body for the next step; nothing for a handle to an entity no longer
+         * alive (destroyed, its id perhaps reused by a newer entity). */
+        void Queue(const Entity& entity, Pusher pusher, const Math::Vec3& amount);
 
       private:
         // The queries, in Queries.cpp, read the bodies and the backend.
@@ -190,6 +191,14 @@ namespace Fenrir
          * collider of a compound body, that body. Null for an entity with neither component, or whose body is not made.
          */
         [[nodiscard]] Record* FindBody(std::uint32_t entity);
+
+        /** @brief As FindBody for its id, but null for a handle to an entity no longer alive, whose id may since name a
+         * newer entity. */
+        [[nodiscard]] Record* FindBody(const Entity& entity);
+
+        /** @brief The backend's form of a query's filter: its ignored body resolved as ResolveBody does, and a handle
+         * to an entity no longer alive ignoring nothing. */
+        [[nodiscard]] Backend::QueryFilter ToBackend(const QueryFilter& filter) const;
 
         /** @brief The body's colliders as they are now, in the order of `entities`. */
         [[nodiscard]] std::vector<Part> PartsOf(std::span<const std::uint32_t> entities, std::uint32_t body,

@@ -392,3 +392,25 @@ TEST_CASE("A body whose entity was destroyed since the last step is not found", 
     REQUIRE(hit.has_value());
     REQUIRE(hit->body == behind);
 }
+
+TEST_CASE("A destroyed entity has no body to ask about, even before the next step", "[physics][queries]")
+{
+    PhysicsApp test;
+    AddGround(test.Entities());
+    Entity box = AddBody(test.Entities(), Math::Vec3(0.0f, 0.5f, 0.0f));
+    test.Run(3.0);
+    PhysicsWorld& world = WorldOf(test);
+    INFO("before it is destroyed, the box rests asleep on the ground, so there is something to find");
+    REQUIRE(world.IsSleeping(box));
+
+    test.Entities().DestroyEntity(box);
+
+    INFO("a destroyed entity's body is reported asleep");
+    REQUIRE_FALSE(world.IsSleeping(box));
+    INFO("a destroyed entity's body has bounds");
+    REQUIRE_FALSE(world.Bounds(box).has_value());
+    int contacts = 0;
+    world.ForEachContact(box, [&](const Contact&) { ++contacts; });
+    INFO("a destroyed entity's body is reported touching the ground");
+    REQUIRE(contacts == 0);
+}

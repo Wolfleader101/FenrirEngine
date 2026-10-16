@@ -42,6 +42,9 @@ namespace Fenrir
      * teleport) is seen from the next tick on. Queries only read, so systems running in parallel may query one world
      * at once; physics's own systems, which sync and step the world, never run beside them. A body whose entity was
      * destroyed since the last step is not found.
+     *
+     * A call that takes an entity ignores a handle to one no longer alive (destroyed, its id perhaps reused by a newer
+     * entity): it finds no body, pushes nothing and ignores nothing.
      */
     class PhysicsWorld
     {
@@ -62,7 +65,7 @@ namespace Fenrir
          * @brief Calls `func` once for each contact `entity`'s body (for a child collider's entity, the compound body
          * it belongs to) has now (as of the last step), whether or not contacts are reported as events. Contacts are as
          * ContactBegin and ContactEnd tell them: one resting on another that has fallen asleep is still touching.
-         * Overlaps with triggers are not contacts.
+         * Overlaps with triggers are not contacts. None for an entity no longer alive.
          */
         void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
@@ -109,34 +112,37 @@ namespace Fenrir
 
         /** @brief Whether `entity`'s body (the entity with its RigidBody or Collider; a child collider's entity stands
          * for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it. False
-         * for an entity with no body. */
+         * for an entity with no body or no longer alive. */
         [[nodiscard]] bool IsSleeping(const Entity& entity) const;
 
-        /** @brief The world-space box around `entity`'s body, or none for an entity with no body. */
+        /** @brief The world-space box around `entity`'s body, or none for an entity with no body or no longer alive.
+         */
         [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& entity) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs
          * to) by `impulse` (newton seconds, world space) over its mass, at the next step. Does nothing if the entity
-         * has no dynamic body then.
+         * is no longer alive, or has no dynamic body then.
          */
         void AddImpulse(const Entity& entity, const Math::Vec3& impulse);
 
         /**
          * @brief Pushes `entity`'s body with `force` (newtons, world space, through its centre of mass) for the next
-         * step only: add it every tick to keep pushing. Does nothing if the entity has no dynamic body then.
+         * step only: add it every tick to keep pushing. Does nothing if the entity is no longer alive, or has no
+         * dynamic body then.
          */
         void AddForce(const Entity& entity, const Math::Vec3& force);
 
         /**
          * @brief Twists `entity`'s body with `torque` (newton metres, world space) for the next step only: add it every
-         * tick to keep twisting. Does nothing if the entity has no dynamic body then.
+         * tick to keep twisting. Does nothing if the entity is no longer alive, or has no dynamic body then.
          */
         void AddTorque(const Entity& entity, const Math::Vec3& torque);
 
         /**
          * @brief Changes the angular velocity of `entity`'s body by `impulse` (newton metre seconds, world space) over
-         * its moment of inertia, at the next step. Does nothing if the entity has no dynamic body then.
+         * its moment of inertia, at the next step. Does nothing if the entity is no longer alive, or has no dynamic
+         * body then.
          */
         void AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse);
 

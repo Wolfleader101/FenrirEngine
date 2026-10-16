@@ -14,7 +14,8 @@ namespace Fenrir
     {
         /** @brief The collision layers to find, one bit per layer: a body is found if it is in any of them. */
         std::uint32_t mask = ~0u;
-        /** @brief A body never found, such as the one casting the query. None by default. */
+        /** @brief A body never found, such as the one casting the query: the body of this entity (for a child
+         * collider's entity, the compound body it belongs to). None by default. */
         Entity ignoreBody = Entity();
         /** @brief Whether triggers are found. */
         bool hitTriggers = false;

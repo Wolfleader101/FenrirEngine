@@ -212,22 +212,22 @@ namespace Fenrir
 
     void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddImpulse, impulse);
+        m_impl->Queue(entity, &Backend::World::AddImpulse, impulse);
     }
 
     void PhysicsWorld::AddForce(const Entity& entity, const Math::Vec3& force)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddForce, force);
+        m_impl->Queue(entity, &Backend::World::AddForce, force);
     }
 
     void PhysicsWorld::AddTorque(const Entity& entity, const Math::Vec3& torque)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddTorque, torque);
+        m_impl->Queue(entity, &Backend::World::AddTorque, torque);
     }
 
     void PhysicsWorld::AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddAngularImpulse, impulse);
+        m_impl->Queue(entity, &Backend::World::AddAngularImpulse, impulse);
     }
 
     Math::Vec3 PhysicsWorld::Gravity() const
@@ -394,6 +394,11 @@ namespace Fenrir
         // A destroyed entity's body, if it had one, lasts until the next step.
         const auto it = m_bodies.find(ResolveBody(entity));
         return it == m_bodies.end() ? nullptr : &it->second;
+    }
+
+    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(const Entity& entity)
+    {
+        return entity.IsValid() ? FindBody(entity.GetId()) : nullptr;
     }
 
     std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
@@ -660,9 +665,12 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount)
+    void PhysicsWorld::Impl::Queue(const Entity& entity, Pusher pusher, const Math::Vec3& amount)
     {
-        m_pushes.push_back(Push{entity, pusher, amount});
+        if (entity.IsValid())
+        {
+            m_pushes.push_back(Push{entity.GetId(), pusher, amount});
+        }
     }
 
     void PhysicsWorld::Impl::ApplyPushes()
@@ -817,6 +825,10 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
     {
+        if (!entity.IsValid())
+        {
+            return; // a destroyed entity's touches end at the next step, but it has no body to ask about now
+        }
         // A child collider's entity stands for the compound body it belongs to.
         const std::uint32_t asked = ResolveBody(entity.GetId());
         for (const Backend::Touch& touch : m_backend.Touches())
