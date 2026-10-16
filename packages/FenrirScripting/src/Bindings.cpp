@@ -1,7 +1,9 @@
 #include "EngineContext.hpp"
 #include "Queries.hpp"
 
+#include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 
 #include <atomic>
 #include <cstdint>
@@ -60,6 +62,41 @@ namespace Fenrir::Detail
         bool EntityIsValid(const CallContext& context, std::uint32_t value)
         {
             return context.Entities().HasEntity(value);
+        }
+
+        // EntityWorldTransform: writes the entity's world transform (FenrirECS GetWorldTransform) to `world`; false,
+        // writing nothing, if the entity is not alive or has no Transform.
+        bool EntityWorldTransform(const CallContext& context, std::uint32_t value, Transform* world)
+        {
+            if (world == nullptr || !context.Entities().HasEntity(value))
+            {
+                return false;
+            }
+            const Entity entity = context.Entities().GetEntity(value);
+            if (!entity.HasComponent<Transform>())
+            {
+                return false;
+            }
+            *world = GetWorldTransform(entity);
+            return true;
+        }
+
+        // EntitySetWorldTransform: sets the entity's Transform so its world transform is `world` (FenrirECS
+        // SetWorldTransform). Component data only, so it takes effect at once. False if the entity is not alive or has
+        // no Transform.
+        bool EntitySetWorldTransform(const CallContext& context, std::uint32_t value, const Transform* world)
+        {
+            if (world == nullptr || !context.Entities().HasEntity(value))
+            {
+                return false;
+            }
+            const Entity entity = context.Entities().GetEntity(value);
+            if (!entity.HasComponent<Transform>())
+            {
+                return false;
+            }
+            SetWorldTransform(entity, *world);
+            return true;
         }
 
         // ComponentIdOf: the id of the component registered under a UTF-8 name for the C# type with the given full
@@ -268,6 +305,8 @@ namespace Fenrir::Detail
             NativeFunction::Make<&TimeDeltaTime>(prefix + "TimeDeltaTime"),
             NativeFunction::Make<&TimeTickRate>(prefix + "TimeTickRate"),
             NativeFunction::Make<&EntityIsValid>(prefix + "EntityIsValid"),
+            NativeFunction::Make<&EntityWorldTransform>(prefix + "EntityWorldTransform"),
+            NativeFunction::Make<&EntitySetWorldTransform>(prefix + "EntitySetWorldTransform"),
             NativeFunction::Make<&ComponentIdOf>(prefix + "ComponentIdOf", unknown),
             NativeFunction::Make<&RegisterScriptComponent>(prefix + "RegisterScriptComponent"),
             NativeFunction::Make<&RegistryGeneration>(prefix + "RegistryGeneration"),

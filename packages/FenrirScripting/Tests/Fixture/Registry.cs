@@ -71,6 +71,21 @@ public static class Registry
         return health.Current + health.Max;
     }
 
+    // The world transform, composed through the parents.
+    public static float WorldPositionZ(uint entity) => new Entity(entity).WorldTransform.Position.Z;
+
+    // Sets the world position (keeping the world rotation and scale), then reads it back in the same call.
+    public static float PlaceAndReadWorldY(uint entity, float x, float y, float z)
+    {
+        var target = new Entity(entity);
+        Transform world = target.WorldTransform;
+        world.Position = new Vector3(x, y, z);
+        target.SetWorldTransform(world);
+        return target.WorldTransform.Position.Y;
+    }
+
+    public static string? DeadWorldTransform(uint entity) => Message(() => new Entity(entity).WorldTransform.Position.X);
+
     // The exception text a script sees for each way a lookup can fail.
     public static string? MissingComponent(uint entity) => Message(() => new Entity(entity).Get<Transform>().Scale.X);
 

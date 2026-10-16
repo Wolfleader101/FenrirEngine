@@ -2,6 +2,7 @@
 
 #include <entt/entity/registry.hpp>
 
+#include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DynamicComponent.hpp"
 
 #include <algorithm>
@@ -38,6 +39,10 @@ namespace Fenrir::Detail
      * Pages are kept for the life of the storage: clearing it or removing every element empties it but returns no
      * memory, so a later element reuses a page. Only reshaping an empty storage (Configure) or destroying it releases
      * them.
+     *
+     * EnTT's own storages signal their adds and removes; this one records them straight into the watches' records
+     * instead (a ComponentWatch is all that listens), at the same points: after an element is added, and before each
+     * element is removed, by remove, entity destruction or clear. With no watch that is one empty check.
      */
     class ByteStorage final : public entt::basic_sparse_set<entt::entity>
     {
@@ -118,12 +123,24 @@ namespace Fenrir::Detail
             return m_size;
         }
 
+        // Records this storage's adds and removes in `record` until StopRecording.
+        void StartRecording(WatchRecord& record)
+        {
+            m_records.push_back(&record);
+        }
+
+        void StopRecording(WatchRecord& record) noexcept
+        {
+            std::erase(m_records, &record);
+        }
+
       protected:
         // Erases entities, moving the last element into each gap.
         void pop(underlying_iterator first, underlying_iterator last) override
         {
             for (; first != last; ++first)
             {
+                Record(*first, ComponentChange::Kind::Removed);
                 const std::size_t position = base_type::index(*first);
                 const std::size_t lastPosition = base_type::size() - 1u;
                 if (position != lastPosition)
@@ -132,6 +149,19 @@ namespace Fenrir::Detail
                 }
                 base_type::swap_and_pop(first);
             }
+        }
+
+        // Erases every entity (clear). The elements need no work: they are plain bytes.
+        void pop_all() override
+        {
+            if (!m_records.empty())
+            {
+                for (const entt::entity entity : static_cast<const base_type&>(*this))
+                {
+                    Record(entity, ComponentChange::Kind::Removed);
+                }
+            }
+            base_type::pop_all();
         }
 
         // Assigns an entity an element: a copy of `value`'s bytes, or zeros.
@@ -156,10 +186,19 @@ namespace Fenrir::Detail
             {
                 std::memset(element, 0, m_size);
             }
+            Record(entity, ComponentChange::Kind::Added);
             return it;
         }
 
       private:
+        void Record(entt::entity entity, ComponentChange::Kind kind)
+        {
+            for (WatchRecord* record : m_records)
+            {
+                record->changes.push_back({static_cast<std::uint32_t>(entity), kind});
+            }
+        }
+
         [[nodiscard]] std::size_t PageBytes() const noexcept
         {
             return m_size * m_perPage;
@@ -217,6 +256,7 @@ namespace Fenrir::Detail
         std::size_t m_alignment = 0;
         std::size_t m_perPage = 1;
         std::string m_owner;
+        std::vector<WatchRecord*> m_records;
     };
 } // namespace Fenrir::Detail
 
