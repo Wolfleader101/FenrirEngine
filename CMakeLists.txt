@@ -9,6 +9,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
+option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 
 # One CTest run for every package that has tests.
@@ -47,6 +48,10 @@ add_subdirectory(packages/FenrirScene)
 
 add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
+
+if(FENRIR_ENABLE_PHYSICS)
+    add_subdirectory(packages/FenrirPhysics)
+endif()
 
 if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)
