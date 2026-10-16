@@ -225,12 +225,14 @@ namespace Fenrir::Detail
                 engine.changes->SendEvent(context.GetApp(), *engine.components, event, value));
         }
 
-        // EventRead: how many events the queue holds for reading (this frame's and the last frame's), and where they
-        // are. -1 if there is no such event. The address is good until something is sent to the queue or the frame
-        // ends.
-        std::int32_t EventRead(const CallContext& context, std::int32_t event, std::uintptr_t* data)
+        // EventReadAfter: one read of a C# EventReader. `seen` is the reader's cursor, kept in C# (NewReaderCursor
+        // before its first read), so readers share no state. Fills `view` with the older part's address and count, the
+        // newer part's, and how many the reader missed. 0, or -1 if there is no such event. The addresses are good
+        // until something is sent to the queue or it swaps.
+        std::int32_t EventReadAfter(const CallContext& context, std::int32_t event, std::uint64_t* seen,
+                                    std::uintptr_t* view)
         {
-            if (data == nullptr)
+            if (seen == nullptr || view == nullptr)
             {
                 return -1;
             }
@@ -241,9 +243,15 @@ namespace Fenrir::Detail
             {
                 return -1;
             }
-            const RawEvents events = queue->ReadRaw();
-            *data = reinterpret_cast<std::uintptr_t>(events.data);
-            return static_cast<std::int32_t>(events.count);
+            auto cursor = static_cast<std::size_t>(*seen);
+            const RawEventRange events = queue->ReadRawAfter(cursor);
+            *seen = cursor;
+            view[0] = reinterpret_cast<std::uintptr_t>(events.older);
+            view[1] = events.olderCount;
+            view[2] = reinterpret_cast<std::uintptr_t>(events.newer);
+            view[3] = events.newerCount;
+            view[4] = events.missed;
+            return 0;
         }
 
         // QueryCount and QueryFill: see Queries.hpp.
@@ -319,7 +327,7 @@ namespace Fenrir::Detail
             NativeFunction::Make<&EventIdOf>(prefix + "EventIdOf", unknown),
             NativeFunction::Make<&RegisterScriptEvent>(prefix + "RegisterScriptEvent"),
             NativeFunction::Make<&EventSend>(prefix + "EventSend", notActive),
-            NativeFunction::Make<&EventRead>(prefix + "EventRead", unknown),
+            NativeFunction::Make<&EventReadAfter>(prefix + "EventReadAfter", unknown),
             NativeFunction::Make<&ChangesApply>(prefix + "ChangesApply"),
             NativeFunction::Make<&ChangesDiscard>(prefix + "ChangesDiscard"),
             NativeFunction::Make<&QueryCount>(prefix + "QueryCount", unknown),

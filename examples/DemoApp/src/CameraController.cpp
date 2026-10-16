@@ -69,22 +69,22 @@ void CameraController::OnMouseButton(const MouseButtonEvent& event)
 
 void CameraController::Update(Fenrir::App& app)
 {
-    for (const auto& event : app.ReadEvents<KeyboardKeyEvent>())
+    for (const auto& event : m_keyReader.Read(app))
     {
         OnKeyPress(event);
     }
 
-    for (const auto& event : app.ReadEvents<MouseButtonEvent>())
+    for (const auto& event : m_mouseButtonReader.Read(app))
     {
         OnMouseButton(event);
     }
 
-    for (const auto& event : app.ReadEvents<MouseMoveEvent>())
+    for (const auto& event : m_mouseMoveReader.Read(app))
     {
         OnMouseMove(event);
     }
 
-    for (const auto& event : app.ReadEvents<MouseScrollEvent>())
+    for (const auto& event : m_mouseScrollReader.Read(app))
     {
         OnMouseScroll(event);
     }

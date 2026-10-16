@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FenrirApp/App.hpp"
 #include "FenrirMath/Math.hpp"
 #include "ShaderLibrary.hpp"
 #include "TextureLibrary.hpp"
@@ -74,6 +75,7 @@ class GLRenderer
     Shader m_skyboxShader;
     float m_aspecRatio;
     unsigned int skyboxVAO;
+    Fenrir::EventReader<WindowFrameBufferResizeEvent> m_resizeReader;
 
     void SetMatProps(const Shader& shader, const Material& mat);
 

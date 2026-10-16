@@ -8,7 +8,7 @@ namespace Fenrir.Scripting;
 // one here, see "Exposing a native function" in the package README.
 //
 // When no Scripting is running a function is not called, and C# gets its "not running" value: -1 from ComponentIdOf,
-// EventIdOf, EventRead, QueryCount and QueryFill, the refusal code -5 from EntityDestroy, ComponentAdd, ComponentRemove and
+// EventIdOf, EventReadAfter, QueryCount and QueryFill, the refusal code -5 from EntityDestroy, ComponentAdd, ComponentRemove and
 // EventSend, uint.MaxValue from EntityCreate, and zero or false from the rest. (C# only runs while one is, so this is
 // the contract, not something a script sees.)
 internal static unsafe partial class Native
@@ -78,13 +78,15 @@ internal static unsafe partial class Native
     [NativeFunction]
     public static partial int ComponentRemove(int id, uint entity);
 
-    // Events. Each is a queue the engine owns (the same queue C++ SendEvent/ReadEvents use for a native event).
+    // Events. Each is a queue the engine owns (the same queue C++ SendEvent and EventReader use for a native event).
     //   EventIdOf(name, nameBytes, typeName, typeBytes): like ComponentIdOf, for events.
     //   RegisterScriptEvent(utf8Name, nameBytes, size, alignment): a script assembly reports an event it defines, while it loads.
     //   EventSend(id, event): records an event to send when the system returns; 0 when recorded, otherwise a refusal code
     //   (-5 scripting is not running, -6 the event has no queue).
-    //   EventRead(id, out data): how many events can be read (this frame's and last frame's) and where they are; negative if the
-    //   event is unknown. The address is good until the system returns.
+    //   EventReadAfter(id, seen, view): a reader's read. `seen` is the reader's cursor (how many of the queue's events it has
+    //   gone past; all ones, the engine's NewReaderCursor, before the first read) and is moved past what the read yields;
+    //   view gets the older part's address and count, the newer part's address and count, and how many events the reader
+    //   missed. 0, or negative if the event is unknown. The addresses are good until the system returns.
     [NativeFunction]
     public static partial int EventIdOf(byte* name, int nameBytes, byte* typeName, int typeBytes);
 
@@ -95,7 +97,7 @@ internal static unsafe partial class Native
     public static partial int EventSend(int id, void* value);
 
     [NativeFunction]
-    public static partial int EventRead(int id, nuint* data);
+    public static partial int EventReadAfter(int id, ulong* seen, nuint* view);
 
     // Plays back (ChangesApply, returning how many changes were applied) or drops (ChangesDiscard) the structural changes
     // recorded since the last time. The system runner calls them after each system.
