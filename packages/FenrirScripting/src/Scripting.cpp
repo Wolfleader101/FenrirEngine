@@ -625,11 +625,13 @@ namespace Fenrir
                 configuration.dotnetRoot = config.dotnetRoot;
                 // Every extension's contract, in order, so the built-in extension's (the scripting contract) comes
                 // first: the others may refer to it, and each is bound as it is shared.
+                // A relative path is beside the scripting contract, where the build deploys a package's contract.
                 for (const auto& extension : config.extensions)
                 {
-                    configuration.sharedAssemblies.insert(configuration.sharedAssemblies.end(),
-                                                          extension.sharedAssemblies.begin(),
-                                                          extension.sharedAssemblies.end());
+                    for (const auto& assembly : extension.sharedAssemblies)
+                    {
+                        configuration.sharedAssemblies.push_back(bridgeDirectory / assembly);
+                    }
                 }
 
                 state->logger = &logger;
