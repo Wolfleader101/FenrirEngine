@@ -17,11 +17,15 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
+#include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 using namespace Fenrir;
@@ -589,5 +593,213 @@ TEST_CASE("A query filter from C# chooses layers, ignores a body and finds trigg
     {
         INFO("Asking for triggers should find the trigger above both boxes");
         REQUIRE(down(~0u, NoEntity, true) == trigger);
+    }
+}
+
+namespace
+{
+    constexpr const char* EventsType = "Fenrir.PhysicsScriptFixture.Events";
+
+    // A static ground slab whose top face is at y = 0.
+    std::uint32_t AddGround(PhysicsScriptingApp& test)
+    {
+        const std::uint32_t ground = test.Place(Math::Vec3(0.0f, -0.5f, 0.0f));
+        test.Entities().GetEntity(ground).AddComponent<Collider>(Collider{BoxShape{Math::Vec3(10.0f, 0.5f, 10.0f)}});
+        return ground;
+    }
+
+    // Every `TEvent` C++ reads while it runs frames, read after each frame as a system would.
+    template <typename TEvent>
+    struct CppSees
+    {
+        EventReader<TEvent> reader;
+        std::vector<TEvent> events;
+
+        void Run(PhysicsScriptingApp& test, int frames)
+        {
+            for (int frame = 0; frame < frames; ++frame)
+            {
+                test.Run(1);
+                for (const TEvent& event : reader.Read(test.headless.Get()))
+                {
+                    events.push_back(event);
+                }
+            }
+        }
+    };
+} // namespace
+
+TEST_CASE("A C# system reads one ContactBegin when a box with ContactEvents lands, as C++ sees it",
+          "[physics][scripting][events]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t ground = AddGround(test);
+    const std::uint32_t box = AddBody(test, Math::Vec3(0.0f, 2.0f, 0.0f));
+    test.Entities().GetEntity(box).AddComponent<ContactEvents>();
+    CppSees<ContactBegin> cpp;
+
+    cpp.Run(test, 120);
+
+    REQUIRE(cpp.events.size() == 1);
+    const ContactBegin& seen = cpp.events[0];
+    {
+        INFO("The box lands once and stays, so C# should read one ContactBegin");
+        REQUIRE(test.Call<int>(EventsType, "ContactBeginCount") == 1);
+    }
+    {
+        INFO("C# should name the ground as A and the box as B, as body and as collider, as C++ does");
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginBodyA", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginBodyB", 0) == box);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginColliderA", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginColliderB", 0) == box);
+    }
+    {
+        INFO("C# should read the very point, normal and closing speed C++ read");
+        REQUIRE(test.Call<float>(EventsType, "BeginPoint", 0, 0) == seen.point.x);
+        REQUIRE(test.Call<float>(EventsType, "BeginPoint", 0, 1) == seen.point.y);
+        REQUIRE(test.Call<float>(EventsType, "BeginPoint", 0, 2) == seen.point.z);
+        REQUIRE(test.Call<float>(EventsType, "BeginNormal", 0, 0) == seen.normal.x);
+        REQUIRE(test.Call<float>(EventsType, "BeginNormal", 0, 1) == seen.normal.y);
+        REQUIRE(test.Call<float>(EventsType, "BeginNormal", 0, 2) == seen.normal.z);
+        REQUIRE(test.Call<float>(EventsType, "BeginRelativeSpeed", 0) == seen.relativeSpeed);
+    }
+}
+
+TEST_CASE("A C# system reads one TriggerEnter and one TriggerExit for a ball falling through a trigger",
+          "[physics][scripting][events]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t zone = test.Place(Math::Vec3(0.0f, 3.0f, 0.0f));
+    test.Entities().GetEntity(zone).AddComponent<Collider>(Collider{BoxShape{Math::Vec3(1.0f, 0.5f, 1.0f)}});
+    test.Entities().GetEntity(zone).AddComponent<Trigger>();
+    const std::uint32_t ball = test.Place(Math::Vec3(0.0f, 6.0f, 0.0f));
+    test.Entities().GetEntity(ball).AddComponent<RigidBody>();
+    test.Entities().GetEntity(ball).AddComponent<Collider>(Collider{SphereShape{0.25f}});
+
+    test.Run(90);
+
+    {
+        INFO("The ball passes through the zone, so C# should read one enter and one exit");
+        REQUIRE(test.Call<int>(EventsType, "TriggerEnterCount") == 1);
+        REQUIRE(test.Call<int>(EventsType, "TriggerExitCount") == 1);
+    }
+    {
+        INFO("Each should name the zone as the trigger and the ball as the body and collider");
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EnterTrigger", 0) == zone);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EnterOtherBody", 0) == ball);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EnterOtherCollider", 0) == ball);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "ExitTrigger", 0) == zone);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "ExitOtherBody", 0) == ball);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "ExitOtherCollider", 0) == ball);
+    }
+}
+
+TEST_CASE("C# disabling ContactEvents ends the contact on the next tick", "[physics][scripting][events]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t ground = AddGround(test);
+    const std::uint32_t box = AddBody(test, Math::Vec3(0.0f, 1.0f, 0.0f));
+    test.Entities().GetEntity(box).AddComponent<ContactEvents>();
+    test.Run(60);
+    REQUIRE(test.Call<int>(EventsType, "ContactBeginCount") == 1);
+
+    test.Call<void>(EventsType, "SetContactEvents", box, false);
+    test.Run(1);
+
+    {
+        INFO("Switching reporting off from C# should end the contact on the next tick, read by C#");
+        REQUIRE(test.Call<int>(EventsType, "ContactEndCount") == 1);
+    }
+    {
+        INFO("The end should name the ground and the box, in the order its begin did");
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EndBodyA", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EndBodyB", 0) == box);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EndColliderA", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "EndColliderB", 0) == box);
+    }
+}
+
+TEST_CASE("C# disabling a trigger exits what is inside on the next tick, and enabling it enters again",
+          "[physics][scripting][events]")
+{
+    PhysicsScriptingApp test;
+    AddGround(test);
+    const std::uint32_t zone = test.Place(Math::Vec3(0.0f, 1.5f, 0.0f));
+    test.Entities().GetEntity(zone).AddComponent<Collider>(Collider{BoxShape{Math::Vec3(2.0f, 1.4f, 2.0f)}});
+    test.Entities().GetEntity(zone).AddComponent<Trigger>();
+    const std::uint32_t box = AddBody(test, Math::Vec3(0.0f, 1.0f, 0.0f));
+    test.Run(60);
+    REQUIRE(test.Call<int>(EventsType, "TriggerEnterCount") == 1);
+
+    test.Call<void>(EventsType, "SetTrigger", zone, false);
+    test.Run(1);
+    {
+        INFO("Disabled from C#, the zone should report the box leaving on the next tick");
+        REQUIRE(test.Call<int>(EventsType, "TriggerExitCount") == 1);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "ExitOtherBody", 0) == box);
+    }
+
+    test.Call<void>(EventsType, "SetTrigger", zone, true);
+    test.Run(1);
+    {
+        INFO("Enabled again from C#, the box inside should enter again on the next tick");
+        REQUIRE(test.Call<int>(EventsType, "TriggerEnterCount") == 2);
+    }
+}
+
+namespace
+{
+    // ContactBegin as a native side that drifted from the C# mirror would map it: RelativeSpeed has the wrong type.
+    struct DriftedContactBegin
+    {
+        Detail::EntityLinkView bodyA;
+        Detail::EntityLinkView bodyB;
+        Detail::EntityLinkView colliderA;
+        Detail::EntityLinkView colliderB;
+        Math::Vec3 point;
+        Math::Vec3 normal;
+        std::int32_t relativeSpeed;
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<DriftedContactBegin>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.ContactBegin";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(DriftedContactBegin, bodyA, "BodyA"), IRIS_FIELD_AS(DriftedContactBegin, bodyB, "BodyB"),
+        IRIS_FIELD_AS(DriftedContactBegin, colliderA, "ColliderA"),
+        IRIS_FIELD_AS(DriftedContactBegin, colliderB, "ColliderB"), IRIS_FIELD_AS(DriftedContactBegin, point, "Point"),
+        IRIS_FIELD_AS(DriftedContactBegin, normal, "Normal"),
+        IRIS_FIELD_AS(DriftedContactBegin, relativeSpeed, "RelativeSpeed"));
+};
+
+TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted one fails the load naming the field",
+          "[physics][scripting][events]")
+{
+    Testing::HeadlessApp headless;
+    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
+    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    std::vector<EventRegistration>& events = config.extensions[0].events;
+    {
+        INFO("Physics's extension should share the four contact and trigger events with C#");
+        REQUIRE(events.size() == 4);
+    }
+    const auto contactBegin = std::find_if(events.begin(), events.end(), [](const EventRegistration& event) {
+        return event.name == "Fenrir.Physics.ContactBegin";
+    });
+    REQUIRE(contactBegin != events.end());
+    *contactBegin = MakeEvent<ContactBegin, DriftedContactBegin>("Fenrir.Physics.ContactBegin");
+
+    Scripting scripting = Scripting::Install(headless.Get(), config);
+
+    {
+        INFO("A ContactBegin mirror that disagrees with the native layout left scripts loaded");
+        REQUIRE_FALSE(scripting.HasScripts());
+    }
+    {
+        INFO("The failed load did not name the event and the field");
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.ContactBegin"));
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'RelativeSpeed'"));
     }
 }
