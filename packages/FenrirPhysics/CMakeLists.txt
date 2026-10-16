@@ -8,10 +8,12 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Events.hpp
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
+    include/FenrirPhysics/Queries.hpp
 
     src/CollisionLayers.cpp
     src/Physics.cpp
     src/PhysicsWorld.cpp
+    src/Queries.cpp
     src/WorldImpl.hpp
 
     src/Backend/Backend.hpp

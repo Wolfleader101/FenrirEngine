@@ -46,6 +46,9 @@ namespace Fenrir
         }
 
       private:
+        // The queries, in Queries.cpp, read the bodies and the backend.
+        friend class PhysicsWorld;
+
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
         // A collider whose shape cannot be made (its collision mesh was released) keeps a record with no body: it is
         // inactive until its shape changes.
