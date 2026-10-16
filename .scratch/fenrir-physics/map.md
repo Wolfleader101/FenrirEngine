@@ -6,6 +6,8 @@ Label: wayfinder:map
 
 A set of specs, one feature directory each (`.scratch/fenrir-physics-<name>/spec.md`, so each spec's tickets sit beside it), each ready for `/to-tickets`, plus ADRs for the hard-to-reverse calls (where the backend seam goes, which side owns body state). The first is the **foundation spec**: the backend seam over Jolt, rigid bodies and shapes, collision layers, stepping, contact and trigger events, queries, debug rendering data, the physics scripting extension, and a physics demo scene in the DemoApp. Then one spec per feature family (constraints and joints, character controller, vehicles, ragdolls, soft bodies), each building on the foundation. The foundation spec is ticketable as soon as its own decisions close, without waiting on the feature families. **Foundation spec: written, `.scratch/fenrir-physics-foundation/spec.md`.**
 
+**Now charting: the joints spec**, `.scratch/fenrir-physics-joints/spec.md` (tickets 20–29), in the foundation spec's format. It covers joints between two rigid bodies or a body and the world, with limits, motors, springs, breaking, and connected bodies not colliding, in C++ and in C# through the physics scripting extension. It includes two DemoApp joints scenes, one built in C++ and one built in C#, each switched to like the F3 "Physics (C#)" scene. It adds an ADR only where a call is hard to reverse. The joint kinds must be ones the ragdoll spec can build on. Ragdoll skeletons and pose driving, vehicles, character bodies and soft bodies are not part of it; each gets its own spec.
+
 ## Notes
 
 - Vocabulary: **FenrirPhysics**, **physics backend**, **physics world** (see `GLOSSARY.md`, "FenrirEngine physics"). In this map, *component*, *system*, *event* and *entity* carry their ECS meanings from the glossary.
@@ -40,11 +42,13 @@ A set of specs, one feature directory each (`.scratch/fenrir-physics-<name>/spec
 - [How does a system read each event exactly once?](issues/18-read-each-event-once.md): ADR-0012. Per-reader cursors (`EventReader<T>`, C++ and C#) over the existing two buffers; `ReadEvents` removed; the swap waits for a fixed step; parallel sends buffered per system and appended in registration order; payloads stay plain data.
 - [What does the physics scripting extension give C#?](issues/11-physics-scripting-extension.md): all physics components writable from C# (`Trigger` and `ContactEvents` gain `bool enabled`); native functions for forces, queries, contacts, sleep and bounds, gravity, debug draw and collision meshes; the four events via `EventReader<T>`; silent no-ops without a world or body; contract `Fenrir.Physics` plus a separate `FenrirPhysicsScripting` library, built only with physics and scripting on.
 - [Is there transform interpolation, and who owns it?](issues/19-transform-interpolation.md): on by default (`RigidBody::interpolate`), interpolating between the last two steps into `Transform`; new once-per-frame `BeforeTicks` (restore the true pose, detect edits) and `AfterTicks` (write the blended pose) phases; teleports snap.
+- [What does Jolt offer for constraints?](issues/20-what-jolt-offers-for-constraints.md): 12 two-body kinds, only hinge and swing-twist drivable for ragdolls; limits, motors and springs only on some kinds; anchors relative to the centre of mass, so the host must report shape changes; no built-in breaking (lambda against a threshold); one collision group per body, which queries ignore; constraints are removed before their bodies; no edit wakes bodies; removing one reorders the solve; no articulations.
+- [How do other engines model joints?](issues/21-how-other-engines-model-joints.md): two models, a joint entity naming both bodies (Avian, Godot, Unreal, Unity ECS) or a component on one body naming the other (Unity, O3DE, bevy_rapier, whose own issue calls that un-ECS-like); kind as a field only in bevy_rapier and Unreal; breaking ranges from thresholds that destroy (Unity) or keep a broken state (Unreal) to none, with force reported for game code (Avian, Rapier); no-collide covers only the joined pair, default split; the usual complaints are frames captured at creation, scale, and chain instability.
 
 ## Not yet specified
 
-- **DemoApp demo scenes:** switching between several demo scenes, one per feature family. (The foundation's own scene is settled: the spike's ground, falling boxes and kinematic paddle, with debug lines on a key.) Becomes a ticket with the first feature-family spec, when there is a second scene to switch to.
-- **Feature-family specs:** constraints and joints, character controller, vehicles, ragdolls, soft bodies. Each becomes tickets once the foundation settles the body, shape and stepping vocabulary they build on.
+- **Feature-family specs:** character controller, vehicles, ragdolls, soft bodies. Each becomes tickets once the foundation settles the body, shape and stepping vocabulary they build on. (Constraints and joints graduated into tickets 20–29; the "DemoApp demo scenes" fog graduated into "What do the joints demo scenes show, and how do several scenes switch?".)
+- **General collision groups** (any set of bodies that ignore each other): not in the joints spec, which only stops jointed bodies colliding. They come with ragdolls and character bodies.
 
 ## Out of scope
 
@@ -53,3 +57,4 @@ A set of specs, one feature directory each (`.scratch/fenrir-physics-<name>/spec
 - Large worlds (double-precision positions): positions are float; the seam must not assume Jolt's types, so this stays addable later.
 - Determinism across platforms or builds.
 - An asset pipeline for collision data: callers supply vertex and index data ("How is physics modelled in the ECS?").
+- Articulations (multibody, reduced-coordinate joints): Jolt has none, only maximal-coordinate constraints ("What does Jolt offer for constraints?"), and a second backend is out of scope.
