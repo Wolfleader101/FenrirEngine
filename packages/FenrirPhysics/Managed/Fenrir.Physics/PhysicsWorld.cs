@@ -9,7 +9,8 @@ namespace Fenrir.Physics;
 /// <remarks>
 /// Nothing here throws. When the active scene has no physics world yet (one is made the first tick it has a body), the
 /// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero, and in
-/// a debug build of the engine a warning is logged once per place in the engine that noticed. Like every native function,
+/// a debug build of the engine a warning is logged once per process for each place in the engine's native code that
+/// noticed (not once per C# call site). Like every native function,
 /// none of these makes a structural change: forces are queued for the next step, and queries read the world as the last
 /// step left it.
 /// </remarks>
