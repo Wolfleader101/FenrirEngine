@@ -17,6 +17,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirScene/Scene.hpp"
@@ -24,8 +25,8 @@
 #include "FenrirScripting/EngineMappings.hpp"
 #include "PhysicsState.hpp"
 
-// How the physics components look to C#: each mapping is checked against its mirror in the Fenrir.Physics contract
-// (Managed/Fenrir.Physics) whenever a script assembly loads, so a drift fails the load and names the field.
+// How the physics components and events look to C#: each mapping is checked against its mirror in the Fenrir.Physics
+// contract (Managed/Fenrir.Physics) whenever a script assembly loads, so a drift fails the load and names the field.
 
 template <>
 struct Iris::EnumMapping<Fenrir::MotionType>
@@ -171,6 +172,88 @@ struct Iris::StructMapping<Fenrir::ContactEvents>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.ContactEvents";
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::ContactEvents, enabled, "Enabled"));
+};
+
+namespace Fenrir::Detail
+{
+    // The events hold Entities, which Iris cannot map, so these stand in for them: the same members in the same order,
+    // each Entity as the link the engine stores (as for Relationship). MakeEvent checks the size and alignment; the
+    // scripting tests read real events through them.
+    struct ContactBeginLayout
+    {
+        EntityLinkView bodyA;
+        EntityLinkView bodyB;
+        EntityLinkView colliderA;
+        EntityLinkView colliderB;
+        Math::Vec3 point;
+        Math::Vec3 normal;
+        float relativeSpeed;
+    };
+
+    struct ContactEndLayout
+    {
+        EntityLinkView bodyA;
+        EntityLinkView bodyB;
+        EntityLinkView colliderA;
+        EntityLinkView colliderB;
+    };
+
+    // TriggerEnter and TriggerExit have the same members, but each is its own C# struct, so each has its own stand-in.
+    struct TriggerEnterLayout
+    {
+        EntityLinkView trigger;
+        EntityLinkView otherBody;
+        EntityLinkView otherCollider;
+    };
+
+    struct TriggerExitLayout
+    {
+        EntityLinkView trigger;
+        EntityLinkView otherBody;
+        EntityLinkView otherCollider;
+    };
+} // namespace Fenrir::Detail
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::ContactBeginLayout>
+{
+    using Layout = Fenrir::Detail::ContactBeginLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.ContactBegin";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, bodyA, "BodyA"), IRIS_FIELD_AS(Layout, bodyB, "BodyB"),
+                           IRIS_FIELD_AS(Layout, colliderA, "ColliderA"), IRIS_FIELD_AS(Layout, colliderB, "ColliderB"),
+                           IRIS_FIELD_AS(Layout, point, "Point"), IRIS_FIELD_AS(Layout, normal, "Normal"),
+                           IRIS_FIELD_AS(Layout, relativeSpeed, "RelativeSpeed"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::ContactEndLayout>
+{
+    using Layout = Fenrir::Detail::ContactEndLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.ContactEnd";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, bodyA, "BodyA"), IRIS_FIELD_AS(Layout, bodyB, "BodyB"),
+        IRIS_FIELD_AS(Layout, colliderA, "ColliderA"), IRIS_FIELD_AS(Layout, colliderB, "ColliderB"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::TriggerEnterLayout>
+{
+    using Layout = Fenrir::Detail::TriggerEnterLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.TriggerEnter";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, trigger, "Trigger"), IRIS_FIELD_AS(Layout, otherBody, "OtherBody"),
+                           IRIS_FIELD_AS(Layout, otherCollider, "OtherCollider"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::TriggerExitLayout>
+{
+    using Layout = Fenrir::Detail::TriggerExitLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.TriggerExit";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, trigger, "Trigger"), IRIS_FIELD_AS(Layout, otherBody, "OtherBody"),
+                           IRIS_FIELD_AS(Layout, otherCollider, "OtherCollider"));
 };
 
 namespace Fenrir
@@ -611,6 +694,12 @@ namespace Fenrir
             MakeComponent<CollisionFilter>("Fenrir.Physics.CollisionFilter"),
             MakeComponent<Trigger>("Fenrir.Physics.Trigger"),
             MakeComponent<ContactEvents>("Fenrir.Physics.ContactEvents"),
+        };
+        extension.events = {
+            MakeEvent<ContactBegin, Detail::ContactBeginLayout>("Fenrir.Physics.ContactBegin"),
+            MakeEvent<ContactEnd, Detail::ContactEndLayout>("Fenrir.Physics.ContactEnd"),
+            MakeEvent<TriggerEnter, Detail::TriggerEnterLayout>("Fenrir.Physics.TriggerEnter"),
+            MakeEvent<TriggerExit, Detail::TriggerExitLayout>("Fenrir.Physics.TriggerExit"),
         };
         return extension;
     }

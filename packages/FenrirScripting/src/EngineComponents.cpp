@@ -33,16 +33,9 @@ struct Iris::StructMapping<Fenrir::Detail::NameView>
 
 namespace Fenrir::Detail
 {
-    // Fenrir::Entity is a 32-bit entity value and a pointer to its entity list. Scripts see the value; the rest is the
-    // engine's. These stand in for Entity and Relationship, which have members Iris cannot map, and must have exactly
-    // their size and layout (checked below, and by a test that reads real hierarchy memory from C#).
-    struct EntityLinkView
-    {
-        std::uint32_t value;
-        std::uint32_t reserved;
-        std::uint64_t owner;
-    };
-
+    // Relationship's members are Entities, which Iris cannot map, so this stands in for it with exactly its size and
+    // layout (checked below, and by a test that reads real hierarchy memory from C#). EntityLinkView is in
+    // EngineMappings.hpp.
     struct RelationshipView
     {
         EntityLinkView Parent;
@@ -51,23 +44,10 @@ namespace Fenrir::Detail
         EntityLinkView PrevSibling;
     };
 
-    static_assert(sizeof(void*) == 8,
-                  "Scripting maps Entity as a 32-bit value and a 64-bit pointer: it needs a 64-bit build.");
-    static_assert(sizeof(Entity) == sizeof(EntityLinkView) && alignof(Entity) == alignof(EntityLinkView),
-                  "Entity changed shape: update EntityLinkView and the C# EntityLink.");
     static_assert(sizeof(Relationship) == sizeof(RelationshipView) &&
                       alignof(Relationship) == alignof(RelationshipView),
                   "Relationship changed shape: update RelationshipView and the C# Relationship.");
 } // namespace Fenrir::Detail
-
-template <>
-struct Iris::StructMapping<Fenrir::Detail::EntityLinkView>
-{
-    static constexpr std::string_view typeName = "Fenrir.Scripting.EntityLink";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Fenrir::Detail::EntityLinkView, value),
-                                                      IRIS_FIELD(Fenrir::Detail::EntityLinkView, reserved),
-                                                      IRIS_FIELD(Fenrir::Detail::EntityLinkView, owner));
-};
 
 template <>
 struct Iris::StructMapping<Fenrir::Detail::RelationshipView>
