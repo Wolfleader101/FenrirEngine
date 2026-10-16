@@ -1,8 +1,10 @@
 // The Jolt implementation of the physics backend seam (ADR-0010). The only code that includes Jolt.
 
 #include "Backend/Backend.hpp"
+#include "Backend/Primitive.hpp"
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cstdarg>
 #include <cstdio>
@@ -327,51 +329,6 @@ namespace Fenrir::Backend
                 return JPH::EMotionType::Kinematic;
             }
             return type == MotionType::Dynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
-        }
-
-        // No dimension of a box, sphere or capsule is made smaller than this, after scale: the backend asserts on
-        // empty shapes, and anything thinner than a millimetre is not simulated well anyway.
-        constexpr float minimumSize = 1.0e-3f;
-
-        // A box, sphere or capsule with the entity's scale baked into its dimensions: what the backend shape is made
-        // from, and the key of the shape cache. Box: half extents. Sphere: radius in x. Capsule: half height in x,
-        // radius in y. Unused dimensions are zero.
-        struct Primitive
-        {
-            ShapeType type;
-            Math::Vec3 size;
-
-            // Ordered bit for bit, like the diff: equal keys make equal shapes.
-            friend bool operator<(const Primitive& a, const Primitive& b)
-            {
-                const auto key = [](const Primitive& p) {
-                    return std::tuple(p.type, std::bit_cast<std::uint32_t>(p.size.x),
-                                      std::bit_cast<std::uint32_t>(p.size.y), std::bit_cast<std::uint32_t>(p.size.z));
-                };
-                return key(a) < key(b);
-            }
-        };
-
-        // Mirroring is ignored (a primitive is symmetric) and no dimension is below minimumSize.
-        Primitive Bake(const CollisionShape& shape, const Math::Vec3& scale)
-        {
-            const Math::Vec3 size = glm::abs(scale);
-            if (shape.Is<SphereShape>())
-            {
-                // Jolt's sphere takes only a uniform scale: the largest axis wins.
-                const float radius = shape.As<SphereShape>().radius * std::max({size.x, size.y, size.z});
-                return Primitive{ShapeType::Sphere, Math::Vec3(std::max(radius, minimumSize), 0.0f, 0.0f)};
-            }
-            if (shape.Is<CapsuleShape>())
-            {
-                // Jolt's capsule takes only a uniform scale: its height follows y, its radius the larger of x and z.
-                const CapsuleShape& capsule = shape.As<CapsuleShape>();
-                return Primitive{ShapeType::Capsule,
-                                 Math::Vec3(std::max(capsule.halfHeight * size.y, minimumSize),
-                                            std::max(capsule.radius * std::max(size.x, size.z), minimumSize), 0.0f)};
-            }
-            return Primitive{ShapeType::Box,
-                             glm::max(shape.As<BoxShape>().halfExtents * size, Math::Vec3(minimumSize))};
         }
 
         JPH::Ref<JPH::Shape> Make(const Primitive& primitive)
@@ -1564,6 +1521,66 @@ namespace Fenrir::Backend
     {
         const JPH::AABox bounds = m_impl->Bounds(id);
         return Math::AABB(FromJolt(bounds.mMin), FromJolt(bounds.mMax));
+    }
+
+    void World::ShapeEdges(const CollisionShape& shape, EdgeSink sink) const
+    {
+        if (IsPrimitive(shape))
+        {
+            return;
+        }
+        const JPH::Ref<JPH::Shape> made = m_impl->meshes->QueryShape(shape);
+        if (made == nullptr)
+        {
+            return;
+        }
+        if (shape.Is<ConvexHullShape>())
+        {
+            // Jolt keeps a hull's points about its centre of mass. Each edge is shared by two faces, which run round
+            // it in opposite directions: drawn once, from the face that has it from the lower point index.
+            const auto& hull = static_cast<const JPH::ConvexHullShape&>(*made);
+            const JPH::Vec3 centre = hull.GetCenterOfMass();
+            std::vector<JPH::uint> face;
+            for (JPH::uint f = 0; f < hull.GetNumFaces(); ++f)
+            {
+                face.resize(hull.GetNumVerticesInFace(f));
+                hull.GetFaceVertices(f, static_cast<JPH::uint>(face.size()), face.data());
+                for (std::size_t i = 0; i < face.size(); ++i)
+                {
+                    const JPH::uint a = face[i];
+                    const JPH::uint b = face[(i + 1) % face.size()];
+                    if (a < b)
+                    {
+                        sink(FromJolt(hull.GetPoint(a) + centre), FromJolt(hull.GetPoint(b) + centre));
+                    }
+                }
+            }
+            return;
+        }
+        // A mesh: every triangle, in the shape's own space (its centre of mass placed where it is in that space).
+        JPH::Shape::GetTrianglesContext context;
+        const JPH::AABox everything(JPH::Vec3::sReplicate(-1.0e30f), JPH::Vec3::sReplicate(1.0e30f));
+        made->GetTrianglesStart(context, everything, made->GetCenterOfMass(), JPH::Quat::sIdentity(),
+                                JPH::Vec3::sOne());
+        constexpr int batch = JPH::Shape::cGetTrianglesMinTrianglesRequested;
+        std::array<JPH::Float3, 3 * batch> vertices;
+        const auto vertex = [&vertices](std::size_t i) {
+            const JPH::Float3& v = vertices[i];
+            return Math::Vec3(v.x, v.y, v.z);
+        };
+        for (int count = made->GetTrianglesNext(context, batch, vertices.data()); count > 0;
+             count = made->GetTrianglesNext(context, batch, vertices.data()))
+        {
+            for (std::size_t t = 0; t < static_cast<std::size_t>(count); ++t)
+            {
+                const Math::Vec3 a = vertex(3 * t);
+                const Math::Vec3 b = vertex(3 * t + 1);
+                const Math::Vec3 c = vertex(3 * t + 2);
+                sink(a, b);
+                sink(b, c);
+                sink(c, a);
+            }
+        }
     }
 
     void World::Step(float dt, int collisionSteps)

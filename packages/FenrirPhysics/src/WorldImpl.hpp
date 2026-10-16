@@ -158,6 +158,13 @@ namespace Fenrir
         void AdvancePoses();
         void SendEvents(App& app);
 
+        // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
+        void DrawDebugLines();
+        void DrawColliders();
+        struct ShapeEdgesKey;
+        void DrawPart(const Part& part, const Transform& body, std::uint32_t colour,
+                      std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
+
         // The filter a body's backend body has: a disabled trigger's collides with nothing.
         [[nodiscard]] CollisionFilter EffectiveFilterOf(Entity& entity) const;
         [[nodiscard]] bool ReportsContacts(std::uint32_t body) const;
@@ -225,5 +232,20 @@ namespace Fenrir
 
         // In the order game code made them, applied after the edits are pushed and before the step.
         std::vector<Push> m_pushes;
+
+        // The debug lines switched on, and those the last step made.
+        DebugDraw m_debugDraw = DebugDraw::None;
+        std::vector<DebugLine> m_debugLines;
+
+        // The edges of the hulls and meshes drawn by the last step, in their own space before scale, as pairs of ends:
+        // asked of the backend once per collision mesh while it is drawn.
+        struct ShapeEdgesKey
+        {
+            ShapeType type;
+            std::uint64_t mesh;
+
+            auto operator<=>(const ShapeEdgesKey&) const = default;
+        };
+        std::map<ShapeEdgesKey, std::vector<Math::Vec3>> m_shapeEdges;
     };
 } // namespace Fenrir

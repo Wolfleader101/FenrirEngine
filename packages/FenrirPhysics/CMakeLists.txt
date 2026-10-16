@@ -5,18 +5,21 @@ add_subdirectory(libs)
 add_library(FenrirPhysics STATIC
     include/FenrirPhysics/CollisionLayers.hpp
     include/FenrirPhysics/Components.hpp
+    include/FenrirPhysics/DebugLines.hpp
     include/FenrirPhysics/Events.hpp
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
     include/FenrirPhysics/Queries.hpp
 
     src/CollisionLayers.cpp
+    src/DebugLines.cpp
     src/Physics.cpp
     src/PhysicsWorld.cpp
     src/Queries.cpp
     src/WorldImpl.hpp
 
     src/Backend/Backend.hpp
+    src/Backend/Primitive.hpp
     src/Backend/Jolt/JoltBackend.cpp
 )
 

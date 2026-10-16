@@ -1,5 +1,8 @@
 #pragma once
 
+#include <span>
+#include <vector>
+
 #include "FenrirApp/App.hpp"
 #include "FenrirMath/Math.hpp"
 #include "ShaderLibrary.hpp"
@@ -21,6 +24,13 @@ class Shader;
 class Material;
 class Model;
 class Mesh;
+
+// One end of a line drawn by GLRenderer::DrawLines, in world space.
+struct LineVertex
+{
+    Fenrir::Math::Vec3 pos;
+    Fenrir::Math::Vec3 colour;
+};
 
 class GLRenderer
 {
@@ -64,6 +74,13 @@ class GLRenderer
 
     void SetSkyboxShader(Shader& shader);
 
+    // The shader DrawLines uses: world-space positions and a colour per vertex.
+    void SetLineShader(Shader& shader);
+
+    // Draws lines, two vertices each, in one GL_LINES pass with the current view, over everything already drawn (no
+    // depth test). Call it between Update and the editor's Update, while the scene's framebuffer is bound.
+    void DrawLines(std::span<const LineVertex> vertices);
+
   private:
     Fenrir::ILogger& m_logger;
     Window& m_window;
@@ -75,6 +92,9 @@ class GLRenderer
     Shader m_skyboxShader;
     float m_aspecRatio;
     unsigned int skyboxVAO;
+    Shader m_lineShader;
+    unsigned int m_linesVAO = 0;
+    unsigned int m_linesVBO = 0;
     Fenrir::EventReader<WindowFrameBufferResizeEvent> m_resizeReader;
 
     void SetMatProps(const Shader& shader, const Material& mat);
@@ -82,8 +102,6 @@ class GLRenderer
     void DrawModel(const Fenrir::Math::Mat4& worldMatrix, const Model& model, const Shader& shader);
 
     void DrawMesh(const Mesh& mesh, const Shader& shader);
-
-    void DrawAABB(const Model& model, const Fenrir::Math::Mat4& modelMatrix);
 
     void DrawSkybox();
 };
