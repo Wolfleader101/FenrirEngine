@@ -7,7 +7,13 @@ add_library(FenrirECS STATIC
 
     include/FenrirECS/DefaultComponents.hpp
 
+    include/FenrirECS/WorldTransform.hpp
+    src/WorldTransform.cpp
+
     include/FenrirECS/ComponentType.hpp
+
+    include/FenrirECS/ComponentWatch.hpp
+    src/ComponentWatch.cpp
 
     include/FenrirECS/DynamicComponent.hpp
     src/DynamicComponent.cpp
