@@ -2,11 +2,11 @@
 
 #include <unordered_set>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirMath/Math.hpp"
 
 namespace Fenrir
 {
-    class App;
     class Camera;
 } // namespace Fenrir
 
@@ -39,6 +39,11 @@ class CameraController
 
     // TODO move to a custom input class
     std::unordered_set<int> m_pressedKeys;
+
+    Fenrir::EventReader<KeyboardKeyEvent> m_keyReader;
+    Fenrir::EventReader<MouseButtonEvent> m_mouseButtonReader;
+    Fenrir::EventReader<MouseMoveEvent> m_mouseMoveReader;
+    Fenrir::EventReader<MouseScrollEvent> m_mouseScrollReader;
 
     Fenrir::Math::Vec2 m_deltaMousePos = Fenrir::Math::Vec2(0.0f, 0.0f);
 };

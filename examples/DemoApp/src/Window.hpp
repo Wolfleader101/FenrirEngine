@@ -8,10 +8,10 @@
 #include <string>
 
 #include "Events.hpp"
+#include "FenrirApp/App.hpp"
 
 namespace Fenrir
 {
-    class App;
     class Camera;
 } // namespace Fenrir
 
@@ -52,6 +52,8 @@ class Window
     int m_width = 0;
     int m_height = 0;
     WindowType m_type;
+    Fenrir::EventReader<WindowCloseEvent> m_closeReader;
+    Fenrir::EventReader<KeyboardKeyEvent> m_keyReader;
 };
 
 #define BIND_WINDOW_SYSTEM_FN(fn, windowInstance) std::bind(&Window::fn, &windowInstance, std::placeholders::_1)
