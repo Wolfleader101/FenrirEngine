@@ -14,4 +14,4 @@
 
 **Resolved by:** merge of impl/05-world-transforms (73d0f41)
 
-**Hand check pending:** DemoApp renderer draws children under a rotated parent at their world transform; the editor gizmo moves a child where it is dragged; clicking a child under a moved parent selects it.
+**Hand checked (2026-10-16):** DemoApp renderer draws children under a rotated parent at their world transform; the editor gizmo moves a child where it is dragged; clicking a child under a moved parent selects it.

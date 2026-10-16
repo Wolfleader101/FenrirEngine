@@ -11,4 +11,4 @@
 - [ ] Camera movement, mouse look, editor selection and window input behave as before (checked by hand).
 
 **Resolved by:** merge of impl/09-demoapp-readers (9d69623)
-**Hand check pending:** camera movement, mouse look, scroll zoom, editor click-select, Escape/close/resize, AutoPlay keys handled once.
+**Hand checked (2026-10-16):** camera movement, mouse look, scroll zoom, editor click-select, Escape/close/resize, AutoPlay keys handled once.

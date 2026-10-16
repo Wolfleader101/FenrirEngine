@@ -13,4 +13,4 @@
 - [ ] The DemoApp physics scene looks smooth on a display above 60 Hz (checked by hand).
 
 **Resolved by:** merge of impl/20-interpolation (a2ad1a1)
-**Hand check pending:** on a display above 60 Hz the physics scene moves smoothly (compare with PhysicsConfig{.interpolate = false}, which steps visibly); editor moves snap.
+**Hand checked (2026-10-16):** on a display above 60 Hz the physics scene moves smoothly (compare with PhysicsConfig{.interpolate = false}, which steps visibly); editor moves snap.

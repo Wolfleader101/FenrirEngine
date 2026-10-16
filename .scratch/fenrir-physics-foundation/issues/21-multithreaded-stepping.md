@@ -12,4 +12,4 @@
 - [ ] The DemoApp physics scene runs multi-threaded (checked by hand).
 
 **Resolved by:** merge of impl/21-multithreaded-stepping (88ca135)
-**Hand check pending:** the DemoApp physics scene runs on worker threads (default config) without stalls.
+**Hand checked (2026-10-16):** the DemoApp physics scene runs on worker threads (default config) without stalls.
