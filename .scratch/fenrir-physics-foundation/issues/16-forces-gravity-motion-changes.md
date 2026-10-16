@@ -4,9 +4,11 @@
 
 **Blocked by:** 12 (Physics tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Tests: an impulse gives the expected velocity change for a known mass; a force over several ticks accelerates as expected; torque and angular impulse spin a body.
 - [ ] Forces on an entity without a body, or in a scene without a world, do nothing (no crash).
 - [ ] Setting gravity on one scene's world does not affect another's; zero gravity leaves bodies floating.
 - [ ] Exceeding a capacity is reported (logged) rather than crashing.
+
+**Resolved by:** merge of impl/16-forces-and-gravity (3d50c29)
