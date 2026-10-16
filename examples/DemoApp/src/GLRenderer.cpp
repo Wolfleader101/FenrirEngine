@@ -2,6 +2,8 @@
 
 #include <glad/glad.h>
 
+#include <cstddef>
+
 #include "FenrirApp/App.hpp"
 #include "FenrirCamera/Camera.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
@@ -63,6 +65,19 @@ void GLRenderer::Init(Fenrir::App& app)
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
 
+    glBindVertexArray(0);
+
+    // Lines: positions and colours interleaved, refilled by each DrawLines.
+    glGenVertexArrays(1, &m_linesVAO);
+    glGenBuffers(1, &m_linesVBO);
+    glBindVertexArray(m_linesVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_linesVBO);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex),
+                          reinterpret_cast<void*>(offsetof(LineVertex, pos)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(LineVertex),
+                          reinterpret_cast<void*>(offsetof(LineVertex, colour)));
     glBindVertexArray(0);
 }
 
@@ -277,8 +292,6 @@ void GLRenderer::DrawModel(const Fenrir::Math::Mat4& worldMatrix, const Model& m
     {
         DrawMesh(mesh, shader);
     }
-
-    // DrawAABB(model, worldMatrix);
 }
 
 void GLRenderer::DrawMesh(const Mesh& mesh, const Shader& shader)
@@ -317,55 +330,29 @@ void GLRenderer::DrawMesh(const Mesh& mesh, const Shader& shader)
     glActiveTexture(GL_TEXTURE0);
 }
 
-// void GLRenderer::DrawAABB(const Model& model, const Fenrir::Math::Mat4& modelMatrix)
-// {
-//     std::vector<Fenrir::Math::Vec3> vertices = {
-//         // 8 corners of the AABB
-//         model.boundingBox.min,
-//         Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.min.y, model.boundingBox.min.z),
-//         Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.max.y, model.boundingBox.min.z),
-//         Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.max.y, model.boundingBox.min.z),
-//         Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.min.y, model.boundingBox.max.z),
-//         Fenrir::Math::Vec3(model.boundingBox.max.x, model.boundingBox.min.y, model.boundingBox.max.z),
-//         Fenrir::Math::Vec3(model.boundingBox.min.x, model.boundingBox.max.y, model.boundingBox.max.z),
-//         model.boundingBox.max};
+void GLRenderer::SetLineShader(Shader& shader)
+{
+    m_lineShader = shader;
+}
 
-//     // AABB lines
-//     std::vector<unsigned int> indices = {0, 1, 1, 3, 3, 2, 2, 0, 4, 5, 5, 7, 7, 6, 6, 4, 0, 4, 1, 5, 3, 7, 2, 6};
+void GLRenderer::DrawLines(std::span<const LineVertex> vertices)
+{
+    if (vertices.empty())
+    {
+        return;
+    }
+    m_lineShader.Use();
+    m_lineShader.SetMat4("view", m_view);
+    m_lineShader.SetMat4("projection", m_projection);
 
-//     // Create and bind VAO, VBO, and EBO
-//     unsigned int VAO, VBO, EBO;
-//     glGenVertexArrays(1, &VAO);
-//     glGenBuffers(1, &VBO);
-//     glGenBuffers(1, &EBO);
-
-//     glBindVertexArray(VAO);
-//     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-//     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Fenrir::Math::Vec3), &vertices[0], GL_STATIC_DRAW);
-//     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-//     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
-
-//     // Position attribute
-//     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Fenrir::Math::Vec3), (void*)0);
-//     glEnableVertexAttribArray(0);
-
-//     // Use your AABB shader here
-//     aabbShader.Use();
-//     aabbShader.SetMat4("model", modelMatrix); // Convert Transform to model matrix
-//     aabbShader.SetMat4("view", m_view);
-//     aabbShader.SetMat4("projection", m_projection);
-//     aabbShader.SetVec3("color", Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f)); // Red color for AABB
-
-//     // Draw the AABB
-//     glBindVertexArray(VAO);
-//     glDrawElements(GL_LINES, indices.size(), GL_UNSIGNED_INT, 0);
-
-//     // Cleanup
-//     glBindVertexArray(0);
-//     glDeleteVertexArrays(1, &VAO);
-//     glDeleteBuffers(1, &VBO);
-//     glDeleteBuffers(1, &EBO);
-// }
+    glBindVertexArray(m_linesVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_linesVBO);
+    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size_bytes()), vertices.data(), GL_STREAM_DRAW);
+    glDisable(GL_DEPTH_TEST);
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(vertices.size()));
+    glEnable(GL_DEPTH_TEST);
+    glBindVertexArray(0);
+}
 
 void GLRenderer::DrawSkybox()
 {

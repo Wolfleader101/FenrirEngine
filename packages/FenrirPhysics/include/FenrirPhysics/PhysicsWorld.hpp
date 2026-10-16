@@ -10,6 +10,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/DebugLines.hpp"
 #include "FenrirPhysics/Queries.hpp"
 
 namespace Fenrir
@@ -141,6 +142,24 @@ namespace Fenrir
 
         /** @brief Changes the world's gravity from the next step on, waking its bodies. Other worlds keep theirs. */
         void SetGravity(const Math::Vec3& gravity);
+
+        /**
+         * @brief Chooses which categories of debug lines the world draws, from the next step on. None (the default)
+         * draws nothing and costs one check per step.
+         */
+        void SetDebugDraw(DebugDraw categories);
+
+        /** @brief The categories of debug lines the world draws. */
+        [[nodiscard]] DebugDraw DebugDrawCategories() const;
+
+        /**
+         * @brief The debug lines of the categories SetDebugDraw chose, made from the world as the last step left it,
+         * and valid until the next step. Empty before the first step after they are switched on.
+         *
+         * They show each body at its true step pose. Between ticks an interpolated body's Transform is blended between
+         * its last two step poses, so its rendered model may lag its lines by up to one step.
+         */
+        [[nodiscard]] std::span<const DebugLine> DebugLines() const;
 
         /** @brief Private: the world's state, for FenrirPhysics's own code. */
         [[nodiscard]] Impl& Implementation()

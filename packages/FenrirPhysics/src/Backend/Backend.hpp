@@ -177,6 +177,9 @@ namespace Fenrir::Backend
      * query. */
     using BodySink = FunctionRef<bool(std::uint32_t, std::uint32_t)>;
 
+    /** @brief Given each edge of a shape, from one end to the other. */
+    using EdgeSink = FunctionRef<void(const Math::Vec3&, const Math::Vec3&)>;
+
     /** @brief A world's settings when it is made. Gravity can change later; the capacities cannot. */
     struct WorldSettings
     {
@@ -336,6 +339,13 @@ namespace Fenrir::Backend
 
         /** @brief The body's world-space bounding box. */
         [[nodiscard]] Math::AABB Bounds(BodyId id) const;
+
+        /**
+         * @brief Gives `sink` the edges of a hull or mesh shape as the backend made it from its collision mesh, in the
+         * shape's own space before scale: each edge of a hull's faces once, and the three edges of each of a mesh's
+         * triangles. Nothing for a primitive, or a released or uncookable mesh. Only reads.
+         */
+        void ShapeEdges(const CollisionShape& shape, EdgeSink sink) const;
 
         /**
          * @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps, and finds which pairs of

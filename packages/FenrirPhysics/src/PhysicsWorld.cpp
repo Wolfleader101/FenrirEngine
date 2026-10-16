@@ -253,6 +253,7 @@ namespace Fenrir
         WriteBack();
         SendEvents(app);
         AdvancePoses();
+        DrawDebugLines();
     }
 
     void PhysicsWorld::Impl::AdvancePoses()
