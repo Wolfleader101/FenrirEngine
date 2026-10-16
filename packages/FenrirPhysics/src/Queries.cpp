@@ -201,15 +201,15 @@ namespace Fenrir
     bool PhysicsWorld::IsSleeping(const Entity& body) const
     {
         const auto it = m_impl->m_bodies.find(body.GetId());
-        return it != m_impl->m_bodies.end() && m_impl->m_backend.IsSleeping(it->second.id);
+        return it != m_impl->m_bodies.end() && it->second.Active() && m_impl->m_backend.IsSleeping(it->second.id);
     }
 
     std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& body) const
     {
         const auto it = m_impl->m_bodies.find(body.GetId());
-        if (it == m_impl->m_bodies.end())
+        if (it == m_impl->m_bodies.end() || !it->second.Active())
         {
-            return std::nullopt;
+            return std::nullopt; // no body, or an inactive one
         }
         return m_impl->m_backend.Bounds(it->second.id);
     }

@@ -40,11 +40,15 @@ namespace Fenrir
                 {
                     return; // no physics in this scene yet
                 }
-                world = &scene.AddResource<PhysicsWorld>(std::make_unique<PhysicsWorld::Impl>(
-                    entities,
-                    Backend::WorldSettings{.gravity = state.config.gravity,
-                                           .workers = state.config.useWorkerThreads ? &app.GetThreadPool() : nullptr},
-                    state.meshes, *app.Logger()));
+                const PhysicsConfig& config = state.config;
+                const Backend::WorldSettings settings{.gravity = config.gravity,
+                                                      .maxBodies = config.maxBodies,
+                                                      .maxBodyPairs = config.maxBodyPairs,
+                                                      .maxContacts = config.maxContacts,
+                                                      .workers =
+                                                          config.useWorkerThreads ? &app.GetThreadPool() : nullptr};
+                world = &scene.AddResource<PhysicsWorld>(
+                    std::make_unique<PhysicsWorld::Impl>(entities, settings, state.meshes, *app.Logger()));
             }
             world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
         }
