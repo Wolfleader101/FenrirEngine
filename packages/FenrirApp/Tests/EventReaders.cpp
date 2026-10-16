@@ -150,26 +150,36 @@ TEST_CASE("A Tick reader sees an event sent in frames that ran no tick", "[app][
     REQUIRE(reads == Reads{{1}});
 }
 
-TEST_CASE("ReadEvents still gives this frame's and the last frame's events, in frames with no tick", "[app][events]")
+TEST_CASE("A reader made after its queue has swapped starts at the oldest event held and has missed nothing",
+          "[app][events]")
 {
     App app(Silent());
     int frame = 0;
-    std::vector<std::size_t> seen;
+    std::vector<int> values;
+    std::vector<std::size_t> missed;
+    app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) { running.SendEvent(Ping{++frame}); }});
     app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) {
-                                 if (++frame == 1)
+                                 if (frame == 4)
                                  {
-                                     running.SendEvent(Ping{1});
+                                     Fenrir::EventReader<Ping> reader;
+                                     const auto read = reader.Read(running);
+                                     missed.push_back(read.Missed());
+                                     for (const Ping& ping : read)
+                                     {
+                                         values.push_back(ping.value);
+                                     }
                                  }
-                                 seen.push_back(running.ReadEvents<Ping>().size());
                              }});
 
+    // One tick a frame, so the queue swaps three times before the reader exists.
     for (int run = 0; run < 4; ++run)
     {
-        app.RunFrame(0.1 * sixtieth);
+        app.RunFrame(sixtieth);
     }
 
-    INFO("an event should be in ReadEvents' window for the frame it was sent and the next, whether or not they ticked");
-    REQUIRE(seen == std::vector<std::size_t>{1, 1, 0, 0});
+    INFO("a new reader should yield the events the queue still holds (frames 3 and 4) and report no misses");
+    REQUIRE(values == std::vector<int>{3, 4});
+    REQUIRE(missed == std::vector<std::size_t>{0});
 }
 
 TEST_CASE("A reader that goes two swaps without reading reports how many events it missed", "[app][events]")
@@ -304,7 +314,7 @@ namespace
     // RecordingReader, by name and as bytes, with a cursor of its own.
     Fenrir::SystemFunc RecordingRawReader(std::string name, Reads& reads)
     {
-        return [name = std::move(name), &reads, seen = std::size_t{0}](App& app) mutable {
+        return [name = std::move(name), &reads, seen = Fenrir::NewReaderCursor](App& app) mutable {
             std::vector<int>& run = reads.emplace_back();
             const Fenrir::RawEventRange events = app.FindEventQueue(name)->ReadRawAfter(seen);
             for (const auto& [data, count] :

@@ -4,10 +4,13 @@
 
 **Blocked by:** 12 (Physics tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `CapsuleShape`, `ConvexHullShape` and `MeshShape` join the union with checked views; tests drop each onto the ground and check where it rests.
 - [ ] A collision mesh made once is used by several colliders; releasing it while in use leaves those bodies inactive with a warning; a released handle is never reused.
 - [ ] Changing a shape's dimensions or the entity's scale rebuilds the backend shape on the next tick (test); a very thin box does not assert.
 - [ ] Many colliders with identical primitive shapes share one backend shape (observable through a diagnostic or test hook that stays private to FenrirPhysics's tests).
 - [ ] The DemoApp can build a mesh collider from a model's vertex data without FenrirPhysics depending on the renderer.
+
+**Resolved by:** merge of impl/13-all-collision-shapes (3f29523)
+**Hand check pending:** DemoApp: three small boxes rest on the brown backpack mesh collider's contours near (5, ground, -7).

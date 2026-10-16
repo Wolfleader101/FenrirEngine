@@ -4,6 +4,7 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -11,6 +12,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "WorldImpl.hpp"
@@ -50,6 +52,20 @@ namespace Fenrir
             if (a.Is<SphereShape>())
             {
                 return Same(a.As<SphereShape>().radius, b.As<SphereShape>().radius);
+            }
+            if (a.Is<ConvexHullShape>())
+            {
+                return a.As<ConvexHullShape>().hull == b.As<ConvexHullShape>().hull;
+            }
+            if (a.Is<MeshShape>())
+            {
+                return a.As<MeshShape>().mesh == b.As<MeshShape>().mesh;
+            }
+            if (a.Is<CapsuleShape>())
+            {
+                const CapsuleShape& x = a.As<CapsuleShape>();
+                const CapsuleShape& y = b.As<CapsuleShape>();
+                return Same(x.halfHeight, y.halfHeight) && Same(x.radius, y.radius);
             }
             return Same(a.As<BoxShape>().halfExtents, b.As<BoxShape>().halfExtents);
         }
@@ -135,8 +151,9 @@ namespace Fenrir
         return scene.GetResource<PhysicsWorld>();
     }
 
-    PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings, ILogger& logger)
-        : m_entities(&entities), m_backend(settings, logger),
+    PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
+                             Backend::CollisionMeshes& meshes, ILogger& logger)
+        : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
           m_triggers(entities.Watch(ComponentType::Native<Trigger>()))
@@ -179,6 +196,7 @@ namespace Fenrir
         {
             changed.insert(change.entity);
         }
+        CollectUnmadeShapes(changed);
         if (changed.empty())
         {
             return;
@@ -212,12 +230,13 @@ namespace Fenrir
             const bool isTrigger = entity.HasComponent<Trigger>();
             const RigidBody* rigidBody = isTrigger ? nullptr : RigidBodyOf(entity);
             const Transform world = GetWorldTransform(entity);
+            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
 
             Backend::BodyDesc desc;
             desc.motion = MotionOf(entity, isTrigger);
             desc.canMove = isTrigger || rigidBody != nullptr;
             desc.isTrigger = isTrigger;
-            desc.shape = entity.GetComponent<Collider>().shape;
+            desc.shape = shape;
             desc.material = MaterialOf(entity);
             desc.filter = EffectiveFilterOf(entity);
             desc.scale = world.scale;
@@ -229,6 +248,16 @@ namespace Fenrir
                 desc.angularVelocity = rigidBody->angularVelocity;
             }
             desc.entity = id;
+            if (!m_backend.CanMakeShape(shape))
+            {
+                m_logger->Warn("The collider of entity " + std::to_string(id) +
+                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
+                               "its body is inactive until its shape changes");
+                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
+                                            desc.filter, Transform(desc.position, desc.rotation, desc.scale),
+                                            desc.linearVelocity, desc.angularVelocity, desc.isTrigger});
+                continue;
+            }
             entities.push_back(id);
             descs.push_back(desc);
         }
@@ -244,10 +273,33 @@ namespace Fenrir
         }
     }
 
+    void PhysicsWorld::Impl::CollectUnmadeShapes(std::set<std::uint32_t>& changed)
+    {
+        // Rebuilt: bodies whose collision mesh was released since (or whose shape was changed to one that cannot be
+        // made), and inactive colliders whose shape has changed since, which may now be made.
+        for (const auto& [id, record] : m_bodies)
+        {
+            if (changed.contains(id) || !m_entities->HasEntity(id))
+            {
+                continue; // already rebuilt, or gone
+            }
+            const CollisionShape& shape = m_entities->GetEntity(id).GetComponent<Collider>().shape;
+            const bool active = record.id.value != Backend::BodyId{}.value;
+            if (active ? !m_backend.CanMakeShape(shape) : !Same(shape, record.shape))
+            {
+                changed.insert(id);
+            }
+        }
+    }
+
     void PhysicsWorld::Impl::PushEdits(float dt)
     {
         for (auto& [id, record] : m_bodies)
         {
+            if (record.id.value == Backend::BodyId{}.value)
+            {
+                continue; // inactive: no body to push to
+            }
             Entity entity = m_entities->GetEntity(id);
             RigidBody* rigidBody = record.isTrigger ? nullptr : RigidBodyOf(entity);
             const Backend::Motion motion = MotionOf(entity, record.isTrigger);
@@ -310,7 +362,7 @@ namespace Fenrir
     {
         for (auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType != MotionType::Dynamic)
+            if (record.motion.motionType != MotionType::Dynamic || record.id.value == Backend::BodyId{}.value)
             {
                 continue;
             }

@@ -4,9 +4,12 @@
 
 **Blocked by:** 12 (Physics tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `ThreadPool` reports its thread count.
 - [ ] A scene of many bodies steps multi-threaded with results bit-identical to single-threaded stepping (test).
 - [ ] No deadlock with pool sizes of 1, 2 and the default, including while other parallel systems run in the same frame (test).
 - [ ] The DemoApp physics scene runs multi-threaded (checked by hand).
+
+**Resolved by:** merge of impl/21-multithreaded-stepping (88ca135)
+**Hand check pending:** the DemoApp physics scene runs on worker threads (default config) without stalls.
