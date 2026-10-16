@@ -92,27 +92,29 @@ namespace Fenrir
                                  float maxDistance, std::span<ShapeCastHit> hits, const QueryFilter& filter = {}) const;
 
         /**
-         * @brief Writes the bodies `shape`, placed at `pose` (scaled as a collider is), overlaps to `hits`, and returns
-         * how many it wrote, stopping when `hits` is full.
+         * @brief Writes the colliders `shape`, placed at `pose` (scaled as a collider is), overlaps to `hits`, each
+         * with its body, and returns how many it wrote, stopping when `hits` is full.
          */
         std::size_t Overlap(const CollisionShape& shape, const Transform& pose, std::span<OverlapHit> hits,
                             const QueryFilter& filter = {}) const;
 
-        /** @brief Writes the bodies containing `point` to `hits`, and returns how many it wrote, stopping when `hits`
-         * is full. */
+        /** @brief Writes the colliders containing `point` to `hits`, each with its body, and returns how many it wrote,
+         * stopping when `hits` is full. */
         std::size_t OverlapPoint(const Math::Vec3& point, std::span<OverlapHit> hits,
                                  const QueryFilter& filter = {}) const;
 
-        /** @brief Whether the body of `body` (the entity with its RigidBody or Collider) is asleep: resting, and not
-         * simulated until something wakes it. False for an entity with no body. */
+        /** @brief Whether the body of `body` (the entity with its RigidBody or Collider; a child collider's entity
+         * stands for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it.
+         * False for an entity with no body. */
         [[nodiscard]] bool IsSleeping(const Entity& body) const;
 
         /** @brief The world-space box around the body of `body`, or none for an entity with no body. */
         [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& body) const;
 
         /**
-         * @brief Changes the velocity of `entity`'s body by `impulse` (newton seconds, world space) over its mass, at
-         * the next step. Does nothing if the entity has no dynamic body then.
+         * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs
+         * to) by `impulse` (newton seconds, world space) over its mass, at the next step. Does nothing if the entity
+         * has no dynamic body then.
          */
         void AddImpulse(const Entity& entity, const Math::Vec3& impulse);
 

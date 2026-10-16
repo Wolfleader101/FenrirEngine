@@ -8,6 +8,7 @@
 #include <memory>
 #include <span>
 #include <utility>
+#include <vector>
 
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
@@ -36,16 +37,33 @@ namespace Fenrir::Backend
         float gravityScale = 1.0f;
     };
 
+    /**
+     * @brief One collider of a body: its shape, its entity's world scale (baked into the shape), and where it sits in
+     * the body (relative to the body's pose, in world units).
+     */
+    struct ColliderPart
+    {
+        CollisionShape shape;
+        Math::Vec3 scale = Math::Vec3(1.0f);
+        Math::Vec3 position = Math::Vec3(0.0f);
+        Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        /** @brief The collider's entity, kept with its part of the body's shape. */
+        std::uint32_t entity = 0;
+    };
+
     /** @brief Everything needed to make a body. */
     struct BodyDesc
     {
         Motion motion;
         /** @brief False for a collider with no RigidBody: it can never become kinematic or dynamic. */
         bool canMove = false;
-        CollisionShape shape;
+        /**
+         * @brief At least one. A single part on the body's own entity, at the body's pose, is the body's shape itself;
+         * otherwise the parts are merged into one compound shape, each keeping its collider's entity.
+         */
+        std::vector<ColliderPart> parts;
         PhysicsMaterial material;
         CollisionFilter filter;
-        Math::Vec3 scale = Math::Vec3(1.0f);
         Math::Vec3 position = Math::Vec3(0.0f);
         Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
         Math::Vec3 linearVelocity = Math::Vec3(0.0f);
@@ -68,6 +86,9 @@ namespace Fenrir::Backend
         /** @brief Their entities, as given in their BodyDesc; kept after a body is destroyed. */
         std::uint32_t entity1 = 0;
         std::uint32_t entity2 = 0;
+        /** @brief The entities of the colliders touching, one of each body (a compound body's part keeps its own). */
+        std::uint32_t collider1 = 0;
+        std::uint32_t collider2 = 0;
         bool isTrigger1 = false;
         bool isTrigger2 = false;
         /** @brief Where they touch, in world space, as last found. */
@@ -141,6 +162,8 @@ namespace Fenrir::Backend
     {
         /** @brief The body's entity. */
         std::uint32_t entity;
+        /** @brief The entity of the body's collider that was hit. */
+        std::uint32_t collider;
         Math::Vec3 point;
         Math::Vec3 normal;
         float distance;
@@ -150,8 +173,9 @@ namespace Fenrir::Backend
      * particular order; returns the farthest distance still wanted. */
     using HitSink = FunctionRef<float(const QueryHit&)>;
 
-    /** @brief Given the entity of each body found, once per body; returns false to stop the query. */
-    using BodySink = FunctionRef<bool(std::uint32_t)>;
+    /** @brief Given the entities of each body found and of its collider, once per collider; returns false to stop the
+     * query. */
+    using BodySink = FunctionRef<bool(std::uint32_t, std::uint32_t)>;
 
     /** @brief A world's settings when it is made. Gravity can change later; the capacities cannot. */
     struct WorldSettings
@@ -250,8 +274,11 @@ namespace Fenrir::Backend
         /** @brief Sets a body's velocities, waking it. */
         void SetVelocity(BodyId id, const Math::Vec3& linear, const Math::Vec3& angular);
 
-        /** @brief Replaces a body's shape, `scale` baked in, keeping its `mass`. The shape must pass CanMakeShape. */
-        void SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass);
+        /**
+         * @brief Replaces a body's shape with one made from `parts` (as BodyDesc::parts, for the body of `entity`),
+         * keeping its `mass`; its inertia follows the new shape. Every part's shape must pass CanMakeShape.
+         */
+        void SetShape(BodyId id, std::span<const ColliderPart> parts, std::uint32_t entity, float mass);
 
         /** @brief Changes a body's surface. */
         void SetMaterial(BodyId id, const PhysicsMaterial& material);

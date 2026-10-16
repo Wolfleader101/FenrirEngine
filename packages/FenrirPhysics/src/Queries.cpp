@@ -57,7 +57,8 @@ namespace Fenrir
                     return Farthest();
                 }
                 Entity body;
-                if (!EntityOf(*m_entities, found.entity, body))
+                Entity collider;
+                if (!EntityOf(*m_entities, found.entity, body) || !EntityOf(*m_entities, found.collider, collider))
                 {
                     return Farthest();
                 }
@@ -71,8 +72,7 @@ namespace Fenrir
                 }
                 std::move_backward(at, m_hits.begin() + static_cast<std::ptrdiff_t>(m_count) - 1,
                                    m_hits.begin() + static_cast<std::ptrdiff_t>(m_count));
-                // Every body has one collider until compound bodies give a body several.
-                *at = Hit{body, body, found.point, found.normal, found.distance};
+                *at = Hit{body, collider, found.point, found.normal, found.distance};
                 return Farthest();
             }
 
@@ -93,7 +93,7 @@ namespace Fenrir
             std::size_t m_count = 0;
         };
 
-        // Writes the bodies it is given to `hits` until it is full.
+        // Writes the colliders it is given, with their bodies, to `hits` until it is full.
         class Overlaps
         {
           public:
@@ -101,12 +101,13 @@ namespace Fenrir
             {
             }
 
-            bool operator()(std::uint32_t id)
+            bool operator()(std::uint32_t bodyId, std::uint32_t colliderId)
             {
                 Entity body;
-                if (EntityOf(*m_entities, id, body))
+                Entity collider;
+                if (EntityOf(*m_entities, bodyId, body) && EntityOf(*m_entities, colliderId, collider))
                 {
-                    m_hits[m_count++] = OverlapHit{body, body};
+                    m_hits[m_count++] = OverlapHit{body, collider};
                 }
                 return m_count < m_hits.size();
             }
@@ -200,17 +201,17 @@ namespace Fenrir
 
     bool PhysicsWorld::IsSleeping(const Entity& body) const
     {
-        const auto it = m_impl->m_bodies.find(body.GetId());
-        return it != m_impl->m_bodies.end() && it->second.Active() && m_impl->m_backend.IsSleeping(it->second.id);
+        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        return record != nullptr && record->Active() && m_impl->m_backend.IsSleeping(record->id);
     }
 
     std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& body) const
     {
-        const auto it = m_impl->m_bodies.find(body.GetId());
-        if (it == m_impl->m_bodies.end() || !it->second.Active())
+        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        if (record == nullptr || !record->Active())
         {
             return std::nullopt; // no body, or an inactive one
         }
-        return m_impl->m_backend.Bounds(it->second.id);
+        return m_impl->m_backend.Bounds(record->id);
     }
 } // namespace Fenrir

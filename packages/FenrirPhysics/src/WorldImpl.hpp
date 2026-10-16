@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <set>
+#include <span>
 #include <vector>
 
 #include "Backend/Backend.hpp"
@@ -80,9 +81,23 @@ namespace Fenrir
         // The queries, in Queries.cpp, read the bodies and the backend.
         friend class PhysicsWorld;
 
+        // One collider of a body, as physics last applied it: its shape, and its pose in the body (relative to the
+        // body's pose, in world units; scale is its entity's world scale). A part whose shape cannot be made (its
+        // collision mesh was released) is left out of the body's backend shape until its shape changes.
+        struct Part
+        {
+            std::uint32_t entity;
+            CollisionShape shape;
+            Transform pose;
+            bool usable;
+            // A CollisionFilter on a collider that is not on the body's own entity: ignored, with a warning.
+            bool filtered;
+        };
+
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
-        // A collider whose body could not be made (its collision mesh was released, or the world was full) keeps a
-        // record with no body: it is inactive, skipped by every step, until its components or its shape change.
+        // A body none of whose colliders can be made (their collision meshes were released), or that the world was too
+        // full to make, keeps a record with no backend body: it is inactive, skipped by every step, until its
+        // components or its colliders' shapes change.
         struct Record
         {
             [[nodiscard]] bool Active() const
@@ -93,7 +108,7 @@ namespace Fenrir
             Backend::BodyId id;
             bool canMove;
             Backend::Motion motion;
-            CollisionShape shape;
+            std::vector<Part> parts;
             PhysicsMaterial material;
             CollisionFilter filter;
             Transform world;
@@ -147,7 +162,37 @@ namespace Fenrir
         [[nodiscard]] CollisionFilter EffectiveFilterOf(Entity& entity) const;
         [[nodiscard]] bool ReportsContacts(std::uint32_t body) const;
 
-        void CollectUnmadeShapes(std::set<std::uint32_t>& changed);
+        /**
+         * @brief The entity whose body the collider on `entity` belongs to: the nearest of it and its ancestors with a
+         * RigidBody, or the collider's own entity (a static body) if none has one.
+         */
+        [[nodiscard]] std::uint32_t BodyEntityOf(std::uint32_t entity) const;
+
+        /**
+         * @brief The entity of the body `entity` stands for: for an entity with a RigidBody or Collider, the body it
+         * has or belongs to (see BodyEntityOf); otherwise, or once destroyed, itself.
+         */
+        [[nodiscard]] std::uint32_t ResolveBody(std::uint32_t entity) const;
+
+        /** @brief The body a trigger is attached to: its nearest ancestor's with a RigidBody, else the trigger itself.
+         */
+        [[nodiscard]] std::uint32_t AttachedBodyOf(std::uint32_t trigger) const;
+
+        /**
+         * @brief The body `entity` has or belongs to: its own (a RigidBody's, or a static collider's), or, for a
+         * collider of a compound body, that body. Null for an entity with neither component, or whose body is not made.
+         */
+        [[nodiscard]] Record* FindBody(std::uint32_t entity);
+
+        /** @brief The body's colliders as they are now, in the order of `entities`. */
+        [[nodiscard]] std::vector<Part> PartsOf(std::span<const std::uint32_t> entities, std::uint32_t body,
+                                                const Math::Vec3& bodyScale);
+
+        /** @brief The parts that go into the body's backend shape. */
+        [[nodiscard]] static std::vector<Backend::ColliderPart> UsableParts(std::span<const Part> parts);
+
+        /** @brief Warns about the parts' unusable shapes and ignored filters, those `before` did not already have. */
+        void WarnAbout(std::span<const Part> parts, std::span<const Part> before);
 
         EntityList* m_entities;
         ILogger* m_logger;
@@ -156,10 +201,15 @@ namespace Fenrir
         ComponentWatch m_colliders;
         ComponentWatch m_triggers;
 
-        // Entities whose bodies are rebuilt at the next tick: those with a collider when the world was made.
-        std::set<std::uint32_t> m_pending;
+        // The entities with each component now, as the watches have reported them.
+        std::set<std::uint32_t> m_rigidBodyEntities;
+        std::set<std::uint32_t> m_colliderEntities;
 
-        // Ordered by entity, so bodies are made, diffed and written back in a reproducible order (ADR-0011).
+        // RigidBodies with no collider: inactive in physics. Each is warned about once, when it becomes one.
+        std::set<std::uint32_t> m_empty;
+
+        // By the body's entity (its RigidBody's, or a static collider's own), so bodies are made, diffed and written
+        // back in a reproducible order (ADR-0011).
         std::map<std::uint32_t, Record> m_bodies;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.

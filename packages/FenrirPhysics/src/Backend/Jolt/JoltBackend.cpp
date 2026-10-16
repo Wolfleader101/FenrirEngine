@@ -41,7 +41,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/MutableCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
@@ -419,6 +421,25 @@ namespace Fenrir::Backend
             return JPH::BodyID(id.value);
         }
 
+        std::uint32_t EntityOf(const JPH::Body& body)
+        {
+            return static_cast<std::uint32_t>(body.GetUserData());
+        }
+
+        // The entity of the collider a sub-shape of the body belongs to: a compound's part keeps it, and a body that is
+        // not a compound is its own entity's one collider.
+        std::uint32_t ColliderOf(const JPH::Body& body, const JPH::SubShapeID& subShape)
+        {
+            const JPH::Shape* shape = body.GetShape();
+            if (shape->GetType() != JPH::EShapeType::Compound)
+            {
+                return EntityOf(body);
+            }
+            const auto* compound = static_cast<const JPH::CompoundShape*>(shape);
+            JPH::SubShapeID remainder;
+            return compound->GetCompoundUserData(compound->GetSubShapeIndexFromID(subShape, remainder));
+        }
+
         // One touching pair of sub-shapes of two bodies.
         struct TouchKey
         {
@@ -473,8 +494,10 @@ namespace Fenrir::Backend
                 Touch touch;
                 touch.body1 = BodyId{body1.GetID().GetIndexAndSequenceNumber()};
                 touch.body2 = BodyId{body2.GetID().GetIndexAndSequenceNumber()};
-                touch.entity1 = static_cast<std::uint32_t>(body1.GetUserData());
-                touch.entity2 = static_cast<std::uint32_t>(body2.GetUserData());
+                touch.entity1 = EntityOf(body1);
+                touch.entity2 = EntityOf(body2);
+                touch.collider1 = ColliderOf(body1, manifold.mSubShapeID1);
+                touch.collider2 = ColliderOf(body2, manifold.mSubShapeID2);
                 touch.isTrigger1 = body1.IsSensor();
                 touch.isTrigger2 = body2.IsSensor();
 
@@ -825,6 +848,40 @@ namespace Fenrir::Backend
             return scaled.Get();
         }
 
+        // A body's shape: its one collider's own shape when that collider is on the body's entity (so identical bodies
+        // share it), else a compound of its colliders, each part keeping its collider's entity as its user data.
+        JPH::Ref<JPH::Shape> MakeBodyShape(std::span<const ColliderPart> parts, std::uint32_t entity)
+        {
+            JPH_ASSERT(!parts.empty());
+            if (parts.size() == 1 && parts[0].entity == entity)
+            {
+                return MakeShape(parts[0].shape, parts[0].scale);
+            }
+            const auto add = [this](JPH::CompoundShapeSettings& compound, const ColliderPart& part) {
+                compound.AddShape(ToJolt(part.position), ToJolt(part.rotation), MakeShape(part.shape, part.scale),
+                                  part.entity);
+            };
+            JPH::Shape::ShapeResult result;
+            if (parts.size() == 1)
+            {
+                // A static compound needs two parts at least.
+                JPH::MutableCompoundShapeSettings compound;
+                add(compound, parts[0]);
+                result = compound.Create();
+            }
+            else
+            {
+                JPH::StaticCompoundShapeSettings compound;
+                for (const ColliderPart& part : parts)
+                {
+                    add(compound, part);
+                }
+                result = compound.Create(tempAllocator);
+            }
+            JPH_ASSERT(result.IsValid());
+            return result.Get();
+        }
+
         // The backend shape for a query's shape, by the same rules as MakeShape but touching no cache, so queries can
         // run side by side. Null for a hull or mesh whose collision mesh was released or cannot be cooked.
         JPH::Ref<JPH::Shape> MakeQueryShape(const CollisionShape& shape, const Math::Vec3& scale) const
@@ -1038,10 +1095,13 @@ namespace Fenrir::Backend
                 desc.isTrigger
                     ? m_impl->objectLayers.Acquire(LayerKey{BroadPhase::Trigger, desc.filter.layers, desc.filter.mask})
                     : m_impl->AcquireLayer(motionType, desc.filter);
-            const JPH::Ref<JPH::Shape> shape = m_impl->MakeShape(desc.shape, desc.scale);
+            const JPH::Ref<JPH::Shape> shape = m_impl->MakeBodyShape(desc.parts, desc.entity);
             JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation), ToJolt(motionType),
                                                layer);
             settings.mAllowDynamicOrKinematic = desc.canMove;
+            // Jolt merges contacts of a body's different parts that face the same way, which would hide all but one of
+            // a compound body's colliders from its contacts.
+            settings.mUseManifoldReduction = shape->GetType() != JPH::EShapeType::Compound;
             if (desc.isTrigger)
             {
                 // A kinematic sensor kept awake sees sleeping bodies, and with this flag static ones too.
@@ -1134,11 +1194,12 @@ namespace Fenrir::Backend
         m_impl->Bodies().SetLinearAndAngularVelocity(ToJolt(id), ToJolt(linear), ToJolt(angular));
     }
 
-    void World::SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass)
+    void World::SetShape(BodyId id, std::span<const ColliderPart> parts, std::uint32_t entity, float mass)
     {
         const JPH::AABox before = m_impl->Bounds(id);
-        const JPH::Ref<JPH::Shape> made = m_impl->MakeShape(shape, scale);
+        const JPH::Ref<JPH::Shape> made = m_impl->MakeBodyShape(parts, entity);
         m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
+        m_impl->Bodies().SetUseManifoldReduction(ToJolt(id), made->GetType() != JPH::EShapeType::Compound);
         // The body keeps its own mass; its inertia follows the new shape.
         m_impl->Write(id, [&made, mass](JPH::Body& body) {
             if (JPH::MotionProperties* motion = body.GetMotionPropertiesUnchecked())
@@ -1319,11 +1380,6 @@ namespace Fenrir::Backend
             QueryBodyFilter body;
         };
 
-        std::uint32_t EntityOf(const JPH::Body& body)
-        {
-            return static_cast<std::uint32_t>(body.GetUserData());
-        }
-
         // Hands each hit to a sink, narrowing the query to the distance the sink still wants.
         class RayCollector final : public JPH::CastRayCollector
         {
@@ -1335,7 +1391,7 @@ namespace Fenrir::Backend
 
             void OnBody(const JPH::Body& body) override
             {
-                m_entity = EntityOf(body);
+                m_body = &body;
             }
 
             void AddHit(const JPH::RayCastResult& result) override
@@ -1347,7 +1403,8 @@ namespace Fenrir::Backend
                                              ? GetContext()->GetWorldSpaceSurfaceNormal(result.mSubShapeID2, point)
                                              : -direction;
                 const float wanted =
-                    m_sink(QueryHit{m_entity, FromJolt(point), FromJolt(normal), result.mFraction * m_maxDistance});
+                    m_sink(QueryHit{EntityOf(*m_body), ColliderOf(*m_body, result.mSubShapeID2), FromJolt(point),
+                                    FromJolt(normal), result.mFraction * m_maxDistance});
                 const float fraction = wanted / m_maxDistance;
                 if (fraction < GetEarlyOutFraction())
                 {
@@ -1359,7 +1416,7 @@ namespace Fenrir::Backend
             const JPH::RRayCast* m_ray;
             float m_maxDistance;
             HitSink m_sink;
-            std::uint32_t m_entity = 0;
+            const JPH::Body* m_body = nullptr;
         };
 
         class ShapeCastCollector final : public JPH::CastShapeCollector
@@ -1371,13 +1428,14 @@ namespace Fenrir::Backend
 
             void OnBody(const JPH::Body& body) override
             {
-                m_entity = EntityOf(body);
+                m_body = &body;
             }
 
             void AddHit(const JPH::ShapeCastResult& result) override
             {
                 const JPH::Vec3 normal = -result.mPenetrationAxis.NormalizedOr(JPH::Vec3::sZero());
-                const float wanted = m_sink(QueryHit{m_entity, FromJolt(result.mContactPointOn1), FromJolt(normal),
+                const float wanted = m_sink(QueryHit{EntityOf(*m_body), ColliderOf(*m_body, result.mSubShapeID2),
+                                                     FromJolt(result.mContactPointOn1), FromJolt(normal),
                                                      result.mFraction * m_maxDistance});
                 // Jolt orders shapes that start overlapping by negative penetration depth, below fraction 0: a sink
                 // that wants nothing farther than distance 0 still sees them.
@@ -1391,10 +1449,10 @@ namespace Fenrir::Backend
           private:
             float m_maxDistance;
             HitSink m_sink;
-            std::uint32_t m_entity = 0;
+            const JPH::Body* m_body = nullptr;
         };
 
-        // Reports each body once, however many of its parts are hit; stops when the sink says so.
+        // Reports each collider of a body once, however many times it is hit; stops when the sink says so.
         template <typename Base>
         class BodyCollector final : public Base
         {
@@ -1405,18 +1463,19 @@ namespace Fenrir::Backend
 
             void OnBody(const JPH::Body& body) override
             {
-                m_entity = EntityOf(body);
-                m_reported = false;
+                m_body = &body;
+                m_reported.clear();
             }
 
-            void AddHit(const typename Base::ResultType&) override
+            void AddHit(const typename Base::ResultType& result) override
             {
-                if (m_reported)
+                const std::uint32_t collider = ColliderOf(*m_body, result.mSubShapeID2);
+                if (std::ranges::find(m_reported, collider) != m_reported.end())
                 {
                     return;
                 }
-                m_reported = true;
-                if (!m_sink(m_entity))
+                m_reported.push_back(collider);
+                if (!m_sink(EntityOf(*m_body), collider))
                 {
                     this->ForceEarlyOut();
                 }
@@ -1424,8 +1483,8 @@ namespace Fenrir::Backend
 
           private:
             BodySink m_sink;
-            std::uint32_t m_entity = 0;
-            bool m_reported = false;
+            const JPH::Body* m_body = nullptr;
+            std::vector<std::uint32_t> m_reported;
         };
 
         JPH::Mat44 ToJolt(const Math::Vec3& position, const Math::Quat& rotation)

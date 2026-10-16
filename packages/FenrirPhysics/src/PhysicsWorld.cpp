@@ -75,9 +75,34 @@ namespace Fenrir
             return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
         }
 
-        PhysicsMaterial MaterialOf(Entity& entity)
+        Entity ParentOf(const Entity& entity)
         {
-            return entity.HasComponent<PhysicsMaterial>() ? entity.GetComponent<PhysicsMaterial>() : PhysicsMaterial{};
+            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
+        }
+
+        Transform LocalOf(const Entity& entity)
+        {
+            return entity.HasComponent<Transform>() ? entity.GetComponent<Transform>() : Transform();
+        }
+
+        // The backend keeps one surface per body, so a compound body has one material: its own entity's, else that of
+        // the first of its colliders (in entity order) with one, else the default.
+        template <typename Parts>
+        PhysicsMaterial MaterialOf(EntityList& entities, const Entity& body, const Parts& parts)
+        {
+            if (body.HasComponent<PhysicsMaterial>())
+            {
+                return body.GetComponent<PhysicsMaterial>();
+            }
+            for (const auto& part : parts)
+            {
+                const Entity collider = entities.GetEntity(part.entity);
+                if (collider.HasComponent<PhysicsMaterial>())
+                {
+                    return collider.GetComponent<PhysicsMaterial>();
+                }
+            }
+            return PhysicsMaterial{};
         }
 
         bool Same(const CollisionFilter& a, const CollisionFilter& b)
@@ -116,10 +141,11 @@ namespace Fenrir
             return MotionOf(RigidBodyOf(entity));
         }
 
-        // The rigid body entity a collider belongs to: its own, until a body can have colliders on several entities.
-        std::uint32_t BodyOf(std::uint32_t collider)
+        // A trigger collider is always its own backend body (the backend's sensor flag is per body), even beneath
+        // another body.
+        bool IsTrigger(const Entity& entity)
         {
-            return collider;
+            return entity.HasComponent<Trigger>() && entity.HasComponent<Collider>();
         }
 
         template <typename TEvent, typename Key>
@@ -206,9 +232,11 @@ namespace Fenrir
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
           m_triggers(entities.Watch(ComponentType::Native<Trigger>()))
     {
-        // A watch records only what happens after it is made: the colliders already there are found once, here.
+        // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
-        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_pending.insert(entity); });
+        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
+        const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
+        entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
@@ -310,69 +338,230 @@ namespace Fenrir
         }
     }
 
+    std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
+    {
+        const Entity collider = m_entities->GetEntity(entity);
+        if (IsTrigger(collider))
+        {
+            return entity;
+        }
+        // A trigger's entity hosts no compound body: a RigidBody there does not make the trigger move as one.
+        for (Entity e = collider; e.IsValid(); e = ParentOf(e))
+        {
+            if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
+            {
+                return e.GetId();
+            }
+        }
+        return entity;
+    }
+
+    std::uint32_t PhysicsWorld::Impl::ResolveBody(std::uint32_t entity) const
+    {
+        if (!m_entities->HasEntity(entity))
+        {
+            return entity;
+        }
+        const Entity found = m_entities->GetEntity(entity);
+        return found.HasComponent<RigidBody>() || found.HasComponent<Collider>() ? BodyEntityOf(entity) : entity;
+    }
+
+    std::uint32_t PhysicsWorld::Impl::AttachedBodyOf(std::uint32_t trigger) const
+    {
+        if (!m_entities->HasEntity(trigger))
+        {
+            return trigger;
+        }
+        const Entity parent = ParentOf(m_entities->GetEntity(trigger));
+        if (!parent.IsValid())
+        {
+            return trigger;
+        }
+        // The body a collider on the parent would belong to: the nearest ancestor body, if there is one.
+        for (Entity e = parent; e.IsValid(); e = ParentOf(e))
+        {
+            if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
+            {
+                return e.GetId();
+            }
+        }
+        return trigger;
+    }
+
+    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(std::uint32_t entity)
+    {
+        if (m_entities->HasEntity(entity) && !m_entities->GetEntity(entity).HasComponent<RigidBody>() &&
+            !m_entities->GetEntity(entity).HasComponent<Collider>())
+        {
+            return nullptr;
+        }
+        // A destroyed entity's body, if it had one, lasts until the next step.
+        const auto it = m_bodies.find(ResolveBody(entity));
+        return it == m_bodies.end() ? nullptr : &it->second;
+    }
+
+    std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
+                                                                      std::uint32_t body, const Math::Vec3& bodyScale)
+    {
+        std::vector<Part> parts;
+        parts.reserve(entities.size());
+        std::vector<Entity> chain;
+        for (std::uint32_t id : entities)
+        {
+            Entity entity = m_entities->GetEntity(id);
+            // Composed from the body down through the locals, the way GetWorldTransform composes, but starting from
+            // the body's scale alone: the pose then stays the same, bit for bit, however the body moves.
+            chain.clear();
+            for (Entity e = entity; e.IsValid() && e.GetId() != body; e = ParentOf(e))
+            {
+                chain.push_back(e);
+            }
+            Transform pose(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), bodyScale);
+            for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+            {
+                const Transform local = LocalOf(*it);
+                pose.pos = pose.pos + Math::Rotate(pose.rot, pose.scale * local.pos);
+                pose.rot = pose.rot * local.rot;
+                pose.scale = pose.scale * local.scale;
+            }
+            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+            parts.push_back(Part{id, shape, pose, m_backend.CanMakeShape(shape),
+                                 id != body && entity.HasComponent<CollisionFilter>()});
+        }
+        return parts;
+    }
+
+    std::vector<Backend::ColliderPart> PhysicsWorld::Impl::UsableParts(std::span<const Part> parts)
+    {
+        std::vector<Backend::ColliderPart> usable;
+        for (const Part& part : parts)
+        {
+            if (part.usable)
+            {
+                usable.push_back(
+                    Backend::ColliderPart{part.shape, part.pose.scale, part.pose.pos, part.pose.rot, part.entity});
+            }
+        }
+        return usable;
+    }
+
+    void PhysicsWorld::Impl::WarnAbout(std::span<const Part> parts, std::span<const Part> before)
+    {
+        for (std::size_t i = 0; i < parts.size(); ++i)
+        {
+            const Part& part = parts[i];
+            const bool known = i < before.size() && before[i].entity == part.entity;
+            if (!part.usable && (!known || before[i].usable))
+            {
+                m_logger->Warn("The collider of entity " + std::to_string(part.entity) +
+                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
+                               "it is inactive until its shape changes");
+            }
+            if (part.filtered && (!known || !before[i].filtered))
+            {
+                m_logger->Warn("The CollisionFilter of entity " + std::to_string(part.entity) +
+                               " is ignored: its collider is part of the body of an ancestor, whose filter applies to "
+                               "all its colliders");
+            }
+        }
+    }
+
     void PhysicsWorld::Impl::SyncBodies()
     {
-        // Only each entity's net effect matters: every entity whose components came or went has its body rebuilt from
+        // Only each entity's net effect matters: an entity whose components came or went has its body rebuilt from
         // what it has now (added then removed: no body; removed then added: a new body).
-        std::set<std::uint32_t> changed = std::move(m_pending);
-        m_pending.clear();
-        for (const ComponentChange& change : m_rigidBodies.Drain())
-        {
-            changed.insert(change.entity);
-        }
-        for (const ComponentChange& change : m_colliders.Drain())
-        {
-            changed.insert(change.entity);
-        }
-        // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs.
+        std::set<std::uint32_t> changed;
+        const auto track = [this, &changed](ComponentWatch& watch, std::set<std::uint32_t>& tracked, auto has) {
+            for (const ComponentChange& change : watch.Drain())
+            {
+                changed.insert(change.entity);
+                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
+                {
+                    tracked.insert(change.entity);
+                }
+                else
+                {
+                    tracked.erase(change.entity);
+                }
+            }
+        };
+        track(m_rigidBodies, m_rigidBodyEntities, [](const Entity& e) { return e.HasComponent<RigidBody>(); });
+        track(m_colliders, m_colliderEntities, [](const Entity& e) { return e.HasComponent<Collider>(); });
+        // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs, and which body it
+        // is part of.
         for (const ComponentChange& change : m_triggers.Drain())
         {
             changed.insert(change.entity);
         }
-        CollectUnmadeShapes(changed);
-        if (changed.empty())
+
+        // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
+        // worked out every tick).
+        std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
+        for (std::uint32_t collider : m_colliderEntities)
         {
-            return;
+            assembly[BodyEntityOf(collider)].push_back(collider);
         }
 
-        std::vector<Backend::BodyId> destroyed;
-        for (std::uint32_t entity : changed)
+        for (std::uint32_t rigidBody : m_rigidBodyEntities)
         {
-            const auto it = m_bodies.find(entity);
-            if (it != m_bodies.end())
+            if (assembly.contains(rigidBody))
             {
-                destroyed.push_back(it->second.id);
-                m_bodies.erase(it);
+                m_empty.erase(rigidBody);
             }
+            else if (m_empty.insert(rigidBody).second)
+            {
+                m_logger->Warn("The RigidBody of entity " + std::to_string(rigidBody) +
+                               " has no collider on its entity or beneath it; it is inactive in physics until it has "
+                               "one");
+            }
+        }
+        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.contains(entity); });
+
+        // Rebuilt: bodies whose entity or colliders changed, whose set of colliders changed, or whose colliders'
+        // shapes became usable or unusable (a collision mesh released, or a shape changed to one that can be made).
+        std::vector<Backend::BodyId> destroyed;
+        for (auto it = m_bodies.begin(); it != m_bodies.end();)
+        {
+            const auto& [body, record] = *it;
+            const auto wanted = assembly.find(body);
+            bool rebuild =
+                wanted == assembly.end() || changed.contains(body) || wanted->second.size() != record.parts.size();
+            for (std::size_t i = 0; !rebuild && i < record.parts.size(); ++i)
+            {
+                const std::uint32_t collider = wanted->second[i];
+                rebuild = collider != record.parts[i].entity || changed.contains(collider) ||
+                          m_backend.CanMakeShape(m_entities->GetEntity(collider).GetComponent<Collider>().shape) !=
+                              record.parts[i].usable;
+            }
+            if (!rebuild)
+            {
+                assembly.erase(wanted);
+                ++it;
+                continue;
+            }
+            destroyed.push_back(record.id);
+            it = m_bodies.erase(it);
         }
         m_backend.DestroyBodies(destroyed);
 
         std::vector<std::uint32_t> entities;
         std::vector<Backend::BodyDesc> descs;
-        for (std::uint32_t id : changed)
+        for (const auto& [id, colliders] : assembly)
         {
-            if (!m_entities->HasEntity(id))
-            {
-                continue;
-            }
             Entity entity = m_entities->GetEntity(id);
-            if (!entity.HasComponent<Collider>())
-            {
-                continue;
-            }
-            const bool isTrigger = entity.HasComponent<Trigger>();
+            const bool isTrigger = IsTrigger(entity);
             const RigidBody* rigidBody = isTrigger ? nullptr : RigidBodyOf(entity);
             const Transform world = GetWorldTransform(entity);
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
+            WarnAbout(parts, {});
 
             Backend::BodyDesc desc;
             desc.motion = MotionOf(entity, isTrigger);
             desc.canMove = isTrigger || rigidBody != nullptr;
             desc.isTrigger = isTrigger;
-            desc.shape = shape;
-            desc.material = MaterialOf(entity);
+            desc.parts = UsableParts(parts);
+            desc.material = MaterialOf(*m_entities, entity, parts);
             desc.filter = EffectiveFilterOf(entity);
-            desc.scale = world.scale;
             desc.position = world.pos;
             desc.rotation = world.rot;
             if (rigidBody != nullptr)
@@ -381,51 +570,23 @@ namespace Fenrir
                 desc.angularVelocity = rigidBody->angularVelocity;
             }
             desc.entity = id;
-            if (!m_backend.CanMakeShape(shape))
+            const auto made = m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion,
+                                                          std::move(parts), desc.material, desc.filter, world,
+                                                          desc.linearVelocity, desc.angularVelocity});
+            made.first->second.isTrigger = isTrigger;
+            if (desc.parts.empty())
             {
-                m_logger->Warn("The collider of entity " + std::to_string(id) +
-                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
-                               "its body is inactive until its shape changes");
-                const auto inactive =
-                    m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
-                                                desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                                desc.linearVelocity, desc.angularVelocity});
-                inactive.first->second.isTrigger = desc.isTrigger;
-                continue;
+                continue; // inactive: none of its colliders can be made
             }
             entities.push_back(id);
-            descs.push_back(desc);
+            descs.push_back(std::move(desc));
         }
 
         std::vector<Backend::BodyId> ids(descs.size());
         m_backend.CreateBodies(descs, ids);
         for (std::size_t i = 0; i < descs.size(); ++i)
         {
-            // A body the backend could not make (the world is full; it logged that) leaves the record inactive.
-            const Backend::BodyDesc& desc = descs[i];
-            const auto made =
-                m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
-                                                     desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                                     desc.linearVelocity, desc.angularVelocity});
-            made.first->second.isTrigger = desc.isTrigger;
-        }
-    }
-
-    void PhysicsWorld::Impl::CollectUnmadeShapes(std::set<std::uint32_t>& changed)
-    {
-        // Rebuilt: bodies whose collision mesh was released since (or whose shape was changed to one that cannot be
-        // made), and inactive colliders whose shape has changed since, which may now be made.
-        for (const auto& [id, record] : m_bodies)
-        {
-            if (changed.contains(id) || !m_entities->HasEntity(id))
-            {
-                continue; // already rebuilt, or gone
-            }
-            const CollisionShape& shape = m_entities->GetEntity(id).GetComponent<Collider>().shape;
-            if (record.Active() ? !m_backend.CanMakeShape(shape) : !Same(shape, record.shape))
-            {
-                changed.insert(id);
-            }
+            m_bodies.at(entities[i]).id = ids[i];
         }
     }
 
@@ -440,7 +601,6 @@ namespace Fenrir
             Entity entity = m_entities->GetEntity(id);
             RigidBody* rigidBody = record.isTrigger ? nullptr : RigidBodyOf(entity);
             const Backend::Motion motion = MotionOf(entity, record.isTrigger);
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
             const Transform world = GetWorldTransform(entity);
 
             bool pushVelocity = false;
@@ -453,13 +613,30 @@ namespace Fenrir
                 record.motion = motion;
             }
 
-            if (!Same(shape, record.shape) || !Same(world.scale, record.world.scale))
+            std::vector<std::uint32_t> colliders;
+            colliders.reserve(record.parts.size());
+            for (const Part& part : record.parts)
             {
-                m_backend.SetShape(record.id, shape, world.scale, motion.mass);
-                record.shape = shape;
+                colliders.push_back(part.entity);
+            }
+            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
+            WarnAbout(parts, record.parts);
+            if (!std::ranges::equal(parts, record.parts, [](const Part& a, const Part& b) {
+                    return Same(a.shape, b.shape) && Same(a.pose.pos, b.pose.pos) && Same(a.pose.rot, b.pose.rot) &&
+                           Same(a.pose.scale, b.pose.scale);
+                }))
+            {
+                m_backend.SetShape(record.id, UsableParts(parts), id, motion.mass);
+            }
+            record.parts = std::move(parts);
+
+            const PhysicsMaterial material = MaterialOf(*m_entities, entity, record.parts);
+            if (!Same(material, record.material))
+            {
+                m_backend.SetMaterial(record.id, material);
+                record.material = material;
             }
 
-            const PhysicsMaterial material = MaterialOf(entity);
             if (!Same(material, record.material))
             {
                 m_backend.SetMaterial(record.id, material);
@@ -505,24 +682,33 @@ namespace Fenrir
     {
         for (const Push& push : m_pushes)
         {
-            const auto it = m_bodies.find(push.entity);
-            if (it == m_bodies.end() || !it->second.Active())
+            const Record* record = FindBody(push.entity);
+            if (record == nullptr || !record->Active())
             {
                 continue; // no body: nothing to push
             }
-            (m_backend.*push.pusher)(it->second.id, push.amount);
+            (m_backend.*push.pusher)(record->id, push.amount);
         }
         m_pushes.clear();
     }
 
     void PhysicsWorld::Impl::WriteBack()
     {
-        for (auto& [id, record] : m_bodies)
+        // Parents before children: a body's local Transform is written against its parent's world transform, so a
+        // parent written after it would move it again.
+        std::vector<std::pair<int, std::uint32_t>> order;
+        for (const auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType != MotionType::Dynamic || !record.Active())
+            if (record.motion.motionType == MotionType::Dynamic && record.Active())
             {
-                continue;
+                order.emplace_back(DepthOf(m_entities->GetEntity(id)), id);
             }
+        }
+        std::ranges::sort(order);
+
+        for (const auto& [depth, id] : order)
+        {
+            Record& record = m_bodies.at(id);
             Entity entity = m_entities->GetEntity(id);
             const Backend::BodyState state = m_backend.GetState(record.id);
 
@@ -575,8 +761,14 @@ namespace Fenrir
             if (touch.isTrigger1 || touch.isTrigger2)
             {
                 const bool firstIsTrigger = touch.isTrigger1;
-                const std::uint32_t other = firstIsTrigger ? touch.entity2 : touch.entity1;
-                const OverlapKey key{firstIsTrigger ? touch.entity1 : touch.entity2, BodyOf(other), other};
+                const OverlapKey key{firstIsTrigger ? touch.entity1 : touch.entity2,
+                                     firstIsTrigger ? touch.entity2 : touch.entity1,
+                                     firstIsTrigger ? touch.collider2 : touch.collider1};
+                // A trigger beneath a body ignores that body: it moves with it, so it would always be inside it.
+                if (isBegin && key.otherBody == AttachedBodyOf(key.trigger))
+                {
+                    continue;
+                }
                 if (isBegin && m_reportedOverlaps.insert(key).second)
                 {
                     enters.push_back(
@@ -590,11 +782,9 @@ namespace Fenrir
             }
 
             // A and B in entity order, so the order does not depend on the backend's body ids.
-            const std::uint32_t body1 = BodyOf(touch.entity1);
-            const std::uint32_t body2 = BodyOf(touch.entity2);
-            const bool swap = std::tie(body2, touch.entity2) < std::tie(body1, touch.entity1);
-            const ContactKey key = swap ? ContactKey{body2, body1, touch.entity2, touch.entity1}
-                                        : ContactKey{body1, body2, touch.entity1, touch.entity2};
+            const bool swap = std::tie(touch.entity2, touch.collider2) < std::tie(touch.entity1, touch.collider1);
+            const ContactKey key = swap ? ContactKey{touch.entity2, touch.entity1, touch.collider2, touch.collider1}
+                                        : ContactKey{touch.entity1, touch.entity2, touch.collider1, touch.collider2};
             if (isBegin)
             {
                 if ((ReportsContacts(key.bodyA) || ReportsContacts(key.bodyB)) && m_reportedContacts.insert(key).second)
@@ -640,7 +830,8 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
     {
-        const std::uint32_t asked = body.GetId();
+        // A child collider's entity stands for the compound body it belongs to.
+        const std::uint32_t asked = ResolveBody(body.GetId());
         for (const Backend::Touch& touch : m_backend.Touches())
         {
             if (touch.isTrigger1 || touch.isTrigger2)
@@ -648,15 +839,15 @@ namespace Fenrir
                 continue;
             }
             const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
-            if (BodyOf(touch.entity1) == asked)
+            if (touch.entity1 == asked)
             {
-                func(Contact{entity(BodyOf(touch.entity1)), entity(touch.entity1), entity(BodyOf(touch.entity2)),
-                             entity(touch.entity2), touch.point, touch.normal});
+                func(Contact{entity(touch.entity1), entity(touch.collider1), entity(touch.entity2),
+                             entity(touch.collider2), touch.point, touch.normal});
             }
-            else if (BodyOf(touch.entity2) == asked)
+            else if (touch.entity2 == asked)
             {
-                func(Contact{entity(BodyOf(touch.entity2)), entity(touch.entity2), entity(BodyOf(touch.entity1)),
-                             entity(touch.entity1), touch.point, -touch.normal});
+                func(Contact{entity(touch.entity2), entity(touch.collider2), entity(touch.entity1),
+                             entity(touch.collider1), touch.point, -touch.normal});
             }
         }
     }
