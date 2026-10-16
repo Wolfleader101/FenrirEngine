@@ -230,8 +230,10 @@ namespace Fenrir::Backend
         /** @brief Forgets a mesh; bodies already using its shapes keep them until they are reshaped or destroyed. */
         bool Release(CollisionMesh mesh);
 
-        /** @brief Private to the backend. */
+        /** @brief The meshes' state, defined by the backend. */
         struct Impl;
+
+        /** @brief The meshes' state, for the backend's own code (the World that cooks and uses their shapes). */
         [[nodiscard]] Impl& Implementation()
         {
             return *m_impl;
@@ -305,11 +307,13 @@ namespace Fenrir::Backend
          * ignore it. */
         void AddAngularImpulse(BodyId id, const Math::Vec3& impulse);
 
+        /** @brief The world's gravity, in metres per second squared. */
         [[nodiscard]] Math::Vec3 Gravity() const;
 
         /** @brief Changes the world's gravity, waking every body. */
         void SetGravity(const Math::Vec3& gravity);
 
+        /** @brief A body's pose and velocities as the last step (or a teleport or velocity change since) left them. */
         [[nodiscard]] BodyState GetState(BodyId id) const;
 
         /** @brief Diagnostic for tests: how many distinct backend shapes the world's bodies use. */
@@ -335,6 +339,7 @@ namespace Fenrir::Backend
         /** @brief Finds the bodies containing `point`. */
         void CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const;
 
+        /** @brief Whether a body is asleep: resting, and not simulated until something wakes it. */
         [[nodiscard]] bool IsSleeping(BodyId id) const;
 
         /** @brief The body's world-space bounding box. */

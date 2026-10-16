@@ -20,11 +20,13 @@ namespace Fenrir
     /** @brief One contact of a body, as PhysicsWorld::ForEachContact reports it. */
     struct Contact
     {
-        /** @brief The body asked about, and its collider touching. */
+        /** @brief The rigid body entity asked about. */
         Entity body;
+        /** @brief The collider entity of `body` touching: `body` itself, or one beneath it in a compound body. */
         Entity collider;
-        /** @brief The body it touches, and that body's collider. */
+        /** @brief The rigid body entity `body` touches. */
         Entity otherBody;
+        /** @brief The collider entity of `otherBody` touching. */
         Entity otherCollider;
         /** @brief Where they touch, in world space, as of the last step. */
         Math::Vec3 point = Math::Vec3(0.0f);

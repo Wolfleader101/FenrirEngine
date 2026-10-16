@@ -17,11 +17,13 @@ namespace Fenrir
      */
     struct ContactBegin
     {
-        /** @brief The rigid body entities. */
+        /** @brief The rigid body entity of A, the lower entity id. */
         Entity bodyA;
+        /** @brief The rigid body entity of B. */
         Entity bodyB;
-        /** @brief The collider entities touching (each its body's entity, or one beneath it in a compound body). */
+        /** @brief A's collider entity touching: `bodyA` itself, or one beneath it in a compound body. */
         Entity colliderA;
+        /** @brief B's collider entity touching: `bodyB` itself, or one beneath it in a compound body. */
         Entity colliderB;
         /** @brief Where they touch, in world space. */
         Math::Vec3 point = Math::Vec3(0.0f);
@@ -38,9 +40,13 @@ namespace Fenrir
      */
     struct ContactEnd
     {
+        /** @brief The rigid body entity of A, as in its ContactBegin. */
         Entity bodyA;
+        /** @brief The rigid body entity of B, as in its ContactBegin. */
         Entity bodyB;
+        /** @brief A's collider entity, as in its ContactBegin. */
         Entity colliderA;
+        /** @brief B's collider entity, as in its ContactBegin. */
         Entity colliderB;
     };
 
@@ -61,8 +67,11 @@ namespace Fenrir
      */
     struct TriggerExit
     {
+        /** @brief The trigger's collider entity, as in its TriggerEnter. */
         Entity trigger;
+        /** @brief The rigid body entity of the collider that left, as in its TriggerEnter. */
         Entity otherBody;
+        /** @brief The collider entity that left, as in its TriggerEnter. */
         Entity otherCollider;
     };
 } // namespace Fenrir

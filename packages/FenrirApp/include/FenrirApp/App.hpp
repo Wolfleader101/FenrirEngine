@@ -173,10 +173,12 @@ namespace Fenrir
         {
         }
 
+        /** @brief The first event, the oldest. */
         [[nodiscard]] Iterator begin() const
         {
             return {m_older.data(), m_older.data() + m_older.size(), m_newer.data(), m_newer.data() + m_newer.size()};
         }
+        /** @brief Past the last event, the newest. */
         [[nodiscard]] Iterator end() const
         {
             const TEvent* last = m_newer.data() + m_newer.size();
@@ -192,6 +194,7 @@ namespace Fenrir
         {
             return m_older.size() + m_newer.size();
         }
+        /** @brief Whether the read yielded no events. */
         [[nodiscard]] bool empty() const noexcept
         {
             return size() == 0;
@@ -206,11 +209,13 @@ namespace Fenrir
             return m_missed;
         }
 
-        /** @brief The part of the events in the older of the queue's buffers, then the part in the newer. */
+        /** @brief The part of the events in the older of the queue's buffers: the oldest of them. */
         [[nodiscard]] std::span<const TEvent> Older() const noexcept
         {
             return m_older;
         }
+
+        /** @brief The part of the events in the newer of the queue's buffers, after those in Older(). */
         [[nodiscard]] std::span<const TEvent> Newer() const noexcept
         {
             return m_newer;
