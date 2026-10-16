@@ -2,6 +2,7 @@
 
 // A physics world's private state and its PostTick pipeline. Knows the ECS, not Jolt: it talks to Backend::World.
 
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <set>
@@ -20,7 +21,8 @@ namespace Fenrir
     struct PhysicsWorld::Impl
     {
         /** @brief A world for the bodies in `entities`, including the colliders already there. */
-        Impl(EntityList& entities, const Backend::WorldSettings& settings, ILogger& logger);
+        Impl(EntityList& entities, const Backend::WorldSettings& settings, Backend::CollisionMeshes& meshes,
+             ILogger& logger);
 
         /**
          * @brief One tick: make and remove bodies for the components added and removed since the last tick, push the
@@ -42,8 +44,19 @@ namespace Fenrir
          */
         void Blend(float fraction);
 
+        /**
+         * @brief Diagnostic private to FenrirPhysics's tests: how many distinct backend shapes the world's bodies use.
+         * Colliders with identical primitive shapes (after scale) share one.
+         */
+        [[nodiscard]] std::size_t SharedShapeCount() const
+        {
+            return m_backend.DistinctShapeCount();
+        }
+
       private:
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
+        // A collider whose shape cannot be made (its collision mesh was released) keeps a record with no body: it is
+        // inactive until its shape changes.
         struct Record
         {
             Backend::BodyId id;
@@ -74,7 +87,10 @@ namespace Fenrir
         void WriteBack();
         void AdvancePoses();
 
+        void CollectUnmadeShapes(std::set<std::uint32_t>& changed);
+
         EntityList* m_entities;
+        ILogger* m_logger;
         Backend::World m_backend;
         ComponentWatch m_rigidBodies;
         ComponentWatch m_colliders;

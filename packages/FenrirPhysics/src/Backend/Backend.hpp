@@ -3,6 +3,7 @@
 // The physics backend seam (ADR-0010): a concrete class with no virtual calls and no backend type in sight. Its only
 // implementation is in src/Backend/Jolt/, the only code that includes Jolt. Private and uninstalled.
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
@@ -13,7 +14,8 @@
 namespace Fenrir
 {
     class ILogger;
-}
+    class ThreadPool;
+} // namespace Fenrir
 
 namespace Fenrir::Backend
 {
@@ -64,6 +66,11 @@ namespace Fenrir::Backend
     struct WorldSettings
     {
         Math::Vec3 gravity;
+        /**
+         * @brief The threads a step spreads its work over, besides the stepping thread, which also works while it
+         * waits. Null: a step runs on the stepping thread alone. Must outlive the world.
+         */
+        ThreadPool* workers = nullptr;
     };
 
     /**
@@ -82,16 +89,59 @@ namespace Fenrir::Backend
         ILogger* m_logger;
     };
 
-    /** @brief One simulation. Single-threaded: every call is made from the thread that runs the App. */
+    /**
+     * @brief The collision meshes made by CreateCollisionMesh and not yet released: their source data and their shapes,
+     * each cooked the first time it is used. Shared by every World; must outlive them all.
+     */
+    class CollisionMeshes
+    {
+      public:
+        explicit CollisionMeshes(ILogger& logger);
+        ~CollisionMeshes();
+        CollisionMeshes(const CollisionMeshes&) = delete;
+        CollisionMeshes& operator=(const CollisionMeshes&) = delete;
+
+        /** @brief Validates and keeps the data; the default handle (and an error) if it is invalid. Ids never repeat.
+         */
+        [[nodiscard]] CollisionMesh Create(std::span<const Math::Vec3> vertices,
+                                           std::span<const std::uint32_t> indices);
+
+        /** @brief Forgets a mesh; bodies already using its shapes keep them until they are reshaped or destroyed. */
+        bool Release(CollisionMesh mesh);
+
+        /** @brief Private to the backend. */
+        struct Impl;
+        [[nodiscard]] Impl& Implementation()
+        {
+            return *m_impl;
+        }
+
+      private:
+        std::unique_ptr<Impl> m_impl;
+    };
+
+    /**
+     * @brief One simulation. Every call is made from the thread that runs the App; only a step's own work runs on the
+     * worker threads.
+     */
     class World
     {
       public:
-        World(const WorldSettings& settings, ILogger& logger);
+        World(const WorldSettings& settings, CollisionMeshes& meshes, ILogger& logger);
         ~World();
         World(const World&) = delete;
         World& operator=(const World&) = delete;
 
-        /** @brief Makes and adds the bodies in one batch, writing their ids to `ids` (the same length as `bodies`). */
+        /**
+         * @brief Whether a body can have `shape`: false for a hull or mesh whose collision mesh was released or cannot
+         * be cooked as that kind (cooking it the first time, which logs an error if it fails). Says nothing otherwise.
+         */
+        [[nodiscard]] bool CanMakeShape(const CollisionShape& shape);
+
+        /**
+         * @brief Makes and adds the bodies in one batch, writing their ids to `ids` (the same length as `bodies`).
+         * Every shape must pass CanMakeShape. A body that is not made gets the default BodyId.
+         */
         void CreateBodies(std::span<const BodyDesc> bodies, std::span<BodyId> ids);
 
         /** @brief Removes and destroys the bodies in one batch. */
@@ -106,7 +156,7 @@ namespace Fenrir::Backend
         /** @brief Sets a body's velocities, waking it. */
         void SetVelocity(BodyId id, const Math::Vec3& linear, const Math::Vec3& angular);
 
-        /** @brief Replaces a body's shape, `scale` baked in, keeping its `mass`. */
+        /** @brief Replaces a body's shape, `scale` baked in, keeping its `mass`. The shape must pass CanMakeShape. */
         void SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass);
 
         /** @brief Changes a body's surface. */
@@ -119,6 +169,9 @@ namespace Fenrir::Backend
         void SetMotion(BodyId id, const Motion& motion);
 
         [[nodiscard]] BodyState GetState(BodyId id) const;
+
+        /** @brief Diagnostic for tests: how many distinct backend shapes the world's bodies use. */
+        [[nodiscard]] std::size_t DistinctShapeCount() const;
 
         /** @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps. */
         void Step(float dt, int collisionSteps);
