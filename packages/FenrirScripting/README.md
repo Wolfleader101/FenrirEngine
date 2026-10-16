@@ -454,7 +454,8 @@ An engine package, or the app, makes itself scriptable with a `ScriptingExtensio
 - **components and events**: native components (`MakeComponent`, `MakeReadOnlyComponent`) and C++ events (`MakeEvent`),
   registered before the script assembly loads and checked against it as it does;
 - **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
-  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract.
+  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (FenrirPhysics's
+  `fenrir_deploy_physics_scripting`, say).
 
 Extensions are the only way to give scripting anything, so the app's own components, events and contract go in an
 extension of its own, just as a package's do. The DemoApp's is a complete example:
@@ -485,7 +486,10 @@ config.extensions.push_back(std::move(physics));
 
 `Install` registers every extension's native functions before it shares the contracts. It fails, logged and running
 without scripts, if a C# field has no native function, if their signatures differ, or if two extensions declare one name.
-The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example.
+The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example, and
+FenrirPhysics's is a real one: `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
+never links FenrirScripting), its contract `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this
+package's harness in `packages/FenrirPhysics/Scripting/Tests`.
 
 ## Exposing a native function
 
