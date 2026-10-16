@@ -34,11 +34,13 @@ namespace Fenrir
         All = Colliders | Contacts | Velocities | Bounds
     };
 
+    /** @brief The categories in `a` or `b`. */
     [[nodiscard]] constexpr DebugDraw operator|(DebugDraw a, DebugDraw b)
     {
         return static_cast<DebugDraw>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
     }
 
+    /** @brief The categories in both `a` and `b`. */
     [[nodiscard]] constexpr DebugDraw operator&(DebugDraw a, DebugDraw b)
     {
         return static_cast<DebugDraw>(static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));

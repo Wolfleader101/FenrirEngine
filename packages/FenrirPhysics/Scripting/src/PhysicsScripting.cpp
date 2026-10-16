@@ -14,6 +14,7 @@
 #include <tuple>
 #include <vector>
 
+#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Components.hpp"
@@ -263,7 +264,7 @@ namespace Fenrir
         // The owner whose extension was made last. Native functions are plain functions, so this is how the collision
         // mesh functions reach the owner's meshes. Weak: an owner destroyed while scripting runs is simply gone.
         std::mutex ownerMutex;
-        std::weak_ptr<Physics::State> scriptedOwner;
+        std::weak_ptr<Detail::PhysicsState> scriptedOwner;
 
         // A warning logged once for each place in this file that notices a call doing nothing, in debug builds only.
         void WarnOnce(const CallContext& context, const std::string& message,
@@ -307,8 +308,7 @@ namespace Fenrir
                      std::source_location where = std::source_location::current())
         {
             EntityList& entities = context.Entities();
-            if (entities.HasEntity(entity) && (entities.Has(ComponentType::Native<RigidBody>(), entity) ||
-                                               entities.Has(ComponentType::Native<Collider>(), entity)))
+            if (entities.HasEntity(entity) && HasBodyComponent(entities.GetEntity(entity)))
             {
                 return true;
             }
@@ -615,10 +615,10 @@ namespace Fenrir
 
         // The owner whose extension the running scripts were given, if it is alive and serves this App; warns once if
         // not.
-        std::shared_ptr<Physics::State> OwnerFor(const CallContext& context, std::string_view function,
-                                                 std::source_location where = std::source_location::current())
+        std::shared_ptr<Detail::PhysicsState> OwnerFor(const CallContext& context, std::string_view function,
+                                                       std::source_location where = std::source_location::current())
         {
-            std::shared_ptr<Physics::State> owner;
+            std::shared_ptr<Detail::PhysicsState> owner;
             {
                 const std::lock_guard<std::mutex> lock(ownerMutex);
                 owner = scriptedOwner.lock();
@@ -634,7 +634,7 @@ namespace Fenrir
         std::uint64_t CreateMesh(const CallContext& context, const Math::Vec3* vertices, std::int32_t vertexCount,
                                  const std::uint32_t* indices, std::int32_t indexCount)
         {
-            const std::shared_ptr<Physics::State> owner = OwnerFor(context, "CreateCollisionMesh");
+            const std::shared_ptr<Detail::PhysicsState> owner = OwnerFor(context, "CreateCollisionMesh");
             if (owner == nullptr || (vertices == nullptr && vertexCount > 0) || (indices == nullptr && indexCount > 0))
             {
                 return 0;
@@ -647,7 +647,7 @@ namespace Fenrir
 
         bool ReleaseMesh(const CallContext& context, std::uint64_t mesh)
         {
-            const std::shared_ptr<Physics::State> owner = OwnerFor(context, "ReleaseCollisionMesh");
+            const std::shared_ptr<Detail::PhysicsState> owner = OwnerFor(context, "ReleaseCollisionMesh");
             if (owner == nullptr)
             {
                 return false;

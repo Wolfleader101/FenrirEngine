@@ -16,15 +16,19 @@
 namespace Fenrir
 {
     class Scene;
+    struct PhysicsWorldAccess;
+    struct PhysicsProbe;
 
     /** @brief One contact of a body, as PhysicsWorld::ForEachContact reports it. */
     struct Contact
     {
-        /** @brief The body asked about, and its collider touching. */
+        /** @brief The rigid body entity asked about. */
         Entity body;
+        /** @brief The collider entity of `body` touching: `body` itself, or one beneath it in a compound body. */
         Entity collider;
-        /** @brief The body it touches, and that body's collider. */
+        /** @brief The rigid body entity `body` touches. */
         Entity otherBody;
+        /** @brief The collider entity of `otherBody` touching. */
         Entity otherCollider;
         /** @brief Where they touch, in world space, as of the last step. */
         Math::Vec3 point = Math::Vec3(0.0f);
@@ -40,15 +44,28 @@ namespace Fenrir
      * teleport) is seen from the next tick on. Queries only read, so systems running in parallel may query one world
      * at once; physics's own systems, which sync and step the world, never run beside them. A body whose entity was
      * destroyed since the last step is not found.
+     *
+     * A call that takes an entity ignores a handle to one no longer alive (destroyed, its id perhaps reused by a newer
+     * entity): it finds no body, pushes nothing and ignores nothing.
      */
     class PhysicsWorld
     {
       public:
-        /** @brief Private: the world's state. Only FenrirPhysics can make one. */
+        /** @brief The world's state, defined in FenrirPhysics's private headers: only FenrirPhysics can make one. */
         struct Impl;
 
-        /** @brief Made by FenrirPhysics; game code reaches a world through Of. */
-        explicit PhysicsWorld(std::unique_ptr<Impl> impl);
+        /**
+         * @brief Proof that FenrirPhysics is making the world: only PhysicsWorldAccess, in FenrirPhysics's private
+         * headers, can make a Key. Public only because Scene::AddResource constructs the world.
+         */
+        class Key
+        {
+            Key() = default;
+            friend struct PhysicsWorldAccess;
+        };
+
+        /** @brief Made by FenrirPhysics (it alone holds a Key); game code reaches a world through Of. */
+        PhysicsWorld(Key key, std::unique_ptr<Impl> impl);
         ~PhysicsWorld();
         PhysicsWorld(const PhysicsWorld&) = delete;
         PhysicsWorld& operator=(const PhysicsWorld&) = delete;
@@ -57,15 +74,18 @@ namespace Fenrir
         [[nodiscard]] static PhysicsWorld* Of(Scene& scene);
 
         /**
-         * @brief Calls `func` once for each contact the rigid body `body` has now (as of the last step), whether or not
-         * contacts are reported as events. Contacts are as ContactBegin and ContactEnd tell them: one resting on
-         * another that has fallen asleep is still touching. Overlaps with triggers are not contacts.
+         * @brief Calls `func` once for each contact `entity`'s body (for a child collider's entity, the compound body
+         * it belongs to) has now (as of the last step), whether or not contacts are reported as events. Contacts are as
+         * ContactBegin and ContactEnd tell them: one resting on another that has fallen asleep is still touching.
+         * Overlaps with triggers are not contacts. None for an entity no longer alive.
          */
-        void ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const;
+        void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
         /**
          * @brief The nearest body a ray from `origin` along `direction` (any length) hits within `maxDistance`. A ray
-         * that starts inside a box or sphere hits it at distance 0.
+         * that starts inside a box, sphere, capsule or convex hull hits it at distance 0. A triangle mesh is hit only
+         * on its triangles' front faces (counter-clockwise seen from the ray), so a ray from inside a closed mesh
+         * passes out through it.
          */
         [[nodiscard]] std::optional<RaycastHit> Raycast(const Math::Vec3& origin, const Math::Vec3& direction,
                                                         float maxDistance, const QueryFilter& filter = {}) const;
@@ -104,36 +124,39 @@ namespace Fenrir
         std::size_t OverlapPoint(const Math::Vec3& point, std::span<OverlapHit> hits,
                                  const QueryFilter& filter = {}) const;
 
-        /** @brief Whether the body of `body` (the entity with its RigidBody or Collider; a child collider's entity
-         * stands for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it.
-         * False for an entity with no body. */
-        [[nodiscard]] bool IsSleeping(const Entity& body) const;
+        /** @brief Whether `entity`'s body (the entity with its RigidBody or Collider; a child collider's entity stands
+         * for the compound body it belongs to) is asleep: resting, and not simulated until something wakes it. False
+         * for an entity with no body or no longer alive. */
+        [[nodiscard]] bool IsSleeping(const Entity& entity) const;
 
-        /** @brief The world-space box around the body of `body`, or none for an entity with no body. */
-        [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& body) const;
+        /** @brief The world-space box around `entity`'s body, or none for an entity with no body or no longer alive.
+         */
+        [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& entity) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs
          * to) by `impulse` (newton seconds, world space) over its mass, at the next step. Does nothing if the entity
-         * has no dynamic body then.
+         * is no longer alive, or has no dynamic body then.
          */
         void AddImpulse(const Entity& entity, const Math::Vec3& impulse);
 
         /**
          * @brief Pushes `entity`'s body with `force` (newtons, world space, through its centre of mass) for the next
-         * step only: add it every tick to keep pushing. Does nothing if the entity has no dynamic body then.
+         * step only: add it every tick to keep pushing. Does nothing if the entity is no longer alive, or has no
+         * dynamic body then.
          */
         void AddForce(const Entity& entity, const Math::Vec3& force);
 
         /**
          * @brief Twists `entity`'s body with `torque` (newton metres, world space) for the next step only: add it every
-         * tick to keep twisting. Does nothing if the entity has no dynamic body then.
+         * tick to keep twisting. Does nothing if the entity is no longer alive, or has no dynamic body then.
          */
         void AddTorque(const Entity& entity, const Math::Vec3& torque);
 
         /**
          * @brief Changes the angular velocity of `entity`'s body by `impulse` (newton metre seconds, world space) over
-         * its moment of inertia, at the next step. Does nothing if the entity has no dynamic body then.
+         * its moment of inertia, at the next step. Does nothing if the entity is no longer alive, or has no dynamic
+         * body then.
          */
         void AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse);
 
@@ -161,19 +184,15 @@ namespace Fenrir
          */
         [[nodiscard]] std::span<const DebugLine> DebugLines() const;
 
-        /** @brief Private: the world's state, for FenrirPhysics's own code. */
-        [[nodiscard]] Impl& Implementation()
-        {
-            return *m_impl;
-        }
-
-        /** @brief Private: the world's state, for FenrirPhysics's own code. */
-        [[nodiscard]] const Impl& Implementation() const
-        {
-            return *m_impl;
-        }
-
       private:
+        // FenrirPhysics's own systems step the world through its state; the tests read a diagnostic.
+        friend struct PhysicsWorldAccess;
+        friend struct PhysicsProbe;
+
+        /** @brief Diagnostic for FenrirPhysics's tests, read through PhysicsProbe: how many distinct backend shapes the
+         * world's bodies use. Colliders with identical primitive shapes (after scale) share one. */
+        [[nodiscard]] std::size_t DistinctShapeCount() const;
+
         std::unique_ptr<Impl> m_impl;
     };
 } // namespace Fenrir

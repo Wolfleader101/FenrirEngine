@@ -480,3 +480,24 @@ TEST_CASE("A trigger beneath a body ignores that body, and enters others", "[phy
     INFO("it is its own body, not part of the body it is beneath: that body still rests on the ground");
     REQUIRE(PositionOf(body).y == Approx(0.5f).margin(restSlop));
 }
+
+TEST_CASE("A query ignoring a child collider's entity ignores the compound body it belongs to", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    Entity body = Place(test.Entities(), Math::Vec3(0.0f));
+    body.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Kinematic});
+    Entity near = AddChildBox(test.Entities(), body, Math::Vec3(0.0f));
+    AddChildBox(test.Entities(), body, Math::Vec3(2.0f, 0.0f, 0.0f));
+    Entity target = Place(test.Entities(), Math::Vec3(6.0f, 0.0f, 0.0f));
+    target.AddComponent<Collider>(Collider{BoxShape{Math::Vec3(0.5f)}});
+    test.Run(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    const std::optional<RaycastHit> hit =
+        world->Raycast(Math::Vec3(0.0f), Math::Vec3(1.0f, 0.0f, 0.0f), 100.0f, QueryFilter{.ignoreBody = near});
+
+    INFO("ignoring the child collider's entity did not ignore its whole body: the ray did not reach the target");
+    REQUIRE(hit.has_value());
+    REQUIRE(hit->body == target);
+}

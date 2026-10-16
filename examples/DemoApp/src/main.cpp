@@ -280,7 +280,7 @@ static void InitBackpacks(Fenrir::App& app)
 }
 
 #ifdef FENRIR_PHYSICS
-// The physics scene: a static ground, a stack of dynamic boxes and a kinematic paddle that game code sweeps back and
+// The physics demo: a static ground, a stack of dynamic boxes and a kinematic paddle that game code sweeps back and
 // forth in Tick, pushing the boxes. Each body is the unit cube in its own flat colour, so they are easy to tell apart.
 // Beside them, a static backpack whose collider is a triangle mesh made from the backpack model's vertices, with boxes
 // dropped onto it. F2 cycles the physics debug lines drawn over the scene.

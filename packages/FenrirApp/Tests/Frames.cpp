@@ -71,18 +71,22 @@ using Fenrir::SchedulePriority;
 TEST_CASE("A frame runs Tick once for each whole tick its delta and what was owed cover", "[app][frames]")
 {
     App app(Silent());
+    INFO("the default tick rate is not 60 Hz, so the deltas below are not whole ticks");
     REQUIRE(app.GetTime().tickRate == sixtieth);
     int ticks = 0;
     app.AddSequentialSystems(SchedulePriority::Tick, {[&](App&) { ++ticks; }});
 
     app.RunFrame(sixtieth);
-    CHECK(ticks == 1);
+    INFO("a frame covering one whole tick did not run Tick exactly once");
+    REQUIRE(ticks == 1);
 
     app.RunFrame(0.5 * sixtieth);
-    CHECK(ticks == 1);
+    INFO("a frame covering half a tick ran Tick");
+    REQUIRE(ticks == 1);
 
     app.RunFrame(0.5 * sixtieth);
-    CHECK(ticks == 2);
+    INFO("the half tick owed plus this frame's half did not run Tick once");
+    REQUIRE(ticks == 2);
 }
 
 TEST_CASE("The first frame runs the init phases once, before the frame; later frames do not", "[app][frames]")
@@ -101,7 +105,8 @@ TEST_CASE("The first frame runs the init phases once, before the frame; later fr
     app.RunFrame(sixtieth);
     app.RunFrame(sixtieth);
 
-    CHECK(phases == std::vector<std::string>{"PreInit", "Init", "PostInit", "PreUpdate", "PreUpdate"});
+    INFO("the init phases did not run once, in order, before the first frame's PreUpdate only");
+    REQUIRE(phases == std::vector<std::string>{"PreInit", "Init", "PostInit", "PreUpdate", "PreUpdate"});
 }
 
 TEST_CASE("Run runs the init phases, then frames until stopped, then Exit", "[app][frames]")
@@ -129,8 +134,9 @@ TEST_CASE("Run runs the init phases, then frames until stopped, then Exit", "[ap
 
     app.Run();
 
-    CHECK(phases == std::vector<std::string>{"PreInit", "Init", "PostInit", "PreUpdate", "Update", "PostUpdate",
-                                             "PreUpdate", "Update", "PostUpdate", "Exit"});
+    INFO("Run did not run the init phases, two frames and then Exit, in that order");
+    REQUIRE(phases == std::vector<std::string>{"PreInit", "Init", "PostInit", "PreUpdate", "Update", "PostUpdate",
+                                               "PreUpdate", "Update", "PostUpdate", "Exit"});
 }
 
 TEST_CASE("RunExit runs the Exit phase for an app driven by RunFrame", "[app][frames]")
@@ -140,10 +146,12 @@ TEST_CASE("RunExit runs the Exit phase for an app driven by RunFrame", "[app][fr
     app.AddSystem(SchedulePriority::Exit, [&](App&) { ++exits; });
 
     app.RunFrame(sixtieth);
-    CHECK(exits == 0);
+    INFO("a frame ran the Exit phase");
+    REQUIRE(exits == 0);
 
     app.RunExit();
-    CHECK(exits == 1);
+    INFO("RunExit did not run the Exit phase once");
+    REQUIRE(exits == 1);
 }
 
 namespace
@@ -173,7 +181,8 @@ TEST_CASE("A frame with no tick still runs BeforeTicks and AfterTicks once, and 
 
     app.RunFrame(0.5 * sixtieth);
 
-    CHECK(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "AfterTicks", "Update", "PostUpdate"});
+    INFO("a frame with no tick did not run BeforeTicks and AfterTicks once each with no tick phase between");
+    REQUIRE(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "AfterTicks", "Update", "PostUpdate"});
 }
 
 TEST_CASE("A frame with three ticks runs PreTick, Tick and PostTick together three times, between BeforeTicks and "
@@ -187,15 +196,17 @@ TEST_CASE("A frame with three ticks runs PreTick, Tick and PostTick together thr
     // A little over three ticks, so floating-point rounding cannot drop the third.
     app.RunFrame(3.5 * sixtieth);
 
-    CHECK(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "PreTick", "Tick", "PostTick", "PreTick",
-                                             "Tick", "PostTick", "PreTick", "Tick", "PostTick", "AfterTicks", "Update",
-                                             "PostUpdate"});
+    INFO("three ticks did not each run PreTick, Tick and PostTick together, between BeforeTicks and AfterTicks");
+    REQUIRE(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "PreTick", "Tick", "PostTick", "PreTick",
+                                               "Tick", "PostTick", "PreTick", "Tick", "PostTick", "AfterTicks",
+                                               "Update", "PostUpdate"});
 }
 
 TEST_CASE("A frame owing more ticks than the cap runs the cap, drops the rest and warns once", "[app][frames]")
 {
     std::vector<std::string> warnings;
     App app(KeepingWarnings(warnings));
+    INFO("the default cap is not five ticks, so the frame below does not owe more than the cap");
     REQUIRE(app.GetTime().maxTicksPerFrame == 5);
     int ticks = 0;
     app.AddSequentialSystems(SchedulePriority::Tick, {[&](App&) { ++ticks; }});
@@ -203,15 +214,21 @@ TEST_CASE("A frame owing more ticks than the cap runs the cap, drops the rest an
     // Eight and a half ticks owed: five run, and three and a half ticks (0.058 s) are dropped.
     app.RunFrame(8.5 * sixtieth);
 
-    CHECK(ticks == 5);
-    CHECK(app.GetTime().accumulator == 0.0);
+    INFO("a frame owing eight and a half ticks did not run the cap of five");
+    REQUIRE(ticks == 5);
+    INFO("the ticks over the cap were kept as owed rather than dropped");
+    REQUIRE(app.GetTime().accumulator == 0.0);
+    INFO("dropping ticks did not warn exactly once");
     REQUIRE(warnings.size() == 1);
-    CHECK(warnings.front().find("0.058") != std::string::npos);
+    INFO("the warning does not say how much time was dropped (0.058 s)");
+    REQUIRE(warnings.front().find("0.058") != std::string::npos);
 
     // Nothing is still owed: the next frame runs only what its own delta covers, and does not warn.
     app.RunFrame(1.5 * sixtieth);
-    CHECK(ticks == 6);
-    CHECK(warnings.size() == 1);
+    INFO("the next frame did not run only the one tick its own delta covers");
+    REQUIRE(ticks == 6);
+    INFO("a frame within the cap warned");
+    REQUIRE(warnings.size() == 1);
 }
 
 TEST_CASE("A frame owing exactly the cap runs every tick and does not warn", "[app][frames]")
@@ -223,8 +240,10 @@ TEST_CASE("A frame owing exactly the cap runs every tick and does not warn", "[a
 
     app.RunFrame(5.5 * sixtieth);
 
-    CHECK(ticks == 5);
-    CHECK(warnings.empty());
+    INFO("a frame owing exactly the cap did not run all five ticks");
+    REQUIRE(ticks == 5);
+    INFO("a frame owing exactly the cap warned");
+    REQUIRE(warnings.empty());
 }
 
 TEST_CASE("A frame's delta is the one it was given", "[app][frames]")
@@ -235,18 +254,22 @@ TEST_CASE("A frame's delta is the one it was given", "[app][frames]")
 
     app.RunFrame(0.25);
 
-    CHECK(seen == 0.25);
+    INFO("Update did not see the delta the frame was given");
+    REQUIRE(seen == 0.25);
 }
 
 TEST_CASE("The App's worker threads number what it was made with, or one per hardware thread", "[app][workers]")
 {
     App two(Silent(), 2);
-    CHECK(two.GetThreadPool().ThreadCount() == 2);
+    INFO("an App made with two worker threads does not have two");
+    REQUIRE(two.GetThreadPool().ThreadCount() == 2);
 
     App one(Silent(), 1);
-    CHECK(one.GetThreadPool().ThreadCount() == 1);
+    INFO("an App made with one worker thread does not have one");
+    REQUIRE(one.GetThreadPool().ThreadCount() == 1);
 
     App byDefault(Silent());
     const std::size_t hardware = std::thread::hardware_concurrency();
-    CHECK(byDefault.GetThreadPool().ThreadCount() == (hardware == 0 ? 1 : hardware));
+    INFO("an App made without a thread count does not have one worker thread per hardware thread");
+    REQUIRE(byDefault.GetThreadPool().ThreadCount() == (hardware == 0 ? 1 : hardware));
 }

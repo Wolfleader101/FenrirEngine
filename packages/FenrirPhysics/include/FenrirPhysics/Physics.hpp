@@ -16,6 +16,13 @@ namespace Fenrir
     // Only named here: FenrirPhysicsScripting defines Physics::ScriptingExtension().
     struct ScriptingExtension;
 
+    namespace Detail
+    {
+        /** @brief What Physics::Install set up. Defined in FenrirPhysics's private headers; nothing else can use it.
+         */
+        struct PhysicsState;
+    } // namespace Detail
+
     /** @brief How Physics::Install sets physics up for an app. */
     struct PhysicsConfig
     {
@@ -99,7 +106,9 @@ namespace Fenrir
          *
          * Its native functions act on the active scene's physics world and, for collision meshes, on this owner (the
          * last one asked for its extension). With no world, no body, a released mesh or this owner destroyed, they do
-         * nothing and return false or zero, warning once per call site in debug builds.
+         * nothing and return false or zero. In debug builds each such case is warned about once per process for each
+         * place in FenrirPhysicsScripting's native code that notices it (its source location) and reason: not once per
+         * C# call site, so a second script calling the same function the same wrong way is not warned about again.
          *
          * Defined by the FenrirPhysicsScripting library, not FenrirPhysics (which never links FenrirScripting), so it
          * exists only in a build with physics and scripting on. Include "FenrirPhysicsScripting/PhysicsScripting.hpp"
@@ -107,15 +116,12 @@ namespace Fenrir
          */
         [[nodiscard]] Fenrir::ScriptingExtension ScriptingExtension() const;
 
-        /** @brief Private: what Install set up. */
-        struct State;
-
       private:
-        explicit Physics(std::shared_ptr<State> state);
+        explicit Physics(std::shared_ptr<Detail::PhysicsState> state);
 
         void Shutdown() noexcept;
 
         // Shared with the installed systems, which hold it weakly: once the owner is gone they do nothing.
-        std::shared_ptr<State> m_state;
+        std::shared_ptr<Detail::PhysicsState> m_state;
     };
 } // namespace Fenrir

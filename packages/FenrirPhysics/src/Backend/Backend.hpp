@@ -15,6 +15,7 @@
 
 namespace Fenrir
 {
+    class CollisionLayers;
     class ILogger;
     class ThreadPool;
 } // namespace Fenrir
@@ -192,6 +193,8 @@ namespace Fenrir::Backend
          * waits. Null: a step runs on the stepping thread alone. Must outlive the world.
          */
         ThreadPool* workers = nullptr;
+        /** @brief The layers' names, for logs; null logs layers by number. Must outlive the world. */
+        const CollisionLayers* layerNames = nullptr;
     };
 
     /**
@@ -230,8 +233,10 @@ namespace Fenrir::Backend
         /** @brief Forgets a mesh; bodies already using its shapes keep them until they are reshaped or destroyed. */
         bool Release(CollisionMesh mesh);
 
-        /** @brief Private to the backend. */
+        /** @brief The meshes' state, defined by the backend. */
         struct Impl;
+
+        /** @brief The meshes' state, for the backend's own code (the World that cooks and uses their shapes). */
         [[nodiscard]] Impl& Implementation()
         {
             return *m_impl;
@@ -305,20 +310,24 @@ namespace Fenrir::Backend
          * ignore it. */
         void AddAngularImpulse(BodyId id, const Math::Vec3& impulse);
 
+        /** @brief The world's gravity, in metres per second squared. */
         [[nodiscard]] Math::Vec3 Gravity() const;
 
         /** @brief Changes the world's gravity, waking every body. */
         void SetGravity(const Math::Vec3& gravity);
 
+        /** @brief A body's pose and velocities as the last step (or a teleport or velocity change since) left them. */
         [[nodiscard]] BodyState GetState(BodyId id) const;
 
-        /** @brief Diagnostic for tests: how many distinct backend shapes the world's bodies use. */
+        /** @brief Diagnostic for FenrirPhysics's tests (PhysicsWorld::DistinctShapeCount): how many distinct backend
+         * shapes the world's bodies use. */
         [[nodiscard]] std::size_t DistinctShapeCount() const;
 
         // Queries only read: they may be made from several threads at once, never during any other call.
 
         /** @brief Casts a ray from `origin` along the unit `direction` for `maxDistance`. A ray that starts inside a
-         * solid shape hits it at distance 0, its normal against `direction`. */
+         * solid shape (a box, sphere, capsule or hull) hits it at distance 0, its normal against `direction`; a mesh's
+         * triangles are hit only on their front faces. */
         void CastRay(const Math::Vec3& origin, const Math::Vec3& direction, float maxDistance,
                      const QueryFilter& filter, HitSink sink) const;
 
@@ -335,6 +344,7 @@ namespace Fenrir::Backend
         /** @brief Finds the bodies containing `point`. */
         void CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const;
 
+        /** @brief Whether a body is asleep: resting, and not simulated until something wakes it. */
         [[nodiscard]] bool IsSleeping(BodyId id) const;
 
         /** @brief The body's world-space bounding box. */

@@ -9,7 +9,8 @@ namespace Fenrir.Physics;
 /// <remarks>
 /// Nothing here throws. When the active scene has no physics world yet (one is made the first tick it has a body), the
 /// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero, and in
-/// a debug build of the engine a warning is logged once per place in the engine that noticed. Like every native function,
+/// a debug build of the engine a warning is logged once per process for each place in the engine's native code that
+/// noticed (not once per C# call site). Like every native function,
 /// none of these makes a structural change: forces are queued for the next step, and queries read the world as the last
 /// step left it.
 /// </remarks>
@@ -34,7 +35,8 @@ public static class PhysicsWorld
 
     /// <summary>
     /// The nearest body a ray from <paramref name="origin"/> along <paramref name="direction"/> (any length) hits within
-    /// <paramref name="maxDistance"/>. A ray that starts inside a box or sphere hits it at distance 0.
+    /// <paramref name="maxDistance"/>. A ray that starts inside a box, sphere, capsule or convex hull hits it at
+    /// distance 0. A triangle mesh is hit only on its triangles' front faces.
     /// </summary>
     /// <returns>Whether it hit a body; <paramref name="hit"/> is default when it did not.</returns>
     public static bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,

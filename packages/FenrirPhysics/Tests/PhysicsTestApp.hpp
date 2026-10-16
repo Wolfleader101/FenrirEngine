@@ -16,12 +16,13 @@
 
 namespace PhysicsTest
 {
-    // A second ConsoleLogger in one process throws (its spdlog name is taken), so the tests log nowhere. Warnings
-    // are recorded when there is somewhere to put them.
+    // A second ConsoleLogger in one process throws (its spdlog name is taken), so the tests log nowhere. Warnings and
+    // errors are recorded when there is somewhere to put them.
     class SilentLogger final : public Fenrir::ILogger
     {
       public:
-        explicit SilentLogger(std::vector<std::string>* warnings = nullptr) : m_warnings(warnings)
+        explicit SilentLogger(std::vector<std::string>* warnings = nullptr, std::vector<std::string>* errors = nullptr)
+            : m_warnings(warnings), m_errors(errors)
         {
         }
 
@@ -46,8 +47,12 @@ namespace PhysicsTest
                 m_warnings->emplace_back(message);
             }
         }
-        void ErrorImpl(std::string_view) override
+        void ErrorImpl(std::string_view message) override
         {
+            if (m_errors != nullptr)
+            {
+                m_errors->emplace_back(message);
+            }
         }
         void FatalImpl(std::string_view) override
         {
@@ -55,6 +60,7 @@ namespace PhysicsTest
 
       private:
         std::vector<std::string>* m_warnings;
+        std::vector<std::string>* m_errors;
     };
 
     inline constexpr double tick = 1.0 / 60.0;
@@ -86,13 +92,15 @@ namespace PhysicsTest
         /** Physics installed with `config`, on an App with `workerThreads` worker threads. */
         explicit PhysicsApp(const Fenrir::PhysicsConfig& config,
                             std::size_t workerThreads = std::thread::hardware_concurrency())
-            : app(std::make_unique<SilentLogger>(&warnings), workerThreads),
+            : app(std::make_unique<SilentLogger>(&warnings, &errors), workerThreads),
               physics(Fenrir::Physics::Install(app, config))
         {
         }
 
         /** Every warning logged, in order. */
         std::vector<std::string> warnings;
+        /** Every error logged, in order. */
+        std::vector<std::string> errors;
         Fenrir::App app;
         Fenrir::Physics physics;
 

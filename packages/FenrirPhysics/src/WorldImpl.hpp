@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <span>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirScene/Scene.hpp"
 
 namespace Fenrir
 {
@@ -35,8 +37,8 @@ namespace Fenrir
          */
         void Step(App& app, float dt);
 
-        /** @brief Calls `func` for each contact of the body `body` touching now. */
-        void ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const;
+        /** @brief Calls `func` for each contact of `entity`'s body touching now. */
+        void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
         /**
          * @brief `BeforeTicks`: put back the true pose of each body Blend wrote, so `Tick` systems and the diff see
@@ -47,18 +49,10 @@ namespace Fenrir
 
         /**
          * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's pose `fraction` of the way from its
-         * previous step pose to its current one, parents before children.
+         * previous step pose to its current one, parents before children. A dynamic or kinematic body that is not
+         * interpolated, beneath one that is, is written at its step pose, so its parent's blend does not carry it.
          */
         void Blend(float fraction);
-
-        /**
-         * @brief Diagnostic private to FenrirPhysics's tests: how many distinct backend shapes the world's bodies use.
-         * Colliders with identical primitive shapes (after scale) share one.
-         */
-        [[nodiscard]] std::size_t SharedShapeCount() const
-        {
-            return m_backend.DistinctShapeCount();
-        }
 
         /** @brief A way of pushing a body: one of Backend::World's AddForce, AddImpulse, AddTorque and
          * AddAngularImpulse. */
@@ -74,8 +68,9 @@ namespace Fenrir
             m_backend.SetGravity(gravity);
         }
 
-        /** @brief Queues a push of `entity`'s body for the next step. */
-        void Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount);
+        /** @brief Queues a push of `entity`'s body for the next step; nothing for a handle to an entity no longer
+         * alive (destroyed, its id perhaps reused by a newer entity). */
+        void Queue(const Entity& entity, Pusher pusher, const Math::Vec3& amount);
 
       private:
         // The queries, in Queries.cpp, read the bodies and the backend.
@@ -191,6 +186,14 @@ namespace Fenrir
          */
         [[nodiscard]] Record* FindBody(std::uint32_t entity);
 
+        /** @brief As FindBody for its id, but null for a handle to an entity no longer alive, whose id may since name a
+         * newer entity. */
+        [[nodiscard]] Record* FindBody(const Entity& entity);
+
+        /** @brief The backend's form of a query's filter: its ignored body resolved as ResolveBody does, and a handle
+         * to an entity no longer alive ignoring nothing. */
+        [[nodiscard]] Backend::QueryFilter ToBackend(const QueryFilter& filter) const;
+
         /** @brief The body's colliders as they are now, in the order of `entities`. */
         [[nodiscard]] std::vector<Part> PartsOf(std::span<const std::uint32_t> entities, std::uint32_t body,
                                                 const Math::Vec3& bodyScale);
@@ -247,5 +250,24 @@ namespace Fenrir
             auto operator<=>(const ShapeEdgesKey&) const = default;
         };
         std::map<ShapeEdgesKey, std::vector<Math::Vec3>> m_shapeEdges;
+    };
+
+    /**
+     * @brief FenrirPhysics's own way into a PhysicsWorld, for its systems: the only maker of PhysicsWorld::Key, and
+     * the only reader of a world's state outside PhysicsWorld's members.
+     */
+    struct PhysicsWorldAccess
+    {
+        /** @brief Makes `scene`'s physics world, holding `impl`, as a scene resource. */
+        static PhysicsWorld& Make(Scene& scene, std::unique_ptr<PhysicsWorld::Impl> impl)
+        {
+            return scene.AddResource<PhysicsWorld>(PhysicsWorld::Key{}, std::move(impl));
+        }
+
+        /** @brief The state of `world`. */
+        [[nodiscard]] static PhysicsWorld::Impl& Of(PhysicsWorld& world)
+        {
+            return *world.m_impl;
+        }
     };
 } // namespace Fenrir

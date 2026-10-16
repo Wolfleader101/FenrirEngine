@@ -12,11 +12,6 @@ namespace Fenrir
 {
     namespace
     {
-        Backend::QueryFilter ToBackend(const QueryFilter& filter)
-        {
-            return Backend::QueryFilter{filter.mask, filter.ignoreBody.GetId(), filter.hitTriggers};
-        }
-
         // The unit direction of `direction`, or false if it has none.
         bool UnitDirection(const Math::Vec3& direction, Math::Vec3& unit)
         {
@@ -124,6 +119,12 @@ namespace Fenrir
         };
     } // namespace
 
+    Backend::QueryFilter PhysicsWorld::Impl::ToBackend(const QueryFilter& filter) const
+    {
+        const std::uint32_t ignored = filter.ignoreBody.IsValid() ? ResolveBody(filter.ignoreBody.GetId()) : ~0u;
+        return Backend::QueryFilter{filter.mask, ignored, filter.hitTriggers};
+    }
+
     std::optional<RaycastHit> PhysicsWorld::Raycast(const Math::Vec3& origin, const Math::Vec3& direction,
                                                     float maxDistance, const QueryFilter& filter) const
     {
@@ -144,7 +145,7 @@ namespace Fenrir
             return 0;
         }
         Nearest<RaycastHit> nearest(*m_impl->m_entities, hits, maxDistance);
-        m_impl->m_backend.CastRay(origin, unit, maxDistance, ToBackend(filter), nearest);
+        m_impl->m_backend.CastRay(origin, unit, maxDistance, m_impl->ToBackend(filter), nearest);
         return nearest.Count();
     }
 
@@ -170,7 +171,7 @@ namespace Fenrir
             return 0;
         }
         Nearest<ShapeCastHit> nearest(*m_impl->m_entities, hits, maxDistance);
-        m_impl->m_backend.CastShape(shape, pose.scale, pose.pos, pose.rot, unit, maxDistance, ToBackend(filter),
+        m_impl->m_backend.CastShape(shape, pose.scale, pose.pos, pose.rot, unit, maxDistance, m_impl->ToBackend(filter),
                                     nearest);
         return nearest.Count();
     }
@@ -183,7 +184,7 @@ namespace Fenrir
             return 0;
         }
         Overlaps overlaps(*m_impl->m_entities, hits);
-        m_impl->m_backend.CollideShape(shape, pose.scale, pose.pos, pose.rot, ToBackend(filter), overlaps);
+        m_impl->m_backend.CollideShape(shape, pose.scale, pose.pos, pose.rot, m_impl->ToBackend(filter), overlaps);
         return overlaps.Count();
     }
 
@@ -195,19 +196,19 @@ namespace Fenrir
             return 0;
         }
         Overlaps overlaps(*m_impl->m_entities, hits);
-        m_impl->m_backend.CollidePoint(point, ToBackend(filter), overlaps);
+        m_impl->m_backend.CollidePoint(point, m_impl->ToBackend(filter), overlaps);
         return overlaps.Count();
     }
 
-    bool PhysicsWorld::IsSleeping(const Entity& body) const
+    bool PhysicsWorld::IsSleeping(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        const Impl::Record* record = m_impl->FindBody(entity);
         return record != nullptr && record->Active() && m_impl->m_backend.IsSleeping(record->id);
     }
 
-    std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& body) const
+    std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(body.GetId());
+        const Impl::Record* record = m_impl->FindBody(entity);
         if (record == nullptr || !record->Active())
         {
             return std::nullopt; // no body, or an inactive one

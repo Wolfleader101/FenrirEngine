@@ -68,11 +68,16 @@ TEST_CASE("Creating scenes leaves other scenes and their entities where they wer
         app.CreateScene("Scene" + std::to_string(i));
     }
 
-    CHECK(&app.GetScene("First") == &first);
-    CHECK(first.GetName() == "First");
+    INFO("creating more scenes moved the first scene");
+    REQUIRE(&app.GetScene("First") == &first);
+    INFO("the first scene lost its name when more scenes were created");
+    REQUIRE(first.GetName() == "First");
+    INFO("the first scene's entity lost its component when more scenes were created");
     REQUIRE(entity.HasComponent<Health>());
-    CHECK(entity.GetComponent<Health>().value == 42);
-    CHECK(errors->empty());
+    INFO("the first scene's entity's component changed when more scenes were created");
+    REQUIRE(entity.GetComponent<Health>().value == 42);
+    INFO("creating scenes logged an error");
+    REQUIRE(errors->empty());
 }
 
 TEST_CASE("Destroying a scene before the active one keeps the same scene active", "[app][scenes]")
@@ -86,9 +91,12 @@ TEST_CASE("Destroying a scene before the active one keeps the same scene active"
 
     app.DestroyScene("First");
 
-    CHECK(&app.GetActiveScene() == &third);
-    CHECK(app.GetActiveScene().GetName() == "Third");
-    CHECK(errors->empty());
+    INFO("destroying an earlier scene changed which scene object is active");
+    REQUIRE(&app.GetActiveScene() == &third);
+    INFO("destroying an earlier scene made another scene active");
+    REQUIRE(app.GetActiveScene().GetName() == "Third");
+    INFO("destroying an inactive scene logged an error");
+    REQUIRE(errors->empty());
 }
 
 TEST_CASE("Destroying the active scene is refused with a logged error", "[app][scenes]")
@@ -102,8 +110,12 @@ TEST_CASE("Destroying the active scene is refused with a logged error", "[app][s
 
     app.DestroyScene("Level");
 
-    CHECK(&app.GetActiveScene() == &level);
-    CHECK(&app.GetScene("Level") == &level);
-    CHECK(entity.GetComponent<Health>().value == 7);
-    CHECK(errors->size() == 1);
+    INFO("the active scene stopped being active when destroying it was refused");
+    REQUIRE(&app.GetActiveScene() == &level);
+    INFO("the active scene was removed although destroying it was refused");
+    REQUIRE(&app.GetScene("Level") == &level);
+    INFO("the active scene's entity changed although destroying it was refused");
+    REQUIRE(entity.GetComponent<Health>().value == 7);
+    INFO("refusing to destroy the active scene did not log exactly one error");
+    REQUIRE(errors->size() == 1);
 }

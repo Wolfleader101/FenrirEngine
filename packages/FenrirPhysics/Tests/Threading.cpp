@@ -135,9 +135,10 @@ TEST_CASE("Stepping on the worker threads does not deadlock while parallel syste
 
         test.Run(1.0);
 
-        INFO("with " << workers << " worker threads, every frame ran its parallel systems and physics stepped");
-        CHECK(runs == 60 * 12);
-        CHECK(Outcome(bodies).front().pose.pos.y < 1.0f);
+        INFO("with " << workers << " worker threads, not every frame ran its twelve parallel systems");
+        REQUIRE(runs == 60 * 12);
+        INFO("with " << workers << " worker threads, physics did not step: the pile did not fall");
+        REQUIRE(Outcome(bodies).front().pose.pos.y < 1.0f);
     }
 }
 
@@ -171,6 +172,6 @@ TEST_CASE("A step finishes while every worker thread is busy", "[physics][thread
         app.RunFrame(tick);
     }
 
-    INFO("the stepping thread ran the step's jobs itself, so the bodies fell");
-    CHECK(Outcome(bodies).front().pose.pos.y < 1.0f);
+    INFO("with every worker busy the step did not finish its jobs on the stepping thread: the bodies did not fall");
+    REQUIRE(Outcome(bodies).front().pose.pos.y < 1.0f);
 }

@@ -15,15 +15,21 @@ namespace Fenrir
         }
     } // namespace
 
+    Transform ComposeTransform(const Transform& parent, const Transform& local)
+    {
+        Transform composed = local;
+        composed.pos = parent.pos + Math::Rotate(parent.rot, parent.scale * local.pos);
+        composed.rot = parent.rot * local.rot;
+        composed.scale = parent.scale * local.scale;
+        return composed;
+    }
+
     Transform GetWorldTransform(const Entity& entity)
     {
         Transform world = LocalOf(entity);
         for (Entity parent = ParentOf(entity); parent.IsValid(); parent = ParentOf(parent))
         {
-            const Transform above = LocalOf(parent);
-            world.pos = above.pos + Math::Rotate(above.rot, above.scale * world.pos);
-            world.rot = above.rot * world.rot;
-            world.scale = above.scale * world.scale;
+            world = ComposeTransform(LocalOf(parent), world);
         }
         return world;
     }

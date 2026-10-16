@@ -2,6 +2,7 @@
 
 #include "Backend/Backend.hpp"
 #include "Backend/Primitive.hpp"
+#include "LayerNames.hpp"
 
 #include <algorithm>
 #include <array>
@@ -100,7 +101,7 @@ namespace Fenrir::Backend
         class ObjectLayers
         {
           public:
-            explicit ObjectLayers(ILogger& logger) : m_logger(&logger)
+            ObjectLayers(ILogger& logger, const CollisionLayers* names) : m_logger(&logger), m_names(names)
             {
                 // The default filter for each broad-phase layer is always there, the fallback if the layers run out.
                 for (JPH::uint i = 0; i < broadPhaseCount; ++i)
@@ -135,8 +136,9 @@ namespace Fenrir::Backend
                 else
                 {
                     m_logger->Error("Physics world uses too many different collision filters at once (" +
-                                    std::to_string(JPH::cObjectLayerInvalid) +
-                                    " at most): a body collides with every layer instead");
+                                    std::to_string(JPH::cObjectLayerInvalid) + " at most): a body in " +
+                                    LayerNames(m_names, key.layers) + ", colliding with " +
+                                    LayerNames(m_names, key.mask) + ", collides with every layer instead");
                     layer = static_cast<JPH::ObjectLayer>(key.broadPhase);
                 }
                 ++m_entries[layer].users;
@@ -167,6 +169,7 @@ namespace Fenrir::Backend
             };
 
             ILogger* m_logger;
+            const CollisionLayers* m_names;
             std::vector<Entry> m_entries;
             std::map<LayerKey, JPH::ObjectLayer> m_byKey;
             std::vector<JPH::ObjectLayer> m_free;
@@ -635,8 +638,7 @@ namespace Fenrir::Backend
             bool& failed = hull ? entry.hullFailed : entry.meshFailed;
             if (cooked == nullptr && !failed)
             {
-                cooked = hull ? Cook(handle, JPH::ConvexHullShapeSettings(entry.vertices), "a convex hull")
-                              : CookMesh(handle, entry);
+                cooked = Cook(handle, hull, entry);
                 failed = cooked == nullptr;
                 if ((entry.hull != nullptr || entry.hullFailed) && (entry.mesh != nullptr || entry.meshFailed))
                 {
@@ -663,57 +665,48 @@ namespace Fenrir::Backend
             {
                 return cooked;
             }
-            if (hull ? entry.hullFailed : entry.meshFailed)
+            if ((hull ? entry.hullFailed : entry.meshFailed) || (!hull && entry.triangles.empty()))
             {
                 return nullptr;
             }
-            if (hull)
-            {
-                const JPH::ShapeSettings::ShapeResult result = JPH::ConvexHullShapeSettings(entry.vertices).Create();
-                return result.HasError() ? nullptr : result.Get();
-            }
-            if (entry.triangles.empty())
-            {
-                return nullptr;
-            }
-            JPH::VertexList vertices;
-            vertices.reserve(entry.vertices.size());
-            for (JPH::Vec3Arg v : entry.vertices)
-            {
-                vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
-            }
-            const JPH::ShapeSettings::ShapeResult result =
-                JPH::MeshShapeSettings(std::move(vertices), entry.triangles).Create();
+            const JPH::ShapeSettings::ShapeResult result = Build(hull, entry);
             return result.HasError() ? nullptr : result.Get();
         }
 
-        JPH::Ref<JPH::Shape> CookMesh(CollisionMesh handle, const Entry& entry)
+        // Cooks a hull (`hull`) or triangle mesh from a mesh's source data, logging an error if it cannot.
+        JPH::Ref<JPH::Shape> Cook(CollisionMesh handle, bool hull, const Entry& entry)
         {
-            if (entry.triangles.empty())
+            if (!hull && entry.triangles.empty())
             {
                 logger->Error("Collision mesh " + std::to_string(handle.id) +
                               " has no triangles, so it cannot be a triangle mesh");
                 return nullptr;
             }
+            const JPH::ShapeSettings::ShapeResult result = Build(hull, entry);
+            if (result.HasError())
+            {
+                logger->Error("Collision mesh " + std::to_string(handle.id) + " cannot be cooked as " +
+                              (hull ? "a convex hull" : "a triangle mesh") + ": " + std::string(result.GetError()));
+                return nullptr;
+            }
+            return result.Get();
+        }
+
+        // Builds a hull (`hull`) or triangle mesh (which needs triangles) from a mesh's source data. Only reads, and
+        // logs nothing, so queries may build throwaway shapes side by side.
+        static JPH::ShapeSettings::ShapeResult Build(bool hull, const Entry& entry)
+        {
+            if (hull)
+            {
+                return JPH::ConvexHullShapeSettings(entry.vertices).Create();
+            }
             JPH::VertexList vertices;
             vertices.reserve(entry.vertices.size());
             for (JPH::Vec3Arg v : entry.vertices)
             {
                 vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
             }
-            return Cook(handle, JPH::MeshShapeSettings(std::move(vertices), entry.triangles), "a triangle mesh");
-        }
-
-        JPH::Ref<JPH::Shape> Cook(CollisionMesh handle, const JPH::ShapeSettings& settings, const char* kind)
-        {
-            const JPH::ShapeSettings::ShapeResult result = settings.Create();
-            if (result.HasError())
-            {
-                logger->Error("Collision mesh " + std::to_string(handle.id) + " cannot be cooked as " + kind + ": " +
-                              std::string(result.GetError()));
-                return nullptr;
-            }
-            return result.Get();
+            return JPH::MeshShapeSettings(std::move(vertices), entry.triangles).Create();
         }
 
         ILogger* logger;
@@ -778,9 +771,10 @@ namespace Fenrir::Backend
 
     struct World::Impl
     {
-        Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers)
+        Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers,
+             const CollisionLayers* layerNames)
             : meshes(&worldMeshes.Implementation()), logger(&worldLogger), maxBodies(bodyCapacity),
-              objectLayers(worldLogger), broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers),
+              objectLayers(worldLogger, layerNames), broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers),
               objectPairs(objectLayers), jobs(MakeJobs(workers))
         {
         }
@@ -801,8 +795,14 @@ namespace Fenrir::Backend
             }
             const JPH::Shape* cooked = meshes->Shape(shape);
             JPH_ASSERT(cooked != nullptr);
-            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
-            return scaled.Get();
+            return Scaled(*cooked, scale);
+        }
+
+        // A cooked hull or mesh at `scale`: wrapped, so the cooked shape stays shared (hulls and meshes take any scale
+        // per axis). Only reads `cooked`.
+        static JPH::Ref<JPH::Shape> Scaled(const JPH::Shape& cooked, const Math::Vec3& scale)
+        {
+            return cooked.ScaleShape(cooked.MakeScaleValid(ToJolt(scale))).Get();
         }
 
         // A body's shape: its one collider's own shape when that collider is on the body's entity (so identical bodies
@@ -848,12 +848,7 @@ namespace Fenrir::Backend
                 return Make(Bake(shape, scale));
             }
             const JPH::Ref<JPH::Shape> cooked = meshes->QueryShape(shape);
-            if (cooked == nullptr)
-            {
-                return nullptr;
-            }
-            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
-            return scaled.Get();
+            return cooked == nullptr ? nullptr : Scaled(*cooked, scale);
         }
 
         // Forgets cached shapes no body uses any more, each time the cache has doubled since it was last pruned.
@@ -1012,7 +1007,7 @@ namespace Fenrir::Backend
     World::World(const WorldSettings& settings, CollisionMeshes& meshes, ILogger& logger)
         : m_impl(std::make_unique<Impl>(
               meshes, logger, Capacity(settings.maxBodies, JPH::PhysicsSystem::cMaxBodiesLimit, "bodies", logger),
-              settings.workers))
+              settings.workers, settings.layerNames))
     {
         m_impl->system.Init(
             m_impl->maxBodies, 0,
@@ -1460,8 +1455,13 @@ namespace Fenrir::Backend
         const JPH::RRayCast ray(ToJolt(origin), ToJolt(direction) * maxDistance);
         RayCollector collector(ray, maxDistance, sink);
         const QueryFilters filters(filter, m_impl->objectLayers);
-        m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, JPH::RayCastSettings(), collector, filters.broadPhase,
-                                                           filters.layer, filters.body);
+        // What the seam promises, set here rather than left to Jolt's defaults: a ray starting inside a solid shape
+        // (any convex one) hits it at distance 0, and triangles' back faces are not hit.
+        JPH::RayCastSettings settings;
+        settings.mTreatConvexAsSolid = true;
+        settings.SetBackFaceMode(JPH::EBackFaceMode::IgnoreBackFaces);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, settings, collector, filters.broadPhase, filters.layer,
+                                                           filters.body);
     }
 
     void World::CastShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,

@@ -323,3 +323,29 @@ TEST_CASE("More contacts than the world's capacity are reported rather than cras
     INFO("eight boxes on the ground need more than two contacts, and running out was logged");
     REQUIRE(AnyMentions(*messages, "ran out of room"));
 }
+
+TEST_CASE("A handle to a destroyed entity pushes nothing, even once a new body is made after it", "[physics][forces]")
+{
+    PhysicsApp test;
+    Entity destroyed = AddMassiveBody(test.Entities(), Math::Vec3(0.0f, 50.0f, 0.0f), 1.0f);
+    test.Run(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+    const Entity stale = destroyed;
+    test.Entities().DestroyEntity(destroyed);
+    // Made straight after the destroy, so the ECS may give it the destroyed entity's id with a new version.
+    Entity fresh = AddMassiveBody(test.Entities(), Math::Vec3(0.0f, 50.0f, 0.0f), 1.0f);
+    test.Run(tick);
+
+    world->AddImpulse(stale, Math::Vec3(4.0f, 0.0f, 0.0f));
+    world->AddForce(stale, Math::Vec3(400.0f, 0.0f, 0.0f));
+    world->AddAngularImpulse(stale, Math::Vec3(4.0f, 0.0f, 0.0f));
+    world->AddTorque(stale, Math::Vec3(400.0f, 0.0f, 0.0f));
+    test.Run(tick);
+
+    const RigidBody& moved = fresh.GetComponent<RigidBody>();
+    INFO("pushes through the destroyed entity's handle moved the new body: it moves at "
+         << moved.linearVelocity.x << " and spins at " << moved.angularVelocity.x);
+    REQUIRE(moved.linearVelocity.x == 0.0f);
+    REQUIRE(moved.angularVelocity.x == 0.0f);
+}

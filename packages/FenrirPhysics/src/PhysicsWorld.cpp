@@ -8,6 +8,7 @@
 #include <tuple>
 #include <vector>
 
+#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -148,6 +149,20 @@ namespace Fenrir
             return entity.HasComponent<Trigger>() && entity.HasComponent<Collider>();
         }
 
+        // The nearest of `from` and its ancestors with a RigidBody that hosts a compound body, or none. A trigger's
+        // entity hosts no compound body: a RigidBody there does not make the trigger move as one.
+        Entity NearestBodyHost(const Entity& from)
+        {
+            for (Entity e = from; e.IsValid(); e = ParentOf(e))
+            {
+                if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
+                {
+                    return e;
+                }
+            }
+            return Entity();
+        }
+
         template <typename TEvent, typename Key>
         void SortAndSend(App& app, std::vector<TEvent>& events, Key key)
         {
@@ -184,8 +199,13 @@ namespace Fenrir
         }
     } // namespace
 
-    PhysicsWorld::PhysicsWorld(std::unique_ptr<Impl> impl) : m_impl(std::move(impl))
+    PhysicsWorld::PhysicsWorld(Key /*key*/, std::unique_ptr<Impl> impl) : m_impl(std::move(impl))
     {
+    }
+
+    std::size_t PhysicsWorld::DistinctShapeCount() const
+    {
+        return m_impl->m_backend.DistinctShapeCount();
     }
 
     PhysicsWorld::~PhysicsWorld() = default;
@@ -197,22 +217,22 @@ namespace Fenrir
 
     void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddImpulse, impulse);
+        m_impl->Queue(entity, &Backend::World::AddImpulse, impulse);
     }
 
     void PhysicsWorld::AddForce(const Entity& entity, const Math::Vec3& force)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddForce, force);
+        m_impl->Queue(entity, &Backend::World::AddForce, force);
     }
 
     void PhysicsWorld::AddTorque(const Entity& entity, const Math::Vec3& torque)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddTorque, torque);
+        m_impl->Queue(entity, &Backend::World::AddTorque, torque);
     }
 
     void PhysicsWorld::AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse)
     {
-        m_impl->Queue(entity.GetId(), &Backend::World::AddAngularImpulse, impulse);
+        m_impl->Queue(entity, &Backend::World::AddAngularImpulse, impulse);
     }
 
     Math::Vec3 PhysicsWorld::Gravity() const
@@ -239,9 +259,9 @@ namespace Fenrir
         entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
     }
 
-    void PhysicsWorld::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
+    void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
     {
-        m_impl->ForEachContact(body, func);
+        m_impl->ForEachContact(entity, func);
     }
 
     void PhysicsWorld::Impl::Step(App& app, float dt)
@@ -301,8 +321,12 @@ namespace Fenrir
             int depth;
             Entity entity;
             Record* record;
+            // Shown at its step pose: a body that is not interpolated, written only because an ancestor is.
+            bool atStepPose;
         };
         std::vector<Blended> blended;
+        std::vector<Blended> carried;
+        std::set<std::uint32_t> interpolated;
         for (auto& [id, record] : m_bodies)
         {
             if (!record.Active() || record.motion.motionType == MotionType::Static || record.heldByGame ||
@@ -312,11 +336,32 @@ namespace Fenrir
             }
             Entity entity = m_entities->GetEntity(id);
             const RigidBody* rigidBody = RigidBodyOf(entity);
-            if (rigidBody == nullptr || !rigidBody->interpolate || !entity.HasComponent<Transform>())
+            if (rigidBody == nullptr || !entity.HasComponent<Transform>())
             {
                 continue;
             }
-            blended.push_back(Blended{DepthOf(entity), entity, &record});
+            if (rigidBody->interpolate)
+            {
+                interpolated.insert(id);
+                blended.push_back(Blended{DepthOf(entity), entity, &record, false});
+            }
+            else
+            {
+                carried.push_back(Blended{DepthOf(entity), entity, &record, true});
+            }
+        }
+        // A body that is not interpolated is still moved by an interpolated ancestor's blend, through its local
+        // Transform: it is written back at its own step pose, so it is shown where it is.
+        for (const Blended& body : carried)
+        {
+            for (Entity above = ParentOf(body.entity); above.IsValid(); above = ParentOf(above))
+            {
+                if (interpolated.contains(above.GetId()))
+                {
+                    blended.push_back(body);
+                    break;
+                }
+            }
         }
         // Parents before children, so each child's world pose is set against its parent's blended one.
         std::stable_sort(blended.begin(), blended.end(),
@@ -331,8 +376,11 @@ namespace Fenrir
         {
             Record& record = *body.record;
             Transform world = record.world;
-            world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
-            world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            if (!body.atStepPose)
+            {
+                world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
+                world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            }
             SetWorldTransform(body.entity, world);
             record.shownLocal = body.entity.GetComponent<Transform>();
             record.blended = true;
@@ -346,15 +394,8 @@ namespace Fenrir
         {
             return entity;
         }
-        // A trigger's entity hosts no compound body: a RigidBody there does not make the trigger move as one.
-        for (Entity e = collider; e.IsValid(); e = ParentOf(e))
-        {
-            if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
-            {
-                return e.GetId();
-            }
-        }
-        return entity;
+        const Entity host = NearestBodyHost(collider);
+        return host.IsValid() ? host.GetId() : entity;
     }
 
     std::uint32_t PhysicsWorld::Impl::ResolveBody(std::uint32_t entity) const
@@ -363,8 +404,7 @@ namespace Fenrir
         {
             return entity;
         }
-        const Entity found = m_entities->GetEntity(entity);
-        return found.HasComponent<RigidBody>() || found.HasComponent<Collider>() ? BodyEntityOf(entity) : entity;
+        return HasBodyComponent(m_entities->GetEntity(entity)) ? BodyEntityOf(entity) : entity;
     }
 
     std::uint32_t PhysicsWorld::Impl::AttachedBodyOf(std::uint32_t trigger) const
@@ -373,32 +413,25 @@ namespace Fenrir
         {
             return trigger;
         }
-        const Entity parent = ParentOf(m_entities->GetEntity(trigger));
-        if (!parent.IsValid())
-        {
-            return trigger;
-        }
         // The body a collider on the parent would belong to: the nearest ancestor body, if there is one.
-        for (Entity e = parent; e.IsValid(); e = ParentOf(e))
-        {
-            if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
-            {
-                return e.GetId();
-            }
-        }
-        return trigger;
+        const Entity host = NearestBodyHost(ParentOf(m_entities->GetEntity(trigger)));
+        return host.IsValid() ? host.GetId() : trigger;
     }
 
     PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(std::uint32_t entity)
     {
-        if (m_entities->HasEntity(entity) && !m_entities->GetEntity(entity).HasComponent<RigidBody>() &&
-            !m_entities->GetEntity(entity).HasComponent<Collider>())
+        if (m_entities->HasEntity(entity) && !HasBodyComponent(m_entities->GetEntity(entity)))
         {
             return nullptr;
         }
         // A destroyed entity's body, if it had one, lasts until the next step.
         const auto it = m_bodies.find(ResolveBody(entity));
         return it == m_bodies.end() ? nullptr : &it->second;
+    }
+
+    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(const Entity& entity)
+    {
+        return entity.IsValid() ? FindBody(entity.GetId()) : nullptr;
     }
 
     std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
@@ -410,8 +443,8 @@ namespace Fenrir
         for (std::uint32_t id : entities)
         {
             Entity entity = m_entities->GetEntity(id);
-            // Composed from the body down through the locals, the way GetWorldTransform composes, but starting from
-            // the body's scale alone: the pose then stays the same, bit for bit, however the body moves.
+            // Composed from the body down through the locals, with GetWorldTransform's own step, but starting from the
+            // body's scale alone: the pose then stays the same, bit for bit, however the body moves.
             chain.clear();
             for (Entity e = entity; e.IsValid() && e.GetId() != body; e = ParentOf(e))
             {
@@ -420,10 +453,7 @@ namespace Fenrir
             Transform pose(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), bodyScale);
             for (auto it = chain.rbegin(); it != chain.rend(); ++it)
             {
-                const Transform local = LocalOf(*it);
-                pose.pos = pose.pos + Math::Rotate(pose.rot, pose.scale * local.pos);
-                pose.rot = pose.rot * local.rot;
-                pose.scale = pose.scale * local.scale;
+                pose = ComposeTransform(pose, LocalOf(*it));
             }
             const CollisionShape& shape = entity.GetComponent<Collider>().shape;
             parts.push_back(Part{id, shape, pose, m_backend.CanMakeShape(shape),
@@ -638,12 +668,6 @@ namespace Fenrir
                 record.material = material;
             }
 
-            if (!Same(material, record.material))
-            {
-                m_backend.SetMaterial(record.id, material);
-                record.material = material;
-            }
-
             const CollisionFilter filter = EffectiveFilterOf(entity);
             if (!Same(filter, record.filter))
             {
@@ -674,9 +698,12 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount)
+    void PhysicsWorld::Impl::Queue(const Entity& entity, Pusher pusher, const Math::Vec3& amount)
     {
-        m_pushes.push_back(Push{entity, pusher, amount});
+        if (entity.IsValid())
+        {
+            m_pushes.push_back(Push{entity.GetId(), pusher, amount});
+        }
     }
 
     void PhysicsWorld::Impl::ApplyPushes()
@@ -829,26 +856,30 @@ namespace Fenrir
         SortAndSend(app, exits, overlapOrder);
     }
 
-    void PhysicsWorld::Impl::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
+    void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
     {
+        if (!entity.IsValid())
+        {
+            return; // a destroyed entity's touches end at the next step, but it has no body to ask about now
+        }
         // A child collider's entity stands for the compound body it belongs to.
-        const std::uint32_t asked = ResolveBody(body.GetId());
+        const std::uint32_t asked = ResolveBody(entity.GetId());
         for (const Backend::Touch& touch : m_backend.Touches())
         {
             if (touch.isTrigger1 || touch.isTrigger2)
             {
                 continue;
             }
-            const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
+            const auto handle = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
             if (touch.entity1 == asked)
             {
-                func(Contact{entity(touch.entity1), entity(touch.collider1), entity(touch.entity2),
-                             entity(touch.collider2), touch.point, touch.normal});
+                func(Contact{handle(touch.entity1), handle(touch.collider1), handle(touch.entity2),
+                             handle(touch.collider2), touch.point, touch.normal});
             }
             else if (touch.entity2 == asked)
             {
-                func(Contact{entity(touch.entity2), entity(touch.collider2), entity(touch.entity1),
-                             entity(touch.collider1), touch.point, -touch.normal});
+                func(Contact{handle(touch.entity2), handle(touch.collider2), handle(touch.entity1),
+                             handle(touch.collider1), touch.point, -touch.normal});
             }
         }
     }

@@ -137,6 +137,54 @@ TEST_CASE("A ray starting inside a box or sphere hits it at distance 0", "[physi
     REQUIRE(inSphere->distance == 0.0f);
 }
 
+TEST_CASE("A ray starting inside a capsule or convex hull hits it at distance 0", "[physics][queries]")
+{
+    PhysicsApp test;
+    Entity capsule = AddStatic(test.Entities(), Math::Vec3(0.0f), CapsuleShape{1.0f, 0.5f});
+    // The corners of a unit cube: a hull needs no triangles.
+    std::array<Math::Vec3, 8> corners;
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        corners[i] = Math::Vec3((i & 1u) ? 0.5f : -0.5f, (i & 2u) ? 0.5f : -0.5f, (i & 4u) ? 0.5f : -0.5f);
+    }
+    const CollisionMesh cube = test.physics.CreateCollisionMesh(corners, {});
+    Entity hull = AddStatic(test.Entities(), Math::Vec3(10.0f, 0.0f, 0.0f), ConvexHullShape{cube});
+    test.Run(tick);
+
+    const std::optional<RaycastHit> inCapsule = WorldOf(test).Raycast(Math::Vec3(0.0f, 1.2f, 0.0f), east, 5.0f);
+    INFO("a ray from inside the capsule's upper cap does not hit the capsule at distance 0");
+    REQUIRE(inCapsule.has_value());
+    REQUIRE(inCapsule->body == capsule);
+    REQUIRE(inCapsule->distance == 0.0f);
+
+    const std::optional<RaycastHit> inHull = WorldOf(test).Raycast(Math::Vec3(10.1f, 0.0f, 0.0f), east, 5.0f);
+    INFO("a ray from inside the hull does not hit the hull at distance 0");
+    REQUIRE(inHull.has_value());
+    REQUIRE(inHull->body == hull);
+    REQUIRE(inHull->distance == 0.0f);
+}
+
+TEST_CASE("A ray hits a triangle mesh's front faces and passes through its back faces", "[physics][queries]")
+{
+    PhysicsApp test;
+    // Two triangles making a 20 by 20 floor at y = 0, facing up.
+    const std::array<Math::Vec3, 4> vertices = {Math::Vec3(-10.0f, 0.0f, -10.0f), Math::Vec3(10.0f, 0.0f, -10.0f),
+                                                Math::Vec3(-10.0f, 0.0f, 10.0f), Math::Vec3(10.0f, 0.0f, 10.0f)};
+    const std::array<std::uint32_t, 6> indices = {0, 2, 1, 1, 2, 3};
+    Entity floor =
+        AddStatic(test.Entities(), Math::Vec3(0.0f), MeshShape{test.physics.CreateCollisionMesh(vertices, indices)});
+    test.Run(tick);
+
+    const std::optional<RaycastHit> fromAbove = WorldOf(test).Raycast(Math::Vec3(1.0f, 2.0f, 1.0f), down, 5.0f);
+    INFO("a ray down onto the floor's front faces does not hit it 2 m along");
+    REQUIRE(fromAbove.has_value());
+    REQUIRE(fromAbove->body == floor);
+    REQUIRE(fromAbove->distance == Approx(2.0f).margin(1e-4f));
+
+    INFO("a ray up through the floor's back faces hits it");
+    REQUIRE_FALSE(WorldOf(test).Raycast(Math::Vec3(1.0f, -2.0f, 1.0f), Math::Vec3(0.0f, 1.0f, 0.0f), 5.0f).has_value());
+}
+
 TEST_CASE("A sphere cast down hits the ground where the sphere first touches it", "[physics][queries]")
 {
     PhysicsApp test;
@@ -391,4 +439,61 @@ TEST_CASE("A body whose entity was destroyed since the last step is not found", 
     INFO("a hit names a live entity, so the ray passes the destroyed one's body and hits the one behind");
     REQUIRE(hit.has_value());
     REQUIRE(hit->body == behind);
+}
+
+TEST_CASE("A destroyed entity has no body to ask about, even before the next step", "[physics][queries]")
+{
+    PhysicsApp test;
+    AddGround(test.Entities());
+    Entity box = AddBody(test.Entities(), Math::Vec3(0.0f, 0.5f, 0.0f));
+    test.Run(3.0);
+    PhysicsWorld& world = WorldOf(test);
+    INFO("before it is destroyed, the box rests asleep on the ground, so there is something to find");
+    REQUIRE(world.IsSleeping(box));
+
+    test.Entities().DestroyEntity(box);
+
+    INFO("a destroyed entity's body is reported asleep");
+    REQUIRE_FALSE(world.IsSleeping(box));
+    INFO("a destroyed entity's body has bounds");
+    REQUIRE_FALSE(world.Bounds(box).has_value());
+    int contacts = 0;
+    world.ForEachContact(box, [&](const Contact&) { ++contacts; });
+    INFO("a destroyed entity's body is reported touching the ground");
+    REQUIRE(contacts == 0);
+}
+
+TEST_CASE("Queries take convex hull and triangle-mesh shapes, scaled by the pose", "[physics][queries]")
+{
+    PhysicsApp test;
+    Entity box = AddStatic(test.Entities(), Math::Vec3(5.0f, 0.0f, 0.0f));
+    // The corners of a unit cube, wound outwards as twelve triangles.
+    std::array<Math::Vec3, 8> corners;
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        corners[i] = Math::Vec3((i & 1u) ? 0.5f : -0.5f, (i & 2u) ? 0.5f : -0.5f, (i & 4u) ? 0.5f : -0.5f);
+    }
+    const std::array<std::uint32_t, 36> triangles = {0, 2, 1, 1, 2, 3, 4, 5, 6, 5, 7, 6, 0, 1, 4, 1, 5, 4,
+                                                     2, 6, 3, 3, 6, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 3, 7, 5};
+    const CollisionMesh cube = test.physics.CreateCollisionMesh(corners, triangles);
+    test.Run(tick);
+
+    const Transform atOrigin(Math::Vec3(0.0f), identity, Math::Vec3(1.0f));
+    const std::optional<ShapeCastHit> hullHit = WorldOf(test).ShapeCast(ConvexHullShape{cube}, atOrigin, east, 10.0f);
+    INFO("a unit hull swept along +x from the origin does not touch the box (its face at x = 4.5) after 4 m");
+    REQUIRE(hullHit.has_value());
+    REQUIRE(hullHit->body == box);
+    REQUIRE(hullHit->distance == Approx(4.0f).margin(0.01f));
+
+    const Transform doubled(Math::Vec3(0.0f), identity, Math::Vec3(2.0f));
+    const std::optional<ShapeCastHit> scaledHit = WorldOf(test).ShapeCast(ConvexHullShape{cube}, doubled, east, 10.0f);
+    INFO("the hull scaled by 2 does not touch the box after 3.5 m");
+    REQUIRE(scaledHit.has_value());
+    REQUIRE(scaledHit->distance == Approx(3.5f).margin(0.01f));
+
+    std::array<OverlapHit, 4> hits;
+    const Transform overBox(Math::Vec3(5.5f, 0.0f, 0.0f), identity, Math::Vec3(1.0f));
+    INFO("a triangle-mesh cube placed half over the box does not overlap it");
+    REQUIRE(WorldOf(test).Overlap(MeshShape{cube}, overBox, hits) == 1);
+    REQUIRE(hits[0].body == box);
 }

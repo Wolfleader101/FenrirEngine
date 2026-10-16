@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <typeindex>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace Fenrir
@@ -48,6 +49,75 @@ namespace Fenrir
             return olderCount + newerCount;
         }
     };
+
+    namespace Detail
+    {
+        /**
+         * @brief Where a queue's two buffers sit in the count of every event it was ever sent, and the arithmetic of
+         * reading them through a cursor. Shared by EventQueue<T> and the App's queues of events known only by their
+         * layout, so both rotate and read alike.
+         */
+        class EventCursor
+        {
+          public:
+            /** @brief What one read through a cursor yields: how many events to skip at the start of each buffer, and
+             * how many were dropped before the reader got to them. */
+            struct Read
+            {
+                std::size_t olderSkip = 0;
+                std::size_t newerSkip = 0;
+                std::size_t missed = 0;
+            };
+
+            /** @brief The buffers swapped: the current one, holding `currentCount` events, became the older one. */
+            void Swap(std::size_t currentCount) noexcept
+            {
+                const std::size_t sent = m_currentStart + currentCount;
+                m_previousStart = m_currentStart;
+                m_currentStart = sent;
+            }
+
+            /**
+             * @brief Reads the events sent after the first `seen` (NewReaderCursor for a reader that has not read)
+             * from buffers holding `previousCount` and `currentCount` events, and moves `seen` past them.
+             */
+            [[nodiscard]] Read ReadAfter(std::size_t& seen, std::size_t previousCount,
+                                         std::size_t currentCount) const noexcept
+            {
+                if (seen == NewReaderCursor)
+                {
+                    seen = m_previousStart;
+                }
+                const std::size_t from = std::max(seen, m_previousStart);
+                Read read;
+                read.olderSkip = std::min(from - m_previousStart, previousCount);
+                read.newerSkip = std::min(from > m_currentStart ? from - m_currentStart : 0, currentCount);
+                read.missed = m_previousStart > seen ? m_previousStart - seen : 0;
+                seen = m_currentStart + currentCount;
+                return read;
+            }
+
+          private:
+            // How many events were sent to the queue before the first event of each buffer.
+            std::size_t m_previousStart = 0;
+            std::size_t m_currentStart = 0;
+        };
+
+        /**
+         * @brief Sends an event by calling `send`: now, or, from a system the scheduler runs in parallel, after its
+         * batch (SendBuffer). Every send to an App's event queues goes through it.
+         */
+        template <typename Send>
+        void SendOrHold(Send&& send)
+        {
+            if (SendBuffer* buffer = SendBuffer::OfThisThread())
+            {
+                buffer->Add(std::forward<Send>(send));
+                return;
+            }
+            send();
+        }
+    } // namespace Detail
 
     /**
      * @brief Interface for event queues
@@ -173,10 +243,12 @@ namespace Fenrir
         {
         }
 
+        /** @brief The first event, the oldest. */
         [[nodiscard]] Iterator begin() const
         {
             return {m_older.data(), m_older.data() + m_older.size(), m_newer.data(), m_newer.data() + m_newer.size()};
         }
+        /** @brief Past the last event, the newest. */
         [[nodiscard]] Iterator end() const
         {
             const TEvent* last = m_newer.data() + m_newer.size();
@@ -192,6 +264,7 @@ namespace Fenrir
         {
             return m_older.size() + m_newer.size();
         }
+        /** @brief Whether the read yielded no events. */
         [[nodiscard]] bool empty() const noexcept
         {
             return size() == 0;
@@ -206,11 +279,13 @@ namespace Fenrir
             return m_missed;
         }
 
-        /** @brief The part of the events in the older of the queue's buffers, then the part in the newer. */
+        /** @brief The part of the events in the older of the queue's buffers: the oldest of them. */
         [[nodiscard]] std::span<const TEvent> Older() const noexcept
         {
             return m_older;
         }
+
+        /** @brief The part of the events in the newer of the queue's buffers, after those in Older(). */
         [[nodiscard]] std::span<const TEvent> Newer() const noexcept
         {
             return m_newer;
@@ -244,11 +319,9 @@ namespace Fenrir
         void Swap() override
         {
             // clear the older buffer, then swap: current becomes previous, and previous becomes the new current
-            const std::size_t sent = currentStart + currentBuffer.size();
+            cursor.Swap(currentBuffer.size());
             previousBuffer.clear();
             std::swap(currentBuffer, previousBuffer);
-            previousStart = currentStart;
-            currentStart = sent;
         }
 
         /**
@@ -257,18 +330,9 @@ namespace Fenrir
          */
         EventRange<TEvent> ReadAfter(std::size_t& seen) const
         {
-            if (seen == NewReaderCursor)
-            {
-                seen = previousStart;
-            }
-            const std::size_t from = std::max(seen, previousStart);
-            std::span<const TEvent> older(previousBuffer);
-            std::span<const TEvent> newer(currentBuffer);
-            older = older.subspan(std::min(from - previousStart, older.size()));
-            newer = newer.subspan(std::min(from > currentStart ? from - currentStart : 0, newer.size()));
-            const std::size_t missed = previousStart > seen ? previousStart - seen : 0;
-            seen = currentStart + currentBuffer.size();
-            return {older, newer, missed};
+            const Detail::EventCursor::Read read = cursor.ReadAfter(seen, previousBuffer.size(), currentBuffer.size());
+            return {std::span<const TEvent>(previousBuffer).subspan(read.olderSkip),
+                    std::span<const TEvent>(currentBuffer).subspan(read.newerSkip), read.missed};
         }
 
         // Events that can be copied as bytes (and so sent and read by code that knows only their layout).
@@ -291,12 +355,7 @@ namespace Fenrir
             {
                 TEvent copy;
                 std::memcpy(&copy, event, sizeof(TEvent));
-                if (SendBuffer* buffer = SendBuffer::OfThisThread())
-                {
-                    buffer->Add([this, copy] { Send(copy); });
-                    return true;
-                }
-                Send(copy);
+                Detail::SendOrHold([this, copy] { Send(copy); });
                 return true;
             }
             else
@@ -324,9 +383,7 @@ namespace Fenrir
       private:
         std::vector<TEvent> currentBuffer;
         std::vector<TEvent> previousBuffer;
-        // How many events were sent to this queue before the first event of each buffer.
-        std::size_t previousStart = 0;
-        std::size_t currentStart = 0;
+        Detail::EventCursor cursor;
     };
 
     /**
@@ -561,12 +618,7 @@ namespace Fenrir
     void App::SendEvent(const TEvent& event)
     {
         EventQueue<TEvent>& queue = GetEventQueue<TEvent>();
-        if (SendBuffer* buffer = SendBuffer::OfThisThread())
-        {
-            buffer->Add([&queue, event] { queue.Send(event); });
-            return;
-        }
-        queue.Send(event);
+        Detail::SendOrHold([&queue, event] { queue.Send(event); });
     }
 
     template <typename TEvent>
