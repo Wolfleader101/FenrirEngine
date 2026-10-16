@@ -3,12 +3,16 @@
 #include "Backend/Backend.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cstdarg>
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <thread>
+#include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #include "FenrirLogger/ILogger.hpp"
@@ -26,6 +30,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
@@ -300,18 +307,91 @@ namespace Fenrir::Backend
             return type == MotionType::Dynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
         }
 
-        // The entity's scale is baked into the shape's dimensions, so a scale change makes a new shape.
-        JPH::Ref<JPH::Shape> MakeShape(const CollisionShape& shape, const Math::Vec3& scale)
+        // No dimension of a box, sphere or capsule is made smaller than this, after scale: the backend asserts on
+        // empty shapes, and anything thinner than a millimetre is not simulated well anyway.
+        constexpr float minimumSize = 1.0e-3f;
+
+        // A box, sphere or capsule with the entity's scale baked into its dimensions: what the backend shape is made
+        // from, and the key of the shape cache. Box: half extents. Sphere: radius in x. Capsule: half height in x,
+        // radius in y. Unused dimensions are zero.
+        struct Primitive
+        {
+            ShapeType type;
+            Math::Vec3 size;
+
+            // Ordered bit for bit, like the diff: equal keys make equal shapes.
+            friend bool operator<(const Primitive& a, const Primitive& b)
+            {
+                const auto key = [](const Primitive& p) {
+                    return std::tuple(p.type, std::bit_cast<std::uint32_t>(p.size.x),
+                                      std::bit_cast<std::uint32_t>(p.size.y), std::bit_cast<std::uint32_t>(p.size.z));
+                };
+                return key(a) < key(b);
+            }
+        };
+
+        // Mirroring is ignored (a primitive is symmetric) and no dimension is below minimumSize.
+        Primitive Bake(const CollisionShape& shape, const Math::Vec3& scale)
         {
             const Math::Vec3 size = glm::abs(scale);
             if (shape.Is<SphereShape>())
             {
-                return new JPH::SphereShape(shape.As<SphereShape>().radius * std::max({size.x, size.y, size.z}));
+                // Jolt's sphere takes only a uniform scale: the largest axis wins.
+                const float radius = shape.As<SphereShape>().radius * std::max({size.x, size.y, size.z});
+                return Primitive{ShapeType::Sphere, Math::Vec3(std::max(radius, minimumSize), 0.0f, 0.0f)};
             }
-            const Math::Vec3 half = shape.As<BoxShape>().halfExtents * size;
-            // Jolt rounds a box's edges by a convex radius, which must fit inside the box.
-            const float convexRadius = std::min(JPH::cDefaultConvexRadius, 0.5f * std::min({half.x, half.y, half.z}));
-            return new JPH::BoxShape(ToJolt(half), convexRadius);
+            if (shape.Is<CapsuleShape>())
+            {
+                // Jolt's capsule takes only a uniform scale: its height follows y, its radius the larger of x and z.
+                const CapsuleShape& capsule = shape.As<CapsuleShape>();
+                return Primitive{ShapeType::Capsule,
+                                 Math::Vec3(std::max(capsule.halfHeight * size.y, minimumSize),
+                                            std::max(capsule.radius * std::max(size.x, size.z), minimumSize), 0.0f)};
+            }
+            return Primitive{ShapeType::Box,
+                             glm::max(shape.As<BoxShape>().halfExtents * size, Math::Vec3(minimumSize))};
+        }
+
+        JPH::Ref<JPH::Shape> Make(const Primitive& primitive)
+        {
+            const Math::Vec3& size = primitive.size;
+            if (primitive.type == ShapeType::Sphere)
+            {
+                return new JPH::SphereShape(size.x);
+            }
+            if (primitive.type == ShapeType::Capsule)
+            {
+                return new JPH::CapsuleShape(size.x, size.y);
+            }
+            // Jolt rounds a box's edges by a convex radius, which must fit inside the box: thin boxes get a smaller
+            // one.
+            const float convexRadius = std::min(JPH::cDefaultConvexRadius, 0.5f * std::min({size.x, size.y, size.z}));
+            return new JPH::BoxShape(ToJolt(size), convexRadius);
+        }
+
+        CollisionMesh MeshOf(const CollisionShape& shape)
+        {
+            return shape.Is<ConvexHullShape>() ? shape.As<ConvexHullShape>().hull : shape.As<MeshShape>().mesh;
+        }
+
+        bool IsPrimitive(const CollisionShape& shape)
+        {
+            return !shape.Is<ConvexHullShape>() && !shape.Is<MeshShape>();
+        }
+
+        // A body's mass properties: the shape's own, scaled to `mass`. A triangle mesh has no volume, so it is weighed
+        // as the solid box of its bounds.
+        JPH::MassProperties MassOf(const JPH::Shape& shape, float mass)
+        {
+            JPH::MassProperties properties = shape.GetMassProperties();
+            if (properties.mMass <= 0.0f)
+            {
+                const JPH::Vec3 size =
+                    JPH::Vec3::sMax(shape.GetLocalBounds().GetSize(), JPH::Vec3::sReplicate(2.0f * minimumSize));
+                properties.SetMassAndInertiaOfSolidBox(size, 1.0f);
+            }
+            properties.ScaleToMass(mass);
+            return properties;
         }
 
         JPH::BodyID ToJolt(BodyId id)
@@ -428,14 +508,186 @@ namespace Fenrir::Backend
         }
     }
 
-    struct World::Impl
+    struct CollisionMeshes::Impl
     {
-        Impl(ILogger& worldLogger, ThreadPool* workers)
-            : logger(&worldLogger), objectLayers(worldLogger), broadPhaseLayers(objectLayers),
-              objectVsBroadPhase(objectLayers), objectPairs(objectLayers), jobs(MakeJobs(workers))
+        // A mesh's source data and the shapes cooked from it so far. The source is dropped once both kinds are cooked.
+        struct Entry
+        {
+            JPH::Array<JPH::Vec3> vertices;
+            JPH::IndexedTriangleList triangles;
+            JPH::Ref<JPH::Shape> hull;
+            JPH::Ref<JPH::Shape> mesh;
+            bool hullFailed = false;
+            bool meshFailed = false;
+        };
+
+        explicit Impl(ILogger& meshesLogger) : logger(&meshesLogger)
         {
         }
 
+        // The shape a hull or mesh refers to, cooked the first time; null if the mesh is released or cannot be cooked
+        // as that kind (an error the first time).
+        const JPH::Shape* Shape(const CollisionShape& shape)
+        {
+            const CollisionMesh handle = MeshOf(shape);
+            const auto it = meshes.find(handle.id);
+            if (it == meshes.end())
+            {
+                return nullptr;
+            }
+            Entry& entry = it->second;
+            const bool hull = shape.Is<ConvexHullShape>();
+            JPH::Ref<JPH::Shape>& cooked = hull ? entry.hull : entry.mesh;
+            bool& failed = hull ? entry.hullFailed : entry.meshFailed;
+            if (cooked == nullptr && !failed)
+            {
+                cooked = hull ? Cook(handle, JPH::ConvexHullShapeSettings(entry.vertices), "a convex hull")
+                              : CookMesh(handle, entry);
+                failed = cooked == nullptr;
+                if ((entry.hull != nullptr || entry.hullFailed) && (entry.mesh != nullptr || entry.meshFailed))
+                {
+                    entry.vertices = {};
+                    entry.triangles = {};
+                }
+            }
+            return cooked.GetPtr();
+        }
+
+        JPH::Ref<JPH::Shape> CookMesh(CollisionMesh handle, const Entry& entry)
+        {
+            if (entry.triangles.empty())
+            {
+                logger->Error("Collision mesh " + std::to_string(handle.id) +
+                              " has no triangles, so it cannot be a triangle mesh");
+                return nullptr;
+            }
+            JPH::VertexList vertices;
+            vertices.reserve(entry.vertices.size());
+            for (JPH::Vec3Arg v : entry.vertices)
+            {
+                vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
+            }
+            return Cook(handle, JPH::MeshShapeSettings(std::move(vertices), entry.triangles), "a triangle mesh");
+        }
+
+        JPH::Ref<JPH::Shape> Cook(CollisionMesh handle, const JPH::ShapeSettings& settings, const char* kind)
+        {
+            const JPH::ShapeSettings::ShapeResult result = settings.Create();
+            if (result.HasError())
+            {
+                logger->Error("Collision mesh " + std::to_string(handle.id) + " cannot be cooked as " + kind + ": " +
+                              std::string(result.GetError()));
+                return nullptr;
+            }
+            return result.Get();
+        }
+
+        ILogger* logger;
+        // Ids start at 1 (0 is the default handle, no mesh) and only grow, so a released id is never handed out again.
+        std::uint64_t nextId = 1;
+        std::unordered_map<std::uint64_t, Entry> meshes;
+    };
+
+    CollisionMeshes::CollisionMeshes(ILogger& logger) : m_impl(std::make_unique<Impl>(logger))
+    {
+    }
+
+    CollisionMeshes::~CollisionMeshes() = default;
+
+    CollisionMesh CollisionMeshes::Create(std::span<const Math::Vec3> vertices, std::span<const std::uint32_t> indices)
+    {
+        const char* problem = nullptr;
+        if (vertices.empty())
+        {
+            problem = "it has no vertices";
+        }
+        else if (indices.size() % 3 != 0)
+        {
+            problem = "its index count is not a multiple of three";
+        }
+        else if (std::any_of(indices.begin(), indices.end(), [&](std::uint32_t i) { return i >= vertices.size(); }))
+        {
+            problem = "an index is past the last vertex";
+        }
+        if (problem != nullptr)
+        {
+            m_impl->logger->Error(std::string("A collision mesh was not made: ") + problem);
+            return CollisionMesh{};
+        }
+
+        Impl::Entry entry;
+        entry.vertices.reserve(vertices.size());
+        for (const Math::Vec3& v : vertices)
+        {
+            entry.vertices.push_back(ToJolt(v));
+        }
+        entry.triangles.reserve(indices.size() / 3);
+        for (std::size_t i = 0; i < indices.size(); i += 3)
+        {
+            entry.triangles.push_back(JPH::IndexedTriangle(indices[i], indices[i + 1], indices[i + 2]));
+        }
+        const CollisionMesh mesh{m_impl->nextId++};
+        m_impl->meshes.emplace(mesh.id, std::move(entry));
+        return mesh;
+    }
+
+    bool CollisionMeshes::Release(CollisionMesh mesh)
+    {
+        if (m_impl->meshes.erase(mesh.id) == 0)
+        {
+            m_impl->logger->Warn("Collision mesh " + std::to_string(mesh.id) +
+                                 " was released, but it is not alive (never made, or already released)");
+            return false;
+        }
+        return true;
+    }
+
+    struct World::Impl
+    {
+        Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, ThreadPool* workers)
+            : meshes(&worldMeshes.Implementation()), logger(&worldLogger), objectLayers(worldLogger),
+              broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers), objectPairs(objectLayers),
+              jobs(MakeJobs(workers))
+        {
+        }
+
+        // The backend shape for a collider, the entity's scale baked in. Identical primitives share one shape; hulls
+        // and meshes share their cooked shape, wrapped per body when scaled (they take any scale per axis).
+        JPH::Ref<JPH::Shape> MakeShape(const CollisionShape& shape, const Math::Vec3& scale)
+        {
+            if (IsPrimitive(shape))
+            {
+                const Primitive primitive = Bake(shape, scale);
+                if (const auto it = primitives.find(primitive); it != primitives.end())
+                {
+                    return it->second;
+                }
+                PruneUnused();
+                return primitives.emplace(primitive, Make(primitive)).first->second;
+            }
+            const JPH::Shape* cooked = meshes->Shape(shape);
+            JPH_ASSERT(cooked != nullptr);
+            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
+            return scaled.Get();
+        }
+
+        // Forgets cached shapes no body uses any more, each time the cache has doubled since it was last pruned.
+        void PruneUnused()
+        {
+            if (primitives.size() < pruneAt)
+            {
+                return;
+            }
+            std::erase_if(primitives, [](const auto& entry) { return entry.second->GetRefCount() == 1; });
+            pruneAt = std::max(minimumPruneAt, 2 * primitives.size());
+        }
+
+        static constexpr std::size_t minimumPruneAt = 64;
+
+        CollisionMeshes::Impl* meshes;
+        // The private shape cache keyed by value: one backend shape per distinct primitive.
+        std::map<Primitive, JPH::Ref<JPH::Shape>> primitives;
+        std::size_t pruneAt = minimumPruneAt;
         ILogger* logger;
         ObjectLayers objectLayers;
         BroadPhaseLayers broadPhaseLayers;
@@ -503,8 +755,8 @@ namespace Fenrir::Backend
         }
     };
 
-    World::World(const WorldSettings& settings, ILogger& logger)
-        : m_impl(std::make_unique<Impl>(logger, settings.workers))
+    World::World(const WorldSettings& settings, CollisionMeshes& meshes, ILogger& logger)
+        : m_impl(std::make_unique<Impl>(meshes, logger, settings.workers))
     {
         m_impl->system.Init(maxBodies, 0, maxBodyPairs, maxContactConstraints, m_impl->broadPhaseLayers,
                             m_impl->objectVsBroadPhase, m_impl->objectPairs);
@@ -523,6 +775,11 @@ namespace Fenrir::Backend
         }
     }
 
+    bool World::CanMakeShape(const CollisionShape& shape)
+    {
+        return IsPrimitive(shape) || m_impl->meshes->Shape(shape) != nullptr;
+    }
+
     void World::CreateBodies(std::span<const BodyDesc> bodies, std::span<BodyId> ids)
     {
         std::vector<JPH::BodyID> created;
@@ -530,8 +787,9 @@ namespace Fenrir::Backend
         for (std::size_t i = 0; i < bodies.size(); ++i)
         {
             const BodyDesc& desc = bodies[i];
-            JPH::BodyCreationSettings settings(MakeShape(desc.shape, desc.scale), ToJolt(desc.position),
-                                               ToJolt(desc.rotation), ToJolt(desc.motion.motionType),
+            const JPH::Ref<JPH::Shape> shape = m_impl->MakeShape(desc.shape, desc.scale);
+            JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation),
+                                               ToJolt(desc.motion.motionType),
                                                m_impl->AcquireLayer(desc.motion.motionType, desc.filter));
             settings.mAllowDynamicOrKinematic = desc.canMove;
             settings.mUserData = desc.entity;
@@ -542,8 +800,8 @@ namespace Fenrir::Backend
             settings.mGravityFactor = desc.motion.gravityScale;
             settings.mFriction = desc.material.friction;
             settings.mRestitution = desc.material.restitution;
-            settings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
-            settings.mMassPropertiesOverride.mMass = desc.motion.mass;
+            settings.mOverrideMassProperties = JPH::EOverrideMassProperties::MassAndInertiaProvided;
+            settings.mMassPropertiesOverride = MassOf(*shape, desc.motion.mass);
 
             JPH::Body* body = m_impl->Bodies().CreateBody(settings);
             if (body == nullptr)
@@ -622,12 +880,13 @@ namespace Fenrir::Backend
     void World::SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass)
     {
         const JPH::AABox before = m_impl->Bounds(id);
-        m_impl->Bodies().SetShape(ToJolt(id), MakeShape(shape, scale), true, JPH::EActivation::Activate);
-        // The new shape's mass properties come from its volume and density; keep the body's own mass.
-        m_impl->Write(id, [mass](JPH::Body& body) {
+        const JPH::Ref<JPH::Shape> made = m_impl->MakeShape(shape, scale);
+        m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
+        // The body keeps its own mass; its inertia follows the new shape.
+        m_impl->Write(id, [&made, mass](JPH::Body& body) {
             if (JPH::MotionProperties* motion = body.GetMotionPropertiesUnchecked())
             {
-                motion->ScaleToMass(mass);
+                motion->SetMassProperties(JPH::EAllowedDOFs::All, MassOf(*made, mass));
             }
         });
         m_impl->WakeAround(before);
@@ -665,6 +924,22 @@ namespace Fenrir::Backend
             properties->SetGravityFactor(motion.gravityScale);
             properties->ScaleToMass(motion.mass);
         });
+    }
+
+    std::size_t World::DistinctShapeCount() const
+    {
+        JPH::BodyIDVector ids;
+        m_impl->system.GetBodies(ids);
+        std::set<const JPH::Shape*> shapes;
+        for (const JPH::BodyID id : ids)
+        {
+            JPH::BodyLockRead lock(m_impl->system.GetBodyLockInterfaceNoLock(), id);
+            if (lock.Succeeded())
+            {
+                shapes.insert(lock.GetBody().GetShape());
+            }
+        }
+        return shapes.size();
     }
 
     BodyState World::GetState(BodyId id) const
