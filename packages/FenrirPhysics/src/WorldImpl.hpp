@@ -49,7 +49,8 @@ namespace Fenrir
 
         /**
          * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's pose `fraction` of the way from its
-         * previous step pose to its current one, parents before children.
+         * previous step pose to its current one, parents before children. A dynamic or kinematic body that is not
+         * interpolated, beneath one that is, is written at its step pose, so its parent's blend does not carry it.
          */
         void Blend(float fraction);
 

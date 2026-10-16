@@ -277,6 +277,34 @@ TEST_CASE("Children of an interpolated body end up at consistent world transform
     }
 }
 
+TEST_CASE("A non-interpolated body under an interpolated parent is shown at its own step pose between ticks",
+          "[physics][interpolation]")
+{
+    PhysicsApp test{PhysicsConfig{}};
+    Entity parent = AddBody(test.Entities(), Math::Vec3(0.0f, 20.0f, 0.0f));
+    Entity child = AddBody(test.Entities(), Math::Vec3(2.0f, 0.0f, 0.0f));
+    child.GetComponent<RigidBody>().interpolate = false;
+    child.GetComponent<RigidBody>().linearVelocity = Math::Vec3(0.0f, 3.0f, 0.0f); // not falling with its parent
+    parent.AddChild(child);
+    const Poses childSteps = RecordStepPoses(test.app, child);
+    test.Run(0.25);
+
+    int between = 0;
+    for (int frame = 0; frame < 40; ++frame)
+    {
+        test.app.RunFrame(shortFrame);
+        between += FractionOf(test.app) > 0.05f ? 1 : 0;
+        const Math::Vec3 step = childSteps->back().pos;
+        const Math::Vec3 shown = PositionOf(child);
+        INFO("frame " << frame << ": the child is not shown at its last step pose " << step.x << ", " << step.y
+                      << " but at " << shown.x << ", " << shown.y << ", carried by its parent's blend");
+        REQUIRE(shown.y == Approx(step.y).margin(1e-4));
+        REQUIRE(shown.x == Approx(step.x).margin(1e-4));
+    }
+    INFO("too few frames ended part of the way through a tick for the parent to be blended");
+    REQUIRE(between > 20);
+}
+
 TEST_CASE("An inactive collider is not blended back to where it was made", "[physics][interpolation]")
 {
     PhysicsApp test{PhysicsConfig{}};

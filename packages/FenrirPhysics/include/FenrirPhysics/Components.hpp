@@ -51,7 +51,8 @@ namespace Fenrir
          * @brief Whether a dynamic or kinematic body is shown between its last two step poses when a frame ends part
          * of the way through a tick, so it moves smoothly at any frame rate, one step behind the simulation. Between
          * ticks its `Transform` holds the blended pose; `Tick` systems see the true one. Turn it off for a body game
-         * code moves every frame, so it does not lag a step. PhysicsConfig can turn interpolation off for every body.
+         * code moves every frame, so it does not lag a step. Off, the body is shown at its step pose, even beneath an
+         * interpolated parent. PhysicsConfig can turn interpolation off for every body.
          */
         bool interpolate = true;
     };

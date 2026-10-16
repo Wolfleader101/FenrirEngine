@@ -321,8 +321,12 @@ namespace Fenrir
             int depth;
             Entity entity;
             Record* record;
+            // Shown at its step pose: a body that is not interpolated, written only because an ancestor is.
+            bool atStepPose;
         };
         std::vector<Blended> blended;
+        std::vector<Blended> carried;
+        std::set<std::uint32_t> interpolated;
         for (auto& [id, record] : m_bodies)
         {
             if (!record.Active() || record.motion.motionType == MotionType::Static || record.heldByGame ||
@@ -332,11 +336,32 @@ namespace Fenrir
             }
             Entity entity = m_entities->GetEntity(id);
             const RigidBody* rigidBody = RigidBodyOf(entity);
-            if (rigidBody == nullptr || !rigidBody->interpolate || !entity.HasComponent<Transform>())
+            if (rigidBody == nullptr || !entity.HasComponent<Transform>())
             {
                 continue;
             }
-            blended.push_back(Blended{DepthOf(entity), entity, &record});
+            if (rigidBody->interpolate)
+            {
+                interpolated.insert(id);
+                blended.push_back(Blended{DepthOf(entity), entity, &record, false});
+            }
+            else
+            {
+                carried.push_back(Blended{DepthOf(entity), entity, &record, true});
+            }
+        }
+        // A body that is not interpolated is still moved by an interpolated ancestor's blend, through its local
+        // Transform: it is written back at its own step pose, so it is shown where it is.
+        for (const Blended& body : carried)
+        {
+            for (Entity above = ParentOf(body.entity); above.IsValid(); above = ParentOf(above))
+            {
+                if (interpolated.contains(above.GetId()))
+                {
+                    blended.push_back(body);
+                    break;
+                }
+            }
         }
         // Parents before children, so each child's world pose is set against its parent's blended one.
         std::stable_sort(blended.begin(), blended.end(),
@@ -351,8 +376,11 @@ namespace Fenrir
         {
             Record& record = *body.record;
             Transform world = record.world;
-            world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
-            world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            if (!body.atStepPose)
+            {
+                world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
+                world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            }
             SetWorldTransform(body.entity, world);
             record.shownLocal = body.entity.GetComponent<Transform>();
             record.blended = true;
