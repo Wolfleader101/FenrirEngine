@@ -29,6 +29,11 @@ namespace Fenrir
         /** @brief Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a
          * default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named. */
         std::vector<CollisionLayer> collisionLayers;
+        /**
+         * @brief Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App
+         * alone. Results are the same either way.
+         */
+        bool useWorkerThreads = true;
     };
 
     /**

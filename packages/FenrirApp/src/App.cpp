@@ -8,6 +8,12 @@ namespace Fenrir
         m_scenes.push_back(std::make_unique<Scene>("Default"));
     }
 
+    App::App(std::unique_ptr<ILogger> logger, std::size_t workerThreads)
+        : m_time(), m_scheduler(workerThreads), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
+    {
+        m_scenes.push_back(std::make_unique<Scene>("Default"));
+    }
+
     App& App::AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
     {
         m_scheduler.AddSystems(priority, systems);

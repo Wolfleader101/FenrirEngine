@@ -6,18 +6,23 @@
 #include <cstdarg>
 #include <cstdio>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <vector>
 
 #include "FenrirLogger/ILogger.hpp"
+#include "FenrirScheduler/ThreadPool.hpp"
 
 #include <Jolt/Jolt.h>
 
 JPH_SUPPRESS_WARNING_PUSH
 JPH_SUPPRESS_WARNINGS
 #include <Jolt/Core/Factory.h>
+#include <Jolt/Core/FixedSizeFreeList.h>
 #include <Jolt/Core/JobSystemSingleThreaded.h>
+#include <Jolt/Core/JobSystemWithBarrier.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
@@ -316,6 +321,85 @@ namespace Fenrir::Backend
         {
             return JPH::BodyID(id.value);
         }
+
+        // Runs a step's jobs on the App's worker threads. The stepping thread is not one of them: it waits on a
+        // barrier, which runs the barrier's jobs itself while it waits (JobSystemWithBarrier). A job already run that
+        // way does nothing when a worker reaches it, so the step finishes even with every worker busy elsewhere, or if
+        // the stepping thread is itself a worker: there is no deadlock to wait for.
+        //
+        // A queued job may still be waiting for a worker after the step returns, and releasing it frees it into this
+        // job system: each queued job keeps the job system alive (shared ownership) rather than the world waiting.
+        class PoolJobs final : public JPH::JobSystemWithBarrier, public std::enable_shared_from_this<PoolJobs>
+        {
+          public:
+            explicit PoolJobs(ThreadPool& pool) : JPH::JobSystemWithBarrier(JPH::cMaxPhysicsBarriers), m_pool(&pool)
+            {
+                m_jobs.Init(JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsJobs);
+            }
+
+            // The workers, and the stepping thread working while it waits.
+            int GetMaxConcurrency() const override
+            {
+                return static_cast<int>(m_pool->ThreadCount()) + 1;
+            }
+
+            JPH::JobHandle CreateJob(const char* name, JPH::ColorArg color, const JobFunction& function,
+                                     JPH::uint32 dependencies) override
+            {
+                JPH::uint32 index = Jobs::cInvalidObjectIndex;
+                while ((index = m_jobs.ConstructObject(name, color, this, function, dependencies)) ==
+                       Jobs::cInvalidObjectIndex)
+                {
+                    std::this_thread::yield(); // all cMaxPhysicsJobs in use: wait for one to be freed
+                }
+                Job* job = &m_jobs.Get(index);
+                JPH::JobHandle handle(job); // the job may finish as soon as it is queued
+                if (dependencies == 0)
+                {
+                    QueueJob(job);
+                }
+                return handle;
+            }
+
+          protected:
+            void QueueJob(Job* job) override
+            {
+                job->AddRef();
+                m_pool->Enqueue([self = shared_from_this(), job] {
+                    job->Execute();
+                    job->Release();
+                });
+            }
+
+            void QueueJobs(Job** jobs, JPH::uint count) override
+            {
+                for (JPH::uint i = 0; i < count; ++i)
+                {
+                    QueueJob(jobs[i]);
+                }
+            }
+
+            void FreeJob(Job* job) override
+            {
+                m_jobs.DestructObject(job);
+            }
+
+          private:
+            using Jobs = JPH::FixedSizeFreeList<Job>;
+
+            ThreadPool* m_pool;
+            Jobs m_jobs;
+        };
+
+        // The job system a world steps with: the App's worker threads, or none (every job runs as it is queued).
+        std::shared_ptr<JPH::JobSystem> MakeJobs(ThreadPool* workers)
+        {
+            if (workers == nullptr)
+            {
+                return std::make_shared<JPH::JobSystemSingleThreaded>(JPH::cMaxPhysicsJobs);
+            }
+            return std::make_shared<PoolJobs>(*workers);
+        }
     } // namespace
 
     Context::Context(ILogger& logger) : m_logger(&logger)
@@ -349,9 +433,9 @@ namespace Fenrir::Backend
 
     struct World::Impl
     {
-        Impl(ILogger& worldLogger, JPH::uint bodyCapacity)
+        Impl(ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers)
             : logger(&worldLogger), maxBodies(bodyCapacity), objectLayers(worldLogger), broadPhaseLayers(objectLayers),
-              objectVsBroadPhase(objectLayers), objectPairs(objectLayers)
+              objectVsBroadPhase(objectLayers), objectPairs(objectLayers), jobs(MakeJobs(workers))
         {
         }
 
@@ -362,7 +446,7 @@ namespace Fenrir::Backend
         ObjectVsBroadPhase objectVsBroadPhase;
         ObjectPairs objectPairs;
         JPH::TempAllocatorImpl tempAllocator{tempAllocatorBytes};
-        JPH::JobSystemSingleThreaded jobs{JPH::cMaxPhysicsJobs};
+        std::shared_ptr<JPH::JobSystem> jobs;
         JPH::PhysicsSystem system;
 
         // Every call comes from the thread that runs the App, never during a step, so no body locks are needed.
@@ -440,7 +524,8 @@ namespace Fenrir::Backend
 
     World::World(const WorldSettings& settings, ILogger& logger)
         : m_impl(std::make_unique<Impl>(
-              logger, Capacity(settings.maxBodies, JPH::PhysicsSystem::cMaxBodiesLimit, "bodies", logger)))
+              logger, Capacity(settings.maxBodies, JPH::PhysicsSystem::cMaxBodiesLimit, "bodies", logger),
+              settings.workers))
     {
         m_impl->system.Init(
             m_impl->maxBodies, 0,
@@ -658,7 +743,7 @@ namespace Fenrir::Backend
     void World::Step(float dt, int collisionSteps)
     {
         const JPH::EPhysicsUpdateError error =
-            m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, &m_impl->jobs);
+            m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         if (error != JPH::EPhysicsUpdateError::None)
         {
             m_impl->logger->Warn("Physics step ran out of room for body pairs or contacts (error " +

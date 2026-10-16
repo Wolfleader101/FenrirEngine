@@ -63,7 +63,11 @@ namespace Fenrir
     class Scheduler
     {
       public:
+        /** @brief A scheduler whose parallel systems run on one worker thread per hardware thread. */
         Scheduler();
+
+        /** @brief A scheduler whose parallel systems run on `workerThreads` worker threads (at least one). */
+        explicit Scheduler(std::size_t workerThreads);
 
         Scheduler& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
         Scheduler& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
@@ -73,6 +77,12 @@ namespace Fenrir
 
         void Init(App& app);
         void RunSystems(App& app, SchedulePriority priority);
+
+        /** @brief The worker threads parallel systems run on, which other engine work may share. */
+        [[nodiscard]] ThreadPool& GetThreadPool() noexcept
+        {
+            return m_threadPool;
+        }
 
       private:
         std::map<SchedulePriority, std::vector<SystemFunc>> m_runOnceSystems;

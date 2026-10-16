@@ -347,6 +347,21 @@ namespace Fenrir
         App(std::unique_ptr<ILogger> logger);
 
         /**
+         * @brief Construct a new App object whose parallel systems run on `workerThreads` worker threads (at least
+         * one), rather than one per hardware thread
+         *
+         * @param logger the logger to use
+         * @param workerThreads the number of worker threads
+         */
+        App(std::unique_ptr<ILogger> logger, std::size_t workerThreads);
+
+        /** @brief The worker threads parallel systems run on, shared with engine work such as physics. */
+        [[nodiscard]] ThreadPool& GetThreadPool() noexcept
+        {
+            return m_scheduler.GetThreadPool();
+        }
+
+        /**
          * @brief Add systems to the scheduler that run in parallel
          *
          * @param priority the priority of the systems
