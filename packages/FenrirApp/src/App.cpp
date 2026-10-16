@@ -1,11 +1,18 @@
 #include "FenrirApp/App.hpp"
 
+#include <thread>
+
 namespace Fenrir
 {
-    App::App(std::unique_ptr<ILogger> logger)
-        : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
+    // As Scheduler() does: one worker thread per hardware thread.
+    App::App(std::unique_ptr<ILogger> logger) : App(std::move(logger), std::thread::hardware_concurrency())
     {
-        m_scenes.push_back(Scene("Default"));
+    }
+
+    App::App(std::unique_ptr<ILogger> logger, std::size_t workerThreads)
+        : m_time(), m_scheduler(workerThreads), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
+    {
+        m_scenes.push_back(std::make_unique<Scene>("Default"));
     }
 
     App& App::AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems)
@@ -150,32 +157,69 @@ namespace Fenrir
         return true;
     }
 
+    void App::InitOnce()
+    {
+        if (!m_initialized)
+        {
+            m_initialized = true;
+            m_scheduler.Init(*this);
+        }
+    }
+
     void App::Run()
     {
-        m_scheduler.Init(*this);
+        // Before the first measurement, so the first frame's delta covers the init phases, as it always has.
+        InitOnce();
 
         while (m_running)
         {
-            m_time.Update();
-
-            m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
-
-            while (m_time.accumulator >= m_time.tickRate)
-            {
-                m_scheduler.RunSystems(*this, SchedulePriority::Tick);
-
-                m_time.accumulator -= m_time.tickRate;
-            }
-
-            m_scheduler.RunSystems(*this, SchedulePriority::Update);
-
-            m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
-
-            // m_scheduler.RunSystems(*this, SchedulePriority::LastUpdate);
-
-            UpdateEvents();
+            RunFrame(m_time.MeasureFrame());
         }
+        RunExit();
+    }
+
+    void App::RunExit()
+    {
         m_scheduler.RunSystems(*this, SchedulePriority::Exit);
+    }
+
+    void App::RunFrame(double deltaTime)
+    {
+        InitOnce();
+
+        m_time.Advance(deltaTime);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::BeforeTicks);
+
+        int ticks = 0;
+        while (m_time.accumulator >= m_time.tickRate && ticks < m_time.maxTicksPerFrame)
+        {
+            m_scheduler.RunSystems(*this, SchedulePriority::PreTick);
+            m_scheduler.RunSystems(*this, SchedulePriority::Tick);
+            m_scheduler.RunSystems(*this, SchedulePriority::PostTick);
+
+            m_time.accumulator -= m_time.tickRate;
+            ++ticks;
+        }
+
+        // Still owing a whole tick after the cap: drop everything owed, so a slow frame cannot make the next one
+        // slower still.
+        if (m_time.accumulator >= m_time.tickRate)
+        {
+            m_logger->Warn("A frame owed more than {} ticks; dropped {:.4f} s of simulation time",
+                           m_time.maxTicksPerFrame, m_time.accumulator);
+            m_time.accumulator = 0.0;
+        }
+
+        m_scheduler.RunSystems(*this, SchedulePriority::AfterTicks);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::Update);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
+
+        UpdateEvents();
     }
 
     const Time& App::GetTime() const
@@ -185,7 +229,7 @@ namespace Fenrir
 
     Scene& App::GetActiveScene()
     {
-        return m_scenes.at(activeSceneIndex);
+        return *m_scenes.at(activeSceneIndex);
     }
 
     void App::ChangeActiveScene(const std::string& name)
@@ -193,7 +237,7 @@ namespace Fenrir
 
         for (size_t i = 0; i < m_scenes.size(); i++)
         {
-            if (m_scenes.at(i).GetName() == name)
+            if (m_scenes.at(i)->GetName() == name)
             {
                 activeSceneIndex = i;
                 return;
@@ -206,17 +250,26 @@ namespace Fenrir
 
     Scene& App::CreateScene(const std::string& name)
     {
-        m_scenes.push_back(Scene(name));
-        return m_scenes.back();
+        m_scenes.push_back(std::make_unique<Scene>(name));
+        return *m_scenes.back();
     }
 
     void App::DestroyScene(const std::string& name)
     {
         for (size_t i = 0; i < m_scenes.size(); i++)
         {
-            if (m_scenes.at(i).GetName() == name)
+            if (m_scenes.at(i)->GetName() == name)
             {
-                m_scenes.erase(m_scenes.begin() + static_cast<int>(i));
+                if (i == activeSceneIndex)
+                {
+                    m_logger->Error("Scene {0} is active and cannot be destroyed; change the active scene first", name);
+                    return;
+                }
+                m_scenes.erase(m_scenes.begin() + static_cast<std::ptrdiff_t>(i));
+                if (i < activeSceneIndex)
+                {
+                    --activeSceneIndex;
+                }
                 return;
             }
         }
@@ -230,15 +283,15 @@ namespace Fenrir
 
         for (size_t i = 0; i < m_scenes.size(); i++)
         {
-            if (m_scenes.at(i).GetName() == name)
+            if (m_scenes.at(i)->GetName() == name)
             {
-                return m_scenes.at(i);
+                return *m_scenes.at(i);
             }
         }
 
         //! if we get here, the scene doesnt exist
         m_logger->Error("Scene with name {0} does not exist", name);
-        return m_scenes.at(0);
+        return *m_scenes.at(0);
     }
 
 } // namespace Fenrir
