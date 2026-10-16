@@ -434,15 +434,16 @@ TEST_CASE("an event is put in its queue at playback and not before", "[change-bu
     REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, world.ping, &value) == ChangeError::None);
 
     INFO("A system should not read its own send before playback");
-    REQUIRE(world.headless.Get().ReadEvents<Ping>().empty());
+    REQUIRE(Testing::HeldEvents<Ping>(world.headless.Get()).empty());
 
     const auto result = world.Apply();
 
     INFO("The send should be applied");
     REQUIRE(result.applied == 1);
     INFO("The event should now be in the queue with its value");
-    REQUIRE(world.headless.Get().ReadEvents<Ping>().size() == 1);
-    REQUIRE(world.headless.Get().ReadEvents<Ping>().front().Value == 7);
+    const std::vector<Ping> events = Testing::HeldEvents<Ping>(world.headless.Get());
+    REQUIRE(events.size() == 1);
+    REQUIRE(events.front().Value == 7);
 }
 
 TEST_CASE("an event whose queue has gone is skipped with a warning", "[change-buffer]")

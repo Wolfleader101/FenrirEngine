@@ -48,10 +48,12 @@ public static class EventProbe
     public static string Dump() => string.Join(",", Events);
 }
 
-// Order 40: sends a Ping on the first frame and reads Pings every frame. Its own send is not among them.
+// Order 40: sends a Ping on the first frame and reads Pings every frame through its own reader. Its own send reaches it
+// the frame after, once.
 [System(Phase.Update, Order = 40)]
 public sealed class PingSender : ISystem
 {
+    private readonly EventReader<Ping> pings = new();
     private int frame;
 
     public void OnUpdate(in SystemContext context)
@@ -61,35 +63,57 @@ public sealed class PingSender : ISystem
         frame++;
         if (frame == 1)
             context.Events.Send(new Ping { Value = 7 });
-        EventProbe.Add("Own=" + context.Events.Read<Ping>().Count);
+        EventProbe.Add("Own=" + pings.Read().Count);
     }
 }
 
-// Order 41: runs after the sender returned, so it sees the send.
+// Order 41: runs after the sender returned, so it sees the send in the same frame.
 [System(Phase.Update, Order = 41)]
 public sealed class PingReader : ISystem
 {
+    private readonly EventReader<Ping> pings = new();
+
     public void OnUpdate(in SystemContext context)
     {
         if (EventProbe.Enabled)
-            EventProbe.Add("Later=" + context.Events.Read<Ping>().Count);
+            EventProbe.Add("Later=" + pings.Read().Count);
     }
 }
 
-// Order 42: reads the C++ event, which a native system sends on the first frame.
+// Order 42: reads the C++ event, which native systems send.
 [System(Phase.Update, Order = 42)]
 public sealed class AlertReader : ISystem
 {
+    private readonly EventReader<Alert> alerts = new();
+
     public void OnUpdate(in SystemContext context)
     {
         if (EventProbe.Enabled)
-            EventProbe.Add("Alerts=" + context.Events.Read<Alert>().Count);
+            EventProbe.Add("Alerts=" + alerts.Read().Count);
     }
 }
 
-// Called by the tests through Iris, outside any system.
+// Reads the C++ event in the fixed step, which runs zero, one or several times a frame.
+[System(Phase.Tick, Order = 42)]
+public sealed class TickAlertReader : ISystem
+{
+    private readonly EventReader<Alert> alerts = new();
+
+    public void OnUpdate(in SystemContext context)
+    {
+        if (EventProbe.Enabled)
+            EventProbe.Add("Tick=" + alerts.Read().Count);
+    }
+}
+
+// Called by the tests through Iris, outside any system. Each helper has a reader of its own, as a system would.
 public static class EventScripts
 {
+    private static readonly EventReader<Alert> alerts = new();
+    private static readonly EventReader<Ping> summed = new();
+    private static readonly EventReader<Ping> counted = new();
+    private static readonly EventReader<Ping> viewed = new();
+
     private static SystemContext Context => default;
 
     public static void SendPing(int value) => Context.Events.Send(new Ping { Value = value });
@@ -99,41 +123,51 @@ public static class EventScripts
     public static string ReadAlerts()
     {
         var codes = new List<string>();
-        foreach (var alert in Context.Events.Read<Alert>())
+        foreach (var alert in alerts.Read())
             codes.Add(alert.Code.ToString());
         return string.Join(",", codes);
+    }
+
+    // A reader made now, as a system added late would have: the codes its first read yields, then how many it missed.
+    public static string ReadAlertsWithNewReader()
+    {
+        var codes = new List<string>();
+        var read = new EventReader<Alert>().Read();
+        foreach (var alert in read)
+            codes.Add(alert.Code.ToString());
+        return string.Join(",", codes) + ";missed=" + read.Missed;
     }
 
     public static int SumPings()
     {
         int sum = 0;
-        foreach (var ping in Context.Events.Read<Ping>())
+        foreach (var ping in summed.Read())
             sum += ping.Value;
         return sum;
     }
 
-    // A send is not readable by the code that made it.
+    // A send is not readable by the code that made it until it returns.
     public static int SendThenCount(int value)
     {
         Context.Events.Send(new Ping { Value = value });
-        return Context.Events.Read<Ping>().Count;
+        return counted.Read().Count;
     }
 
-    // A view taken before sends is still the same events after them.
+    // What a read yielded is still the same events after the reader sends more, and those sends are not read yet.
     public static bool ViewStaysValid()
     {
-        var before = Context.Events.Read<Ping>();
+        var before = viewed.Read();
         int count = before.Count;
         int first = before[0].Value;
         for (int index = 0; index < 100; index++)
             Context.Events.Send(new Ping { Value = 1000 + index });
-        var after = Context.Events.Read<Ping>();
-        return before.Count == count && after.Count == count && before[0].Value == first && after[0].Value == first;
+        var after = viewed.Read();
+        return count > 0 && before.Count == count && before[0].Value == first && after.Count == 0;
     }
 
-    public static string TryReadFake() => Message(() => { _ = Context.Events.Read<FakeAlert>().Count; });
+    public static string TryReadFake() => Message(() => { _ = new EventReader<FakeAlert>().Read().Count; });
 
-    public static string TryReadOrphan() => Message(() => { _ = Context.Events.Read<Orphan>().Count; });
+    public static string TryReadOrphan() => Message(() => { _ = new EventReader<Orphan>().Read().Count; });
 
     private static string Message(Action action)
     {

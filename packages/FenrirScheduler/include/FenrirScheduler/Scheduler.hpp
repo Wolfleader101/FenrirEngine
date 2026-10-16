@@ -3,6 +3,7 @@
 #include <functional>
 #include <initializer_list>
 #include <map>
+#include <vector>
 
 #include "ThreadPool.hpp"
 
@@ -43,6 +44,27 @@ namespace Fenrir
         // CreateScene,
         // LastUpdate,
         Exit
+    };
+
+    /**
+     * @brief The events one system sent while the scheduler ran it in parallel with others. They are held until the
+     * whole batch has run, then sent in the order the systems were registered, so parallel sends arrive in the same
+     * order every run. Sequential systems have none and send directly.
+     */
+    class SendBuffer
+    {
+      public:
+        /** @brief The buffer of the parallel system running on this thread, or null outside a parallel system. */
+        [[nodiscard]] static SendBuffer* OfThisThread() noexcept;
+
+        /** @brief Holds a send until the system's batch has run. */
+        void Add(std::function<void()> send);
+
+        /** @brief Makes the held sends, in the order they were added, and empties the buffer. */
+        void Flush();
+
+      private:
+        std::vector<std::function<void()>> m_sends;
     };
 
     class Scheduler

@@ -10,8 +10,8 @@ public struct Whisper : IEvent
 // What a system reads is a view of the engine's queue: it cannot be written through.
 public static class Tamper
 {
-    public static void Rewrite(in SystemContext context)
+    public static void Rewrite(EventReader<Whisper> reader)
     {
-        context.Events.Read<Whisper>()[0].Volume = 11;
+        reader.Read()[0].Volume = 11;
     }
 }

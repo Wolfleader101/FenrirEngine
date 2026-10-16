@@ -461,7 +461,7 @@ TEST_CASE("an event queue whose layout is unchanged is kept with its events", "[
     INFO("The queue should be the same one");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") == queue);
     INFO("Its event should still be in it");
-    REQUIRE(queue->ReadRaw().count == 1);
+    REQUIRE(Testing::HeldEventCount(*queue) == 1);
 }
 
 TEST_CASE("an event that no longer exists loses its queue with a warning", "[reconcile]")
@@ -506,7 +506,7 @@ TEST_CASE("an event queue whose layout changed is removed with its events and ma
     const auto* queue = world.headless.Get().FindEventQueue("Rules.Beep");
     INFO("The queue should exist with the new event size and none of the old events");
     REQUIRE(queue != nullptr);
-    REQUIRE((queue->EventSize() == 8 && queue->ReadRaw().count == 0));
+    REQUIRE((queue->EventSize() == 8 && Testing::HeldEventCount(*queue) == 0));
     INFO("The warning should say the queue and its events were dropped");
     REQUIRE(world.headless.Logger().Contains(
         Testing::LogLevel::Warn,
@@ -544,7 +544,7 @@ TEST_CASE("a failure of the native components' check changes nothing", "[reconci
     REQUIRE(world.Entities().HasEntity(entity));
     INFO("Nor should its event queue and the event in it");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->EventSize() == 4);
-    REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->ReadRaw().count == 1);
+    REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
     INFO("Nothing of the new report should be registered, and ownership should be as it was");
     REQUIRE((world.registry.Find("Rules.Armour") < 0 && world.registry.Find("Rules.Health") < 0));
     REQUIRE((world.owned.components.size() == 1 && world.owned.components.contains("Rules.Health")));
