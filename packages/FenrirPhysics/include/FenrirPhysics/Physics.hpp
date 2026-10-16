@@ -35,6 +35,9 @@ namespace Fenrir
          * alone. Results are the same either way.
          */
         bool useWorkerThreads = true;
+        /** @brief Whether bodies are interpolated between ticks (RigidBody::interpolate). Off: every body is shown at
+         * its step poses only. */
+        bool interpolate = true;
     };
 
     /**
@@ -52,7 +55,9 @@ namespace Fenrir
          * scene with a RigidBody or Collider in it. In `PostTick`, the active scene's world brings its bodies up to
          * date with their components and world transforms, steps once by `Time::tickRate`, and writes dynamic bodies'
          * poses and velocities back. Inactive scenes' worlds do not step. A world's capacities are those in `config`
-         * when the world is made, fixed for its life.
+         * when the world is made, fixed for its life. In `AfterTicks` it writes each interpolated body's blended pose
+         * into its `Transform`, and in `BeforeTicks` restores the true pose; a `Transform` game code changed in between
+         * is kept, as a teleport.
          */
         [[nodiscard]] static Physics Install(App& app, PhysicsConfig config = {});
 

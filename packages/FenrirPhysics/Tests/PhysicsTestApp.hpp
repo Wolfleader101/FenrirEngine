@@ -65,10 +65,21 @@ namespace PhysicsTest
 
     inline const Fenrir::Math::Quat identity(1.0f, 0.0f, 0.0f, 0.0f);
 
-    /** An App with physics installed. The members end in reverse order: physics before the app. */
+    /** Interpolation off: after a whole-tick frame a body's Transform is its latest step pose, not one step behind. */
+    inline Fenrir::PhysicsConfig StepPosesOnly()
+    {
+        Fenrir::PhysicsConfig config;
+        config.interpolate = false;
+        return config;
+    }
+
+    /**
+     * An App with physics installed, by default with interpolation off (StepPosesOnly), so tests read step poses. The
+     * members end in reverse order: physics before the app.
+     */
     struct PhysicsApp
     {
-        PhysicsApp() : PhysicsApp(Fenrir::PhysicsConfig{})
+        PhysicsApp() : PhysicsApp(StepPosesOnly())
         {
         }
 

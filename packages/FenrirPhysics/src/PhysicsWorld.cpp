@@ -103,6 +103,24 @@ namespace Fenrir
             return entity.HasComponent<RigidBody>() ? &entity.GetComponent<RigidBody>() : nullptr;
         }
 
+        bool Same(const Transform& a, const Transform& b)
+        {
+            return Same(a.pos, b.pos) && Same(a.rot, b.rot) && Same(a.scale, b.scale);
+        }
+
+        // How many ancestors the entity has: blending writes parents before children.
+        int DepthOf(const Entity& entity)
+        {
+            int depth = 0;
+            for (Entity at = entity;
+                 at.HasComponent<Relationship>() && at.GetComponent<Relationship>().parent.IsValid();
+                 at = at.GetComponent<Relationship>().parent)
+            {
+                ++depth;
+            }
+            return depth;
+        }
+
         // Enough collision steps that none is longer than a 60 Hz step.
         int CollisionSteps(float dt)
         {
@@ -169,6 +187,90 @@ namespace Fenrir
         ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        AdvancePoses();
+    }
+
+    void PhysicsWorld::Impl::AdvancePoses()
+    {
+        for (auto& [id, record] : m_bodies)
+        {
+            record.previous = record.snap ? record.world : record.current;
+            record.current = record.world;
+            record.snap = false;
+            record.heldByGame = false;
+        }
+    }
+
+    void PhysicsWorld::Impl::Restore()
+    {
+        for (auto& [id, record] : m_bodies)
+        {
+            if (!record.blended)
+            {
+                continue;
+            }
+            record.blended = false;
+            if (!m_entities->HasEntity(id))
+            {
+                continue;
+            }
+            Transform& local = m_entities->GetEntity(id).GetComponent<Transform>();
+            if (Same(local, record.shownLocal))
+            {
+                local = record.trueLocal;
+            }
+            else
+            {
+                // Game code moved it during Update: its value stays, and nothing blends across the jump.
+                record.snap = true;
+                record.heldByGame = true;
+            }
+        }
+    }
+
+    void PhysicsWorld::Impl::Blend(float fraction)
+    {
+        struct Blended
+        {
+            int depth;
+            Entity entity;
+            Record* record;
+        };
+        std::vector<Blended> blended;
+        for (auto& [id, record] : m_bodies)
+        {
+            if (!record.Active() || record.motion.motionType == MotionType::Static || record.heldByGame ||
+                !m_entities->HasEntity(id))
+            {
+                continue; // an inactive collider has no simulated pose to show
+            }
+            Entity entity = m_entities->GetEntity(id);
+            const RigidBody* rigidBody = RigidBodyOf(entity);
+            if (rigidBody == nullptr || !rigidBody->interpolate || !entity.HasComponent<Transform>())
+            {
+                continue;
+            }
+            blended.push_back(Blended{DepthOf(entity), entity, &record});
+        }
+        // Parents before children, so each child's world pose is set against its parent's blended one.
+        std::stable_sort(blended.begin(), blended.end(),
+                         [](const Blended& a, const Blended& b) { return a.depth < b.depth; });
+
+        // Every true local Transform is saved before any is overwritten.
+        for (const Blended& body : blended)
+        {
+            body.record->trueLocal = body.entity.GetComponent<Transform>();
+        }
+        for (const Blended& body : blended)
+        {
+            Record& record = *body.record;
+            Transform world = record.world;
+            world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
+            world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            SetWorldTransform(body.entity, world);
+            record.shownLocal = body.entity.GetComponent<Transform>();
+            record.blended = true;
+        }
     }
 
     void PhysicsWorld::Impl::SyncBodies()
@@ -331,6 +433,7 @@ namespace Fenrir
             else if (!Same(world.pos, record.world.pos) || !Same(world.rot, record.world.rot))
             {
                 m_backend.Teleport(record.id, world.pos, world.rot);
+                record.snap = true;
             }
             record.world = world;
 
