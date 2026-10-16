@@ -1,11 +1,12 @@
 #include "FenrirApp/App.hpp"
 
+#include <thread>
+
 namespace Fenrir
 {
-    App::App(std::unique_ptr<ILogger> logger)
-        : m_time(), m_scheduler(), m_logger(std::move(logger)), m_scenes(), m_eventQueues()
+    // As Scheduler() does: one worker thread per hardware thread.
+    App::App(std::unique_ptr<ILogger> logger) : App(std::move(logger), std::thread::hardware_concurrency())
     {
-        m_scenes.push_back(std::make_unique<Scene>("Default"));
     }
 
     App::App(std::unique_ptr<ILogger> logger, std::size_t workerThreads)
@@ -72,11 +73,9 @@ namespace Fenrir
 
             void Swap() override
             {
-                const std::size_t sent = m_currentStart + m_current.size() / m_size;
+                m_cursor.Swap(m_current.size() / m_size);
                 m_previous.clear();
                 std::swap(m_current, m_previous);
-                m_previousStart = m_currentStart;
-                m_currentStart = sent;
             }
 
             [[nodiscard]] std::size_t EventSize() const noexcept override
@@ -92,12 +91,8 @@ namespace Fenrir
             bool SendRaw(const void* event) override
             {
                 const auto* bytes = static_cast<const std::byte*>(event);
-                if (SendBuffer* buffer = SendBuffer::OfThisThread())
-                {
-                    buffer->Add([this, copy = std::vector<std::byte>(bytes, bytes + m_size)] { Append(copy.data()); });
-                    return true;
-                }
-                Append(bytes);
+                Detail::SendOrHold(
+                    [this, copy = std::vector<std::byte>(bytes, bytes + m_size)] { Append(copy.data()); });
                 return true;
             }
 
@@ -105,20 +100,13 @@ namespace Fenrir
             {
                 const std::size_t previousCount = m_previous.size() / m_size;
                 const std::size_t currentCount = m_current.size() / m_size;
-                if (seen == NewReaderCursor)
-                {
-                    seen = m_previousStart;
-                }
-                const std::size_t from = std::max(seen, m_previousStart);
-                const std::size_t olderSkip = std::min(from - m_previousStart, previousCount);
-                const std::size_t newerSkip = std::min(from > m_currentStart ? from - m_currentStart : 0, currentCount);
+                const Detail::EventCursor::Read read = m_cursor.ReadAfter(seen, previousCount, currentCount);
                 RawEventRange range;
-                range.older = m_previous.data() + olderSkip * m_size;
-                range.olderCount = previousCount - olderSkip;
-                range.newer = m_current.data() + newerSkip * m_size;
-                range.newerCount = currentCount - newerSkip;
-                range.missed = m_previousStart > seen ? m_previousStart - seen : 0;
-                seen = m_currentStart + currentCount;
+                range.older = m_previous.data() + read.olderSkip * m_size;
+                range.olderCount = previousCount - read.olderSkip;
+                range.newer = m_current.data() + read.newerSkip * m_size;
+                range.newerCount = currentCount - read.newerSkip;
+                range.missed = read.missed;
                 return range;
             }
 
@@ -132,9 +120,7 @@ namespace Fenrir
             std::size_t m_alignment;
             std::vector<std::byte> m_current;
             std::vector<std::byte> m_previous;
-            // How many events were sent to this queue before the first event of each buffer.
-            std::size_t m_previousStart = 0;
-            std::size_t m_currentStart = 0;
+            Detail::EventCursor m_cursor;
         };
     } // namespace
 
