@@ -39,6 +39,10 @@
 #include "FenrirPhysics/Physics.hpp"
 #endif
 
+#if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
+#include "FenrirPhysicsScripting/PhysicsScripting.hpp"
+#endif
+
 template <>
 struct glz::meta<ProjectSettings>
 {
@@ -557,21 +561,26 @@ int main(int argc, char* argv[])
 
     Fenrir::App app(std::move(logger));
 
+#ifdef FENRIR_PHYSICS
+    // Declared after the app, so every scene's physics world and the physics backend end before the app does. Before
+    // scripting, which is given physics's scripting extension, so scripting ends first.
+    auto physics = Fenrir::Physics::Install(app);
+#endif
+
 #ifdef FENRIR_SCRIPTING
     // Declared after the app, so .NET is released before the app is destroyed and before main returns.
-    // The component and events C++ and C# share, as the app's own scripting extension.
+    // The component and events C++ and C# share, as the app's own scripting extension, and physics's, so scripts can
+    // use physics.
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
                                             .extensions = {ScriptingDemo::Extension()}};
+#ifdef FENRIR_PHYSICS
+    scriptingConfig.extensions.push_back(physics.ScriptingExtension());
+#endif
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
     // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just
     // wrote.
     app.AddSequentialSystems(Fenrir::SchedulePriority::Update,
                              {ScriptingDemo::ShowBobPhase, ScriptingDemo::LogBursts(), ScriptingDemo::AutoPlay()});
-#endif
-
-#ifdef FENRIR_PHYSICS
-    // Declared after the app, so every scene's physics world and the physics backend end before the app does.
-    auto physics = Fenrir::Physics::Install(app);
 #endif
 
     Fenrir::Camera camera;

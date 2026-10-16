@@ -75,6 +75,12 @@ if(FENRIR_ENABLE_SCRIPTING)
     add_dependencies(DemoApp DemoScripts)
 endif()
 
+# Physics's scripting extension, which the demo gives scripting when both are on, and its contract beside the executable.
+if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
+    target_link_libraries(DemoApp PRIVATE FenrirPhysicsScripting)
+    fenrir_deploy_physics_scripting(DemoApp)
+endif()
+
 target_compile_definitions(DemoApp PRIVATE 
 V8_COMPRESS_POINTERS # WHAT A FUCKING STUPID FUCKING DUMB FUCKING FEATURE -- https://stackoverflow.com/questions/62921373/embedder-side-pointer-compression-is-disabled
 V8_ENABLE_SANDBOX # SHITTY FUCKING DEFINITION NEEDED -- https://github.com/CauldronDevelopmentLLC/cbang/issues/117
