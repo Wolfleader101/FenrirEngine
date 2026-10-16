@@ -2,6 +2,7 @@
 
 #include "Backend/Backend.hpp"
 #include "Backend/Primitive.hpp"
+#include "LayerNames.hpp"
 
 #include <algorithm>
 #include <array>
@@ -100,7 +101,7 @@ namespace Fenrir::Backend
         class ObjectLayers
         {
           public:
-            explicit ObjectLayers(ILogger& logger) : m_logger(&logger)
+            ObjectLayers(ILogger& logger, const CollisionLayers* names) : m_logger(&logger), m_names(names)
             {
                 // The default filter for each broad-phase layer is always there, the fallback if the layers run out.
                 for (JPH::uint i = 0; i < broadPhaseCount; ++i)
@@ -135,8 +136,9 @@ namespace Fenrir::Backend
                 else
                 {
                     m_logger->Error("Physics world uses too many different collision filters at once (" +
-                                    std::to_string(JPH::cObjectLayerInvalid) +
-                                    " at most): a body collides with every layer instead");
+                                    std::to_string(JPH::cObjectLayerInvalid) + " at most): a body in " +
+                                    LayerNames(m_names, key.layers) + ", colliding with " +
+                                    LayerNames(m_names, key.mask) + ", collides with every layer instead");
                     layer = static_cast<JPH::ObjectLayer>(key.broadPhase);
                 }
                 ++m_entries[layer].users;
@@ -167,6 +169,7 @@ namespace Fenrir::Backend
             };
 
             ILogger* m_logger;
+            const CollisionLayers* m_names;
             std::vector<Entry> m_entries;
             std::map<LayerKey, JPH::ObjectLayer> m_byKey;
             std::vector<JPH::ObjectLayer> m_free;
@@ -778,9 +781,10 @@ namespace Fenrir::Backend
 
     struct World::Impl
     {
-        Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers)
+        Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers,
+             const CollisionLayers* layerNames)
             : meshes(&worldMeshes.Implementation()), logger(&worldLogger), maxBodies(bodyCapacity),
-              objectLayers(worldLogger), broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers),
+              objectLayers(worldLogger, layerNames), broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers),
               objectPairs(objectLayers), jobs(MakeJobs(workers))
         {
         }
@@ -1012,7 +1016,7 @@ namespace Fenrir::Backend
     World::World(const WorldSettings& settings, CollisionMeshes& meshes, ILogger& logger)
         : m_impl(std::make_unique<Impl>(
               meshes, logger, Capacity(settings.maxBodies, JPH::PhysicsSystem::cMaxBodiesLimit, "bodies", logger),
-              settings.workers))
+              settings.workers, settings.layerNames))
     {
         m_impl->system.Init(
             m_impl->maxBodies, 0,

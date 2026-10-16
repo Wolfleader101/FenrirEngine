@@ -15,6 +15,7 @@
 
 namespace Fenrir
 {
+    class CollisionLayers;
     class ILogger;
     class ThreadPool;
 } // namespace Fenrir
@@ -192,6 +193,8 @@ namespace Fenrir::Backend
          * waits. Null: a step runs on the stepping thread alone. Must outlive the world.
          */
         ThreadPool* workers = nullptr;
+        /** @brief The layers' names, for logs; null logs layers by number. Must outlive the world. */
+        const CollisionLayers* layerNames = nullptr;
     };
 
     /**

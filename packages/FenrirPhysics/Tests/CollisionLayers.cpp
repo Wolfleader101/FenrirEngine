@@ -191,3 +191,32 @@ TEST_CASE("Bodies given filters by layer name collide by their layers' default m
          << PositionOf(ghost).y);
     REQUIRE(PositionOf(ghost).y < -5.0f);
 }
+
+TEST_CASE("Running out of collision filters logs the filter that missed out by its layers' names", "[physics][layers]")
+{
+    PhysicsConfig config = StepPosesOnly();
+    config.collisionLayers = {CollisionLayer{.name = "Ground"}, CollisionLayer{.name = "Player"},
+                              CollisionLayer{.name = "Enemy"}};
+    PhysicsApp test(config);
+    // The backend holds 65535 filters at once, a few of them its own: this many distinct masks (on layers 3 and up,
+    // which have no names) uses them all.
+    constexpr std::uint32_t fillers = 65535;
+    for (std::uint32_t i = 0; i < fillers; ++i)
+    {
+        Entity filler = Place(test.Entities(), Math::Vec3(0.0f, -1000.0f, 0.0f));
+        filler.AddComponent<Collider>();
+        filler.AddComponent<CollisionFilter>(CollisionFilter{.layers = Layer(3), .mask = i << 3});
+    }
+    Entity player = AddBody(test.Entities(), Math::Vec3(0.0f, 2.0f, 0.0f));
+    player.AddComponent<CollisionFilter>(CollisionFilter{.layers = Layer(1), .mask = Layer(0) | Layer(2)});
+
+    test.Run(tick);
+
+    INFO("running out of collision filters did not log an error");
+    REQUIRE_FALSE(test.errors.empty());
+    const std::string& error = test.errors.back();
+    INFO("the error does not name the player's filter by its layers' names: " << error);
+    REQUIRE(error.find("Player") != std::string::npos);
+    REQUIRE(error.find("Ground") != std::string::npos);
+    REQUIRE(error.find("Enemy") != std::string::npos);
+}

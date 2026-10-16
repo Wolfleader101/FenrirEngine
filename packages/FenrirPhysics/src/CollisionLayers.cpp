@@ -5,6 +5,7 @@
 #include <string>
 
 #include "FenrirLogger/ILogger.hpp"
+#include "LayerNames.hpp"
 
 namespace Fenrir
 {
@@ -65,5 +66,28 @@ namespace Fenrir
             return {};
         }
         return m_layers[static_cast<std::size_t>(index)].name;
+    }
+} // namespace Fenrir
+
+namespace Fenrir
+{
+    std::string LayerNames(const CollisionLayers* names, std::uint32_t bits)
+    {
+        if (bits == 0)
+        {
+            return "no layer";
+        }
+        std::string text;
+        for (int index = 0; index < static_cast<int>(layerCount); ++index)
+        {
+            if ((bits & (1u << index)) == 0)
+            {
+                continue;
+            }
+            const std::string_view name = names != nullptr ? names->Name(index) : std::string_view();
+            text += text.empty() ? "" : ", ";
+            text += name.empty() ? "layer " + std::to_string(index) : std::string(name);
+        }
+        return text;
     }
 } // namespace Fenrir

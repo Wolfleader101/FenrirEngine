@@ -31,7 +31,8 @@ namespace Fenrir
                                                       .maxBodyPairs = config.maxBodyPairs,
                                                       .maxContacts = config.maxContacts,
                                                       .workers =
-                                                          config.useWorkerThreads ? &app.GetThreadPool() : nullptr};
+                                                          config.useWorkerThreads ? &app.GetThreadPool() : nullptr,
+                                                      .layerNames = &state.layers};
                 world = &PhysicsWorldAccess::Make(
                     scene, std::make_unique<PhysicsWorld::Impl>(entities, settings, state.meshes, *app.Logger()));
             }
