@@ -13,3 +13,5 @@
 - [ ] All scripting tests pass.
 
 **Resolved by:** merge of impl/08-csharp-event-readers (7301cd7)
+
+**Hand check pending:** the DemoApp scripting demo (LogBursts, Controls, Sparks) handles each event once (AutoPlay run logged each once during the build).

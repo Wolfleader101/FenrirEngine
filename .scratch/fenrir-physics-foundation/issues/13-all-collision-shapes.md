@@ -14,3 +14,5 @@
 
 **Resolved by:** merge of impl/13-all-collision-shapes (3f29523)
 **Hand check pending:** DemoApp: three small boxes rest on the brown backpack mesh collider's contours near (5, ground, -7).
+
+**Note:** collision meshes live on the Physics owner (CreateCollisionMesh / ReleaseCollisionMesh), not on PhysicsWorld, because worlds are created lazily and a mesh must exist before any collider that uses it.
