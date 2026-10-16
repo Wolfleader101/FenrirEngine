@@ -151,6 +151,10 @@ public struct Health : IComponent { public int Current; public int Max; }
   assembly is released, the app keeps running, and the error names the component and the field.
 - **Nothing registers after Install.** What scripting knows is fixed by the extensions given to `Install`; afterwards the
   registry changes only when a reload removes and adds the components and events the script assembly defines.
+- **Engine types as fields.** A component or event holding a `Math::Vec3`, `Math::Quat` or `Transform` includes
+  `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
+  An `Entity` member is mapped through a stand-in struct that puts `Detail::EntityLinkView` (from the same header) where
+  the `Entity` is; C# sees it as an `EntityLink`, as in `Relationship` (FenrirPhysics's contact and trigger events do this).
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
@@ -213,6 +217,73 @@ component's mapping is checked against its C# struct; and only then are the scri
 fails, the assembly is released and **nothing** from that load is registered: no registry entries and no storage. (The checks
 today are a malformed report, a name that clashes with a native component or another script component, two names that would
 share a storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
+
+## Tagged unions
+
+A component can hold a tagged union: a tag saying which kind it holds and overlapping storage for one of several kinds
+(FenrirPhysics's `CollisionShape` is one). Nothing special is needed to share it: Iris's struct mapping accepts C#'s
+explicit layout and checks every field by name, offset and kind, and nothing stops two fields sharing an offset. The C#
+side is written by hand, in one pattern. On the native side, the mapping lists the tag and each kind in declaration order,
+with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend (or, for a package that must not
+name Iris, as FenrirPhysics's `CollisionShape` does, map a plain stand-in with the same members through
+`MakeComponent<T, Mapping>`):
+
+```cpp
+class Shape {
+  public:
+    Shape(BoxShape box);       // implicit, one per kind
+    Shape(SphereShape sphere);
+    ShapeType Type() const;
+    template <typename T> T& As();   // asserts the kind
+  private:
+    friend struct Iris::StructMapping<Shape>;
+    ShapeType m_type;
+    union { BoxShape m_box; SphereShape m_sphere; };
+};
+template <> struct Iris::StructMapping<Shape> {
+    static constexpr std::string_view typeName = "MyGame.Shape";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Shape, m_type, "_type"),
+        IRIS_FIELD_AS(Shape, m_box, "_box"), IRIS_FIELD_AS(Shape, m_sphere, "_sphere"));
+};
+```
+
+```csharp
+[StructLayout(LayoutKind.Explicit)]
+public struct Shape
+{
+    [FieldOffset(0)] private ShapeType _type;      // the tag, private so only a conversion changes it
+    [FieldOffset(4)] private BoxShape _box;        // every kind at the union's offset (the C++ offsetof)
+    [FieldOffset(4)] private SphereShape _sphere;
+
+    public readonly ShapeType Type => _type;
+
+    // A checked view per kind: a reference into the shape, so writes land in the component's storage.
+    [UnscopedRef] public ref BoxShape Box { get { Expect(ShapeType.Box); return ref _box; } }
+    [UnscopedRef] public ref SphereShape Sphere { get { Expect(ShapeType.Sphere); return ref _sphere; } }
+
+    // Assigning a kind by value sets the tag with it.
+    public static implicit operator Shape(BoxShape box) => new() { _type = ShapeType.Box, _box = box };
+    public static implicit operator Shape(SphereShape sphere) => new() { _type = ShapeType.Sphere, _sphere = sphere };
+
+    private readonly void Expect(ShapeType wanted)
+    {
+        if (_type != wanted) throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
+    }
+}
+```
+
+So `collider.Shape = new SphereShape { Radius = 1 }` changes the kind, `collider.Shape.Box.HalfExtents.Y = 2` edits a box
+in place, and reading the wrong kind's view throws `InvalidOperationException`, as C++'s asserting `As<T>()` does.
+
+- **The mirror is checked like any other.** A kind at the wrong offset or under the wrong name fails the load, naming the
+  field. The offsets must be the C++ ones: the union starts at its own alignment after the tag.
+- **Components defined in C# may use the pattern too**, by hand: their struct is their definition, so it needs only to be
+  unmanaged. There is no generator for the views and conversions; one may come when a second union shows it is worth it.
+- **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
+  value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
+  bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
+- The `ScriptingTests` tagged-union tests are the proof: a native component holding one validates, round-trips through a C#
+  system both ways, throws for the wrong kind, and is refused with a wrong offset or name.
 
 ## Creating, destroying, adding and removing
 
@@ -382,7 +453,8 @@ An engine package, or the app, makes itself scriptable with a `ScriptingExtensio
   by the full name of the C# method that calls them;
 - **components and events**: native components (`MakeComponent`, `MakeReadOnlyComponent`) and C++ events (`MakeEvent`),
   registered before the script assembly loads and checked against it as it does;
-- **shared assemblies**: its C# contract, shared with every script load.
+- **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
+  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract.
 
 Extensions are the only way to give scripting anything, so the app's own components, events and contract go in an
 extension of its own, just as a package's do. The DemoApp's is a complete example:
@@ -406,7 +478,7 @@ float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* co
 
 Fenrir::ScriptingExtension physics;
 physics.name = "physics";
-physics.sharedAssemblies = {"Fenrir.Physics.Scripting.dll"};
+physics.sharedAssemblies = {"Fenrir.Physics.dll"};    // beside Fenrir.Scripting.dll
 physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf")};
 config.extensions.push_back(std::move(physics));
 ```
