@@ -12,3 +12,5 @@
 - [ ] The DemoApp and scripting keep working unchanged.
 
 **Resolved by:** merge of impl/02-phases (ca45ad5)
+
+**Hand check pending:** the DemoApp and its scripting demo behave as before with the new phases.
