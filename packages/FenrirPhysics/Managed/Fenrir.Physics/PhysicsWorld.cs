@@ -34,7 +34,8 @@ public static class PhysicsWorld
 
     /// <summary>
     /// The nearest body a ray from <paramref name="origin"/> along <paramref name="direction"/> (any length) hits within
-    /// <paramref name="maxDistance"/>. A ray that starts inside a box or sphere hits it at distance 0.
+    /// <paramref name="maxDistance"/>. A ray that starts inside a box, sphere, capsule or convex hull hits it at
+    /// distance 0. A triangle mesh is hit only on its triangles' front faces.
     /// </summary>
     /// <returns>Whether it hit a body; <paramref name="hit"/> is default when it did not.</returns>
     public static bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,

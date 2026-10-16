@@ -1464,8 +1464,13 @@ namespace Fenrir::Backend
         const JPH::RRayCast ray(ToJolt(origin), ToJolt(direction) * maxDistance);
         RayCollector collector(ray, maxDistance, sink);
         const QueryFilters filters(filter, m_impl->objectLayers);
-        m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, JPH::RayCastSettings(), collector, filters.broadPhase,
-                                                           filters.layer, filters.body);
+        // What the seam promises, set here rather than left to Jolt's defaults: a ray starting inside a solid shape
+        // (any convex one) hits it at distance 0, and triangles' back faces are not hit.
+        JPH::RayCastSettings settings;
+        settings.mTreatConvexAsSolid = true;
+        settings.SetBackFaceMode(JPH::EBackFaceMode::IgnoreBackFaces);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CastRay(ray, settings, collector, filters.broadPhase, filters.layer,
+                                                           filters.body);
     }
 
     void World::CastShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,

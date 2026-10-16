@@ -326,7 +326,8 @@ namespace Fenrir::Backend
         // Queries only read: they may be made from several threads at once, never during any other call.
 
         /** @brief Casts a ray from `origin` along the unit `direction` for `maxDistance`. A ray that starts inside a
-         * solid shape hits it at distance 0, its normal against `direction`. */
+         * solid shape (a box, sphere, capsule or hull) hits it at distance 0, its normal against `direction`; a mesh's
+         * triangles are hit only on their front faces. */
         void CastRay(const Math::Vec3& origin, const Math::Vec3& direction, float maxDistance,
                      const QueryFilter& filter, HitSink sink) const;
 

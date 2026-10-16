@@ -137,6 +137,54 @@ TEST_CASE("A ray starting inside a box or sphere hits it at distance 0", "[physi
     REQUIRE(inSphere->distance == 0.0f);
 }
 
+TEST_CASE("A ray starting inside a capsule or convex hull hits it at distance 0", "[physics][queries]")
+{
+    PhysicsApp test;
+    Entity capsule = AddStatic(test.Entities(), Math::Vec3(0.0f), CapsuleShape{1.0f, 0.5f});
+    // The corners of a unit cube: a hull needs no triangles.
+    std::array<Math::Vec3, 8> corners;
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        corners[i] = Math::Vec3((i & 1u) ? 0.5f : -0.5f, (i & 2u) ? 0.5f : -0.5f, (i & 4u) ? 0.5f : -0.5f);
+    }
+    const CollisionMesh cube = test.physics.CreateCollisionMesh(corners, {});
+    Entity hull = AddStatic(test.Entities(), Math::Vec3(10.0f, 0.0f, 0.0f), ConvexHullShape{cube});
+    test.Run(tick);
+
+    const std::optional<RaycastHit> inCapsule = WorldOf(test).Raycast(Math::Vec3(0.0f, 1.2f, 0.0f), east, 5.0f);
+    INFO("a ray from inside the capsule's upper cap does not hit the capsule at distance 0");
+    REQUIRE(inCapsule.has_value());
+    REQUIRE(inCapsule->body == capsule);
+    REQUIRE(inCapsule->distance == 0.0f);
+
+    const std::optional<RaycastHit> inHull = WorldOf(test).Raycast(Math::Vec3(10.1f, 0.0f, 0.0f), east, 5.0f);
+    INFO("a ray from inside the hull does not hit the hull at distance 0");
+    REQUIRE(inHull.has_value());
+    REQUIRE(inHull->body == hull);
+    REQUIRE(inHull->distance == 0.0f);
+}
+
+TEST_CASE("A ray hits a triangle mesh's front faces and passes through its back faces", "[physics][queries]")
+{
+    PhysicsApp test;
+    // Two triangles making a 20 by 20 floor at y = 0, facing up.
+    const std::array<Math::Vec3, 4> vertices = {Math::Vec3(-10.0f, 0.0f, -10.0f), Math::Vec3(10.0f, 0.0f, -10.0f),
+                                                Math::Vec3(-10.0f, 0.0f, 10.0f), Math::Vec3(10.0f, 0.0f, 10.0f)};
+    const std::array<std::uint32_t, 6> indices = {0, 2, 1, 1, 2, 3};
+    Entity floor =
+        AddStatic(test.Entities(), Math::Vec3(0.0f), MeshShape{test.physics.CreateCollisionMesh(vertices, indices)});
+    test.Run(tick);
+
+    const std::optional<RaycastHit> fromAbove = WorldOf(test).Raycast(Math::Vec3(1.0f, 2.0f, 1.0f), down, 5.0f);
+    INFO("a ray down onto the floor's front faces does not hit it 2 m along");
+    REQUIRE(fromAbove.has_value());
+    REQUIRE(fromAbove->body == floor);
+    REQUIRE(fromAbove->distance == Approx(2.0f).margin(1e-4f));
+
+    INFO("a ray up through the floor's back faces hits it");
+    REQUIRE_FALSE(WorldOf(test).Raycast(Math::Vec3(1.0f, -2.0f, 1.0f), Math::Vec3(0.0f, 1.0f, 0.0f), 5.0f).has_value());
+}
+
 TEST_CASE("A sphere cast down hits the ground where the sphere first touches it", "[physics][queries]")
 {
     PhysicsApp test;

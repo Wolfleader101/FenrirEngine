@@ -83,7 +83,9 @@ namespace Fenrir
 
         /**
          * @brief The nearest body a ray from `origin` along `direction` (any length) hits within `maxDistance`. A ray
-         * that starts inside a box or sphere hits it at distance 0.
+         * that starts inside a box, sphere, capsule or convex hull hits it at distance 0. A triangle mesh is hit only
+         * on its triangles' front faces (counter-clockwise seen from the ray), so a ray from inside a closed mesh
+         * passes out through it.
          */
         [[nodiscard]] std::optional<RaycastHit> Raycast(const Math::Vec3& origin, const Math::Vec3& direction,
                                                         float maxDistance, const QueryFilter& filter = {}) const;
