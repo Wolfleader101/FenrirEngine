@@ -16,6 +16,8 @@
 namespace Fenrir
 {
     class Scene;
+    struct PhysicsWorldAccess;
+    struct PhysicsProbe;
 
     /** @brief One contact of a body, as PhysicsWorld::ForEachContact reports it. */
     struct Contact
@@ -49,11 +51,21 @@ namespace Fenrir
     class PhysicsWorld
     {
       public:
-        /** @brief Private: the world's state. Only FenrirPhysics can make one. */
+        /** @brief The world's state, defined in FenrirPhysics's private headers: only FenrirPhysics can make one. */
         struct Impl;
 
-        /** @brief Made by FenrirPhysics; game code reaches a world through Of. */
-        explicit PhysicsWorld(std::unique_ptr<Impl> impl);
+        /**
+         * @brief Proof that FenrirPhysics is making the world: only PhysicsWorldAccess, in FenrirPhysics's private
+         * headers, can make a Key. Public only because Scene::AddResource constructs the world.
+         */
+        class Key
+        {
+            Key() = default;
+            friend struct PhysicsWorldAccess;
+        };
+
+        /** @brief Made by FenrirPhysics (it alone holds a Key); game code reaches a world through Of. */
+        PhysicsWorld(Key key, std::unique_ptr<Impl> impl);
         ~PhysicsWorld();
         PhysicsWorld(const PhysicsWorld&) = delete;
         PhysicsWorld& operator=(const PhysicsWorld&) = delete;
@@ -170,19 +182,15 @@ namespace Fenrir
          */
         [[nodiscard]] std::span<const DebugLine> DebugLines() const;
 
-        /** @brief Private: the world's state, for FenrirPhysics's own code. */
-        [[nodiscard]] Impl& Implementation()
-        {
-            return *m_impl;
-        }
-
-        /** @brief Private: the world's state, for FenrirPhysics's own code. */
-        [[nodiscard]] const Impl& Implementation() const
-        {
-            return *m_impl;
-        }
-
       private:
+        // FenrirPhysics's own systems step the world through its state; the tests read a diagnostic.
+        friend struct PhysicsWorldAccess;
+        friend struct PhysicsProbe;
+
+        /** @brief Diagnostic for FenrirPhysics's tests, read through PhysicsProbe: how many distinct backend shapes the
+         * world's bodies use. Colliders with identical primitive shapes (after scale) share one. */
+        [[nodiscard]] std::size_t DistinctShapeCount() const;
+
         std::unique_ptr<Impl> m_impl;
     };
 } // namespace Fenrir

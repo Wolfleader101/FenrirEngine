@@ -7,8 +7,8 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "PhysicsProbe.hpp"
 #include "PhysicsTestApp.hpp"
-#include "WorldImpl.hpp" // private: the shape-sharing diagnostic
 
 using namespace Fenrir;
 using namespace PhysicsTest;
@@ -269,13 +269,13 @@ TEST_CASE("Colliders with identical primitive shapes share one backend shape", "
     scaled.AddComponent<Collider>();
     test.Run(tick);
 
-    PhysicsWorld::Impl& world = PhysicsWorld::Of(test.app.GetActiveScene())->Implementation();
+    const PhysicsWorld& world = *PhysicsWorld::Of(test.app.GetActiveScene());
     INFO("42 colliders hold four distinct shapes after scale (the ground, the unit box, the sphere and the box of half "
          "extents 1), so the backend holds four shapes");
-    REQUIRE(world.SharedShapeCount() == 4);
+    REQUIRE(PhysicsProbe::DistinctShapeCount(world) == 4);
 
     scaled.GetComponent<Transform>().scale = Math::Vec3(3.0f);
     test.Run(tick);
     INFO("rescaling the last one gives it a shape of its own, and the box of half extents 1 is still used once");
-    REQUIRE(world.SharedShapeCount() == 5);
+    REQUIRE(PhysicsProbe::DistinctShapeCount(world) == 5);
 }

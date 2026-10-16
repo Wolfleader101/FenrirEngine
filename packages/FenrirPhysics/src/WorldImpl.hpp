@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <memory>
 #include <set>
 #include <span>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirScene/Scene.hpp"
 
 namespace Fenrir
 {
@@ -50,15 +52,6 @@ namespace Fenrir
          * previous step pose to its current one, parents before children.
          */
         void Blend(float fraction);
-
-        /**
-         * @brief Diagnostic private to FenrirPhysics's tests: how many distinct backend shapes the world's bodies use.
-         * Colliders with identical primitive shapes (after scale) share one.
-         */
-        [[nodiscard]] std::size_t SharedShapeCount() const
-        {
-            return m_backend.DistinctShapeCount();
-        }
 
         /** @brief A way of pushing a body: one of Backend::World's AddForce, AddImpulse, AddTorque and
          * AddAngularImpulse. */
@@ -256,5 +249,24 @@ namespace Fenrir
             auto operator<=>(const ShapeEdgesKey&) const = default;
         };
         std::map<ShapeEdgesKey, std::vector<Math::Vec3>> m_shapeEdges;
+    };
+
+    /**
+     * @brief FenrirPhysics's own way into a PhysicsWorld, for its systems: the only maker of PhysicsWorld::Key, and
+     * the only reader of a world's state outside PhysicsWorld's members.
+     */
+    struct PhysicsWorldAccess
+    {
+        /** @brief Makes `scene`'s physics world, holding `impl`, as a scene resource. */
+        static PhysicsWorld& Make(Scene& scene, std::unique_ptr<PhysicsWorld::Impl> impl)
+        {
+            return scene.AddResource<PhysicsWorld>(PhysicsWorld::Key{}, std::move(impl));
+        }
+
+        /** @brief The state of `world`. */
+        [[nodiscard]] static PhysicsWorld::Impl& Of(PhysicsWorld& world)
+        {
+            return *world.m_impl;
+        }
     };
 } // namespace Fenrir

@@ -316,7 +316,8 @@ namespace Fenrir::Backend
         /** @brief A body's pose and velocities as the last step (or a teleport or velocity change since) left them. */
         [[nodiscard]] BodyState GetState(BodyId id) const;
 
-        /** @brief Diagnostic for tests: how many distinct backend shapes the world's bodies use. */
+        /** @brief Diagnostic for FenrirPhysics's tests (PhysicsWorld::DistinctShapeCount): how many distinct backend
+         * shapes the world's bodies use. */
         [[nodiscard]] std::size_t DistinctShapeCount() const;
 
         // Queries only read: they may be made from several threads at once, never during any other call.

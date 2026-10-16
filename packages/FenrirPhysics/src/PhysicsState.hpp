@@ -10,9 +10,9 @@
 
 namespace Fenrir
 {
-    struct Physics::State
+    struct Detail::PhysicsState
     {
-        State(App& installedOn, const PhysicsConfig& installedWith)
+        PhysicsState(App& installedOn, const PhysicsConfig& installedWith)
             : app(&installedOn), config(installedWith), layers(installedWith.collisionLayers, *installedOn.Logger()),
               context(*installedOn.Logger()), meshes(*installedOn.Logger())
         {

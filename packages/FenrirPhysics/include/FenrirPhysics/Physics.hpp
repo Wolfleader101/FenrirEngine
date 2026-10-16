@@ -16,6 +16,13 @@ namespace Fenrir
     // Only named here: FenrirPhysicsScripting defines Physics::ScriptingExtension().
     struct ScriptingExtension;
 
+    namespace Detail
+    {
+        /** @brief What Physics::Install set up. Defined in FenrirPhysics's private headers; nothing else can use it.
+         */
+        struct PhysicsState;
+    } // namespace Detail
+
     /** @brief How Physics::Install sets physics up for an app. */
     struct PhysicsConfig
     {
@@ -107,15 +114,12 @@ namespace Fenrir
          */
         [[nodiscard]] Fenrir::ScriptingExtension ScriptingExtension() const;
 
-        /** @brief Private: what Install set up. */
-        struct State;
-
       private:
-        explicit Physics(std::shared_ptr<State> state);
+        explicit Physics(std::shared_ptr<Detail::PhysicsState> state);
 
         void Shutdown() noexcept;
 
         // Shared with the installed systems, which hold it weakly: once the owner is gone they do nothing.
-        std::shared_ptr<State> m_state;
+        std::shared_ptr<Detail::PhysicsState> m_state;
     };
 } // namespace Fenrir

@@ -199,8 +199,13 @@ namespace Fenrir
         }
     } // namespace
 
-    PhysicsWorld::PhysicsWorld(std::unique_ptr<Impl> impl) : m_impl(std::move(impl))
+    PhysicsWorld::PhysicsWorld(Key /*key*/, std::unique_ptr<Impl> impl) : m_impl(std::move(impl))
     {
+    }
+
+    std::size_t PhysicsWorld::DistinctShapeCount() const
+    {
+        return m_impl->m_backend.DistinctShapeCount();
     }
 
     PhysicsWorld::~PhysicsWorld() = default;
