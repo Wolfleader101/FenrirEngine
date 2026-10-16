@@ -638,8 +638,7 @@ namespace Fenrir::Backend
             bool& failed = hull ? entry.hullFailed : entry.meshFailed;
             if (cooked == nullptr && !failed)
             {
-                cooked = hull ? Cook(handle, JPH::ConvexHullShapeSettings(entry.vertices), "a convex hull")
-                              : CookMesh(handle, entry);
+                cooked = Cook(handle, hull, entry);
                 failed = cooked == nullptr;
                 if ((entry.hull != nullptr || entry.hullFailed) && (entry.mesh != nullptr || entry.meshFailed))
                 {
@@ -666,57 +665,48 @@ namespace Fenrir::Backend
             {
                 return cooked;
             }
-            if (hull ? entry.hullFailed : entry.meshFailed)
+            if ((hull ? entry.hullFailed : entry.meshFailed) || (!hull && entry.triangles.empty()))
             {
                 return nullptr;
             }
-            if (hull)
-            {
-                const JPH::ShapeSettings::ShapeResult result = JPH::ConvexHullShapeSettings(entry.vertices).Create();
-                return result.HasError() ? nullptr : result.Get();
-            }
-            if (entry.triangles.empty())
-            {
-                return nullptr;
-            }
-            JPH::VertexList vertices;
-            vertices.reserve(entry.vertices.size());
-            for (JPH::Vec3Arg v : entry.vertices)
-            {
-                vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
-            }
-            const JPH::ShapeSettings::ShapeResult result =
-                JPH::MeshShapeSettings(std::move(vertices), entry.triangles).Create();
+            const JPH::ShapeSettings::ShapeResult result = Build(hull, entry);
             return result.HasError() ? nullptr : result.Get();
         }
 
-        JPH::Ref<JPH::Shape> CookMesh(CollisionMesh handle, const Entry& entry)
+        // Cooks a hull (`hull`) or triangle mesh from a mesh's source data, logging an error if it cannot.
+        JPH::Ref<JPH::Shape> Cook(CollisionMesh handle, bool hull, const Entry& entry)
         {
-            if (entry.triangles.empty())
+            if (!hull && entry.triangles.empty())
             {
                 logger->Error("Collision mesh " + std::to_string(handle.id) +
                               " has no triangles, so it cannot be a triangle mesh");
                 return nullptr;
             }
+            const JPH::ShapeSettings::ShapeResult result = Build(hull, entry);
+            if (result.HasError())
+            {
+                logger->Error("Collision mesh " + std::to_string(handle.id) + " cannot be cooked as " +
+                              (hull ? "a convex hull" : "a triangle mesh") + ": " + std::string(result.GetError()));
+                return nullptr;
+            }
+            return result.Get();
+        }
+
+        // Builds a hull (`hull`) or triangle mesh (which needs triangles) from a mesh's source data. Only reads, and
+        // logs nothing, so queries may build throwaway shapes side by side.
+        static JPH::ShapeSettings::ShapeResult Build(bool hull, const Entry& entry)
+        {
+            if (hull)
+            {
+                return JPH::ConvexHullShapeSettings(entry.vertices).Create();
+            }
             JPH::VertexList vertices;
             vertices.reserve(entry.vertices.size());
             for (JPH::Vec3Arg v : entry.vertices)
             {
                 vertices.push_back(JPH::Float3(v.GetX(), v.GetY(), v.GetZ()));
             }
-            return Cook(handle, JPH::MeshShapeSettings(std::move(vertices), entry.triangles), "a triangle mesh");
-        }
-
-        JPH::Ref<JPH::Shape> Cook(CollisionMesh handle, const JPH::ShapeSettings& settings, const char* kind)
-        {
-            const JPH::ShapeSettings::ShapeResult result = settings.Create();
-            if (result.HasError())
-            {
-                logger->Error("Collision mesh " + std::to_string(handle.id) + " cannot be cooked as " + kind + ": " +
-                              std::string(result.GetError()));
-                return nullptr;
-            }
-            return result.Get();
+            return JPH::MeshShapeSettings(std::move(vertices), entry.triangles).Create();
         }
 
         ILogger* logger;
@@ -805,8 +795,14 @@ namespace Fenrir::Backend
             }
             const JPH::Shape* cooked = meshes->Shape(shape);
             JPH_ASSERT(cooked != nullptr);
-            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
-            return scaled.Get();
+            return Scaled(*cooked, scale);
+        }
+
+        // A cooked hull or mesh at `scale`: wrapped, so the cooked shape stays shared (hulls and meshes take any scale
+        // per axis). Only reads `cooked`.
+        static JPH::Ref<JPH::Shape> Scaled(const JPH::Shape& cooked, const Math::Vec3& scale)
+        {
+            return cooked.ScaleShape(cooked.MakeScaleValid(ToJolt(scale))).Get();
         }
 
         // A body's shape: its one collider's own shape when that collider is on the body's entity (so identical bodies
@@ -852,12 +848,7 @@ namespace Fenrir::Backend
                 return Make(Bake(shape, scale));
             }
             const JPH::Ref<JPH::Shape> cooked = meshes->QueryShape(shape);
-            if (cooked == nullptr)
-            {
-                return nullptr;
-            }
-            const JPH::Shape::ShapeResult scaled = cooked->ScaleShape(cooked->MakeScaleValid(ToJolt(scale)));
-            return scaled.Get();
+            return cooked == nullptr ? nullptr : Scaled(*cooked, scale);
         }
 
         // Forgets cached shapes no body uses any more, each time the cache has doubled since it was last pruned.
