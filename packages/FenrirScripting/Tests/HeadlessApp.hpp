@@ -92,10 +92,14 @@ namespace Fenrir::Testing
         std::vector<LoggedMessage> m_messages;
     };
 
-    // An App with no window and a recording logger. Run(n) runs exactly n frames, then stops.
+    // An App with no window and a recording logger. Run(n) runs exactly n frames of FrameDelta seconds each through
+    // App::RunFrame, then the Exit phase.
     class HeadlessApp
     {
       public:
+        // One tick per frame, whatever the wall clock does.
+        static constexpr double FrameDelta = 1.0 / 60.0;
+
         HeadlessApp() : m_logger(new RecordingLogger), m_app(std::unique_ptr<ILogger>(m_logger))
         {
         }
@@ -115,13 +119,12 @@ namespace Fenrir::Testing
 
         void Run(int frames)
         {
-            m_app.AddSequentialSystems(SchedulePriority::Update, {[this, frames](App& app) {
-                                           if (++m_frames >= frames)
-                                           {
-                                               app.Stop();
-                                           }
-                                       }});
-            m_app.Run();
+            for (int frame = 0; frame < frames; ++frame)
+            {
+                m_app.RunFrame(FrameDelta);
+                ++m_frames;
+            }
+            m_app.RunExit();
         }
 
       private:

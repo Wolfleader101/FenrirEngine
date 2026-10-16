@@ -176,6 +176,21 @@ namespace Fenrir
         App(std::unique_ptr<ILogger> logger);
 
         /**
+         * @brief Construct a new App object whose parallel systems run on `workerThreads` worker threads (at least
+         * one), rather than one per hardware thread
+         *
+         * @param logger the logger to use
+         * @param workerThreads the number of worker threads
+         */
+        App(std::unique_ptr<ILogger> logger, std::size_t workerThreads);
+
+        /** @brief The worker threads parallel systems run on, shared with engine work such as physics. */
+        [[nodiscard]] ThreadPool& GetThreadPool() noexcept
+        {
+            return m_scheduler.GetThreadPool();
+        }
+
+        /**
          * @brief Add systems to the scheduler that run in parallel
          *
          * @param priority the priority of the systems
@@ -214,6 +229,19 @@ namespace Fenrir
          *
          */
         void Run();
+
+        /**
+         * @brief Runs one frame as if `deltaTime` seconds had passed: adds it to the accumulator and runs the fixed
+         * step as many times as that covers. Reads no clock, so a test can drive the app deterministically. The first
+         * frame (from here or from Run) runs the PreInit, Init and PostInit phases first; later frames do not.
+         */
+        void RunFrame(double deltaTime);
+
+        /**
+         * @brief Runs the Exit phase. Run does this when it stops; code that drives the app with RunFrame calls it
+         * when it is done with the app.
+         */
+        void RunExit();
 
         /**
          * @brief Stop the app
@@ -275,6 +303,10 @@ namespace Fenrir
 
         Scene& CreateScene(const std::string& name);
 
+        /**
+         * @brief Destroys the scene with this name. Other scenes stay where they are, and the active scene stays
+         * active. Destroying the active scene is refused with a logged error: change the active scene first.
+         */
         void DestroyScene(const std::string& name);
 
         Scene& GetScene(const std::string& name);
@@ -286,9 +318,9 @@ namespace Fenrir
         template <typename Func>
         void ForEachScene(Func&& func)
         {
-            for (Scene& scene : m_scenes)
+            for (const std::unique_ptr<Scene>& scene : m_scenes)
             {
-                func(scene);
+                func(*scene);
             }
         }
 
@@ -297,8 +329,11 @@ namespace Fenrir
         Scheduler m_scheduler;
         std::unique_ptr<ILogger> m_logger;
         bool m_running = true;
+        bool m_initialized = false;
 
-        std::vector<Scene> m_scenes;
+        // One heap allocation per scene, so creating or destroying a scene never moves another: Entity handles and
+        // references to a scene stay valid.
+        std::vector<std::unique_ptr<Scene>> m_scenes;
         size_t activeSceneIndex = 0;
 
         // this is mutable because GetEventQueue() is const
@@ -310,6 +345,9 @@ namespace Fenrir
         std::unordered_map<std::string, std::unique_ptr<IEventQueue>> m_byteEventQueues;
 
         bool BindEventName(std::string name, IEventQueue* queue);
+
+        /** @brief Runs the init phases, the first time only. */
+        void InitOnce();
 
         /**
          * @brief Update the event queues
