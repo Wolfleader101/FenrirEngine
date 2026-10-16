@@ -52,6 +52,28 @@ namespace Fenrir
             }
             world->Implementation().Step(app, static_cast<float>(app.GetTime().tickRate));
         }
+
+        // The BeforeTicks system: the active scene's bodies are back at their true poses before any tick.
+        void RestoreActiveScene(App& app)
+        {
+            if (PhysicsWorld* world = PhysicsWorld::Of(app.GetActiveScene()))
+            {
+                world->Implementation().Restore();
+            }
+        }
+
+        // The AfterTicks system: the active scene's bodies are shown as far between their last two step poses as the
+        // frame is through the next tick.
+        void BlendActiveScene(App& app, const Physics::State& state)
+        {
+            PhysicsWorld* world = PhysicsWorld::Of(app.GetActiveScene());
+            if (world == nullptr || !state.config.interpolate)
+            {
+                return;
+            }
+            const Time& time = app.GetTime();
+            world->Implementation().Blend(static_cast<float>(time.accumulator / time.tickRate));
+        }
     } // namespace
 
     Physics::Physics(std::shared_ptr<State> state) : m_state(std::move(state))
@@ -111,6 +133,20 @@ namespace Fenrir
                                      if (const std::shared_ptr<State> current = installed.lock())
                                      {
                                          StepActiveScene(running, *current);
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::BeforeTicks,
+                                 {[installed = std::weak_ptr<State>(state)](App& running) {
+                                     if (installed.lock())
+                                     {
+                                         RestoreActiveScene(running);
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::AfterTicks,
+                                 {[installed = std::weak_ptr<State>(state)](App& running) {
+                                     if (const std::shared_ptr<State> current = installed.lock())
+                                     {
+                                         BlendActiveScene(running, *current);
                                      }
                                  }});
         return Physics(std::move(state));
