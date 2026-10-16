@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "FenrirECS/ComponentType.hpp"
+#include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DynamicComponent.hpp"
 
 namespace Fenrir
@@ -61,6 +62,13 @@ namespace Fenrir
          * @return Entity The entity that was retrieved
          */
         Entity GetEntity(uint32_t id);
+
+        /**
+         * @brief A handle naming the entity `id` in this list whether or not it still exists, adding nothing to it.
+         * For data that names an entity which may since have been destroyed (a physics ContactEnd, say): check it with
+         * HasEntity before using its components.
+         */
+        [[nodiscard]] Entity HandleOf(std::uint32_t id);
 
         /**
          * @brief Destroy the Entity object
@@ -188,11 +196,23 @@ namespace Fenrir
         void ForEachWith(std::span<const ComponentType> types, Func&& func);
         /** @} */
 
+        /**
+         * @brief Starts recording every add and remove of components of this type in this list, native or dynamic,
+         * however it happens: typed calls, the ComponentType calls, destroying an entity, or clearing. See
+         * ComponentWatch. A dynamic type nobody has added yet may be watched; an invalid one, or one whose name this
+         * list cannot hold, gives a watch that records nothing.
+         */
+        [[nodiscard]] ComponentWatch Watch(const ComponentType& type);
+
         /** @brief How many different kinds of component this list is holding storage for. A diagnostic, mostly. */
         [[nodiscard]] std::size_t ComponentStorageCount() const;
 
       private:
         entt::registry m_registry;
+
+        // Lives as long as this list's storages (and moves with them), so a watch can tell whether its storage still
+        // exists. Made by the first Watch.
+        std::shared_ptr<const void> m_alive;
 
         void ForEachWithImpl(std::span<const ComponentType> types, void (*visit)(void* context, std::uint32_t entity),
                              void* context);
@@ -213,6 +233,34 @@ namespace Fenrir
             return static_cast<entt::sparse_set*>(&entities.m_registry.storage<T>());
         }
 
+        // The native component type `T`'s ComponentType::NativeWatchHook: connects the record to (or disconnects it
+        // from) the storage's construct and destroy signals.
+        template <typename T>
+        static void HookNativeWatch(void* storage, Detail::WatchRecord& record, bool start)
+        {
+            auto& typed = *static_cast<entt::storage_for_t<T>*>(static_cast<entt::sparse_set*>(storage));
+            if (start)
+            {
+                typed.on_construct().template connect<&EntityList::RecordAdded>(record);
+                typed.on_destroy().template connect<&EntityList::RecordRemoved>(record);
+            }
+            else
+            {
+                typed.on_construct().disconnect(&record);
+                typed.on_destroy().disconnect(&record);
+            }
+        }
+
+        static void RecordAdded(Detail::WatchRecord& record, entt::registry& /*registry*/, entt::entity entity)
+        {
+            record.changes.push_back({static_cast<std::uint32_t>(entity), ComponentChange::Kind::Added});
+        }
+
+        static void RecordRemoved(Detail::WatchRecord& record, entt::registry& /*registry*/, entt::entity entity)
+        {
+            record.changes.push_back({static_cast<std::uint32_t>(entity), ComponentChange::Kind::Removed});
+        }
+
         friend class Entity;
         friend class ComponentType;
     };
@@ -222,7 +270,8 @@ namespace Fenrir
     {
         static_assert(std::is_default_constructible_v<T>, "A component type must be default constructible.");
         static_assert(!std::is_empty_v<T>, "A component type reached by pointer must hold data.");
-        return ComponentType(&EntityList::FindNativeStorage<T>, nullptr, sizeof(T), alignof(T));
+        return ComponentType(&EntityList::FindNativeStorage<T>, &EntityList::HookNativeWatch<T>, nullptr, sizeof(T),
+                             alignof(T));
     }
 
     template <typename Func>

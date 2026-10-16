@@ -5,10 +5,12 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -861,6 +863,50 @@ namespace
         {
             INFO("C# did not see the hierarchy change");
             REQUIRE(Registry<std::uint32_t>(scripting, "FirstChildOf", parent.GetId()) == second.GetId());
+        }
+    }
+
+    void AWorldTransformIsReadAndSetFromCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto parent = entities.CreateEntity();
+        auto child = entities.CreateEntity();
+        parent.AddChild(child);
+        // The parent sits at (10, 0, 0), turned a quarter about +Y (+X to -Z) and doubled; the child is 1 along its +X.
+        parent.GetComponent<Transform>() =
+            Transform(Math::Vec3(10.0F, 0.0F, 0.0F),
+                      Math::AngleAxis(Math::DegToRad(90.0F), Math::Vec3(0.0F, 1.0F, 0.0F)), Math::Vec3(2.0F));
+        child.GetComponent<Transform>().pos = Math::Vec3(1.0F, 0.0F, 0.0F);
+        const auto near = [](float left, float right) { return std::abs(left - right) < 1e-4F; };
+
+        const float worldZ = Registry<float>(scripting, "WorldPositionZ", child.GetId());
+        {
+            INFO("C# read world Z " + std::to_string(worldZ) + ", not -2");
+            REQUIRE(near(worldZ, -2.0F));
+        }
+
+        // C# sets the child's world position and reads it back in the same call, before anything returns to C++.
+        const float readBack = Registry<float>(scripting, "PlaceAndReadWorldY", child.GetId(), 4.0F, 6.0F, -8.0F);
+        {
+            INFO("C# read back world Y " + std::to_string(readBack) + " after setting 6");
+            REQUIRE(near(readBack, 6.0F));
+        }
+        const Transform world = GetWorldTransform(child);
+        {
+            INFO("C++ did not see the world position C# set");
+            REQUIRE((near(world.pos.x, 4.0F) && near(world.pos.y, 6.0F) && near(world.pos.z, -8.0F)));
+        }
+        {
+            INFO("The child's local Transform was not set through its parent (expected (4, 3, -3))");
+            const Math::Vec3 local = child.GetComponent<Transform>().pos;
+            REQUIRE((near(local.x, 4.0F) && near(local.y, 3.0F) && near(local.z, -3.0F)));
+        }
+        {
+            INFO("A dead entity's world transform was not refused");
+            const auto message = Registry<std::optional<std::string>>(scripting, "DeadWorldTransform", NullEntity);
+            REQUIRE(message.has_value());
         }
     }
 
@@ -3530,6 +3576,11 @@ TEST_CASE("a Name round-trips both ways, and long text is cut between characters
 TEST_CASE("the hierarchy is readable from C# but not writable", "[scripting]")
 {
     TheHierarchyIsReadableButNotWritable();
+}
+
+TEST_CASE("C# reads and sets a child's world transform and sees its own edit", "[scripting]")
+{
+    AWorldTransformIsReadAndSetFromCSharp();
 }
 
 TEST_CASE("a component registered by the test works with no engine changes", "[scripting]")

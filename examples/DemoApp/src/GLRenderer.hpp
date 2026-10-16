@@ -77,8 +77,7 @@ class GLRenderer
 
     void SetMatProps(const Shader& shader, const Material& mat);
 
-    void DrawModel(const Fenrir::Transform& transform, const Fenrir::Relationship& relationship, const Model& model,
-                   const Shader& shader);
+    void DrawModel(const Fenrir::Math::Mat4& worldMatrix, const Model& model, const Shader& shader);
 
     void DrawMesh(const Mesh& mesh, const Shader& shader);
 
