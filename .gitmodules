@@ -10,3 +10,6 @@
 [submodule "libs/catch2"]
 	path = libs/catch2
 	url = https://github.com/catchorg/Catch2
+[submodule "packages/FenrirPhysics/libs/JoltPhysics"]
+	path = packages/FenrirPhysics/libs/JoltPhysics
+	url = https://github.com/jrouwe/JoltPhysics
