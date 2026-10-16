@@ -4,7 +4,7 @@
 
 **Blocked by:** 15 (Physics materials and collision layers).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Tests: a ray hits the nearest body with the right point, normal, distance and entities; `RaycastAll` lists hits in distance order and stops when the span is full.
 - [ ] Shape casts and overlaps find the expected bodies for box and sphere shapes.
@@ -12,3 +12,6 @@
 - [ ] A ray starting inside a solid primitive hits at distance 0; triangle-mesh back faces are ignored (once mesh shapes exist).
 - [ ] A body moved since the last step is found at its old position until the next tick (documented behaviour, tested).
 - [ ] `IsSleeping` and `Bounds` report a resting body correctly; queries in a scene without a world find nothing.
+
+**Resolved by:** merge of impl/18-queries (74a15b5)
+**Follow-ups:** the trigger-skipping test lands with ticket 17; hits naming the collider entity land with ticket 14.
