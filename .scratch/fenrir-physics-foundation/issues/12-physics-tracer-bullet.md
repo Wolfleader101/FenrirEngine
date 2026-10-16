@@ -21,4 +21,4 @@
 - [ ] The DemoApp physics scene shows boxes falling, stacking and being pushed by the paddle (checked by hand).
 
 **Resolved by:** merge of impl/12-physics-tracer-bullet (8c7ef72)
-**Hand check pending:** DemoApp physics scene: coloured boxes fall and pile on the grey ground near (0,-4,-12); the orange paddle sweeps x -6..6, pushes boxes, is not pushed, does not drift.
+**Hand checked (2026-10-16):** DemoApp physics scene: coloured boxes fall and pile on the grey ground near (0,-4,-12); the orange paddle sweeps x -6..6, pushes boxes, is not pushed, does not drift.

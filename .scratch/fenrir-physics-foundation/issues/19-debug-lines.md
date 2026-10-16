@@ -12,4 +12,4 @@
 
 **Resolved by:** merge of impl/19-debug-lines (72d97cd)
 
-**Hand check pending:** DemoApp physics scene: F2 cycles colliders (grey ground, green boxes dimmed when asleep, blue paddle, grey backpack mesh), contacts (red), velocities (yellow), bounds (orange), all, off; frame rate stays acceptable with the backpack mesh drawn.
+**Hand checked (2026-10-16):** DemoApp physics scene: F2 cycles colliders (grey ground, green boxes dimmed when asleep, blue paddle, grey backpack mesh), contacts (red), velocities (yellow), bounds (orange), all, off; frame rate stays acceptable with the backpack mesh drawn.

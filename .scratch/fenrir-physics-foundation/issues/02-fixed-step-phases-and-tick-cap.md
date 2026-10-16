@@ -13,4 +13,4 @@
 
 **Resolved by:** merge of impl/02-phases (ca45ad5)
 
-**Hand check pending:** the DemoApp and its scripting demo behave as before with the new phases.
+**Hand checked (2026-10-16):** the DemoApp and its scripting demo behave as before with the new phases.

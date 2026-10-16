@@ -13,6 +13,6 @@
 - [ ] The DemoApp can build a mesh collider from a model's vertex data without FenrirPhysics depending on the renderer.
 
 **Resolved by:** merge of impl/13-all-collision-shapes (3f29523)
-**Hand check pending:** DemoApp: three small boxes rest on the brown backpack mesh collider's contours near (5, ground, -7).
+**Hand checked (2026-10-16):** DemoApp: three small boxes rest on the brown backpack mesh collider's contours near (5, ground, -7).
 
 **Note:** collision meshes live on the Physics owner (CreateCollisionMesh / ReleaseCollisionMesh), not on PhysicsWorld, because worlds are created lazily and a mesh must exist before any collider that uses it.
