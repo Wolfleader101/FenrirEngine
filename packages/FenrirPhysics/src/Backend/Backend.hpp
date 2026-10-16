@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <utility>
 #include <vector>
 
 #include "FenrirMath/Math.hpp"
@@ -80,10 +81,70 @@ namespace Fenrir::Backend
         Math::Vec3 angularVelocity;
     };
 
-    /** @brief A world's fixed settings. */
+    /** @brief A non-owning reference to a callable, valid while the callable is: a callback with no virtual call and
+     * no allocation. */
+    template <typename Signature>
+    class FunctionRef;
+
+    template <typename Result, typename... Args>
+    class FunctionRef<Result(Args...)>
+    {
+      public:
+        template <typename Callable>
+        FunctionRef(Callable& callable) // NOLINT(google-explicit-constructor): passed straight to a call
+            : m_callable(&callable), m_call([](void* target, Args... args) -> Result {
+                  return (*static_cast<Callable*>(target))(std::forward<Args>(args)...);
+              })
+        {
+        }
+
+        Result operator()(Args... args) const
+        {
+            return m_call(m_callable, std::forward<Args>(args)...);
+        }
+
+      private:
+        void* m_callable;
+        Result (*m_call)(void*, Args...);
+    };
+
+    /** @brief Which bodies a query finds: those in a layer of `mask`, other than `ignoreEntity`'s, and triggers only
+     * if `hitTriggers`. */
+    struct QueryFilter
+    {
+        std::uint32_t mask = ~0u;
+        /** @brief The entity whose body is not found; the default matches no entity. */
+        std::uint32_t ignoreEntity = ~0u;
+        bool hitTriggers = false;
+    };
+
+    /** @brief Where a ray or a cast shape hit a body. */
+    struct QueryHit
+    {
+        /** @brief The body's entity. */
+        std::uint32_t entity;
+        /** @brief The entity of the body's collider that was hit. */
+        std::uint32_t collider;
+        Math::Vec3 point;
+        Math::Vec3 normal;
+        float distance;
+    };
+
+    /** @brief Given each hit nearer than the distance it last returned (at first the query's maximum), in no
+     * particular order; returns the farthest distance still wanted. */
+    using HitSink = FunctionRef<float(const QueryHit&)>;
+
+    /** @brief Given the entities of each body found and of its collider, once per collider; returns false to stop the
+     * query. */
+    using BodySink = FunctionRef<bool(std::uint32_t, std::uint32_t)>;
+
+    /** @brief A world's settings when it is made. Gravity can change later; the capacities cannot. */
     struct WorldSettings
     {
         Math::Vec3 gravity;
+        std::uint32_t maxBodies;
+        std::uint32_t maxBodyPairs;
+        std::uint32_t maxContacts;
         /**
          * @brief The threads a step spreads its work over, besides the stepping thread, which also works while it
          * waits. Null: a step runs on the stepping thread alone. Must outlive the world.
@@ -139,8 +200,8 @@ namespace Fenrir::Backend
     };
 
     /**
-     * @brief One simulation. Every call is made from the thread that runs the App; only a step's own work runs on the
-     * worker threads.
+     * @brief One simulation. Every call but a query is made from the thread that runs the App; only a step's own work
+     * runs on the worker threads. Queries may come from any threads at once, never during another call.
      */
     class World
     {
@@ -189,10 +250,53 @@ namespace Fenrir::Backend
         /** @brief Changes how a body moves. The body must have been made with `canMove`. */
         void SetMotion(BodyId id, const Motion& motion);
 
+        /** @brief Changes a dynamic body's velocity by `impulse` over its mass, waking it. Other bodies ignore it. */
+        void AddImpulse(BodyId id, const Math::Vec3& impulse);
+
+        /** @brief Pushes a dynamic body with `force` during the next step only, waking it. Other bodies ignore it. */
+        void AddForce(BodyId id, const Math::Vec3& force);
+
+        /** @brief Twists a dynamic body with `torque` during the next step only, waking it. Other bodies ignore it. */
+        void AddTorque(BodyId id, const Math::Vec3& torque);
+
+        /** @brief Changes a dynamic body's angular velocity by `impulse` over its inertia, waking it. Other bodies
+         * ignore it. */
+        void AddAngularImpulse(BodyId id, const Math::Vec3& impulse);
+
+        [[nodiscard]] Math::Vec3 Gravity() const;
+
+        /** @brief Changes the world's gravity, waking every body. */
+        void SetGravity(const Math::Vec3& gravity);
+
         [[nodiscard]] BodyState GetState(BodyId id) const;
 
         /** @brief Diagnostic for tests: how many distinct backend shapes the world's bodies use. */
         [[nodiscard]] std::size_t DistinctShapeCount() const;
+
+        // Queries only read: they may be made from several threads at once, never during any other call.
+
+        /** @brief Casts a ray from `origin` along the unit `direction` for `maxDistance`. A ray that starts inside a
+         * solid shape hits it at distance 0, its normal against `direction`. */
+        void CastRay(const Math::Vec3& origin, const Math::Vec3& direction, float maxDistance,
+                     const QueryFilter& filter, HitSink sink) const;
+
+        /** @brief Sweeps `shape` (`scale` baked in, as for a body) from a pose along the unit `direction` for
+         * `maxDistance`. Each hit's point is on the cast shape. */
+        void CastShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                       const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
+                       const QueryFilter& filter, HitSink sink) const;
+
+        /** @brief Finds the bodies `shape` (`scale` baked in, as for a body) at a pose overlaps. */
+        void CollideShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                          const Math::Quat& rotation, const QueryFilter& filter, BodySink sink) const;
+
+        /** @brief Finds the bodies containing `point`. */
+        void CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const;
+
+        [[nodiscard]] bool IsSleeping(BodyId id) const;
+
+        /** @brief The body's world-space bounding box. */
+        [[nodiscard]] Math::AABB Bounds(BodyId id) const;
 
         /** @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps. */
         void Step(float dt, int collisionSteps);

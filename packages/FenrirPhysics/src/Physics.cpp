@@ -40,13 +40,39 @@ namespace Fenrir
                 {
                     return; // no physics in this scene yet
                 }
-                world = &scene.AddResource<PhysicsWorld>(std::make_unique<PhysicsWorld::Impl>(
-                    entities,
-                    Backend::WorldSettings{.gravity = state.config.gravity,
-                                           .workers = state.config.useWorkerThreads ? &app.GetThreadPool() : nullptr},
-                    state.meshes, *app.Logger()));
+                const PhysicsConfig& config = state.config;
+                const Backend::WorldSettings settings{.gravity = config.gravity,
+                                                      .maxBodies = config.maxBodies,
+                                                      .maxBodyPairs = config.maxBodyPairs,
+                                                      .maxContacts = config.maxContacts,
+                                                      .workers =
+                                                          config.useWorkerThreads ? &app.GetThreadPool() : nullptr};
+                world = &scene.AddResource<PhysicsWorld>(
+                    std::make_unique<PhysicsWorld::Impl>(entities, settings, state.meshes, *app.Logger()));
             }
             world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
+        }
+
+        // The BeforeTicks system: the active scene's bodies are back at their true poses before any tick.
+        void RestoreActiveScene(App& app)
+        {
+            if (PhysicsWorld* world = PhysicsWorld::Of(app.GetActiveScene()))
+            {
+                world->Implementation().Restore();
+            }
+        }
+
+        // The AfterTicks system: the active scene's bodies are shown as far between their last two step poses as the
+        // frame is through the next tick.
+        void BlendActiveScene(App& app, const Physics::State& state)
+        {
+            PhysicsWorld* world = PhysicsWorld::Of(app.GetActiveScene());
+            if (world == nullptr || !state.config.interpolate)
+            {
+                return;
+            }
+            const Time& time = app.GetTime();
+            world->Implementation().Blend(static_cast<float>(time.accumulator / time.tickRate));
         }
     } // namespace
 
@@ -107,6 +133,20 @@ namespace Fenrir
                                      if (const std::shared_ptr<State> current = installed.lock())
                                      {
                                          StepActiveScene(running, *current);
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::BeforeTicks,
+                                 {[installed = std::weak_ptr<State>(state)](App& running) {
+                                     if (installed.lock())
+                                     {
+                                         RestoreActiveScene(running);
+                                     }
+                                 }});
+        app.AddSequentialSystems(SchedulePriority::AfterTicks,
+                                 {[installed = std::weak_ptr<State>(state)](App& running) {
+                                     if (const std::shared_ptr<State> current = installed.lock())
+                                     {
+                                         BlendActiveScene(running, *current);
                                      }
                                  }});
         return Physics(std::move(state));

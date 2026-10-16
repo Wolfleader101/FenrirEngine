@@ -21,7 +21,14 @@ namespace Fenrir
      * edits by comparing it, each tick, with what it last applied.
      *
      * A collider without a RigidBody is static, as is `RigidBody{MotionType::Static}`. Switching `motionType` is a
-     * field edit and takes effect on the next tick. Physics writes a dynamic body's velocities back after each step;
+     * field edit and takes effect on the next tick.
+     *
+     * The body's colliders are the one on its own entity and those on entities beneath it that have no RigidBody of
+     * their own: a compound body, whose mass is spread over all its colliders. A RigidBody with no collider at all is
+     * inactive, with a warning. Removing a RigidBody leaves its colliders static where they are (or part of the body of
+     * a RigidBody further up). A dynamic body under a parent simulates in world space: its local `Transform` is written
+     * back against its parent's world transform, and moving the parent teleports it. A kinematic or static body follows
+     * its world transform when its parent moves. Physics writes a dynamic body's velocities back after each step;
      * writing them sets the body's velocity. A kinematic body is moved by writing its `Transform` (in `Tick`, so
      * physics sees it in `PostTick`); it pushes dynamic bodies and is not pushed.
      */
@@ -40,6 +47,13 @@ namespace Fenrir
         Math::Vec3 linearVelocity = Math::Vec3(0.0f);
         /** @brief Radians per second about each world axis. */
         Math::Vec3 angularVelocity = Math::Vec3(0.0f);
+        /**
+         * @brief Whether a dynamic or kinematic body is shown between its last two step poses when a frame ends part
+         * of the way through a tick, so it moves smoothly at any frame rate, one step behind the simulation. Between
+         * ticks its `Transform` holds the blended pose; `Tick` systems see the true one. Turn it off for a body game
+         * code moves every frame, so it does not lag a step. PhysicsConfig can turn interpolation off for every body.
+         */
+        bool interpolate = true;
     };
 
     /**
@@ -246,8 +260,10 @@ namespace Fenrir
     };
 
     /**
-     * @brief Gives the entity collision geometry, placed at its world transform and scaled by its world scale. Without
-     * a RigidBody the collider is static.
+     * @brief Gives the entity collision geometry, placed at its world transform and scaled by its world scale. One per
+     * entity. It belongs to the body of the nearest of its entity and that entity's ancestors with a RigidBody; without
+     * one the collider is static. Adding, removing or moving a collider beneath a body rebuilds that body's shape on
+     * the next tick.
      *
      * The scale is baked into the backend's shape, so changing the shape's dimensions or the entity's scale rebuilds
      * that shape on the next tick: fine occasionally, costly every tick. Each kind's shape documents how it takes a
@@ -265,6 +281,9 @@ namespace Fenrir
      *
      * Where two surfaces touch, their friction is the square root of the product of the two frictions, and their
      * restitution the larger of the two restitutions.
+     *
+     * A compound body has one surface: the material on its RigidBody's entity, else that of the first of its colliders
+     * (in entity order) that has one.
      */
     struct PhysicsMaterial
     {
@@ -280,8 +299,9 @@ namespace Fenrir
      * one is in layer 0 and collides with every layer.
      *
      * Two bodies collide when each one's mask includes a layer of the other: `(a.layers & b.mask) != 0 &&
-     * (b.layers & a.mask) != 0`. It is read from the body's entity and applies to all the body's colliders. Edits take
-     * effect on the next tick. Layers can be given names in PhysicsConfig, and looked up through CollisionLayers.
+     * (b.layers & a.mask) != 0`. It is read from the body's entity and applies to all the body's colliders; one on a
+     * child collider of a compound body is ignored, with a warning. Edits take effect on the next tick. Layers can be
+     * given names in PhysicsConfig, and looked up through CollisionLayers.
      */
     struct CollisionFilter
     {

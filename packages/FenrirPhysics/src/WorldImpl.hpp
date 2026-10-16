@@ -34,6 +34,19 @@ namespace Fenrir
         void Step(float dt);
 
         /**
+         * @brief `BeforeTicks`: put back the true pose of each body Blend wrote, so `Tick` systems and the diff see
+         * real simulation state. A body whose `Transform` game code changed since keeps the game's value, which the
+         * next step takes as a teleport.
+         */
+        void Restore();
+
+        /**
+         * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's pose `fraction` of the way from its
+         * previous step pose to its current one, parents before children.
+         */
+        void Blend(float fraction);
+
+        /**
          * @brief Diagnostic private to FenrirPhysics's tests: how many distinct backend shapes the world's bodies use.
          * Colliders with identical primitive shapes (after scale) share one.
          */
@@ -42,7 +55,27 @@ namespace Fenrir
             return m_backend.DistinctShapeCount();
         }
 
+        /** @brief A way of pushing a body: one of Backend::World's AddForce, AddImpulse, AddTorque and
+         * AddAngularImpulse. */
+        using Pusher = void (Backend::World::*)(Backend::BodyId, const Math::Vec3&);
+
+        [[nodiscard]] Math::Vec3 Gravity() const
+        {
+            return m_backend.Gravity();
+        }
+
+        void SetGravity(const Math::Vec3& gravity)
+        {
+            m_backend.SetGravity(gravity);
+        }
+
+        /** @brief Queues a push of `entity`'s body for the next step. */
+        void Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount);
+
       private:
+        // The queries, in Queries.cpp, read the bodies and the backend.
+        friend class PhysicsWorld;
+
         // One collider of a body, as physics last applied it: its shape, and its pose in the body (relative to the
         // body's pose, in world units; scale is its entity's world scale). A part whose shape cannot be made (its
         // collision mesh was released) is left out of the body's backend shape until its shape changes.
@@ -57,9 +90,16 @@ namespace Fenrir
         };
 
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
-        // A body none of whose colliders can be made keeps a record with no backend body: it is inactive.
+        // A body none of whose colliders can be made (their collision meshes were released), or that the world was too
+        // full to make, keeps a record with no backend body: it is inactive, skipped by every step, until its
+        // components or its colliders' shapes change.
         struct Record
         {
+            [[nodiscard]] bool Active() const
+            {
+                return id.value != Backend::BodyId{}.value;
+            }
+
             Backend::BodyId id;
             bool canMove;
             Backend::Motion motion;
@@ -69,17 +109,37 @@ namespace Fenrir
             Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
+
+            // Interpolation: the world poses after the step before last and after the last step. A teleport or a new
+            // body snaps: previous = current after its next step, so nothing blends across the jump.
+            Transform previous;
+            Transform current;
+            bool snap = true;
+            // Game code wrote the Transform during Update: shown as written until a step has taken it.
+            bool heldByGame = false;
+            // Whether Blend wrote this body's Transform, the true local Transform it replaced, and the one it wrote.
+            bool blended = false;
+            Transform trueLocal;
+            Transform shownLocal;
         };
 
         void SyncBodies();
         void PushEdits(float dt);
+        void ApplyPushes();
         void WriteBack();
+        void AdvancePoses();
 
         /**
          * @brief The entity whose body the collider on `entity` belongs to: the nearest of it and its ancestors with a
          * RigidBody, or the collider's own entity (a static body) if none has one.
          */
         [[nodiscard]] std::uint32_t BodyEntityOf(std::uint32_t entity) const;
+
+        /**
+         * @brief The body `entity` has or belongs to: its own (a RigidBody's, or a static collider's), or, for a
+         * collider of a compound body, that body. Null for an entity with neither component, or whose body is not made.
+         */
+        [[nodiscard]] Record* FindBody(std::uint32_t entity);
 
         /** @brief The body's colliders as they are now, in the order of `entities`. */
         [[nodiscard]] std::vector<Part> PartsOf(std::span<const std::uint32_t> entities, std::uint32_t body,
@@ -107,5 +167,15 @@ namespace Fenrir
         // By the body's entity (its RigidBody's, or a static collider's own), so bodies are made, diffed and written
         // back in a reproducible order (ADR-0011).
         std::map<std::uint32_t, Record> m_bodies;
+
+        struct Push
+        {
+            std::uint32_t entity;
+            Pusher pusher;
+            Math::Vec3 amount;
+        };
+
+        // In the order game code made them, applied after the edits are pushed and before the step.
+        std::vector<Push> m_pushes;
     };
 } // namespace Fenrir

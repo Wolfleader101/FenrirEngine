@@ -82,16 +82,6 @@ namespace Fenrir
             return entity.HasComponent<Transform>() ? entity.GetComponent<Transform>() : Transform();
         }
 
-        int DepthOf(const Entity& entity)
-        {
-            int depth = 0;
-            for (Entity e = ParentOf(entity); e.IsValid(); e = ParentOf(e))
-            {
-                ++depth;
-            }
-            return depth;
-        }
-
         // The backend keeps one surface per body, so a compound body has one material: its own entity's, else that of
         // the first of its colliders (in entity order) with one, else the default.
         template <typename Parts>
@@ -138,6 +128,24 @@ namespace Fenrir
             return entity.HasComponent<RigidBody>() ? &entity.GetComponent<RigidBody>() : nullptr;
         }
 
+        bool Same(const Transform& a, const Transform& b)
+        {
+            return Same(a.pos, b.pos) && Same(a.rot, b.rot) && Same(a.scale, b.scale);
+        }
+
+        // How many ancestors the entity has: blending writes parents before children.
+        int DepthOf(const Entity& entity)
+        {
+            int depth = 0;
+            for (Entity at = entity;
+                 at.HasComponent<Relationship>() && at.GetComponent<Relationship>().parent.IsValid();
+                 at = at.GetComponent<Relationship>().parent)
+            {
+                ++depth;
+            }
+            return depth;
+        }
+
         // Enough collision steps that none is longer than a 60 Hz step.
         int CollisionSteps(float dt)
         {
@@ -154,6 +162,36 @@ namespace Fenrir
     PhysicsWorld* PhysicsWorld::Of(Scene& scene)
     {
         return scene.GetResource<PhysicsWorld>();
+    }
+
+    void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddImpulse, impulse);
+    }
+
+    void PhysicsWorld::AddForce(const Entity& entity, const Math::Vec3& force)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddForce, force);
+    }
+
+    void PhysicsWorld::AddTorque(const Entity& entity, const Math::Vec3& torque)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddTorque, torque);
+    }
+
+    void PhysicsWorld::AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddAngularImpulse, impulse);
+    }
+
+    Math::Vec3 PhysicsWorld::Gravity() const
+    {
+        return m_impl->Gravity();
+    }
+
+    void PhysicsWorld::SetGravity(const Math::Vec3& gravity)
+    {
+        m_impl->SetGravity(gravity);
     }
 
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
@@ -173,8 +211,93 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        AdvancePoses();
+    }
+
+    void PhysicsWorld::Impl::AdvancePoses()
+    {
+        for (auto& [id, record] : m_bodies)
+        {
+            record.previous = record.snap ? record.world : record.current;
+            record.current = record.world;
+            record.snap = false;
+            record.heldByGame = false;
+        }
+    }
+
+    void PhysicsWorld::Impl::Restore()
+    {
+        for (auto& [id, record] : m_bodies)
+        {
+            if (!record.blended)
+            {
+                continue;
+            }
+            record.blended = false;
+            if (!m_entities->HasEntity(id))
+            {
+                continue;
+            }
+            Transform& local = m_entities->GetEntity(id).GetComponent<Transform>();
+            if (Same(local, record.shownLocal))
+            {
+                local = record.trueLocal;
+            }
+            else
+            {
+                // Game code moved it during Update: its value stays, and nothing blends across the jump.
+                record.snap = true;
+                record.heldByGame = true;
+            }
+        }
+    }
+
+    void PhysicsWorld::Impl::Blend(float fraction)
+    {
+        struct Blended
+        {
+            int depth;
+            Entity entity;
+            Record* record;
+        };
+        std::vector<Blended> blended;
+        for (auto& [id, record] : m_bodies)
+        {
+            if (!record.Active() || record.motion.motionType == MotionType::Static || record.heldByGame ||
+                !m_entities->HasEntity(id))
+            {
+                continue; // an inactive collider has no simulated pose to show
+            }
+            Entity entity = m_entities->GetEntity(id);
+            const RigidBody* rigidBody = RigidBodyOf(entity);
+            if (rigidBody == nullptr || !rigidBody->interpolate || !entity.HasComponent<Transform>())
+            {
+                continue;
+            }
+            blended.push_back(Blended{DepthOf(entity), entity, &record});
+        }
+        // Parents before children, so each child's world pose is set against its parent's blended one.
+        std::stable_sort(blended.begin(), blended.end(),
+                         [](const Blended& a, const Blended& b) { return a.depth < b.depth; });
+
+        // Every true local Transform is saved before any is overwritten.
+        for (const Blended& body : blended)
+        {
+            body.record->trueLocal = body.entity.GetComponent<Transform>();
+        }
+        for (const Blended& body : blended)
+        {
+            Record& record = *body.record;
+            Transform world = record.world;
+            world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
+            world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+            SetWorldTransform(body.entity, world);
+            record.shownLocal = body.entity.GetComponent<Transform>();
+            record.blended = true;
+        }
     }
 
     std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
@@ -187,6 +310,23 @@ namespace Fenrir
             }
         }
         return entity;
+    }
+
+    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(std::uint32_t entity)
+    {
+        if (!m_entities->HasEntity(entity))
+        {
+            // Destroyed: its body, if it had one, is ended at the next step.
+            const auto it = m_bodies.find(entity);
+            return it == m_bodies.end() ? nullptr : &it->second;
+        }
+        const Entity found = m_entities->GetEntity(entity);
+        if (!found.HasComponent<RigidBody>() && !found.HasComponent<Collider>())
+        {
+            return nullptr;
+        }
+        const auto it = m_bodies.find(BodyEntityOf(entity));
+        return it == m_bodies.end() ? nullptr : &it->second;
     }
 
     std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
@@ -374,7 +514,7 @@ namespace Fenrir
     {
         for (auto& [id, record] : m_bodies)
         {
-            if (record.id.value == Backend::BodyId{}.value)
+            if (!record.Active())
             {
                 continue; // inactive: no body to push to
             }
@@ -417,6 +557,12 @@ namespace Fenrir
                 record.material = material;
             }
 
+            if (!Same(material, record.material))
+            {
+                m_backend.SetMaterial(record.id, material);
+                record.material = material;
+            }
+
             const CollisionFilter filter = FilterOf(entity);
             if (!Same(filter, record.filter))
             {
@@ -432,6 +578,7 @@ namespace Fenrir
             else if (!Same(world.pos, record.world.pos) || !Same(world.rot, record.world.rot))
             {
                 m_backend.Teleport(record.id, world.pos, world.rot);
+                record.snap = true;
             }
             record.world = world;
 
@@ -446,6 +593,25 @@ namespace Fenrir
         }
     }
 
+    void PhysicsWorld::Impl::Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount)
+    {
+        m_pushes.push_back(Push{entity, pusher, amount});
+    }
+
+    void PhysicsWorld::Impl::ApplyPushes()
+    {
+        for (const Push& push : m_pushes)
+        {
+            const Record* record = FindBody(push.entity);
+            if (record == nullptr || !record->Active())
+            {
+                continue; // no body: nothing to push
+            }
+            (m_backend.*push.pusher)(record->id, push.amount);
+        }
+        m_pushes.clear();
+    }
+
     void PhysicsWorld::Impl::WriteBack()
     {
         // Parents before children: a body's local Transform is written against its parent's world transform, so a
@@ -453,7 +619,7 @@ namespace Fenrir
         std::vector<std::pair<int, std::uint32_t>> order;
         for (const auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType == MotionType::Dynamic && record.id.value != Backend::BodyId{}.value)
+            if (record.motion.motionType == MotionType::Dynamic && record.Active())
             {
                 order.emplace_back(DepthOf(m_entities->GetEntity(id)), id);
             }

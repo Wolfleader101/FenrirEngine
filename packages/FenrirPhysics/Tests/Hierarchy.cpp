@@ -1,6 +1,9 @@
 // Bodies in the entity hierarchy through the frame seam: compound bodies built from child colliders, and bodies under
 // moved and rotated parents.
 
+#include <array>
+#include <optional>
+
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
@@ -307,4 +310,90 @@ TEST_CASE("A compound body's mass is spread over all its colliders", "[physics][
          "pillar (resting on it, the body would be at y = 2.5); it is at y = "
          << PositionOf(body).y);
     REQUIRE(PositionOf(body).y < 2.0f);
+}
+
+namespace
+{
+    /** A static compound body: a parent with a static RigidBody and unit boxes on children at x = 3 and x = 6. */
+    struct StaticCompound
+    {
+        Entity body;
+        Entity near;
+        Entity far;
+    };
+
+    StaticCompound AddStaticCompound(EntityList& entities)
+    {
+        Entity body = Place(entities, Math::Vec3(0.0f));
+        body.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Static});
+        Entity near = AddChildBox(entities, body, Math::Vec3(3.0f, 0.0f, 0.0f));
+        Entity far = AddChildBox(entities, body, Math::Vec3(6.0f, 0.0f, 0.0f));
+        return StaticCompound{body, near, far};
+    }
+} // namespace
+
+TEST_CASE("A ray hitting a compound body names the body and the collider it hit", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    const StaticCompound compound = AddStaticCompound(test.Entities());
+    test.Run(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    const std::optional<RaycastHit> along = world->Raycast(Math::Vec3(0.0f), Math::Vec3(1.0f, 0.0f, 0.0f), 100.0f);
+    INFO("a ray along +x meets the box at x = 3 first, on its near face at x = 2.5");
+    REQUIRE(along.has_value());
+    REQUIRE(along->body == compound.body);
+    REQUIRE(along->collider == compound.near);
+    REQUIRE(along->point.x == Approx(2.5f).margin(1e-4f));
+
+    const std::optional<RaycastHit> onto =
+        world->Raycast(Math::Vec3(6.0f, 5.0f, 0.0f), Math::Vec3(0.0f, -1.0f, 0.0f), 100.0f);
+    INFO("a ray down onto x = 6 meets the far box");
+    REQUIRE(onto.has_value());
+    REQUIRE(onto->body == compound.body);
+    REQUIRE(onto->collider == compound.far);
+}
+
+TEST_CASE("Overlap queries report each collider of a compound body they touch, with the body", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    const StaticCompound compound = AddStaticCompound(test.Entities());
+    test.Run(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    std::array<OverlapHit, 4> hits;
+    INFO("a point inside the far box overlaps that box alone");
+    REQUIRE(world->OverlapPoint(Math::Vec3(6.2f, 0.1f, 0.0f), hits) == 1);
+    REQUIRE(hits[0].body == compound.body);
+    REQUIRE(hits[0].collider == compound.far);
+
+    const std::size_t count = world->Overlap(BoxShape{Math::Vec3(2.0f, 0.5f, 0.5f)},
+                                             Transform(Math::Vec3(4.5f, 0.0f, 0.0f), identity, Math::Vec3(1.0f)), hits);
+    INFO("a box spanning both overlaps both, each named with the one body");
+    REQUIRE(count == 2);
+    REQUIRE(hits[0].body == compound.body);
+    REQUIRE(hits[1].body == compound.body);
+    REQUIRE(hits[0].collider != hits[1].collider);
+    REQUIRE((hits[0].collider == compound.near || hits[0].collider == compound.far));
+    REQUIRE((hits[1].collider == compound.near || hits[1].collider == compound.far));
+}
+
+TEST_CASE("Pushing a child collider's entity pushes the compound body it belongs to", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    Entity body = Place(test.Entities(), Math::Vec3(0.0f, 50.0f, 0.0f));
+    body.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Dynamic, .mass = 2.0f});
+    Entity child = AddChildBox(test.Entities(), body, Math::Vec3(0.0f));
+    test.Run(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    world->AddImpulse(child, Math::Vec3(4.0f, 0.0f, 0.0f));
+    test.Run(tick);
+
+    const float speed = body.GetComponent<RigidBody>().linearVelocity.x;
+    INFO("an impulse of 4 N s on the child's 2 kg body adds 2 m/s (less a tick of damping), it moves at " << speed);
+    REQUIRE(speed == Approx(2.0f).margin(0.01));
 }
