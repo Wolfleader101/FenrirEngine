@@ -462,3 +462,38 @@ TEST_CASE("A destroyed entity has no body to ask about, even before the next ste
     INFO("a destroyed entity's body is reported touching the ground");
     REQUIRE(contacts == 0);
 }
+
+TEST_CASE("Queries take convex hull and triangle-mesh shapes, scaled by the pose", "[physics][queries]")
+{
+    PhysicsApp test;
+    Entity box = AddStatic(test.Entities(), Math::Vec3(5.0f, 0.0f, 0.0f));
+    // The corners of a unit cube, wound outwards as twelve triangles.
+    std::array<Math::Vec3, 8> corners;
+    for (std::size_t i = 0; i < corners.size(); ++i)
+    {
+        corners[i] = Math::Vec3((i & 1u) ? 0.5f : -0.5f, (i & 2u) ? 0.5f : -0.5f, (i & 4u) ? 0.5f : -0.5f);
+    }
+    const std::array<std::uint32_t, 36> triangles = {0, 2, 1, 1, 2, 3, 4, 5, 6, 5, 7, 6, 0, 1, 4, 1, 5, 4,
+                                                     2, 6, 3, 3, 6, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 3, 7, 5};
+    const CollisionMesh cube = test.physics.CreateCollisionMesh(corners, triangles);
+    test.Run(tick);
+
+    const Transform atOrigin(Math::Vec3(0.0f), identity, Math::Vec3(1.0f));
+    const std::optional<ShapeCastHit> hullHit = WorldOf(test).ShapeCast(ConvexHullShape{cube}, atOrigin, east, 10.0f);
+    INFO("a unit hull swept along +x from the origin does not touch the box (its face at x = 4.5) after 4 m");
+    REQUIRE(hullHit.has_value());
+    REQUIRE(hullHit->body == box);
+    REQUIRE(hullHit->distance == Approx(4.0f).margin(0.01f));
+
+    const Transform doubled(Math::Vec3(0.0f), identity, Math::Vec3(2.0f));
+    const std::optional<ShapeCastHit> scaledHit = WorldOf(test).ShapeCast(ConvexHullShape{cube}, doubled, east, 10.0f);
+    INFO("the hull scaled by 2 does not touch the box after 3.5 m");
+    REQUIRE(scaledHit.has_value());
+    REQUIRE(scaledHit->distance == Approx(3.5f).margin(0.01f));
+
+    std::array<OverlapHit, 4> hits;
+    const Transform overBox(Math::Vec3(5.5f, 0.0f, 0.0f), identity, Math::Vec3(1.0f));
+    INFO("a triangle-mesh cube placed half over the box does not overlap it");
+    REQUIRE(WorldOf(test).Overlap(MeshShape{cube}, overBox, hits) == 1);
+    REQUIRE(hits[0].body == box);
+}
