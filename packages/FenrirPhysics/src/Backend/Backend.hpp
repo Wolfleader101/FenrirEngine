@@ -49,6 +49,42 @@ namespace Fenrir::Backend
         Math::Vec3 angularVelocity = Math::Vec3(0.0f);
         /** @brief The body's entity, kept with the body. */
         std::uint32_t entity = 0;
+        /** @brief A trigger: a kinematic body, kept awake, that pushes nothing and finds static bodies too. */
+        bool isTrigger = false;
+    };
+
+    /**
+     * @brief Two bodies touching, as the backend sees it: a contact, or an overlap if one is a trigger. A pair stops
+     * being found when both its bodies fall asleep (or one sleeps and the other is static); it keeps touching.
+     */
+    struct Touch
+    {
+        /** @brief The two bodies, in no meaningful order. */
+        BodyId body1;
+        BodyId body2;
+        /** @brief Their entities, as given in their BodyDesc; kept after a body is destroyed. */
+        std::uint32_t entity1 = 0;
+        std::uint32_t entity2 = 0;
+        bool isTrigger1 = false;
+        bool isTrigger2 = false;
+        /** @brief Where they touch, in world space, as last found. */
+        Math::Vec3 point = Math::Vec3(0.0f);
+        /** @brief Unit length, from body 1 to body 2, as last found. */
+        Math::Vec3 normal = Math::Vec3(0.0f);
+        /** @brief How fast they were closing along `normal` when they began touching. */
+        float relativeSpeed = 0.0f;
+    };
+
+    /** @brief A pair that began or stopped touching over one step. */
+    struct TouchChange
+    {
+        enum class Kind : std::uint8_t
+        {
+            Begin,
+            End
+        };
+        Kind kind;
+        Touch touch;
     };
 
     /** @brief A body's pose and velocities after a step. */
@@ -120,8 +156,18 @@ namespace Fenrir::Backend
 
         [[nodiscard]] BodyState GetState(BodyId id) const;
 
-        /** @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps. */
+        /**
+         * @brief Advances the simulation by `dt` seconds in `collisionSteps` collision steps, and finds which pairs of
+         * bodies began and stopped touching. A body destroyed since the last step ends its touches here.
+         */
         void Step(float dt, int collisionSteps);
+
+        /** @brief The pairs that began or stopped touching in the last Step, in no particular order. Valid until the
+         * next Step. */
+        [[nodiscard]] std::span<const TouchChange> TouchChanges() const;
+
+        /** @brief Every pair touching after the last Step, in no particular order. Valid until the next Step. */
+        [[nodiscard]] std::span<const Touch> Touches() const;
 
       private:
         struct Impl;

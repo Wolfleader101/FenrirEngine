@@ -3,6 +3,7 @@
 // FenrirPhysics (this test target is one), the build fails here.
 #include "FenrirPhysics/CollisionLayers.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 

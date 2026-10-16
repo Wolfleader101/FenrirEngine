@@ -64,6 +64,13 @@ namespace Fenrir
         Entity GetEntity(uint32_t id);
 
         /**
+         * @brief A handle naming the entity `id` in this list whether or not it still exists, adding nothing to it.
+         * For data that names an entity which may since have been destroyed (a physics ContactEnd, say): check it with
+         * HasEntity before using its components.
+         */
+        [[nodiscard]] Entity HandleOf(std::uint32_t id);
+
+        /**
          * @brief Destroy the Entity object
          *
          * @param id The id of the entity to destroy

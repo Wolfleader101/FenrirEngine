@@ -4,11 +4,14 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
+#include <tuple>
 #include <vector>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "WorldImpl.hpp"
 
@@ -87,6 +90,33 @@ namespace Fenrir
             return entity.HasComponent<RigidBody>() ? &entity.GetComponent<RigidBody>() : nullptr;
         }
 
+        // A trigger is a kinematic body whatever RigidBody its entity has: it follows its entity and pushes nothing.
+        Backend::Motion MotionOf(Entity& entity, bool isTrigger)
+        {
+            if (isTrigger)
+            {
+                return Backend::Motion{.motionType = MotionType::Kinematic};
+            }
+            return MotionOf(RigidBodyOf(entity));
+        }
+
+        // The rigid body entity a collider belongs to: its own, until a body can have colliders on several entities.
+        std::uint32_t BodyOf(std::uint32_t collider)
+        {
+            return collider;
+        }
+
+        template <typename TEvent, typename Key>
+        void SortAndSend(App& app, std::vector<TEvent>& events, Key key)
+        {
+            std::sort(events.begin(), events.end(),
+                      [&key](const TEvent& a, const TEvent& b) { return key(a) < key(b); });
+            for (const TEvent& event : events)
+            {
+                app.SendEvent(event);
+            }
+        }
+
         // Enough collision steps that none is longer than a 60 Hz step.
         int CollisionSteps(float dt)
         {
@@ -108,19 +138,26 @@ namespace Fenrir
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings, ILogger& logger)
         : m_entities(&entities), m_backend(settings, logger),
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
-          m_colliders(entities.Watch(ComponentType::Native<Collider>()))
+          m_colliders(entities.Watch(ComponentType::Native<Collider>())),
+          m_triggers(entities.Watch(ComponentType::Native<Trigger>()))
     {
         // A watch records only what happens after it is made: the colliders already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
         entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_pending.insert(entity); });
     }
 
-    void PhysicsWorld::Impl::Step(float dt)
+    void PhysicsWorld::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
+    {
+        m_impl->ForEachContact(body, func);
+    }
+
+    void PhysicsWorld::Impl::Step(App& app, float dt)
     {
         SyncBodies();
         PushEdits(dt);
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        SendEvents(app);
     }
 
     void PhysicsWorld::Impl::SyncBodies()
@@ -134,6 +171,11 @@ namespace Fenrir
             changed.insert(change.entity);
         }
         for (const ComponentChange& change : m_colliders.Drain())
+        {
+            changed.insert(change.entity);
+        }
+        // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs.
+        for (const ComponentChange& change : m_triggers.Drain())
         {
             changed.insert(change.entity);
         }
@@ -167,15 +209,17 @@ namespace Fenrir
             {
                 continue;
             }
-            const RigidBody* rigidBody = RigidBodyOf(entity);
+            const bool isTrigger = entity.HasComponent<Trigger>();
+            const RigidBody* rigidBody = isTrigger ? nullptr : RigidBodyOf(entity);
             const Transform world = GetWorldTransform(entity);
 
             Backend::BodyDesc desc;
-            desc.motion = MotionOf(rigidBody);
-            desc.canMove = rigidBody != nullptr;
+            desc.motion = MotionOf(entity, isTrigger);
+            desc.canMove = isTrigger || rigidBody != nullptr;
+            desc.isTrigger = isTrigger;
             desc.shape = entity.GetComponent<Collider>().shape;
             desc.material = MaterialOf(entity);
-            desc.filter = FilterOf(entity);
+            desc.filter = EffectiveFilterOf(entity);
             desc.scale = world.scale;
             desc.position = world.pos;
             desc.rotation = world.rot;
@@ -196,7 +240,7 @@ namespace Fenrir
             const Backend::BodyDesc& desc = descs[i];
             m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
                                                  desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                                 desc.linearVelocity, desc.angularVelocity});
+                                                 desc.linearVelocity, desc.angularVelocity, desc.isTrigger});
         }
     }
 
@@ -205,8 +249,8 @@ namespace Fenrir
         for (auto& [id, record] : m_bodies)
         {
             Entity entity = m_entities->GetEntity(id);
-            RigidBody* rigidBody = RigidBodyOf(entity);
-            const Backend::Motion motion = MotionOf(rigidBody);
+            RigidBody* rigidBody = record.isTrigger ? nullptr : RigidBodyOf(entity);
+            const Backend::Motion motion = MotionOf(entity, record.isTrigger);
             const CollisionShape& shape = entity.GetComponent<Collider>().shape;
             const Transform world = GetWorldTransform(entity);
 
@@ -233,7 +277,7 @@ namespace Fenrir
                 record.material = material;
             }
 
-            const CollisionFilter filter = FilterOf(entity);
+            const CollisionFilter filter = EffectiveFilterOf(entity);
             if (!Same(filter, record.filter))
             {
                 m_backend.SetFilter(record.id, filter);
@@ -285,6 +329,126 @@ namespace Fenrir
             rigidBody.angularVelocity = state.angularVelocity;
             record.linearVelocity = state.linearVelocity;
             record.angularVelocity = state.angularVelocity;
+        }
+    }
+
+    CollisionFilter PhysicsWorld::Impl::EffectiveFilterOf(Entity& entity) const
+    {
+        if (entity.HasComponent<Trigger>() && !entity.GetComponent<Trigger>().enabled)
+        {
+            return CollisionFilter{.layers = 0u, .mask = 0u};
+        }
+        return FilterOf(entity);
+    }
+
+    bool PhysicsWorld::Impl::ReportsContacts(std::uint32_t body) const
+    {
+        if (!m_entities->HasEntity(body))
+        {
+            return false;
+        }
+        Entity entity = m_entities->GetEntity(body);
+        return entity.HasComponent<ContactEvents>() && entity.GetComponent<ContactEvents>().enabled;
+    }
+
+    void PhysicsWorld::Impl::SendEvents(App& app)
+    {
+        std::vector<ContactBegin> begins;
+        std::vector<ContactEnd> ends;
+        std::vector<TriggerEnter> enters;
+        std::vector<TriggerExit> exits;
+        const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
+
+        for (const Backend::TouchChange& change : m_backend.TouchChanges())
+        {
+            const Backend::Touch& touch = change.touch;
+            const bool isBegin = change.kind == Backend::TouchChange::Kind::Begin;
+            if (touch.isTrigger1 || touch.isTrigger2)
+            {
+                const bool firstIsTrigger = touch.isTrigger1;
+                const std::uint32_t other = firstIsTrigger ? touch.entity2 : touch.entity1;
+                const OverlapKey key{firstIsTrigger ? touch.entity1 : touch.entity2, BodyOf(other), other};
+                if (isBegin && m_reportedOverlaps.insert(key).second)
+                {
+                    enters.push_back(
+                        TriggerEnter{entity(key.trigger), entity(key.otherBody), entity(key.otherCollider)});
+                }
+                else if (!isBegin && m_reportedOverlaps.erase(key) > 0)
+                {
+                    exits.push_back(TriggerExit{entity(key.trigger), entity(key.otherBody), entity(key.otherCollider)});
+                }
+                continue;
+            }
+
+            // A and B in entity order, so the order does not depend on the backend's body ids.
+            const std::uint32_t body1 = BodyOf(touch.entity1);
+            const std::uint32_t body2 = BodyOf(touch.entity2);
+            const bool swap = std::tie(body2, touch.entity2) < std::tie(body1, touch.entity1);
+            const ContactKey key = swap ? ContactKey{body2, body1, touch.entity2, touch.entity1}
+                                        : ContactKey{body1, body2, touch.entity1, touch.entity2};
+            if (isBegin)
+            {
+                if ((ReportsContacts(key.bodyA) || ReportsContacts(key.bodyB)) && m_reportedContacts.insert(key).second)
+                {
+                    begins.push_back(ContactBegin{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA),
+                                                  entity(key.colliderB), touch.point,
+                                                  swap ? -touch.normal : touch.normal, touch.relativeSpeed});
+                }
+            }
+            else if (m_reportedContacts.erase(key) > 0)
+            {
+                ends.push_back(
+                    ContactEnd{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA), entity(key.colliderB)});
+            }
+        }
+
+        // A contact neither body reports any more (ContactEvents removed or disabled) ends now, as if it separated.
+        for (auto it = m_reportedContacts.begin(); it != m_reportedContacts.end();)
+        {
+            if (ReportsContacts(it->bodyA) || ReportsContacts(it->bodyB))
+            {
+                ++it;
+                continue;
+            }
+            ends.push_back(
+                ContactEnd{entity(it->bodyA), entity(it->bodyB), entity(it->colliderA), entity(it->colliderB)});
+            it = m_reportedContacts.erase(it);
+        }
+
+        // Sorted by entity, so the order is the same on every run whatever order the backend found them in.
+        const auto contactOrder = [](const auto& event) {
+            return std::make_tuple(event.bodyA.GetId(), event.bodyB.GetId(), event.colliderA.GetId(),
+                                   event.colliderB.GetId());
+        };
+        const auto overlapOrder = [](const auto& event) {
+            return std::make_tuple(event.trigger.GetId(), event.otherBody.GetId(), event.otherCollider.GetId());
+        };
+        SortAndSend(app, begins, contactOrder);
+        SortAndSend(app, ends, contactOrder);
+        SortAndSend(app, enters, overlapOrder);
+        SortAndSend(app, exits, overlapOrder);
+    }
+
+    void PhysicsWorld::Impl::ForEachContact(const Entity& body, const std::function<void(const Contact&)>& func) const
+    {
+        const std::uint32_t asked = body.GetId();
+        for (const Backend::Touch& touch : m_backend.Touches())
+        {
+            if (touch.isTrigger1 || touch.isTrigger2)
+            {
+                continue;
+            }
+            const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
+            if (BodyOf(touch.entity1) == asked)
+            {
+                func(Contact{entity(BodyOf(touch.entity1)), entity(touch.entity1), entity(BodyOf(touch.entity2)),
+                             entity(touch.entity2), touch.point, touch.normal});
+            }
+            else if (BodyOf(touch.entity2) == asked)
+            {
+                func(Contact{entity(BodyOf(touch.entity2)), entity(touch.entity2), entity(BodyOf(touch.entity1)),
+                             entity(touch.entity1), touch.point, -touch.normal});
+            }
         }
     }
 } // namespace Fenrir

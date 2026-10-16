@@ -39,7 +39,7 @@ namespace Fenrir
                 world = &scene.AddResource<PhysicsWorld>(std::make_unique<PhysicsWorld::Impl>(
                     entities, Backend::WorldSettings{state.config.gravity}, *app.Logger()));
             }
-            world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
+            world->Implementation().Step(app, static_cast<float>(app.GetTime().tickRate));
         }
     } // namespace
 

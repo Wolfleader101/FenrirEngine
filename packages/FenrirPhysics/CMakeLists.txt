@@ -5,6 +5,7 @@ add_subdirectory(libs)
 add_library(FenrirPhysics STATIC
     include/FenrirPhysics/CollisionLayers.hpp
     include/FenrirPhysics/Components.hpp
+    include/FenrirPhysics/Events.hpp
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
 

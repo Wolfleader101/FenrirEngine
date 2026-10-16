@@ -190,4 +190,26 @@ namespace Fenrir
         /** @brief The layers the body collides with, one bit per layer. */
         std::uint32_t mask = ~0u;
     };
+
+    /**
+     * @brief Makes the entity's collider a trigger: it reports what overlaps it (TriggerEnter, TriggerExit) and never
+     * pushes anything.
+     *
+     * A trigger follows its entity's world transform, so one under a moving body moves with it, and is in the layers
+     * of a CollisionFilter on its own entity (not its body's). It sees static, kinematic and dynamic bodies, sleeping
+     * ones included, but not other triggers. A RigidBody on the trigger's own entity gets no solid collider from it.
+     */
+    struct Trigger
+    {
+        /** @brief A disabled trigger overlaps nothing: disabling it exits what is inside on the next step. */
+        bool enabled = true;
+    };
+
+    /** @brief Reports the body's contacts as ContactBegin and ContactEnd events. Put it on the rigid body's entity. */
+    struct ContactEvents
+    {
+        /** @brief Disabled, the body's contacts are not reported; disabling it ends those reported on the next step,
+         * unless the other body reports them. */
+        bool enabled = true;
+    };
 } // namespace Fenrir

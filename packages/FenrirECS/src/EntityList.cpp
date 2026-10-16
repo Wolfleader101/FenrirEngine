@@ -48,6 +48,14 @@ namespace Fenrir
         return Entity();
     }
 
+    Entity EntityList::HandleOf(std::uint32_t id)
+    {
+        Entity handle;
+        handle.m_entityId = static_cast<entt::entity>(id);
+        handle.m_entityList = this;
+        return handle;
+    }
+
     void EntityList::DestroyEntity(uint32_t id)
     {
         if (m_registry.valid(static_cast<entt::entity>(id)))
