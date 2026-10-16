@@ -94,6 +94,10 @@ An ID in the active scene's ECS, including a version, so an ID that is destroyed
 **Component**
 Plain data attached to an entity, with no behaviour. A *native component* is a C++ struct, and a *C# component* is an `IComponent` struct. Both live in the ECS and are queried the same way. In engine code and docs, *component* always means this. Say *Iris component* for the other sense.
 
+**Component watch**
+A record, kept for whoever asked, of every time one component type was added to or removed from entities in one scene, in order, until it is drained. It reports adds and removes only, never edits.
+*Avoid:* observer, listener, callback (a watch is read later, not called at the time).
+
 **Component type**
 A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name.
 *Avoid:* selector, registration (a registration is scripting's record of what C# sees).
@@ -103,7 +107,11 @@ Logic that runs once per frame phase over the entities a query selects. Native s
 *Avoid:* script, behaviour, manager.
 
 **Event**
-Plain data one system sends and others read, kept in a queue with two buffers: a read sees the current frame's events and the previous frame's. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
+Plain data one system sends and others read. Each reader sees each event once, including events sent after it last ran, as long as it reads before its queue swaps twice; a queue swaps at the end of each frame that ran a tick, so reading once a frame is enough (ADR-0012). A new reader starts at the oldest event its queue still holds. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
+
+**Event reader**
+What a system reads events through: it remembers which events of one kind it has already seen, so each reaches it once.
+*Avoid:* listener, subscriber (nothing is called when an event is sent).
 
 **Query**
 A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
@@ -136,3 +144,70 @@ What a native function receives first (`CallContext`): the App the running Scrip
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.
+
+## FenrirEngine core
+
+**World transform**
+Where an entity is in the scene, as opposed to its `Transform`, which is relative to its parent. Always computed from the entity's ancestors, never stored. Its scale is approximate when a parent's non-uniform scale meets a child's rotation (the exact form is the world matrix).
+*Avoid:* global transform, absolute transform.
+
+**Scene resource**
+State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
+*Avoid:* singleton, global, scene component (a *component* belongs to an entity).
+
+## FenrirEngine physics
+
+**FenrirPhysics**
+The engine's physics package: its public API, its components and its systems. An app may leave it out. Nothing in its public interface names, or needs at compile time, the library that simulates underneath.
+*Avoid:* physics library, physics engine (both blur it with the physics backend).
+
+**Physics backend**
+The third-party library that does the simulation behind FenrirPhysics (Jolt today). Only FenrirPhysics's private code names it, so it can be replaced without changing FenrirPhysics's public interface.
+*Avoid:* physics engine, physics library.
+
+**Physics world**
+One running simulation, holding the bodies of one scene. Each scene that uses physics has its own; it is paused while its scene is inactive and ends with its scene.
+*Avoid:* physics scene, physics system (*system* is ECS logic).
+
+**Rigid body**
+An entity the physics world simulates as one solid object that does not deform. Its *motion type* is one of:
+- *static*: never moves;
+- *kinematic*: moved by game code, pushes dynamic bodies, is not pushed;
+- *dynamic*: moved by the simulation.
+
+*Avoid:* physics body, actor.
+
+**Soft body**
+An entity the physics world simulates as a deformable object (cloth, jelly).
+*Avoid:* cloth (one kind of soft body).
+
+**Character body**
+An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body.
+*Avoid:* character controller (as the name of the thing), player body.
+
+**Collider**
+Geometry attached to a body: one collision shape, placed where its entity is, with a physics material, a collision layer, and optionally marked as a trigger. An entity has at most one; a collider with no rigid body on its entity or above it is static.
+*Avoid:* hitbox.
+
+**Compound body**
+A rigid body whose colliders sit on several entities: its own and those beneath it that have no rigid body of their own.
+*Avoid:* compound shape (the backend's term for the merged geometry).
+
+**Collision shape**
+The geometry of a collider on its own, as a value: exactly one kind (box, sphere, capsule, convex hull or triangle mesh) and that kind's dimensions. Convex hull and triangle mesh kinds refer to a *collision mesh*, vertex data that FenrirPhysics prepares once and several colliders may share.
+*Avoid:* mesh (for the shape in general), geometry.
+
+**Physics material**
+How a collider's surface responds to contact: its friction and restitution.
+
+**Contact**
+Two solid colliders of different bodies touching. It begins when they first touch and ends when they separate or one is removed; a body falling asleep does not end it.
+*Avoid:* collision (as the name of the state), hit.
+
+**Trigger**
+A collider that reports what overlaps it but never pushes anything.
+*Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
+
+**Collision layer**
+One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
+*Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
