@@ -2367,6 +2367,25 @@ namespace
         }
     }
 
+    void ACSharpReaderMadeAfterSwapsStartsAtTheOldestEventHeld()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigWithAlert());
+        // One Alert a frame, each frame ticking, so the queue swaps three times and drops Alerts 1 and 2.
+        for (std::int32_t code = 1; code <= 3; ++code)
+        {
+            headless.Get().SendEvent(TestNative::Alert{code, 0.0F});
+            headless.Get().RunFrame(HeadlessApp::FrameDelta);
+        }
+        headless.Get().SendEvent(TestNative::Alert{4, 0.0F});
+        {
+            INFO("A new C# reader did not start at the oldest Alert held, or counted ones sent before it as missed");
+            REQUIRE(EventScript<std::optional<std::string>>(scripting, "ReadAlertsWithNewReader").value_or("?") ==
+                    "3,4;missed=0");
+        }
+        headless.Get().RunExit();
+    }
+
     void ACSharpEventIsReadInCpp()
     {
         HeadlessApp headless;
@@ -2404,7 +2423,7 @@ namespace
 
         // Nothing in C++ knows its type, but the queue is there by name, with the layout C# reported.
         const IEventQueue* queue = headless.Get().FindEventQueue("Fenrir.ScriptFixture.Ping");
-        std::size_t seen = 0;
+        std::size_t seen = NewReaderCursor;
         {
             INFO("The C#-only event's queue was not there by name");
             REQUIRE((queue != nullptr && queue->EventSize() == 4 && queue->ReadRawAfter(seen).Count() == 2));
@@ -2463,7 +2482,7 @@ namespace
         std::vector<std::size_t> nativePings;
         app.AddSequentialSystems(
             SchedulePriority::Update,
-            {[&, alerts = EventReader<TestNative::Alert>{}, pingsSeen = std::size_t{0}](App& running) mutable {
+            {[&, alerts = EventReader<TestNative::Alert>{}, pingsSeen = NewReaderCursor](App& running) mutable {
                 nativeAlerts.push_back(alerts.Read(running).size());
                 const IEventQueue* pings = running.FindEventQueue("Fenrir.ScriptFixture.Ping");
                 nativePings.push_back(pings == nullptr ? 99 : pings->ReadRawAfter(pingsSeen).Count());
@@ -2588,7 +2607,7 @@ namespace
         app.SendEvent(Plain{2});
         {
             INFO("Typed events changed");
-            REQUIRE(app.ReadEvents<Plain>().size() == 2);
+            REQUIRE(HeldEvents<Plain>(app).size() == 2);
         }
         {
             INFO("A queue could not be named, or naming twice failed");
@@ -2601,20 +2620,20 @@ namespace
         const IEventQueue* named = app.FindEventQueue("Plain");
         {
             INFO("The named queue is not the typed queue");
-            REQUIRE((named != nullptr && named->EventSize() == sizeof(Plain) && named->ReadRaw().count == 2));
+            REQUIRE((named != nullptr && named->EventSize() == sizeof(Plain) && HeldEventCount(*named) == 2));
         }
         const int third = 3;
         {
             INFO("Sending by name did not reach the typed queue");
-            REQUIRE((app.FindEventQueue("Plain")->SendRaw(&third) && app.ReadEvents<Plain>().size() == 3 &&
-                     app.ReadEvents<Plain>()[2].value == 3));
+            REQUIRE((app.FindEventQueue("Plain")->SendRaw(&third) && HeldEvents<Plain>(app).size() == 3 &&
+                     HeldEvents<Plain>(app)[2].value == 3));
         }
 
         // An event that is not plain bytes still works as before and cannot be used by name.
         app.SendEvent(Heavy{"a string"});
         {
             INFO("A non-trivial event changed");
-            REQUIRE((app.ReadEvents<Heavy>().size() == 1 && app.ReadEvents<Heavy>()[0].text == "a string"));
+            REQUIRE((HeldEvents<Heavy>(app).size() == 1 && HeldEvents<Heavy>(app)[0].text == "a string"));
         }
         {
             INFO("A non-trivial event was usable as bytes");
@@ -2637,7 +2656,7 @@ namespace
         const std::int64_t value = 42;
         {
             INFO("A byte queue did not hold its event");
-            REQUIRE((bytes->SendRaw(&value) && bytes->ReadRaw().count == 1));
+            REQUIRE((bytes->SendRaw(&value) && HeldEventCount(*bytes) == 1));
         }
         {
             INFO("Removing a byte queue went wrong, or a typed queue could be removed");
@@ -2971,11 +2990,11 @@ namespace
         const IEventQueue* ripple = app.FindEventQueue("Fenrir.ScriptFixture.Ripple");
         {
             INFO("An unchanged event queue lost its events");
-            REQUIRE((echo != nullptr && echo->ReadRaw().count == 2));
+            REQUIRE((echo != nullptr && HeldEventCount(*echo) == 2));
         }
         {
             INFO("A changed event queue was not recreated empty");
-            REQUIRE((ripple != nullptr && ripple->EventSize() == 8 && ripple->ReadRaw().count == 0));
+            REQUIRE((ripple != nullptr && ripple->EventSize() == 8 && HeldEventCount(*ripple) == 0));
         }
         {
             INFO("The dropped event was not reported");
@@ -4029,6 +4048,11 @@ TEST_CASE("a C++ event is read in C#", "[scripting]")
     ACppEventIsReadInCSharp();
 }
 
+TEST_CASE("a C# reader made after its queue swapped starts at the oldest event held", "[scripting]")
+{
+    ACSharpReaderMadeAfterSwapsStartsAtTheOldestEventHeld();
+}
+
 TEST_CASE("a C# event is read in C++", "[scripting]")
 {
     ACSharpEventIsReadInCpp();
@@ -4039,7 +4063,7 @@ TEST_CASE("a C#-only event needs no C++", "[scripting]")
     ACSharpOnlyEventNeedsNoCpp();
 }
 
-TEST_CASE("events have the same frame window in both languages", "[scripting]")
+TEST_CASE("each reader sees each event once in both languages", "[scripting]")
 {
     EachReaderSeesEachEventOnceInBothLanguages();
 }

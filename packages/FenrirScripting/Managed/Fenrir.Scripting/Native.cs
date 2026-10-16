@@ -84,9 +84,9 @@ internal static unsafe partial class Native
     //   EventSend(id, event): records an event to send when the system returns; 0 when recorded, otherwise a refusal code
     //   (-5 scripting is not running, -6 the event has no queue).
     //   EventReadAfter(id, seen, view): a reader's read. `seen` is the reader's cursor (how many of the queue's events it has
-    //   gone past, zero at first) and is moved past what the read yields; view gets the older part's address and count, the newer
-    //   part's address and count, and how many events the reader missed. 0, or negative if the event is unknown. The addresses
-    //   are good until the system returns.
+    //   gone past; all ones, the engine's NewReaderCursor, before the first read) and is moved past what the read yields;
+    //   view gets the older part's address and count, the newer part's address and count, and how many events the reader
+    //   missed. 0, or negative if the event is unknown. The addresses are good until the system returns.
     [NativeFunction]
     public static partial int EventIdOf(byte* name, int nameBytes, byte* typeName, int typeBytes);
 

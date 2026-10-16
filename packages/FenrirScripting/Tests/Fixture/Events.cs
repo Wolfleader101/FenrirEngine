@@ -128,6 +128,16 @@ public static class EventScripts
         return string.Join(",", codes);
     }
 
+    // A reader made now, as a system added late would have: the codes its first read yields, then how many it missed.
+    public static string ReadAlertsWithNewReader()
+    {
+        var codes = new List<string>();
+        var read = new EventReader<Alert>().Read();
+        foreach (var alert in read)
+            codes.Add(alert.Code.ToString());
+        return string.Join(",", codes) + ";missed=" + read.Missed;
+    }
+
     public static int SumPings()
     {
         int sum = 0;
