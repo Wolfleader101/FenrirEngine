@@ -33,7 +33,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
 #include <Jolt/Physics/Collision/Shape/ConvexHullShape.h>
 #include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/Shape/MutableCompoundShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -671,6 +673,40 @@ namespace Fenrir::Backend
             return scaled.Get();
         }
 
+        // A body's shape: its one collider's own shape when that collider is on the body's entity (so identical bodies
+        // share it), else a compound of its colliders, each part keeping its collider's entity as its user data.
+        JPH::Ref<JPH::Shape> MakeBodyShape(std::span<const ColliderPart> parts, std::uint32_t entity)
+        {
+            JPH_ASSERT(!parts.empty());
+            if (parts.size() == 1 && parts[0].entity == entity)
+            {
+                return MakeShape(parts[0].shape, parts[0].scale);
+            }
+            const auto add = [this](JPH::CompoundShapeSettings& compound, const ColliderPart& part) {
+                compound.AddShape(ToJolt(part.position), ToJolt(part.rotation), MakeShape(part.shape, part.scale),
+                                  part.entity);
+            };
+            JPH::Shape::ShapeResult result;
+            if (parts.size() == 1)
+            {
+                // A static compound needs two parts at least.
+                JPH::MutableCompoundShapeSettings compound;
+                add(compound, parts[0]);
+                result = compound.Create();
+            }
+            else
+            {
+                JPH::StaticCompoundShapeSettings compound;
+                for (const ColliderPart& part : parts)
+                {
+                    add(compound, part);
+                }
+                result = compound.Create(tempAllocator);
+            }
+            JPH_ASSERT(result.IsValid());
+            return result.Get();
+        }
+
         // Forgets cached shapes no body uses any more, each time the cache has doubled since it was last pruned.
         void PruneUnused()
         {
@@ -787,7 +823,7 @@ namespace Fenrir::Backend
         for (std::size_t i = 0; i < bodies.size(); ++i)
         {
             const BodyDesc& desc = bodies[i];
-            const JPH::Ref<JPH::Shape> shape = m_impl->MakeShape(desc.shape, desc.scale);
+            const JPH::Ref<JPH::Shape> shape = m_impl->MakeBodyShape(desc.parts, desc.entity);
             JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation),
                                                ToJolt(desc.motion.motionType),
                                                m_impl->AcquireLayer(desc.motion.motionType, desc.filter));
@@ -877,10 +913,10 @@ namespace Fenrir::Backend
         m_impl->Bodies().SetLinearAndAngularVelocity(ToJolt(id), ToJolt(linear), ToJolt(angular));
     }
 
-    void World::SetShape(BodyId id, const CollisionShape& shape, const Math::Vec3& scale, float mass)
+    void World::SetShape(BodyId id, std::span<const ColliderPart> parts, std::uint32_t entity, float mass)
     {
         const JPH::AABox before = m_impl->Bounds(id);
-        const JPH::Ref<JPH::Shape> made = m_impl->MakeShape(shape, scale);
+        const JPH::Ref<JPH::Shape> made = m_impl->MakeBodyShape(parts, entity);
         m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
         // The body keeps its own mass; its inertia follows the new shape.
         m_impl->Write(id, [&made, mass](JPH::Body& body) {

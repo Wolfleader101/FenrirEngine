@@ -72,9 +72,44 @@ namespace Fenrir
             return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
         }
 
-        PhysicsMaterial MaterialOf(Entity& entity)
+        Entity ParentOf(const Entity& entity)
         {
-            return entity.HasComponent<PhysicsMaterial>() ? entity.GetComponent<PhysicsMaterial>() : PhysicsMaterial{};
+            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
+        }
+
+        Transform LocalOf(const Entity& entity)
+        {
+            return entity.HasComponent<Transform>() ? entity.GetComponent<Transform>() : Transform();
+        }
+
+        int DepthOf(const Entity& entity)
+        {
+            int depth = 0;
+            for (Entity e = ParentOf(entity); e.IsValid(); e = ParentOf(e))
+            {
+                ++depth;
+            }
+            return depth;
+        }
+
+        // The backend keeps one surface per body, so a compound body has one material: its own entity's, else that of
+        // the first of its colliders (in entity order) with one, else the default.
+        template <typename Parts>
+        PhysicsMaterial MaterialOf(EntityList& entities, const Entity& body, const Parts& parts)
+        {
+            if (body.HasComponent<PhysicsMaterial>())
+            {
+                return body.GetComponent<PhysicsMaterial>();
+            }
+            for (const auto& part : parts)
+            {
+                const Entity collider = entities.GetEntity(part.entity);
+                if (collider.HasComponent<PhysicsMaterial>())
+                {
+                    return collider.GetComponent<PhysicsMaterial>();
+                }
+            }
+            return PhysicsMaterial{};
         }
 
         bool Same(const CollisionFilter& a, const CollisionFilter& b)
@@ -127,9 +162,11 @@ namespace Fenrir
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>()))
     {
-        // A watch records only what happens after it is made: the colliders already there are found once, here.
+        // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
-        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_pending.insert(entity); });
+        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
+        const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
+        entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
     }
 
     void PhysicsWorld::Impl::Step(float dt)
@@ -140,62 +177,173 @@ namespace Fenrir
         WriteBack();
     }
 
+    std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
+    {
+        for (Entity e = m_entities->GetEntity(entity); e.IsValid(); e = ParentOf(e))
+        {
+            if (e.HasComponent<RigidBody>())
+            {
+                return e.GetId();
+            }
+        }
+        return entity;
+    }
+
+    std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
+                                                                      std::uint32_t body, const Math::Vec3& bodyScale)
+    {
+        std::vector<Part> parts;
+        parts.reserve(entities.size());
+        std::vector<Entity> chain;
+        for (std::uint32_t id : entities)
+        {
+            Entity entity = m_entities->GetEntity(id);
+            // Composed from the body down through the locals, the way GetWorldTransform composes, but starting from
+            // the body's scale alone: the pose then stays the same, bit for bit, however the body moves.
+            chain.clear();
+            for (Entity e = entity; e.IsValid() && e.GetId() != body; e = ParentOf(e))
+            {
+                chain.push_back(e);
+            }
+            Transform pose(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), bodyScale);
+            for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+            {
+                const Transform local = LocalOf(*it);
+                pose.pos = pose.pos + Math::Rotate(pose.rot, pose.scale * local.pos);
+                pose.rot = pose.rot * local.rot;
+                pose.scale = pose.scale * local.scale;
+            }
+            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+            parts.push_back(Part{id, shape, pose, m_backend.CanMakeShape(shape),
+                                 id != body && entity.HasComponent<CollisionFilter>()});
+        }
+        return parts;
+    }
+
+    std::vector<Backend::ColliderPart> PhysicsWorld::Impl::UsableParts(std::span<const Part> parts)
+    {
+        std::vector<Backend::ColliderPart> usable;
+        for (const Part& part : parts)
+        {
+            if (part.usable)
+            {
+                usable.push_back(
+                    Backend::ColliderPart{part.shape, part.pose.scale, part.pose.pos, part.pose.rot, part.entity});
+            }
+        }
+        return usable;
+    }
+
+    void PhysicsWorld::Impl::WarnAbout(std::span<const Part> parts, std::span<const Part> before)
+    {
+        for (std::size_t i = 0; i < parts.size(); ++i)
+        {
+            const Part& part = parts[i];
+            const bool known = i < before.size() && before[i].entity == part.entity;
+            if (!part.usable && (!known || before[i].usable))
+            {
+                m_logger->Warn("The collider of entity " + std::to_string(part.entity) +
+                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
+                               "it is inactive until its shape changes");
+            }
+            if (part.filtered && (!known || !before[i].filtered))
+            {
+                m_logger->Warn("The CollisionFilter of entity " + std::to_string(part.entity) +
+                               " is ignored: its collider is part of the body of an ancestor, whose filter applies to "
+                               "all its colliders");
+            }
+        }
+    }
+
     void PhysicsWorld::Impl::SyncBodies()
     {
-        // Only each entity's net effect matters: every entity whose components came or went has its body rebuilt from
+        // Only each entity's net effect matters: an entity whose components came or went has its body rebuilt from
         // what it has now (added then removed: no body; removed then added: a new body).
-        std::set<std::uint32_t> changed = std::move(m_pending);
-        m_pending.clear();
-        for (const ComponentChange& change : m_rigidBodies.Drain())
+        std::set<std::uint32_t> changed;
+        const auto track = [this, &changed](ComponentWatch& watch, std::set<std::uint32_t>& tracked, auto has) {
+            for (const ComponentChange& change : watch.Drain())
+            {
+                changed.insert(change.entity);
+                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
+                {
+                    tracked.insert(change.entity);
+                }
+                else
+                {
+                    tracked.erase(change.entity);
+                }
+            }
+        };
+        track(m_rigidBodies, m_rigidBodyEntities, [](const Entity& e) { return e.HasComponent<RigidBody>(); });
+        track(m_colliders, m_colliderEntities, [](const Entity& e) { return e.HasComponent<Collider>(); });
+
+        // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
+        // worked out every tick).
+        std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
+        for (std::uint32_t collider : m_colliderEntities)
         {
-            changed.insert(change.entity);
-        }
-        for (const ComponentChange& change : m_colliders.Drain())
-        {
-            changed.insert(change.entity);
-        }
-        CollectUnmadeShapes(changed);
-        if (changed.empty())
-        {
-            return;
+            assembly[BodyEntityOf(collider)].push_back(collider);
         }
 
-        std::vector<Backend::BodyId> destroyed;
-        for (std::uint32_t entity : changed)
+        for (std::uint32_t rigidBody : m_rigidBodyEntities)
         {
-            const auto it = m_bodies.find(entity);
-            if (it != m_bodies.end())
+            if (assembly.contains(rigidBody))
             {
-                destroyed.push_back(it->second.id);
-                m_bodies.erase(it);
+                m_empty.erase(rigidBody);
             }
+            else if (m_empty.insert(rigidBody).second)
+            {
+                m_logger->Warn("The RigidBody of entity " + std::to_string(rigidBody) +
+                               " has no collider on its entity or beneath it; it is inactive in physics until it has "
+                               "one");
+            }
+        }
+        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.contains(entity); });
+
+        // Rebuilt: bodies whose entity or colliders changed, whose set of colliders changed, or whose colliders'
+        // shapes became usable or unusable (a collision mesh released, or a shape changed to one that can be made).
+        std::vector<Backend::BodyId> destroyed;
+        std::vector<std::vector<Part>> previous;
+        for (auto it = m_bodies.begin(); it != m_bodies.end();)
+        {
+            const auto& [body, record] = *it;
+            const auto wanted = assembly.find(body);
+            bool rebuild =
+                wanted == assembly.end() || changed.contains(body) || wanted->second.size() != record.parts.size();
+            for (std::size_t i = 0; !rebuild && i < record.parts.size(); ++i)
+            {
+                const std::uint32_t collider = wanted->second[i];
+                rebuild = collider != record.parts[i].entity || changed.contains(collider) ||
+                          m_backend.CanMakeShape(m_entities->GetEntity(collider).GetComponent<Collider>().shape) !=
+                              record.parts[i].usable;
+            }
+            if (!rebuild)
+            {
+                assembly.erase(wanted);
+                ++it;
+                continue;
+            }
+            destroyed.push_back(record.id);
+            it = m_bodies.erase(it);
         }
         m_backend.DestroyBodies(destroyed);
 
         std::vector<std::uint32_t> entities;
         std::vector<Backend::BodyDesc> descs;
-        for (std::uint32_t id : changed)
+        for (const auto& [id, colliders] : assembly)
         {
-            if (!m_entities->HasEntity(id))
-            {
-                continue;
-            }
             Entity entity = m_entities->GetEntity(id);
-            if (!entity.HasComponent<Collider>())
-            {
-                continue;
-            }
             const RigidBody* rigidBody = RigidBodyOf(entity);
             const Transform world = GetWorldTransform(entity);
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
+            WarnAbout(parts, {});
 
             Backend::BodyDesc desc;
             desc.motion = MotionOf(rigidBody);
             desc.canMove = rigidBody != nullptr;
-            desc.shape = shape;
-            desc.material = MaterialOf(entity);
+            desc.parts = UsableParts(parts);
+            desc.material = MaterialOf(*m_entities, entity, parts);
             desc.filter = FilterOf(entity);
-            desc.scale = world.scale;
             desc.position = world.pos;
             desc.rotation = world.rot;
             if (rigidBody != nullptr)
@@ -204,47 +352,21 @@ namespace Fenrir
                 desc.angularVelocity = rigidBody->angularVelocity;
             }
             desc.entity = id;
-            if (!m_backend.CanMakeShape(shape))
+            m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, std::move(parts), desc.material,
+                                        desc.filter, world, desc.linearVelocity, desc.angularVelocity});
+            if (desc.parts.empty())
             {
-                m_logger->Warn("The collider of entity " + std::to_string(id) +
-                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
-                               "its body is inactive until its shape changes");
-                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
-                                            desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                            desc.linearVelocity, desc.angularVelocity});
-                continue;
+                continue; // inactive: none of its colliders can be made
             }
             entities.push_back(id);
-            descs.push_back(desc);
+            descs.push_back(std::move(desc));
         }
 
         std::vector<Backend::BodyId> ids(descs.size());
         m_backend.CreateBodies(descs, ids);
         for (std::size_t i = 0; i < descs.size(); ++i)
         {
-            const Backend::BodyDesc& desc = descs[i];
-            m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
-                                                 desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                                 desc.linearVelocity, desc.angularVelocity});
-        }
-    }
-
-    void PhysicsWorld::Impl::CollectUnmadeShapes(std::set<std::uint32_t>& changed)
-    {
-        // Rebuilt: bodies whose collision mesh was released since (or whose shape was changed to one that cannot be
-        // made), and inactive colliders whose shape has changed since, which may now be made.
-        for (const auto& [id, record] : m_bodies)
-        {
-            if (changed.contains(id) || !m_entities->HasEntity(id))
-            {
-                continue; // already rebuilt, or gone
-            }
-            const CollisionShape& shape = m_entities->GetEntity(id).GetComponent<Collider>().shape;
-            const bool active = record.id.value != Backend::BodyId{}.value;
-            if (active ? !m_backend.CanMakeShape(shape) : !Same(shape, record.shape))
-            {
-                changed.insert(id);
-            }
+            m_bodies.at(entities[i]).id = ids[i];
         }
     }
 
@@ -259,7 +381,6 @@ namespace Fenrir
             Entity entity = m_entities->GetEntity(id);
             RigidBody* rigidBody = RigidBodyOf(entity);
             const Backend::Motion motion = MotionOf(rigidBody);
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
             const Transform world = GetWorldTransform(entity);
 
             bool pushVelocity = false;
@@ -272,13 +393,24 @@ namespace Fenrir
                 record.motion = motion;
             }
 
-            if (!Same(shape, record.shape) || !Same(world.scale, record.world.scale))
+            std::vector<std::uint32_t> colliders;
+            colliders.reserve(record.parts.size());
+            for (const Part& part : record.parts)
             {
-                m_backend.SetShape(record.id, shape, world.scale, motion.mass);
-                record.shape = shape;
+                colliders.push_back(part.entity);
             }
+            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
+            WarnAbout(parts, record.parts);
+            if (!std::ranges::equal(parts, record.parts, [](const Part& a, const Part& b) {
+                    return Same(a.shape, b.shape) && Same(a.pose.pos, b.pose.pos) && Same(a.pose.rot, b.pose.rot) &&
+                           Same(a.pose.scale, b.pose.scale);
+                }))
+            {
+                m_backend.SetShape(record.id, UsableParts(parts), id, motion.mass);
+            }
+            record.parts = std::move(parts);
 
-            const PhysicsMaterial material = MaterialOf(entity);
+            const PhysicsMaterial material = MaterialOf(*m_entities, entity, record.parts);
             if (!Same(material, record.material))
             {
                 m_backend.SetMaterial(record.id, material);
@@ -316,12 +448,21 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::WriteBack()
     {
-        for (auto& [id, record] : m_bodies)
+        // Parents before children: a body's local Transform is written against its parent's world transform, so a
+        // parent written after it would move it again.
+        std::vector<std::pair<int, std::uint32_t>> order;
+        for (const auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType != MotionType::Dynamic || record.id.value == Backend::BodyId{}.value)
+            if (record.motion.motionType == MotionType::Dynamic && record.id.value != Backend::BodyId{}.value)
             {
-                continue;
+                order.emplace_back(DepthOf(m_entities->GetEntity(id)), id);
             }
+        }
+        std::ranges::sort(order);
+
+        for (const auto& [depth, id] : order)
+        {
+            Record& record = m_bodies.at(id);
             Entity entity = m_entities->GetEntity(id);
             const Backend::BodyState state = m_backend.GetState(record.id);
 
