@@ -208,9 +208,11 @@ namespace Fenrir
         std::vector<Blended> blended;
         for (auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType == MotionType::Static || record.heldByGame || !m_entities->HasEntity(id))
+            const bool active = record.id.value != Backend::BodyId{}.value;
+            if (!active || record.motion.motionType == MotionType::Static || record.heldByGame ||
+                !m_entities->HasEntity(id))
             {
-                continue;
+                continue; // an inactive collider has no simulated pose to show
             }
             Entity entity = m_entities->GetEntity(id);
             const RigidBody* rigidBody = RigidBodyOf(entity);

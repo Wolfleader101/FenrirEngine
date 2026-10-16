@@ -1,6 +1,8 @@
 // Interpolation through the frame seam, with frames shorter than a tick: what game code sees in world transforms
 // between ticks, and what Tick systems and physics's own diff see.
 
+#include <array>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <vector>
@@ -272,5 +274,27 @@ TEST_CASE("Children of an interpolated body end up at consistent world transform
         const Math::Vec3 parentShown = PositionOf(parent);
         INFO("the mesh keeps its place one unit above its blended parent");
         REQUIRE(PositionOf(mesh).y == Approx(parentShown.y + 1.0f).margin(1e-4));
+    }
+}
+
+TEST_CASE("An inactive collider is not blended back to where it was made", "[physics][interpolation]")
+{
+    PhysicsApp test{PhysicsConfig{}};
+    const std::array<Math::Vec3, 4> corners = {Math::Vec3(0.0f), Math::Vec3(1.0f, 0.0f, 0.0f),
+                                               Math::Vec3(0.0f, 1.0f, 0.0f), Math::Vec3(0.0f, 0.0f, 1.0f)};
+    const std::array<std::uint32_t, 12> faces = {0, 2, 1, 0, 1, 3, 0, 3, 2, 1, 2, 3};
+    const CollisionMesh released = test.physics.CreateCollisionMesh(corners, faces);
+    REQUIRE(test.physics.ReleaseCollisionMesh(released));
+    Entity body = AddBody(test.Entities(), Math::Vec3(0.0f, 5.0f, 0.0f), ConvexHullShape{released});
+    test.Run(0.25); // inactive: its shape refers to a released mesh
+
+    body.GetComponent<Transform>().pos = Math::Vec3(1.0f, 2.0f, 3.0f);
+    for (int frame = 0; frame < 20; ++frame)
+    {
+        test.app.RunFrame(shortFrame);
+        const Math::Vec3 shown = PositionOf(body);
+        INFO("frame " << frame << ": game code moved it to 1, 2, 3; it is at " << shown.x << ", " << shown.y << ", "
+                      << shown.z);
+        REQUIRE(shown == Math::Vec3(1.0f, 2.0f, 3.0f));
     }
 }
