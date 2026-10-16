@@ -26,6 +26,15 @@ public struct KeyboardKey : IEvent
     public int Mods;
 }
 
+// A left click in the editor's scene view, as the ray from the camera through the clicked point. The editor sends it from
+// C++ (SceneClickEvent); the C# physics scene raycasts along it (Physics/Playground.cs).
+[NativeEvent("Demo.SceneClick")]
+public struct SceneClick : IEvent
+{
+    public Vector3 Origin;
+    public Vector3 Direction; // Unit length.
+}
+
 [NativeEvent("Demo.Burst")]
 public struct Burst : IEvent
 {

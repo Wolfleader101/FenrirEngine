@@ -7,6 +7,8 @@
 //                a C++ system reads Phase back (scripts/Bobbing.cs).
 //   KeyboardKey  the window's C++ KeyboardKeyEvent, read from C# unchanged (scripts/Controls.cs).
 //   Burst        an event C# sends when Space is pressed; C# reads it to make sparks and C++ reads it here (scripts/Sparks.cs).
+//   DemoMesh     a component C# adds to make an entity visible, without knowing the renderer (DemoMesh.hpp, scripts/DemoMesh.cs).
+//   SceneClick   the editor's SceneClickEvent, a click in the scene view as a ray (scripts/Controls.cs).
 
 #ifdef FENRIR_SCRIPTING
 
@@ -15,10 +17,12 @@
 #include <cstdlib>
 #include <memory>
 
+#include "DemoMesh.hpp"
 #include "Events.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 namespace ScriptingDemo
@@ -73,6 +77,27 @@ struct Iris::StructMapping<KeyboardKeyEvent>
         IRIS_FIELD_AS(KeyboardKeyEvent, mods, "Mods"));
 };
 
+template <>
+struct Iris::EnumMapping<MeshKind>
+{
+    static constexpr std::string_view typeName = "DemoScripts.MeshKind";
+};
+
+template <>
+struct Iris::StructMapping<DemoMesh>
+{
+    static constexpr std::string_view typeName = "DemoScripts.DemoMesh";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(DemoMesh, Kind), IRIS_FIELD(DemoMesh, Colour));
+};
+
+template <>
+struct Iris::StructMapping<SceneClickEvent>
+{
+    static constexpr std::string_view typeName = "DemoScripts.SceneClick";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(SceneClickEvent, origin, "Origin"),
+                                                      IRIS_FIELD_AS(SceneClickEvent, direction, "Direction"));
+};
+
 namespace ScriptingDemo
 {
     // What the demo app gives scripting: the component and events C++ and C# share, as the app's own extension.
@@ -80,8 +105,11 @@ namespace ScriptingDemo
     {
         Fenrir::ScriptingExtension extension;
         extension.name = "DemoApp";
-        extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob")};
-        extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"), Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey")};
+        extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob"),
+                                Fenrir::MakeComponent<DemoMesh>("Demo.DemoMesh")};
+        extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"),
+                            Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey"),
+                            Fenrir::MakeEvent<SceneClickEvent>("Demo.SceneClick")};
         return extension;
     }
 
@@ -125,7 +153,9 @@ namespace ScriptingDemo
 
     // Plays the demo without anyone at the keyboard, for showing it off unattended and for checking it still works: with the
     // environment variable FENRIR_DEMO_AUTOPLAY set, it sends the same KeyboardKeyEvent the window sends, as if R and then
-    // Space were pressed. Without the variable it does nothing.
+    // Space were pressed. Then, for the C# physics scene (when physics is built in): F3 to go to it, a click at the middle
+    // of its box pyramid (the SceneClickEvent the editor sends, from where the camera starts), J to kick its bodies, F3 to
+    // go back and F3 to return. Without the variable it does nothing.
     inline Fenrir::SystemFunc AutoPlay()
     {
         auto frame = std::make_shared<int>(0);
@@ -137,14 +167,32 @@ namespace ScriptingDemo
             }
             constexpr int keyR = 82;
             constexpr int keySpace = 32;
+            constexpr int keyJ = 74;
+            constexpr int keyF3 = 292;
+            const auto press = [&app](int key) { app.SendEvent(KeyboardKeyEvent{key, 0, 0, InputState::Pressed, 0}); };
             ++*frame;
-            if (*frame == 120)
+            switch (*frame)
             {
-                app.SendEvent(KeyboardKeyEvent{keyR, 0, 0, InputState::Pressed, 0});
-            }
-            else if (*frame == 240)
-            {
-                app.SendEvent(KeyboardKeyEvent{keySpace, 0, 0, InputState::Pressed, 0});
+            case 120:
+                press(keyR);
+                break;
+            case 240:
+                press(keySpace);
+                break;
+            case 360: // to the C# physics scene
+            case 840: // back
+            case 960: // and to it again
+                press(keyF3);
+                break;
+            case 480:
+                app.SendEvent(SceneClickEvent{Fenrir::Math::Vec3(0.0f),
+                                              Fenrir::Math::Normalized(Fenrir::Math::Vec3(0.0f, -2.5f, -12.0f))});
+                break;
+            case 720:
+                press(keyJ);
+                break;
+            default:
+                break;
             }
         };
     }

@@ -30,6 +30,9 @@ add_executable(DemoApp
     src/GLRenderer.cpp
 
     src/Material.hpp
+
+    src/DemoMesh.hpp
+    src/CSharpPhysicsScene.hpp
 )
 
 add_subdirectory(libs)
@@ -63,15 +66,26 @@ if(FENRIR_ENABLE_SCRIPTING)
     # target and always runs (dotnet skips what has not changed), so building just DemoScripts while the demo is running
     # drops the new build where the demo's hot reload is watching for it.
     file(GLOB demo_scripts_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/*.cs")
+    # The scripts in scripts/Physics use physics from C#: built against the Fenrir.Physics contract when physics is on,
+    # left out of the assembly when it is off.
+    set(demo_scripts_physics_args "")
+    if(FENRIR_ENABLE_PHYSICS)
+        file(GLOB demo_physics_scripts_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/Physics/*.cs")
+        list(APPEND demo_scripts_sources ${demo_physics_scripts_sources})
+        set(demo_scripts_physics_args "-p:FenrirPhysicsContractDir=${FENRIR_PHYSICS_CONTRACT_DIR}/")
+    endif()
     add_custom_target(DemoScripts
         COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
             --configuration Release --output "$<TARGET_FILE_DIR:DemoApp>/scripts" -nologo -v:q
-            "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+            "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" ${demo_scripts_physics_args}
         SOURCES ${demo_scripts_sources} "${CMAKE_CURRENT_SOURCE_DIR}/scripts/DemoScripts.csproj"
         COMMENT "Building the demo script assembly"
         VERBATIM
     )
     add_dependencies(DemoScripts FenrirScriptingContract)
+    if(FENRIR_ENABLE_PHYSICS)
+        add_dependencies(DemoScripts FenrirPhysicsContract)
+    endif()
     add_dependencies(DemoApp DemoScripts)
 endif()
 

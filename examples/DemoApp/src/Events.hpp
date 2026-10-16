@@ -1,5 +1,7 @@
 #pragma once
 
+#include "FenrirMath/Math.hpp"
+
 struct WindowFrameBufferResizeEvent
 {
     int width, height;
@@ -53,4 +55,11 @@ struct KeyboardKeyEvent
     int repeat;
     InputState state;
     int mods;
+};
+
+// A left click in the editor's scene view, as the ray from the camera through the clicked point (the editor sends it).
+struct SceneClickEvent
+{
+    Fenrir::Math::Vec3 origin;
+    Fenrir::Math::Vec3 direction; // Unit length.
 };
