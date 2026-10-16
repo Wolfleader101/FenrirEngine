@@ -40,6 +40,13 @@ namespace Fenrir
         Math::Vec3 linearVelocity = Math::Vec3(0.0f);
         /** @brief Radians per second about each world axis. */
         Math::Vec3 angularVelocity = Math::Vec3(0.0f);
+        /**
+         * @brief Whether a dynamic or kinematic body is shown between its last two step poses when a frame ends part
+         * of the way through a tick, so it moves smoothly at any frame rate, one step behind the simulation. Between
+         * ticks its `Transform` holds the blended pose; `Tick` systems see the true one. Turn it off for a body game
+         * code moves every frame, so it does not lag a step. PhysicsConfig can turn interpolation off for every body.
+         */
+        bool interpolate = true;
     };
 
     /** @brief A box centred on its entity, `halfExtents` from the centre to each face before the entity's scale. */

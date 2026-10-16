@@ -20,6 +20,9 @@ namespace Fenrir
         /** @brief Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a
          * default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named. */
         std::vector<CollisionLayer> collisionLayers;
+        /** @brief Whether bodies are interpolated between ticks (RigidBody::interpolate). Off: every body is shown at
+         * its step poses only. */
+        bool interpolate = true;
     };
 
     /**
@@ -36,7 +39,9 @@ namespace Fenrir
          * @brief Turns physics on for `app`. Each scene gets its own physics world the first time it runs as the active
          * scene with a RigidBody or Collider in it. In `PostTick`, the active scene's world brings its bodies up to
          * date with their components and world transforms, steps once by `Time::tickRate`, and writes dynamic bodies'
-         * poses and velocities back. Inactive scenes' worlds do not step.
+         * poses and velocities back. Inactive scenes' worlds do not step. In `AfterTicks` it writes each interpolated
+         * body's blended pose into its `Transform`, and in `BeforeTicks` restores the true pose; a `Transform` game
+         * code changed in between is kept, as a teleport.
          */
         [[nodiscard]] static Physics Install(App& app, PhysicsConfig config = {});
 

@@ -29,6 +29,19 @@ namespace Fenrir
          */
         void Step(float dt);
 
+        /**
+         * @brief `BeforeTicks`: put back the true pose of each body Blend wrote, so `Tick` systems and the diff see
+         * real simulation state. A body whose `Transform` game code changed since keeps the game's value, which the
+         * next step takes as a teleport.
+         */
+        void Restore();
+
+        /**
+         * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's pose `fraction` of the way from its
+         * previous step pose to its current one, parents before children.
+         */
+        void Blend(float fraction);
+
       private:
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
         struct Record
@@ -42,11 +55,24 @@ namespace Fenrir
             Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
+
+            // Interpolation: the world poses after the step before last and after the last step. A teleport or a new
+            // body snaps: previous = current after its next step, so nothing blends across the jump.
+            Transform previous;
+            Transform current;
+            bool snap = true;
+            // Game code wrote the Transform during Update: shown as written until a step has taken it.
+            bool heldByGame = false;
+            // Whether Blend wrote this body's Transform, the true local Transform it replaced, and the one it wrote.
+            bool blended = false;
+            Transform trueLocal;
+            Transform shownLocal;
         };
 
         void SyncBodies();
         void PushEdits(float dt);
         void WriteBack();
+        void AdvancePoses();
 
         EntityList* m_entities;
         Backend::World m_backend;
