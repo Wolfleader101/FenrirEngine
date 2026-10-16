@@ -386,9 +386,11 @@ namespace Fenrir
                 m_logger->Warn("The collider of entity " + std::to_string(id) +
                                " refers to a collision mesh that is released or cannot be used as its kind of shape; "
                                "its body is inactive until its shape changes");
-                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
-                                            desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                            desc.linearVelocity, desc.angularVelocity, desc.isTrigger});
+                const auto inactive =
+                    m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
+                                                desc.filter, Transform(desc.position, desc.rotation, desc.scale),
+                                                desc.linearVelocity, desc.angularVelocity});
+                inactive.first->second.isTrigger = desc.isTrigger;
                 continue;
             }
             entities.push_back(id);
@@ -401,9 +403,11 @@ namespace Fenrir
         {
             // A body the backend could not make (the world is full; it logged that) leaves the record inactive.
             const Backend::BodyDesc& desc = descs[i];
-            m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
-                                                 desc.filter, Transform(desc.position, desc.rotation, desc.scale),
-                                                 desc.linearVelocity, desc.angularVelocity, desc.isTrigger});
+            const auto made =
+                m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
+                                                     desc.filter, Transform(desc.position, desc.rotation, desc.scale),
+                                                     desc.linearVelocity, desc.angularVelocity});
+            made.first->second.isTrigger = desc.isTrigger;
         }
     }
 

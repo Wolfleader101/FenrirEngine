@@ -99,7 +99,6 @@ namespace Fenrir
             Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
-            bool isTrigger;
 
             // Interpolation: the world poses after the step before last and after the last step. A teleport or a new
             // body snaps: previous = current after its next step, so nothing blends across the jump.
@@ -112,6 +111,8 @@ namespace Fenrir
             bool blended = false;
             Transform trueLocal;
             Transform shownLocal;
+            // A trigger: a kinematic body following its entity, whatever RigidBody the entity has.
+            bool isTrigger = false;
         };
 
         // A contact reported by a ContactBegin and not yet ended, A and B ordered as in the event.
