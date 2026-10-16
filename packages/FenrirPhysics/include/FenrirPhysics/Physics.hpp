@@ -3,8 +3,10 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <vector>
 
 #include "FenrirMath/Math.hpp"
+#include "FenrirPhysics/CollisionLayers.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 
@@ -17,6 +19,9 @@ namespace Fenrir
     {
         /** @brief The gravity each new physics world starts with, in metres per second squared. */
         Math::Vec3 gravity = Math::Vec3(0.0f, -9.81f, 0.0f);
+        /** @brief Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a
+         * default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named. */
+        std::vector<CollisionLayer> collisionLayers;
     };
 
     /**
@@ -63,6 +68,9 @@ namespace Fenrir
         Physics(const Physics&) = delete;
         Physics& operator=(const Physics&) = delete;
         ~Physics();
+
+        /** @brief The collision layers named in the PhysicsConfig given to Install. */
+        [[nodiscard]] const CollisionLayers& Layers() const;
 
         /** @brief Private: what Install set up. */
         struct State;

@@ -45,50 +45,176 @@ namespace Fenrir::Backend
         constexpr std::size_t tempAllocatorBytes = 10 * 1024 * 1024;
         constexpr float wakeMargin = 0.1f;
 
-        // Static bodies in one object layer, moving ones in another; static bodies never collide with each other.
-        // Collision layers and masks replace this with their own mapping.
-        constexpr JPH::ObjectLayer staticLayer = 0;
-        constexpr JPH::ObjectLayer movingLayer = 1;
-        constexpr JPH::BroadPhaseLayer staticBroadPhase(0);
-        constexpr JPH::BroadPhaseLayer movingBroadPhase(1);
+        // Broad-phase layers, one tree each: static bodies (rarely updated), moving bodies, and triggers. Static bodies
+        // never collide with each other.
+        enum class BroadPhase : std::uint8_t
+        {
+            Static,
+            Moving,
+            Trigger
+        };
+        constexpr JPH::uint broadPhaseCount = 3;
+
+        BroadPhase BroadPhaseOf(MotionType type)
+        {
+            return type == MotionType::Static ? BroadPhase::Static : BroadPhase::Moving;
+        }
+
+        // What an object layer stands for: a broad-phase layer and a collision filter.
+        struct LayerKey
+        {
+            BroadPhase broadPhase;
+            std::uint32_t layers;
+            std::uint32_t mask;
+
+            auto operator<=>(const LayerKey&) const = default;
+        };
+
+        // Each distinct LayerKey in use gets its own object layer, so the filters below evaluate the layer and mask
+        // rule on any of the 32 layers (Jolt's ready-made mask filter manages 16). A layer no body uses any more is
+        // reused. Changed only between steps, from the thread that runs the App; the filters read it during a step.
+        class ObjectLayers
+        {
+          public:
+            explicit ObjectLayers(ILogger& logger) : m_logger(&logger)
+            {
+                // The default filter for each broad-phase layer is always there, the fallback if the layers run out.
+                for (JPH::uint i = 0; i < broadPhaseCount; ++i)
+                {
+                    const LayerKey key{static_cast<BroadPhase>(i), CollisionFilter{}.layers, CollisionFilter{}.mask};
+                    m_byKey.emplace(key, static_cast<JPH::ObjectLayer>(m_entries.size()));
+                    m_entries.push_back(Entry{key, 1});
+                }
+            }
+
+            /** The object layer for `key`, counted as used by one more body. */
+            JPH::ObjectLayer Acquire(const LayerKey& key)
+            {
+                JPH::ObjectLayer layer;
+                if (const auto it = m_byKey.find(key); it != m_byKey.end())
+                {
+                    layer = it->second;
+                }
+                else if (!m_free.empty())
+                {
+                    layer = m_free.back();
+                    m_free.pop_back();
+                    m_entries[layer].key = key;
+                    m_byKey.emplace(key, layer);
+                }
+                else if (m_entries.size() < JPH::cObjectLayerInvalid)
+                {
+                    layer = static_cast<JPH::ObjectLayer>(m_entries.size());
+                    m_entries.push_back(Entry{key, 0});
+                    m_byKey.emplace(key, layer);
+                }
+                else
+                {
+                    m_logger->Error("Physics world uses too many different collision filters at once (" +
+                                    std::to_string(JPH::cObjectLayerInvalid) +
+                                    " at most): a body collides with every layer instead");
+                    layer = static_cast<JPH::ObjectLayer>(key.broadPhase);
+                }
+                ++m_entries[layer].users;
+                return layer;
+            }
+
+            /** One body fewer uses `layer`. */
+            void Release(JPH::ObjectLayer layer)
+            {
+                Entry& entry = m_entries[layer];
+                if (--entry.users == 0)
+                {
+                    m_byKey.erase(entry.key);
+                    m_free.push_back(layer);
+                }
+            }
+
+            [[nodiscard]] const LayerKey& Key(JPH::ObjectLayer layer) const
+            {
+                return m_entries[layer].key;
+            }
+
+          private:
+            struct Entry
+            {
+                LayerKey key;
+                std::uint32_t users;
+            };
+
+            ILogger* m_logger;
+            std::vector<Entry> m_entries;
+            std::map<LayerKey, JPH::ObjectLayer> m_byKey;
+            std::vector<JPH::ObjectLayer> m_free;
+        };
 
         class BroadPhaseLayers final : public JPH::BroadPhaseLayerInterface
         {
           public:
+            explicit BroadPhaseLayers(const ObjectLayers& layers) : m_layers(&layers)
+            {
+            }
+
             JPH::uint GetNumBroadPhaseLayers() const override
             {
-                return 2;
+                return broadPhaseCount;
             }
 
             JPH::BroadPhaseLayer GetBroadPhaseLayer(JPH::ObjectLayer layer) const override
             {
-                return layer == staticLayer ? staticBroadPhase : movingBroadPhase;
+                return JPH::BroadPhaseLayer(static_cast<JPH::BroadPhaseLayer::Type>(m_layers->Key(layer).broadPhase));
             }
 
 #if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
             const char* GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override
             {
-                return layer == staticBroadPhase ? "Static" : "Moving";
+                constexpr const char* names[broadPhaseCount] = {"Static", "Moving", "Trigger"};
+                return names[layer.GetValue()];
             }
 #endif
+
+          private:
+            const ObjectLayers* m_layers;
         };
 
         class ObjectVsBroadPhase final : public JPH::ObjectVsBroadPhaseLayerFilter
         {
           public:
+            explicit ObjectVsBroadPhase(const ObjectLayers& layers) : m_layers(&layers)
+            {
+            }
+
             bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer broadPhase) const override
             {
-                return layer == movingLayer || broadPhase == movingBroadPhase;
+                constexpr JPH::BroadPhaseLayer moving(static_cast<JPH::BroadPhaseLayer::Type>(BroadPhase::Moving));
+                return m_layers->Key(layer).broadPhase == BroadPhase::Moving || broadPhase == moving;
             }
+
+          private:
+            const ObjectLayers* m_layers;
         };
 
         class ObjectPairs final : public JPH::ObjectLayerPairFilter
         {
           public:
+            explicit ObjectPairs(const ObjectLayers& layers) : m_layers(&layers)
+            {
+            }
+
+            // The layer and mask rule, symmetric as Jolt requires.
             bool ShouldCollide(JPH::ObjectLayer a, JPH::ObjectLayer b) const override
             {
-                return a == movingLayer || b == movingLayer;
+                const LayerKey& first = m_layers->Key(a);
+                const LayerKey& second = m_layers->Key(b);
+                if (first.broadPhase != BroadPhase::Moving && second.broadPhase != BroadPhase::Moving)
+                {
+                    return false;
+                }
+                return (first.layers & second.mask) != 0 && (second.layers & first.mask) != 0;
             }
+
+          private:
+            const ObjectLayers* m_layers;
         };
 
         // Jolt reports through global functions with no user data, so its messages go to the logger of the newest
@@ -174,11 +300,6 @@ namespace Fenrir::Backend
                 return JPH::EMotionType::Kinematic;
             }
             return type == MotionType::Dynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
-        }
-
-        JPH::ObjectLayer LayerOf(MotionType type)
-        {
-            return type == MotionType::Static ? staticLayer : movingLayer;
         }
 
         // No dimension of a box, sphere or capsule is made smaller than this, after scale: the backend asserts on
@@ -440,7 +561,8 @@ namespace Fenrir::Backend
     struct World::Impl
     {
         Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger)
-            : meshes(&worldMeshes.Implementation()), logger(&worldLogger)
+            : meshes(&worldMeshes.Implementation()), logger(&worldLogger), objectLayers(worldLogger),
+              broadPhaseLayers(objectLayers), objectVsBroadPhase(objectLayers), objectPairs(objectLayers)
         {
         }
 
@@ -482,6 +604,7 @@ namespace Fenrir::Backend
         std::map<Primitive, JPH::Ref<JPH::Shape>> primitives;
         std::size_t pruneAt = minimumPruneAt;
         ILogger* logger;
+        ObjectLayers objectLayers;
         BroadPhaseLayers broadPhaseLayers;
         ObjectVsBroadPhase objectVsBroadPhase;
         ObjectPairs objectPairs;
@@ -512,6 +635,28 @@ namespace Fenrir::Backend
             JPH::AABox around = bounds;
             around.ExpandBy(JPH::Vec3::sReplicate(wakeMargin));
             Bodies().ActivateBodiesInAABox(around, {}, {});
+        }
+
+        JPH::ObjectLayer AcquireLayer(MotionType type, const CollisionFilter& filter)
+        {
+            return objectLayers.Acquire(LayerKey{BroadPhaseOf(type), filter.layers, filter.mask});
+        }
+
+        // Moves a body to the object layer for `key` (after `change` edits its key), waking it and what is near it:
+        // pairs it now does or no longer collides with are found again only for awake bodies.
+        template <typename Change>
+        void Relayer(BodyId id, Change&& change)
+        {
+            const JPH::ObjectLayer old = Bodies().GetObjectLayer(ToJolt(id));
+            LayerKey key = objectLayers.Key(old);
+            change(key);
+            if (key == objectLayers.Key(old))
+            {
+                return;
+            }
+            Bodies().SetObjectLayer(ToJolt(id), objectLayers.Acquire(key));
+            objectLayers.Release(old);
+            WakeAround(Bounds(id));
         }
 
         template <typename Func>
@@ -559,7 +704,8 @@ namespace Fenrir::Backend
             const BodyDesc& desc = bodies[i];
             const JPH::Ref<JPH::Shape> shape = m_impl->MakeShape(desc.shape, desc.scale);
             JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation),
-                                               ToJolt(desc.motion.motionType), LayerOf(desc.motion.motionType));
+                                               ToJolt(desc.motion.motionType),
+                                               m_impl->AcquireLayer(desc.motion.motionType, desc.filter));
             settings.mAllowDynamicOrKinematic = desc.canMove;
             settings.mUserData = desc.entity;
             settings.mLinearVelocity = ToJolt(desc.linearVelocity);
@@ -567,12 +713,15 @@ namespace Fenrir::Backend
             settings.mLinearDamping = desc.motion.linearDamping;
             settings.mAngularDamping = desc.motion.angularDamping;
             settings.mGravityFactor = desc.motion.gravityScale;
+            settings.mFriction = desc.material.friction;
+            settings.mRestitution = desc.material.restitution;
             settings.mOverrideMassProperties = JPH::EOverrideMassProperties::MassAndInertiaProvided;
             settings.mMassPropertiesOverride = MassOf(*shape, desc.motion.mass);
 
             JPH::Body* body = m_impl->Bodies().CreateBody(settings);
             if (body == nullptr)
             {
+                m_impl->objectLayers.Release(settings.mObjectLayer);
                 m_impl->logger->Error("Physics world is full: a body was not made (" + std::to_string(maxBodies) +
                                       " at most)");
                 ids[i] = BodyId{};
@@ -611,6 +760,10 @@ namespace Fenrir::Backend
         for (BodyId id : ids)
         {
             bounds.push_back(m_impl->Bounds(id));
+        }
+        for (JPH::BodyID body : bodies)
+        {
+            m_impl->objectLayers.Release(m_impl->Bodies().GetObjectLayer(body));
         }
         m_impl->Bodies().RemoveBodies(bodies.data(), static_cast<int>(bodies.size()));
         m_impl->Bodies().DestroyBodies(bodies.data(), static_cast<int>(bodies.size()));
@@ -655,11 +808,25 @@ namespace Fenrir::Backend
         m_impl->WakeAround(m_impl->Bounds(id));
     }
 
+    void World::SetMaterial(BodyId id, const PhysicsMaterial& material)
+    {
+        m_impl->Bodies().SetFriction(ToJolt(id), material.friction);
+        m_impl->Bodies().SetRestitution(ToJolt(id), material.restitution);
+    }
+
+    void World::SetFilter(BodyId id, const CollisionFilter& filter)
+    {
+        m_impl->Relayer(id, [&filter](LayerKey& key) {
+            key.layers = filter.layers;
+            key.mask = filter.mask;
+        });
+    }
+
     void World::SetMotion(BodyId id, const Motion& motion)
     {
         m_impl->WakeAround(m_impl->Bounds(id));
+        m_impl->Relayer(id, [&motion](LayerKey& key) { key.broadPhase = BroadPhaseOf(motion.motionType); });
         JPH::BodyInterface& bodies = m_impl->Bodies();
-        bodies.SetObjectLayer(ToJolt(id), LayerOf(motion.motionType));
         bodies.SetMotionType(ToJolt(id), ToJolt(motion.motionType), JPH::EActivation::Activate);
         m_impl->Write(id, [&motion](JPH::Body& body) {
             JPH::MotionProperties* properties = body.GetMotionPropertiesUnchecked();

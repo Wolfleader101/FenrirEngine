@@ -50,6 +50,8 @@ namespace Fenrir
             bool canMove;
             Backend::Motion motion;
             CollisionShape shape;
+            PhysicsMaterial material;
+            CollisionFilter filter;
             Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;

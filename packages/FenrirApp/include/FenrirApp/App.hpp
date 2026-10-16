@@ -24,13 +24,29 @@ namespace Fenrir
 {
 
     /**
-     * @brief The events a queue holds for reading, as one contiguous array of `count` elements of EventSize() bytes
-     * each. Valid until the queue is next sent to or updated.
+     * @brief The cursor of a reader that has not read yet. Its first read starts at the oldest event the queue still
+     * holds and reports no misses: events sent before the reader existed are not ones it missed.
      */
-    struct RawEvents
+    inline constexpr std::size_t NewReaderCursor = static_cast<std::size_t>(-1);
+
+    /**
+     * @brief What one type-erased read through a cursor yields (IEventQueue::ReadRawAfter): the events sent since the
+     * previous read, oldest first, as up to two arrays of EventSize()-byte elements in the queue's buffers (nothing is
+     * copied). Valid until the queue is next sent to or swapped. The byte form of EventRange.
+     */
+    struct RawEventRange
     {
-        const void* data = nullptr;
-        std::size_t count = 0;
+        const void* older = nullptr;
+        std::size_t olderCount = 0;
+        const void* newer = nullptr;
+        std::size_t newerCount = 0;
+        /** @brief How many events were dropped before the reader got to them (it went two swaps without reading). */
+        std::size_t missed = 0;
+
+        [[nodiscard]] std::size_t Count() const noexcept
+        {
+            return olderCount + newerCount;
+        }
     };
 
     /**
@@ -47,10 +63,10 @@ namespace Fenrir
 
       public:
         /**
-         * @brief Ends a frame. Swaps the two buffers if `swapBuffers` (dropping the older one's events), and moves the
-         * ReadEvents window on by a frame either way.
+         * @brief Swaps the two buffers, dropping the older one's events. The App does this at the end of each frame
+         * that ran a tick.
          */
-        virtual void EndFrame(bool swapBuffers) = 0;
+        virtual void Swap() = 0;
 
         /**
          * @name Type-erased access
@@ -66,11 +82,17 @@ namespace Fenrir
         [[nodiscard]] virtual std::size_t EventAlignment() const noexcept = 0;
 
         /** @brief Copies one event (EventSize() bytes) into the queue's current frame. False if the queue has no byte
-         * size. */
+         * size. From a system the scheduler runs in parallel, the copy is held and sent after the batch, as
+         * App::SendEvent does. */
         virtual bool SendRaw(const void* event) = 0;
 
-        /** @brief This frame's and the previous frame's events, the same window ReadEvents gives. */
-        [[nodiscard]] virtual RawEvents ReadRaw() const = 0;
+        /**
+         * @brief The events sent after the first `seen` this queue was ever sent, oldest first; moves `seen` past them.
+         * The cursor of an EventReader, for code that knows the event only by its layout: the caller keeps `seen` (one
+         * per reader, starting at NewReaderCursor), so readers never share state. An empty range if the queue has no
+         * byte size.
+         */
+        [[nodiscard]] virtual RawEventRange ReadRawAfter(std::size_t& seen) const = 0;
         /** @} */
     };
 
@@ -184,6 +206,16 @@ namespace Fenrir
             return m_missed;
         }
 
+        /** @brief The part of the events in the older of the queue's buffers, then the part in the newer. */
+        [[nodiscard]] std::span<const TEvent> Older() const noexcept
+        {
+            return m_older;
+        }
+        [[nodiscard]] std::span<const TEvent> Newer() const noexcept
+        {
+            return m_newer;
+        }
+
       private:
         std::span<const TEvent> m_older;
         std::span<const TEvent> m_newer;
@@ -209,27 +241,26 @@ namespace Fenrir
             currentBuffer.push_back(event);
         }
 
-        void EndFrame(bool swapBuffers) override
+        void Swap() override
         {
+            // clear the older buffer, then swap: current becomes previous, and previous becomes the new current
             const std::size_t sent = currentStart + currentBuffer.size();
-            lastFrameStart = thisFrameStart;
-            thisFrameStart = sent;
-            if (swapBuffers)
-            {
-                // clear the older buffer, then swap: current becomes previous, and previous becomes the new current
-                previousBuffer.clear();
-                std::swap(currentBuffer, previousBuffer);
-                previousStart = currentStart;
-                currentStart = sent;
-            }
+            previousBuffer.clear();
+            std::swap(currentBuffer, previousBuffer);
+            previousStart = currentStart;
+            currentStart = sent;
         }
 
         /**
          * @brief The events sent after the first `seen` this queue was ever sent, oldest first; moves `seen` past
-         * them. The cursor of an EventReader.
+         * them. The cursor of an EventReader; NewReaderCursor for one that has not read yet.
          */
         EventRange<TEvent> ReadAfter(std::size_t& seen) const
         {
+            if (seen == NewReaderCursor)
+            {
+                seen = previousStart;
+            }
             const std::size_t from = std::max(seen, previousStart);
             std::span<const TEvent> older(previousBuffer);
             std::span<const TEvent> newer(currentBuffer);
@@ -238,31 +269,6 @@ namespace Fenrir
             const std::size_t missed = previousStart > seen ? previousStart - seen : 0;
             seen = currentStart + currentBuffer.size();
             return {older, newer, missed};
-        }
-
-        /**
-         * @brief This frame's and the previous frame's events, oldest first, copied into one vector.
-         *
-         * @return const std::vector<TEvent>& the events
-         */
-        const std::vector<TEvent>& ReadEvents() const
-        {
-            // The buffers hold at least the last two frames (they swap at most once a frame); skip anything older.
-            std::size_t skip = lastFrameStart - previousStart;
-            combinedBuffer.clear();
-            if (skip < previousBuffer.size())
-            {
-                combinedBuffer.insert(combinedBuffer.end(), previousBuffer.begin() + static_cast<std::ptrdiff_t>(skip),
-                                      previousBuffer.end());
-                skip = 0;
-            }
-            else
-            {
-                skip -= previousBuffer.size();
-            }
-            combinedBuffer.insert(combinedBuffer.end(), currentBuffer.begin() + static_cast<std::ptrdiff_t>(skip),
-                                  currentBuffer.end());
-            return combinedBuffer;
         }
 
         // Events that can be copied as bytes (and so sent and read by code that knows only their layout).
@@ -285,7 +291,12 @@ namespace Fenrir
             {
                 TEvent copy;
                 std::memcpy(&copy, event, sizeof(TEvent));
-                currentBuffer.push_back(copy);
+                if (SendBuffer* buffer = SendBuffer::OfThisThread())
+                {
+                    buffer->Add([this, copy] { Send(copy); });
+                    return true;
+                }
+                Send(copy);
                 return true;
             }
             else
@@ -295,10 +306,19 @@ namespace Fenrir
             }
         }
 
-        [[nodiscard]] RawEvents ReadRaw() const override
+        [[nodiscard]] RawEventRange ReadRawAfter(std::size_t& seen) const override
         {
-            const auto& events = ReadEvents();
-            return {events.data(), events.size()};
+            if constexpr (ByteCopyable)
+            {
+                const EventRange<TEvent> events = ReadAfter(seen);
+                return {events.Older().data(), events.Older().size(), events.Newer().data(), events.Newer().size(),
+                        events.Missed()};
+            }
+            else
+            {
+                (void)seen;
+                return {};
+            }
         }
 
       private:
@@ -307,10 +327,6 @@ namespace Fenrir
         // How many events were sent to this queue before the first event of each buffer.
         std::size_t previousStart = 0;
         std::size_t currentStart = 0;
-        // How many events were sent before the previous frame and before this one: the ReadEvents window.
-        std::size_t lastFrameStart = 0;
-        std::size_t thisFrameStart = 0;
-        mutable std::vector<TEvent> combinedBuffer; // marked as mutable because ReadEvents() is const
     };
 
     /**
@@ -400,15 +416,6 @@ namespace Fenrir
         void SendEvent(const TEvent& event);
 
         /**
-         * @brief Read the events from the queue
-         *
-         * @tparam TEvent the type of event
-         * @return const std::vector<TEvent>& the events
-         */
-        template <typename TEvent>
-        const std::vector<TEvent>& ReadEvents() const;
-
-        /**
          * @brief Gives the queue of `TEvent` a name, so code that only knows the name can reach the same queue
          * (FindEventQueue). `SendEvent<TEvent>` and the named queue are one queue. False if the name is already given
          * to a different queue. Naming the same queue twice is fine.
@@ -495,7 +502,7 @@ namespace Fenrir
         /** @brief Runs the init phases, the first time only. */
         void InitOnce();
 
-        /** @brief Ends the frame for every event queue, swapping their buffers if a tick ran since the last swap. */
+        /** @brief Swaps every event queue's buffers if a tick ran since the last swap. */
         void UpdateEvents();
 
         /**
@@ -532,7 +539,7 @@ namespace Fenrir
         }
 
       private:
-        std::size_t m_seen = 0;
+        std::size_t m_seen = NewReaderCursor;
     };
 
     template <typename TEvent>
@@ -545,12 +552,6 @@ namespace Fenrir
             return;
         }
         queue.Send(event);
-    }
-
-    template <typename TEvent>
-    const std::vector<TEvent>& App::ReadEvents() const
-    {
-        return GetEventQueue<TEvent>().ReadEvents();
     }
 
     template <typename TEvent>

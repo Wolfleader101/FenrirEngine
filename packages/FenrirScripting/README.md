@@ -366,7 +366,7 @@ Within a phase, the lowest `Order` runs first (ties by full name). `OnCreate` an
 - **Main thread only.** Scripts run on the thread that installed scripting (the one running the App's sequential systems).
   A phase asked to run elsewhere asserts in a debug build and is skipped, with an error, in a release build. This is not
   covered by a test, because the debug assert aborts the process.
-- `SystemContext` has `Time`, `Log`, `CreateEntity()` and `Query<...>()`. Events join it in ticket 09.
+- `SystemContext` has `Time`, `Log`, `CreateEntity()`, `Query<...>()` and `Events` (sending; see Events).
 
 ## Events
 
@@ -376,31 +376,41 @@ public struct Damage : IEvent { public Entity Target; public float Amount; }   /
 [System(Phase.Update, Order = 10)]
 public sealed class Reporter : ISystem
 {
+    private readonly EventReader<Damage> damage = new();   // one reader per event type the system reads
+
     public void OnUpdate(in SystemContext ctx)
     {
-        foreach (var hit in ctx.Events.Read<Damage>())
+        foreach (var hit in damage.Read())
             ctx.Log.Info($"{hit.Target} took {hit.Amount}");
         ctx.Events.Send(new Damage { Target = default, Amount = 1 });
     }
 }
 ```
 
-An event is an unmanaged struct implementing `IEvent`. The engine keeps one queue per event with the same double buffering as
-C++ `SendEvent`/`ReadEvents`: a read sees this frame's events so far and the last frame's. (C++ systems now read through an
-`EventReader<T>` instead, which sees each event once; the queues swap their buffers at the end of a frame only if a tick ran.)
+An event is an unmanaged struct implementing `IEvent`. The engine keeps one queue per event, and a system reads it through an
+`EventReader<T>` it keeps in a field, which yields each event once: the same reader, and the same guarantee, as a C++ system's
+`EventReader<T>` (ADR-0012). A reader remembers how far it has read, so a read yields only the events sent since its previous
+read, including ones sent after it last ran; readers of one queue, C# or C++, are independent of each other.
 
 - **C#-only events need no C++.** The SDK generator lists them in an `EventTable`; when the script assembly loads, the engine
   makes a queue for each (the App's `CreateEventQueue`), and removes it when the assembly is released.
 - **Sharing a C++ event.** List it in an extension's `events` with `Fenrir::MakeEvent<T>("Ns.Name")` and mirror it in
   C# with `[NativeEvent("Ns.Name")]`. The layout is checked like a component's, and a mismatch fails the load
-  naming the field. `SendEvent<T>`/`ReadEvents<T>` in C++ and `Events.Send/Read<T>()` in C# are then one queue. The C++ type
-  must be trivially copyable and default constructible: events cross the boundary as bytes.
-- **Sends wait for the system to return.** `Events.Send` is recorded like a structural change, so a system never reads its own
-  sends and a view from `Events.Read<T>()` stays valid for the whole system. The systems after it, and C++, see the send.
-- **Reading.** `Read<T>()` gives an `EventReader<T>` (a `ref struct`, so it cannot outlive the system): `Count`, an indexer
-  and `foreach`. Elements come out oldest first; `var` copies one, `ref readonly var` does not.
+  naming the field. `SendEvent<T>`/`EventReader<T>` in C++ and `Events.Send<T>()`/`EventReader<T>` in C# are then one queue.
+  The C++ type must be trivially copyable and default constructible: events cross the boundary as bytes.
+- **Sends wait for the system to return.** `Events.Send` is recorded like a structural change, so what a read yielded stays
+  valid for the whole system. The systems after it, and C++, see the send; the sender's own readers see it on their next read.
+- **Reading.** `reader.Read()` gives an `EventRange<T>` (a `ref struct`, so it cannot outlive the system): `Count`, an
+  indexer, `foreach`, and `Missed`, how many events the reader lost by going two of the queue's swaps without reading (the
+  queue swaps at the end of each frame that ran a tick, so zero for a reader that reads every frame). Elements come out
+  oldest first; `var` copies one, `ref readonly var` does not. A reader in a `Tick` system sees an
+  event on its first run after the send, even across frames that run no tick.
+- **A new reader**, such as one made by a reload, starts at the oldest event the queue still holds and reports nothing
+  missed. After a reload one may see an event the previous generation's reader already handled just before it.
 - **By name from C++.** `App::NameEvent<T>("name")` gives a typed queue a name, `App::FindEventQueue("name")` finds any named
-  queue and reads or sends it as bytes (`IEventQueue::ReadRaw/SendRaw`). Existing `SendEvent`/`ReadEvents` code is unchanged.
+  queue, and `IEventQueue::SendRaw` and `ReadRawAfter` send it and read it as bytes, with a cursor the caller keeps (one
+  per reader, starting at `NewReaderCursor`). A raw send from a system running in parallel is held until its batch has
+  run, as `SendEvent` is.
 
 ## Hot reload
 

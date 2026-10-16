@@ -67,6 +67,27 @@ namespace Fenrir
             return Same(a.As<BoxShape>().halfExtents, b.As<BoxShape>().halfExtents);
         }
 
+        bool Same(const PhysicsMaterial& a, const PhysicsMaterial& b)
+        {
+            return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
+        }
+
+        PhysicsMaterial MaterialOf(Entity& entity)
+        {
+            return entity.HasComponent<PhysicsMaterial>() ? entity.GetComponent<PhysicsMaterial>() : PhysicsMaterial{};
+        }
+
+        bool Same(const CollisionFilter& a, const CollisionFilter& b)
+        {
+            return a.layers == b.layers && a.mask == b.mask;
+        }
+
+        // Read from the body's entity: it applies to all the body's colliders.
+        CollisionFilter FilterOf(Entity& entity)
+        {
+            return entity.HasComponent<CollisionFilter>() ? entity.GetComponent<CollisionFilter>() : CollisionFilter{};
+        }
+
         Backend::Motion MotionOf(const RigidBody* rigidBody)
         {
             if (rigidBody == nullptr)
@@ -172,6 +193,8 @@ namespace Fenrir
             desc.motion = MotionOf(rigidBody);
             desc.canMove = rigidBody != nullptr;
             desc.shape = shape;
+            desc.material = MaterialOf(entity);
+            desc.filter = FilterOf(entity);
             desc.scale = world.scale;
             desc.position = world.pos;
             desc.rotation = world.rot;
@@ -186,9 +209,9 @@ namespace Fenrir
                 m_logger->Warn("The collider of entity " + std::to_string(id) +
                                " refers to a collision mesh that is released or cannot be used as its kind of shape; "
                                "its body is inactive until its shape changes");
-                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape,
-                                            Transform(desc.position, desc.rotation, desc.scale), desc.linearVelocity,
-                                            desc.angularVelocity});
+                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, desc.shape, desc.material,
+                                            desc.filter, Transform(desc.position, desc.rotation, desc.scale),
+                                            desc.linearVelocity, desc.angularVelocity});
                 continue;
             }
             entities.push_back(id);
@@ -200,8 +223,8 @@ namespace Fenrir
         for (std::size_t i = 0; i < descs.size(); ++i)
         {
             const Backend::BodyDesc& desc = descs[i];
-            m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape,
-                                                 Transform(desc.position, desc.rotation, desc.scale),
+            m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
+                                                 desc.filter, Transform(desc.position, desc.rotation, desc.scale),
                                                  desc.linearVelocity, desc.angularVelocity});
         }
     }
@@ -253,6 +276,20 @@ namespace Fenrir
             {
                 m_backend.SetShape(record.id, shape, world.scale, motion.mass);
                 record.shape = shape;
+            }
+
+            const PhysicsMaterial material = MaterialOf(entity);
+            if (!Same(material, record.material))
+            {
+                m_backend.SetMaterial(record.id, material);
+                record.material = material;
+            }
+
+            const CollisionFilter filter = FilterOf(entity);
+            if (!Same(filter, record.filter))
+            {
+                m_backend.SetFilter(record.id, filter);
+                record.filter = filter;
             }
 
             if (motion.motionType == MotionType::Kinematic)

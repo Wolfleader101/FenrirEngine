@@ -4,10 +4,14 @@
 
 **Blocked by:** 12 (Physics tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Tests: a bouncy material bounces higher than a dead one; a low-friction slope slides further.
 - [ ] Two bodies whose masks exclude each other pass through; one-sided masks do not collide (the rule is symmetric); the default collides with everything.
 - [ ] More than 16 layers in use at once works.
 - [ ] Changing `layers` or `mask` at run time takes effect on the next tick.
 - [ ] Named layers can be looked up by name; names are fixed at `Install`.
+
+**Resolved by:** merge of impl/15-materials-and-layers (11404b5)
+
+**Note:** named layers are looked up through the installed owner (Physics::Layers()), not a static CollisionLayers::Bit, because one process may hold several Physics owners; the child-collider filter warning arrives with ticket 14.

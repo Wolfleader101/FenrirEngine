@@ -38,8 +38,8 @@ Each piece is a small, commented file in `scripts/` (the C# half) and, where C++
 | `Spark 3 burnt out.` | **An event only C# defines** (`Expired`): no C++ type and no registration; the build finds it and the engine makes its queue. | `Sparks.cs` |
 | Edit a script while the demo runs (below). | **Hot reload**, with the data kept: the spin angles carry on. | all of them |
 
-Events stay readable for two frames, so a system that reads every frame sees each event twice. `FreshEvents` in `Controls.cs` is the
-small helper the demo uses to handle each one once (the C++ `LogBursts` does the same sum by hand).
+Each system reads events through readers of its own (`EventReader<T>` fields in C#, captured in the lambda in C++), so it handles each
+event once, whichever language sent it.
 
 ### Running it without a keyboard
 

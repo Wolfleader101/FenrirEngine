@@ -1,7 +1,11 @@
 #include <chrono>
+#include <cstddef>
+#include <cstring>
 #include <memory>
+#include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -146,26 +150,36 @@ TEST_CASE("A Tick reader sees an event sent in frames that ran no tick", "[app][
     REQUIRE(reads == Reads{{1}});
 }
 
-TEST_CASE("ReadEvents still gives this frame's and the last frame's events, in frames with no tick", "[app][events]")
+TEST_CASE("A reader made after its queue has swapped starts at the oldest event held and has missed nothing",
+          "[app][events]")
 {
     App app(Silent());
     int frame = 0;
-    std::vector<std::size_t> seen;
+    std::vector<int> values;
+    std::vector<std::size_t> missed;
+    app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) { running.SendEvent(Ping{++frame}); }});
     app.AddSequentialSystems(SchedulePriority::Update, {[&](App& running) {
-                                 if (++frame == 1)
+                                 if (frame == 4)
                                  {
-                                     running.SendEvent(Ping{1});
+                                     Fenrir::EventReader<Ping> reader;
+                                     const auto read = reader.Read(running);
+                                     missed.push_back(read.Missed());
+                                     for (const Ping& ping : read)
+                                     {
+                                         values.push_back(ping.value);
+                                     }
                                  }
-                                 seen.push_back(running.ReadEvents<Ping>().size());
                              }});
 
+    // One tick a frame, so the queue swaps three times before the reader exists.
     for (int run = 0; run < 4; ++run)
     {
-        app.RunFrame(0.1 * sixtieth);
+        app.RunFrame(sixtieth);
     }
 
-    INFO("an event should be in ReadEvents' window for the frame it was sent and the next, whether or not they ticked");
-    REQUIRE(seen == std::vector<std::size_t>{1, 1, 0, 0});
+    INFO("a new reader should yield the events the queue still holds (frames 3 and 4) and report no misses");
+    REQUIRE(values == std::vector<int>{3, 4});
+    REQUIRE(missed == std::vector<std::size_t>{0});
 }
 
 TEST_CASE("A reader that goes two swaps without reading reports how many events it missed", "[app][events]")
@@ -274,6 +288,82 @@ TEST_CASE("Readers and senders running in parallel each see every event once, fr
         {
             INFO("a parallel reader should see each frame's parallel sends once, in registration order, the next "
                  "frame");
+            REQUIRE(read == expected);
+        }
+    }
+}
+
+namespace
+{
+    // SendsThree, by name and as bytes: what scripting does.
+    Fenrir::SystemFunc SendsThreeByName(std::string name, int first, bool slow)
+    {
+        return [name = std::move(name), first, slow](App& app) {
+            if (slow)
+            {
+                std::this_thread::sleep_for(std::chrono::microseconds(200));
+            }
+            for (int offset = 0; offset < 3; ++offset)
+            {
+                const int value = first + offset;
+                (void)app.FindEventQueue(name)->SendRaw(&value);
+            }
+        };
+    }
+
+    // RecordingReader, by name and as bytes, with a cursor of its own.
+    Fenrir::SystemFunc RecordingRawReader(std::string name, Reads& reads)
+    {
+        return [name = std::move(name), &reads, seen = Fenrir::NewReaderCursor](App& app) mutable {
+            std::vector<int>& run = reads.emplace_back();
+            const Fenrir::RawEventRange events = app.FindEventQueue(name)->ReadRawAfter(seen);
+            for (const auto& [data, count] :
+                 {std::pair{events.older, events.olderCount}, std::pair{events.newer, events.newerCount}})
+            {
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    int value = 0;
+                    std::memcpy(&value, static_cast<const std::byte*>(data) + index * sizeof(int), sizeof(int));
+                    run.push_back(value);
+                }
+            }
+        };
+    }
+} // namespace
+
+TEST_CASE("Sends and reads by name, as bytes, follow the rules typed ones do", "[app][events]")
+{
+    // A named typed queue and a queue with no C++ type: both are reached only by name here.
+    for (const bool typed : {true, false})
+    {
+        App app(Silent());
+        const std::string name = "Ping";
+        if (typed)
+        {
+            REQUIRE(app.NameEvent<Ping>(name));
+        }
+        else
+        {
+            REQUIRE(app.CreateEventQueue(name, sizeof(int), alignof(int)) != nullptr);
+        }
+        std::vector<Reads> reads(2);
+        app.AddSystems(SchedulePriority::Update,
+                       {SendsThreeByName(name, 10, true), RecordingRawReader(name, reads[0]),
+                        RecordingRawReader(name, reads[1]), SendsThreeByName(name, 20, false)});
+
+        constexpr int frames = 20;
+        for (int run = 0; run < frames; ++run)
+        {
+            app.RunFrame(sixtieth);
+        }
+
+        Reads expected(frames, {10, 11, 12, 20, 21, 22});
+        expected.front().clear();
+        for (const Reads& read : reads)
+        {
+            INFO((typed ? "typed queue: " : "byte queue: ")
+                 << "parallel sends by name should arrive after the batch in registration order, and each raw reader "
+                    "should see them once");
             REQUIRE(read == expected);
         }
     }
