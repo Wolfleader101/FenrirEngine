@@ -151,6 +151,36 @@ namespace Fenrir
         return scene.GetResource<PhysicsWorld>();
     }
 
+    void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddImpulse, impulse);
+    }
+
+    void PhysicsWorld::AddForce(const Entity& entity, const Math::Vec3& force)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddForce, force);
+    }
+
+    void PhysicsWorld::AddTorque(const Entity& entity, const Math::Vec3& torque)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddTorque, torque);
+    }
+
+    void PhysicsWorld::AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse)
+    {
+        m_impl->Queue(entity.GetId(), &Backend::World::AddAngularImpulse, impulse);
+    }
+
+    Math::Vec3 PhysicsWorld::Gravity() const
+    {
+        return m_impl->Gravity();
+    }
+
+    void PhysicsWorld::SetGravity(const Math::Vec3& gravity)
+    {
+        m_impl->SetGravity(gravity);
+    }
+
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
         : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
@@ -172,6 +202,7 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
         SendEvents(app);
@@ -266,6 +297,7 @@ namespace Fenrir
         m_backend.CreateBodies(descs, ids);
         for (std::size_t i = 0; i < descs.size(); ++i)
         {
+            // A body the backend could not make (the world is full; it logged that) leaves the record inactive.
             const Backend::BodyDesc& desc = descs[i];
             m_bodies.emplace(entities[i], Record{ids[i], desc.canMove, desc.motion, desc.shape, desc.material,
                                                  desc.filter, Transform(desc.position, desc.rotation, desc.scale),
@@ -284,8 +316,7 @@ namespace Fenrir
                 continue; // already rebuilt, or gone
             }
             const CollisionShape& shape = m_entities->GetEntity(id).GetComponent<Collider>().shape;
-            const bool active = record.id.value != Backend::BodyId{}.value;
-            if (active ? !m_backend.CanMakeShape(shape) : !Same(shape, record.shape))
+            if (record.Active() ? !m_backend.CanMakeShape(shape) : !Same(shape, record.shape))
             {
                 changed.insert(id);
             }
@@ -296,7 +327,7 @@ namespace Fenrir
     {
         for (auto& [id, record] : m_bodies)
         {
-            if (record.id.value == Backend::BodyId{}.value)
+            if (!record.Active())
             {
                 continue; // inactive: no body to push to
             }
@@ -358,11 +389,30 @@ namespace Fenrir
         }
     }
 
+    void PhysicsWorld::Impl::Queue(std::uint32_t entity, Pusher pusher, const Math::Vec3& amount)
+    {
+        m_pushes.push_back(Push{entity, pusher, amount});
+    }
+
+    void PhysicsWorld::Impl::ApplyPushes()
+    {
+        for (const Push& push : m_pushes)
+        {
+            const auto it = m_bodies.find(push.entity);
+            if (it == m_bodies.end() || !it->second.Active())
+            {
+                continue; // no body: nothing to push
+            }
+            (m_backend.*push.pusher)(it->second.id, push.amount);
+        }
+        m_pushes.clear();
+    }
+
     void PhysicsWorld::Impl::WriteBack()
     {
         for (auto& [id, record] : m_bodies)
         {
-            if (record.motion.motionType != MotionType::Dynamic || record.id.value == Backend::BodyId{}.value)
+            if (record.motion.motionType != MotionType::Dynamic || !record.Active())
             {
                 continue;
             }
