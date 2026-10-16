@@ -50,7 +50,7 @@ namespace Fenrir
                 world = &scene.AddResource<PhysicsWorld>(
                     std::make_unique<PhysicsWorld::Impl>(entities, settings, state.meshes, *app.Logger()));
             }
-            world->Implementation().Step(static_cast<float>(app.GetTime().tickRate));
+            world->Implementation().Step(app, static_cast<float>(app.GetTime().tickRate));
         }
 
         // The BeforeTicks system: the active scene's bodies are back at their true poses before any tick.

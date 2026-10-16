@@ -1,12 +1,15 @@
 // Bodies in the entity hierarchy through the frame seam: compound bodies built from child colliders, and bodies under
 // moved and rotated parents.
 
+#include <algorithm>
 #include <array>
 #include <optional>
+#include <vector>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirPhysics/Events.hpp"
 #include "PhysicsTestApp.hpp"
 
 using namespace Fenrir;
@@ -396,4 +399,84 @@ TEST_CASE("Pushing a child collider's entity pushes the compound body it belongs
     const float speed = body.GetComponent<RigidBody>().linearVelocity.x;
     INFO("an impulse of 4 N s on the child's 2 kg body adds 2 m/s (less a tick of damping), it moves at " << speed);
     REQUIRE(speed == Approx(2.0f).margin(0.01));
+}
+
+namespace
+{
+    /** Every event of type TEvent sent while it runs frames, read after each frame as a system would. */
+    template <typename TEvent>
+    std::vector<TEvent> RunReading(PhysicsApp& test, double seconds)
+    {
+        EventReader<TEvent> reader;
+        std::vector<TEvent> events;
+        const int frames = static_cast<int>(seconds / tick + 0.5);
+        for (int i = 0; i < frames; ++i)
+        {
+            test.app.RunFrame(tick);
+            for (const TEvent& event : reader.Read(test.app))
+            {
+                events.push_back(event);
+            }
+        }
+        return events;
+    }
+} // namespace
+
+TEST_CASE("Contacts of a compound body name the body and the collider that touched", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    Entity ground = AddGround(test.Entities());
+    Entity body = Place(test.Entities(), Math::Vec3(0.0f, 2.0f, 0.0f));
+    body.AddComponent<RigidBody>(RigidBody{.motionType = MotionType::Dynamic});
+    body.AddComponent<ContactEvents>();
+    Entity left = AddChildBox(test.Entities(), body, Math::Vec3(-1.0f, 0.0f, 0.0f));
+    Entity right = AddChildBox(test.Entities(), body, Math::Vec3(1.0f, 0.0f, 0.0f));
+
+    const std::vector<ContactBegin> begins = RunReading<ContactBegin>(test, 2.0);
+
+    INFO("both boxes land on the ground: two contacts begin, got " << begins.size());
+    REQUIRE(begins.size() == 2);
+    for (const ContactBegin& begin : begins)
+    {
+        REQUIRE(begin.bodyA == ground);
+        REQUIRE(begin.colliderA == ground);
+        REQUIRE(begin.bodyB == body);
+    }
+    INFO("one names each box as the collider, in entity order");
+    REQUIRE(begins[0].colliderB == left);
+    REQUIRE(begins[1].colliderB == right);
+
+    PhysicsWorld* world = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(world != nullptr);
+    std::vector<Entity> touching;
+    world->ForEachContact(right, [&](const Contact& contact) {
+        REQUIRE(contact.body == body);
+        REQUIRE(contact.otherBody == ground);
+        touching.push_back(contact.collider);
+    });
+    INFO("asked through a child collider's entity, ForEachContact lists the compound body's contacts, by collider");
+    REQUIRE(touching.size() == 2);
+    REQUIRE(std::ranges::count(touching, left) == 1);
+    REQUIRE(std::ranges::count(touching, right) == 1);
+}
+
+TEST_CASE("A trigger beneath a body ignores that body, and enters others", "[physics][hierarchy]")
+{
+    PhysicsApp test;
+    Entity ground = AddGround(test.Entities());
+    Entity body = AddBody(test.Entities(), Math::Vec3(0.0f, 0.5f, 0.0f));
+    Entity sensor = Place(test.Entities(), Math::Vec3(0.0f));
+    sensor.AddComponent<Collider>(Collider{SphereShape{1.0f}});
+    sensor.AddComponent<Trigger>();
+    body.AddChild(sensor);
+
+    const std::vector<TriggerEnter> enters = RunReading<TriggerEnter>(test, 1.0);
+
+    INFO("the sensor, around the body's own box and dipping into the ground, enters the ground alone: got "
+         << enters.size() << " enters");
+    REQUIRE(enters.size() == 1);
+    REQUIRE(enters[0].trigger == sensor);
+    REQUIRE(enters[0].otherBody == ground);
+    INFO("it is its own body, not part of the body it is beneath: that body still rests on the ground");
+    REQUIRE(PositionOf(body).y == Approx(0.5f).margin(restSlop));
 }

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <string_view>
@@ -33,6 +34,7 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -55,8 +57,7 @@ namespace Fenrir::Backend
         constexpr std::size_t tempAllocatorBytes = 10 * 1024 * 1024;
         constexpr float wakeMargin = 0.1f;
 
-        // Broad-phase layers, one tree each: static bodies (rarely updated), moving bodies, and triggers. Static bodies
-        // never collide with each other.
+        // Broad-phase layers, one tree each: static bodies (rarely updated), moving bodies, and triggers.
         enum class BroadPhase : std::uint8_t
         {
             Static,
@@ -68,6 +69,17 @@ namespace Fenrir::Backend
         BroadPhase BroadPhaseOf(MotionType type)
         {
             return type == MotionType::Static ? BroadPhase::Static : BroadPhase::Moving;
+        }
+
+        // Moving bodies pair with everything. Triggers pair with static bodies too (they are kept awake, so they find
+        // sleeping and static bodies), but not with each other; static bodies never pair with each other.
+        bool BroadPhasesPair(BroadPhase a, BroadPhase b)
+        {
+            if (a == BroadPhase::Moving || b == BroadPhase::Moving)
+            {
+                return true;
+            }
+            return a != b;
         }
 
         // What an object layer stands for: a broad-phase layer and a collision filter.
@@ -196,8 +208,7 @@ namespace Fenrir::Backend
 
             bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer broadPhase) const override
             {
-                constexpr JPH::BroadPhaseLayer moving(static_cast<JPH::BroadPhaseLayer::Type>(BroadPhase::Moving));
-                return m_layers->Key(layer).broadPhase == BroadPhase::Moving || broadPhase == moving;
+                return BroadPhasesPair(m_layers->Key(layer).broadPhase, static_cast<BroadPhase>(broadPhase.GetValue()));
             }
 
           private:
@@ -216,7 +227,7 @@ namespace Fenrir::Backend
             {
                 const LayerKey& first = m_layers->Key(a);
                 const LayerKey& second = m_layers->Key(b);
-                if (first.broadPhase != BroadPhase::Moving && second.broadPhase != BroadPhase::Moving)
+                if (!BroadPhasesPair(first.broadPhase, second.broadPhase))
                 {
                     return false;
                 }
@@ -410,6 +421,121 @@ namespace Fenrir::Backend
             return JPH::BodyID(id.value);
         }
 
+        std::uint32_t EntityOf(const JPH::Body& body)
+        {
+            return static_cast<std::uint32_t>(body.GetUserData());
+        }
+
+        // The entity of the collider a sub-shape of the body belongs to: a compound's part keeps it, and a body that is
+        // not a compound is its own entity's one collider.
+        std::uint32_t ColliderOf(const JPH::Body& body, const JPH::SubShapeID& subShape)
+        {
+            const JPH::Shape* shape = body.GetShape();
+            if (shape->GetType() != JPH::EShapeType::Compound)
+            {
+                return EntityOf(body);
+            }
+            const auto* compound = static_cast<const JPH::CompoundShape*>(shape);
+            JPH::SubShapeID remainder;
+            return compound->GetCompoundUserData(compound->GetSubShapeIndexFromID(subShape, remainder));
+        }
+
+        // One touching pair of sub-shapes of two bodies.
+        struct TouchKey
+        {
+            std::uint32_t body1;
+            std::uint32_t body2;
+            std::uint32_t subShape1;
+            std::uint32_t subShape2;
+
+            auto operator<=>(const TouchKey&) const = default;
+        };
+
+        // Collects the pairs Jolt finds touching during a step. Jolt calls it from its job threads, several at once,
+        // in no reproducible order across pairs (callbacks for one pair are serialized), so the step sorts what it
+        // collects before using it.
+        class TouchListener final : public JPH::ContactListener
+        {
+          public:
+            struct Found
+            {
+                TouchKey key;
+                Touch touch;
+            };
+
+            void OnContactAdded(const JPH::Body& body1, const JPH::Body& body2, const JPH::ContactManifold& manifold,
+                                JPH::ContactSettings&) override
+            {
+                Record(body1, body2, manifold);
+            }
+
+            void OnContactPersisted(const JPH::Body& body1, const JPH::Body& body2,
+                                    const JPH::ContactManifold& manifold, JPH::ContactSettings&) override
+            {
+                Record(body1, body2, manifold);
+            }
+
+            /** What was found since the last call, ordered by pair, each pair's findings in the order found. */
+            std::vector<Found> Take()
+            {
+                std::vector<Found> found;
+                {
+                    const std::lock_guard<std::mutex> lock(m_mutex);
+                    found.swap(m_found);
+                }
+                std::stable_sort(found.begin(), found.end(),
+                                 [](const Found& a, const Found& b) { return a.key < b.key; });
+                return found;
+            }
+
+          private:
+            static Touch Describe(const JPH::Body& body1, const JPH::Body& body2, const JPH::ContactManifold& manifold)
+            {
+                Touch touch;
+                touch.body1 = BodyId{body1.GetID().GetIndexAndSequenceNumber()};
+                touch.body2 = BodyId{body2.GetID().GetIndexAndSequenceNumber()};
+                touch.entity1 = EntityOf(body1);
+                touch.entity2 = EntityOf(body2);
+                touch.collider1 = ColliderOf(body1, manifold.mSubShapeID1);
+                touch.collider2 = ColliderOf(body2, manifold.mSubShapeID2);
+                touch.isTrigger1 = body1.IsSensor();
+                touch.isTrigger2 = body2.IsSensor();
+
+                // Midway between the bodies' contact points: they differ by the penetration.
+                JPH::Vec3 sum = JPH::Vec3::sZero();
+                const JPH::uint count = manifold.mRelativeContactPointsOn1.size();
+                for (JPH::uint i = 0; i < count; ++i)
+                {
+                    sum += manifold.mRelativeContactPointsOn1[i] + manifold.mRelativeContactPointsOn2[i];
+                }
+                const JPH::RVec3 point =
+                    count > 0 ? manifold.mBaseOffset + sum / (2.0f * static_cast<float>(count)) : manifold.mBaseOffset;
+                touch.point = FromJolt(JPH::Vec3(point));
+                touch.normal = FromJolt(manifold.mWorldSpaceNormal);
+                touch.relativeSpeed =
+                    (body1.GetPointVelocity(point) - body2.GetPointVelocity(point)).Dot(manifold.mWorldSpaceNormal);
+                return touch;
+            }
+
+            void Record(const JPH::Body& body1, const JPH::Body& body2, const JPH::ContactManifold& manifold)
+            {
+                // Jolt does not always name a pair's bodies in the same order: one pair must have one key.
+                if (body2.GetID() < body1.GetID())
+                {
+                    Record(body2, body1, manifold.SwapShapes());
+                    return;
+                }
+                Found found{TouchKey{body1.GetID().GetIndexAndSequenceNumber(),
+                                     body2.GetID().GetIndexAndSequenceNumber(), manifold.mSubShapeID1.GetValue(),
+                                     manifold.mSubShapeID2.GetValue()},
+                            Describe(body1, body2, manifold)};
+                const std::lock_guard<std::mutex> lock(m_mutex);
+                m_found.push_back(found);
+            }
+
+            std::mutex m_mutex;
+            std::vector<Found> m_found;
+        };
         // Runs a step's jobs on the App's worker threads. The stepping thread is not one of them: it waits on a
         // barrier, which runs the barrier's jobs itself while it waits (JobSystemWithBarrier). A job already run that
         // way does nothing when a worker reaches it, so the step finishes even with every worker busy elsewhere, or if
@@ -799,6 +925,59 @@ namespace Fenrir::Backend
         JPH::TempAllocatorImpl tempAllocator{tempAllocatorBytes};
         std::shared_ptr<JPH::JobSystem> jobs;
         JPH::PhysicsSystem system;
+        TouchListener listener;
+
+        // The pairs touching after the last step, and what changed in that step.
+        std::map<TouchKey, Touch> touching;
+        std::vector<Touch> touches;
+        std::vector<TouchChange> changes;
+
+        // Brings `touching` up to date after a step. A pair Jolt found is touching. A pair it did not find has
+        // separated, unless neither body was awake when the step began: Jolt drops the contacts of sleeping bodies
+        // without their separating, and finds them again when one wakes, and a body falling asleep must not end what it
+        // touches.
+        void UpdateTouches(const std::set<std::uint32_t>& awakeAtStart)
+        {
+            changes.clear();
+            std::set<TouchKey> found;
+            for (TouchListener::Found& each : listener.Take())
+            {
+                found.insert(each.key);
+                const auto it = touching.find(each.key);
+                if (it == touching.end())
+                {
+                    touching.emplace(each.key, each.touch);
+                    changes.push_back(TouchChange{TouchChange::Kind::Begin, each.touch});
+                }
+                else
+                {
+                    it->second.point = each.touch.point;
+                    it->second.normal = each.touch.normal;
+                }
+            }
+            for (auto it = touching.begin(); it != touching.end();)
+            {
+                const TouchKey& key = it->first;
+                const bool ended =
+                    !found.contains(key) &&
+                    (awakeAtStart.contains(key.body1) || awakeAtStart.contains(key.body2) ||
+                     !Bodies().IsAdded(JPH::BodyID(key.body1)) || !Bodies().IsAdded(JPH::BodyID(key.body2)));
+                if (ended)
+                {
+                    changes.push_back(TouchChange{TouchChange::Kind::End, it->second});
+                    it = touching.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+            touches.clear();
+            for (const auto& [key, touch] : touching)
+            {
+                touches.push_back(touch);
+            }
+        }
 
         // Every call comes from the thread that runs the App, never during a step, so no body locks are needed.
         JPH::BodyInterface& Bodies()
@@ -884,6 +1063,7 @@ namespace Fenrir::Backend
             Capacity(settings.maxContacts, JPH::PhysicsSystem::cMaxContactConstraintsLimit, "contacts", logger),
             m_impl->broadPhaseLayers, m_impl->objectVsBroadPhase, m_impl->objectPairs);
         m_impl->system.SetGravity(ToJolt(settings.gravity));
+        m_impl->system.SetContactListener(&m_impl->listener);
     }
 
     World::~World()
@@ -910,11 +1090,25 @@ namespace Fenrir::Backend
         for (std::size_t i = 0; i < bodies.size(); ++i)
         {
             const BodyDesc& desc = bodies[i];
+            const MotionType motionType = desc.isTrigger ? MotionType::Kinematic : desc.motion.motionType;
+            const JPH::ObjectLayer layer =
+                desc.isTrigger
+                    ? m_impl->objectLayers.Acquire(LayerKey{BroadPhase::Trigger, desc.filter.layers, desc.filter.mask})
+                    : m_impl->AcquireLayer(motionType, desc.filter);
             const JPH::Ref<JPH::Shape> shape = m_impl->MakeBodyShape(desc.parts, desc.entity);
-            JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation),
-                                               ToJolt(desc.motion.motionType),
-                                               m_impl->AcquireLayer(desc.motion.motionType, desc.filter));
+            JPH::BodyCreationSettings settings(shape, ToJolt(desc.position), ToJolt(desc.rotation), ToJolt(motionType),
+                                               layer);
             settings.mAllowDynamicOrKinematic = desc.canMove;
+            // Jolt merges contacts of a body's different parts that face the same way, which would hide all but one of
+            // a compound body's colliders from its contacts.
+            settings.mUseManifoldReduction = shape->GetType() != JPH::EShapeType::Compound;
+            if (desc.isTrigger)
+            {
+                // A kinematic sensor kept awake sees sleeping bodies, and with this flag static ones too.
+                settings.mIsSensor = true;
+                settings.mCollideKinematicVsNonDynamic = true;
+                settings.mAllowSleeping = false;
+            }
             settings.mUserData = desc.entity;
             settings.mLinearVelocity = ToJolt(desc.linearVelocity);
             settings.mAngularVelocity = ToJolt(desc.angularVelocity);
@@ -1005,6 +1199,7 @@ namespace Fenrir::Backend
         const JPH::AABox before = m_impl->Bounds(id);
         const JPH::Ref<JPH::Shape> made = m_impl->MakeBodyShape(parts, entity);
         m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
+        m_impl->Bodies().SetUseManifoldReduction(ToJolt(id), made->GetType() != JPH::EShapeType::Compound);
         // The body keeps its own mass; its inertia follows the new shape.
         m_impl->Write(id, [&made, mass](JPH::Body& body) {
             if (JPH::MotionProperties* motion = body.GetMotionPropertiesUnchecked())
@@ -1184,25 +1379,6 @@ namespace Fenrir::Backend
             QueryLayerFilter layer;
             QueryBodyFilter body;
         };
-
-        std::uint32_t EntityOf(const JPH::Body& body)
-        {
-            return static_cast<std::uint32_t>(body.GetUserData());
-        }
-
-        // The entity of the collider a sub-shape of the body belongs to: a compound's part keeps it, and a body that is
-        // not a compound is its own entity's one collider.
-        std::uint32_t ColliderOf(const JPH::Body& body, const JPH::SubShapeID& subShape)
-        {
-            const JPH::Shape* shape = body.GetShape();
-            if (shape->GetType() != JPH::EShapeType::Compound)
-            {
-                return EntityOf(body);
-            }
-            const auto* compound = static_cast<const JPH::CompoundShape*>(shape);
-            JPH::SubShapeID remainder;
-            return compound->GetCompoundUserData(compound->GetSubShapeIndexFromID(subShape, remainder));
-        }
 
         // Hands each hit to a sink, narrowing the query to the distance the sink still wants.
         class RayCollector final : public JPH::CastRayCollector
@@ -1392,6 +1568,14 @@ namespace Fenrir::Backend
 
     void World::Step(float dt, int collisionSteps)
     {
+        JPH::BodyIDVector awake;
+        m_impl->system.GetActiveBodies(JPH::EBodyType::RigidBody, awake);
+        std::set<std::uint32_t> awakeAtStart;
+        for (const JPH::BodyID& id : awake)
+        {
+            awakeAtStart.insert(id.GetIndexAndSequenceNumber());
+        }
+
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         if (error != JPH::EPhysicsUpdateError::None)
@@ -1399,5 +1583,16 @@ namespace Fenrir::Backend
             m_impl->logger->Warn("Physics step ran out of room for body pairs or contacts (error " +
                                  std::to_string(static_cast<unsigned>(error)) + "); some contacts were ignored");
         }
+        m_impl->UpdateTouches(awakeAtStart);
+    }
+
+    std::span<const TouchChange> World::TouchChanges() const
+    {
+        return m_impl->changes;
+    }
+
+    std::span<const Touch> World::Touches() const
+    {
+        return m_impl->touches;
     }
 } // namespace Fenrir::Backend
