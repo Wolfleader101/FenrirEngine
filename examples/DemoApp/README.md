@@ -1,7 +1,30 @@
 # DemoApp
 
-A windowed sample app: a renderer, an editor and two backpacks. It is also the smoke test of C# scripting in a real app (the proof
-of the scripting package is its headless tests, in `packages/FenrirScripting/Tests`).
+A windowed sample app: a renderer, an editor, two backpacks and, with physics on, two physics scenes (one built in C++, one only
+in C#). It is also the smoke test of C# scripting in a real app (the proof of the scripting package is its headless tests, in
+`packages/FenrirScripting/Tests`).
+
+## Scenes and controls
+
+The demo has two scenes, and the editor shows whichever is active.
+
+- **Default**, the one it starts in: two backpacks, four lights and, with physics on, the C++ physics demo (a stack of boxes on a
+  ground, a kinematic paddle sweeping through them, and a backpack with a triangle-mesh collider with boxes dropped onto it).
+- **Physics (C#)**, with physics and scripting both on: a scene C++ creates empty but for one marker entity, built and run
+  entirely by a C# script (see "The C# physics scene" below).
+
+| Key or button | Does |
+|---|---|
+| Right mouse (hold) and move | Looks around. |
+| `W` `A` `S` `D`, `Shift` | Moves the camera; `Shift` is faster. The scroll wheel zooms. `F1` turns the camera controls off and on. |
+| Left click in the scene view | Selects the entity under the cursor in the editor. In the Physics (C#) scene it also casts a ray from C#. |
+| `F2` | Cycles the active scene's physics debug lines: off, colliders, contacts, velocities, bounds, all (physics on). |
+| `F3` | Switches between Default and Physics (C#) (physics and scripting on). |
+| `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
+| `J` | In the Physics (C#) scene: kicks every box and sphere into the air. |
+
+Physics steps only the active scene, so the scene you switch away from waits, bodies mid-air and all, and carries on from there
+when you switch back. The scripting demo's C# systems also act only on the active scene.
 
 ## With scripting (C#)
 
@@ -37,14 +60,34 @@ Each piece is a small, commented file in `scripts/` (the C# half) and, where C++
 | `C++ saw a burst of 5 sparks sent from C#.` | **An event from C# to C++**: `Burst` is one queue read by both languages. | `Controls.cs`, `Sparks.cs`, `ScriptingDemo.hpp` |
 | `Spark 3 burnt out.` | **An event only C# defines** (`Expired`): no C++ type and no registration; the build finds it and the engine makes its queue. | `Sparks.cs` |
 | Edit a script while the demo runs (below). | **Hot reload**, with the data kept: the spin angles carry on. | all of them |
+| `F3`: a second scene of boxes, spheres, a paddle and a green trigger pad, all made by C#. | **Physics from C# only**, through the `Fenrir.Physics` contract (below). | `Physics/Playground.cs` |
 
 Each system reads events through readers of its own (`EventReader<T>` fields in C#, captured in the lambda in C++), so it handles each
 event once, whichever language sent it.
 
+### The C# physics scene
+
+`F3` switches to the "Physics (C#)" scene. All C++ does for it (`src/CSharpPhysicsScene.hpp`) is create the scene with one entity
+carrying a `CSharpPhysicsScene` component, the marker C# looks for, and switch scenes on `F3`; it creates no bodies. Everything
+else is `scripts/Physics/Playground.cs`:
+
+| You see | What it shows |
+|---|---|
+| The first time you switch: a grey ground, a pyramid of ten boxes and five spheres of different sizes falling onto it, each in its own colour, an orange paddle and a green pad on the ground. The log says `Physics (C#): C# built ...`. | **Bodies made from C#**: entities given `RigidBody`, `Collider` (box and sphere shapes), `PhysicsMaterial` (the bouncy spheres), `ContactEvents`, `Trigger` and `CollisionFilter`, all mirrored from FenrirPhysics. **Visible without the renderer**: each also gets a `DemoMesh` (cube or sphere, and a colour), a plain-data component the app shares with C# (`src/DemoMesh.hpp`, `scripts/DemoMesh.cs`), which a C++ system turns into the renderer's `Model` and `Material`. |
+| The paddle sweeps from side to side through the pyramid, pushing the boxes. | **A kinematic body moved by a C# `Tick` system**, writing its `Transform`. The sweep's progress is kept in a C#-defined component, so it pauses with the scene and survives a hot reload. |
+| A box or sphere on the green pad turns pale while it is there; the log says `TriggerEnter: Box 3 entered the Trigger zone.` and `TriggerExit: ...`. | **Trigger events read from C#** through `EventReader<TriggerEnter>` and `EventReader<TriggerExit>` fields, and writing `DemoMesh.Colour` to recolour the body. The trigger's `CollisionFilter` leaves out the ground and the paddle. |
+| `ContactBegin: Ground and Sphere 4 met at 11.0 m/s, ...` when a sphere lands hard. | **Contact events read from C#** (`EventReader<ContactBegin>`), on the spheres, which carry `ContactEvents`. Only hits faster than 3 m/s are logged. |
+| `J` throws every box and sphere into the air. | **`PhysicsWorld.AddImpulse`** from C#, on the `KeyboardKey` event. |
+| A left click logs `Raycast: hit Box 6 at (...), 11.7 m away, ...` and pokes what it hit. | **`PhysicsWorld.Raycast`** from C#, along the ray the editor sends for a click in the scene view (`SceneClickEvent`, shared as `Demo.SceneClick`). |
+
+`F3` again goes back to Default, and the C# scene's world waits until you return. The scripts in `scripts/Physics/` are built
+against the `Fenrir.Physics` contract only when physics is on; with physics off they are left out of `DemoScripts`.
+
 ### Running it without a keyboard
 
 Set `FENRIR_DEMO_AUTOPLAY=1` and the demo presses `R` after a couple of seconds and `Space` after a couple more, by sending the same
-`KeyboardKeyEvent` the window would. It is how the showcase was checked end to end:
+`KeyboardKeyEvent` the window would. With physics on it then visits the C# physics scene: `F3`, a click at the box pyramid (the
+editor's `SceneClickEvent`), `J`, `F3` back and `F3` again, about two seconds apart. It is how the showcase was checked end to end:
 
 ```bash
 cd out/build/clang-x64-debug/examples/DemoApp

@@ -359,6 +359,9 @@ void Editor::OnMouseClick(const MouseButtonEvent& event)
 
         Fenrir::Math::Ray ray = ScreenToPointRay(normalisedCoords);
 
+        // For game code that acts on clicks in the scene (the C# physics scene raycasts with it).
+        m_app.SendEvent(SceneClickEvent{ray.origin, ray.dir});
+
         Fenrir::Entity clickedEntity = SelectEntity(ray, entityList);
 
         if (clickedEntity.IsValid())
@@ -370,6 +373,13 @@ void Editor::OnMouseClick(const MouseButtonEvent& event)
 
 void Editor::Update(Fenrir::App& app)
 {
+    // The selection belongs to the scene it was made in: another scene becoming active clears it.
+    if (&app.GetActiveScene() != m_selectionScene)
+    {
+        m_selectionScene = &app.GetActiveScene();
+        m_selectedEntity = Fenrir::Entity();
+    }
+
     for (const auto& event : m_mouseButtonReader.Read(app))
     {
         OnMouseClick(event);

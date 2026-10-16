@@ -149,6 +149,7 @@ class Editor
     ImGuiContext* m_guiContext;
     GLRenderer::Framebuffer m_frameBuffer;
     Fenrir::Entity m_selectedEntity;
+    Fenrir::Scene* m_selectionScene = nullptr; // The scene m_selectedEntity is in.
     Fenrir::EventReader<MouseButtonEvent> m_mouseButtonReader;
 
     std::shared_ptr<EditorConsoleLogger> m_consoleLogger;
