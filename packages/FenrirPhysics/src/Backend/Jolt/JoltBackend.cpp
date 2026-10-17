@@ -39,7 +39,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
+#include <Jolt/Physics/Collision/CollisionGroup.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/GroupFilter.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -407,6 +409,53 @@ namespace Fenrir::Backend
             JPH::SubShapeID remainder;
             return compound->GetCompoundUserData(compound->GetSubShapeIndexFromID(subShape, remainder));
         }
+
+        // The pairs of bodies joined by an enabled joint that keeps them from colliding, counted by such joints. Jolt
+        // gives a body one collision group only, so a body joined to several neighbours needs one filter over all its
+        // pairs: each body in such a pair has a group naming this filter, its group ID the body's index. Jolt asks it
+        // only after the layer rule allows a pair, so it can only remove pairs, and never for queries. Jolt's job
+        // threads call CanCollide during a step: the table changes only between steps, on the stepping thread.
+        class JoinedPairs final : public JPH::GroupFilter
+        {
+          public:
+            [[nodiscard]] bool CanCollide(const JPH::CollisionGroup& group1,
+                                          const JPH::CollisionGroup& group2) const override
+            {
+                // A body in no excluded pair, a trigger among them, has no group.
+                if (group1.GetGroupFilter() != this || group2.GetGroupFilter() != this)
+                {
+                    return true;
+                }
+                return !m_pairs.contains(Key(group1.GetGroupID(), group2.GetGroupID()));
+            }
+
+            // Counts a joint excluding the pair; false if the pair was already excluded.
+            bool Add(JPH::CollisionGroup::GroupID a, JPH::CollisionGroup::GroupID b)
+            {
+                return ++m_pairs[Key(a, b)] == 1;
+            }
+
+            // Uncounts a joint excluding the pair; false while another still excludes it.
+            bool Remove(JPH::CollisionGroup::GroupID a, JPH::CollisionGroup::GroupID b)
+            {
+                const auto it = m_pairs.find(Key(a, b));
+                JPH_ASSERT(it != m_pairs.end());
+                if (--it->second > 0)
+                {
+                    return false;
+                }
+                m_pairs.erase(it);
+                return true;
+            }
+
+          private:
+            static std::uint64_t Key(JPH::CollisionGroup::GroupID a, JPH::CollisionGroup::GroupID b)
+            {
+                return (static_cast<std::uint64_t>(std::min(a, b)) << 32u) | std::max(a, b);
+            }
+
+            std::unordered_map<std::uint64_t, std::uint32_t> m_pairs;
+        };
 
         // One touching pair of sub-shapes of two bodies.
         struct TouchKey
@@ -1004,9 +1053,46 @@ namespace Fenrir::Backend
             JointType type = JointType::Fixed;
             BodyId bodyA;
             BodyId bodyB;
+            // Whether it keeps its bodies from colliding: counted in `joinedPairs`.
+            bool excludes = false;
         };
         std::vector<JointSlot> joints;
         std::vector<std::uint32_t> freeJoints;
+
+        JPH::Ref<JoinedPairs> joinedPairs = new JoinedPairs();
+        // How many excluded pairs each body is in, by its index: a body has a collision group while it is in any.
+        std::unordered_map<JPH::uint32, std::uint32_t> excludedPairsOf;
+
+        // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
+        // excluded pair and taking it away when it leaves its last. Never during a step.
+        void SetExcludes(JointSlot& slot, bool excludes)
+        {
+            if (slot.excludes == excludes)
+            {
+                return;
+            }
+            slot.excludes = excludes;
+            const JPH::uint32 a = ToJolt(slot.bodyA).GetIndex();
+            const JPH::uint32 b = ToJolt(slot.bodyB).GetIndex();
+            if (excludes ? !joinedPairs->Add(a, b) : !joinedPairs->Remove(a, b))
+            {
+                return;
+            }
+            for (const BodyId body : {slot.bodyA, slot.bodyB})
+            {
+                const JPH::BodyID id = ToJolt(body);
+                std::uint32_t& count = excludedPairsOf[id.GetIndex()];
+                if (excludes && count++ == 0)
+                {
+                    Bodies().SetCollisionGroup(id, JPH::CollisionGroup(joinedPairs, id.GetIndex(), 0));
+                }
+                else if (!excludes && --count == 0)
+                {
+                    excludedPairsOf.erase(id.GetIndex());
+                    Bodies().SetCollisionGroup(id, JPH::CollisionGroup());
+                }
+            }
+        }
 
         // Jolt wakes nothing when a constraint is added, removed or edited: every change to a joint wakes its bodies.
         void WakeJoint(const JointSlot& slot)
@@ -1307,20 +1393,21 @@ namespace Fenrir::Backend
             m_impl->freeJoints.pop_back();
             m_impl->joints[index] = std::move(slot);
         }
-        UpdateJoint(JointId{index}, desc.kind, desc.enabled);
+        UpdateJoint(JointId{index}, desc.kind, desc.enabled, desc.collideConnected);
         return JointId{index};
     }
 
     void World::DestroyJoint(JointId id)
     {
         Impl::JointSlot& slot = m_impl->joints[id.value];
+        m_impl->SetExcludes(slot, false);
         m_impl->WakeJoint(slot);
         m_impl->system.RemoveConstraint(slot.constraint);
         slot = Impl::JointSlot{};
         m_impl->freeJoints.push_back(id.value);
     }
 
-    void World::UpdateJoint(JointId id, const JointKind& kind, bool enabled)
+    void World::UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected)
     {
         Impl::JointSlot& slot = m_impl->joints[id.value];
         assert(kind.Type() == slot.type && "World::UpdateJoint: a joint's kind changes only by recreating it");
@@ -1331,6 +1418,8 @@ namespace Fenrir::Backend
             static_cast<JPH::DistanceConstraint*>(slot.constraint.GetPtr())->SetDistance(min, max);
         }
         slot.constraint->SetEnabled(enabled);
+        // A joint to the world has no pair to exclude.
+        m_impl->SetExcludes(slot, enabled && !collideConnected && slot.bodyB.value != BodyId{}.value);
         m_impl->WakeJoint(slot);
     }
 

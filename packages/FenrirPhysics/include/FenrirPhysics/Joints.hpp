@@ -313,9 +313,10 @@ namespace Fenrir
      * The rest pose is where the two frames coincide in world space; physics never captures frames from the scene.
      * Use FrameFromWorld to author them: frames written by hand on a scaled or parented body are easy to get wrong.
      *
-     * Plain data, which physics compares each tick with what it last applied (ADR-0011). `enabled` and a distance
-     * joint's range are live edits, applied on the next tick. Changing the kind, a body, a frame or a body's scale
-     * recreates the joint in the backend: cheap, but one step softer while it settles. Every change wakes both bodies.
+     * Plain data, which physics compares each tick with what it last applied (ADR-0011). `enabled`, `collideConnected`
+     * and a distance joint's range are live edits, applied on the next tick. Changing the kind, a body, a frame or a
+     * body's scale recreates the joint in the backend: cheap, but one step softer while it settles. Every change wakes
+     * both bodies.
      */
     struct Joint
     {
@@ -330,7 +331,12 @@ namespace Fenrir
         JointKind kind;
         /** @brief A disabled joint holds nothing. */
         bool enabled = true;
-        /** @brief Whether the two bodies collide with each other. Not yet applied. */
+        /**
+         * @brief Whether the two bodies collide with each other. While the joint is enabled, false keeps every solid
+         * collider of one from colliding with the other's; true leaves them to their CollisionFilters, which it never
+         * overrides. Only the two bodies named: in a chain, bodies two apart still collide. Triggers and queries ignore
+         * it. A live edit.
+         */
         bool collideConnected = false;
         /** @brief Newtons. Not yet applied. */
         float breakForce = std::numeric_limits<float>::infinity();
