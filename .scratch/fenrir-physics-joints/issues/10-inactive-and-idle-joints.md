@@ -13,9 +13,9 @@
 
 **Blocked by:** 05 (Joints debug lines); 07 (Jointed bodies don't collide); 08 (Joint state).
 
-**Status:** ready-for-agent
+**Status:** ready-for-human (built and tested headless on branch `claude/joints-inactive-52915c`; the DemoApp hand check is left)
 
-- [ ] Tests: each inactive case gives one warning per valid-to-invalid transition and reactivates when both names are valid; a body removed and its `RigidBody` added back reactivates the joint; keeping only the `Collider` keeps it active.
-- [ ] Tests: an inactive joint reads zeroed state, excludes no collisions, and draws grey frames on its surviving bodies only.
-- [ ] Tests: an idle joint starts when an end becomes dynamic; motion-type switches keep the joint silently; destroying a body mid-swing does not crash; an inactive scene's joints resume correctly.
+- [x] Tests: each inactive case gives one warning per valid-to-invalid transition and reactivates when both names are valid; a body removed and its `RigidBody` added back reactivates the joint; keeping only the `Collider` keeps it active.
+- [x] Tests: an inactive joint reads zeroed state, excludes no collisions, and draws grey frames on its surviving bodies only.
+- [x] Tests: an idle joint starts when an end becomes dynamic; motion-type switches keep the joint silently; destroying a body mid-swing does not crash; an inactive scene's joints resume correctly.
 - [ ] 3 gives one warning per joint, the links below fall and the inactive joints draw grey (checked by hand).

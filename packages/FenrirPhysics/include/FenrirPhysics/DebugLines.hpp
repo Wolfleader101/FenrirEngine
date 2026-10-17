@@ -33,8 +33,8 @@ namespace Fenrir
         Bounds = 1u << 3,
         /** @brief Each joint's two frames as axes, X, Y and Z, at their bodies' step poses: frameA long (JointAX,
            JointAY, JointAZ) and frameB short (JointBX, JointBY, JointBZ). They coincide at the rest pose and while the
-           joint holds. A disabled joint (broken, or disabled by game code) is drawn Dimmed. A joint with no constraint
-           (naming no pair of made bodies) is not drawn. */
+           joint holds. A disabled joint (broken, or disabled by game code) is drawn Dimmed. An inactive joint draws
+           only the frames on its bodies that are still bodies, in InactiveJoint grey; never its world end. */
         Joints = 1u << 4,
         All = Colliders | Contacts | Velocities | Bounds | Joints
     };
@@ -82,6 +82,8 @@ namespace Fenrir
         inline constexpr std::uint32_t JointBX = 0xFF99CCFFu;
         inline constexpr std::uint32_t JointBY = 0xFFFF4DFFu;
         inline constexpr std::uint32_t JointBZ = 0x4DFFFFFFu;
+        /** @brief Every axis of an inactive joint's frames, drawn only on its bodies that are still bodies. */
+        inline constexpr std::uint32_t InactiveJoint = 0x6B6B6BFFu;
 
         /** @brief A sleeping body's collider colour, or a disabled joint's axis colour: `colour` at half brightness,
          * alpha unchanged. */

@@ -6,7 +6,7 @@ fenrir_add_catch2()
 add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds.cpp Materials.cpp CollisionLayers.cpp
                                   Threading.cpp Queries.cpp Forces.cpp Interpolation.cpp Events.cpp Hierarchy.cpp
                                   DebugLines.cpp Joints.cpp JointCollisions.cpp JointSettings.cpp JointState.cpp
-                                  JointBreaking.cpp
+                                  JointBreaking.cpp JointEdges.cpp
                                   PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)
 add_test(NAME FenrirPhysics COMMAND FenrirPhysicsTests)
