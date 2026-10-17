@@ -19,6 +19,7 @@
 #include <thread>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "FenrirLogger/ILogger.hpp"
@@ -49,9 +50,12 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Constraints/DistanceConstraint.h>
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
+#include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -1042,6 +1046,23 @@ namespace Fenrir::Backend
                          std::to_string(limit) + " the backend allows: using " + std::to_string(limit));
             return limit;
         }
+
+        // A distance joint's range as Jolt takes it: not negative, and max not below min (Jolt asserts it).
+        std::pair<float, float> DistanceRange(const DistanceJoint& distance)
+        {
+            const float min = std::max(distance.minDistance, 0.0f);
+            return {min, std::max(distance.maxDistance, min)};
+        }
+
+        // A swing-twist joint's limits as Jolt takes them (it asserts their ranges): cone half-angles in [0, pi], and a
+        // twist range in [-pi, pi] holding the rest pose.
+        void SetSwingTwistLimits(JPH::SwingTwistConstraintSettings& settings, const SwingTwistJoint& swingTwist)
+        {
+            settings.mPlaneHalfConeAngle = std::clamp(swingTwist.swingYLimit, 0.0f, JPH::JPH_PI);
+            settings.mNormalHalfConeAngle = std::clamp(swingTwist.swingZLimit, 0.0f, JPH::JPH_PI);
+            settings.mTwistMinAngle = std::clamp(swingTwist.twistMin, -JPH::JPH_PI, 0.0f);
+            settings.mTwistMaxAngle = std::clamp(swingTwist.twistMax, 0.0f, JPH::JPH_PI);
+        }
     } // namespace
 
     World::World(const WorldSettings& settings, CollisionMeshes& meshes, ILogger& logger)
@@ -1216,6 +1237,40 @@ namespace Fenrir::Backend
             ball->mPoint2 = pointB;
             settings = ball;
         }
+        else if (desc.kind.Is<DistanceJoint>())
+        {
+            auto* distance = new JPH::DistanceConstraintSettings();
+            distance->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            distance->mPoint1 = pointA;
+            distance->mPoint2 = pointB;
+            std::tie(distance->mMinDistance, distance->mMaxDistance) = DistanceRange(desc.kind.As<DistanceJoint>());
+            settings = distance;
+        }
+        else if (desc.kind.Is<SliderJoint>())
+        {
+            auto* slider = new JPH::SliderConstraintSettings();
+            slider->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            slider->mPoint1 = pointA;
+            slider->mSliderAxis1 = rotationA * JPH::Vec3::sAxisX();
+            slider->mNormalAxis1 = rotationA * JPH::Vec3::sAxisY();
+            slider->mPoint2 = pointB;
+            slider->mSliderAxis2 = rotationB * JPH::Vec3::sAxisX();
+            slider->mNormalAxis2 = rotationB * JPH::Vec3::sAxisY();
+            settings = slider;
+        }
+        else if (desc.kind.Is<SwingTwistJoint>())
+        {
+            auto* swingTwist = new JPH::SwingTwistConstraintSettings();
+            swingTwist->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            swingTwist->mPosition1 = pointA;
+            swingTwist->mTwistAxis1 = rotationA * JPH::Vec3::sAxisX();
+            swingTwist->mPlaneAxis1 = rotationA * JPH::Vec3::sAxisY();
+            swingTwist->mPosition2 = pointB;
+            swingTwist->mTwistAxis2 = rotationB * JPH::Vec3::sAxisX();
+            swingTwist->mPlaneAxis2 = rotationB * JPH::Vec3::sAxisY();
+            SetSwingTwistLimits(*swingTwist, desc.kind.As<SwingTwistJoint>());
+            settings = swingTwist;
+        }
         else
         {
             auto* hinge = new JPH::HingeConstraintSettings();
@@ -1269,7 +1324,12 @@ namespace Fenrir::Backend
     {
         Impl::JointSlot& slot = m_impl->joints[id.value];
         assert(kind.Type() == slot.type && "World::UpdateJoint: a joint's kind changes only by recreating it");
-        (void)kind; // the fixed, ball and hinge kinds have no settings of their own yet
+        // Of the kinds' settings, only a distance joint's range is applied yet.
+        if (kind.Is<DistanceJoint>())
+        {
+            const auto [min, max] = DistanceRange(kind.As<DistanceJoint>());
+            static_cast<JPH::DistanceConstraint*>(slot.constraint.GetPtr())->SetDistance(min, max);
+        }
         slot.constraint->SetEnabled(enabled);
         m_impl->WakeJoint(slot);
     }
