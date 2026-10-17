@@ -22,12 +22,27 @@ namespace Fenrir
             return Fenrir::Same(a.position, b.position) && Fenrir::Same(a.rotation, b.rotation);
         }
 
-        // The fields applied to an existing constraint (the fixed, ball and hinge kinds have no settings of their own
-        // yet). The kind, the bodies and the frames are not: changing them recreates it.
+        // The settings of a kind applied to an existing constraint: of them, only a distance joint's range yet. Both
+        // kinds are the same.
+        bool SameLiveSettings(const JointKind& a, const JointKind& b)
+        {
+            if (!a.Is<DistanceJoint>())
+            {
+                return true;
+            }
+            const DistanceJoint& distanceA = a.As<DistanceJoint>();
+            const DistanceJoint& distanceB = b.As<DistanceJoint>();
+            return Fenrir::Same(distanceA.minDistance, distanceB.minDistance) &&
+                   Fenrir::Same(distanceA.maxDistance, distanceB.maxDistance);
+        }
+
+        // The fields applied to an existing constraint. The kind, the bodies and the frames are not: changing them
+        // recreates it.
         bool SameLive(const Joint& a, const Joint& b)
         {
             return a.enabled == b.enabled && a.collideConnected == b.collideConnected &&
-                   Fenrir::Same(a.breakForce, b.breakForce) && Fenrir::Same(a.breakTorque, b.breakTorque);
+                   Fenrir::Same(a.breakForce, b.breakForce) && Fenrir::Same(a.breakTorque, b.breakTorque) &&
+                   SameLiveSettings(a.kind, b.kind);
         }
 
         // Only an empty entity is the world: a destroyed one is not.
