@@ -264,6 +264,7 @@ namespace Fenrir
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
         MeasureJoints();
+        BreakJoints();
         SendEvents(app);
         AdvancePoses();
         DrawDebugLines();
@@ -849,6 +850,8 @@ namespace Fenrir
         SortAndSend(app, ends, contactOrder);
         SortAndSend(app, enters, overlapOrder);
         SortAndSend(app, exits, overlapOrder);
+        SortAndSend(app, m_broken, [](const JointBroken& event) { return event.joint.GetId(); });
+        m_broken.clear();
     }
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const

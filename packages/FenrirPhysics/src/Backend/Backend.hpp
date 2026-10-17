@@ -328,6 +328,10 @@ namespace Fenrir::Backend
          * From then on a hard limit beats the joint's Velocity motor, however strong, at every step. */
         void UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected);
 
+        /** @brief Disables a joint after a step, as a break does: it holds nothing and its bodies collide with each
+         * other from the next step. Wakes nothing: a joint is checked for breaking only while its bodies are awake. */
+        void DisableJoint(JointId id);
+
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);
 
