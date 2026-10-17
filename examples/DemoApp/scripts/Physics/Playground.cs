@@ -5,23 +5,16 @@ namespace DemoScripts;
 
 // A PHYSICS SCENE MADE AND RUN ONLY FROM C#
 //
-// F3 switches the demo to its "Physics (C#)" scene. C++ made that scene empty but for one entity carrying a
-// CSharpPhysicsScene (examples/DemoApp/src/CSharpPhysicsScene.hpp); everything else in it is made here: the bodies, from
-// the Fenrir.Physics components; what they look like, from DemoMesh; and what happens, from the physics events and the
-// PhysicsWorld functions. Every system here works on the active scene, so it acts only while that scene is shown, and
-// the scene's state (the bodies, the paddle's place in its sweep, the tints) lives in components, so it waits while the
-// other scene is shown and survives a hot reload.
+// F3 switches the demo to its "Physics (C#)" scene. C++ made that scene empty but for one entity carrying a CSharpScene
+// marker with this scene's id (examples/DemoApp/src/CSharpScenes.hpp); everything else in it is made here: the bodies,
+// from the Fenrir.Physics components; what they look like, from DemoMesh; and what happens, from the physics events and
+// the PhysicsWorld functions. Every system here works on the active scene, so it acts only while that scene is shown,
+// and the scene's state (the bodies, the paddle's place in its sweep, the tints) lives in components, so it waits while
+// another scene is shown and survives a hot reload.
 //
 //   J            kicks every box and sphere into the air (PhysicsWorld.AddImpulse).
 //   Left click   casts a ray from the camera through the click (PhysicsWorld.Raycast), logs what it hit and pokes it.
 //   F2           cycles the physics debug lines, as in the other scene (the C++ demo draws the active world's lines).
-
-// The marker C++ puts in the scene, mirrored from C++. Built is 0 until the Builder has built the scene.
-[NativeComponent("Demo.CSharpPhysicsScene")]
-public struct CSharpPhysicsScene : IComponent
-{
-    public int Built;
-}
 
 // The kinematic paddle's sweep: x goes from -Reach to Reach and back, Speed radians of the cycle per second.
 public struct Paddle : IComponent
@@ -41,6 +34,9 @@ public struct Tint : IComponent
 
 public static class Playground
 {
+    // This scene's id in its CSharpScene marker, as C++ gives it (CSharpScenes::physicsId).
+    public const int SceneId = 1;
+
     public const int KeyJ = 74;
 
     // Collision layers, one bit each. Bodies are in layer 0 unless given a CollisionFilter. The fixtures (the ground and
@@ -51,8 +47,8 @@ public static class Playground
     // Whether the active scene is the C# physics scene, built.
     public static bool IsActive(in SystemContext context)
     {
-        foreach (var (entity, marker) in context.Query<CSharpPhysicsScene>())
-            if (marker.Built != 0)
+        foreach (var (entity, marker) in context.Query<CSharpScene>())
+            if (marker.Scene == SceneId && marker.Built != 0)
                 return true;
         return false;
     }
@@ -65,7 +61,7 @@ public static class Playground
     public static Vector3 Lit(Vector3 colour) => colour * 0.35f + new Vector3(1, 1, 0.8f) * 0.65f;
 }
 
-// Builds the scene the first time it finds the marker unbuilt.
+// Builds the scene the first time it finds its marker unbuilt.
 [System(Phase.Update, Order = 100)]
 public sealed class PlaygroundBuilder : ISystem
 {
@@ -74,9 +70,9 @@ public sealed class PlaygroundBuilder : ISystem
 
     public void OnUpdate(in SystemContext context)
     {
-        foreach (var (entity, marker) in context.Query<CSharpPhysicsScene>())
+        foreach (var (entity, marker) in context.Query<CSharpScene>())
         {
-            if (marker.Built != 0)
+            if (marker.Scene != Playground.SceneId || marker.Built != 0)
                 continue;
             marker.Built = 1; // Written into the ECS now, so the scene is built once, even across a reload.
             Build(in context);
@@ -136,8 +132,9 @@ public sealed class PlaygroundBuilder : ISystem
         zone.Add(new Trigger());
         zone.Add(new CollisionFilter { Layers = Playground.ZoneLayer, Mask = ~Playground.FixturesLayer });
 
+        // Its keys are logged by the scene switcher on entry (CSharpScenes::Physics).
         context.Log.Info($"Physics (C#): C# built a ground, {boxes} boxes, {sizes.Length} spheres, a paddle and a trigger " +
-                         "zone. J kicks the bodies, a left click casts a ray, F3 goes back.");
+                         "zone.");
     }
 
     // An entity drawn as `kind` in `colour`. Its Name, Transform and DemoMesh land when this system returns.
