@@ -19,6 +19,7 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Events.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirScene/Scene.hpp"
@@ -173,6 +174,195 @@ struct Iris::StructMapping<Fenrir::ContactEvents>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.ContactEvents";
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::ContactEvents, enabled, "Enabled"));
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::JointMotorMode>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointMotorMode";
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::JointType>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointType";
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::JointFrame>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointFrame";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::JointFrame, position, "Position"),
+                                                      IRIS_FIELD_AS(Fenrir::JointFrame, rotation, "Rotation"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::JointSpring>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointSpring";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::JointSpring, frequency, "Frequency"),
+                                                      IRIS_FIELD_AS(Fenrir::JointSpring, damping, "Damping"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::JointLimits>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointLimits";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Fenrir::JointLimits, enabled, "Enabled"), IRIS_FIELD_AS(Fenrir::JointLimits, min, "Min"),
+        IRIS_FIELD_AS(Fenrir::JointLimits, max, "Max"), IRIS_FIELD_AS(Fenrir::JointLimits, spring, "Spring"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::JointMotor>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointMotor";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Fenrir::JointMotor, mode, "Mode"),
+        IRIS_FIELD_AS(Fenrir::JointMotor, targetVelocity, "TargetVelocity"),
+        IRIS_FIELD_AS(Fenrir::JointMotor, targetPosition, "TargetPosition"),
+        IRIS_FIELD_AS(Fenrir::JointMotor, maxForce, "MaxForce"), IRIS_FIELD_AS(Fenrir::JointMotor, spring, "Spring"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::SwingTwistMotor>
+{
+    using Motor = Fenrir::SwingTwistMotor;
+    static constexpr std::string_view typeName = "Fenrir.Physics.SwingTwistMotor";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Motor, mode, "Mode"), IRIS_FIELD_AS(Motor, targetRotation, "TargetRotation"),
+                           IRIS_FIELD_AS(Motor, targetAngularVelocity, "TargetAngularVelocity"),
+                           IRIS_FIELD_AS(Motor, maxTorque, "MaxTorque"), IRIS_FIELD_AS(Motor, spring, "Spring"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::DistanceJoint>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.DistanceJoint";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::DistanceJoint, minDistance, "MinDistance"),
+                                                      IRIS_FIELD_AS(Fenrir::DistanceJoint, maxDistance, "MaxDistance"),
+                                                      IRIS_FIELD_AS(Fenrir::DistanceJoint, spring, "Spring"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::HingeJoint>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.HingeJoint";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::HingeJoint, limits, "Limits"),
+                                                      IRIS_FIELD_AS(Fenrir::HingeJoint, motor, "Motor"),
+                                                      IRIS_FIELD_AS(Fenrir::HingeJoint, friction, "Friction"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::SliderJoint>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.SliderJoint";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::SliderJoint, limits, "Limits"),
+                                                      IRIS_FIELD_AS(Fenrir::SliderJoint, motor, "Motor"),
+                                                      IRIS_FIELD_AS(Fenrir::SliderJoint, friction, "Friction"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::SwingTwistJoint>
+{
+    using Kind = Fenrir::SwingTwistJoint;
+    static constexpr std::string_view typeName = "Fenrir.Physics.SwingTwistJoint";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Kind, swingYLimit, "SwingYLimit"), IRIS_FIELD_AS(Kind, swingZLimit, "SwingZLimit"),
+        IRIS_FIELD_AS(Kind, twistMin, "TwistMin"), IRIS_FIELD_AS(Kind, twistMax, "TwistMax"),
+        IRIS_FIELD_AS(Kind, friction, "Friction"), IRIS_FIELD_AS(Kind, motor, "Motor"));
+};
+
+namespace Fenrir::Detail
+{
+    // FixedJoint and BallJoint are empty, which Iris cannot map, so these stand in for them: the one byte an empty
+    // struct takes, as a field the C# FixedJoint and BallJoint keep private.
+    struct FixedJointLayout
+    {
+        std::uint8_t unused;
+    };
+    static_assert(sizeof(FixedJointLayout) == sizeof(FixedJoint) && alignof(FixedJointLayout) == alignof(FixedJoint),
+                  "FixedJoint changed shape: update FixedJointLayout and the C# FixedJoint.");
+
+    struct BallJointLayout
+    {
+        std::uint8_t unused;
+    };
+    static_assert(sizeof(BallJointLayout) == sizeof(BallJoint) && alignof(BallJointLayout) == alignof(BallJoint),
+                  "BallJoint changed shape: update BallJointLayout and the C# BallJoint.");
+
+    // JointKind keeps its tag and union private, and Joint holds Entities, so these stand in for them, as for
+    // CollisionShape and the events: the same members in the same order. MakeComponent checks the size and alignment;
+    // the scripting tests read and write real joints through them.
+    struct JointKindLayout
+    {
+        JointType type = JointType::Fixed;
+        union {
+            FixedJointLayout fixed{};
+            BallJointLayout ball;
+            DistanceJoint distance;
+            HingeJoint hinge;
+            SliderJoint slider;
+            SwingTwistJoint swingTwist;
+        };
+    };
+    static_assert(sizeof(JointKindLayout) == sizeof(JointKind) && alignof(JointKindLayout) == alignof(JointKind),
+                  "JointKind changed shape: update JointKindLayout and the C# JointKind.");
+
+    struct JointLayout
+    {
+        EntityLinkView bodyA;
+        EntityLinkView bodyB;
+        JointFrame frameA;
+        JointFrame frameB;
+        JointKindLayout kind;
+        bool enabled;
+        bool collideConnected;
+        float breakForce;
+        float breakTorque;
+    };
+} // namespace Fenrir::Detail
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::FixedJointLayout>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.FixedJoint";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Fenrir::Detail::FixedJointLayout, unused, "_unused"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::BallJointLayout>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.BallJoint";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Fenrir::Detail::BallJointLayout, unused, "_unused"));
+};
+
+// The tag and every kind, in declaration order, each kind at the union's offset (the C# explicit layout mirrors it).
+template <>
+struct Iris::StructMapping<Fenrir::Detail::JointKindLayout>
+{
+    using Layout = Fenrir::Detail::JointKindLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointKind";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, type, "_type"), IRIS_FIELD_AS(Layout, fixed, "_fixed"),
+                           IRIS_FIELD_AS(Layout, ball, "_ball"), IRIS_FIELD_AS(Layout, distance, "_distance"),
+                           IRIS_FIELD_AS(Layout, hinge, "_hinge"), IRIS_FIELD_AS(Layout, slider, "_slider"),
+                           IRIS_FIELD_AS(Layout, swingTwist, "_swingTwist"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::JointLayout>
+{
+    using Layout = Fenrir::Detail::JointLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.Joint";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, bodyA, "BodyA"), IRIS_FIELD_AS(Layout, bodyB, "BodyB"),
+        IRIS_FIELD_AS(Layout, frameA, "FrameA"), IRIS_FIELD_AS(Layout, frameB, "FrameB"),
+        IRIS_FIELD_AS(Layout, kind, "Kind"), IRIS_FIELD_AS(Layout, enabled, "Enabled"),
+        IRIS_FIELD_AS(Layout, collideConnected, "CollideConnected"), IRIS_FIELD_AS(Layout, breakForce, "BreakForce"),
+        IRIS_FIELD_AS(Layout, breakTorque, "BreakTorque"));
 };
 
 namespace Fenrir::Detail
@@ -655,6 +845,24 @@ namespace Fenrir
             // Releasing a mesh that is not alive warns there, every time, as it does in C++.
             return owner->meshes.Release(CollisionMesh{mesh});
         }
+
+        static_assert(sizeof(JointFrames) == 2 * sizeof(JointFrame),
+                      "Keep JointFrames as the C# JointFrames lays it out.");
+
+        // C++'s FrameFromWorld, which warns about a body that is not alive itself; the empty value is the empty Entity,
+        // the world, and any other value names an entity of the active scene, alive or not.
+        void FrameFromWorldNative(const CallContext& context, std::uint32_t bodyA, std::uint32_t bodyB,
+                                  const JointFrame* anchor, JointFrames* frames)
+        {
+            if (anchor == nullptr || frames == nullptr)
+            {
+                return;
+            }
+            const auto entityOf = [&](std::uint32_t value) {
+                return value == Entity::Null ? Entity() : context.Entities().HandleOf(value);
+            };
+            *frames = FrameFromWorld(entityOf(bodyA), entityOf(bodyB), *anchor);
+        }
     } // namespace
 
     Fenrir::ScriptingExtension Physics::ScriptingExtension() const
@@ -686,6 +894,7 @@ namespace Fenrir
             NativeFunction::Make<&SetDebugDraw>(prefix + "SetDebugDraw"),
             NativeFunction::Make<&CreateMesh>(prefix + "CreateCollisionMesh"),
             NativeFunction::Make<&ReleaseMesh>(prefix + "ReleaseCollisionMesh"),
+            NativeFunction::Make<&FrameFromWorldNative>(prefix + "FrameFromWorld"),
         };
         extension.components = {
             MakeComponent<RigidBody>("Fenrir.Physics.RigidBody"),
@@ -694,6 +903,7 @@ namespace Fenrir
             MakeComponent<CollisionFilter>("Fenrir.Physics.CollisionFilter"),
             MakeComponent<Trigger>("Fenrir.Physics.Trigger"),
             MakeComponent<ContactEvents>("Fenrir.Physics.ContactEvents"),
+            MakeComponent<Joint, Detail::JointLayout>("Fenrir.Physics.Joint"),
         };
         extension.events = {
             MakeEvent<ContactBegin, Detail::ContactBeginLayout>("Fenrir.Physics.ContactBegin"),

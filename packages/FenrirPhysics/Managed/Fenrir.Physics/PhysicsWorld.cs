@@ -233,4 +233,8 @@ internal static unsafe partial class PhysicsNative
 
     [NativeFunction]
     public static partial bool ReleaseCollisionMesh(ulong mesh);
+
+    // Joint.FrameFromWorld: an empty bodyB (uint.MaxValue) is the world. Needs only the active scene.
+    [NativeFunction]
+    public static partial void FrameFromWorld(Entity bodyA, Entity bodyB, in JointFrame anchor, out JointFrames frames);
 }

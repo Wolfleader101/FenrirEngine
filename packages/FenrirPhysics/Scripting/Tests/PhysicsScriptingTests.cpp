@@ -15,15 +15,20 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <limits>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirPhysics/Events.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
@@ -818,5 +823,387 @@ TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted 
         INFO("The failed load did not name the event and the field");
         REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.ContactBegin"));
         REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'RelativeSpeed'"));
+    }
+}
+
+namespace
+{
+    constexpr const char* JointsType = "Fenrir.PhysicsScriptFixture.Joints";
+
+    bool Same(const JointSpring& a, const JointSpring& b)
+    {
+        return a.frequency == b.frequency && a.damping == b.damping;
+    }
+
+    bool Same(const JointLimits& a, const JointLimits& b)
+    {
+        return a.enabled == b.enabled && a.min == b.min && a.max == b.max && Same(a.spring, b.spring);
+    }
+
+    bool Same(const JointMotor& a, const JointMotor& b)
+    {
+        return a.mode == b.mode && a.targetVelocity == b.targetVelocity && a.targetPosition == b.targetPosition &&
+               a.maxForce == b.maxForce && Same(a.spring, b.spring);
+    }
+
+    bool Same(const SwingTwistMotor& a, const SwingTwistMotor& b)
+    {
+        return a.mode == b.mode && a.targetRotation == b.targetRotation &&
+               a.targetAngularVelocity == b.targetAngularVelocity && a.maxTorque == b.maxTorque &&
+               Same(a.spring, b.spring);
+    }
+
+    bool Same(const JointFrame& a, const JointFrame& b)
+    {
+        return a.position == b.position && a.rotation == b.rotation;
+    }
+
+    // Whether two kinds are the same kind with the same settings.
+    bool Same(const JointKind& a, const JointKind& b)
+    {
+        if (a.Type() != b.Type())
+        {
+            return false;
+        }
+        switch (a.Type())
+        {
+        case JointType::Fixed:
+        case JointType::Ball:
+            return true;
+        case JointType::Distance: {
+            const auto& x = a.As<DistanceJoint>();
+            const auto& y = b.As<DistanceJoint>();
+            return x.minDistance == y.minDistance && x.maxDistance == y.maxDistance && Same(x.spring, y.spring);
+        }
+        case JointType::Hinge: {
+            const auto& x = a.As<HingeJoint>();
+            const auto& y = b.As<HingeJoint>();
+            return Same(x.limits, y.limits) && Same(x.motor, y.motor) && x.friction == y.friction;
+        }
+        case JointType::Slider: {
+            const auto& x = a.As<SliderJoint>();
+            const auto& y = b.As<SliderJoint>();
+            return Same(x.limits, y.limits) && Same(x.motor, y.motor) && x.friction == y.friction;
+        }
+        case JointType::SwingTwist: {
+            const auto& x = a.As<SwingTwistJoint>();
+            const auto& y = b.As<SwingTwistJoint>();
+            return x.swingYLimit == y.swingYLimit && x.swingZLimit == y.swingZLimit && x.twistMin == y.twistMin &&
+                   x.twistMax == y.twistMax && x.friction == y.friction && Same(x.motor, y.motor);
+        }
+        }
+        return false;
+    }
+
+    const Joint& JointOn(PhysicsScriptingApp& test, std::uint32_t entity)
+    {
+        Entity holder = test.Entities().GetEntity(entity);
+        INFO("The Joint C# added did not reach the entity");
+        REQUIRE(holder.HasComponent<Joint>());
+        return holder.GetComponent<Joint>();
+    }
+
+    // A static post at `position` and a dynamic door 1.5 along X, joined by a fixed joint at the gap, all made in C++.
+    // Returns the joint entity.
+    std::uint32_t AddFixedDoor(PhysicsScriptingApp& test, const Math::Vec3& position, std::uint32_t& door)
+    {
+        const std::uint32_t post = AddStaticBox(test, position);
+        door = AddBody(test, position + Math::Vec3(1.5f, 0.0f, 0.0f));
+        const Entity postEntity = test.Entities().GetEntity(post);
+        const Entity doorEntity = test.Entities().GetEntity(door);
+        const JointFrames frames =
+            FrameFromWorld(postEntity, doorEntity, JointFrame{position + Math::Vec3(0.75f, 0.0f, 0.0f)});
+        Entity joint = test.Entities().CreateEntity();
+        joint.AddComponent<Joint>(
+            Joint{.bodyA = postEntity, .bodyB = doorEntity, .frameA = frames.frameA, .frameB = frames.frameB});
+        return joint.GetId();
+    }
+} // namespace
+
+TEST_CASE("A new Joint from C# has C++'s defaults, for its own kind and every kind's new",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const std::pair<int, JointKind> kinds[] = {
+        {-1, JointKind()}, {0, FixedJoint{}},  {1, BallJoint{}},       {2, DistanceJoint{}},
+        {3, HingeJoint{}}, {4, SliderJoint{}}, {5, SwingTwistJoint{}},
+    };
+    for (const auto& [number, kind] : kinds)
+    {
+        const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
+        test.Call<void>(JointsType, "AddNewJoint", entity, number);
+        test.ApplyChanges();
+
+        const Joint& joint = JointOn(test, entity);
+        const Joint expected{};
+        INFO("For C# kind number " << number << " (-1 is the Joint's own new kind)");
+        {
+            INFO("New, both links should be empty, as C++'s default Entity is");
+            REQUIRE(joint.bodyA == Entity());
+            REQUIRE(joint.bodyB == Entity());
+        }
+        {
+            INFO("New, both frames should be the identity, as in C++");
+            REQUIRE(Same(joint.frameA, expected.frameA));
+            REQUIRE(Same(joint.frameB, expected.frameB));
+        }
+        {
+            INFO("New, the joint should be enabled, not collide its bodies and never break, as in C++");
+            REQUIRE(joint.enabled);
+            REQUIRE_FALSE(joint.collideConnected);
+            REQUIRE(joint.breakForce == std::numeric_limits<float>::infinity());
+            REQUIRE(joint.breakTorque == std::numeric_limits<float>::infinity());
+        }
+        {
+            INFO("The kind and every setting should be C++'s new one of that kind");
+            REQUIRE(Same(joint.kind, kind));
+        }
+    }
+}
+
+TEST_CASE("A C# system makes two bodies and a hinge between them in one call, and the hinge holds after playback",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const auto door = test.Call<std::uint32_t>(JointsType, "BuildHingedDoor", 0.0f, 5.0f, 0.0f);
+    test.ApplyChanges();
+    {
+        Entity built = test.Entities().GetEntity(door);
+        INFO("Playback did not make the door C# built");
+        REQUIRE(built.HasComponent<RigidBody>());
+    }
+
+    test.Run(60);
+
+    const Math::Vec3 at = test.Entities().GetEntity(door).GetComponent<Transform>().pos;
+    INFO("Hinged about X to a post, the door should stay at 1.5, 5, 0 for a second instead of falling, but it is at "
+         << at.x << ", " << at.y << ", " << at.z);
+    REQUIRE(at.x == Approx(1.5f).margin(0.02));
+    REQUIRE(at.y == Approx(5.0f).margin(0.02));
+}
+
+TEST_CASE("C# assigns a joint's kind and edits its motor through the hinge view, and physics follows",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    std::uint32_t door = 0;
+    const std::uint32_t joint = AddFixedDoor(test, Math::Vec3(0.0f, 5.0f, 0.0f), door);
+    test.Run(10);
+
+    test.Call<void>(JointsType, "MakeMotorHinge", joint, 2.0f);
+    {
+        const Joint& written = JointOn(test, joint);
+        INFO("The hinge C# assigned did not replace the fixed kind");
+        REQUIRE(written.kind.Is<HingeJoint>());
+        const JointMotor& motor = written.kind.As<HingeJoint>().motor;
+        INFO("The motor should be driven at 2 rad/s, with C++'s other motor defaults");
+        REQUIRE(motor.mode == JointMotorMode::Velocity);
+        REQUIRE(motor.targetVelocity == 2.0f);
+        REQUIRE(motor.maxForce == std::numeric_limits<float>::infinity());
+        REQUIRE(Same(motor.spring, JointMotor{}.spring));
+    }
+    test.Run(30);
+    {
+        const float spin = test.Entities().GetEntity(door).GetComponent<RigidBody>().angularVelocity.x;
+        INFO("The motor hinge C# assigned should turn the door at 2 rad/s about X, but it turns at " << spin);
+        REQUIRE(spin == Approx(2.0f).margin(0.05));
+    }
+
+    test.Call<void>(JointsType, "SetHingeTarget", joint, -1.0f);
+    {
+        INFO("The target C# edited through the hinge view did not land in the component");
+        REQUIRE(JointOn(test, joint).kind.As<HingeJoint>().motor.targetVelocity == -1.0f);
+    }
+    test.Run(30);
+    {
+        const float spin = test.Entities().GetEntity(door).GetComponent<RigidBody>().angularVelocity.x;
+        INFO("After C# edited the target to -1 rad/s, the door should turn back at it, but it turns at " << spin);
+        REQUIRE(spin == Approx(-1.0f).margin(0.05));
+    }
+    {
+        const auto message = test.Call<std::optional<std::string>>(JointsType, "SliderViewMessage", joint);
+        INFO("Reading a hinge as a slider from C# should throw, naming both kinds");
+        REQUIRE(message.has_value());
+        REQUIRE(*message == "The joint is a Hinge, not a Slider.");
+    }
+}
+
+namespace
+{
+    // A body under a parent that is moved, turned about Z and scaled unevenly, itself moved and turned about Y.
+    std::uint32_t BodyUnderTurnedScaledParent(PhysicsScriptingApp& test)
+    {
+        Entity parent = test.Entities().CreateEntity();
+        parent.GetComponent<Transform>() =
+            Transform(Math::Vec3(1.0f, 2.0f, 3.0f), Math::AngleAxis(0.5f, Math::Vec3(0.0f, 0.0f, 1.0f)),
+                      Math::Vec3(2.0f, 1.0f, 0.5f));
+        Entity body = test.Entities().CreateEntity();
+        body.GetComponent<Transform>() =
+            Transform(Math::Vec3(0.5f, 0.25f, 1.0f), Math::AngleAxis(0.3f, Math::Vec3(0.0f, 1.0f, 0.0f)),
+                      Math::Vec3(1.0f, 1.5f, 1.0f));
+        parent.AddChild(body);
+        body.AddComponent<RigidBody>();
+        body.AddComponent<Collider>();
+        return body.GetId();
+    }
+
+    // Whether C#'s last FrameFromWorld gave exactly these frames.
+    bool CSharpGave(PhysicsScriptingApp& test, const JointFrames& frames)
+    {
+        const JointFrame* both[] = {&frames.frameA, &frames.frameB};
+        for (int frame = 0; frame < 2; ++frame)
+        {
+            const JointFrame& expected = *both[frame];
+            const float values[] = {expected.position.x, expected.position.y, expected.position.z, expected.rotation.w,
+                                    expected.rotation.x, expected.rotation.y, expected.rotation.z};
+            for (int value = 0; value < 7; ++value)
+            {
+                if (test.Call<float>(JointsType, "LastFrame", frame, value) != values[value])
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+} // namespace
+
+TEST_CASE("FrameFromWorld from C# matches C++ under a scaled, turned parent, and its world overload is an empty bodyB",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t body = BodyUnderTurnedScaledParent(test);
+    const std::uint32_t other = AddBody(test, Math::Vec3(-2.0f, 4.0f, 1.0f));
+    const JointFrame anchor{Math::Vec3(1.5f, 2.5f, 3.5f), Math::AngleAxis(0.7f, Math::Vec3(1.0f, 0.0f, 0.0f))};
+    const auto [x, y, z] = std::tuple(anchor.position.x, anchor.position.y, anchor.position.z);
+    const auto [w, qx, qy, qz] = std::tuple(anchor.rotation.w, anchor.rotation.x, anchor.rotation.y, anchor.rotation.z);
+    const Entity bodyEntity = test.Entities().GetEntity(body);
+
+    test.Call<void>(JointsType, "FrameFromWorld", body, other, x, y, z, w, qx, qy, qz);
+    {
+        const JointFrames cpp = FrameFromWorld(bodyEntity, test.Entities().GetEntity(other), anchor);
+        INFO("C# should get the very frames C++ computes for the body under its scaled, turned parent");
+        REQUIRE(CSharpGave(test, cpp));
+    }
+
+    test.Call<void>(JointsType, "FrameFromWorldToWorld", body, x, y, z, w, qx, qy, qz);
+    {
+        const JointFrames cpp = FrameFromWorld(bodyEntity, Entity(), anchor);
+        INFO("C#'s world overload should get C++'s frames with an empty bodyB: frameB the anchor itself");
+        REQUIRE(CSharpGave(test, cpp));
+        REQUIRE(test.Call<float>(JointsType, "LastFrame", 1, 0) == anchor.position.x);
+    }
+
+    test.Entities().DestroyEntity(other);
+    test.Call<void>(JointsType, "FrameFromWorld", body, other, x, y, z, w, qx, qy, qz);
+    {
+        INFO("A destroyed bodyB is not the world: C# should get identity frames, as C++ does");
+        REQUIRE(CSharpGave(test, JointFrames{}));
+    }
+}
+
+TEST_CASE("A default(Joint) from C# names no body of this scene, so it holds nothing and does not crash",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t box = AddBody(test, Math::Vec3(0.0f, 10.0f, 0.0f));
+    const std::uint32_t holder = test.Place(Math::Vec3(0.0f));
+    test.Call<void>(JointsType, "AddDefaultJoint", holder);
+    test.ApplyChanges();
+    {
+        const Joint& joint = JointOn(test, holder);
+        INFO("default(Joint) is all zero bytes: links to entity 0 with no scene, which are not alive");
+        REQUIRE(joint.bodyA.GetId() == 0);
+        REQUIRE_FALSE(joint.bodyA.IsValid());
+        REQUIRE_FALSE(joint.bodyB.IsValid());
+    }
+
+    test.Run(30);
+
+    {
+        const float height = test.Entities().GetEntity(box).GetComponent<Transform>().pos.y;
+        INFO("The joint holds nothing, so the body should fall freely from 10, but it is at " << height);
+        REQUIRE(height < 9.0f);
+    }
+    {
+        const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+        REQUIRE(world != nullptr);
+        const JointState state = world->GetJointState(test.Entities().GetEntity(holder));
+        INFO("An inactive joint reads as the zeroed state");
+        REQUIRE(state.force == Math::Vec3(0.0f));
+        REQUIRE(state.position == 0.0f);
+    }
+}
+
+namespace
+{
+    // JointFrame's own mapping is the extension's, so the drifted Joint below has a stand-in of its own for it.
+    struct DriftedFrame
+    {
+        Math::Vec3 position;
+        Math::Quat rotation;
+    };
+
+    // Joint as a native side that drifted from the C# mirror would map it: its kind is raw bytes, not the tagged union.
+    struct DriftedJoint
+    {
+        Detail::EntityLinkView bodyA;
+        Detail::EntityLinkView bodyB;
+        DriftedFrame frameA;
+        DriftedFrame frameB;
+        std::uint8_t kind[sizeof(JointKind)];
+        bool enabled;
+        bool collideConnected;
+        float breakForce;
+        float breakTorque;
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<DriftedFrame>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointFrame";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(DriftedFrame, position, "Position"),
+                                                      IRIS_FIELD_AS(DriftedFrame, rotation, "Rotation"));
+};
+
+template <>
+struct Iris::StructMapping<DriftedJoint>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.Joint";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(DriftedJoint, bodyA, "BodyA"), IRIS_FIELD_AS(DriftedJoint, bodyB, "BodyB"),
+        IRIS_FIELD_AS(DriftedJoint, frameA, "FrameA"), IRIS_FIELD_AS(DriftedJoint, frameB, "FrameB"),
+        IRIS_FIELD_AS(DriftedJoint, kind, "Kind"), IRIS_FIELD_AS(DriftedJoint, enabled, "Enabled"),
+        IRIS_FIELD_AS(DriftedJoint, collideConnected, "CollideConnected"),
+        IRIS_FIELD_AS(DriftedJoint, breakForce, "BreakForce"), IRIS_FIELD_AS(DriftedJoint, breakTorque, "BreakTorque"));
+};
+
+TEST_CASE("The Joint mirror is checked as scripts load, and a drifted one fails the load naming the field",
+          "[physics][scripting][joints]")
+{
+    Testing::HeadlessApp headless;
+    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
+    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    std::vector<ComponentRegistration>& components = config.extensions[0].components;
+    const auto joint = std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
+        return component.name == "Fenrir.Physics.Joint";
+    });
+    {
+        INFO("Physics's extension should share the Joint component with C#");
+        REQUIRE(joint != components.end());
+    }
+    *joint = MakeComponent<Joint, DriftedJoint>("Fenrir.Physics.Joint");
+
+    Scripting scripting = Scripting::Install(headless.Get(), config);
+
+    {
+        INFO("A Joint mirror that disagrees with the native layout left scripts loaded");
+        REQUIRE_FALSE(scripting.HasScripts());
+    }
+    {
+        INFO("The failed load did not name the component and the field");
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.Joint"));
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Kind'"));
     }
 }
