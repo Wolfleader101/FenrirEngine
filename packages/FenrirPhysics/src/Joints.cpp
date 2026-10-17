@@ -320,7 +320,7 @@ namespace Fenrir
         return JointFrames{LocalTo(bodyA, anchor), toWorld ? anchor : LocalTo(bodyB, anchor)};
     }
 
-    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::JointBodyOf(const Entity& body)
+    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::JointBodyOf(const Entity& body) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!body.IsValid() || body != m_entities->HandleOf(body.GetId()))
@@ -334,6 +334,33 @@ namespace Fenrir
             return nullptr;
         }
         return &it->second;
+    }
+
+    std::string PhysicsWorld::Impl::WhyInactive(const Joint& joint) const
+    {
+        if (IsWorld(joint.bodyA))
+        {
+            return "bodyA is empty (only bodyB can be the world)";
+        }
+        if (joint.bodyA == joint.bodyB)
+        {
+            return "bodyA and bodyB are the same entity";
+        }
+        const auto why = [this](const Entity& body, const char* name) -> std::string {
+            if (!body.IsValid())
+            {
+                return std::string(name) + " is not alive";
+            }
+            if (body != m_entities->HandleOf(body.GetId()))
+            {
+                return std::string(name) + " is in another scene";
+            }
+            return std::string(name) + " (entity " + std::to_string(body.GetId()) +
+                   ") is not a body entity: a RigidBody's, or a standalone static collider's, with a collider physics "
+                   "could make";
+        };
+        // The side whose body is missing: bodyA's if both are.
+        return JointBodyOf(joint.bodyA) != nullptr ? why(joint.bodyB, "bodyB") : why(joint.bodyA, "bodyA");
     }
 
     void PhysicsWorld::Impl::DrainJoints()
@@ -419,11 +446,20 @@ namespace Fenrir
             const Record* b = toWorld ? nullptr : JointBodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && (b == nullptr || b == a)))
             {
-                // Inactive: it names no pair of made body entities, and has no constraint until it does.
+                // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
+                // wakes the body left.
+                if (!record.inactive)
+                {
+                    m_logger->Warn("The Joint on entity " + std::to_string(entity) +
+                                   " is inactive: " + WhyInactive(joint) +
+                                   ". It does nothing until both its bodies are body entities of its scene.");
+                    record.inactive = true;
+                }
                 DropConstraint(entity, record);
                 record.applied = joint;
                 continue;
             }
+            record.inactive = false;
 
             const Math::Vec3 scaleA = a->world.scale;
             const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : b->world.scale;
