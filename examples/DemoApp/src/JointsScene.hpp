@@ -9,6 +9,10 @@
 // Jointed bodies do not collide: neighbouring links overlap at their joints, and the door's hinge edge sits against
 // its post. A trigger beneath the door, overlapping the post too, still reports it: triggers are never excluded. 9 lets
 // the links collide with their neighbours (collideConnected), which pushes them apart, and back.
+//
+// The door's hinge has hard limits (shut to a little past a right angle open), friction, and a motor that starts off.
+// 1 pushes the door, 2 cycles its motor (off, opening, closing, to shut), logging whether the door was asleep, and L
+// turns its limits off and on. With limits on, the opening motor holds the door at its limit, however strong.
 
 #ifdef FENRIR_PHYSICS
 
@@ -30,6 +34,7 @@
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
+#include "FenrirPhysics/PhysicsWorld.hpp"
 #include "Material.hpp"
 #include "ModelLibrary.hpp"
 
@@ -44,9 +49,12 @@ class JointsScene
         return DemoScene{.name = name,
                          .familyKey = DemoFamilyKey::joints,
                          .keyHelp =
-                             "The door swings on its hinge, the chain hangs from its hook. 9 lets the links collide "
-                             "with their neighbours, and back. F2 cycles the physics debug lines, F4 goes on.",
-                         .smokeKeys = {GLFW_KEY_9}};
+                             "The door swings on its hinge, the chain hangs from its hook. 1 pushes the door, 2 "
+                             "cycles its motor (off, opening, closing, to shut), L turns its limits off and on. 9 lets "
+                             "the links collide with their neighbours, and back. F2 cycles the physics debug lines, F4 "
+                             "goes on.",
+                         .smokeKeys = {GLFW_KEY_9, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_2,
+                                       GLFW_KEY_2, GLFW_KEY_L}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -69,14 +77,33 @@ class JointsScene
         MakeChain(entities);
     }
 
-    // Update, while the scene is active: 9 toggles collideConnected on every chain joint between two links, and each
-    // TriggerEnter of the door's trigger is logged. Events sent while another scene is active are read and dropped.
+    // Update, while the scene is active: 1, 2 and L work the door, 9 toggles collideConnected on every chain joint
+    // between two links, and each TriggerEnter of the door's trigger is logged. Events sent while another scene is
+    // active are read and dropped.
     void Update(Fenrir::App& app)
     {
         const bool active = app.GetActiveScene().GetName() == m_scene;
         for (const KeyboardKeyEvent& event : m_keys.Read(app))
         {
-            if (active && event.key == GLFW_KEY_9 && event.state == InputState::Pressed)
+            if (!active || event.state != InputState::Pressed)
+            {
+                continue;
+            }
+            if (event.key == GLFW_KEY_1)
+            {
+                PushDoor(app);
+            }
+            else if (event.key == GLFW_KEY_2)
+            {
+                CycleDoorMotor(app);
+            }
+            else if (event.key == GLFW_KEY_L)
+            {
+                Fenrir::JointLimits& limits = DoorHinge().limits;
+                limits.enabled = !limits.enabled;
+                app.Logger()->Info(limits.enabled ? "Door limits on" : "Door limits off: it swings all the way round");
+            }
+            else if (event.key == GLFW_KEY_9)
             {
                 m_linksCollide = !m_linksCollide;
                 for (const Fenrir::Entity& joint : m_linkJoints)
@@ -98,6 +125,15 @@ class JointsScene
     }
 
   private:
+    // The door's motor settings, cycled through by 2.
+    enum class DoorMotor
+    {
+        Off,
+        Opening,
+        Closing,
+        Shut
+    };
+
     static constexpr int linkCount = 8;
     // Joint to joint. Each link is a little longer, so neighbours overlap at their joints.
     static constexpr float linkSpacing = 0.5f;
@@ -167,11 +203,62 @@ class JointsScene
             Fenrir::Math::AngleAxis(std::numbers::pi_v<float> / 2.0f, Fenrir::Math::Vec3(0.0f, 0.0f, 1.0f));
         const Fenrir::Math::Vec3 anchor = Fenrir::GetWorldTransform(frame).pos + Fenrir::Math::Vec3(-0.5f, 1.05f, 0.0f);
         const Fenrir::JointFrames frames = Fenrir::FrameFromWorld(post, door, Fenrir::JointFrame{anchor, axisUp});
-        door.AddComponent<Fenrir::Joint>(Fenrir::Joint{.bodyA = post,
-                                                       .bodyB = door,
-                                                       .frameA = frames.frameA,
-                                                       .frameB = frames.frameB,
-                                                       .kind = Fenrir::HingeJoint{}});
+        // Shut to 100 degrees open, and stiff enough to stay where it is left once it slows.
+        door.AddComponent<Fenrir::Joint>(Fenrir::Joint{
+            .bodyA = post,
+            .bodyB = door,
+            .frameA = frames.frameA,
+            .frameB = frames.frameB,
+            .kind = Fenrir::HingeJoint{.limits = {.enabled = true, .min = 0.0f, .max = 1.75f}, .friction = 3.0f}});
+        m_door = door;
+    }
+
+    Fenrir::HingeJoint& DoorHinge() const
+    {
+        return m_door.GetComponent<Fenrir::Joint>().kind.As<Fenrir::HingeJoint>();
+    }
+
+    // 1: an angular impulse about the hinge, opening and closing in turn: about 2 rad/s.
+    void PushDoor(Fenrir::App& app)
+    {
+        m_pushOpen = !m_pushOpen;
+        Fenrir::PhysicsWorld::Of(app.GetActiveScene())
+            ->AddAngularImpulse(m_door, Fenrir::Math::Vec3(0.0f, m_pushOpen ? 6.0f : -6.0f, 0.0f));
+        app.Logger()->Info(m_pushOpen ? "Door pushed open" : "Door pushed shut");
+    }
+
+    // 2: the next motor setting, with no limit on its torque. Logged with whether the door was asleep: the edit wakes
+    // it.
+    void CycleDoorMotor(Fenrir::App& app)
+    {
+        const bool asleep = Fenrir::PhysicsWorld::Of(app.GetActiveScene())->IsSleeping(m_door);
+        Fenrir::JointMotor& motor = DoorHinge().motor;
+        const char* what = "";
+        switch (m_doorMotor)
+        {
+        case DoorMotor::Off:
+            m_doorMotor = DoorMotor::Opening;
+            motor = {.mode = Fenrir::JointMotorMode::Velocity, .targetVelocity = 1.0f};
+            what = "opening at 1 rad/s";
+            break;
+        case DoorMotor::Opening:
+            m_doorMotor = DoorMotor::Closing;
+            motor = {.mode = Fenrir::JointMotorMode::Velocity, .targetVelocity = -1.0f};
+            what = "closing at 1 rad/s";
+            break;
+        case DoorMotor::Closing:
+            m_doorMotor = DoorMotor::Shut;
+            motor = {.mode = Fenrir::JointMotorMode::Position, .targetPosition = 0.0f};
+            what = "driving it shut";
+            break;
+        case DoorMotor::Shut:
+            m_doorMotor = DoorMotor::Off;
+            motor = {};
+            what = "off";
+            break;
+        }
+        app.Logger()->Info(std::string("Door motor ") + what +
+                           (asleep ? " (the door was asleep)" : " (the door was awake)"));
     }
 
     // Eight links laid out level from a hook fixed to the world, so they fall and swing at once. Each joint is on its
@@ -219,7 +306,10 @@ class JointsScene
     const Model* m_cube;
     const Shader* m_flatShader;
     std::string m_scene;
+    Fenrir::Entity m_door;
     Fenrir::Entity m_doorTrigger;
+    DoorMotor m_doorMotor = DoorMotor::Off;
+    bool m_pushOpen = false;
     std::vector<Fenrir::Entity> m_linkJoints;
     bool m_linksCollide = false;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;

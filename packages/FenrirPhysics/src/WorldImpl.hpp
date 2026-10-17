@@ -158,9 +158,9 @@ namespace Fenrir
         void DrainJoints();
         /** @brief Removes the constraints of the joints naming any of `bodies`, which are about to be destroyed. */
         void RemoveJointsOf(std::span<const Backend::BodyId> bodies);
-        /** @brief After the bodies' edits: makes, recreates or updates each joint's constraint, in joint entity order.
-         */
-        void SyncJoints();
+        /** @brief After the bodies' edits: makes, recreates or updates each joint's constraint, in joint entity order,
+         * with its settings corrected into range for a step of `dt` seconds. */
+        void SyncJoints(float dt);
         /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
         [[nodiscard]] const Record* JointBodyOf(const Entity& body);
         struct JointRecord;
@@ -260,6 +260,8 @@ namespace Fenrir
             Math::Vec3 scaleB = Math::Vec3(1.0f);
             Backend::BodyId bodyA;
             Backend::BodyId bodyB;
+            // The kinds of out-of-range value already warned about, so each is warned about once per joint.
+            std::uint32_t warned = 0;
         };
 
         // The entities with a Joint now, as the watch has reported them, and their records, by joint entity: joints
