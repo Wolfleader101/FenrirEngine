@@ -13,11 +13,14 @@
 // The door's hinge has hard limits (shut to a little past a right angle open), friction, and a motor that starts off.
 // 1 pushes the door, 2 cycles its motor (off, opening, closing, to shut), logging whether the door was asleep, and L
 // turns its limits off and on. With limits on, the opening motor holds the door at its limit, however strong.
+// Each joint entity's name shows its joint state every frame: the door's angle and load, each chain joint's load. 0
+// logs every joint's full state.
 
 #ifdef FENRIR_PHYSICS
 
 #include <array>
 #include <cstddef>
+#include <cstdio>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -51,10 +54,10 @@ class JointsScene
                          .keyHelp =
                              "The door swings on its hinge, the chain hangs from its hook. 1 pushes the door, 2 "
                              "cycles its motor (off, opening, closing, to shut), L turns its limits off and on. 9 lets "
-                             "the links collide with their neighbours, and back. F2 cycles the physics debug lines, F4 "
-                             "goes on.",
+                             "the links collide with their neighbours, and back. 0 logs every joint's state. F2 cycles "
+                             "the physics debug lines, F4 goes on.",
                          .smokeKeys = {GLFW_KEY_9, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_2,
-                                       GLFW_KEY_2, GLFW_KEY_L}};
+                                       GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_0}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -78,8 +81,8 @@ class JointsScene
     }
 
     // Update, while the scene is active: 1, 2 and L work the door, 9 toggles collideConnected on every chain joint
-    // between two links, and each TriggerEnter of the door's trigger is logged. Events sent while another scene is
-    // active are read and dropped.
+    // between two links, 0 logs every joint's state, each TriggerEnter of the door's trigger is logged, and each joint
+    // entity's name shows its readings. Events sent while another scene is active are read and dropped.
     void Update(Fenrir::App& app)
     {
         const bool active = app.GetActiveScene().GetName() == m_scene;
@@ -113,6 +116,14 @@ class JointsScene
                 app.Logger()->Info(m_linksCollide ? "Chain links collide with their neighbours"
                                                   : "Chain links pass through their neighbours");
             }
+            else if (event.key == GLFW_KEY_0)
+            {
+                LogJointStates(app);
+            }
+        }
+        if (active)
+        {
+            ShowReadings(app);
         }
         for (const Fenrir::TriggerEnter& enter : m_enters.Read(app))
         {
@@ -125,6 +136,67 @@ class JointsScene
     }
 
   private:
+    // Each joint entity, with the name it is shown under before its readings.
+    struct Labelled
+    {
+        Fenrir::Entity joint;
+        std::string label;
+    };
+
+    template <typename... Args>
+    static std::string Format(const char* format, Args... args)
+    {
+        std::array<char, 256> text{};
+        std::snprintf(text.data(), text.size(), format, args...);
+        return text.data();
+    }
+
+    static std::string Describe(const Fenrir::Math::Vec3& v)
+    {
+        return Format("(%.2f, %.2f, %.2f)", static_cast<double>(v.x), static_cast<double>(v.y),
+                      static_cast<double>(v.z));
+    }
+
+    // The joints' readings in their names: the door's angle, and how hard each joint pulls.
+    void ShowReadings(Fenrir::App& app) const
+    {
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        for (const Labelled& labelled : m_joints)
+        {
+            const Fenrir::JointState state = world->GetJointState(labelled.joint);
+            const double force = static_cast<double>(Fenrir::Math::Magnitude(state.force));
+            const std::string reading =
+                labelled.joint.GetComponent<Fenrir::Joint>().kind.Is<Fenrir::HingeJoint>()
+                    ? Format("%s: %.2f rad, %.0f N", labelled.label.c_str(), static_cast<double>(state.position), force)
+                    : Format("%s: %.1f N", labelled.label.c_str(), force);
+            labelled.joint.GetComponent<Fenrir::Name>().Set(reading.c_str());
+        }
+    }
+
+    void LogJointStates(Fenrir::App& app) const
+    {
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        for (const Labelled& labelled : m_joints)
+        {
+            const Fenrir::JointState state = world->GetJointState(labelled.joint);
+            const Fenrir::Math::Quat& turn = state.relative.rotation;
+            app.Logger()->Info(labelled.label + ": force " + Describe(state.force) + " N, torque " +
+                               Describe(state.torque) + " N m, frameB at " + Describe(state.relative.position) +
+                               Format(" turned (w %.3f, x %.3f, y %.3f, z %.3f), position %.3f",
+                                      static_cast<double>(turn.w), static_cast<double>(turn.x),
+                                      static_cast<double>(turn.y), static_cast<double>(turn.z),
+                                      static_cast<double>(state.position)));
+        }
+    }
+
     // The door's motor settings, cycled through by 2.
     enum class DoorMotor
     {
@@ -211,6 +283,7 @@ class JointsScene
             .frameB = frames.frameB,
             .kind = Fenrir::HingeJoint{.limits = {.enabled = true, .min = 0.0f, .max = 1.75f}, .friction = 3.0f}});
         m_door = door;
+        m_joints.push_back(Labelled{door, "Door hinge"});
     }
 
     Fenrir::HingeJoint& DoorHinge() const
@@ -271,8 +344,9 @@ class JointsScene
         Fenrir::Entity jointsRoot = entities.CreateEntity();
         jointsRoot.GetComponent<Fenrir::Name>().Set("Chain joints");
 
-        static constexpr std::array<Fenrir::Math::Vec3, 2> colours = {Fenrir::Math::Vec3(0.85f, 0.25f, 0.2f),
-                                                                      Fenrir::Math::Vec3(0.95f, 0.8f, 0.2f)};
+        // Not constexpr: MSVC does not take glm's vec3 constructor as one.
+        static const std::array<Fenrir::Math::Vec3, 2> colours = {Fenrir::Math::Vec3(0.85f, 0.25f, 0.2f),
+                                                                  Fenrir::Math::Vec3(0.95f, 0.8f, 0.2f)};
         Fenrir::Entity above; // the world, for the top link
         for (int i = 0; i < linkCount; ++i)
         {
@@ -295,6 +369,7 @@ class JointsScene
                                                             .frameB = frames.frameB,
                                                             .kind = Fenrir::BallJoint{}});
             jointsRoot.AddChild(joint);
+            m_joints.push_back(Labelled{joint, "Chain joint " + std::to_string(i)});
             if (i > 0)
             {
                 m_linkJoints.push_back(joint);
@@ -311,6 +386,7 @@ class JointsScene
     DoorMotor m_doorMotor = DoorMotor::Off;
     bool m_pushOpen = false;
     std::vector<Fenrir::Entity> m_linkJoints;
+    std::vector<Labelled> m_joints;
     bool m_linksCollide = false;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
     Fenrir::EventReader<Fenrir::TriggerEnter> m_enters;

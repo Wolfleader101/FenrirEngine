@@ -151,6 +151,15 @@ namespace Fenrir::Backend
         Math::Vec3 angularVelocity;
     };
 
+    /** @brief What a joint applied to its bodyB over a step's last collision step, in world space. */
+    struct JointLoad
+    {
+        /** @brief Newtons: every part of the joint holding, limiting or driving bodyB's position. */
+        Math::Vec3 force = Math::Vec3(0.0f);
+        /** @brief Newton metres, about the joint's anchor: every part holding, limiting or driving its rotation. */
+        Math::Vec3 torque = Math::Vec3(0.0f);
+    };
+
     /** @brief A non-owning reference to a callable, valid while the callable is: a callback with no virtual call and
      * no allocation. */
     template <typename Signature>
@@ -364,6 +373,13 @@ namespace Fenrir::Backend
 
         /** @brief A body's pose and velocities as the last step (or a teleport or velocity change since) left them. */
         [[nodiscard]] BodyState GetState(BodyId id) const;
+
+        /**
+         * @brief What the joint applied to its bodyB over the last Step's last collision step: the solver's impulses
+         * over that collision step's time, along the axes the bodies' poses after the step give. Zero for a disabled
+         * joint, and before its first Step. Stale while its bodies sleep: they are not solved.
+         */
+        [[nodiscard]] JointLoad Load(JointId id) const;
 
         /** @brief Diagnostic for FenrirPhysics's tests (PhysicsWorld::DistinctShapeCount): how many distinct backend
          * shapes the world's bodies use. */

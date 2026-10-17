@@ -16,6 +16,7 @@ add_library(FenrirPhysics STATIC
     src/CollisionLayers.cpp
     src/DebugLines.cpp
     src/Joints.cpp
+    src/JointState.cpp
     src/LayerNames.hpp
     src/Physics.cpp
     src/PhysicsState.hpp

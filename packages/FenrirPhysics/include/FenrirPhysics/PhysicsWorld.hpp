@@ -11,6 +11,7 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Queries.hpp"
 
 namespace Fenrir
@@ -132,6 +133,16 @@ namespace Fenrir
         /** @brief The world-space box around `entity`'s body, or none for an entity with no body or no longer alive.
          */
         [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& entity) const;
+
+        /**
+         * @brief How the joint on `joint` sits and how hard it pulls, as of the last step (see JointState). Never
+         * written into its Joint; only reads, like the other queries.
+         *
+         * Zeroed for an entity with no Joint or no longer alive, an inactive joint, and a joint made
+         * since the last step. While a joint's bodies sleep, `force` and `torque` keep the values they had when they
+         * fell asleep; while it is disabled they are 0. The pose readings are always current.
+         */
+        [[nodiscard]] JointState GetJointState(const Entity& joint) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs
