@@ -230,6 +230,10 @@ Which way a joint lets its bodies move relative to each other. One of:
 The pose of a joint's two bodies in which its anchor on each body coincides: a hinge's angle and a slider's position are zero there, and its limits and targets are measured from it. The rest pose always lies within a joint's limits.
 *Avoid:* bind pose, zero pose.
 
+**Breaking (a joint)**
+A joint breaks when, in one step, the force or torque it transmits exceeds its *break force* or *break torque*: physics then disables it and announces that it broke. A broken joint is a disabled one, nothing more; enabling it again repairs it.
+*Avoid:* snapping, destroying (nothing is removed).
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
