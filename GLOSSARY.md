@@ -209,7 +209,7 @@ A collider that reports what overlaps it but never pushes anything.
 *Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
 
 **Joint**
-A link between two rigid bodies, or between a rigid body and the world, that restricts how they move relative to each other. It has exactly one *kind* (hinge, slider, ...) and lives on its own entity, the *joint entity*, which names the bodies it joins; a body may take part in any number of joints.
+A link between two rigid bodies, or between a rigid body and the world, that restricts how they move relative to each other. It has exactly one *kind* (hinge, slider, ...) and lives on its own entity, the *joint entity*, which names the bodies it joins; a body may take part in any number of joints. While a joint is enabled, the two bodies it joins do not collide with each other unless it says they may; bodies further along a chain still do.
 *Avoid:* constraint (the physics backend's word), connection.
 
 **Joint entity**
