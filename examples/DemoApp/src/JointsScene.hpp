@@ -259,8 +259,9 @@ class JointsScene
         Fenrir::Entity jointsRoot = entities.CreateEntity();
         jointsRoot.GetComponent<Fenrir::Name>().Set("Chain joints");
 
-        static constexpr std::array<Fenrir::Math::Vec3, 2> colours = {Fenrir::Math::Vec3(0.85f, 0.25f, 0.2f),
-                                                                      Fenrir::Math::Vec3(0.95f, 0.8f, 0.2f)};
+        // Not constexpr: MSVC does not take glm's vec3 constructor as one.
+        static const std::array<Fenrir::Math::Vec3, 2> colours ={Fenrir::Math::Vec3(0.85f, 0.25f, 0.2f),
+                                                                  Fenrir::Math::Vec3(0.95f, 0.8f, 0.2f)};
         Fenrir::Entity above; // the world, for the top link
         for (int i = 0; i < linkCount; ++i)
         {

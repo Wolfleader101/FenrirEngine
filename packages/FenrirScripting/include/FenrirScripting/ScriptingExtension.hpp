@@ -94,15 +94,18 @@ namespace Fenrir
             }
         };
 
-        // NativeFunctionCall for a C++ function taking the call context first, noexcept or not.
-        template <auto Function>
+        // NativeFunctionCall for a C++ function taking the call context first, noexcept or not. Matched on the
+        // pointer's type, not the pointer: MSVC lets a noexcept pointer match both value specializations.
+        template <auto Function, typename Pointer = decltype(Function)>
         struct NativeFunctionTraits;
-        template <typename R, typename... Args, R (*Function)(const CallContext&, Args...)>
-        struct NativeFunctionTraits<Function> : NativeFunctionCall<Function, R, Args...>
+        template <auto Function, typename R, typename... Args>
+        struct NativeFunctionTraits<Function, R (*)(const CallContext&, Args...)>
+            : NativeFunctionCall<Function, R, Args...>
         {
         };
-        template <typename R, typename... Args, R (*Function)(const CallContext&, Args...) noexcept>
-        struct NativeFunctionTraits<Function> : NativeFunctionCall<Function, R, Args...>
+        template <auto Function, typename R, typename... Args>
+        struct NativeFunctionTraits<Function, R (*)(const CallContext&, Args...) noexcept>
+            : NativeFunctionCall<Function, R, Args...>
         {
         };
     } // namespace Detail

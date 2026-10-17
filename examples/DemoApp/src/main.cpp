@@ -468,7 +468,8 @@ class PhysicsDemo
         return material;
     }
 
-    static constexpr std::array<Fenrir::Math::Vec3, 8> boxColours = {
+    // Not constexpr: MSVC does not take glm's vec3 constructor as one.
+    inline static const std::array<Fenrir::Math::Vec3, 8> boxColours = {
         Fenrir::Math::Vec3(0.90f, 0.20f, 0.20f), // red
         Fenrir::Math::Vec3(0.20f, 0.75f, 0.25f), // green
         Fenrir::Math::Vec3(0.20f, 0.40f, 0.95f), // blue
