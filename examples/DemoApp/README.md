@@ -6,7 +6,9 @@ in C#). It is also the smoke test of C# scripting in a real app (the proof of th
 
 ## Scenes and controls
 
-The demo has two scenes, and the editor shows whichever is active.
+The demo has two scenes, and the editor shows whichever is active. Each feature family gets one F-key, which steps through the
+family's scenes and back to Default (`src/DemoScenes.hpp`); another family's key jumps to its first scene. `F3` is physics from C#;
+`F4` to `F8` are kept for joints, the character controller, vehicles, ragdolls and soft bodies. Entering a scene logs its keys.
 
 - **Default**, the one it starts in: two backpacks, four lights and, with physics on, the C++ physics demo (a stack of boxes on a
   ground, a kinematic paddle sweeping through them, and a backpack with a triangle-mesh collider with boxes dropped onto it).
@@ -18,13 +20,14 @@ The demo has two scenes, and the editor shows whichever is active.
 | Right mouse (hold) and move | Looks around. |
 | `W` `A` `S` `D`, `Shift` | Moves the camera; `Shift` is faster. The scroll wheel zooms. `F1` turns the camera controls off and on. |
 | Left click in the scene view | Selects the entity under the cursor in the editor. In the Physics (C#) scene it also casts a ray from C#. |
-| `F2` | Cycles the active scene's physics debug lines: off, colliders, contacts, velocities, bounds, all (physics on). |
-| `F3` | Switches between Default and Physics (C#) (physics and scripting on). |
+| `F2` | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, all (physics on). The mode is the app's, so it carries across a scene switch. |
+| `F3` | Switches between Default and Physics (C#) (physics and scripting on; without scripting it does nothing). |
 | `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
 | `J` | In the Physics (C#) scene: kicks every box and sphere into the air. |
 
 Physics steps only the active scene, so the scene you switch away from waits, bodies mid-air and all, and carries on from there
-when you switch back. The scripting demo's C# systems also act only on the active scene.
+when you switch back. The scripting demo's C# systems also act only on the active scene, and each scene's keys act only while it
+is active.
 
 ## With scripting (C#)
 
@@ -67,9 +70,9 @@ event once, whichever language sent it.
 
 ### The C# physics scene
 
-`F3` switches to the "Physics (C#)" scene. All C++ does for it (`src/CSharpPhysicsScene.hpp`) is create the scene with one entity
-carrying a `CSharpPhysicsScene` component, the marker C# looks for, and switch scenes on `F3`; it creates no bodies. Everything
-else is `scripts/Physics/Playground.cs`:
+`F3` switches to the "Physics (C#)" scene. All C++ does for it (`src/CSharpScenes.hpp`) is create the scene with one entity
+carrying a `CSharpScene` marker, whose `Scene` id says which C# script builds there, and register it with the scene switcher on
+`F3`; it creates no bodies. Everything else is `scripts/Physics/Playground.cs`:
 
 | You see | What it shows |
 |---|---|
@@ -92,6 +95,14 @@ editor's `SceneClickEvent`), `J`, `F3` back and `F3` again, about two seconds ap
 ```bash
 cd out/build/clang-x64-debug/examples/DemoApp
 FENRIR_DEMO_AUTOPLAY=1 ./DemoApp.exe
+```
+
+To run one scene by itself, `FENRIR_DEMO_SCENE=<name>` starts in it (by its name, such as `"Physics (C#)"`), and with
+`FENRIR_DEMO_KEYS=1` the scene switcher presses that scene's keys, two seconds after it becomes active and then one a second, as
+`KeyboardKeyEvent`s, so C++ and C# both read them:
+
+```bash
+FENRIR_DEMO_SCENE="Physics (C#)" FENRIR_DEMO_KEYS=1 ./DemoApp.exe
 ```
 
 ### Change the script while the demo runs

@@ -1,14 +1,18 @@
 #pragma once
 
-// The C++ half of the scripting demo (the C# half is in scripts/). Everything here exists only when scripting is built in.
+// The C++ half of the scripting demo (the C# half is in scripts/). Everything here exists only when scripting is built
+// in.
 //
 // What it shows, with the C# side that goes with each piece:
-//   Bob          a component C++ declares and C# animates: C++ sets Amplitude, Speed and BaseY, C# writes Phase every frame, and
+//   Bob          a component C++ declares and C# animates: C++ sets Amplitude, Speed and BaseY, C# writes Phase every
+//   frame, and
 //                a C++ system reads Phase back (scripts/Bobbing.cs).
 //   KeyboardKey  the window's C++ KeyboardKeyEvent, read from C# unchanged (scripts/Controls.cs).
-//   Burst        an event C# sends when Space is pressed; C# reads it to make sparks and C++ reads it here (scripts/Sparks.cs).
-//   DemoMesh     a component C# adds to make an entity visible, without knowing the renderer (DemoMesh.hpp, scripts/DemoMesh.cs).
-//   SceneClick   the editor's SceneClickEvent, a click in the scene view as a ray (scripts/Controls.cs).
+//   Burst        an event C# sends when Space is pressed; C# reads it to make sparks and C++ reads it here
+//   (scripts/Sparks.cs). DemoMesh     a component C# adds to make an entity visible, without knowing the renderer
+//   (DemoMesh.hpp, scripts/DemoMesh.cs). SceneClick   the editor's SceneClickEvent, a click in the scene view as a ray
+//   (scripts/Controls.cs). CSharpScene  the marker C++ puts in a scene for C# to build, naming which one
+//   (CSharpScenes.hpp, scripts/CSharpScene.cs).
 
 #ifdef FENRIR_SCRIPTING
 
@@ -36,6 +40,15 @@ namespace ScriptingDemo
         float BaseY = 0.0F;     // The height it bobs around.
     };
 
+    /** @brief The marker of a scene C# builds. Scene says which (CSharpScenes.hpp has the ids C# also uses); the C#
+     * system that builds it sets Built where it finds its own id with Built == 0. Built stays in the ECS, so each scene
+     * is built once, even across a hot reload. */
+    struct CSharpScene
+    {
+        std::int32_t Scene = 0;
+        std::int32_t Built = 0;
+    };
+
     // Sent by C# when a burst of sparks starts, read by C# (to make them) and by C++ (see LogBursts).
     struct BurstEvent
     {
@@ -43,8 +56,8 @@ namespace ScriptingDemo
     };
 } // namespace ScriptingDemo
 
-// How these look to C#. The C# structs (scripts/*.cs) must match field for field, or the script assembly refuses to load and says
-// which field is wrong.
+// How these look to C#. The C# structs (scripts/*.cs) must match field for field, or the script assembly refuses to
+// load and says which field is wrong.
 template <>
 struct Iris::StructMapping<ScriptingDemo::Bob>
 {
@@ -52,6 +65,14 @@ struct Iris::StructMapping<ScriptingDemo::Bob>
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD(ScriptingDemo::Bob, Amplitude), IRIS_FIELD(ScriptingDemo::Bob, Speed),
                            IRIS_FIELD(ScriptingDemo::Bob, Phase), IRIS_FIELD(ScriptingDemo::Bob, BaseY));
+};
+
+template <>
+struct Iris::StructMapping<ScriptingDemo::CSharpScene>
+{
+    static constexpr std::string_view typeName = "DemoScripts.CSharpScene";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(ScriptingDemo::CSharpScene, Scene),
+                                                      IRIS_FIELD(ScriptingDemo::CSharpScene, Built));
 };
 
 template <>
@@ -100,13 +121,14 @@ struct Iris::StructMapping<SceneClickEvent>
 
 namespace ScriptingDemo
 {
-    // What the demo app gives scripting: the component and events C++ and C# share, as the app's own extension.
+    // What the demo app gives scripting: the components and events C++ and C# share, as the app's own extension.
     inline Fenrir::ScriptingExtension Extension()
     {
         Fenrir::ScriptingExtension extension;
         extension.name = "DemoApp";
         extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob"),
-                                Fenrir::MakeComponent<DemoMesh>("Demo.DemoMesh")};
+                                Fenrir::MakeComponent<DemoMesh>("Demo.DemoMesh"),
+                                Fenrir::MakeComponent<CSharpScene>("Demo.CSharpScene")};
         extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"),
                             Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey"),
                             Fenrir::MakeEvent<SceneClickEvent>("Demo.SceneClick")};
@@ -123,8 +145,8 @@ namespace ScriptingDemo
         entity.AddComponent<Bob>(bob);
     }
 
-    // Reads what C# wrote (Bob::Phase) and shows it in the entity's name, which the editor's hierarchy displays. This is the
-    // shared component working in the other direction: C# data, read by C++ with no copying or marshalling.
+    // Reads what C# wrote (Bob::Phase) and shows it in the entity's name, which the editor's hierarchy displays. This
+    // is the shared component working in the other direction: C# data, read by C++ with no copying or marshalling.
     inline void ShowBobPhase(Fenrir::App& app)
     {
         static bool saidSo = false;
@@ -151,11 +173,11 @@ namespace ScriptingDemo
         };
     }
 
-    // Plays the demo without anyone at the keyboard, for showing it off unattended and for checking it still works: with the
-    // environment variable FENRIR_DEMO_AUTOPLAY set, it sends the same KeyboardKeyEvent the window sends, as if R and then
-    // Space were pressed. Then, for the C# physics scene (when physics is built in): F3 to go to it, a click at the middle
-    // of its box pyramid (the SceneClickEvent the editor sends, from where the camera starts), J to kick its bodies, F3 to
-    // go back and F3 to return. Without the variable it does nothing.
+    // Plays the demo without anyone at the keyboard, for showing it off unattended and for checking it still works:
+    // with the environment variable FENRIR_DEMO_AUTOPLAY set, it sends the same KeyboardKeyEvent the window sends, as
+    // if R and then Space were pressed. Then, for the C# physics scene (when physics is built in): F3 to go to it, a
+    // click at the middle of its box pyramid (the SceneClickEvent the editor sends, from where the camera starts), J to
+    // kick its bodies, F3 to go back and F3 to return. Without the variable it does nothing.
     inline Fenrir::SystemFunc AutoPlay()
     {
         auto frame = std::make_shared<int>(0);
