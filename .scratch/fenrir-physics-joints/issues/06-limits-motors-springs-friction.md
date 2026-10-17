@@ -11,10 +11,16 @@
 
 **Blocked by:** 04 (Distance, slider and swing-twist kinds).
 
-**Status:** ready-for-agent
+**Status:** resolved, but for the door hand check, which is the user's
 
-- [ ] Tests: hard and soft limits on hinge and slider; a limit excluding the rest pose is widened with one warning; min == max holds.
-- [ ] Tests: Velocity and Position motors on hinge, slider and swing-twist reach their targets; a position target outside a limit is clamped; an infinite Velocity motor is held at a hard hinge, slider and swing-twist limit.
-- [ ] Tests: friction keeps a hinge where it is left; a distance spring bobs; swing-twist cones and twist hold.
-- [ ] Tests: each out-of-range value is corrected with one warning per joint; every limit, motor, spring and friction edit reaches physics on the next tick and wakes a sleeping pair.
+- [x] Tests: hard and soft limits on hinge and slider; a limit excluding the rest pose is widened with one warning; min == max holds.
+- [x] Tests: Velocity and Position motors on hinge, slider and swing-twist reach their targets; a position target outside a limit is clamped; an infinite Velocity motor is held at a hard hinge, slider and swing-twist limit.
+- [x] Tests: friction keeps a hinge where it is left; a distance spring bobs; swing-twist cones and twist hold.
+- [x] Tests: each out-of-range value is corrected with one warning per joint; every limit, motor, spring and friction edit reaches physics on the next tick and wakes a sleeping pair.
 - [ ] The door swings, stops at its limits, a velocity motor holds it at its limit, and a motor edit wakes a sleeping door (checked by hand).
+
+Notes from building it:
+
+- The out-of-range rules, the rest-pose widening and the position-target clamp are applied in `src/Joints.cpp` as physics applies a joint, so the backend only ever sees settings in range. Each kind of mistake is warned about once per joint, for as long as the joint keeps its `Joint`. Hinge limits beyond a half turn and swing limits outside [0, pi] are also corrected with a warning.
+- A hard limit beats a Velocity motor by cutting the motor's target before each step, so that one step at it reaches the limit and goes no further (`CutMotorsAtLimits` in the Jolt backend). For swing-twist, the push out of the cone and the twist past its range are cut.
+- Ticket 04 had swing-twist's Y and Z swapped in Jolt: its constraint space is (twist, plane x twist, plane), so the plane axis on frame Y made `swingYLimit` limit the swing about Z. The plane axis is now frame Z, which makes Jolt's constraint space the frames' own axes. Equal default cones hid it; the cone test now uses unequal ones.
