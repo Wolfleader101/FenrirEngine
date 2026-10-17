@@ -16,6 +16,7 @@
 #include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirScene/Scene.hpp"
@@ -36,7 +37,8 @@ namespace Fenrir
          * @brief One tick: make and remove bodies and joints for the components added and removed since the last tick
          * (a joint's constraint before its bodies go, and after they come), push the edits game code made to
          * components and world transforms, bodies before joints, step by `dt` seconds, write dynamic bodies' poses and
-         * velocities back, and send the step's contact and trigger events to `app`.
+         * velocities back, break overloaded joints, and send the step's contact, trigger and JointBroken events to
+         * `app`.
          */
         void Step(App& app, float dt);
 
@@ -174,6 +176,10 @@ namespace Fenrir
         /** @brief After the step: each joint's load, kept from the last step either of its bodies was awake for, and 0
          * while it is disabled (JointState.cpp). */
         void MeasureJoints();
+        /** @brief After MeasureJoints, in joint entity order: disables each enabled joint measured this step whose load
+         * is over a finite threshold, in the backend, its Joint and its record, and queues a JointBroken for SendEvents
+         * (JointBreaking.cpp). */
+        void BreakJoints();
         /** @brief Whether `body` names a made body that moves and is awake. */
         [[nodiscard]] bool IsAwake(const Entity& body) const;
         /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
@@ -284,6 +290,8 @@ namespace Fenrir
         std::map<std::uint32_t, JointRecord> m_joints;
         // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
+        // The joints the last step broke, sent with its contact and trigger events.
+        std::vector<JointBroken> m_broken;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

@@ -362,9 +362,13 @@ namespace Fenrir
          * it. A live edit.
          */
         bool collideConnected = false;
-        /** @brief Newtons. Negative is treated as 0. Not yet applied. */
+        /**
+         * @brief Newtons. The first step whose JointState::force is over it, while the joint's bodies are awake, breaks
+         * the joint: physics sets `enabled` to false and sends a JointBroken. Infinity (the default) never breaks;
+         * negative is treated as 0. Setting `enabled` back to true repairs it.
+         */
         float breakForce = std::numeric_limits<float>::infinity();
-        /** @brief Newton metres. Negative is treated as 0. Not yet applied. */
+        /** @brief Newton metres: as breakForce, against JointState::torque. */
         float breakTorque = std::numeric_limits<float>::infinity();
     };
 

@@ -1612,6 +1612,13 @@ namespace Fenrir::Backend
         m_impl->WakeJoint(slot);
     }
 
+    void World::DisableJoint(JointId id)
+    {
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        slot.constraint->SetEnabled(false);
+        m_impl->SetExcludes(slot, false);
+    }
+
     void World::Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation)
     {
         const JPH::AABox before = m_impl->Bounds(id);
