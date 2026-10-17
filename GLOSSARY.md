@@ -234,6 +234,10 @@ The pose of a joint's two bodies in which its anchor on each body coincides: a h
 A joint breaks when, in one step, the force or torque it transmits exceeds its *break force* or *break torque*: physics then disables it and announces that it broke. A broken joint is a disabled one, nothing more; enabling it again repairs it.
 *Avoid:* snapping, destroying (nothing is removed).
 
+**Inactive joint**
+A joint that does nothing because one of the things it names is not currently a rigid body it can join (gone, never a body, the same body twice, or in another scene). It is kept as it is and becomes active again by itself once both names are valid. Unlike a disabled joint, nobody switched it off; a joint whose bodies all cannot move is not inactive, only idle.
+*Avoid:* dormant joint, dangling joint, invalid joint.
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
