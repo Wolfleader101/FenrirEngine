@@ -10,9 +10,11 @@
 
 **Blocked by:** 05 (Joints debug lines); 08 (Joint state).
 
-**Status:** ready-for-agent
+**Status:** resolved (built and tested headless on branch `claude/joints-breaking-7b513f`; the DemoApp hand check is given to the user)
 
-- [ ] Tests (through `EventReader<JointBroken>`): one step over a threshold breaks the joint with one event naming the joint, its bodies and the load; several breaks in one step are sorted by joint; an infinite threshold never breaks.
-- [ ] Tests: a game disable sends nothing; repair while overloaded breaks again with another event; a broken joint's bodies collide again; lowering a threshold wakes the pair.
-- [ ] Tests: a disabled joint's axes are dimmed in the debug lines.
+- [x] Tests (through `EventReader<JointBroken>`): one step over a threshold breaks the joint with one event naming the joint, its bodies and the load; several breaks in one step are sorted by joint; an infinite threshold never breaks.
+- [x] Tests: a game disable sends nothing; repair while overloaded breaks again with another event; a broken joint's bodies collide again; lowering a threshold wakes the pair.
+- [x] Tests: a disabled joint's axes are dimmed in the debug lines.
 - [ ] B then a swing breaks chain joint 1 with one event and it draws dimmed; R repairs it (checked by hand).
+
+Found while building: chain joint 1 holds the seven links below it, about 69 N, so a 15 N `breakForce` breaks it on the step after B, with no swing needed. R then repairs it into a joint still over 15 N, which breaks again at once with another event; B again (no threshold) and R repairs it for good. A joint woken from sleep reads a low load for its first step (no warm starting), so a threshold lowered on a sleeping joint can take a step or two longer to break; the tests check that no step over the threshold passes unbroken rather than counting steps.

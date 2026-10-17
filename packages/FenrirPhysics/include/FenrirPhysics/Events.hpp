@@ -1,6 +1,6 @@
 #pragma once
 
-// The contact and trigger events a physics world sends, once per step, in PostTick. Read them through an
+// The contact, trigger and joint events a physics world sends, once per step, in PostTick. Read them through an
 // EventReader<T>. Plain data: the entities named may already be destroyed by the time an end or exit is read (their
 // version tells), so every begin and enter has its end and exit.
 
@@ -73,5 +73,27 @@ namespace Fenrir
         Entity otherBody;
         /** @brief The collider entity that left, as in its TriggerEnter. */
         Entity otherCollider;
+    };
+
+    /**
+     * @brief A joint broke: in the last step its load went over its Joint's `breakForce` or `breakTorque`, so physics
+     * set its `enabled` to false. Sent only for breaks, never when game code disables a joint. Sorted by joint entity.
+     *
+     * Repair a joint by setting `enabled` back to true: one still over its threshold breaks again on the next step,
+     * with another event.
+     */
+    struct JointBroken
+    {
+        /** @brief The joint entity, whose Joint is now disabled. */
+        Entity joint;
+        /** @brief The joint's bodyA. */
+        Entity bodyA;
+        /** @brief The joint's bodyB: empty for the world. */
+        Entity bodyB;
+        /** @brief Newtons, world space: what the joint applied to bodyB in the step that broke it (JointState::force).
+         */
+        Math::Vec3 force = Math::Vec3(0.0f);
+        /** @brief Newton metres, world space, likewise (JointState::torque). */
+        Math::Vec3 torque = Math::Vec3(0.0f);
     };
 } // namespace Fenrir
