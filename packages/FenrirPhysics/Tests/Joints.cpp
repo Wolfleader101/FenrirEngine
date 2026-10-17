@@ -1,9 +1,12 @@
 // Joints through the frame seam (ADR-0013): bodies joined by Joint components on joint entities, observed in their
 // world transforms as physics steps.
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <numbers>
+#include <tuple>
 #include <vector>
 
 #include <catch2/catch_approx.hpp>
@@ -53,11 +56,107 @@ TEST_CASE("A joint kind takes any kind by assignment and is read through a check
     REQUIRE(kind.Type() == JointType::Hinge);
     REQUIRE(kind.Is<HingeJoint>());
     [[maybe_unused]] const HingeJoint& hinge = kind.As<HingeJoint>();
+
+    kind = DistanceJoint{.minDistance = 2.0f, .maxDistance = 3.0f};
+    INFO("assigning a distance joint keeps its settings, which the view reads and edits");
+    REQUIRE(kind.Type() == JointType::Distance);
+    REQUIRE(kind.Is<DistanceJoint>());
+    REQUIRE(kind.As<DistanceJoint>().minDistance == 2.0f);
+    kind.As<DistanceJoint>().maxDistance = 4.0f;
+    REQUIRE(kind.As<DistanceJoint>().maxDistance == 4.0f);
+
+    kind = SliderJoint{.friction = 5.0f};
+    INFO("a slider");
+    REQUIRE(kind.Type() == JointType::Slider);
+    REQUIRE(kind.Is<SliderJoint>());
+    REQUIRE(kind.As<SliderJoint>().friction == 5.0f);
+
+    kind = SwingTwistJoint{.twistMax = 1.0f};
+    INFO("a swing-twist joint");
+    REQUIRE(kind.Type() == JointType::SwingTwist);
+    REQUIRE(kind.Is<SwingTwistJoint>());
+    REQUIRE_FALSE(kind.Is<SliderJoint>());
+    REQUIRE(kind.As<SwingTwistJoint>().twistMax == 1.0f);
+}
+
+TEST_CASE("Every joint kind and shared setting has the spec's defaults", "[physics][joints]")
+{
+    const float infinity = std::numeric_limits<float>::infinity();
+    const float quarterTurn = std::numbers::pi_v<float> / 4.0f;
+
+    const JointSpring spring;
+    INFO("a spring is rigid, critically damped");
+    REQUIRE(spring.frequency == Approx(0.0f));
+    REQUIRE(spring.damping == Approx(1.0f));
+
+    const JointLimits limits;
+    INFO("limits are off, at 0 to 0, rigid");
+    REQUIRE_FALSE(limits.enabled);
+    REQUIRE(limits.min == Approx(0.0f));
+    REQUIRE(limits.max == Approx(0.0f));
+    REQUIRE(limits.spring.frequency == Approx(0.0f));
+    REQUIRE(limits.spring.damping == Approx(1.0f));
+
+    const JointMotor motor;
+    INFO("a motor is off, with zero targets, no force limit, and a 2 Hz critically damped position drive");
+    REQUIRE(motor.mode == JointMotorMode::Off);
+    REQUIRE(motor.targetVelocity == Approx(0.0f));
+    REQUIRE(motor.targetPosition == Approx(0.0f));
+    REQUIRE(motor.maxForce == Approx(infinity));
+    REQUIRE(motor.spring.frequency == Approx(2.0f));
+    REQUIRE(motor.spring.damping == Approx(1.0f));
+
+    const SwingTwistMotor swingTwistMotor;
+    INFO("a swing-twist motor matches a motor, its target the rest pose");
+    REQUIRE(swingTwistMotor.mode == JointMotorMode::Off);
+    REQUIRE(swingTwistMotor.targetRotation == identity);
+    REQUIRE(swingTwistMotor.targetAngularVelocity == Math::Vec3(0.0f));
+    REQUIRE(swingTwistMotor.maxTorque == Approx(infinity));
+    REQUIRE(swingTwistMotor.spring.frequency == Approx(2.0f));
+    REQUIRE(swingTwistMotor.spring.damping == Approx(1.0f));
+
+    const DistanceJoint distance;
+    INFO("a distance joint is a rigid rope from 0 to 1");
+    REQUIRE(distance.minDistance == Approx(0.0f));
+    REQUIRE(distance.maxDistance == Approx(1.0f));
+    REQUIRE(distance.spring.frequency == Approx(0.0f));
+    REQUIRE(distance.spring.damping == Approx(1.0f));
+
+    INFO("a hinge and a slider are free, unpowered and frictionless");
+    const HingeJoint hinge;
+    const SliderJoint slider;
+    for (const auto& [kindLimits, kindMotor, friction] : {std::tuple(hinge.limits, hinge.motor, hinge.friction),
+                                                          std::tuple(slider.limits, slider.motor, slider.friction)})
+    {
+        REQUIRE_FALSE(kindLimits.enabled);
+        REQUIRE(kindLimits.min == Approx(0.0f));
+        REQUIRE(kindLimits.max == Approx(0.0f));
+        REQUIRE(kindMotor.mode == JointMotorMode::Off);
+        REQUIRE(kindMotor.maxForce == Approx(infinity));
+        REQUIRE(friction == Approx(0.0f));
+    }
+
+    const SwingTwistJoint swingTwist;
+    INFO("a swing-twist joint swings a quarter of a half turn each way about Y and Z, and twists as far, unpowered");
+    REQUIRE(swingTwist.swingYLimit == Approx(quarterTurn));
+    REQUIRE(swingTwist.swingZLimit == Approx(quarterTurn));
+    REQUIRE(swingTwist.twistMin == Approx(-quarterTurn));
+    REQUIRE(swingTwist.twistMax == Approx(quarterTurn));
+    REQUIRE(swingTwist.friction == Approx(0.0f));
+    REQUIRE(swingTwist.motor.mode == JointMotorMode::Off);
 }
 
 namespace
 {
     const Math::Vec3 hook(0.0f, 10.0f, 0.0f);
+
+    /** One joint of each kind, with their default settings but for the distance joint: a rod of length 0, whose rest
+     * pose is held. */
+    std::vector<JointKind> EveryKind()
+    {
+        return {FixedJoint{}, BallJoint{},   DistanceJoint{.maxDistance = 0.0f},
+                HingeJoint{}, SliderJoint{}, SwingTwistJoint{}};
+    }
 
     /** Joins `bodyA` to `bodyB` (empty: the world) with a joint of `kind` on `jointEntity`, its rest pose at `anchor`
      * where the bodies are now. */
@@ -80,7 +179,7 @@ namespace
 
 TEST_CASE("Each kind of joint holds a body hung from the world at its rest pose", "[physics][joints]")
 {
-    for (const JointKind& kind : {JointKind(FixedJoint{}), JointKind(BallJoint{}), JointKind(HingeJoint{})})
+    for (const JointKind& kind : EveryKind())
     {
         PhysicsApp test;
         Entity box = HangFromHook(test, kind);
@@ -182,6 +281,161 @@ TEST_CASE("A ball joint lets its body turn about every axis", "[physics][joints]
     const Math::Vec3 top = WorldPointOf(box, Math::Vec3(0.0f, 0.5f, 0.0f));
     INFO("the middle of its top face stays on the hook; it is at " << top.x << ", " << top.y << ", " << top.z);
     REQUIRE(Math::Magnitude(top - hook) < 1e-3f);
+}
+
+TEST_CASE("A slider moves its body along the frames' X axis only", "[physics][joints]")
+{
+    PhysicsApp test;
+    Entity box = AddBody(test.Entities(), hook);
+    // The frames' X turned onto world Z: the slider runs along Z, level, so gravity does not move the box along it.
+    const Math::Quat alongZ = Math::AngleAxis(-std::numbers::pi_v<float> / 2.0f, Math::Vec3(0.0f, 1.0f, 0.0f));
+    Join(test.Entities().CreateEntity(), box, Entity(), JointFrame{hook, alongZ}, SliderJoint{});
+    test.Run(0.1);
+
+    // Pushed and twisted every way: the slider keeps only the push along world Z.
+    PhysicsWorld& world = *PhysicsWorld::Of(test.app.GetActiveScene());
+    world.AddImpulse(box, Math::Vec3(1.0f, 1.0f, 1.0f));
+    world.AddAngularImpulse(box, Math::Vec3(0.2f, 0.3f, 0.2f));
+    test.Run(0.5);
+
+    const Transform at = GetWorldTransform(box);
+    INFO("the box slid along world Z, about half a metre, and nowhere else, unturned; it is at "
+         << at.pos.x << ", " << at.pos.y << ", " << at.pos.z << " turned by w = " << at.rot.w);
+    REQUIRE(at.pos.z > 0.3f);
+    REQUIRE(at.pos.x == Approx(0.0f).margin(1e-3));
+    REQUIRE(at.pos.y == Approx(hook.y).margin(1e-3));
+    REQUIRE(std::abs(at.rot.w) == Approx(1.0f).margin(1e-4));
+}
+
+TEST_CASE("A distance joint at min == max is a rod: its body swings at that distance, free to turn",
+          "[physics][joints]")
+{
+    PhysicsApp test;
+    // The box's centre on a 2 m rod from the hook, the frames' rotations unlike each other: they are ignored.
+    Entity box = AddBody(test.Entities(), hook - Math::Vec3(0.0f, 2.0f, 0.0f));
+    const Math::Quat turned = Math::AngleAxis(1.0f, Math::Vec3(0.0f, 0.0f, 1.0f));
+    box.AddComponent<Joint>(Joint{.bodyA = box,
+                                  .bodyB = Entity(),
+                                  .frameA = JointFrame{},
+                                  .frameB = JointFrame{hook, turned},
+                                  .kind = DistanceJoint{.minDistance = 2.0f, .maxDistance = 2.0f}});
+    test.Run(0.1);
+
+    PhysicsWorld& world = *PhysicsWorld::Of(test.app.GetActiveScene());
+    world.AddImpulse(box, Math::Vec3(3.0f, 0.0f, 1.0f));
+    world.AddAngularImpulse(box, Math::Vec3(0.0f, 0.3f, 0.0f));
+    float shortest = 2.0f;
+    float longest = 2.0f;
+    for (int i = 0; i < 60; ++i)
+    {
+        test.app.RunFrame(tick);
+        const float length = Math::Magnitude(PositionOf(box) - hook);
+        shortest = std::min(shortest, length);
+        longest = std::max(longest, length);
+    }
+
+    const Transform at = GetWorldTransform(box);
+    INFO("the box swung out, to " << at.pos.x << ", " << at.pos.y << ", " << at.pos.z
+                                  << ", and turned, by w = " << at.rot.w);
+    REQUIRE(at.pos.x > 0.5f);
+    REQUIRE(std::abs(at.rot.w) < 0.99f);
+    INFO("its centre stayed 2 m from the hook, between " << shortest << " and " << longest);
+    REQUIRE(shortest > 1.98f);
+    REQUIRE(longest < 2.02f);
+}
+
+TEST_CASE("A distance joint at min 0 is a slack rope: its body falls freely until the rope is taut",
+          "[physics][joints]")
+{
+    PhysicsApp test;
+    Entity box = AddBody(test.Entities(), hook - Math::Vec3(0.0f, 0.5f, 0.0f));
+    Join(test.Entities().CreateEntity(), box, Entity(), JointFrame{hook},
+         DistanceJoint{.minDistance = 0.0f, .maxDistance = 2.0f});
+
+    test.app.RunFrame(tick);
+    const float fall = box.GetComponent<RigidBody>().linearVelocity.y;
+    INFO("one tick in, the box falls at one tick of gravity, 9.81 / 60: the slack rope holds nothing; it moves at "
+         << fall);
+    REQUIRE(fall == Approx(-9.81f / 60.0f).margin(0.01));
+
+    test.Run(3.0);
+    const Math::Vec3 top = WorldPointOf(box, Math::Vec3(0.0f, 0.5f, 0.0f));
+    INFO("it hangs at the rope's full 2 m below the hook by the middle of its top face; that is at "
+         << top.x << ", " << top.y << ", " << top.z);
+    REQUIRE(Math::Magnitude(top - (hook - Math::Vec3(0.0f, 2.0f, 0.0f))) < 0.01f);
+}
+
+namespace
+{
+    /** The turn of `rotation` about X (its twist) and the angle of the rest (its swing), in radians. */
+    struct SwingAndTwist
+    {
+        float swing;
+        float twist;
+    };
+
+    SwingAndTwist Decompose(const Math::Quat& rotation)
+    {
+        const float twist = 2.0f * std::atan2(rotation.x, rotation.w);
+        const Math::Quat aboutX = Math::AngleAxis(twist, Math::Vec3(1.0f, 0.0f, 0.0f));
+        const Math::Quat swing = rotation * Math::Conjugate(aboutX);
+        return SwingAndTwist{2.0f * std::acos(std::min(1.0f, std::abs(swing.w))),
+                             std::remainder(twist, 2.0f * std::numbers::pi_v<float>)};
+    }
+
+    /** The largest swing and twist a box hung from the hook by a default swing-twist joint reaches, its twist axis
+     * pointing down through it, after an angular impulse. */
+    SwingAndTwist SwingTwistReach(const Math::Vec3& angularImpulse)
+    {
+        PhysicsApp test;
+        // The frames' X turned onto world down.
+        const Math::Quat down = Math::AngleAxis(-std::numbers::pi_v<float> / 2.0f, Math::Vec3(0.0f, 0.0f, 1.0f));
+        Entity box = AddBody(test.Entities(), hook - Math::Vec3(0.0f, 0.5f, 0.0f));
+        const Joint& joint =
+            Join(test.Entities().CreateEntity(), box, Entity(), JointFrame{hook, down}, SwingTwistJoint{});
+        const Math::Quat frameA = joint.frameA.rotation;
+        test.Run(0.1);
+
+        PhysicsWorld::Of(test.app.GetActiveScene())->AddAngularImpulse(box, angularImpulse);
+        SwingAndTwist reach{0.0f, 0.0f};
+        for (int i = 0; i < 90; ++i)
+        {
+            test.app.RunFrame(tick);
+            // frameA's turn from frameB (the world's), in frameB's axes.
+            const SwingAndTwist now = Decompose(Math::Conjugate(down) * GetWorldTransform(box).rot * frameA);
+            reach.swing = std::max(reach.swing, now.swing);
+            reach.twist = std::max(reach.twist, std::abs(now.twist));
+        }
+        const Math::Vec3 top = WorldPointOf(box, Math::Vec3(0.0f, 0.5f, 0.0f));
+        INFO("the middle of the box's top face stays on the hook; it is at " << top.x << ", " << top.y << ", "
+                                                                             << top.z);
+        REQUIRE(Math::Magnitude(top - hook) < 0.01f);
+        return reach;
+    }
+} // namespace
+
+TEST_CASE("A swing-twist joint stays within its default cone and twist", "[physics][joints]")
+{
+    const float quarterTurn = std::numbers::pi_v<float> / 4.0f;
+
+    const SwingAndTwist twisted = SwingTwistReach(Math::Vec3(0.0f, 2.0f, 0.0f));
+    INFO("twisted hard about its axis, world up, the box twists up to a quarter of a half turn and no further; it "
+         "reached "
+         << twisted.twist << ", swinging " << twisted.swing);
+    REQUIRE(twisted.twist > quarterTurn - 0.05f);
+    REQUIRE(twisted.twist < quarterTurn + 0.05f);
+    REQUIRE(twisted.swing < 0.05f);
+
+    for (const Math::Vec3& impulse : {Math::Vec3(3.0f, 0.0f, 0.0f), Math::Vec3(0.0f, 0.0f, 3.0f)})
+    {
+        const SwingAndTwist swung = SwingTwistReach(impulse);
+        INFO("swung hard about world " << (impulse.x > 0.0f ? "X" : "Z") << ", the box swings up to the cone's quarter "
+                                       << "of a half turn and no further; it reached " << swung.swing << ", twisting "
+                                       << swung.twist);
+        REQUIRE(swung.swing > quarterTurn - 0.05f);
+        REQUIRE(swung.swing < quarterTurn + 0.05f);
+        REQUIRE(swung.twist < 0.05f);
+    }
 }
 
 namespace
@@ -399,6 +653,52 @@ TEST_CASE("Changing a joint's kind recreates it at the same rest pose", "[physic
          << at.pos.x << ", " << at.pos.y << ", " << at.pos.z << ", turned by w = " << at.rot.w);
     REQUIRE(Math::Magnitude(at.pos - Math::Vec3(0.0f, 1.0f, 0.0f)) < 0.01f);
     REQUIRE(std::abs(at.rot.w) == Approx(1.0f).margin(1e-4));
+}
+
+TEST_CASE("Changing a joint's kind between any two kinds keeps its rest pose", "[physics][joints]")
+{
+    PhysicsApp test;
+    Entity box = HangFromHook(test, FixedJoint{});
+    Joint& joint = JointOf(HangingJoint(test, box));
+    const std::vector<JointKind> kinds = EveryKind();
+
+    for (const JointKind& from : kinds)
+    {
+        for (const JointKind& to : kinds)
+        {
+            if (from.Type() == to.Type())
+            {
+                continue;
+            }
+            joint.kind = from;
+            test.Run(0.1);
+            joint.kind = to;
+            test.Run(0.25);
+
+            const Transform at = GetWorldTransform(box);
+            INFO("from joint type " << static_cast<int>(from.Type()) << " to " << static_cast<int>(to.Type())
+                                    << ", the box still hangs at its rest pose, at 0, 9.5, 0, unturned; it is at "
+                                    << at.pos.x << ", " << at.pos.y << ", " << at.pos.z
+                                    << ", turned by w = " << at.rot.w);
+            REQUIRE(Math::Magnitude(at.pos - Math::Vec3(0.0f, 9.5f, 0.0f)) < 1e-3f);
+            REQUIRE(std::abs(at.rot.w) == Approx(1.0f).margin(1e-4));
+        }
+    }
+}
+
+TEST_CASE("Changing a distance joint's range reaches physics on the next tick", "[physics][joints]")
+{
+    PhysicsApp test;
+    Entity box = HangFromHook(test, DistanceJoint{.minDistance = 0.0f, .maxDistance = 2.0f});
+    test.Run(3.0);
+
+    JointOf(HangingJoint(test, box)).kind.As<DistanceJoint>().maxDistance = 1.0f;
+    test.Run(2.0);
+
+    const Math::Vec3 top = WorldPointOf(box, Math::Vec3(0.0f, 0.5f, 0.0f));
+    INFO("the rope, shortened to 1 m, holds the box by the middle of its top face 1 m below the hook; it is at "
+         << top.x << ", " << top.y << ", " << top.z);
+    REQUIRE(Math::Magnitude(top - (hook - Math::Vec3(0.0f, 1.0f, 0.0f))) < 0.01f);
 }
 
 TEST_CASE("Changing a joint's frame recreates it at the new rest pose", "[physics][joints]")
