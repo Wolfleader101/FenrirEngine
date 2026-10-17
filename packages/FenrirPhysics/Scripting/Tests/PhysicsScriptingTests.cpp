@@ -396,6 +396,23 @@ TEST_CASE("C# chooses the debug lines a world draws", "[physics][scripting]")
     REQUIRE_FALSE(world->DebugLines().empty());
 }
 
+TEST_CASE("C#'s debug-draw categories match C++'s, joints included", "[physics][scripting]")
+{
+    PhysicsScriptingApp test;
+    AddStaticBox(test, Math::Vec3(0.0f, 0.0f, 0.0f));
+    test.Run(1);
+    const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    REQUIRE(test.Call<bool>(WorldType, "DrawJoints"));
+    INFO("C#'s Joints is C++'s Joints");
+    REQUIRE(world->DebugDrawCategories() == DebugDraw::Joints);
+
+    REQUIRE(test.Call<bool>(WorldType, "DrawAll"));
+    INFO("C#'s All is C++'s All: every category, joints included");
+    REQUIRE(world->DebugDrawCategories() == DebugDraw::All);
+}
+
 TEST_CASE("A collision mesh made from C# spans is usable by a collider, and released once", "[physics][scripting]")
 {
     PhysicsScriptingApp test;

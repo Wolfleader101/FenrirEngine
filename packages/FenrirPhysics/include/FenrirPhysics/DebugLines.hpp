@@ -31,7 +31,11 @@ namespace Fenrir
         Velocities = 1u << 2,
         /** @brief Each body's world-space bounding box (PhysicsWorld::Bounds). */
         Bounds = 1u << 3,
-        All = Colliders | Contacts | Velocities | Bounds
+        /** @brief Each joint's two frames as axes, X, Y and Z, at their bodies' step poses: frameA long (JointAX,
+           JointAY, JointAZ) and frameB short (JointBX, JointBY, JointBZ). They coincide at the rest pose and while the
+           joint holds. A joint with no constraint (naming no pair of made bodies) is not drawn. */
+        Joints = 1u << 4,
+        All = Colliders | Contacts | Velocities | Bounds | Joints
     };
 
     /** @brief The categories in `a` or `b`. */
@@ -69,6 +73,14 @@ namespace Fenrir
         inline constexpr std::uint32_t Velocity = 0xFFE633FFu;
         /** @brief A body's bounding box. */
         inline constexpr std::uint32_t Bounds = 0xFF9933FFu;
+        /** @brief A joint's frameA: its X axis (red), Y axis (green) and Z axis (blue). */
+        inline constexpr std::uint32_t JointAX = 0xE6194BFFu;
+        inline constexpr std::uint32_t JointAY = 0x3CB44BFFu;
+        inline constexpr std::uint32_t JointAZ = 0x4363D8FFu;
+        /** @brief A joint's frameB: its X axis (pink), Y axis (yellow) and Z axis (cyan). */
+        inline constexpr std::uint32_t JointBX = 0xFF99CCFFu;
+        inline constexpr std::uint32_t JointBY = 0xFFFF4DFFu;
+        inline constexpr std::uint32_t JointBZ = 0x4DFFFFFFu;
 
         /** @brief A sleeping body's collider colour: `colour` at half brightness, alpha unchanged. */
         [[nodiscard]] constexpr std::uint32_t Dimmed(std::uint32_t colour)

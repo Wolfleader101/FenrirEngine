@@ -95,5 +95,8 @@ public enum DebugDraw : uint
     Velocities = 1u << 2,
     /// <summary>Each body's world-space bounding box.</summary>
     Bounds = 1u << 3,
-    All = Colliders | Contacts | Velocities | Bounds,
+    /// <summary>Each joint's two frames as axes: frameA long (red, green, blue), frameB short (pink, yellow,
+    /// cyan). They coincide at the rest pose and while the joint holds.</summary>
+    Joints = 1u << 4,
+    All = Colliders | Contacts | Velocities | Bounds | Joints,
 }
