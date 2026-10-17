@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include "DemoMesh.hpp"
+#include "DemoScenes.hpp"
 #include "Editor.hpp"
 #include "GLRenderer.hpp"
 #include "Material.hpp"
@@ -41,7 +42,7 @@
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
-#include "CSharpPhysicsScene.hpp"
+#include "CSharpScenes.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #endif
 
@@ -287,7 +288,7 @@ static void InitBackpacks(Fenrir::App& app)
 // The physics demo: a static ground, a stack of dynamic boxes and a kinematic paddle that game code sweeps back and
 // forth in Tick, pushing the boxes. Each body is the unit cube in its own flat colour, so they are easy to tell apart.
 // Beside them, a static backpack whose collider is a triangle mesh made from the backpack model's vertices, with boxes
-// dropped onto it. F2 cycles the physics debug lines drawn over the scene.
+// dropped onto it. F2 cycles the physics debug lines drawn over the active scene, whichever it is.
 class PhysicsDemo
 {
   public:
@@ -355,19 +356,25 @@ class PhysicsDemo
     // a moving body's model, drawn at its interpolated pose, may trail its lines by up to a step.
     void DebugLines(Fenrir::App& app)
     {
-        Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
-        if (world == nullptr)
-        {
-            return;
-        }
         for (const KeyboardKeyEvent& event : m_keys.Read(app))
         {
             if (event.key == GLFW_KEY_F2 && event.state == InputState::Pressed)
             {
                 m_debugMode = (m_debugMode + 1) % debugModes.size();
-                world->SetDebugDraw(debugModes[m_debugMode].categories);
                 app.Logger()->Info(std::string("Physics debug lines: ") + debugModes[m_debugMode].name);
             }
+        }
+
+        Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        // The mode is the app's, but each scene's world keeps its own categories: a world that has just become active
+        // may still have the mode it had when it was last shown, or none.
+        if (world->DebugDrawCategories() != debugModes[m_debugMode].categories)
+        {
+            world->SetDebugDraw(debugModes[m_debugMode].categories);
         }
 
         m_lineVertices.clear();
@@ -571,6 +578,17 @@ int main(int argc, char* argv[])
 
     Fenrir::App app(std::move(logger));
 
+    // One F-key per feature family steps through its scenes and back to Default (DemoScenes.hpp). Each scene below
+    // registers here as it is built in. Before anything else of the frame, so the frame runs in the scene switched to.
+#ifdef FENRIR_PHYSICS
+    DemoScenes demoScenes(
+        "Default", "WASD moves the camera, F1 turns its controls off and on, F2 cycles the physics debug lines.");
+#else
+    DemoScenes demoScenes("Default", "WASD moves the camera, F1 turns its controls off and on.");
+#endif
+    app.AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate,
+                             {[&demoScenes](Fenrir::App& running) { demoScenes.Update(running); }});
+
 #ifdef FENRIR_PHYSICS
     // Declared after the app, so every scene's physics world and the physics backend end before the app does. Before
     // scripting, which is given physics's scripting extension, so scripting ends first.
@@ -581,12 +599,8 @@ int main(int argc, char* argv[])
     // Declared after the app, so .NET is released before the app is destroyed and before main returns.
     // The components and events C++ and C# share, as the app's own scripting extension, and physics's, so scripts can
     // use physics.
-    Fenrir::ScriptingExtension demoExtension = ScriptingDemo::Extension();
-#ifdef FENRIR_PHYSICS
-    demoExtension.components.push_back(CSharpPhysics::Component());
-#endif
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
-                                            .extensions = {std::move(demoExtension)}};
+                                            .extensions = {ScriptingDemo::Extension()}};
 #ifdef FENRIR_PHYSICS
     scriptingConfig.extensions.push_back(physics.ScriptingExtension());
 #endif
@@ -600,8 +614,10 @@ int main(int argc, char* argv[])
 #ifdef FENRIR_PHYSICS
     // The second scene, built and run by C# (scripts/Physics/Playground.cs): C++ makes it empty but for a marker, and
     // F3 switches to it and back.
-    app.AddSystem(Fenrir::SchedulePriority::PostInit, CSharpPhysics::CreateScene)
-        .AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate, {CSharpPhysics::SwitchOnF3()});
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, [](Fenrir::App& running) {
+        CSharpScenes::Create(running, CSharpScenes::physicsName, CSharpScenes::physicsId);
+    });
+    demoScenes.Register(CSharpScenes::Physics());
 #endif
 #endif
 

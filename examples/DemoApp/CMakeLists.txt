@@ -32,7 +32,8 @@ add_executable(DemoApp
     src/Material.hpp
 
     src/DemoMesh.hpp
-    src/CSharpPhysicsScene.hpp
+    src/DemoScenes.hpp
+    src/CSharpScenes.hpp
 )
 
 add_subdirectory(libs)
