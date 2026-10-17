@@ -9,11 +9,15 @@
 // Jointed bodies do not collide: neighbouring links overlap at their joints, and the door's hinge edge sits against
 // its post. A trigger beneath the door, overlapping the post too, still reports it: triggers are never excluded. 9 lets
 // the links collide with their neighbours (collideConnected), which pushes them apart, and back.
+//
+// Each joint entity's name shows its joint state every frame: the door's angle and load, each chain joint's load. 0
+// logs every joint's full state.
 
 #ifdef FENRIR_PHYSICS
 
 #include <array>
 #include <cstddef>
+#include <cstdio>
 #include <numbers>
 #include <string>
 #include <vector>
@@ -45,8 +49,9 @@ class JointsScene
                          .familyKey = DemoFamilyKey::joints,
                          .keyHelp =
                              "The door swings on its hinge, the chain hangs from its hook. 9 lets the links collide "
-                             "with their neighbours, and back. F2 cycles the physics debug lines, F4 goes on.",
-                         .smokeKeys = {GLFW_KEY_9}};
+                             "with their neighbours, and back. 0 logs every joint's state. F2 cycles the physics "
+                             "debug lines, F4 goes on.",
+                         .smokeKeys = {GLFW_KEY_9, GLFW_KEY_0}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -86,6 +91,14 @@ class JointsScene
                 app.Logger()->Info(m_linksCollide ? "Chain links collide with their neighbours"
                                                   : "Chain links pass through their neighbours");
             }
+            if (active && event.key == GLFW_KEY_0 && event.state == InputState::Pressed)
+            {
+                LogJointStates(app);
+            }
+        }
+        if (active)
+        {
+            ShowReadings(app);
         }
         for (const Fenrir::TriggerEnter& enter : m_enters.Read(app))
         {
@@ -98,6 +111,67 @@ class JointsScene
     }
 
   private:
+    // Each joint entity, with the name it is shown under before its readings.
+    struct Labelled
+    {
+        Fenrir::Entity joint;
+        std::string label;
+    };
+
+    template <typename... Args>
+    static std::string Format(const char* format, Args... args)
+    {
+        std::array<char, 256> text{};
+        std::snprintf(text.data(), text.size(), format, args...);
+        return text.data();
+    }
+
+    static std::string Describe(const Fenrir::Math::Vec3& v)
+    {
+        return Format("(%.2f, %.2f, %.2f)", static_cast<double>(v.x), static_cast<double>(v.y),
+                      static_cast<double>(v.z));
+    }
+
+    // The joints' readings in their names: the door's angle, and how hard each joint pulls.
+    void ShowReadings(Fenrir::App& app) const
+    {
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        for (const Labelled& labelled : m_joints)
+        {
+            const Fenrir::JointState state = world->GetJointState(labelled.joint);
+            const double force = static_cast<double>(Fenrir::Math::Magnitude(state.force));
+            const std::string reading =
+                labelled.joint.GetComponent<Fenrir::Joint>().kind.Is<Fenrir::HingeJoint>()
+                    ? Format("%s: %.2f rad, %.0f N", labelled.label.c_str(), static_cast<double>(state.position), force)
+                    : Format("%s: %.1f N", labelled.label.c_str(), force);
+            labelled.joint.GetComponent<Fenrir::Name>().Set(reading.c_str());
+        }
+    }
+
+    void LogJointStates(Fenrir::App& app) const
+    {
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        for (const Labelled& labelled : m_joints)
+        {
+            const Fenrir::JointState state = world->GetJointState(labelled.joint);
+            const Fenrir::Math::Quat& turn = state.relative.rotation;
+            app.Logger()->Info(labelled.label + ": force " + Describe(state.force) + " N, torque " +
+                               Describe(state.torque) + " N m, frameB at " + Describe(state.relative.position) +
+                               Format(" turned (w %.3f, x %.3f, y %.3f, z %.3f), position %.3f",
+                                      static_cast<double>(turn.w), static_cast<double>(turn.x),
+                                      static_cast<double>(turn.y), static_cast<double>(turn.z),
+                                      static_cast<double>(state.position)));
+        }
+    }
+
     static constexpr int linkCount = 8;
     // Joint to joint. Each link is a little longer, so neighbours overlap at their joints.
     static constexpr float linkSpacing = 0.5f;
@@ -172,6 +246,7 @@ class JointsScene
                                                        .frameA = frames.frameA,
                                                        .frameB = frames.frameB,
                                                        .kind = Fenrir::HingeJoint{}});
+        m_joints.push_back(Labelled{door, "Door hinge"});
     }
 
     // Eight links laid out level from a hook fixed to the world, so they fall and swing at once. Each joint is on its
@@ -208,6 +283,7 @@ class JointsScene
                                                             .frameB = frames.frameB,
                                                             .kind = Fenrir::BallJoint{}});
             jointsRoot.AddChild(joint);
+            m_joints.push_back(Labelled{joint, "Chain joint " + std::to_string(i)});
             if (i > 0)
             {
                 m_linkJoints.push_back(joint);
@@ -221,6 +297,7 @@ class JointsScene
     std::string m_scene;
     Fenrir::Entity m_doorTrigger;
     std::vector<Fenrir::Entity> m_linkJoints;
+    std::vector<Labelled> m_joints;
     bool m_linksCollide = false;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
     Fenrir::EventReader<Fenrir::TriggerEnter> m_enters;

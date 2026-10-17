@@ -263,6 +263,7 @@ namespace Fenrir
         ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        MeasureJoints();
         SendEvents(app);
         AdvancePoses();
         DrawDebugLines();

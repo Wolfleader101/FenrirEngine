@@ -359,4 +359,34 @@ namespace Fenrir
      * A body that is not alive (destroyed, or an empty `bodyA`) gives identity frames, with a warning in debug builds.
      */
     [[nodiscard]] JointFrames FrameFromWorld(const Entity& bodyA, const Entity& bodyB, const JointFrame& anchor);
+
+    /**
+     * @brief How a joint sits and how hard it pulls, as PhysicsWorld::GetJointState reads it from the last completed
+     * step.
+     *
+     * The pose readings come from the bodies' poses after that step and the joint's frames, for every kind, never from
+     * interpolated Transforms. `force` and `torque` sum every part of the joint (holding the frames together, its
+     * limits, its motor and friction) over the step's last collision step: approximate within a step, exact enough for
+     * steady loads such as a hanging chain's weight.
+     */
+    struct JointState
+    {
+        /** @brief Newtons, world space: what the joint applies to bodyB (bodyA gets the negative). */
+        Math::Vec3 force = Math::Vec3(0.0f);
+        /** @brief Newton metres, world space, about the joint's anchor: what the joint applies to bodyB, likewise. */
+        Math::Vec3 torque = Math::Vec3(0.0f);
+        /**
+         * @brief frameB's pose in frameA's axes: the identity is the rest pose. For a swing-twist joint, its rotation
+         * is in the same terms as its motor's `targetRotation`.
+         */
+        JointFrame relative;
+        /**
+         * @brief A hinge's angle (radians, wrapped to (-pi, pi], with no count of whole turns), a slider's offset along
+         * frameA's X (metres), a distance joint's length (metres); 0 for the other kinds.
+         *
+         * A hinge's angle is frameB's turn relative to frameA, so its sign follows which body is A: put the fixed part
+         * in bodyA to read a positive opening. A body hinged to the world (always bodyB) reads with the opposite sign.
+         */
+        float position = 0.0f;
+    };
 } // namespace Fenrir
