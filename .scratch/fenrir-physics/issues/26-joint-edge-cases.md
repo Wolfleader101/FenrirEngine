@@ -17,3 +17,5 @@ How does a joint behave when the bodies around it change? Builds on [How are joi
 - **Inactive scenes:** nothing new expected (the world pauses), but confirm.
 
 Facts from "What does Jolt offer for constraints?": the host must remove a constraint before either body (undefined otherwise in release builds); shape or centre-of-mass changes need `NotifyShapeChanged` or the anchors drift; no constraint edit wakes the bodies; a removal reorders another constraint in the solve order; a constraint is solved only with one dynamic, awake end.
+
+From "How are joints modelled in the ECS?" (ADR-0013): joints name body entities only, an empty `bodyB` is the world, and the joint entity may be one of its bodies (so destroying that body also destroys the joint). Frames are local to each body's origin and follow world scale; physics owns the private body-to-joints index and removes constraints before bodies.

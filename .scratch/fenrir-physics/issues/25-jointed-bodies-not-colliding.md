@@ -16,3 +16,5 @@ Two bodies joined by a joint often must not collide (a door and its frame, chain
 - **Queries:** whether the setting affects queries at all (presumably not).
 
 Facts from "What does Jolt offer for constraints?": Jolt gives each body only one `CollisionGroup`, applied after the layer test (it can only remove pairs) and not to queries. A body jointed to two different neighbours cannot be expressed with `GroupFilterTable` alone, so a custom group filter (run on job threads) or another mechanism may be needed.
+
+From "How are joints modelled in the ECS?" (ADR-0013): a body may take part in any number of joints (each its own joint entity), so the mechanism must handle a body excluded from several neighbours; the flag is expected as a shared field on `Joint`.

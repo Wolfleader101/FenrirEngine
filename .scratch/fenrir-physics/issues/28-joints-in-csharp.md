@@ -14,3 +14,5 @@ What does the physics scripting extension (`FenrirPhysicsScripting`, contract `F
 - **Events:** the break event through `EventReader<T>`.
 - **Robustness:** the same no-op-with-warning rules as the foundation's native functions.
 - **What the C# demo scene needs** that tests alone would not prove.
+
+From "How are joints modelled in the ECS?" (ADR-0013): `Joint` holds `Entity` fields, `JointFrame`s and a `JointKind` tagged union, which makes it the second tagged-union component. A C# form of the `FrameFromWorld` helper is needed.
