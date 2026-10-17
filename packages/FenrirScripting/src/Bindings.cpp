@@ -64,6 +64,13 @@ namespace Fenrir::Detail
             return context.Entities().HasEntity(value);
         }
 
+        // EntityLinkOwner: the active scene's entity list, which a native Entity holds beside its value. C# puts it in
+        // the EntityLinks it makes, so C++ reads them as entities of the active scene.
+        void* EntityLinkOwner(const CallContext& context)
+        {
+            return &context.Entities();
+        }
+
         // EntityWorldTransform: writes the entity's world transform (FenrirECS GetWorldTransform) to `world`; false,
         // writing nothing, if the entity is not alive or has no Transform.
         bool EntityWorldTransform(const CallContext& context, std::uint32_t value, Transform* world)
@@ -313,6 +320,7 @@ namespace Fenrir::Detail
             NativeFunction::Make<&TimeDeltaTime>(prefix + "TimeDeltaTime"),
             NativeFunction::Make<&TimeTickRate>(prefix + "TimeTickRate"),
             NativeFunction::Make<&EntityIsValid>(prefix + "EntityIsValid"),
+            NativeFunction::Make<&EntityLinkOwner>(prefix + "EntityLinkOwner"),
             NativeFunction::Make<&EntityWorldTransform>(prefix + "EntityWorldTransform"),
             NativeFunction::Make<&EntitySetWorldTransform>(prefix + "EntitySetWorldTransform"),
             NativeFunction::Make<&ComponentIdOf>(prefix + "ComponentIdOf", unknown),

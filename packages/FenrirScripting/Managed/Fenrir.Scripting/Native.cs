@@ -27,6 +27,11 @@ internal static unsafe partial class Native
     [NativeFunction]
     public static partial bool EntityIsValid(uint entity);
 
+    // The active scene's entity list: the owner a native Entity holds beside its value. EntityLink's conversion from an
+    // Entity stores it and never hands it to a script.
+    [NativeFunction]
+    public static partial void* EntityLinkOwner();
+
     // The world transform (FenrirECS GetWorldTransform / SetWorldTransform), composed through the parents on each call.
     // Both return false, touching nothing, when the entity is not alive or has no Transform.
     [NativeFunction]

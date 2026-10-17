@@ -6,9 +6,11 @@ This is FenrirScripting work, independent of physics, and lands before any joint
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `ScriptingTests`: an `EntityLink` assigned from an `Entity` fills the owner; `EntityLink.None` is empty; a link to an entity created earlier in the same system reads back after playback.
-- [ ] `ScriptingTests`: a native component's `Entity` field written from C# reads correctly in C++.
-- [ ] `owner` is not readable from C#; a zeroed `EntityLink` names entity 0 with no scene and does not crash when read.
-- [ ] The README's "Tagged unions" section names the planned `[TaggedUnion]` generator and its trigger.
+- [x] `ScriptingTests`: an `EntityLink` assigned from an `Entity` fills the owner; `EntityLink.None` is empty; a link to an entity created earlier in the same system reads back after playback.
+- [x] `ScriptingTests`: a native component's `Entity` field written from C# reads correctly in C++.
+- [x] `owner` is not readable from C#; a zeroed `EntityLink` names entity 0 with no scene and does not crash when read.
+- [x] The README's "Tagged unions" section names the planned `[TaggedUnion]` generator and its trigger.
+
+**Resolved by:** branch claude/joints-writable-entity-links-2f751c (not yet merged into dotnet-scripting). The proof is the `ScriptingTests` entity-link cases, with the fixture's `Links.cs` and a test-registered `Test.Tether` component. A zeroed link crashed C++'s `Entity::IsValid` (null entity list), so `IsValid` now returns false for an entity with no entity list.

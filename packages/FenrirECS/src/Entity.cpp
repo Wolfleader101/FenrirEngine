@@ -36,7 +36,7 @@ namespace Fenrir
 
     bool Entity::IsValid() const
     {
-        return m_entityId != entt::null && m_entityList->m_registry.valid(m_entityId);
+        return m_entityId != entt::null && m_entityList != nullptr && m_entityList->m_registry.valid(m_entityId);
     }
 
     void Entity::AddChild(Entity child) const
