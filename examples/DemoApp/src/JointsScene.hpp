@@ -5,6 +5,10 @@
 //
 // The door holds its own hinge, its post as bodyA, so its opening angle reads positive. Each chain joint is on its own
 // entity, the top one joined to the world (an empty bodyB). Every frame is made with FrameFromWorld.
+//
+// Jointed bodies do not collide: neighbouring links overlap at their joints, and the door's hinge edge sits against
+// its post. A trigger beneath the door, overlapping the post too, still reports it: triggers are never excluded. 9 lets
+// the links collide with their neighbours (collideConnected), which pushes them apart, and back.
 
 #ifdef FENRIR_PHYSICS
 
@@ -12,13 +16,18 @@
 #include <cstddef>
 #include <numbers>
 #include <string>
+#include <vector>
+
+#include <GLFW/glfw3.h>
 
 #include "DemoScenes.hpp"
+#include "Events.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "Material.hpp"
@@ -35,9 +44,9 @@ class JointsScene
         return DemoScene{.name = name,
                          .familyKey = DemoFamilyKey::joints,
                          .keyHelp =
-                             "The door swings on its hinge, the chain hangs from its hook. F2 cycles the physics "
-                             "debug lines, F4 goes on.",
-                         .smokeKeys = {}};
+                             "The door swings on its hinge, the chain hangs from its hook. 9 lets the links collide "
+                             "with their neighbours, and back. F2 cycles the physics debug lines, F4 goes on.",
+                         .smokeKeys = {GLFW_KEY_9}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -48,6 +57,7 @@ class JointsScene
     // it.
     void Init(Fenrir::App& app)
     {
+        m_scene = name;
         Fenrir::EntityList& entities = app.CreateScene(name).GetEntityList();
 
         // Static, its top face at y = -3.75.
@@ -59,11 +69,39 @@ class JointsScene
         MakeChain(entities);
     }
 
+    // Update, while the scene is active: 9 toggles collideConnected on every chain joint between two links, and each
+    // TriggerEnter of the door's trigger is logged. Events sent while another scene is active are read and dropped.
+    void Update(Fenrir::App& app)
+    {
+        const bool active = app.GetActiveScene().GetName() == m_scene;
+        for (const KeyboardKeyEvent& event : m_keys.Read(app))
+        {
+            if (active && event.key == GLFW_KEY_9 && event.state == InputState::Pressed)
+            {
+                m_linksCollide = !m_linksCollide;
+                for (const Fenrir::Entity& joint : m_linkJoints)
+                {
+                    joint.GetComponent<Fenrir::Joint>().collideConnected = m_linksCollide;
+                }
+                app.Logger()->Info(m_linksCollide ? "Chain links collide with their neighbours"
+                                                  : "Chain links pass through their neighbours");
+            }
+        }
+        for (const Fenrir::TriggerEnter& enter : m_enters.Read(app))
+        {
+            if (active && enter.trigger == m_doorTrigger)
+            {
+                app.Logger()->Info(std::string("Door trigger entered by ") +
+                                   enter.otherBody.GetComponent<Fenrir::Name>().Get());
+            }
+        }
+    }
+
   private:
     static constexpr int linkCount = 8;
-    // Joint to joint. Each link is a little shorter, so neighbours do not touch as the chain bends.
+    // Joint to joint. Each link is a little longer, so neighbours overlap at their joints.
     static constexpr float linkSpacing = 0.5f;
-    static constexpr float linkLength = 0.4f;
+    static constexpr float linkLength = 0.6f;
     inline static const Fenrir::Math::Vec3 hook = Fenrir::Math::Vec3(1.5f, 2.5f, -12.0f);
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
 
@@ -83,8 +121,9 @@ class JointsScene
 
     // A static frame (two posts and a lintel under a "Door frame" entity) and a dynamic door beneath it, hinged on its
     // left edge to the left post. The post is scaled (0.2, 2.2, 0.2), so the hinge's frame on it is in that scaled
-    // space: FrameFromWorld works it out. The door starts swinging open, and comes to rest against the frame.
-    void MakeDoor(Fenrir::EntityList& entities) const
+    // space: FrameFromWorld works it out. The door starts swinging open, and comes to rest against the frame. A
+    // small trigger beneath the door, at its hinge edge, overlaps the post.
+    void MakeDoor(Fenrir::EntityList& entities)
     {
         Fenrir::Entity frame = entities.CreateEntity();
         frame.GetComponent<Fenrir::Name>().Set("Door frame");
@@ -113,6 +152,16 @@ class JointsScene
         door.AddComponent<Fenrir::Collider>();
         frame.AddChild(door);
 
+        // On the door's hinge edge, its scale undoing the door's so the sphere stays round, reaching into the post.
+        m_doorTrigger = entities.CreateEntity();
+        m_doorTrigger.GetComponent<Fenrir::Name>().Set("Door trigger");
+        door.AddChild(m_doorTrigger);
+        m_doorTrigger.GetComponent<Fenrir::Transform>() =
+            Fenrir::Transform(Fenrir::Math::Vec3(-0.5f, 0.0f, 0.0f), identity,
+                              Fenrir::Math::Vec3(1.0f / 0.96f, 1.0f / 2.0f, 1.0f / 0.08f));
+        m_doorTrigger.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::SphereShape{0.12f}});
+        m_doorTrigger.AddComponent<Fenrir::Trigger>();
+
         // The hinge axis (frame X) turned onto world up, at the left post's inner face.
         const Fenrir::Math::Quat axisUp =
             Fenrir::Math::AngleAxis(std::numbers::pi_v<float> / 2.0f, Fenrir::Math::Vec3(0.0f, 0.0f, 1.0f));
@@ -127,7 +176,7 @@ class JointsScene
 
     // Eight links laid out level from a hook fixed to the world, so they fall and swing at once. Each joint is on its
     // own entity beneath "Chain joints"; the top one joins its link to the world.
-    void MakeChain(Fenrir::EntityList& entities) const
+    void MakeChain(Fenrir::EntityList& entities)
     {
         Box(entities, "Hook (a world point, no body)", hook, Fenrir::Math::Vec3(0.12f), Fenrir::Math::Vec3(0.9f));
         Fenrir::Entity links = entities.CreateEntity();
@@ -159,12 +208,22 @@ class JointsScene
                                                             .frameB = frames.frameB,
                                                             .kind = Fenrir::BallJoint{}});
             jointsRoot.AddChild(joint);
+            if (i > 0)
+            {
+                m_linkJoints.push_back(joint);
+            }
             above = link;
         }
     }
 
     const Model* m_cube;
     const Shader* m_flatShader;
+    std::string m_scene;
+    Fenrir::Entity m_doorTrigger;
+    std::vector<Fenrir::Entity> m_linkJoints;
+    bool m_linksCollide = false;
+    Fenrir::EventReader<KeyboardKeyEvent> m_keys;
+    Fenrir::EventReader<Fenrir::TriggerEnter> m_enters;
 };
 
 #endif // FENRIR_PHYSICS

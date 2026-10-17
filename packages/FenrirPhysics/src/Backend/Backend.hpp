@@ -49,6 +49,9 @@ namespace Fenrir::Backend
         JointFrame frameB;
         JointKind kind;
         bool enabled = true;
+        /** @brief Whether the two bodies collide with each other. While the joint is enabled and false, they do not;
+         * nothing for a joint to the world. */
+        bool collideConnected = false;
         /** @brief Where the constraint comes in the solve: lower first. Distinct for each joint, so the solve order
          * depends only on which joints exist, not on the order they were made and removed in. */
         std::uint32_t priority = 0;
@@ -310,9 +313,9 @@ namespace Fenrir::Backend
         /** @brief Removes and destroys a constraint, waking its bodies. */
         void DestroyJoint(JointId id);
 
-        /** @brief Applies a joint's live settings (its kind's settings, which must be of the kind it was made with, and
-         * whether it is enabled), waking its bodies. */
-        void UpdateJoint(JointId id, const JointKind& kind, bool enabled);
+        /** @brief Applies a joint's live settings (its kind's settings, which must be of the kind it was made with,
+         * whether it is enabled, and whether its bodies collide with each other), waking its bodies. */
+        void UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);
