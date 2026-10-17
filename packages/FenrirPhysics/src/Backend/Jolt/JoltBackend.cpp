@@ -8,6 +8,8 @@
 #include <array>
 #include <bit>
 #include <cassert>
+#include <cfloat>
+#include <cmath>
 #include <cstdarg>
 #include <cstdio>
 #include <map>
@@ -17,7 +19,6 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -342,6 +343,145 @@ namespace Fenrir::Backend
                 return JPH::EMotionType::Kinematic;
             }
             return type == MotionType::Dynamic ? JPH::EMotionType::Dynamic : JPH::EMotionType::Static;
+        }
+
+        JPH::SpringSettings ToJolt(const JointSpring& spring)
+        {
+            return JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, spring.frequency, spring.damping);
+        }
+
+        JPH::EMotorState ToJolt(JointMotorMode mode)
+        {
+            if (mode == JointMotorMode::Velocity)
+            {
+                return JPH::EMotorState::Velocity;
+            }
+            return mode == JointMotorMode::Position ? JPH::EMotorState::Position : JPH::EMotorState::Off;
+        }
+
+        // Jolt's largest float stands for no limit: it multiplies limits by the step time.
+        float Finite(float value)
+        {
+            return std::min(value, FLT_MAX);
+        }
+
+        void SetMotor(JPH::MotorSettings& motor, const JointSpring& spring, float maxForce)
+        {
+            motor.mSpringSettings = ToJolt(spring);
+            motor.SetForceLimit(Finite(maxForce));
+            motor.SetTorqueLimit(Finite(maxForce));
+        }
+
+        // Each kind's settings, already in range (Jolt asserts its ranges). Limits before motor targets: Jolt clamps a
+        // position target into the limits it has when the target is set.
+        void ApplySettings(JPH::DistanceConstraint& constraint, const DistanceJoint& distance)
+        {
+            constraint.SetDistance(distance.minDistance, distance.maxDistance);
+            constraint.SetLimitsSpringSettings(ToJolt(distance.spring));
+        }
+
+        void ApplySettings(JPH::HingeConstraint& constraint, const HingeJoint& hinge)
+        {
+            const JointLimits& limits = hinge.limits;
+            constraint.SetLimits(limits.enabled ? limits.min : -JPH::JPH_PI, limits.enabled ? limits.max : JPH::JPH_PI);
+            constraint.SetLimitsSpringSettings(ToJolt(limits.spring));
+            constraint.SetMaxFrictionTorque(Finite(hinge.friction));
+            SetMotor(constraint.GetMotorSettings(), hinge.motor.spring, hinge.motor.maxForce);
+            constraint.SetMotorState(ToJolt(hinge.motor.mode));
+            constraint.SetTargetAngularVelocity(hinge.motor.targetVelocity);
+            constraint.SetTargetAngle(hinge.motor.targetPosition);
+        }
+
+        void ApplySettings(JPH::SliderConstraint& constraint, const SliderJoint& slider)
+        {
+            const JointLimits& limits = slider.limits;
+            constraint.SetLimits(limits.enabled ? limits.min : -FLT_MAX, limits.enabled ? limits.max : FLT_MAX);
+            constraint.SetLimitsSpringSettings(ToJolt(limits.spring));
+            constraint.SetMaxFrictionForce(Finite(slider.friction));
+            SetMotor(constraint.GetMotorSettings(), slider.motor.spring, slider.motor.maxForce);
+            constraint.SetMotorState(ToJolt(slider.motor.mode));
+            constraint.SetTargetVelocity(slider.motor.targetVelocity);
+            constraint.SetTargetPosition(slider.motor.targetPosition);
+        }
+
+        void ApplySettings(JPH::SwingTwistConstraint& constraint, const SwingTwistJoint& swingTwist)
+        {
+            // Jolt's plane cone limits the swing about its normal axis, the frames' Y; its normal cone the swing about
+            // its plane axis, the frames' Z.
+            constraint.SetPlaneHalfConeAngle(swingTwist.swingYLimit);
+            constraint.SetNormalHalfConeAngle(swingTwist.swingZLimit);
+            constraint.SetTwistMinAngle(swingTwist.twistMin);
+            constraint.SetTwistMaxAngle(swingTwist.twistMax);
+            constraint.SetMaxFrictionTorque(Finite(swingTwist.friction));
+            const SwingTwistMotor& motor = swingTwist.motor;
+            SetMotor(constraint.GetSwingMotorSettings(), motor.spring, motor.maxTorque);
+            SetMotor(constraint.GetTwistMotorSettings(), motor.spring, motor.maxTorque);
+            constraint.SetSwingMotorState(ToJolt(motor.mode));
+            constraint.SetTwistMotorState(ToJolt(motor.mode));
+            // Jolt's constraint space is frameA's, and it clamps the target into the cone and twist range.
+            constraint.SetTargetOrientationCS(ToJolt(motor.targetRotation));
+        }
+
+        // A Velocity motor's target along one axis, cut so that one step at it goes no further than a hard limit
+        // `toLimit` away (negative past it): Jolt solves a motor before the limit, so an unbounded motor would
+        // otherwise push past the limit. Only a push towards the limit is cut.
+        float CutAtLimit(float velocity, float toLimit, float dt)
+        {
+            const float most = std::max(toLimit, 0.0f) / dt;
+            return std::min(velocity, most);
+        }
+
+        // Limits a motor cannot push past: enabled and rigid.
+        bool IsHard(const JointLimits& limits)
+        {
+            return limits.enabled && limits.spring.frequency <= 0.0f;
+        }
+
+        float CutAtLimits(float velocity, float at, float min, float max, float dt)
+        {
+            if (velocity > 0.0f)
+            {
+                return CutAtLimit(velocity, max - at, dt);
+            }
+            return -CutAtLimit(-velocity, at - min, dt);
+        }
+
+        // A swing-twist Velocity motor's target in frameA's axes, cut at the cone and twist limits as CutAtLimits cuts
+        // a hinge's, and returned in frameB's axes, as Jolt takes it. `rotation` is frameB's relative to frameA.
+        JPH::Vec3 CutAtSwingTwistLimits(JPH::Vec3 velocity, JPH::QuatArg rotation, const SwingTwistJoint& swingTwist,
+                                        float dt)
+        {
+            JPH::Quat swing;
+            JPH::Quat twist;
+            rotation.GetSwingTwist(swing, twist);
+
+            // The swing as an angle about an axis in frameA's YZ plane, against the ellipse of its two cone limits.
+            const float swingSin = JPH::Vec3(0.0f, swing.GetY(), swing.GetZ()).Length();
+            if (swingSin > 1e-5f)
+            {
+                const float angle = 2.0f * std::atan2(swingSin, std::abs(swing.GetW()));
+                const float sign = swing.GetW() < 0.0f ? -1.0f : 1.0f;
+                const float y = sign * swing.GetY() / swingSin;
+                const float z = sign * swing.GetZ() / swingSin;
+                // A cone of 0 locks its swing: kept just above it, so the ellipse is defined.
+                const float limitY = std::max(swingTwist.swingYLimit, 1e-3f);
+                const float limitZ = std::max(swingTwist.swingZLimit, 1e-3f);
+                const float reach = 1.0f / std::sqrt((y / limitY) * (y / limitY) + (z / limitZ) * (z / limitZ));
+                const JPH::Vec3 outward = JPH::Vec3(0.0f, y / (limitY * limitY), z / (limitZ * limitZ)).Normalized();
+                const float out = velocity.Dot(outward);
+                const float most = std::max(reach - angle, 0.0f) / dt;
+                if (out > most)
+                {
+                    velocity -= (out - most) * outward;
+                }
+            }
+            JPH::Vec3 inB = rotation.InverseRotate(velocity);
+            const float twistAngle = 2.0f * std::atan2(twist.GetX(), twist.GetW());
+            const float wrapped = twistAngle > JPH::JPH_PI    ? twistAngle - 2.0f * JPH::JPH_PI
+                                  : twistAngle < -JPH::JPH_PI ? twistAngle + 2.0f * JPH::JPH_PI
+                                                              : twistAngle;
+            inB.SetX(CutAtLimits(inB.GetX(), wrapped, swingTwist.twistMin, swingTwist.twistMax, dt));
+            return inB;
         }
 
         JPH::Ref<JPH::Shape> Make(const Primitive& primitive)
@@ -1051,6 +1191,8 @@ namespace Fenrir::Backend
         {
             JPH::Ref<JPH::TwoBodyConstraint> constraint;
             JointType type = JointType::Fixed;
+            // The kind's settings last applied, in range: a Velocity motor's target is cut from them before each step.
+            JointKind kind;
             BodyId bodyA;
             BodyId bodyB;
             // Whether it keeps its bodies from colliding: counted in `joinedPairs`.
@@ -1106,6 +1248,52 @@ namespace Fenrir::Backend
             }
         }
 
+        // Before each step: cuts each Velocity motor's target at the hard limits its joint is at or about to reach,
+        // so that a hard limit always beats a motor, whatever its strength.
+        void CutMotorsAtLimits(float dt)
+        {
+            for (JointSlot& slot : joints)
+            {
+                if (slot.constraint == nullptr)
+                {
+                    continue;
+                }
+                if (slot.type == JointType::Hinge)
+                {
+                    const HingeJoint& hinge = slot.kind.As<HingeJoint>();
+                    if (hinge.motor.mode == JointMotorMode::Velocity && IsHard(hinge.limits))
+                    {
+                        auto& constraint = static_cast<JPH::HingeConstraint&>(*slot.constraint);
+                        constraint.SetTargetAngularVelocity(CutAtLimits(hinge.motor.targetVelocity,
+                                                                        constraint.GetCurrentAngle(), hinge.limits.min,
+                                                                        hinge.limits.max, dt));
+                    }
+                }
+                else if (slot.type == JointType::Slider)
+                {
+                    const SliderJoint& slider = slot.kind.As<SliderJoint>();
+                    if (slider.motor.mode == JointMotorMode::Velocity && IsHard(slider.limits))
+                    {
+                        auto& constraint = static_cast<JPH::SliderConstraint&>(*slot.constraint);
+                        constraint.SetTargetVelocity(CutAtLimits(slider.motor.targetVelocity,
+                                                                 constraint.GetCurrentPosition(), slider.limits.min,
+                                                                 slider.limits.max, dt));
+                    }
+                }
+                else if (slot.type == JointType::SwingTwist)
+                {
+                    const SwingTwistJoint& swingTwist = slot.kind.As<SwingTwistJoint>();
+                    if (swingTwist.motor.mode == JointMotorMode::Velocity)
+                    {
+                        auto& constraint = static_cast<JPH::SwingTwistConstraint&>(*slot.constraint);
+                        constraint.SetTargetAngularVelocityCS(
+                            CutAtSwingTwistLimits(ToJolt(swingTwist.motor.targetAngularVelocity),
+                                                  constraint.GetRotationInConstraintSpace(), swingTwist, dt));
+                    }
+                }
+            }
+        }
+
         // A frame relative to the body's origin, as relative to its centre of mass, where Jolt's local space is. The
         // world's frame is already in its space.
         JointFrame FromCentreOfMass(BodyId body, const JointFrame& frame)
@@ -1131,23 +1319,6 @@ namespace Fenrir::Backend
             logger.Error("Physics world capacity of " + std::to_string(requested) + " " + what + " is more than the " +
                          std::to_string(limit) + " the backend allows: using " + std::to_string(limit));
             return limit;
-        }
-
-        // A distance joint's range as Jolt takes it: not negative, and max not below min (Jolt asserts it).
-        std::pair<float, float> DistanceRange(const DistanceJoint& distance)
-        {
-            const float min = std::max(distance.minDistance, 0.0f);
-            return {min, std::max(distance.maxDistance, min)};
-        }
-
-        // A swing-twist joint's limits as Jolt takes them (it asserts their ranges): cone half-angles in [0, pi], and a
-        // twist range in [-pi, pi] holding the rest pose.
-        void SetSwingTwistLimits(JPH::SwingTwistConstraintSettings& settings, const SwingTwistJoint& swingTwist)
-        {
-            settings.mPlaneHalfConeAngle = std::clamp(swingTwist.swingYLimit, 0.0f, JPH::JPH_PI);
-            settings.mNormalHalfConeAngle = std::clamp(swingTwist.swingZLimit, 0.0f, JPH::JPH_PI);
-            settings.mTwistMinAngle = std::clamp(swingTwist.twistMin, -JPH::JPH_PI, 0.0f);
-            settings.mTwistMaxAngle = std::clamp(swingTwist.twistMax, 0.0f, JPH::JPH_PI);
         }
     } // namespace
 
@@ -1329,7 +1500,8 @@ namespace Fenrir::Backend
             distance->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
             distance->mPoint1 = pointA;
             distance->mPoint2 = pointB;
-            std::tie(distance->mMinDistance, distance->mMaxDistance) = DistanceRange(desc.kind.As<DistanceJoint>());
+            distance->mMinDistance = desc.kind.As<DistanceJoint>().minDistance;
+            distance->mMaxDistance = desc.kind.As<DistanceJoint>().maxDistance;
             settings = distance;
         }
         else if (desc.kind.Is<SliderJoint>())
@@ -1349,12 +1521,13 @@ namespace Fenrir::Backend
             auto* swingTwist = new JPH::SwingTwistConstraintSettings();
             swingTwist->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
             swingTwist->mPosition1 = pointA;
+            // Jolt's constraint space is (twist, plane x twist, plane): with the plane axis on the frames' Z, it is the
+            // frames' own axes, so its swing about Y and Z, its motor targets and its rotation are in frameA's terms.
             swingTwist->mTwistAxis1 = rotationA * JPH::Vec3::sAxisX();
-            swingTwist->mPlaneAxis1 = rotationA * JPH::Vec3::sAxisY();
+            swingTwist->mPlaneAxis1 = rotationA * JPH::Vec3::sAxisZ();
             swingTwist->mPosition2 = pointB;
             swingTwist->mTwistAxis2 = rotationB * JPH::Vec3::sAxisX();
-            swingTwist->mPlaneAxis2 = rotationB * JPH::Vec3::sAxisY();
-            SetSwingTwistLimits(*swingTwist, desc.kind.As<SwingTwistJoint>());
+            swingTwist->mPlaneAxis2 = rotationB * JPH::Vec3::sAxisZ();
             settings = swingTwist;
         }
         else
@@ -1411,11 +1584,24 @@ namespace Fenrir::Backend
     {
         Impl::JointSlot& slot = m_impl->joints[id.value];
         assert(kind.Type() == slot.type && "World::UpdateJoint: a joint's kind changes only by recreating it");
-        // Of the kinds' settings, only a distance joint's range is applied yet.
-        if (kind.Is<DistanceJoint>())
+        slot.kind = kind;
+        JPH::TwoBodyConstraint& constraint = *slot.constraint;
+        switch (kind.Type())
         {
-            const auto [min, max] = DistanceRange(kind.As<DistanceJoint>());
-            static_cast<JPH::DistanceConstraint*>(slot.constraint.GetPtr())->SetDistance(min, max);
+        case JointType::Distance:
+            ApplySettings(static_cast<JPH::DistanceConstraint&>(constraint), kind.As<DistanceJoint>());
+            break;
+        case JointType::Hinge:
+            ApplySettings(static_cast<JPH::HingeConstraint&>(constraint), kind.As<HingeJoint>());
+            break;
+        case JointType::Slider:
+            ApplySettings(static_cast<JPH::SliderConstraint&>(constraint), kind.As<SliderJoint>());
+            break;
+        case JointType::SwingTwist:
+            ApplySettings(static_cast<JPH::SwingTwistConstraint&>(constraint), kind.As<SwingTwistJoint>());
+            break;
+        default:
+            break;
         }
         slot.constraint->SetEnabled(enabled);
         // A joint to the world has no pair to exclude.
@@ -1889,6 +2075,7 @@ namespace Fenrir::Backend
             awakeAtStart.insert(id.GetIndexAndSequenceNumber());
         }
 
+        m_impl->CutMotorsAtLimits(dt);
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         if (error != JPH::EPhysicsUpdateError::None)
