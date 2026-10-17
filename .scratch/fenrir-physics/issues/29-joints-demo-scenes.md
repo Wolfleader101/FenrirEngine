@@ -14,3 +14,5 @@ The joints spec ships two DemoApp scenes: one built in C++ and one built in C# (
 - **Debug lines:** a `Joints` category (anchors, axes, limits) drawn in the F2 cycle.
 - **The spike's scene:** whether "Spike: a hinged door and a hanging chain through the proposed model" becomes the C++ scene.
 - **Hand checks:** what the engine developer verifies by hand.
+
+From "What joint state can game code read, and how do joints break?" (24): joints break on `breakForce`/`breakTorque` (one step over), physics sets `enabled = false` and sends `JointBroken`, and re-enabling repairs. Candidates: a breakable bridge or chain that breaks under a dropped weight, with a key to repair it (and see it re-break if still loaded); an on-screen readout from `PhysicsWorld::JointState` (a door's angle from `position`, a link's load from `force`) proving the readings in the hand check. The `Joints` debug lines might colour broken (disabled) joints differently.

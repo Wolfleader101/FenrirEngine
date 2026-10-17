@@ -16,3 +16,5 @@ What does the physics scripting extension (`FenrirPhysicsScripting`, contract `F
 - **What the C# demo scene needs** that tests alone would not prove.
 
 From "How are joints modelled in the ECS?" (ADR-0013): `Joint` holds `Entity` fields, `JointFrame`s and a `JointKind` tagged union, which makes it the second tagged-union component. A C# form of the `FrameFromWorld` helper is needed.
+
+From "What joint state can game code read, and how do joints break?" (24): state is a query, not a field, so C# needs one native function for `PhysicsWorld::JointState(joint)` returning the plain-data `JointState { force, torque, relative (a JointFrame), position }`, zeroed for a non-joint. `Joint` gains `breakForce` and `breakTorque` (default infinity; the C# defaults must match). `JointBroken { joint, bodyA, bodyB, force, torque }` is read through `EventReader<JointBroken>`; `bodyB` is empty for the world. Repair is writing `enabled = true`, so physics writes `enabled` back and C# must see that write.
