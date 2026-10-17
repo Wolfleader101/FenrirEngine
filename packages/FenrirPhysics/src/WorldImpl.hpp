@@ -168,6 +168,13 @@ namespace Fenrir
         void MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc);
         /** @brief Removes the joint's constraint, if it has one, and its place in the index. */
         void DropConstraint(std::uint32_t entity, JointRecord& record);
+        /** @brief After the step: each joint's load, kept from the last step either of its bodies was awake for, and 0
+         * while it is disabled (JointState.cpp). */
+        void MeasureJoints();
+        /** @brief Whether `body` names a made body that moves and is awake. */
+        [[nodiscard]] bool IsAwake(const Entity& body) const;
+        /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
+        [[nodiscard]] JointState StateOf(const Entity& joint) const;
         void ApplyPushes();
         void WriteBack();
         void AdvancePoses();
@@ -262,6 +269,8 @@ namespace Fenrir
             Backend::BodyId bodyB;
             // The kinds of out-of-range value already warned about, so each is warned about once per joint.
             std::uint32_t warned = 0;
+            // What the constraint applied to bodyB in the last step its bodies were awake for.
+            Backend::JointLoad load;
         };
 
         // The entities with a Joint now, as the watch has reported them, and their records, by joint entity: joints

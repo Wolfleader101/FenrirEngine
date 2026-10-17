@@ -1205,6 +1205,9 @@ namespace Fenrir::Backend
         // How many excluded pairs each body is in, by its index: a body has a collision group while it is in any.
         std::unordered_map<JPH::uint32, std::uint32_t> excludedPairsOf;
 
+        // The time of the last Step's collision steps: a joint's impulses are per collision step.
+        float collisionStepTime = 0.0f;
+
         // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
         // excluded pair and taking it away when it leaves its last. Never during a step.
         void SetExcludes(JointSlot& slot, bool excludes)
@@ -1745,6 +1748,174 @@ namespace Fenrir::Backend
 
     namespace
     {
+        // Each kind's impulses on body 2, which is bodyB, rebuilt along the axes its constraint parts derive, from the
+        // bodies' poses after the step. Jolt applies each part's lambda to body 2 and its negative to body 1. The
+        // rotation parts give the torque about the anchor; the position parts' lever arms are left out.
+
+        // The world-space axes of the constraint's frame on body 1: Jolt's local axes there, turned with the body.
+        JPH::Mat44 ConstraintToWorld1(const JPH::TwoBodyConstraint& constraint)
+        {
+            return JPH::Mat44::sRotation(constraint.GetBody1()->GetRotation()) *
+                   constraint.GetConstraintToBody1Matrix();
+        }
+
+        JointLoad FixedLoad(const JPH::FixedConstraint& fixed)
+        {
+            return JointLoad{FromJolt(fixed.GetTotalLambdaPosition()), FromJolt(fixed.GetTotalLambdaRotation())};
+        }
+
+        JointLoad PointLoad(const JPH::PointConstraint& ball)
+        {
+            return JointLoad{FromJolt(ball.GetTotalLambdaPosition()), Math::Vec3(0.0f)};
+        }
+
+        // Along the line from body 1's point to body 2's, as DistanceConstraint finds it. Two points together give
+        // no line, and no direction to report the impulse in.
+        JointLoad DistanceLoad(const JPH::DistanceConstraint& distance)
+        {
+            const JPH::RVec3 point1 = distance.GetBody1()->GetCenterOfMassTransform() *
+                                      distance.GetConstraintToBody1Matrix().GetTranslation();
+            const JPH::RVec3 point2 = distance.GetBody2()->GetCenterOfMassTransform() *
+                                      distance.GetConstraintToBody2Matrix().GetTranslation();
+            const JPH::Vec3 delta(point2 - point1);
+            const float length = delta.Length();
+            if (length <= 0.0f)
+            {
+                return JointLoad{};
+            }
+            return JointLoad{FromJolt(delta / length * distance.GetTotalLambdaPosition()), Math::Vec3(0.0f)};
+        }
+
+        // The hinge's rotation impulse is along two axes its HingeRotationConstraintPart works out: rebuilt the same
+        // way. Its limits and motor turn about body 1's hinge axis.
+        JointLoad HingeLoad(const JPH::HingeConstraint& hinge)
+        {
+            const JPH::Vec3 a1 = (hinge.GetBody1()->GetRotation() * hinge.GetLocalSpaceHingeAxis1()).Normalized();
+            JPH::Vec3 a2 = (hinge.GetBody2()->GetRotation() * hinge.GetLocalSpaceHingeAxis2()).Normalized();
+            const float dot = a1.Dot(a2);
+            if (dot <= 1.0e-3f)
+            {
+                JPH::Vec3 perp = a2 - dot * a1;
+                if (perp.LengthSq() < 1.0e-6f)
+                {
+                    perp = a1.GetNormalizedPerpendicular();
+                }
+                a2 = (0.99f * perp.Normalized() + 0.01f * a1).Normalized();
+            }
+            const JPH::Vec3 b2 = a2.GetNormalizedPerpendicular();
+            const JPH::Vec3 c2 = a2.Cross(b2);
+            const JPH::Vector<2> rotation = hinge.GetTotalLambdaRotation();
+            const JPH::Vec3 torque = b2.Cross(a1) * rotation[0] + c2.Cross(a1) * rotation[1] +
+                                     a1 * (hinge.GetTotalLambdaRotationLimits() + hinge.GetTotalLambdaMotor());
+            return JointLoad{FromJolt(hinge.GetTotalLambdaPosition()), FromJolt(torque)};
+        }
+
+        // The slider holds body 2 on its axis along body 1's two normals, and limits and drives it along body 1's
+        // slider axis: the columns of its constraint frame on body 1.
+        JointLoad SliderLoad(const JPH::SliderConstraint& slider)
+        {
+            const JPH::Mat44 axes = ConstraintToWorld1(slider);
+            const JPH::Vector<2> position = slider.GetTotalLambdaPosition();
+            const JPH::Vec3 force =
+                axes.GetAxisY() * position[0] + axes.GetAxisZ() * position[1] +
+                axes.GetAxisX() * (slider.GetTotalLambdaPositionLimits() + slider.GetTotalLambdaMotor());
+            return JointLoad{FromJolt(force), FromJolt(slider.GetTotalLambdaRotation())};
+        }
+
+        // As Jolt's SwingTwistConstraintPart judges it: a limit within half a degree of 0 is locked.
+        constexpr float swingTwistLocked = JPH::DegreesToRadians(0.5f);
+
+        // The swing-twist limits push along axes SwingTwistConstraintPart works out from the rotation, flipped on a
+        // limit's negative side so that their impulses are never positive: rebuilt here, the side from the rotation's
+        // sign. A cone limit pushes the twist axis back towards the rest pose, about the axis from there to where it
+        // is.
+        JointLoad SwingTwistLoad(const JPH::SwingTwistConstraint& swingTwist)
+        {
+            const JPH::Quat toWorld1 = swingTwist.GetBody1()->GetRotation() * swingTwist.GetConstraintToBody1();
+            const JPH::Quat toWorld2 = swingTwist.GetBody2()->GetRotation() * swingTwist.GetConstraintToBody2();
+            JPH::Quat swing;
+            JPH::Quat twist;
+            (toWorld1.Conjugated() * toWorld2).GetSwingTwist(swing, twist);
+            // As SwingTwistConstraintPart reads them: turns of less than a half turn either way.
+            if (swing.GetW() < 0.0f)
+            {
+                swing = -swing;
+            }
+            if (twist.GetW() < 0.0f)
+            {
+                twist = -twist;
+            }
+            const JPH::Quat swingToWorld = toWorld1 * swing;
+            const auto side = [](float component) { return component < 0.0f ? -1.0f : 1.0f; };
+
+            JPH::Vec3 torque = JPH::Vec3::sZero();
+            const bool lockedY = swingTwist.GetPlaneHalfConeAngle() < swingTwistLocked;
+            const bool lockedZ = swingTwist.GetNormalHalfConeAngle() < swingTwistLocked;
+            const float swingY = swingTwist.GetTotalLambdaSwingY();
+            const float swingZ = swingTwist.GetTotalLambdaSwingZ();
+            if (lockedY || lockedZ)
+            {
+                torque += swingToWorld.RotateAxisY() * (lockedY ? swingY : swingY * side(swing.GetY()));
+                torque += swingToWorld.RotateAxisZ() * (lockedZ ? swingZ : swingZ * side(swing.GetZ()));
+            }
+            else
+            {
+                const JPH::Vec3 axis = toWorld1.RotateAxisX().Cross(swingToWorld.RotateAxisX());
+                if (axis.LengthSq() > 0.0f)
+                {
+                    torque += axis.Normalized() * swingY;
+                }
+            }
+            const bool lockedTwist =
+                swingTwist.GetTwistMinAngle() > -swingTwistLocked && swingTwist.GetTwistMaxAngle() < swingTwistLocked;
+            torque += swingToWorld.RotateAxisX() *
+                      (swingTwist.GetTotalLambdaTwist() * (lockedTwist ? 1.0f : side(twist.GetX())));
+
+            // The motor and friction turn about body 2's constraint axes.
+            const JPH::Mat44 motorAxes = JPH::Mat44::sRotation(toWorld2);
+            const JPH::Vec3 motor = swingTwist.GetTotalLambdaMotor();
+            torque += motorAxes.GetAxisX() * motor.GetX() + motorAxes.GetAxisY() * motor.GetY() +
+                      motorAxes.GetAxisZ() * motor.GetZ();
+            return JointLoad{FromJolt(swingTwist.GetTotalLambdaPosition()), FromJolt(torque)};
+        }
+    } // namespace
+
+    JointLoad World::Load(JointId id) const
+    {
+        const Impl::JointSlot& slot = m_impl->joints[id.value];
+        const float dt = m_impl->collisionStepTime;
+        if (!slot.constraint->GetEnabled() || dt <= 0.0f)
+        {
+            return JointLoad{};
+        }
+        const JPH::TwoBodyConstraint& constraint = *slot.constraint;
+        JointLoad impulse;
+        switch (slot.type)
+        {
+        case JointType::Fixed:
+            impulse = FixedLoad(static_cast<const JPH::FixedConstraint&>(constraint));
+            break;
+        case JointType::Ball:
+            impulse = PointLoad(static_cast<const JPH::PointConstraint&>(constraint));
+            break;
+        case JointType::Distance:
+            impulse = DistanceLoad(static_cast<const JPH::DistanceConstraint&>(constraint));
+            break;
+        case JointType::Hinge:
+            impulse = HingeLoad(static_cast<const JPH::HingeConstraint&>(constraint));
+            break;
+        case JointType::Slider:
+            impulse = SliderLoad(static_cast<const JPH::SliderConstraint&>(constraint));
+            break;
+        case JointType::SwingTwist:
+            impulse = SwingTwistLoad(static_cast<const JPH::SwingTwistConstraint&>(constraint));
+            break;
+        }
+        return JointLoad{impulse.force / dt, impulse.torque / dt};
+    }
+
+    namespace
+    {
         // A query's filter, at each of Jolt's three levels.
         class QueryBroadPhaseFilter final : public JPH::BroadPhaseLayerFilter
         {
@@ -2078,6 +2249,7 @@ namespace Fenrir::Backend
         m_impl->CutMotorsAtLimits(dt);
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
+        m_impl->collisionStepTime = dt / static_cast<float>(collisionSteps);
         if (error != JPH::EPhysicsUpdateError::None)
         {
             m_impl->logger->Warn("Physics step ran out of room for body pairs or contacts (error " +
