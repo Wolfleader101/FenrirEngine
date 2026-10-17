@@ -2,6 +2,7 @@
 // motion type, trigger flag) and what it asks the backend privately (contacts, bounds, sleep, velocity, the edges of a
 // cooked hull or mesh). Never through the backend's own debug renderer, so they look the same whatever the backend.
 
+#include <array>
 #include <cmath>
 #include <map>
 #include <numbers>
@@ -23,6 +24,9 @@ namespace Fenrir
         // Half the size of a contact point's cross, and the length of its normal.
         constexpr float contactCross = 0.05f;
         constexpr float contactNormal = 0.3f;
+        // The length of a joint frame's axes: frameA's long, frameB's short, so both show where they coincide.
+        constexpr float jointAxisA = 0.5f;
+        constexpr float jointAxisB = 0.25f;
 
         // Adds lines through a pose: points given in the shape's own space come out in world space.
         class LineWriter
@@ -169,6 +173,10 @@ namespace Fenrir
         {
             DrawColliders();
         }
+        if (Includes(m_debugDraw, DebugDraw::Joints))
+        {
+            DrawJoints();
+        }
         if (Includes(m_debugDraw, DebugDraw::Contacts))
         {
             for (const Backend::Touch& touch : m_backend.Touches())
@@ -231,6 +239,43 @@ namespace Fenrir
             }
         }
         m_shapeEdges = std::move(used);
+    }
+
+    void PhysicsWorld::Impl::DrawJoints()
+    {
+        // Every kind draws the same two frames. Shapes of a kind's own (limit arcs, cones) would go here, by kind.
+        const auto frame = [this](const JointFrame& local, const Transform* body, const Math::Vec3& scale, float length,
+                                  std::array<std::uint32_t, 3> colours) {
+            // A frame's position follows its body's scale and its rotation does not, as the constraint was made; the
+            // world end's frame is already in world space.
+            const Math::Vec3 position =
+                body == nullptr ? local.position : body->pos + body->rot * (local.position * scale);
+            const Math::Quat rotation = body == nullptr ? local.rotation : body->rot * local.rotation;
+            const std::array<Math::Vec3, 3> axes = {xAxis, yAxis, zAxis};
+            for (std::size_t i = 0; i < axes.size(); ++i)
+            {
+                LineWriter(m_debugLines, position, rotation, colours[i])(Math::Vec3(0.0f), length * axes[i]);
+            }
+        };
+        for (const auto& [entity, record] : m_joints)
+        {
+            if (!record.HasConstraint())
+            {
+                continue; // inactive: no pair of bodies to draw it on
+            }
+            const Joint& joint = record.applied;
+            const Record* a = JointBodyOf(joint.bodyA);
+            const bool toWorld = joint.bodyB == Entity();
+            const Record* b = toWorld ? nullptr : JointBodyOf(joint.bodyB);
+            if (a == nullptr || (!toWorld && b == nullptr))
+            {
+                continue; // not expected: SyncJoints drops a constraint before its bodies go
+            }
+            frame(joint.frameA, &a->world, record.scaleA, jointAxisA,
+                  {DebugColour::JointAX, DebugColour::JointAY, DebugColour::JointAZ});
+            frame(joint.frameB, toWorld ? nullptr : &b->world, record.scaleB, jointAxisB,
+                  {DebugColour::JointBX, DebugColour::JointBY, DebugColour::JointBZ});
+        }
     }
 
     void PhysicsWorld::Impl::DrawPart(const Part& part, const Transform& body, std::uint32_t colour,

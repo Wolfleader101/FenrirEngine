@@ -5,11 +5,14 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <vector>
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "FenrirPhysics/Joints.hpp"
 #include "PhysicsTestApp.hpp"
 
 using namespace Fenrir;
@@ -295,4 +298,138 @@ TEST_CASE("Each collider of a compound body is drawn at its own world pose", "[p
     INFO("one box is drawn centred two units above the body, the other two below");
     REQUIRE(inAbove == 12);
     REQUIRE(inBelow == 12);
+}
+
+namespace
+{
+    // The colours of a joint's axes: frameA's X, Y, Z, then frameB's.
+    const std::array<std::uint32_t, 6> jointColours = {
+        DebugColour::JointAX, DebugColour::JointAY, DebugColour::JointAZ,
+        DebugColour::JointBX, DebugColour::JointBY, DebugColour::JointBZ,
+    };
+
+    std::size_t CountColoured(std::span<const DebugLine> lines, std::uint32_t colour)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            lines.begin(), lines.end(), [colour](const DebugLine& line) { return line.colour == colour; }));
+    }
+
+    std::size_t JointLines(std::span<const DebugLine> lines)
+    {
+        std::size_t count = 0;
+        for (const std::uint32_t colour : jointColours)
+        {
+            count += CountColoured(lines, colour);
+        }
+        return count;
+    }
+
+    // The line of `colour` that starts at `from`, if any.
+    const DebugLine* LineFrom(std::span<const DebugLine> lines, std::uint32_t colour, const Math::Vec3& from)
+    {
+        for (const DebugLine& line : lines)
+        {
+            if (line.colour == colour && glm::length(line.from - from) < 1.0e-3f)
+            {
+                return &line;
+            }
+        }
+        return nullptr;
+    }
+
+    // Two joints whose rest poses are known: a box hung from the world by a hinge whose axis is world y, and a box held
+    // by a fixed joint to the corner of a static post stretched to twice its width.
+    struct TwoJoints
+    {
+        Math::Vec3 hingeAnchor = Math::Vec3(0.0f, 10.0f, 0.0f);
+        Math::Quat hingeRotation = Math::AngleAxis(0.5f * 3.14159265f, Math::Vec3(0.0f, 0.0f, 1.0f));
+        Math::Vec3 fixedAnchor = Math::Vec3(6.0f, 0.5f, 0.5f);
+
+        explicit TwoJoints(EntityList& entities)
+        {
+            Entity hung = AddBody(entities, hingeAnchor - Math::Vec3(0.0f, 0.5f, 0.0f));
+            const JointFrames hinge = FrameFromWorld(hung, Entity(), JointFrame{hingeAnchor, hingeRotation});
+            entities.CreateEntity().AddComponent<Joint>(Joint{.bodyA = hung,
+                                                              .bodyB = Entity(),
+                                                              .frameA = hinge.frameA,
+                                                              .frameB = hinge.frameB,
+                                                              .kind = HingeJoint{}});
+
+            Entity post = Place(entities, Math::Vec3(5.0f, 0.0f, 0.0f), Math::Vec3(2.0f, 1.0f, 1.0f));
+            post.AddComponent<Collider>(Collider{BoxShape{}});
+            Entity held = AddBody(entities, fixedAnchor + Math::Vec3(1.0f, 0.5f, 0.0f));
+            const JointFrames fixed = FrameFromWorld(post, held, JointFrame{fixedAnchor});
+            entities.CreateEntity().AddComponent<Joint>(Joint{
+                .bodyA = post, .bodyB = held, .frameA = fixed.frameA, .frameB = fixed.frameB, .kind = FixedJoint{}});
+        }
+    };
+} // namespace
+
+TEST_CASE("Each joint is drawn as its two frames' axes, coinciding at its rest pose", "[physics][debug][joints]")
+{
+    PhysicsApp test;
+    const TwoJoints joints(test.Entities());
+    test.Run(tick);
+    PhysicsWorld& world = WorldOf(test);
+    world.SetDebugDraw(DebugDraw::Joints);
+    test.Run(0.5);
+
+    const std::span<const DebugLine> lines = world.DebugLines();
+    INFO("two joints, two frames each, three axes a frame: twelve lines and nothing else");
+    REQUIRE(lines.size() == 12);
+    for (const std::uint32_t colour : jointColours)
+    {
+        INFO("one line of each axis colour for each joint: colour " << std::hex << colour);
+        REQUIRE(CountColoured(lines, colour) == 2);
+    }
+
+    // The hinge is to the world, so frameB is in world space; the fixed joint's frameA is on a stretched post.
+    for (const Math::Vec3& anchor : {joints.hingeAnchor, joints.fixedAnchor})
+    {
+        INFO("at the joint at " << anchor.x << ", " << anchor.y << ", " << anchor.z);
+        for (std::size_t axis = 0; axis < 3; ++axis)
+        {
+            const DebugLine* a = LineFrom(lines, jointColours[axis], anchor);
+            const DebugLine* b = LineFrom(lines, jointColours[axis + 3], anchor);
+            INFO("both frames' axis " << axis << " start at the anchor");
+            REQUIRE(a != nullptr);
+            REQUIRE(b != nullptr);
+            const Math::Vec3 alongA = a->to - a->from;
+            const Math::Vec3 alongB = b->to - b->from;
+            INFO("and point the same way, frameA's longer than frameB's");
+            REQUIRE(glm::length(glm::normalize(alongA) - glm::normalize(alongB)) < 1.0e-3f);
+            REQUIRE(glm::length(alongA) > glm::length(alongB));
+        }
+    }
+
+    const DebugLine* hingeAxis = LineFrom(lines, DebugColour::JointAX, joints.hingeAnchor);
+    REQUIRE(hingeAxis != nullptr);
+    const Math::Vec3 along = glm::normalize(hingeAxis->to - hingeAxis->from);
+    INFO("a frame's X axis is drawn along its world X: the hinge's, turned to point up");
+    REQUIRE(along.y == Approx(1.0f).margin(1.0e-3f));
+}
+
+TEST_CASE("Joints are drawn only when their category is on, and All includes it", "[physics][debug][joints]")
+{
+    STATIC_REQUIRE(Includes(DebugDraw::All, DebugDraw::Joints));
+
+    PhysicsApp test;
+    const TwoJoints joints(test.Entities());
+    test.Run(tick);
+    PhysicsWorld& world = WorldOf(test);
+
+    test.Run(tick);
+    INFO("off by default: no lines");
+    REQUIRE(world.DebugLines().empty());
+
+    world.SetDebugDraw(DebugDraw::Colliders | DebugDraw::Contacts | DebugDraw::Velocities | DebugDraw::Bounds);
+    test.Run(tick);
+    INFO("every other category: lines, but none of a joint's");
+    REQUIRE(!world.DebugLines().empty());
+    REQUIRE(JointLines(world.DebugLines()) == 0);
+
+    world.SetDebugDraw(DebugDraw::All);
+    test.Run(tick);
+    INFO("All: the two joints' twelve axes among the rest");
+    REQUIRE(JointLines(world.DebugLines()) == 12);
 }
