@@ -259,7 +259,7 @@ namespace Fenrir
         SyncBodies();
         PushEdits(dt);
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
-        SyncJoints();
+        SyncJoints(dt);
         ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();

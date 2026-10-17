@@ -25,13 +25,22 @@ namespace Fenrir
     /** @brief How hard a part of a joint pulls back. */
     struct JointSpring
     {
-        /** @brief Hertz: 0 is rigid. */
+        /** @brief Hertz: 0 is rigid. Negative is treated as 0, and above half the tick rate is lowered to it. */
         float frequency = 0.0f;
-        /** @brief The damping ratio: 1 is critical. */
+        /** @brief The damping ratio: 1 is critical. Negative is treated as 0. */
         float damping = 1.0f;
     };
 
-    /** @brief The range a hinge or slider is kept in, measured from the rest pose. Disabled, it is free. */
+    /**
+     * @brief The range a hinge or slider is kept in, measured from the rest pose. Disabled, it is free.
+     *
+     * The rest pose lies inside the range (min <= 0 <= max): a range excluding it, or with min above max, is widened
+     * to take in both ends and the rest pose, with a warning. min == max holds the joint at the rest pose. A hinge's
+     * limits lie within a half turn either way, and are lowered to it with a warning.
+     *
+     * A hard limit (a rigid spring) always beats the joint's motor, however strong. A soft limit is a spring, which a
+     * motor or a blow may push past.
+     */
     struct JointLimits
     {
         bool enabled = false;
@@ -51,29 +60,32 @@ namespace Fenrir
         Position
     };
 
-    /** @brief Drives a hinge's angle or a slider's offset, measured from the rest pose. */
+    /** @brief Drives a hinge's angle or a slider's offset, measured from the rest pose. A hard limit always stops it.
+     */
     struct JointMotor
     {
         JointMotorMode mode = JointMotorMode::Off;
         /** @brief Radians or metres per second, read in Velocity mode only. */
         float targetVelocity = 0.0f;
-        /** @brief Radians or metres, read in Position mode only. */
+        /** @brief Radians or metres, read in Position mode only. Outside an enabled limit, it is taken as the limit. */
         float targetPosition = 0.0f;
-        /** @brief Newton metres for a hinge, newtons for a slider, either way. */
+        /** @brief Newton metres for a hinge, newtons for a slider, either way. Negative is treated as 0. */
         float maxForce = std::numeric_limits<float>::infinity();
         /** @brief How hard Position mode drives. */
         JointSpring spring = {.frequency = 2.0f, .damping = 1.0f};
     };
 
-    /** @brief Drives a swing-twist joint's rotation. */
+    /** @brief Drives a swing-twist joint's rotation, swing and twist together. Its cone and twist limits always stop
+     * it. */
     struct SwingTwistMotor
     {
         JointMotorMode mode = JointMotorMode::Off;
-        /** @brief frameB's rotation relative to frameA, read in Position mode only: the identity is the rest pose. */
+        /** @brief frameB's rotation relative to frameA, read in Position mode only: the identity is the rest pose.
+         * Outside the cone or the twist range, it is taken as the nearest rotation inside them. */
         Math::Quat targetRotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
         /** @brief Radians per second in frameA's axes, read in Velocity mode only. */
         Math::Vec3 targetAngularVelocity = Math::Vec3(0.0f);
-        /** @brief Newton metres. */
+        /** @brief Newton metres, about each axis. Negative is treated as 0. */
         float maxTorque = std::numeric_limits<float>::infinity();
         /** @brief How hard Position mode drives. */
         JointSpring spring = {.frequency = 2.0f, .damping = 1.0f};
@@ -91,15 +103,15 @@ namespace Fenrir
 
     /**
      * @brief Keeps the two frames' positions between `minDistance` and `maxDistance` apart, and ignores the frames'
-     * rotations: a rod at min == max, a rope at min 0.
+     * rotations: a rod at min == max, a rope at min 0, a spring when soft.
      */
     struct DistanceJoint
     {
-        /** @brief Metres. */
+        /** @brief Metres. Negative is raised to 0, with a warning. */
         float minDistance = 0.0f;
-        /** @brief Metres. */
+        /** @brief Metres. Below `minDistance` is raised to it, with a warning. */
         float maxDistance = 1.0f;
-        /** @brief Makes the distance soft. Not yet applied. */
+        /** @brief Makes the distance soft: it stretches beyond the range and springs back. */
         JointSpring spring = {};
     };
 
@@ -109,22 +121,21 @@ namespace Fenrir
      */
     struct HingeJoint
     {
-        /** @brief Not yet applied. */
+        /** @brief Radians. */
         JointLimits limits = {};
-        /** @brief Not yet applied. */
         JointMotor motor = {};
-        /** @brief Newton metres. Not yet applied. */
+        /** @brief The most torque, in newton metres, resisting the hinge's turn while its motor is off: a door stays
+         * where it is left. Negative is treated as 0. */
         float friction = 0.0f;
     };
 
     /** @brief Holds the two frames together but for sliding along their shared X axis, without turning. */
     struct SliderJoint
     {
-        /** @brief Not yet applied. */
+        /** @brief Metres. */
         JointLimits limits = {};
-        /** @brief Not yet applied. */
         JointMotor motor = {};
-        /** @brief Newtons. Not yet applied. */
+        /** @brief The most force, in newtons, resisting the slide while its motor is off. Negative is treated as 0. */
         float friction = 0.0f;
     };
 
@@ -132,6 +143,10 @@ namespace Fenrir
      * @brief Holds the two frames' positions together and keeps frameB's turn relative to frameA within hard limits, in
      * radians: a swing about Y and Z within a cone about frameA's X, and a twist about X within a range. A shoulder or
      * a hip.
+     *
+     * The swing limits are cone half-angles from 0 to a half turn (a half turn frees that swing), moved into that
+     * range with a warning. The twist range lies within a half turn either way and takes in the rest pose, corrected
+     * with a warning as JointLimits are.
      */
     struct SwingTwistJoint
     {
@@ -141,9 +156,9 @@ namespace Fenrir
         float swingZLimit = std::numbers::pi_v<float> / 4.0f;
         float twistMin = -std::numbers::pi_v<float> / 4.0f;
         float twistMax = std::numbers::pi_v<float> / 4.0f;
-        /** @brief Newton metres. Not yet applied. */
+        /** @brief The most torque, in newton metres, resisting the joint's turn while its motor is off. Negative is
+         * treated as 0. */
         float friction = 0.0f;
-        /** @brief Not yet applied. */
         SwingTwistMotor motor = {};
     };
 
@@ -313,10 +328,13 @@ namespace Fenrir
      * The rest pose is where the two frames coincide in world space; physics never captures frames from the scene.
      * Use FrameFromWorld to author them: frames written by hand on a scaled or parented body are easy to get wrong.
      *
-     * Plain data, which physics compares each tick with what it last applied (ADR-0011). `enabled`, `collideConnected`
-     * and a distance joint's range are live edits, applied on the next tick. Changing the kind, a body, a frame or a
-     * body's scale recreates the joint in the backend: cheap, but one step softer while it settles. Every change wakes
-     * both bodies.
+     * Plain data, which physics compares each tick with what it last applied (ADR-0011). `enabled`, `collideConnected`,
+     * the break thresholds and every setting of the kind (limits, motors, springs, friction) are live edits, applied on
+     * the next tick. Changing the kind, a body, a frame or a body's scale recreates the joint in the backend: cheap,
+     * but one step softer while it settles. Every change wakes both bodies.
+     *
+     * Out-of-range settings are corrected as physics applies them, with one warning per joint for each kind of
+     * mistake; the component keeps what was written.
      */
     struct Joint
     {
@@ -338,9 +356,9 @@ namespace Fenrir
          * it. A live edit.
          */
         bool collideConnected = false;
-        /** @brief Newtons. Not yet applied. */
+        /** @brief Newtons. Negative is treated as 0. Not yet applied. */
         float breakForce = std::numeric_limits<float>::infinity();
-        /** @brief Newton metres. Not yet applied. */
+        /** @brief Newton metres. Negative is treated as 0. Not yet applied. */
         float breakTorque = std::numeric_limits<float>::infinity();
     };
 

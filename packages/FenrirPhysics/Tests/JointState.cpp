@@ -337,3 +337,27 @@ TEST_CASE("An inactive joint reads a zeroed state", "[physics][joints][joint-sta
     INFO("a joint naming an entity that is not a body joins nothing, and reads zeroed");
     REQUIRE(IsZeroed(World(test).GetJointState(joint)));
 }
+
+TEST_CASE("A swing-twist joint's relative rotation is in its motor's terms", "[physics][joints][joint-state]")
+{
+    PhysicsApp test;
+    Entity box = AddBody(test.Entities(), hook + Math::Vec3(0.5f, 0.0f, 0.0f));
+    Entity joint = test.Entities().CreateEntity();
+    // Within the default cone and twist range: a swing of 0.3 about Y after a twist of 0.2 about X.
+    const Math::Quat target =
+        Math::AngleAxis(0.3f, Math::Vec3(0.0f, 1.0f, 0.0f)) * Math::AngleAxis(0.2f, Math::Vec3(1.0f, 0.0f, 0.0f));
+    Join(joint, box, Entity(), JointFrame{hook},
+         SwingTwistJoint{.motor = {.mode = JointMotorMode::Position, .targetRotation = target}});
+    // In zero gravity once the world is made, so only the motor turns the box.
+    test.app.RunFrame(tick);
+    World(test).SetGravity(Math::Vec3(0.0f));
+    test.Run(4.0);
+
+    const Math::Quat turned = World(test).GetJointState(joint).relative.rotation;
+    // q and -q are the same turn.
+    const float alike = std::abs(turned.w * target.w + turned.x * target.x + turned.y * target.y + turned.z * target.z);
+    INFO("the motor drove frameB to its target relative to frameA, so the reading is the target; it reads "
+         << turned.w << ", " << turned.x << ", " << turned.y << ", " << turned.z << " for " << target.w << ", "
+         << target.x << ", " << target.y << ", " << target.z);
+    REQUIRE(alike == Approx(1.0f).margin(1e-4));
+}

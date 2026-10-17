@@ -3,12 +3,16 @@
 
 #include "FenrirPhysics/Joints.hpp"
 
+#include <algorithm>
+#include <cstdint>
+#include <numbers>
 #include <set>
 #include <span>
 #include <string>
 
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "PhysicsState.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
@@ -22,18 +26,68 @@ namespace Fenrir
             return Fenrir::Same(a.position, b.position) && Fenrir::Same(a.rotation, b.rotation);
         }
 
-        // The settings of a kind applied to an existing constraint: of them, only a distance joint's range yet. Both
-        // kinds are the same.
+        bool Same(const JointSpring& a, const JointSpring& b)
+        {
+            return Fenrir::Same(a.frequency, b.frequency) && Fenrir::Same(a.damping, b.damping);
+        }
+
+        bool Same(const JointLimits& a, const JointLimits& b)
+        {
+            return a.enabled == b.enabled && Fenrir::Same(a.min, b.min) && Fenrir::Same(a.max, b.max) &&
+                   Same(a.spring, b.spring);
+        }
+
+        bool Same(const JointMotor& a, const JointMotor& b)
+        {
+            return a.mode == b.mode && Fenrir::Same(a.targetVelocity, b.targetVelocity) &&
+                   Fenrir::Same(a.targetPosition, b.targetPosition) && Fenrir::Same(a.maxForce, b.maxForce) &&
+                   Same(a.spring, b.spring);
+        }
+
+        bool Same(const SwingTwistMotor& a, const SwingTwistMotor& b)
+        {
+            return a.mode == b.mode && Fenrir::Same(a.targetRotation, b.targetRotation) &&
+                   Fenrir::Same(a.targetAngularVelocity, b.targetAngularVelocity) &&
+                   Fenrir::Same(a.maxTorque, b.maxTorque) && Same(a.spring, b.spring);
+        }
+
+        // The settings of a kind applied to an existing constraint: all of them. Both kinds are the same.
         bool SameLiveSettings(const JointKind& a, const JointKind& b)
         {
-            if (!a.Is<DistanceJoint>())
+            switch (a.Type())
             {
+            case JointType::Distance: {
+                const DistanceJoint& distanceA = a.As<DistanceJoint>();
+                const DistanceJoint& distanceB = b.As<DistanceJoint>();
+                return Fenrir::Same(distanceA.minDistance, distanceB.minDistance) &&
+                       Fenrir::Same(distanceA.maxDistance, distanceB.maxDistance) &&
+                       Same(distanceA.spring, distanceB.spring);
+            }
+            case JointType::Hinge: {
+                const HingeJoint& hingeA = a.As<HingeJoint>();
+                const HingeJoint& hingeB = b.As<HingeJoint>();
+                return Same(hingeA.limits, hingeB.limits) && Same(hingeA.motor, hingeB.motor) &&
+                       Fenrir::Same(hingeA.friction, hingeB.friction);
+            }
+            case JointType::Slider: {
+                const SliderJoint& sliderA = a.As<SliderJoint>();
+                const SliderJoint& sliderB = b.As<SliderJoint>();
+                return Same(sliderA.limits, sliderB.limits) && Same(sliderA.motor, sliderB.motor) &&
+                       Fenrir::Same(sliderA.friction, sliderB.friction);
+            }
+            case JointType::SwingTwist: {
+                const SwingTwistJoint& swingTwistA = a.As<SwingTwistJoint>();
+                const SwingTwistJoint& swingTwistB = b.As<SwingTwistJoint>();
+                return Fenrir::Same(swingTwistA.swingYLimit, swingTwistB.swingYLimit) &&
+                       Fenrir::Same(swingTwistA.swingZLimit, swingTwistB.swingZLimit) &&
+                       Fenrir::Same(swingTwistA.twistMin, swingTwistB.twistMin) &&
+                       Fenrir::Same(swingTwistA.twistMax, swingTwistB.twistMax) &&
+                       Fenrir::Same(swingTwistA.friction, swingTwistB.friction) &&
+                       Same(swingTwistA.motor, swingTwistB.motor);
+            }
+            default:
                 return true;
             }
-            const DistanceJoint& distanceA = a.As<DistanceJoint>();
-            const DistanceJoint& distanceB = b.As<DistanceJoint>();
-            return Fenrir::Same(distanceA.minDistance, distanceB.minDistance) &&
-                   Fenrir::Same(distanceA.maxDistance, distanceB.maxDistance);
         }
 
         // The fields applied to an existing constraint. The kind, the bodies and the frames are not: changing them
@@ -63,6 +117,193 @@ namespace Fenrir
             const Math::Vec3 position = Math::MultiplyPoint(anchor.position, Math::Inverse(GetWorldMatrix(body)));
             return JointFrame{position, Math::Conjugate(GetWorldTransform(body).rot) * anchor.rotation};
         }
+
+        // The kinds of out-of-range value a joint can hold, each warned about once per joint.
+        enum Problem : std::uint32_t
+        {
+            NegativeFrequency = 1u << 0,
+            FrequencyTooHigh = 1u << 1,
+            NegativeDamping = 1u << 2,
+            NegativeForce = 1u << 3,
+            NegativeFriction = 1u << 4,
+            NegativeBreakThreshold = 1u << 5,
+            LimitExcludesRestPose = 1u << 6,
+            HingeLimitBeyondHalfTurn = 1u << 7,
+            ConeOutOfRange = 1u << 8,
+            TwistExcludesRestPose = 1u << 9,
+            TwistBeyondHalfTurn = 1u << 10,
+            NegativeMinDistance = 1u << 11,
+            MaxBelowMinDistance = 1u << 12,
+        };
+
+        // Corrects a joint's out-of-range values as physics applies it, warning about each kind of value the first
+        // time the joint holds one.
+        class Corrector
+        {
+          public:
+            Corrector(std::uint32_t entity, std::uint32_t& warned, ILogger& logger, float maxFrequency)
+                : m_entity(entity), m_warned(&warned), m_logger(&logger), m_maxFrequency(maxFrequency)
+            {
+            }
+
+            [[nodiscard]] Joint Corrected(const Joint& joint)
+            {
+                Joint corrected = joint;
+                NotNegative(corrected.breakForce, NegativeBreakThreshold, "a negative break threshold is treated as 0");
+                NotNegative(corrected.breakTorque, NegativeBreakThreshold,
+                            "a negative break threshold is treated as 0");
+                switch (corrected.kind.Type())
+                {
+                case JointType::Distance:
+                    Correct(corrected.kind.As<DistanceJoint>());
+                    break;
+                case JointType::Hinge:
+                    Correct(corrected.kind.As<HingeJoint>());
+                    break;
+                case JointType::Slider:
+                    Correct(corrected.kind.As<SliderJoint>());
+                    break;
+                case JointType::SwingTwist:
+                    Correct(corrected.kind.As<SwingTwistJoint>());
+                    break;
+                default:
+                    break;
+                }
+                return corrected;
+            }
+
+          private:
+            void Warn(Problem problem, const char* message)
+            {
+                if ((*m_warned & problem) != 0)
+                {
+                    return;
+                }
+                *m_warned |= problem;
+                m_logger->Warn("The Joint on entity " + std::to_string(m_entity) + ": " + message);
+            }
+
+            void NotNegative(float& value, Problem problem, const char* message)
+            {
+                if (value < 0.0f)
+                {
+                    value = 0.0f;
+                    Warn(problem, message);
+                }
+            }
+
+            void Correct(JointSpring& spring)
+            {
+                NotNegative(spring.frequency, NegativeFrequency, "a negative spring frequency is treated as 0");
+                NotNegative(spring.damping, NegativeDamping, "a negative damping ratio is treated as 0");
+                if (spring.frequency > m_maxFrequency)
+                {
+                    spring.frequency = m_maxFrequency;
+                    Warn(FrequencyTooHigh, "a spring frequency above half the tick rate is lowered to it");
+                }
+            }
+
+            // The rest pose lies inside a range: one excluding it, or reversed, is widened to take in both its ends and
+            // the rest pose.
+            void HoldRestPose(float& min, float& max, Problem problem, const char* message)
+            {
+                if (min <= 0.0f && 0.0f <= max)
+                {
+                    return;
+                }
+                const float low = std::min({min, max, 0.0f});
+                max = std::max({min, max, 0.0f});
+                min = low;
+                Warn(problem, message);
+            }
+
+            // Moves `value` into [low, high], warning if it was outside.
+            void Within(float& value, float low, float high, Problem problem, const char* message)
+            {
+                if (value < low || value > high)
+                {
+                    value = std::clamp(value, low, high);
+                    Warn(problem, message);
+                }
+            }
+
+            void WithinHalfTurn(float& angle, Problem problem, const char* message)
+            {
+                Within(angle, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, problem, message);
+            }
+
+            // A hinge's or a slider's limits, and the motor they hold. A hinge's limits lie within a half turn.
+            void Correct(JointLimits& limits, JointMotor& motor, bool hinge)
+            {
+                Correct(limits.spring);
+                HoldRestPose(limits.min, limits.max, LimitExcludesRestPose,
+                             "limits excluding the rest pose are widened to take it in");
+                if (hinge)
+                {
+                    WithinHalfTurn(limits.min, HingeLimitBeyondHalfTurn,
+                                   "hinge limits beyond a half turn are "
+                                   "lowered to it");
+                    WithinHalfTurn(limits.max, HingeLimitBeyondHalfTurn,
+                                   "hinge limits beyond a half turn are "
+                                   "lowered to it");
+                }
+                Correct(motor.spring);
+                NotNegative(motor.maxForce, NegativeForce, "a negative motor force is treated as 0");
+                // Silently: a target beyond a limit is where a motor drives a door shut against its frame.
+                if (limits.enabled)
+                {
+                    motor.targetPosition = std::clamp(motor.targetPosition, limits.min, limits.max);
+                }
+            }
+
+            void Correct(DistanceJoint& distance)
+            {
+                Correct(distance.spring);
+                NotNegative(distance.minDistance, NegativeMinDistance, "a negative minimum distance is raised to 0");
+                if (distance.maxDistance < distance.minDistance)
+                {
+                    distance.maxDistance = distance.minDistance;
+                    Warn(MaxBelowMinDistance, "a maximum distance below the minimum is raised to it");
+                }
+            }
+
+            void Correct(HingeJoint& hinge)
+            {
+                Correct(hinge.limits, hinge.motor, true);
+                NotNegative(hinge.friction, NegativeFriction, "a negative friction is treated as 0");
+            }
+
+            void Correct(SliderJoint& slider)
+            {
+                Correct(slider.limits, slider.motor, false);
+                NotNegative(slider.friction, NegativeFriction, "a negative friction is treated as 0");
+            }
+
+            void Correct(SwingTwistJoint& swingTwist)
+            {
+                for (float* cone : {&swingTwist.swingYLimit, &swingTwist.swingZLimit})
+                {
+                    Within(*cone, 0.0f, std::numbers::pi_v<float>, ConeOutOfRange,
+                           "a swing limit outside 0 to a half turn is moved into it");
+                }
+                WithinHalfTurn(swingTwist.twistMin, TwistBeyondHalfTurn,
+                               "twist limits beyond a half turn are "
+                               "lowered to it");
+                WithinHalfTurn(swingTwist.twistMax, TwistBeyondHalfTurn,
+                               "twist limits beyond a half turn are "
+                               "lowered to it");
+                HoldRestPose(swingTwist.twistMin, swingTwist.twistMax, TwistExcludesRestPose,
+                             "a twist range excluding the rest pose is widened to take it in");
+                NotNegative(swingTwist.friction, NegativeFriction, "a negative friction is treated as 0");
+                Correct(swingTwist.motor.spring);
+                NotNegative(swingTwist.motor.maxTorque, NegativeForce, "a negative motor torque is treated as 0");
+            }
+
+            std::uint32_t m_entity;
+            std::uint32_t* m_warned;
+            ILogger* m_logger;
+            float m_maxFrequency;
+        };
     } // namespace
 
     JointFrames FrameFromWorld(const Entity& bodyA, const Entity& bodyB, const JointFrame& anchor)
@@ -164,8 +405,10 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::SyncJoints()
+    void PhysicsWorld::Impl::SyncJoints(float dt)
     {
+        // A spring faster than half the tick rate cannot be stepped.
+        const float maxFrequency = 0.5f / dt;
         for (const std::uint32_t entity : m_jointEntities)
         {
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
@@ -198,7 +441,7 @@ namespace Fenrir
                 desc.bodyB = toWorld ? Backend::BodyId{} : b->id;
                 desc.frameA = Scaled(joint.frameA, scaleA);
                 desc.frameB = toWorld ? joint.frameB : Scaled(joint.frameB, scaleB);
-                desc.kind = joint.kind;
+                desc.kind = Corrector(entity, record.warned, *m_logger, maxFrequency).Corrected(joint).kind;
                 desc.enabled = joint.enabled;
                 desc.collideConnected = joint.collideConnected;
                 desc.priority = entity;
@@ -209,7 +452,8 @@ namespace Fenrir
             }
             else if (!SameLive(joint, record.applied))
             {
-                m_backend.UpdateJoint(record.id, joint.kind, joint.enabled, joint.collideConnected);
+                const Joint corrected = Corrector(entity, record.warned, *m_logger, maxFrequency).Corrected(joint);
+                m_backend.UpdateJoint(record.id, corrected.kind, joint.enabled, joint.collideConnected);
                 record.applied = joint;
             }
         }

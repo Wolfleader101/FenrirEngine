@@ -47,6 +47,7 @@ namespace Fenrir::Backend
         BodyId bodyB;
         JointFrame frameA;
         JointFrame frameB;
+        /** @brief Its settings already in range: physics corrects them first. */
         JointKind kind;
         bool enabled = true;
         /** @brief Whether the two bodies collide with each other. While the joint is enabled and false, they do not;
@@ -322,8 +323,9 @@ namespace Fenrir::Backend
         /** @brief Removes and destroys a constraint, waking its bodies. */
         void DestroyJoint(JointId id);
 
-        /** @brief Applies a joint's live settings (its kind's settings, which must be of the kind it was made with,
-         * whether it is enabled, and whether its bodies collide with each other), waking its bodies. */
+        /** @brief Applies a joint's live settings (its kind's settings, which must be of the kind it was made with and
+         * already in range, whether it is enabled, and whether its bodies collide with each other), waking its bodies.
+         * From then on a hard limit beats the joint's Velocity motor, however strong, at every step. */
         void UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected);
 
         /** @brief Moves a body to a pose at once, waking it. */
