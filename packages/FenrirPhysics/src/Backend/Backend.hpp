@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -155,7 +156,10 @@ namespace Fenrir::Backend
     class FunctionRef<Result(Args...)>
     {
       public:
+        // Never for another FunctionRef: copying one (a non-const lvalue, which this template would match better than
+        // the copy constructor) would refer to that FunctionRef, not to its callable, and dangle once it is gone.
         template <typename Callable>
+            requires(!std::is_same_v<std::remove_cvref_t<Callable>, FunctionRef>)
         FunctionRef(Callable& callable) // NOLINT(google-explicit-constructor): passed straight to a call
             : m_callable(&callable), m_call([](void* target, Args... args) -> Result {
                   return (*static_cast<Callable*>(target))(std::forward<Args>(args)...);
