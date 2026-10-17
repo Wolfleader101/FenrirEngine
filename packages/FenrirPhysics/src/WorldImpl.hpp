@@ -9,12 +9,15 @@
 #include <memory>
 #include <set>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "Backend/Backend.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Events.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -148,6 +151,18 @@ namespace Fenrir
 
         void SyncBodies();
         void PushEdits(float dt);
+
+        // PROTOTYPE (joints spike), in Joints.cpp.
+        struct JointRecord;
+        /** @brief Removes the constraints of joints touching bodies about to be destroyed: before the bodies go. */
+        void RemoveJointsOf(std::span<const Backend::BodyId> bodies);
+        /** @brief Drains the Joint watch, then creates, recreates, edits and removes constraints, after the bodies. */
+        void SyncJoints();
+        /** @brief Step 5b: reads each awake joint's load, and disables those over their thresholds. */
+        void BreakJoints();
+        /** @brief Why the joint names no valid body (empty if it does): it is inactive. */
+        [[nodiscard]] std::string InvalidReason(const Joint& joint);
+        [[nodiscard]] Fenrir::JointState StateOf(std::uint32_t joint) const;
         void ApplyPushes();
         void WriteBack();
         void AdvancePoses();
@@ -210,6 +225,32 @@ namespace Fenrir
         ComponentWatch m_rigidBodies;
         ComponentWatch m_colliders;
         ComponentWatch m_triggers;
+
+        // PROTOTYPE (joints spike): what physics last applied for each joint entity, in entity order.
+        struct JointRecord
+        {
+            [[nodiscard]] bool HasConstraint() const
+            {
+                return id.value != Backend::JointId{}.value;
+            }
+
+            Backend::JointId id;
+            Joint applied;
+            Math::Vec3 scaleA = Math::Vec3(1.0f);
+            Math::Vec3 scaleB = Math::Vec3(1.0f);
+            Backend::BodyId bodyIdA;
+            Backend::BodyId bodyIdB;
+            // Inactive (names no valid body), warned about once when it became so.
+            bool inactive = false;
+            // The load of the last step it was awake.
+            Backend::JointLoad load;
+        };
+        ComponentWatch m_jointWatch;
+        std::set<std::uint32_t> m_jointEntities;
+        std::map<std::uint32_t, JointRecord> m_joints;
+        // Bodies teleported this tick: their joints forget their warm start.
+        std::set<std::uint32_t> m_teleported;
+        std::vector<JointBroken> m_broken;
 
         // The entities with each component now, as the watches have reported them.
         std::set<std::uint32_t> m_rigidBodyEntities;

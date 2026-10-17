@@ -250,13 +250,16 @@ namespace Fenrir
         : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
-          m_triggers(entities.Watch(ComponentType::Native<Trigger>()))
+          m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
+          m_jointWatch(entities.Watch(ComponentType::Native<Joint>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
         entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
         const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
         entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
+        const ComponentType joints[] = {ComponentType::Native<Joint>()};
+        entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -268,9 +271,11 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        SyncJoints();
         ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        BreakJoints();
         SendEvents(app);
         AdvancePoses();
         DrawDebugLines();
@@ -573,6 +578,7 @@ namespace Fenrir
             destroyed.push_back(record.id);
             it = m_bodies.erase(it);
         }
+        RemoveJointsOf(destroyed);
         m_backend.DestroyBodies(destroyed);
 
         std::vector<std::uint32_t> entities;
@@ -684,6 +690,7 @@ namespace Fenrir
             {
                 m_backend.Teleport(record.id, world.pos, world.rot);
                 record.snap = true;
+                m_teleported.insert(id);
             }
             record.world = world;
 
@@ -854,6 +861,12 @@ namespace Fenrir
         SortAndSend(app, ends, contactOrder);
         SortAndSend(app, enters, overlapOrder);
         SortAndSend(app, exits, overlapOrder);
+        // Already in joint entity order.
+        for (const JointBroken& broken : m_broken)
+        {
+            app.SendEvent(broken);
+        }
+        m_broken.clear();
     }
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const

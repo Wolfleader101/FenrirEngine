@@ -9,6 +9,7 @@
 #include <bit>
 #include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -38,6 +39,7 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/GroupFilter.h>
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
@@ -48,6 +50,8 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -769,6 +773,68 @@ namespace Fenrir::Backend
         return true;
     }
 
+    namespace
+    {
+        // PROTOTYPE (joints spike): the pairs of bodies an enabled joint with collideConnected = false joins, counted,
+        // as one GroupFilter (ticket 25). Only bodies in such a joint get a collision group, its id the body's id. The
+        // table is patched on the main thread between steps, so job threads only read it.
+        class JointPairs final : public JPH::GroupFilter
+        {
+          public:
+            bool CanCollide(const JPH::CollisionGroup& group1, const JPH::CollisionGroup& group2) const override
+            {
+                return !counts.contains(Key(group1.GetGroupID(), group2.GetGroupID()));
+            }
+
+            static std::pair<std::uint32_t, std::uint32_t> Key(std::uint32_t a, std::uint32_t b)
+            {
+                return std::minmax(a, b);
+            }
+
+            std::map<std::pair<std::uint32_t, std::uint32_t>, int> counts;
+        };
+
+        JPH::SpringSettings ToJolt(const JointSpring& spring)
+        {
+            return JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping, std::max(0.0f, spring.frequency),
+                                       std::max(0.0f, spring.damping));
+        }
+
+        // Every per-kind field of a hinge is a live edit (ticket 23).
+        void Apply(JPH::HingeConstraint& hinge, const HingeJoint& settings)
+        {
+            if (settings.limits.enabled)
+            {
+                // The rest pose is always inside the limits (ticket 23).
+                hinge.SetLimits(std::clamp(settings.limits.min, -JPH::JPH_PI, 0.0f),
+                                std::clamp(settings.limits.max, 0.0f, JPH::JPH_PI));
+            }
+            else
+            {
+                hinge.SetLimits(-JPH::JPH_PI, JPH::JPH_PI);
+            }
+            hinge.SetLimitsSpringSettings(ToJolt(settings.limits.spring));
+            hinge.SetMaxFrictionTorque(std::max(0.0f, settings.friction));
+            JPH::MotorSettings& motor = hinge.GetMotorSettings();
+            motor.mSpringSettings = ToJolt(settings.motor.spring);
+            motor.SetTorqueLimit(std::min(std::max(0.0f, settings.motor.maxForce), FLT_MAX));
+            switch (settings.motor.mode)
+            {
+            case JointMotorMode::Off:
+                hinge.SetMotorState(JPH::EMotorState::Off);
+                break;
+            case JointMotorMode::Velocity:
+                hinge.SetMotorState(JPH::EMotorState::Velocity);
+                hinge.SetTargetAngularVelocity(settings.motor.targetVelocity);
+                break;
+            case JointMotorMode::Position:
+                hinge.SetMotorState(JPH::EMotorState::Position);
+                hinge.SetTargetAngle(settings.motor.targetPosition);
+                break;
+            }
+        }
+    } // namespace
+
     struct World::Impl
     {
         Impl(CollisionMeshes& worldMeshes, ILogger& worldLogger, JPH::uint bodyCapacity, ThreadPool* workers,
@@ -987,6 +1053,57 @@ namespace Fenrir::Backend
                 func(lock.GetBody());
             }
         }
+
+        // PROTOTYPE (joints spike): the constraints, by JointId, and the bodies each joins (BodyId values; the world's
+        // is the default BodyId).
+        struct JointSlot
+        {
+            JPH::Ref<JPH::TwoBodyConstraint> constraint;
+            JointType type = JointType::Ball;
+            std::uint32_t bodyA = ~0u;
+            std::uint32_t bodyB = ~0u;
+            // Counted in `pairs`: enabled, not collideConnected, and not to the world.
+            bool excludes = false;
+        };
+        std::vector<JointSlot> joints;
+        std::vector<std::uint32_t> freeJoints;
+        JPH::Ref<JointPairs> pairs = new JointPairs();
+        // The length of the last step's collision steps: constraint impulses are per collision step.
+        float subStep = 1.0f / 60.0f;
+
+        void WakeJoint(const JointSlot& slot)
+        {
+            for (const std::uint32_t body : {slot.bodyA, slot.bodyB})
+            {
+                if (body != BodyId{}.value)
+                {
+                    Bodies().ActivateBody(JPH::BodyID(body));
+                }
+            }
+        }
+
+        void SetExcludes(JointSlot& slot, bool excludes)
+        {
+            excludes = excludes && slot.bodyB != BodyId{}.value;
+            if (excludes == slot.excludes)
+            {
+                return;
+            }
+            slot.excludes = excludes;
+            const auto key = JointPairs::Key(slot.bodyA, slot.bodyB);
+            if (excludes)
+            {
+                ++pairs->counts[key];
+                for (const std::uint32_t body : {slot.bodyA, slot.bodyB})
+                {
+                    Bodies().SetCollisionGroup(JPH::BodyID(body), JPH::CollisionGroup(pairs, body, 0));
+                }
+            }
+            else if (--pairs->counts[key] == 0)
+            {
+                pairs->counts.erase(key);
+            }
+        }
     };
 
     namespace
@@ -1020,6 +1137,14 @@ namespace Fenrir::Backend
 
     World::~World()
     {
+        // Constraints before bodies (ticket 26).
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            if (slot.constraint != nullptr)
+            {
+                m_impl->system.RemoveConstraint(slot.constraint);
+            }
+        }
         // Jolt leaves destroying bodies to its user.
         JPH::BodyIDVector ids;
         m_impl->system.GetBodies(ids);
@@ -1109,6 +1234,17 @@ namespace Fenrir::Backend
         {
             return;
         }
+        // PROTOTYPE (joints spike): Jolt keeps raw body pointers in constraints; FenrirPhysics removes them first.
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            for (BodyId id : ids)
+            {
+                if (slot.constraint != nullptr && (slot.bodyA == id.value || slot.bodyB == id.value))
+                {
+                    m_impl->logger->Error("Physics: a body was destroyed before its constraint");
+                }
+            }
+        }
         std::vector<JPH::AABox> bounds;
         bounds.reserve(ids.size());
         for (BodyId id : ids)
@@ -1150,7 +1286,17 @@ namespace Fenrir::Backend
     {
         const JPH::AABox before = m_impl->Bounds(id);
         const JPH::Ref<JPH::Shape> made = m_impl->MakeBodyShape(parts, entity);
+        const JPH::Vec3 centreBefore = m_impl->Bodies().GetShape(ToJolt(id))->GetCenterOfMass();
         m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
+        // PROTOTYPE (joints spike): constraints hold anchors relative to the centre of mass; told it moved, they keep
+        // them where they were relative to the body's origin.
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            if (slot.constraint != nullptr && (slot.bodyA == id.value || slot.bodyB == id.value))
+            {
+                slot.constraint->NotifyShapeChanged(ToJolt(id), made->GetCenterOfMass() - centreBefore);
+            }
+        }
         m_impl->Bodies().SetUseManifoldReduction(ToJolt(id), made->GetType() != JPH::EShapeType::Compound);
         // The body keeps its own mass; its inertia follows the new shape.
         m_impl->Write(id, [&made, mass](JPH::Body& body) {
@@ -1248,6 +1394,134 @@ namespace Fenrir::Backend
         {
             m_impl->Bodies().ActivateBodies(ids.data(), static_cast<int>(ids.size()));
         }
+    }
+
+    JointId World::CreateJoint(const JointDesc& desc)
+    {
+        // Frames are relative to each body's origin; Jolt's local space is relative to its centre of mass.
+        const auto local = [this](BodyId body, const JointFrame& frame) {
+            if (body.value == BodyId{}.value)
+            {
+                return frame; // the world: already in world space
+            }
+            JointFrame centred = frame;
+            centred.position -= FromJolt(m_impl->Bodies().GetShape(ToJolt(body))->GetCenterOfMass());
+            return centred;
+        };
+        const JointFrame a = local(desc.bodyA, desc.frameA);
+        const JointFrame b = local(desc.bodyB, desc.frameB);
+
+        JPH::Ref<JPH::TwoBodyConstraintSettings> settings;
+        if (desc.kind.Is<HingeJoint>())
+        {
+            auto* hinge = new JPH::HingeConstraintSettings();
+            hinge->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            hinge->mPoint1 = JPH::RVec3(ToJolt(a.position));
+            hinge->mHingeAxis1 = ToJolt(a.rotation) * JPH::Vec3::sAxisX();
+            hinge->mNormalAxis1 = ToJolt(a.rotation) * JPH::Vec3::sAxisY();
+            hinge->mPoint2 = JPH::RVec3(ToJolt(b.position));
+            hinge->mHingeAxis2 = ToJolt(b.rotation) * JPH::Vec3::sAxisX();
+            hinge->mNormalAxis2 = ToJolt(b.rotation) * JPH::Vec3::sAxisY();
+            settings = hinge;
+        }
+        else
+        {
+            auto* ball = new JPH::PointConstraintSettings();
+            ball->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            ball->mPoint1 = JPH::RVec3(ToJolt(a.position));
+            ball->mPoint2 = JPH::RVec3(ToJolt(b.position));
+            settings = ball;
+        }
+        // The spike's check of ticket 26's solve order can turn the priority off, to see what it prevents.
+        static const bool noPriority = std::getenv("FENRIR_JOINTS_SPIKE_NO_PRIORITY") != nullptr;
+        settings->mConstraintPriority = noPriority ? 0 : desc.priority;
+
+        Impl::JointSlot slot;
+        slot.constraint = m_impl->Bodies().CreateConstraint(settings, ToJolt(desc.bodyA), ToJolt(desc.bodyB));
+        slot.type = desc.kind.Type();
+        slot.bodyA = desc.bodyA.value;
+        slot.bodyB = desc.bodyB.value;
+        m_impl->system.AddConstraint(slot.constraint);
+
+        std::uint32_t index;
+        if (m_impl->freeJoints.empty())
+        {
+            index = static_cast<std::uint32_t>(m_impl->joints.size());
+            m_impl->joints.push_back(std::move(slot));
+        }
+        else
+        {
+            index = m_impl->freeJoints.back();
+            m_impl->freeJoints.pop_back();
+            m_impl->joints[index] = std::move(slot);
+        }
+        UpdateJoint(JointId{index}, desc.kind, desc.enabled, desc.collideConnected);
+        return JointId{index};
+    }
+
+    void World::DestroyJoint(JointId id)
+    {
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        m_impl->SetExcludes(slot, false);
+        m_impl->WakeJoint(slot);
+        m_impl->system.RemoveConstraint(slot.constraint);
+        slot = Impl::JointSlot{};
+        m_impl->freeJoints.push_back(id.value);
+    }
+
+    void World::UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected)
+    {
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        JPH_ASSERT(kind.Type() == slot.type);
+        if (kind.Is<HingeJoint>())
+        {
+            Apply(static_cast<JPH::HingeConstraint&>(*slot.constraint), kind.As<HingeJoint>());
+        }
+        slot.constraint->SetEnabled(enabled);
+        m_impl->SetExcludes(slot, enabled && !collideConnected);
+        // Jolt wakes nothing for an edit; every joint change wakes both bodies (ticket 26).
+        m_impl->WakeJoint(slot);
+    }
+
+    void World::ResetWarmStart(JointId id)
+    {
+        m_impl->joints[id.value].constraint->ResetWarmStart();
+    }
+
+    JointLoad World::Load(JointId id) const
+    {
+        const Impl::JointSlot& slot = m_impl->joints[id.value];
+        if (!slot.constraint->GetEnabled())
+        {
+            return JointLoad{};
+        }
+        const float dt = m_impl->subStep;
+        if (slot.type == JointType::Ball)
+        {
+            const auto& ball = static_cast<const JPH::PointConstraint&>(*slot.constraint);
+            return JointLoad{FromJolt(ball.GetTotalLambdaPosition() / dt), Math::Vec3(0.0f)};
+        }
+        // Jolt reports the hinge's rotation impulse along two axes it works out privately each step: rebuilt here the
+        // way its HingeRotationConstraintPart does, from the bodies as the step left them.
+        const auto& hinge = static_cast<const JPH::HingeConstraint&>(*slot.constraint);
+        const JPH::Vec3 a1 = (hinge.GetBody1()->GetRotation() * hinge.GetLocalSpaceHingeAxis1()).Normalized();
+        JPH::Vec3 a2 = (hinge.GetBody2()->GetRotation() * hinge.GetLocalSpaceHingeAxis2()).Normalized();
+        const float dot = a1.Dot(a2);
+        if (dot <= 1.0e-3f)
+        {
+            JPH::Vec3 perp = a2 - dot * a1;
+            if (perp.LengthSq() < 1.0e-6f)
+            {
+                perp = a1.GetNormalizedPerpendicular();
+            }
+            a2 = (0.99f * perp.Normalized() + 0.01f * a1).Normalized();
+        }
+        const JPH::Vec3 b2 = a2.GetNormalizedPerpendicular();
+        const JPH::Vec3 c2 = a2.Cross(b2);
+        const JPH::Vector<2> rotation = hinge.GetTotalLambdaRotation();
+        const JPH::Vec3 torque = b2.Cross(a1) * rotation[0] + c2.Cross(a1) * rotation[1] +
+                                 a1 * (hinge.GetTotalLambdaRotationLimits() + hinge.GetTotalLambdaMotor());
+        return JointLoad{FromJolt(hinge.GetTotalLambdaPosition() / dt), FromJolt(torque / dt)};
     }
 
     BodyState World::GetState(BodyId id) const
@@ -1593,6 +1867,7 @@ namespace Fenrir::Backend
             awakeAtStart.insert(id.GetIndexAndSequenceNumber());
         }
 
+        m_impl->subStep = dt / static_cast<float>(collisionSteps);
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         if (error != JPH::EPhysicsUpdateError::None)

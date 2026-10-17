@@ -12,6 +12,7 @@
 
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 
 namespace Fenrir
 {
@@ -26,6 +27,37 @@ namespace Fenrir::Backend
     struct BodyId
     {
         std::uint32_t value = ~0u;
+    };
+
+    /** @brief PROTOTYPE (joints spike): a constraint in one World. Valid until it is destroyed. */
+    struct JointId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /**
+     * @brief PROTOTYPE (joints spike): everything needed to make a constraint. Frames are relative to each body's
+     * origin in world units (its scale already applied), in the body's axes; the world end's frame is in world space.
+     */
+    struct JointDesc
+    {
+        BodyId bodyA;
+        /** @brief The default BodyId: the world. */
+        BodyId bodyB;
+        JointFrame frameA;
+        JointFrame frameB;
+        JointKind kind;
+        bool enabled = true;
+        bool collideConnected = false;
+        /** @brief Lower first in the solve, within an island: the joint entity's order. */
+        std::uint32_t priority = 0;
+    };
+
+    /** @brief PROTOTYPE (joints spike): what a constraint did to bodyB in the last step, world space. */
+    struct JointLoad
+    {
+        Math::Vec3 force = Math::Vec3(0.0f);
+        Math::Vec3 torque = Math::Vec3(0.0f);
     };
 
     /** @brief How a body moves and responds: the parts of RigidBody the backend needs. */
@@ -315,6 +347,24 @@ namespace Fenrir::Backend
 
         /** @brief Changes the world's gravity, waking every body. */
         void SetGravity(const Math::Vec3& gravity);
+
+        // PROTOTYPE (joints spike): constraints. Every one must be destroyed before either of its bodies is.
+
+        /** @brief Makes and adds a constraint, waking its bodies. */
+        [[nodiscard]] JointId CreateJoint(const JointDesc& desc);
+
+        /** @brief Removes and destroys a constraint, waking its bodies. */
+        void DestroyJoint(JointId id);
+
+        /** @brief Applies the per-kind settings and the shared switches, waking its bodies. The kind must not change.
+         */
+        void UpdateJoint(JointId id, const JointKind& kind, bool enabled, bool collideConnected);
+
+        /** @brief Forgets the constraint's warm start: its body was teleported. */
+        void ResetWarmStart(JointId id);
+
+        /** @brief What the constraint did to bodyB in the last step. Zero when disabled. */
+        [[nodiscard]] JointLoad Load(JointId id) const;
 
         /** @brief A body's pose and velocities as the last step (or a teleport or velocity change since) left them. */
         [[nodiscard]] BodyState GetState(BodyId id) const;

@@ -74,4 +74,15 @@ namespace Fenrir
         /** @brief The collider entity that left, as in its TriggerEnter. */
         Entity otherCollider;
     };
+
+    /** @brief PROTOTYPE (joints spike): a joint went over its breakForce or breakTorque and was disabled. */
+    struct JointBroken
+    {
+        Entity joint;
+        Entity bodyA;
+        /** @brief Empty for the world. */
+        Entity bodyB;
+        Math::Vec3 force = Math::Vec3(0.0f);
+        Math::Vec3 torque = Math::Vec3(0.0f);
+    };
 } // namespace Fenrir

@@ -38,6 +38,7 @@
 #include <cmath>
 
 #include "FenrirPhysics/Physics.hpp"
+#include "JointsSpikeScene.hpp"
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
@@ -617,6 +618,14 @@ int main(int argc, char* argv[])
     // PostInit: the cube and the debug shader are loaded in Init.
     app.AddSystem(Fenrir::SchedulePriority::PostInit, BIND_PHYSICS_DEMO_FN(Init, physicsDemo))
         .AddSequentialSystems(Fenrir::SchedulePriority::Tick, {BIND_PHYSICS_DEMO_FN(MovePaddle, physicsDemo)});
+    // PROTOTYPE (joints spike, ticket 27): the "Joints (spike)" scene, F4 to switch to it and back.
+    JointsSpikeScene jointsSpike(glRenderer, cube, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&jointsSpike](Fenrir::App& running) { jointsSpike.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::PreUpdate,
+                              {[&jointsSpike](Fenrir::App& running) { jointsSpike.SwitchOnF4(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&jointsSpike](Fenrir::App& running) { jointsSpike.Keys(running); }});
 #endif
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
@@ -637,11 +646,13 @@ int main(int argc, char* argv[])
         .AddSystems(Fenrir::SchedulePriority::Update,
                     {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
         // The physics debug lines are drawn after the scene and before the editor unbinds the scene's framebuffer.
-        .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
 #ifdef FENRIR_PHYSICS
-                                                                 BIND_PHYSICS_DEMO_FN(DebugLines, physicsDemo),
+                               BIND_PHYSICS_DEMO_FN(DebugLines, physicsDemo),
+                               [&jointsSpike](Fenrir::App& running) { jointsSpike.DrawFrames(running); },
 #endif
-                                                                 BIND_EDITOR_FN(Editor::Update, editor)})
+                               BIND_EDITOR_FN(Editor::Update, editor)})
         // .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSequentialSystems(Fenrir::SchedulePriority::PostUpdate,
                               {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),

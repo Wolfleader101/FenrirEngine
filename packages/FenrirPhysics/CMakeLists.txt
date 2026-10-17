@@ -7,6 +7,7 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Components.hpp
     include/FenrirPhysics/DebugLines.hpp
     include/FenrirPhysics/Events.hpp
+    include/FenrirPhysics/Joints.hpp
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
     include/FenrirPhysics/Queries.hpp
@@ -14,6 +15,7 @@ add_library(FenrirPhysics STATIC
     src/BodyComponents.hpp
     src/CollisionLayers.cpp
     src/DebugLines.cpp
+    src/Joints.cpp
     src/LayerNames.hpp
     src/Physics.cpp
     src/PhysicsState.hpp

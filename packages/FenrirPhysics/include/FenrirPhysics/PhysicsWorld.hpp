@@ -11,6 +11,7 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Queries.hpp"
 
 namespace Fenrir
@@ -132,6 +133,12 @@ namespace Fenrir
         /** @brief The world-space box around `entity`'s body, or none for an entity with no body or no longer alive.
          */
         [[nodiscard]] std::optional<Math::AABB> Bounds(const Entity& entity) const;
+
+        /**
+         * @brief PROTOTYPE (joints spike): the state of the joint on `joint` as the last step left it; zeroed for an
+         * entity with no Joint, or an inactive one. The return type is qualified: the member's name hides it.
+         */
+        [[nodiscard]] Fenrir::JointState JointState(const Entity& joint) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs
