@@ -10,8 +10,8 @@
 
 **Blocked by:** 04 (Distance, slider and swing-twist kinds).
 
-**Status:** ready-for-human (built and tested headless on branch `claude/joints-state-14d8ff`; the DemoApp hand check is left)
+**Status:** resolved
 
 - [x] Tests: the chain's top joint reads its weight (49.0 N for five 1 kg links); a hinge reads its angle with the documented sign; a slider its offset; a distance joint its length; each kind's steady load is right.
 - [x] Tests: zeroed for a non-joint and an unstepped joint; force and torque kept while asleep and 0 while disabled; pose readings current in both cases.
-- [ ] The door's and chain's names show their readings live and 0 logs every joint (checked by hand).
+- [x] The door's and chain's names show their readings live and 0 logs every joint (checked by hand).

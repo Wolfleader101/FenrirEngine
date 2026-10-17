@@ -271,10 +271,14 @@ namespace Fenrir
             {
                 continue; // not expected: SyncJoints drops a constraint before its bodies go
             }
+            // A disabled joint, broken or switched off by game code, is dimmed.
+            const auto colour = [&joint](std::uint32_t full) {
+                return joint.enabled ? full : DebugColour::Dimmed(full);
+            };
             frame(joint.frameA, &a->world, record.scaleA, jointAxisA,
-                  {DebugColour::JointAX, DebugColour::JointAY, DebugColour::JointAZ});
+                  {colour(DebugColour::JointAX), colour(DebugColour::JointAY), colour(DebugColour::JointAZ)});
             frame(joint.frameB, toWorld ? nullptr : &b->world, record.scaleB, jointAxisB,
-                  {DebugColour::JointBX, DebugColour::JointBY, DebugColour::JointBZ});
+                  {colour(DebugColour::JointBX), colour(DebugColour::JointBY), colour(DebugColour::JointBZ)});
         }
     }
 
