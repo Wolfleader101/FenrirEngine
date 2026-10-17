@@ -639,7 +639,9 @@ int main(int argc, char* argv[])
     // Joints (C++), the first of the F4 family. Made in PostInit, like the physics demo, once the cube is loaded.
     JointsScene jointsScene(cube, aabbShader);
     app.AddSystem(Fenrir::SchedulePriority::PostInit,
-                  [&jointsScene](Fenrir::App& running) { jointsScene.Init(running); });
+                  [&jointsScene](Fenrir::App& running) { jointsScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&jointsScene](Fenrir::App& running) { jointsScene.Update(running); }});
     demoScenes.Register(JointsScene::Scene());
 #endif
 

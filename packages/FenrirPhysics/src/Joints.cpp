@@ -200,6 +200,7 @@ namespace Fenrir
                 desc.frameB = toWorld ? joint.frameB : Scaled(joint.frameB, scaleB);
                 desc.kind = joint.kind;
                 desc.enabled = joint.enabled;
+                desc.collideConnected = joint.collideConnected;
                 desc.priority = entity;
                 MakeConstraint(entity, record, desc);
                 record.scaleA = scaleA;
@@ -208,7 +209,7 @@ namespace Fenrir
             }
             else if (!SameLive(joint, record.applied))
             {
-                m_backend.UpdateJoint(record.id, joint.kind, joint.enabled);
+                m_backend.UpdateJoint(record.id, joint.kind, joint.enabled, joint.collideConnected);
                 record.applied = joint;
             }
         }
