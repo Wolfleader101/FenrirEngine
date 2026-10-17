@@ -216,6 +216,20 @@ A link between two rigid bodies, or between a rigid body and the world, that res
 The entity a joint lives on. It may be one of the bodies it joins, or any other entity; where it sits does not move the joint.
 *Avoid:* joint body, joint node.
 
+**Joint kind**
+Which way a joint lets its bodies move relative to each other. One of:
+- *fixed*: not at all;
+- *ball*: turn freely about a shared point;
+- *distance*: keep two points between a shortest and a longest distance (a rod, a rope or a spring);
+- *hinge*: turn about one axis (a door);
+- *slider*: move along one axis (a drawer);
+- *swing-twist*: swing within a cone and twist within a range about one axis (a shoulder).
+*Avoid:* point joint (the physics backend's name for ball), joint type (for the idea; the code's enum may say type).
+
+**Rest pose**
+The pose of a joint's two bodies in which its anchor on each body coincides: a hinge's angle and a slider's position are zero there, and its limits and targets are measured from it. The rest pose always lies within a joint's limits.
+*Avoid:* bind pose, zero pose.
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
