@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cassert>
 #include <cstdarg>
 #include <cstdio>
 #include <map>
@@ -48,6 +49,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
+#include <Jolt/Physics/Constraints/FixedConstraint.h>
+#include <Jolt/Physics/Constraints/HingeConstraint.h>
+#include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/RegisterTypes.h>
@@ -987,6 +991,42 @@ namespace Fenrir::Backend
                 func(lock.GetBody());
             }
         }
+
+        // The joints' constraints, by JointId, and the bodies each joins (the world's is the default BodyId). A freed
+        // slot has no constraint, and is reused.
+        struct JointSlot
+        {
+            JPH::Ref<JPH::TwoBodyConstraint> constraint;
+            JointType type = JointType::Fixed;
+            BodyId bodyA;
+            BodyId bodyB;
+        };
+        std::vector<JointSlot> joints;
+        std::vector<std::uint32_t> freeJoints;
+
+        // Jolt wakes nothing when a constraint is added, removed or edited: every change to a joint wakes its bodies.
+        void WakeJoint(const JointSlot& slot)
+        {
+            for (const BodyId body : {slot.bodyA, slot.bodyB})
+            {
+                if (body.value != BodyId{}.value)
+                {
+                    Bodies().ActivateBody(ToJolt(body));
+                }
+            }
+        }
+
+        // A frame relative to the body's origin, as relative to its centre of mass, where Jolt's local space is. The
+        // world's frame is already in its space.
+        JointFrame FromCentreOfMass(BodyId body, const JointFrame& frame)
+        {
+            if (body.value == BodyId{}.value)
+            {
+                return frame;
+            }
+            return JointFrame{frame.position - FromJolt(Bodies().GetShape(ToJolt(body))->GetCenterOfMass()),
+                              frame.rotation};
+        }
     };
 
     namespace
@@ -1020,6 +1060,14 @@ namespace Fenrir::Backend
 
     World::~World()
     {
+        // Constraints before bodies: Jolt's constraints point at their bodies.
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            if (slot.constraint != nullptr)
+            {
+                m_impl->system.RemoveConstraint(slot.constraint);
+            }
+        }
         // Jolt leaves destroying bodies to its user.
         JPH::BodyIDVector ids;
         m_impl->system.GetBodies(ids);
@@ -1109,6 +1157,17 @@ namespace Fenrir::Backend
         {
             return;
         }
+#ifndef NDEBUG
+        // A constraint outliving its body is undefined in Jolt.
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            for (const BodyId id : ids)
+            {
+                assert((slot.constraint == nullptr || (slot.bodyA.value != id.value && slot.bodyB.value != id.value)) &&
+                       "World::DestroyBodies: a joint's constraint must be destroyed before its bodies");
+            }
+        }
+#endif
         std::vector<JPH::AABox> bounds;
         bounds.reserve(ids.size());
         for (BodyId id : ids)
@@ -1125,6 +1184,94 @@ namespace Fenrir::Backend
         {
             m_impl->WakeAround(box);
         }
+    }
+
+    JointId World::CreateJoint(const JointDesc& desc)
+    {
+        const JointFrame a = m_impl->FromCentreOfMass(desc.bodyA, desc.frameA);
+        const JointFrame b = m_impl->FromCentreOfMass(desc.bodyB, desc.frameB);
+        const JPH::RVec3 pointA(ToJolt(a.position));
+        const JPH::RVec3 pointB(ToJolt(b.position));
+        const JPH::Quat rotationA = ToJolt(a.rotation);
+        const JPH::Quat rotationB = ToJolt(b.rotation);
+
+        JPH::Ref<JPH::TwoBodyConstraintSettings> settings;
+        if (desc.kind.Is<FixedJoint>())
+        {
+            auto* fixed = new JPH::FixedConstraintSettings();
+            fixed->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            fixed->mPoint1 = pointA;
+            fixed->mAxisX1 = rotationA * JPH::Vec3::sAxisX();
+            fixed->mAxisY1 = rotationA * JPH::Vec3::sAxisY();
+            fixed->mPoint2 = pointB;
+            fixed->mAxisX2 = rotationB * JPH::Vec3::sAxisX();
+            fixed->mAxisY2 = rotationB * JPH::Vec3::sAxisY();
+            settings = fixed;
+        }
+        else if (desc.kind.Is<BallJoint>())
+        {
+            auto* ball = new JPH::PointConstraintSettings();
+            ball->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            ball->mPoint1 = pointA;
+            ball->mPoint2 = pointB;
+            settings = ball;
+        }
+        else
+        {
+            auto* hinge = new JPH::HingeConstraintSettings();
+            hinge->mSpace = JPH::EConstraintSpace::LocalToBodyCOM;
+            hinge->mPoint1 = pointA;
+            hinge->mHingeAxis1 = rotationA * JPH::Vec3::sAxisX();
+            hinge->mNormalAxis1 = rotationA * JPH::Vec3::sAxisY();
+            hinge->mPoint2 = pointB;
+            hinge->mHingeAxis2 = rotationB * JPH::Vec3::sAxisX();
+            hinge->mNormalAxis2 = rotationB * JPH::Vec3::sAxisY();
+            settings = hinge;
+        }
+        // Jolt sorts each island's constraints by priority, then by their index in its constraint list, which changes
+        // as constraints are removed: distinct priorities keep the solve order to which joints exist.
+        settings->mConstraintPriority = desc.priority;
+
+        Impl::JointSlot slot;
+        // An invalid BodyID stands for Jolt's fixed-to-world body.
+        slot.constraint = m_impl->Bodies().CreateConstraint(settings, ToJolt(desc.bodyA), ToJolt(desc.bodyB));
+        slot.type = desc.kind.Type();
+        slot.bodyA = desc.bodyA;
+        slot.bodyB = desc.bodyB;
+        m_impl->system.AddConstraint(slot.constraint);
+
+        std::uint32_t index = 0;
+        if (m_impl->freeJoints.empty())
+        {
+            index = static_cast<std::uint32_t>(m_impl->joints.size());
+            m_impl->joints.push_back(std::move(slot));
+        }
+        else
+        {
+            index = m_impl->freeJoints.back();
+            m_impl->freeJoints.pop_back();
+            m_impl->joints[index] = std::move(slot);
+        }
+        UpdateJoint(JointId{index}, desc.kind, desc.enabled);
+        return JointId{index};
+    }
+
+    void World::DestroyJoint(JointId id)
+    {
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        m_impl->WakeJoint(slot);
+        m_impl->system.RemoveConstraint(slot.constraint);
+        slot = Impl::JointSlot{};
+        m_impl->freeJoints.push_back(id.value);
+    }
+
+    void World::UpdateJoint(JointId id, const JointKind& kind, bool enabled)
+    {
+        Impl::JointSlot& slot = m_impl->joints[id.value];
+        assert(kind.Type() == slot.type && "World::UpdateJoint: a joint's kind changes only by recreating it");
+        (void)kind; // the fixed, ball and hinge kinds have no settings of their own yet
+        slot.constraint->SetEnabled(enabled);
+        m_impl->WakeJoint(slot);
     }
 
     void World::Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation)

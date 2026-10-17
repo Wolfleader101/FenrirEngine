@@ -5,6 +5,7 @@
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"
 #include "FenrirPhysics/Events.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"

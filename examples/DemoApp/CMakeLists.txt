@@ -33,6 +33,7 @@ add_executable(DemoApp
 
     src/DemoMesh.hpp
     src/DemoScenes.hpp
+    src/JointsScene.hpp
     src/CSharpScenes.hpp
 )
 

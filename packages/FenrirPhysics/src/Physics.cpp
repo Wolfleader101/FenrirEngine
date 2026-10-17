@@ -1,6 +1,9 @@
 #include "FenrirPhysics/Physics.hpp"
 
 #include <cassert>
+#include <memory>
+#include <mutex>
+#include <string>
 
 #include "Backend/Backend.hpp"
 #include "BodyComponents.hpp"
@@ -13,6 +16,10 @@ namespace Fenrir
 {
     namespace
     {
+        // The install WarnThroughInstalledApp logs through. Weak: an install that ends is simply gone.
+        std::mutex lastInstalledMutex;
+        std::weak_ptr<Detail::PhysicsState> lastInstalled;
+
         // The PostTick system: the active scene's world, made the first time the scene has physics components, steps.
         void StepActiveScene(App& app, Detail::PhysicsState& state)
         {
@@ -112,9 +119,26 @@ namespace Fenrir
         return m_state->meshes.Release(mesh);
     }
 
+    void WarnThroughInstalledApp(const std::string& message)
+    {
+        std::shared_ptr<Detail::PhysicsState> installed;
+        {
+            const std::lock_guard<std::mutex> lock(lastInstalledMutex);
+            installed = lastInstalled.lock();
+        }
+        if (installed)
+        {
+            installed->app->Logger()->Warn(message);
+        }
+    }
+
     Physics Physics::Install(App& app, PhysicsConfig config)
     {
         auto state = std::make_shared<Detail::PhysicsState>(app, config);
+        {
+            const std::lock_guard<std::mutex> lock(lastInstalledMutex);
+            lastInstalled = state;
+        }
         app.AddSequentialSystems(SchedulePriority::PostTick,
                                  {[installed = std::weak_ptr<Detail::PhysicsState>(state)](App& running) {
                                      if (const std::shared_ptr<Detail::PhysicsState> current = installed.lock())
