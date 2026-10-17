@@ -12,12 +12,25 @@
 
 **Blocked by:** 02 (DemoApp scene switcher).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests` (through the frame seam): fixed, ball and hinge joints hold their bodies at the rest pose; a hinge turns about its X axis and a ball turns freely; a joint to the world works; a body in several joints, and a joint entity that is one of its bodies, both work.
-- [ ] Frames on scaled and rotated parents stay on the body; `FrameFromWorld` round trips, treats only an empty `bodyB` as the world, and warns with identity frames for a dead body.
-- [ ] A live edit reaches physics on the next tick; kind, body, frame and scale changes recreate without moving the rest pose; a `Joint` removed and re-added in one tick is rebuilt; every edit wakes a sleeping pair.
-- [ ] Removing an earlier joint leaves a chain bit-identical to one where it was never created; two runs are bit-identical, single- and multi-threaded.
-- [ ] Reading `JointKind` as the wrong kind asserts; `Joint{}` has the spec's defaults.
+- [x] `FenrirPhysicsTests` (through the frame seam): fixed, ball and hinge joints hold their bodies at the rest pose; a hinge turns about its X axis and a ball turns freely; a joint to the world works; a body in several joints, and a joint entity that is one of its bodies, both work.
+- [x] Frames on scaled and rotated parents stay on the body; `FrameFromWorld` round trips, treats only an empty `bodyB` as the world, and warns with identity frames for a dead body.
+- [x] A live edit reaches physics on the next tick; kind, body, frame and scale changes recreate without moving the rest pose; a `Joint` removed and re-added in one tick is rebuilt; every edit wakes a sleeping pair.
+- [x] Removing an earlier joint leaves a chain bit-identical to one where it was never created; two runs are bit-identical, single- and multi-threaded.
+- [x] Reading `JointKind` as the wrong kind asserts; `Joint{}` has the spec's defaults.
 - [ ] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without warnings.
 - [ ] The Joints (C++) scene on F4 shows the door swinging on its post and the chain hanging from its world point (checked by hand).
+
+## Answer
+
+Built as specified. Public: `FenrirPhysics/Joints.hpp` (`JointFrame`, the three kinds, `JointType`, `JointKind`, `Joint`, `JointFrames`, `FrameFromWorld`). Private: `src/Joints.cpp` (the joint drain, the body-to-joints index and the joint diff, as `PhysicsWorld::Impl` members), the backend's `CreateJoint`, `DestroyJoint` and `UpdateJoint`, and `src/Same.hpp` (the diff's bit-for-bit comparisons, now shared by bodies and joints). The scene is `examples/DemoApp/src/JointsScene.hpp`.
+
+- **Order within `PostTick`:** `SyncBodies` drains the `Joint` watch with the body watches (a removed or re-added joint loses its constraint there) and removes the constraints of every joint touching a body it is about to destroy or rebuild, through the index; then `PushEdits`; then `SyncJoints` creates, recreates or updates each joint's constraint in joint entity order. Joints come after the body edits because a body's scale decides recreation.
+- **A joint naming no made body entity** has no constraint, silently, until it does. Ticket 10 adds the warning, the wake and the full inactive rules.
+- **`FrameFromWorld`'s debug warning** goes through the app physics was last installed on (a weak pointer in `Physics.cpp`), since the function is given no app.
+- **The wrong-kind assert** is checked by `JointKindWrongView`, a program of its own that CTest runs in debug builds and passes on the assert's message. It turns off the Windows debug runtime's abort dialog: without that, an assert in a test binary hangs until CTest's timeout.
+- **Solve order:** the "removing an earlier joint" test fails with the priority set to 0, and passes with each constraint's priority set to its joint entity.
+- **Demo chain:** links are 0.4 long on 0.5 spacing so neighbours do not touch while bodies a joint names still collide (ticket 07).
+- **Checked by running:** clang debug and release, all suites; MSVC x64 debug, the joints tests and the assert test, with no warnings in FenrirPhysics code. `FENRIR_DEMO_SCENE="Joints (C++)"` starts in the scene and logs its key help, with no errors or warnings.
+- **Left for the hand check:** the door swinging and the chain hanging, by eye.

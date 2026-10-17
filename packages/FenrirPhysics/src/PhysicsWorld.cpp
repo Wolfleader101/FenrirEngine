@@ -1,7 +1,6 @@
 #include "FenrirPhysics/PhysicsWorld.hpp"
 
 #include <algorithm>
-#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <string>
@@ -16,27 +15,15 @@
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "Same.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
 {
     namespace
     {
-        // Bit for bit: any value game code writes is an edit, and a value physics wrote back is not.
-        bool Same(float a, float b)
-        {
-            return std::bit_cast<std::uint32_t>(a) == std::bit_cast<std::uint32_t>(b);
-        }
-
-        bool Same(const Math::Vec3& a, const Math::Vec3& b)
-        {
-            return Same(a.x, b.x) && Same(a.y, b.y) && Same(a.z, b.z);
-        }
-
-        bool Same(const Math::Quat& a, const Math::Quat& b)
-        {
-            return Same(a.x, b.x) && Same(a.y, b.y) && Same(a.z, b.z) && Same(a.w, b.w);
-        }
+        // The diff's overloads below would otherwise hide those for plain values.
+        using Fenrir::Same;
 
         bool Same(const Backend::Motion& a, const Backend::Motion& b)
         {
@@ -250,13 +237,16 @@ namespace Fenrir
         : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
-          m_triggers(entities.Watch(ComponentType::Native<Trigger>()))
+          m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
+          m_jointWatch(entities.Watch(ComponentType::Native<Joint>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
         entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
         const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
         entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
+        const ComponentType joints[] = {ComponentType::Native<Joint>()};
+        entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -268,6 +258,8 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        // After the bodies' edits: a body's scale decides whether its joints are recreated.
+        SyncJoints();
         ApplyPushes();
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
@@ -524,6 +516,7 @@ namespace Fenrir
         {
             changed.insert(change.entity);
         }
+        DrainJoints();
 
         // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
         // worked out every tick).
@@ -573,6 +566,7 @@ namespace Fenrir
             destroyed.push_back(record.id);
             it = m_bodies.erase(it);
         }
+        RemoveJointsOf(destroyed);
         m_backend.DestroyBodies(destroyed);
 
         std::vector<std::uint32_t> entities;

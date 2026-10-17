@@ -12,6 +12,7 @@
 
 #include "FenrirMath/Math.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 
 namespace Fenrir
 {
@@ -26,6 +27,30 @@ namespace Fenrir::Backend
     struct BodyId
     {
         std::uint32_t value = ~0u;
+    };
+
+    /** @brief A joint's constraint in one World. Valid until the constraint is destroyed. */
+    struct JointId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /**
+     * @brief Everything needed to make a joint's constraint. Each frame is relative to its body's origin, in the body's
+     * axes, its position in world units (the body's scale already applied); the world end's frame is in world space.
+     */
+    struct JointDesc
+    {
+        BodyId bodyA;
+        /** @brief The default BodyId: the world. */
+        BodyId bodyB;
+        JointFrame frameA;
+        JointFrame frameB;
+        JointKind kind;
+        bool enabled = true;
+        /** @brief Where the constraint comes in the solve: lower first. Distinct for each joint, so the solve order
+         * depends only on which joints exist, not on the order they were made and removed in. */
+        std::uint32_t priority = 0;
     };
 
     /** @brief How a body moves and responds: the parts of RigidBody the backend needs. */
@@ -270,8 +295,20 @@ namespace Fenrir::Backend
          */
         void CreateBodies(std::span<const BodyDesc> bodies, std::span<BodyId> ids);
 
-        /** @brief Removes and destroys the bodies in one batch. */
+        /** @brief Removes and destroys the bodies in one batch. Every joint's constraint naming one of them must be
+         * destroyed first. */
         void DestroyBodies(std::span<const BodyId> ids);
+
+        /** @brief Makes and adds a joint's constraint between two made bodies (or a body and the world), waking them.
+         */
+        [[nodiscard]] JointId CreateJoint(const JointDesc& desc);
+
+        /** @brief Removes and destroys a constraint, waking its bodies. */
+        void DestroyJoint(JointId id);
+
+        /** @brief Applies a joint's live settings (its kind's settings, which must be of the kind it was made with, and
+         * whether it is enabled), waking its bodies. */
+        void UpdateJoint(JointId id, const JointKind& kind, bool enabled);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

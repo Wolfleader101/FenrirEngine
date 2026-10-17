@@ -39,6 +39,7 @@
 #include <cmath>
 
 #include "FenrirPhysics/Physics.hpp"
+#include "JointsScene.hpp"
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
@@ -633,6 +634,12 @@ int main(int argc, char* argv[])
     // PostInit: the cube and the debug shader are loaded in Init.
     app.AddSystem(Fenrir::SchedulePriority::PostInit, BIND_PHYSICS_DEMO_FN(Init, physicsDemo))
         .AddSequentialSystems(Fenrir::SchedulePriority::Tick, {BIND_PHYSICS_DEMO_FN(MovePaddle, physicsDemo)});
+
+    // Joints (C++), the first of the F4 family. Made in PostInit, like the physics demo, once the cube is loaded.
+    JointsScene jointsScene(cube, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&jointsScene](Fenrir::App& running) { jointsScene.Init(running); });
+    demoScenes.Register(JointsScene::Scene());
 #endif
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
