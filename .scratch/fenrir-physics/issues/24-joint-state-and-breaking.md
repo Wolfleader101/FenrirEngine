@@ -15,3 +15,5 @@ What can game code read back from a joint, and how does a joint break? Builds on
 - **Determinism and order:** where in the `PostTick` sequence breaking is checked and events are sent.
 
 Facts from "What does Jolt offer for constraints?": breaking is not built in (lambda against a threshold after the step); current values exist only for hinge, slider, pulley, path, and swing-twist and six-DOF rotation; lambda is stale while the joint sleeps.
+
+From "How are joints modelled in the ECS?" (ADR-0013): `Joint` already has `bool enabled = true`, a candidate for what breaking sets; thresholds are expected as shared fields beside it. The joint entity is what an event would name as "the joint".

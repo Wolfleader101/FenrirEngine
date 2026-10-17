@@ -208,6 +208,14 @@ Two solid colliders of different bodies touching. It begins when they first touc
 A collider that reports what overlaps it but never pushes anything.
 *Avoid:* sensor (the physics backend's word), area (unless a later decision names a trigger volume so).
 
+**Joint**
+A link between two rigid bodies, or between a rigid body and the world, that restricts how they move relative to each other. It has exactly one *kind* (hinge, slider, ...) and lives on its own entity, the *joint entity*, which names the bodies it joins; a body may take part in any number of joints.
+*Avoid:* constraint (the physics backend's word), connection.
+
+**Joint entity**
+The entity a joint lives on. It may be one of the bodies it joins, or any other entity; where it sits does not move the joint.
+*Avoid:* joint body, joint node.
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).

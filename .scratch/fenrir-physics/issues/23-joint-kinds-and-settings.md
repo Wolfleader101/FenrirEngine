@@ -16,3 +16,5 @@ Which joint kinds does the joints spec have, and which settings does each expose
 - **Solver settings** (graduated from the map's fog): whether per-joint velocity and position step overrides, and priority, are exposed in neutral terms or refused as backend tuning under ADR-0010. In Jolt an override raises the whole island's step count.
 
 Facts from "What does Jolt offer for constraints?": only hinge and swing-twist are ragdoll-drivable; soft limits and motors exist only on some kinds; hinge and slider limits must include 0.
+
+From "How are joints modelled in the ECS?" (ADR-0013): the kinds are the alternatives of the `JointKind` tagged union inside `Joint`. Bodies, frames and `enabled` are shared fields outside it, and the rest pose (zero angle, zero position) is the two frames coinciding. A kind change recreates the backend constraint.
