@@ -9,6 +9,7 @@
 #include <memory>
 #include <set>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "Backend/Backend.hpp"
@@ -162,7 +163,9 @@ namespace Fenrir
          * with its settings corrected into range for a step of `dt` seconds. */
         void SyncJoints(float dt);
         /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
-        [[nodiscard]] const Record* JointBodyOf(const Entity& body);
+        [[nodiscard]] const Record* JointBodyOf(const Entity& body) const;
+        /** @brief Why `joint` names no pair of made body entities of this world, for its warning on going inactive. */
+        [[nodiscard]] std::string WhyInactive(const Joint& joint) const;
         struct JointRecord;
         /** @brief Makes the constraint `desc` describes for the joint on `entity`, indexed under its bodies. */
         void MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc);
@@ -271,6 +274,8 @@ namespace Fenrir
             std::uint32_t warned = 0;
             // What the constraint applied to bodyB in the last step its bodies were awake for.
             Backend::JointLoad load;
+            // Inactive: it names no pair of made body entities. Warned about each time it becomes so.
+            bool inactive = false;
         };
 
         // The entities with a Joint now, as the watch has reported them, and their records, by joint entity: joints

@@ -335,6 +335,12 @@ namespace Fenrir
      *
      * Out-of-range settings are corrected as physics applies them, with one warning per joint for each kind of
      * mistake; the component keeps what was written.
+     *
+     * A joint is inactive while `bodyA` is empty, both bodies are the same entity, or either names something that is
+     * not a body entity of the joint entity's scene (destroyed, never a body, a compound body's child collider, a
+     * trigger, or in another scene). It does nothing, with one warning each time it goes inactive, wakes the body left,
+     * and works again by itself once both names are bodies. A joint whose bodies are all static or kinematic is idle,
+     * not inactive: kept silently, it holds once one becomes dynamic. Motion-type changes keep a joint as it is.
      */
     struct Joint
     {

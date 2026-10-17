@@ -259,11 +259,22 @@ namespace Fenrir
         };
         for (const auto& [entity, record] : m_joints)
         {
+            const Joint& joint = record.applied;
             if (!record.HasConstraint())
             {
-                continue; // inactive: no pair of bodies to draw it on
+                // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
+                constexpr std::array<std::uint32_t, 3> grey = {DebugColour::InactiveJoint, DebugColour::InactiveJoint,
+                                                               DebugColour::InactiveJoint};
+                if (const Record* a = JointBodyOf(joint.bodyA))
+                {
+                    frame(joint.frameA, &a->world, a->world.scale, jointAxisA, grey);
+                }
+                if (const Record* b = JointBodyOf(joint.bodyB))
+                {
+                    frame(joint.frameB, &b->world, b->world.scale, jointAxisB, grey);
+                }
+                continue;
             }
-            const Joint& joint = record.applied;
             const Record* a = JointBodyOf(joint.bodyA);
             const bool toWorld = joint.bodyB == Entity();
             const Record* b = toWorld ? nullptr : JointBodyOf(joint.bodyB);

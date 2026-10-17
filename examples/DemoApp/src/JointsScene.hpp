@@ -15,6 +15,9 @@
 // turns its limits off and on. With limits on, the opening motor holds the door at its limit, however strong.
 // Each joint entity's name shows its joint state every frame: the door's angle and load, each chain joint's load. 0
 // logs every joint's full state.
+//
+// 3 destroys chain link 3. The two joints naming it go inactive, one warning each, and draw grey on the links left
+// with the Joints debug lines on (F2); the links below fall.
 
 #ifdef FENRIR_PHYSICS
 
@@ -54,10 +57,10 @@ class JointsScene
                          .keyHelp =
                              "The door swings on its hinge, the chain hangs from its hook. 1 pushes the door, 2 "
                              "cycles its motor (off, opening, closing, to shut), L turns its limits off and on. 9 lets "
-                             "the links collide with their neighbours, and back. 0 logs every joint's state. F2 cycles "
-                             "the physics debug lines, F4 goes on.",
+                             "the links collide with their neighbours, and back. 3 destroys chain link 3. 0 logs every "
+                             "joint's state. F2 cycles the physics debug lines, F4 goes on.",
                          .smokeKeys = {GLFW_KEY_9, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_2,
-                                       GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_0}};
+                                       GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_3, GLFW_KEY_0}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -81,8 +84,9 @@ class JointsScene
     }
 
     // Update, while the scene is active: 1, 2 and L work the door, 9 toggles collideConnected on every chain joint
-    // between two links, 0 logs every joint's state, each TriggerEnter of the door's trigger is logged, and each joint
-    // entity's name shows its readings. Events sent while another scene is active are read and dropped.
+    // between two links, 3 destroys chain link 3, 0 logs every joint's state, each TriggerEnter of the door's trigger
+    // is logged, and each joint entity's name shows its readings. Events sent while another scene is active are read
+    // and dropped.
     void Update(Fenrir::App& app)
     {
         const bool active = app.GetActiveScene().GetName() == m_scene;
@@ -115,6 +119,10 @@ class JointsScene
                 }
                 app.Logger()->Info(m_linksCollide ? "Chain links collide with their neighbours"
                                                   : "Chain links pass through their neighbours");
+            }
+            else if (event.key == GLFW_KEY_3)
+            {
+                DestroyLink(app);
             }
             else if (event.key == GLFW_KEY_0)
             {
@@ -207,6 +215,8 @@ class JointsScene
     };
 
     static constexpr int linkCount = 8;
+    // The link 3 destroys.
+    static constexpr std::size_t destroyedLink = 3;
     // Joint to joint. Each link is a little longer, so neighbours overlap at their joints.
     static constexpr float linkSpacing = 0.5f;
     static constexpr float linkLength = 0.6f;
@@ -334,6 +344,20 @@ class JointsScene
                            (asleep ? " (the door was asleep)" : " (the door was awake)"));
     }
 
+    // 3: chain link 3 destroyed, once. Its joints keep their Joint components and go inactive.
+    void DestroyLink(Fenrir::App& app) const
+    {
+        const Fenrir::Entity& link = m_links[destroyedLink];
+        if (!link.IsValid())
+        {
+            app.Logger()->Info("Chain link " + std::to_string(destroyedLink) + " is already destroyed");
+            return;
+        }
+        app.GetActiveScene().GetEntityList().DestroyEntity(link);
+        app.Logger()->Info("Chain link " + std::to_string(destroyedLink) +
+                           " destroyed: the joints above and below it are inactive, and the links below fall");
+    }
+
     // Eight links laid out level from a hook fixed to the world, so they fall and swing at once. Each joint is on its
     // own entity beneath "Chain joints"; the top one joins its link to the world.
     void MakeChain(Fenrir::EntityList& entities)
@@ -358,6 +382,7 @@ class JointsScene
             link.AddComponent<Fenrir::RigidBody>();
             link.AddComponent<Fenrir::Collider>();
             links.AddChild(link);
+            m_links.push_back(link);
 
             Fenrir::Entity joint = entities.CreateEntity();
             joint.GetComponent<Fenrir::Name>().Set(("Chain joint " + std::to_string(i)).c_str());
@@ -385,6 +410,7 @@ class JointsScene
     Fenrir::Entity m_doorTrigger;
     DoorMotor m_doorMotor = DoorMotor::Off;
     bool m_pushOpen = false;
+    std::vector<Fenrir::Entity> m_links;
     std::vector<Fenrir::Entity> m_linkJoints;
     std::vector<Labelled> m_joints;
     bool m_linksCollide = false;
