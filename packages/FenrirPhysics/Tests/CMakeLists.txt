@@ -5,7 +5,17 @@ fenrir_add_catch2()
 
 add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds.cpp Materials.cpp CollisionLayers.cpp
                                   Threading.cpp Queries.cpp Forces.cpp Interpolation.cpp Events.cpp Hierarchy.cpp
-                                  DebugLines.cpp PhysicsProbe.hpp)
+                                  DebugLines.cpp Joints.cpp PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)
 add_test(NAME FenrirPhysics COMMAND FenrirPhysicsTests)
 set_tests_properties(FenrirPhysics PROPERTIES TIMEOUT 600) # a deadlocked step fails rather than hangs
+
+# Reading a JointKind as the wrong kind asserts, which ends the process: a program of its own, checked by the assert's
+# message. Only where asserts are compiled in.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_executable(JointKindWrongView JointKindWrongView.cpp)
+    target_link_libraries(JointKindWrongView PRIVATE FenrirPhysics)
+    add_test(NAME FenrirPhysics-JointKindWrongViewAsserts COMMAND JointKindWrongView)
+    set_tests_properties(FenrirPhysics-JointKindWrongViewAsserts PROPERTIES
+        PASS_REGULAR_EXPRESSION "JointKind::As: the joint is a different kind" TIMEOUT 60)
+endif()

@@ -15,6 +15,7 @@
 #include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirScene/Scene.hpp"
 
@@ -31,9 +32,10 @@ namespace Fenrir
              ILogger& logger);
 
         /**
-         * @brief One tick: make and remove bodies for the components added and removed since the last tick, push the
-         * edits game code made to components and world transforms, step by `dt` seconds, write dynamic bodies' poses
-         * and velocities back, and send the step's contact and trigger events to `app`.
+         * @brief One tick: make and remove bodies and joints for the components added and removed since the last tick
+         * (a joint's constraint before its bodies go, and after they come), push the edits game code made to
+         * components and world transforms, bodies before joints, step by `dt` seconds, write dynamic bodies' poses and
+         * velocities back, and send the step's contact and trigger events to `app`.
          */
         void Step(App& app, float dt);
 
@@ -148,6 +150,24 @@ namespace Fenrir
 
         void SyncBodies();
         void PushEdits(float dt);
+
+        // Joints (Joints.cpp). Their constraints always go before their bodies and come after them.
+
+        /** @brief Drains the Joint watch, with the body watches: a joint removed (or removed and added again) since the
+         * last tick loses its constraint, and one added and removed again comes to nothing. */
+        void DrainJoints();
+        /** @brief Removes the constraints of the joints naming any of `bodies`, which are about to be destroyed. */
+        void RemoveJointsOf(std::span<const Backend::BodyId> bodies);
+        /** @brief After the bodies' edits: makes, recreates or updates each joint's constraint, in joint entity order.
+         */
+        void SyncJoints();
+        /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
+        [[nodiscard]] const Record* JointBodyOf(const Entity& body);
+        struct JointRecord;
+        /** @brief Makes the constraint `desc` describes for the joint on `entity`, indexed under its bodies. */
+        void MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc);
+        /** @brief Removes the joint's constraint, if it has one, and its place in the index. */
+        void DropConstraint(std::uint32_t entity, JointRecord& record);
         void ApplyPushes();
         void WriteBack();
         void AdvancePoses();
@@ -210,6 +230,7 @@ namespace Fenrir
         ComponentWatch m_rigidBodies;
         ComponentWatch m_colliders;
         ComponentWatch m_triggers;
+        ComponentWatch m_jointWatch;
 
         // The entities with each component now, as the watches have reported them.
         std::set<std::uint32_t> m_rigidBodyEntities;
@@ -221,6 +242,31 @@ namespace Fenrir
         // By the body's entity (its RigidBody's, or a static collider's own), so bodies are made, diffed and written
         // back in a reproducible order (ADR-0011).
         std::map<std::uint32_t, Record> m_bodies;
+
+        // What physics last applied for a joint: the diff compares the Joint against it. A joint naming no made body
+        // entity has no constraint.
+        struct JointRecord
+        {
+            [[nodiscard]] bool HasConstraint() const
+            {
+                return id.value != Backend::JointId{}.value;
+            }
+
+            Backend::JointId id;
+            Joint applied;
+            // The bodies' world scales and backend bodies the constraint was made with.
+            Math::Vec3 scaleA = Math::Vec3(1.0f);
+            Math::Vec3 scaleB = Math::Vec3(1.0f);
+            Backend::BodyId bodyA;
+            Backend::BodyId bodyB;
+        };
+
+        // The entities with a Joint now, as the watch has reported them, and their records, by joint entity: joints
+        // are made, diffed and solved in that order.
+        std::set<std::uint32_t> m_jointEntities;
+        std::map<std::uint32_t, JointRecord> m_joints;
+        // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
+        std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;
