@@ -91,6 +91,10 @@ Scripting is ECS-first (ADR-0007): C# code adds components and systems to the sa
 An ID in the active scene's ECS, including a version, so an ID that is destroyed and reused is detected as stale. In C# it is a small value with helper methods, not an object.
 *Avoid:* game object, actor, node.
 
+**Entity link**
+An entity named inside a component or event (a parent, a contact's body, a joint's bodies), as scripts see it. A link may be empty, naming no entity. A script reads the entity a link names and makes a link from any entity of the active scene; it never sees which scene the link belongs to.
+*Avoid:* entity reference, entity handle (a *handle* is Iris's term).
+
 **Component**
 Plain data attached to an entity, with no behaviour. A *native component* is a C++ struct, and a *C# component* is an `IComponent` struct. Both live in the ECS and are queried the same way. In engine code and docs, *component* always means this. Say *Iris component* for the other sense.
 
@@ -233,6 +237,10 @@ The pose of a joint's two bodies in which its anchor on each body coincides: a h
 **Breaking (a joint)**
 A joint breaks when, in one step, the force or torque it transmits exceeds its *break force* or *break torque*: physics then disables it and announces that it broke. A broken joint is a disabled one, nothing more; enabling it again repairs it.
 *Avoid:* snapping, destroying (nothing is removed).
+
+**Joint state**
+What a joint did in the last step: the force and torque it carried, and where its bodies sit relative to the rest pose. Game code asks for it when it wants it; it is never stored on the joint. An inactive joint, or one not yet stepped, reads as all zero.
+*Avoid:* joint reading, joint feedback.
 
 **Inactive joint**
 A joint that does nothing because one of the things it names is not currently a rigid body it can join (gone, never a body, the same body twice, or in another scene). It is kept as it is and becomes active again by itself once both names are valid. Unlike a disabled joint, nobody switched it off; a joint whose bodies all cannot move is not inactive, only idle.
