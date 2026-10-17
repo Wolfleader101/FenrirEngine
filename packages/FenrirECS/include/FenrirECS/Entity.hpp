@@ -104,7 +104,8 @@ namespace Fenrir
         uint32_t GetId() const;
 
         /**
-         * @brief Check if the entity is valid
+         * @brief Check if the entity is valid: alive in its entity list. An entity with no entity list (a zeroed
+         * EntityLink written from a script) is not valid.
          *
          * @return true if the entity is valid
          * @return false if the entity is not valid

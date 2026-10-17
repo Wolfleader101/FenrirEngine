@@ -6,6 +6,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
@@ -71,6 +72,30 @@ struct Iris::StructMapping<TestNative::FloatHealth>
     static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Health";
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD(TestNative::FloatHealth, Current), IRIS_FIELD(TestNative::FloatHealth, Max));
+};
+
+// A component with an Entity field, as a joint names its bodies, and the stand-in that maps it to the fixture's Tether.
+namespace TestNative
+{
+    struct Tether
+    {
+        Fenrir::Entity target;
+        std::int32_t length = 0;
+    };
+
+    struct TetherView
+    {
+        Fenrir::Detail::EntityLinkView target;
+        std::int32_t length;
+    };
+} // namespace TestNative
+
+template <>
+struct Iris::StructMapping<TestNative::TetherView>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Tether";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::TetherView, target, "Target"),
+                                                      IRIS_FIELD_AS(TestNative::TetherView, length, "Length"));
 };
 
 // A component holding a tagged union, shaped like FenrirPhysics's Collider and CollisionShape: a private tag and
@@ -1391,6 +1416,157 @@ namespace
         ExpectTheMirrorRefused(MakeComponent<TestNative::Collider, TestNative::ColliderLayout<TestNative::Misnamed>>(
                                    "Test.MisnamedCollider"),
                                "'_ball'", "'_sphere'");
+    }
+
+    // ---- entity links written from C#
+
+    constexpr const char* LinksType = "Fenrir.ScriptFixture.Links";
+
+    template <typename Result, typename... Args>
+    Result Links(Scripting& scripting, const char* method, Args... arguments)
+    {
+        return CallIn<Result>(LinksType, scripting, method, arguments...);
+    }
+
+    ComponentRegistration TetherComponent()
+    {
+        return MakeComponent<TestNative::Tether, TestNative::TetherView>("Test.Tether");
+    }
+
+    void AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto holder = entities.CreateEntity();
+        auto target = entities.CreateEntity();
+        holder.AddComponent<TestNative::Tether>();
+
+        Links<void>(scripting, "LinkTo", holder.GetId(), target.GetId());
+
+        // Equal means the same entity value in the same entity list: C# filled the owner with the active scene's.
+        const Entity written = holder.GetComponent<TestNative::Tether>().target;
+        {
+            INFO("The Entity C# wrote is not the target in the active scene");
+            REQUIRE(written == target);
+        }
+        {
+            INFO("C++ could not use the Entity C# wrote");
+            REQUIRE((written.IsValid() && written.HasComponent<Transform>()));
+        }
+    }
+
+    void ALinkToAnEntityCreatedInTheSameSystemReadsBackAfterPlayback()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+
+        const auto holderId = Links<std::uint32_t>(scripting, "CreateLinkedPair");
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("Playback did not create both entities and add the Tether");
+            REQUIRE((summary.applied == 3 && summary.skipped == 0));
+        }
+
+        const auto targetId = Links<std::uint32_t>(scripting, "TargetOf", holderId);
+        {
+            INFO("C# did not read the link back after playback");
+            REQUIRE((targetId != NullEntity && targetId != holderId));
+        }
+        const auto& tether = entities.GetEntity(holderId).GetComponent<TestNative::Tether>();
+        {
+            INFO("C++ did not read the link to the created entity in the active scene");
+            REQUIRE((tether.target == entities.GetEntity(targetId) && tether.target.HasComponent<Transform>()));
+        }
+        {
+            INFO("The rest of the component did not arrive");
+            REQUIRE(tether.length == 3);
+        }
+    }
+
+    void AZeroedLinkNamesEntityZeroWithNoSceneAndReadsSafely()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto holder = entities.CreateEntity();
+        {
+            INFO("The first entity of a new scene is not entity 0, so this test cannot tell entity 0 apart");
+            REQUIRE(holder.GetId() == 0);
+        }
+        holder.AddComponent<TestNative::Tether>();
+
+        Links<void>(scripting, "WriteZeroed", holder.GetId());
+
+        {
+            INFO("C# did not read a zeroed link as naming entity 0");
+            REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == 0);
+        }
+        // Entity 0 is alive in the active scene, but the zeroed link has no scene, so it is neither it nor valid.
+        const Entity zeroed = holder.GetComponent<TestNative::Tether>().target;
+        {
+            INFO("A zeroed link read in C++ as entity 0 of the active scene");
+            REQUIRE((zeroed.GetId() == 0 && zeroed != holder));
+        }
+        {
+            INFO("A zeroed link read in C++ as valid");
+            REQUIRE(!zeroed.IsValid());
+        }
+    }
+
+    void AnEntityLinksOwnerIsNotReadableFromCSharp()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        // The spec's whole readable surface: whether it is empty, the entity it names, and the empty link.
+        const auto members = Links<std::optional<std::string>>(scripting, "ReadableMembers");
+        {
+            INFO("EntityLink exposes more than IsNull, Target and None to scripts: " + members.value_or("<null>"));
+            REQUIRE(members == "IsNull:Boolean,None:EntityLink,Target:Entity");
+        }
+    }
+
+    void EntityLinkNoneIsTheEmptyLink()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("EntityLink.None was not null in C#");
+            REQUIRE(Links<bool>(scripting, "NoneIsNull"));
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto holder = entities.CreateEntity();
+        auto target = entities.CreateEntity();
+        holder.AddComponent<TestNative::Tether>().target = target;
+
+        Links<void>(scripting, "Unlink", holder.GetId());
+
+        // The empty link is a default Entity: the null value and no entity list.
+        {
+            INFO("EntityLink.None did not read in C++ as an empty Entity");
+            REQUIRE(holder.GetComponent<TestNative::Tether>().target == Entity());
+        }
+        {
+            INFO("C# did not read the empty link back as null");
+            REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == NullEntity);
+        }
     }
 
     // ---- components defined in C#
@@ -4256,4 +4432,29 @@ TEST_CASE("the engine components come with their rules", "[scripting]")
 TEST_CASE("an extension cannot take an engine component's name", "[scripting]")
 {
     AnExtensionCannotTakeAnEngineComponentsName();
+}
+
+TEST_CASE("an Entity field written from C# reads correctly in C++", "[scripting]")
+{
+    AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp();
+}
+
+TEST_CASE("EntityLink.None is the empty link", "[scripting]")
+{
+    EntityLinkNoneIsTheEmptyLink();
+}
+
+TEST_CASE("a link to an entity created earlier in the same system reads back after playback", "[scripting]")
+{
+    ALinkToAnEntityCreatedInTheSameSystemReadsBackAfterPlayback();
+}
+
+TEST_CASE("a zeroed EntityLink names entity 0 with no scene and reads safely", "[scripting]")
+{
+    AZeroedLinkNamesEntityZeroWithNoSceneAndReadsSafely();
+}
+
+TEST_CASE("an EntityLink's owner is not readable from C#", "[scripting]")
+{
+    AnEntityLinksOwnerIsNotReadableFromCSharp();
 }

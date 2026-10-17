@@ -110,6 +110,29 @@ var parent = new Entity(id).GetReadOnly<Relationship>().Parent;   // an EntityLi
 bool has = new Entity(id).Has<Transform>();
 ```
 
+### Entity links
+
+An `Entity` inside a component or event is an `EntityLink` in C#: read `IsNull`, then `Target`. In a component C# may
+write, a link is made by assigning an `Entity`, so every native component with an `Entity` field is writable from C#:
+
+```csharp
+var tether = holder.Get<Tether>();
+tether.Target = door;                 // a link to door in the active scene; C++ reads it as door's Entity
+tether.Target = EntityLink.None;      // the empty link; C++ reads a default Entity
+var created = Entity.Create();
+tether.Target = created;              // fine: a created entity's value is reserved at once
+```
+
+- **A link names an entity of the active scene.** The conversion stores the active scene's entity list beside the value,
+  where a native `Entity` keeps it (the `EntityLinkOwner` native function gives it). Scripts never see that part: an
+  `EntityLink` shows only `IsNull`, `Target` and `None`.
+- **`default(EntityLink)` is not `None`.** A zeroed link names entity 0 with no scene, so a component made with `default`
+  names entity 0 in each `Entity` field. C++'s `IsValid` is false for it; it does not crash, but write `EntityLink.None`
+  where you mean "no entity".
+- The `ScriptingTests` entity-link tests are the proof: a link C# writes reads in C++ as the same entity of the active
+  scene, `None` reads as a default `Entity`, a link to an entity created earlier in the same system survives playback, a
+  zeroed link reads safely, and `EntityLink` exposes nothing more.
+
 `Get` and `GetReadOnly` throw `InvalidOperationException` with a message that says why: the entity is not alive, it has
 no such component, the engine has nothing registered under the type's name, or the type has no `[NativeComponent]`
 attribute. (Creating, destroying, adding and removing from C# arrives with deferred changes, ticket 06.)
@@ -155,6 +178,8 @@ public struct Health : IComponent { public int Current; public int Max; }
   `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
   An `Entity` member is mapped through a stand-in struct that puts `Detail::EntityLinkView` (from the same header) where
   the `Entity` is; C# sees it as an `EntityLink`, as in `Relationship` (FenrirPhysics's contact and trigger events do this).
+  In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
+  `EntityLink.None` is the empty link (C++'s default `Entity`). See "Entity links" below.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
@@ -278,7 +303,11 @@ in place, and reading the wrong kind's view throws `InvalidOperationException`, 
 - **The mirror is checked like any other.** A kind at the wrong offset or under the wrong name fails the load, naming the
   field. The offsets must be the C++ ones: the union starts at its own alignment after the tag.
 - **Components defined in C# may use the pattern too**, by hand: their struct is their definition, so it needs only to be
-  unmanaged. There is no generator for the views and conversions; one may come when a second union shows it is worth it.
+  unmanaged.
+- **A `[TaggedUnion]` source generator is planned.** It would write the tag, the views, the conversions and the wrong-kind
+  exception, the public surface every hand-written union already has, so it can replace them without touching a caller
+  (the offsets stay by hand: C# cannot see the C++ union's alignment). Its trigger: a script author wants a union, or a
+  third engine union appears (FenrirPhysics's `CollisionShape` is the first, and the joints spec's `JointKind` the second).
 - **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
   value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
   bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
