@@ -26,3 +26,10 @@ From "Spike: a character walking a small level through the proposed model" (37):
 - **Hand checks:** on a 60 Hz display, interpolation cannot be seen by eye. Leave it to the headless check, or drop the frame cap for the demo.
 - **Debug lines:** the scene had none. The character's look is two cubes over a capsule collider, and the colliders category does not draw characters. A character category drawing the capsule, the ground normal and `velocity` would show what the look hides.
 - **Game code:** the scene's Tick sets horizontal speed from the keys, which stops `stopOnSlope = false` from sliding. The demo should add input to the written-back velocity instead.
+
+From "How does a character interact with other bodies?": hand checks for pushing and being pushed, beyond the spike's 1 kg boxes:
+- boxes of several masses (1, 20, 100 kg), showing that `pushForce` (100 N) moves the light ones and not the heaviest, and a seesaw or raft the character's `mass` tips;
+- a kinematic door or paddle that shoves the character at its own speed, and a ball thrown at a standing character that bounces off without moving it, with a `ContactEvents` readout proving the bounce is reported (the inner body's step contacts);
+- two characters (one autopilot) blocking each other, one standing on the other and riding it;
+- a box resting on the character's head, which is not carried (a stated limit).
+A character debug-line category could draw the capsule its inner body presents to bodies and queries.
