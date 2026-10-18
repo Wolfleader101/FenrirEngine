@@ -58,6 +58,51 @@ namespace Fenrir::Backend
         std::uint32_t priority = 0;
     };
 
+    /** @brief A character in one World. Valid until the character is destroyed. */
+    struct CharacterId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /** @brief Everything needed to make a character: its pose is its shape's centre. */
+    struct CharacterDesc
+    {
+        CollisionShape shape;
+        Math::Vec3 scale = Math::Vec3(1.0f);
+        CollisionFilter filter;
+        Math::Vec3 position = Math::Vec3(0.0f);
+        Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        /** @brief The character's entity: its inner body's, so hits and contacts name it, and its private ID. */
+        std::uint32_t entity = 0;
+    };
+
+    /** @brief One tick's move of a character: CharacterBody's fields, and the velocity it carries. */
+    struct CharacterMove
+    {
+        Math::Vec3 velocity = Math::Vec3(0.0f);
+        Math::Vec3 carried = Math::Vec3(0.0f);
+        float maxSlope = 0.0f;
+        float stepHeight = 0.0f;
+        float floorSnap = 0.0f;
+        bool stopOnSlope = true;
+    };
+
+    /** @brief Where a move left a character. */
+    struct CharacterMoved
+    {
+        Math::Vec3 position = Math::Vec3(0.0f);
+        /** @brief The move's velocity and carried velocity, each less what went into what it touches. */
+        Math::Vec3 velocity = Math::Vec3(0.0f);
+        Math::Vec3 carried = Math::Vec3(0.0f);
+        /** @brief Added to the move: the velocity of the walkable ground the last move ended on, if it did. */
+        Math::Vec3 groundVelocity = Math::Vec3(0.0f);
+        Math::Vec3 movedVelocity = Math::Vec3(0.0f);
+        CharacterGround ground = CharacterGround::InAir;
+        Math::Vec3 groundNormal = Math::Vec3(0.0f);
+        /** @brief The ground body's entity; ~0u when there is none. */
+        std::uint32_t groundEntity = ~0u;
+    };
+
     /** @brief How a body moves and responds: the parts of RigidBody the backend needs. */
     struct Motion
     {
@@ -331,6 +376,29 @@ namespace Fenrir::Backend
         /** @brief Disables a joint after a step, as a break does: it holds nothing and its bodies collide with each
          * other from the next step. Wakes nothing: a joint is checked for breaking only while its bodies are awake. */
         void DisableJoint(JointId id);
+
+        /**
+         * @brief Makes a character and its inner kinematic body (seen by bodies, queries and triggers), its contacts
+         * and ground found where it stands. Its shape must pass CanMakeShape, and not be a mesh. The default
+         * CharacterId if the world is full.
+         */
+        [[nodiscard]] CharacterId CreateCharacter(const CharacterDesc& desc);
+
+        /** @brief Destroys a character and its inner body. */
+        void DestroyCharacter(CharacterId id);
+
+        /** @brief Moves a character to a pose at once, with no sweep, and finds its contacts and ground there. */
+        void TeleportCharacter(CharacterId id, const Math::Vec3& position, const Math::Quat& rotation);
+
+        /** @brief Turns a character, with no sweep: the next move pushes it out of anything it now overlaps. */
+        void TurnCharacter(CharacterId id, const Math::Quat& rotation);
+
+        /**
+         * @brief Moves a character by `move` over `dt` seconds, sliding along what it hits, stepping up stairs and
+         * sticking to the floor, adding its ground's velocity if its last move ended on walkable ground, and pushing
+         * dynamic bodies. Never during a step: before it, so it moves with bodies the step then moves.
+         */
+        CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

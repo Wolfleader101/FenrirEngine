@@ -37,6 +37,22 @@ namespace Fenrir
         Math::Vec3 normal = Math::Vec3(0.0f);
     };
 
+    /** @brief PROTOTYPE (ticket 34 decides): a character body's state after its last move. */
+    struct CharacterState
+    {
+        CharacterGround ground = CharacterGround::InAir;
+        /** @brief The body it stands on, touching it while not InAir; empty otherwise. */
+        Entity groundBody;
+        /** @brief World space, unit length, up from the ground. */
+        Math::Vec3 groundNormal = Math::Vec3(0.0f);
+        /** @brief The ground velocity the move added (only after a move that ended on walkable ground). */
+        Math::Vec3 groundVelocity = Math::Vec3(0.0f);
+        /** @brief Kept from the ground it left, added to each move until it lands. */
+        Math::Vec3 carriedVelocity = Math::Vec3(0.0f);
+        /** @brief How far it actually moved over the tick, over the tick's time: stairs and floor snaps included. */
+        Math::Vec3 movedVelocity = Math::Vec3(0.0f);
+    };
+
     /**
      * @brief One scene's physics world: the bodies of that scene's colliders, simulated together. A scene resource,
      * made by the systems Physics::Install adds and ended with its scene (or when the Physics owner is destroyed).
@@ -143,6 +159,12 @@ namespace Fenrir
          * fell asleep; while it is disabled they are 0. The pose readings are always current.
          */
         [[nodiscard]] JointState GetJointState(const Entity& joint) const;
+
+        /**
+         * @brief PROTOTYPE (ticket 34 decides the read-back state): how `character`'s last move left it. The default
+         * CharacterState for an entity with no active character body.
+         */
+        [[nodiscard]] CharacterState GetCharacterState(const Entity& character) const;
 
         /**
          * @brief Changes the velocity of `entity`'s body (for a child collider's entity, the compound body it belongs

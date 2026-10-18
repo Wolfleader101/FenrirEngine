@@ -31,33 +31,6 @@ namespace Fenrir
                    Same(a.angularDamping, b.angularDamping) && Same(a.gravityScale, b.gravityScale);
         }
 
-        bool Same(const CollisionShape& a, const CollisionShape& b)
-        {
-            if (a.Type() != b.Type())
-            {
-                return false;
-            }
-            if (a.Is<SphereShape>())
-            {
-                return Same(a.As<SphereShape>().radius, b.As<SphereShape>().radius);
-            }
-            if (a.Is<ConvexHullShape>())
-            {
-                return a.As<ConvexHullShape>().hull == b.As<ConvexHullShape>().hull;
-            }
-            if (a.Is<MeshShape>())
-            {
-                return a.As<MeshShape>().mesh == b.As<MeshShape>().mesh;
-            }
-            if (a.Is<CapsuleShape>())
-            {
-                const CapsuleShape& x = a.As<CapsuleShape>();
-                const CapsuleShape& y = b.As<CapsuleShape>();
-                return Same(x.halfHeight, y.halfHeight) && Same(x.radius, y.radius);
-            }
-            return Same(a.As<BoxShape>().halfExtents, b.As<BoxShape>().halfExtents);
-        }
-
         bool Same(const PhysicsMaterial& a, const PhysicsMaterial& b)
         {
             return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
@@ -238,7 +211,8 @@ namespace Fenrir
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
           m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
-          m_jointWatch(entities.Watch(ComponentType::Native<Joint>()))
+          m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
+          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
@@ -247,6 +221,8 @@ namespace Fenrir
         entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
         const ComponentType joints[] = {ComponentType::Native<Joint>()};
         entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
+        const ComponentType characters[] = {ComponentType::Native<CharacterBody>()};
+        entities.ForEachWith(characters, [this](std::uint32_t entity) { m_characterEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -257,12 +233,16 @@ namespace Fenrir
     void PhysicsWorld::Impl::Step(App& app, float dt)
     {
         SyncBodies();
+        SyncCharacters();
         PushEdits(dt);
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
         SyncJoints(dt);
         ApplyPushes();
+        // 3b: after every kinematic body's velocity is set for this tick, so a character moves with its platform.
+        MoveCharacters(dt);
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        WriteBackCharacters();
         MeasureJoints();
         BreakJoints();
         SendEvents(app);
@@ -279,10 +259,12 @@ namespace Fenrir
             record.snap = false;
             record.heldByGame = false;
         }
+        AdvanceCharacterPoses();
     }
 
     void PhysicsWorld::Impl::Restore()
     {
+        RestoreCharacters();
         for (auto& [id, record] : m_bodies)
         {
             if (!record.blended)
@@ -379,6 +361,7 @@ namespace Fenrir
             record.shownLocal = body.entity.GetComponent<Transform>();
             record.blended = true;
         }
+        BlendCharacters(fraction);
     }
 
     std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
@@ -525,7 +508,10 @@ namespace Fenrir
         std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
         for (std::uint32_t collider : m_colliderEntities)
         {
-            assembly[BodyEntityOf(collider)].push_back(collider);
+            if (!IsCharacterCollider(collider))
+            {
+                assembly[BodyEntityOf(collider)].push_back(collider);
+            }
         }
 
         for (std::uint32_t rigidBody : m_rigidBodyEntities)

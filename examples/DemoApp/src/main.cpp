@@ -38,6 +38,7 @@
 #include <array>
 #include <cmath>
 
+#include "CharacterScene.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
 #endif
@@ -651,6 +652,16 @@ int main(int argc, char* argv[])
     });
     demoScenes.Register(CSharpScenes::Joints());
 #endif
+
+    // PROTOTYPE (ticket 37): Characters (spike), the first of the F5 family.
+    CharacterScene characterScene(cube, aabbShader, camera);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&characterScene](Fenrir::App& running) { characterScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&characterScene](Fenrir::App& running) { characterScene.Tick(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&characterScene](Fenrir::App& running) { characterScene.Update(running); }});
+    demoScenes.Register(CharacterScene::Scene());
 #endif
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
@@ -671,11 +682,17 @@ int main(int argc, char* argv[])
         .AddSystems(Fenrir::SchedulePriority::Update,
                     {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
         // The physics debug lines are drawn after the scene and before the editor unbinds the scene's framebuffer.
-        .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {
 #ifdef FENRIR_PHYSICS
-                                                                 BIND_PHYSICS_DEMO_FN(DebugLines, physicsDemo),
+                                  // After the camera controller: the follow camera wins.
+                                  [&characterScene](Fenrir::App& running) { characterScene.FollowCamera(running); },
 #endif
-                                                                 BIND_EDITOR_FN(Editor::Update, editor)})
+                                  BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
+#ifdef FENRIR_PHYSICS
+                                  BIND_PHYSICS_DEMO_FN(DebugLines, physicsDemo),
+#endif
+                                  BIND_EDITOR_FN(Editor::Update, editor)})
         // .AddSystems(Fenrir::SchedulePriority::Tick, {Tick})
         .AddSequentialSystems(Fenrir::SchedulePriority::PostUpdate,
                               {BIND_GL_RENDERER_FN(GLRenderer::PostUpdate, glRenderer),

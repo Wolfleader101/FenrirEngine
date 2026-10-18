@@ -185,6 +185,24 @@ namespace Fenrir
         /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
         [[nodiscard]] JointState StateOf(const Entity& joint) const;
         void ApplyPushes();
+
+        // Character bodies (Characters.cpp, PROTOTYPE for ticket 37): each a backend character beside the bodies.
+
+        /** @brief Drains the CharacterBody watch, then makes, remakes or drops each one's backend character: none while
+         * it is inactive (warned about once each time it becomes so) or disabled. */
+        void SyncCharacters();
+        /** @brief Step 3b, before the step: in entity order, applies each character's teleport or turn, then moves it
+         * by its velocity, keeping the result for WriteBackCharacters. */
+        void MoveCharacters(float dt);
+        /** @brief Step 5: each moved character's position and trimmed velocity, written back. */
+        void WriteBackCharacters();
+        void AdvanceCharacterPoses();
+        void RestoreCharacters();
+        void BlendCharacters(float fraction);
+        /** @brief Whether the collider on `entity` is a character body's shape, so no body of its own. */
+        [[nodiscard]] bool IsCharacterCollider(std::uint32_t entity) const;
+        [[nodiscard]] CharacterState CharacterStateOf(const Entity& character) const;
+
         void WriteBack();
         void AdvancePoses();
         void SendEvents(App& app);
@@ -292,6 +310,40 @@ namespace Fenrir
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
         // The joints the last step broke, sent with its contact and trigger events.
         std::vector<JointBroken> m_broken;
+
+        // What physics last applied to a character body, or wrote back from it. With no backend character while it is
+        // inactive or disabled.
+        struct CharacterRecord
+        {
+            [[nodiscard]] bool Active() const
+            {
+                return id.value != Backend::CharacterId{}.value;
+            }
+
+            Backend::CharacterId id;
+            CollisionShape shape;
+            Math::Vec3 scale = Math::Vec3(1.0f);
+            CollisionFilter filter;
+            Transform world;
+            Math::Vec3 carried = Math::Vec3(0.0f);
+            // The last move's result, written back in step 5 and read back by GetCharacterState.
+            Backend::CharacterMoved moved;
+            bool moving = false;
+            // Inactive (a RigidBody, no Collider, a mesh shape): warned about once each time it becomes so.
+            bool inactive = false;
+
+            // Interpolation, as Record's.
+            Transform previous;
+            Transform current;
+            bool snap = true;
+            bool heldByGame = false;
+            bool blended = false;
+            Transform trueLocal;
+            Transform shownLocal;
+        };
+        ComponentWatch m_characterWatch;
+        std::set<std::uint32_t> m_characterEntities;
+        std::map<std::uint32_t, CharacterRecord> m_characters;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

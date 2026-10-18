@@ -37,6 +37,7 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollidePointResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
@@ -1205,6 +1206,29 @@ namespace Fenrir::Backend
         // How many excluded pairs each body is in, by its index: a body has a collision group while it is in any.
         std::unordered_map<JPH::uint32, std::uint32_t> excludedPairsOf;
 
+        // The characters, by CharacterId, each with its inner body's object layer. A freed slot has no character, and
+        // is reused.
+        struct CharacterSlot
+        {
+            JPH::Ref<JPH::CharacterVirtual> character;
+            JPH::ObjectLayer layer = 0;
+        };
+        std::vector<CharacterSlot> characters;
+        std::vector<std::uint32_t> freeCharacters;
+
+        JPH::CharacterVirtual& Character(CharacterId id)
+        {
+            return *characters[id.value].character;
+        }
+
+        // A character's contacts and ground where it stands, found against what its inner body's layer collides with.
+        void RefreshContacts(CharacterId id)
+        {
+            const CharacterSlot& slot = characters[id.value];
+            slot.character->RefreshContacts(system.GetDefaultBroadPhaseLayerFilter(slot.layer),
+                                            system.GetDefaultLayerFilter(slot.layer), {}, {}, tempAllocator);
+        }
+
         // The time of the last Step's collision steps: a joint's impulses are per collision step.
         float collisionStepTime = 0.0f;
 
@@ -1341,6 +1365,8 @@ namespace Fenrir::Backend
 
     World::~World()
     {
+        // Characters first: each removes and destroys its own inner body.
+        m_impl->characters.clear();
         // Constraints before bodies: Jolt's constraints point at their bodies.
         for (const Impl::JointSlot& slot : m_impl->joints)
         {
@@ -1617,6 +1643,195 @@ namespace Fenrir::Backend
         Impl::JointSlot& slot = m_impl->joints[id.value];
         slot.constraint->SetEnabled(false);
         m_impl->SetExcludes(slot, false);
+    }
+
+    namespace
+    {
+        // Contacts below this height in the character's own space (its centre at 0) can be its ground: those on the
+        // lower part of its shape, below where a capsule's cylinder ends. So a capsule stands on the round of its
+        // bottom, and its sides only slide.
+        float SupportHeight(const JPH::Shape& shape)
+        {
+            const JPH::AABox bounds = shape.GetLocalBounds();
+            const float radius = std::min(bounds.mMax.GetX(), bounds.mMax.GetZ());
+            return std::max(0.0f, -bounds.mMin.GetY() - radius);
+        }
+
+        CharacterGround FromJolt(JPH::CharacterBase::EGroundState state)
+        {
+            if (state == JPH::CharacterBase::EGroundState::OnGround)
+            {
+                return CharacterGround::OnGround;
+            }
+            if (state == JPH::CharacterBase::EGroundState::OnSteepGround)
+            {
+                return CharacterGround::OnSteepGround;
+            }
+            return state == JPH::CharacterBase::EGroundState::NotSupported ? CharacterGround::NotSupported
+                                                                           : CharacterGround::InAir;
+        }
+
+        // `velocity` less its part going into a surface along `normal` (towards the character), measured against the
+        // surface's own velocity.
+        JPH::Vec3 Trim(JPH::Vec3Arg velocity, JPH::Vec3Arg normal, JPH::Vec3Arg surface)
+        {
+            const float into = (velocity - surface).Dot(normal);
+            return into < 0.0f ? velocity - into * normal : velocity;
+        }
+    } // namespace
+
+    CharacterId World::CreateCharacter(const CharacterDesc& desc)
+    {
+        JPH::Ref<JPH::CharacterVirtualSettings> settings = new JPH::CharacterVirtualSettings();
+        settings->mShape = m_impl->MakeShape(desc.shape, desc.scale);
+        settings->mInnerBodyShape = settings->mShape;
+        settings->mInnerBodyLayer = m_impl->AcquireLayer(MotionType::Kinematic, desc.filter);
+        // From the entity, not Jolt's process-wide counter: the same scene gives the same IDs on every run.
+        settings->mID = JPH::CharacterID(desc.entity);
+        settings->mSupportingVolume = JPH::Plane(JPH::Vec3::sAxisY(), SupportHeight(*settings->mShape));
+        settings->mEnhancedInternalEdgeRemoval = true;
+
+        JPH::Ref<JPH::CharacterVirtual> character = new JPH::CharacterVirtual(
+            settings, JPH::RVec3(ToJolt(desc.position)), ToJolt(desc.rotation), desc.entity, &m_impl->system);
+        if (character->GetInnerBodyID().IsInvalid())
+        {
+            m_impl->objectLayers.Release(settings->mInnerBodyLayer);
+            m_impl->logger->Error("Physics world is full: a character was not made (" +
+                                  std::to_string(m_impl->maxBodies) + " bodies at most)");
+            return CharacterId{};
+        }
+        std::uint32_t index;
+        if (m_impl->freeCharacters.empty())
+        {
+            index = static_cast<std::uint32_t>(m_impl->characters.size());
+            m_impl->characters.emplace_back();
+        }
+        else
+        {
+            index = m_impl->freeCharacters.back();
+            m_impl->freeCharacters.pop_back();
+        }
+        m_impl->characters[index] = Impl::CharacterSlot{character, settings->mInnerBodyLayer};
+        const CharacterId id{index};
+        m_impl->RefreshContacts(id);
+        return id;
+    }
+
+    void World::DestroyCharacter(CharacterId id)
+    {
+        Impl::CharacterSlot& slot = m_impl->characters[id.value];
+        const JPH::AABox bounds = m_impl->Bounds(BodyId{slot.character->GetInnerBodyID().GetIndexAndSequenceNumber()});
+        slot.character = nullptr;
+        m_impl->objectLayers.Release(slot.layer);
+        m_impl->freeCharacters.push_back(id.value);
+        m_impl->WakeAround(bounds);
+    }
+
+    void World::TeleportCharacter(CharacterId id, const Math::Vec3& position, const Math::Quat& rotation)
+    {
+        JPH::CharacterVirtual& character = m_impl->Character(id);
+        character.SetPosition(JPH::RVec3(ToJolt(position)));
+        character.SetRotation(ToJolt(rotation));
+        m_impl->RefreshContacts(id);
+    }
+
+    void World::TurnCharacter(CharacterId id, const Math::Quat& rotation)
+    {
+        m_impl->Character(id).SetRotation(ToJolt(rotation));
+    }
+
+    CharacterMoved World::MoveCharacter(CharacterId id, const CharacterMove& move, float dt)
+    {
+        const Impl::CharacterSlot& slot = m_impl->characters[id.value];
+        JPH::CharacterVirtual& character = *slot.character;
+        const JPH::Vec3 up = JPH::Vec3::sAxisY();
+        character.SetMaxSlopeAngle(move.maxSlope);
+
+        // Riding: the last move ended on walkable ground, whose velocity this tick (a kinematic body's was set before
+        // the move) is added to the move and never to the game's velocity.
+        const bool riding = character.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+        JPH::Vec3 ground = JPH::Vec3::sZero();
+        if (riding)
+        {
+            character.UpdateGroundVelocity();
+            ground = character.GetGroundVelocity();
+        }
+        const JPH::Vec3 velocity = ToJolt(move.velocity);
+        JPH::Vec3 own = velocity;
+        if (riding && move.stopOnSlope && own.Dot(up) < 0.0f)
+        {
+            // Standing: what presses it into the ground does not slide it down the slope.
+            own -= own.Dot(up) * up;
+        }
+        JPH::Vec3 carried = ToJolt(move.carried);
+        character.SetLinearVelocity(own + carried + ground);
+
+        JPH::CharacterVirtual::ExtendedUpdateSettings update;
+        update.mStickToFloorStepDown = JPH::Vec3(0.0f, -move.floorSnap, 0.0f);
+        update.mWalkStairsStepUp = JPH::Vec3(0.0f, move.stepHeight, 0.0f);
+        const JPH::RVec3 start = character.GetPosition();
+        character.ExtendedUpdate(dt, m_impl->system.GetGravity(), update,
+                                 m_impl->system.GetDefaultBroadPhaseLayerFilter(slot.layer),
+                                 m_impl->system.GetDefaultLayerFilter(slot.layer), {}, {}, m_impl->tempAllocator);
+
+        // Trimmed against what it touches at the end of the move, in the frame of the ground it rode. Never measured
+        // from displacement, so a stair step or a floor snap does not show.
+        //  - What faces up (ground, a slope, a step's rounded edge) takes only the falling part of the velocity, so
+        //    walking never turns into climbing speed or is lost on a step's edge. On walkable ground with stopOnSlope,
+        //    all of the falling part; otherwise its part into the surface, so the rest slides down the slope.
+        //  - Anything else (a wall, a ceiling) takes what goes into it along its normal.
+        JPH::Vec3 kept = velocity;
+        const auto against = [&](JPH::Vec3Arg normal, JPH::Vec3Arg surfaceVelocity) {
+            const JPH::Vec3 surface = surfaceVelocity - ground;
+            carried = Trim(carried, normal, surface);
+            kept = Trim(kept + carried, normal, surface) - carried;
+        };
+        const auto falling = [&](JPH::Vec3Arg normal, JPH::Vec3Arg surfaceVelocity) {
+            const JPH::Vec3 surface = surfaceVelocity - ground;
+            carried = Trim(carried, normal, surface);
+            const JPH::Vec3 vertical = kept.Dot(up) * up;
+            kept = kept - vertical + Trim(vertical + carried, normal, surface) - carried;
+        };
+        const auto touch = [&](JPH::Vec3Arg contactNormal, JPH::Vec3Arg surfaceNormal, JPH::Vec3Arg surfaceVelocity) {
+            if (contactNormal.Dot(up) <= 1.0e-3f)
+            {
+                against(contactNormal, surfaceVelocity);
+            }
+            else if (move.stopOnSlope && !character.IsSlopeTooSteep(surfaceNormal))
+            {
+                against(up, surfaceVelocity);
+            }
+            else
+            {
+                falling(contactNormal, surfaceVelocity);
+            }
+        };
+        for (const JPH::CharacterContact& contact : character.GetActiveContacts())
+        {
+            if (contact.mHadCollision && !contact.mWasDiscarded && !contact.mIsSensorB)
+            {
+                touch(contact.mContactNormal, contact.mSurfaceNormal, contact.mLinearVelocity);
+            }
+        }
+        if (character.IsSupported())
+        {
+            // Standing still with stopOnSlope hits nothing: the ground still takes what presses into it.
+            touch(character.GetGroundNormal(), character.GetGroundNormal(), character.GetGroundVelocity());
+        }
+
+        CharacterMoved moved;
+        moved.position = FromJolt(JPH::Vec3(character.GetPosition()));
+        moved.velocity = FromJolt(kept);
+        moved.carried = FromJolt(carried);
+        moved.groundVelocity = FromJolt(ground);
+        moved.movedVelocity = FromJolt(JPH::Vec3(character.GetPosition() - start) / dt);
+        moved.ground = FromJolt(character.GetGroundState());
+        moved.groundNormal = FromJolt(character.GetGroundNormal());
+        if (!character.GetGroundBodyID().IsInvalid())
+        {
+            moved.groundEntity = static_cast<std::uint32_t>(m_impl->Bodies().GetUserData(character.GetGroundBodyID()));
+        }
+        return moved;
     }
 
     void World::Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation)

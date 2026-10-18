@@ -13,6 +13,7 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Queries.hpp
 
     src/BodyComponents.hpp
+    src/Characters.cpp
     src/CollisionLayers.cpp
     src/DebugLines.cpp
     src/Joints.cpp

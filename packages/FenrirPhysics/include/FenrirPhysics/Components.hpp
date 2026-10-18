@@ -327,6 +327,47 @@ namespace Fenrir
         bool enabled = true;
     };
 
+    /**
+     * @brief PROTOTYPE (prototype/fenrir-physics-character-spike, ticket 37): makes the entity's own Collider a
+     * character body (ADR-0014). Game code writes `velocity` in `Tick`; physics moves the character by it once in
+     * `PostTick`, before the step, in entity order, and writes `velocity` back with the parts that went into what it
+     * hit removed. Gravity is game code's: add `PhysicsWorld::Gravity() * dt` each tick. Ground velocity is added
+     * privately and never written into `velocity`.
+     *
+     * Inactive (one warning, kept, back once valid) beside a RigidBody, with no Collider, or with a mesh shape. The
+     * spike ignores colliders beneath it and the entity's PhysicsMaterial.
+     */
+    struct CharacterBody
+    {
+        /** @brief World space, m/s; written back trimmed by hits. */
+        Math::Vec3 velocity = Math::Vec3(0.0f);
+        /** @brief Radians; 0 turns slope limiting off. */
+        float maxSlope = 0.785f;
+        /** @brief Metres; 0 turns stair walking off. */
+        float stepHeight = 0.4f;
+        /** @brief Metres; 0 turns floor sticking off. */
+        float floorSnap = 0.5f;
+        /** @brief On walkable ground, the part of `velocity` going into the ground does not slide it down a slope. */
+        bool stopOnSlope = true;
+        /** @brief As RigidBody::interpolate: position and rotation blend between the last two steps. */
+        bool interpolate = true;
+        /** @brief Disabled: not moved, invisible to bodies, queries and triggers, nothing written back. */
+        bool enabled = true;
+    };
+
+    /** @brief PROTOTYPE (ticket 34 decides): how a character body stood after its last move. */
+    enum class CharacterGround : std::uint8_t
+    {
+        /** @brief On walkable ground. */
+        OnGround,
+        /** @brief On ground too steep to stand on. */
+        OnSteepGround,
+        /** @brief Touching something, but nothing beneath it. */
+        NotSupported,
+        /** @brief Touching nothing. */
+        InAir
+    };
+
     /** @brief Reports the body's contacts as ContactBegin and ContactEnd events. Put it on the rigid body's entity. */
     struct ContactEvents
     {
