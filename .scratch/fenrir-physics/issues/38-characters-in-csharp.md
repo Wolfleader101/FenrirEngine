@@ -14,3 +14,5 @@ What does the physics scripting extension (`FenrirPhysicsScripting`, contract `F
 - **Queries:** the motion-test queries as native functions with caller-supplied spans.
 - **Robustness:** the foundation's no-op-with-warning rules.
 - **What the C# demo scene needs** that tests alone would not prove.
+
+From "How is a character body modelled in the ECS?" (ADR-0014): a character is driven by writing `CharacterBody::velocity`, a field, so C# needs no native move function (ADR-0009). `CharacterBody` holds plain fields (`velocity`, `enabled`, live settings) and no tagged union, so it maps directly. Physics never adds or removes components on a character, so nothing a C# system reads appears or disappears on landing. Inactive and disabled characters follow the foundation's silent no-op rules for native queries about them.
