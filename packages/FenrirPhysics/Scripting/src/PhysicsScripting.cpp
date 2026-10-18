@@ -25,6 +25,7 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
+#include "JointStateMapping.hpp"
 #include "PhysicsState.hpp"
 
 // How the physics components and events look to C#: each mapping is checked against its mirror in the Fenrir.Physics
@@ -186,14 +187,6 @@ template <>
 struct Iris::EnumMapping<Fenrir::JointType>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.JointType";
-};
-
-template <>
-struct Iris::StructMapping<Fenrir::JointFrame>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.JointFrame";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::JointFrame, position, "Position"),
-                                                      IRIS_FIELD_AS(Fenrir::JointFrame, rotation, "Rotation"));
 };
 
 template <>
@@ -403,6 +396,15 @@ namespace Fenrir::Detail
         EntityLinkView otherBody;
         EntityLinkView otherCollider;
     };
+
+    struct JointBrokenLayout
+    {
+        EntityLinkView joint;
+        EntityLinkView bodyA;
+        EntityLinkView bodyB;
+        Math::Vec3 force;
+        Math::Vec3 torque;
+    };
 } // namespace Fenrir::Detail
 
 template <>
@@ -445,6 +447,17 @@ struct Iris::StructMapping<Fenrir::Detail::TriggerExitLayout>
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD_AS(Layout, trigger, "Trigger"), IRIS_FIELD_AS(Layout, otherBody, "OtherBody"),
                            IRIS_FIELD_AS(Layout, otherCollider, "OtherCollider"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::JointBrokenLayout>
+{
+    using Layout = Fenrir::Detail::JointBrokenLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointBroken";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, joint, "Joint"), IRIS_FIELD_AS(Layout, bodyA, "BodyA"),
+                           IRIS_FIELD_AS(Layout, bodyB, "BodyB"), IRIS_FIELD_AS(Layout, force, "Force"),
+                           IRIS_FIELD_AS(Layout, torque, "Torque"));
 };
 
 namespace Fenrir
@@ -863,6 +876,29 @@ namespace Fenrir
             };
             *frames = FrameFromWorld(entityOf(bodyA), entityOf(bodyB), *anchor);
         }
+
+        // The world's reading of the joint, or the zeroed state (warning once) with no world or no Joint. An inactive
+        // or unstepped joint reads zeroed from the world itself, which already warns about an inactive one.
+        void GetJointState(const CallContext& context, std::uint32_t joint, JointState* state)
+        {
+            if (state == nullptr)
+            {
+                return;
+            }
+            *state = JointState{};
+            PhysicsWorld* world = WorldFor(context, "GetJointState");
+            if (world == nullptr)
+            {
+                return;
+            }
+            EntityList& entities = context.Entities();
+            if (!entities.HasEntity(joint) || !entities.GetEntity(joint).HasComponent<Joint>())
+            {
+                WarnOnce(context, "GetJointState: the entity has no Joint, so it reads zeroed");
+                return;
+            }
+            *state = world->GetJointState(entities.HandleOf(joint));
+        }
     } // namespace
 
     Fenrir::ScriptingExtension Physics::ScriptingExtension() const
@@ -895,6 +931,7 @@ namespace Fenrir
             NativeFunction::Make<&CreateMesh>(prefix + "CreateCollisionMesh"),
             NativeFunction::Make<&ReleaseMesh>(prefix + "ReleaseCollisionMesh"),
             NativeFunction::Make<&FrameFromWorldNative>(prefix + "FrameFromWorld"),
+            NativeFunction::Make<&GetJointState>(prefix + "GetJointState"),
         };
         extension.components = {
             MakeComponent<RigidBody>("Fenrir.Physics.RigidBody"),
@@ -910,6 +947,7 @@ namespace Fenrir
             MakeEvent<ContactEnd, Detail::ContactEndLayout>("Fenrir.Physics.ContactEnd"),
             MakeEvent<TriggerEnter, Detail::TriggerEnterLayout>("Fenrir.Physics.TriggerEnter"),
             MakeEvent<TriggerExit, Detail::TriggerExitLayout>("Fenrir.Physics.TriggerExit"),
+            MakeEvent<JointBroken, Detail::JointBrokenLayout>("Fenrir.Physics.JointBroken"),
         };
         return extension;
     }
