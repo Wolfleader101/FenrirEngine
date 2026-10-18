@@ -186,7 +186,7 @@ An entity the physics world simulates as a deformable object (cloth, jelly).
 *Avoid:* cloth (one kind of soft body).
 
 **Character body**
-An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body. Game code sets the velocity it should move at, and physics moves it by sliding along whatever is in its way. It has exactly one collider, its own, and other bodies, queries and triggers see that collider as they see a body's. An entity is either a character body or a rigid body, never both. Gravity and jumping are part of the velocity game code sets; physics adds the velocity of the ground it stands on, and of ground it has just left, without changing the velocity game code set.
+An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body. Game code sets the velocity it should move at, and physics moves it by sliding along whatever is in its way. It has exactly one collider, its own, and other bodies, queries and triggers see that collider as they see a body's. An entity is either a character body or a rigid body, never both. Gravity and jumping are part of the velocity game code sets; physics adds the velocity of the ground it stands on, and of ground it has just left, without changing the velocity game code set. It pushes the loose bodies it walks into, with a limited force, and presses down on what it stands on; loose bodies never push it back, but moving fixed-path bodies (doors, platforms) shove it along.
 *Avoid:* character controller (as the name of the thing), player body, kinematic character (it is not a kinematic rigid body).
 
 **Carried velocity**

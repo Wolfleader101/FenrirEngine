@@ -79,3 +79,5 @@ No ADR: every call can be reversed by adding fields or events, and all of it fit
       // strength and mass from ticket 35
   };
   ```
+
+**Amended by "How does a character interact with other bodies?" (35):** a body can bounce off a character's inner body during the step and be gone before the next move, so move contacts alone miss it. Contacts between a character and a *dynamic* body are the union of the move's end-of-move contacts and the inner body's step contacts: touching while either source has the pair, `ContactBegin` from whichever sees it first (with that source's `relativeSpeed`), `ContactEnd` when neither has it; still one pair per entity pair. Contacts with static and kinematic bodies and other characters still come from moves only. `CharacterBody` gains `pushForce` (100 N) and `mass` (70 kg).
