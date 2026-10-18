@@ -678,6 +678,9 @@ namespace Fenrir
             }
             else if (!Same(world.pos, record.world.pos) || !Same(world.rot, record.world.rot))
             {
+                // Its joints keep the impulses they carried last step: the backend pulls them back together by
+                // position, so they still hold the same load, and starting them from nothing would overshoot it and
+                // could break them.
                 m_backend.Teleport(record.id, world.pos, world.rot);
                 record.snap = true;
             }

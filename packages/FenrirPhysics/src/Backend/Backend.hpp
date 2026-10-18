@@ -343,7 +343,9 @@ namespace Fenrir::Backend
 
         /**
          * @brief Replaces a body's shape with one made from `parts` (as BodyDesc::parts, for the body of `entity`),
-         * keeping its `mass`; its inertia follows the new shape. Every part's shape must pass CanMakeShape.
+         * keeping its `mass`; its inertia follows the new shape. Every part's shape must pass CanMakeShape. Its joints'
+         * constraints keep their anchors where they are relative to the body's origin, however its centre of mass
+         * moves.
          */
         void SetShape(BodyId id, std::span<const ColliderPart> parts, std::uint32_t entity, float mass);
 

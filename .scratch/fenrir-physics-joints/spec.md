@@ -242,7 +242,7 @@ The foundation's `PostTick` sequence gains joint work in steps 1, 2 and a new 5b
   - Removing a `RigidBody` but keeping its `Collider` leaves a static body, so the joint stays active.
 - **Idle joints:** both ends static or kinematic, or a static or kinematic `bodyA` joined to the world, are valid but never solved, silently. They start working when an end becomes dynamic.
 - **Motion type changes** keep the constraint and log nothing. A kinematic end drags its dynamic partner and is never pushed.
-- **Teleports:** writing one end's `Transform` does not move the other end; the joint pulls them back together. Physics privately resets warm starting on the teleported body's joints. Documented: move a whole jointed group in the same tick (each body's `Transform`); there is no group-teleport helper. Kinematic moves are not teleports. Reparenting a body entity is a teleport.
+- **Teleports:** writing one end's `Transform` does not move the other end; the joint pulls them back together. The teleported body's joints keep their warm starting: the backend corrects the gap by position, so last step's impulses still fit, and resetting them made the first step overshoot the load like a new joint's (5 % on a 20 kg cantilever), enough to break a joint set just over its load (found in ticket 11). Documented: move a whole jointed group in the same tick (each body's `Transform`); there is no group-teleport helper. Kinematic moves are not teleports. Reparenting a body entity is a teleport.
   - **Promised and tested:** a teleport never breaks a joint and adds no velocity to the joint's bodies. The backend corrects the gap by position, not by impulse, so neither `GetJointState` nor breaking sees it.
   - **Not promised:** how fast the bodies are pulled back together. The spike's door, teleported 0.7 m alone, returned within 10 steps without a jolt; another backend may differ.
 - **Shapes and scale:** a shape or centre-of-mass change on a body that keeps its backend body (a `Collider` edit, a compound child added, removed or moved) keeps the constraint; physics tells the backend privately, so anchors stay put relative to the body's origin. A scale change recreates the constraint like a frame edit. A rebuilt body has its joints' constraints removed before it and created after it.
@@ -251,7 +251,7 @@ The foundation's `PostTick` sequence gains joint work in steps 1, 2 and a new 5b
 ### FenrirPhysics: the Jolt backend (private)
 
 All in `src/Backend/Jolt/`; no public header names Jolt.
-- The backend class gains joint operations (in the spike: `CreateJoint`, `DestroyJoint`, `UpdateJoint`, `ResetWarmStart`, and reading load). Physics keeps a private index from each body to its joints.
+- The backend class gains joint operations (in the spike: `CreateJoint`, `DestroyJoint`, `UpdateJoint`, and reading load; the spike's `ResetWarmStart` was dropped in ticket 11). Physics keeps a private index from each body to its joints.
 - Kinds map to Jolt's fixed, point, distance, hinge, slider and swing-twist constraints, built in local space against centre-of-mass frames; the world end is `Body::sFixedToWorld`.
 - min == max limits, the rest-pose widening and clamping are mapped privately.
 - Shape changes call `NotifyShapeChanged`; every update calls `ActivateConstraint` (no Jolt edit wakes anything).
@@ -318,7 +318,7 @@ C++ places only the marker. `scripts/Physics/Joints.cs` builds everything in one
   - `GetJointState`: the chain's top joint reads its weight (49.0 N for five 1 kg links), hinge angle and sign, zeroed for non-joints, inactive and unstepped joints, kept while asleep, 0 while disabled;
   - breaking: one step over breaks with one `JointBroken` sorted by joint; repair while overloaded breaks again; infinite never breaks; game disables send nothing;
   - no-collide: default exclusion, `collideConnected`, chains two apart colliding, the layer rule winning, triggers not excluded, exclusion ending on disable or break, contact events on a toggle, queries unaffected;
-  - edges: each inactive case with one warning per transition and reactivation; idle joints starting when an end becomes dynamic; motion-type switches; destroying a body mid-swing (no crash, constraints before bodies); teleports and warm-start reset, a teleport never breaking a joint (even with a low threshold) nor adding velocity; shape changes keeping anchors; every edit waking a sleeping pair; inactive scenes;
+  - edges: each inactive case with one warning per transition and reactivation; idle joints starting when an end becomes dynamic; motion-type switches; destroying a body mid-swing (no crash, constraints before bodies); teleports, a teleport never breaking a joint (even with a low threshold) nor adding velocity; shape changes keeping anchors; every edit waking a sleeping pair; inactive scenes;
   - solve order: removing an earlier joint leaves a chain bit-identical to disabling it; bit-identical runs, single- and multi-threaded;
   - `Joints` debug lines: counts for known joints, dimmed and grey cases.
   Prior art: the foundation's `PhysicsTestApp` and `PhysicsProbe`, and the spike's `[joints-spike]` cases on the prototype branch.

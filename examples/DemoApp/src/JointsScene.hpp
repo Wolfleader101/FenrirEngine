@@ -22,6 +22,11 @@
 //
 // 3 destroys chain link 3. The two joints naming it go inactive, one warning each, and draw grey on the links left
 // with the Joints debug lines on (F2); the links below fall.
+//
+// 4 teleports the door alone, 0.7 m out of its frame and back: its hinge pulls it back without a jolt. 5 teleports the
+// door and its frame together, a metre and back: they line up at once. 6 scales link 5 up by half and back: its
+// joints' anchors stay on its ends. 7 adds a lump to the side of link 6, or removes it, rebuilding its body; 8 moves
+// the lump to link 6's other side, reshaping it. Its centre of mass moves each time, and its anchors stay put on it.
 
 #ifdef FENRIR_PHYSICS
 
@@ -63,11 +68,13 @@ class JointsScene
             .keyHelp = "The door swings on its hinge, the chain hangs from its hook. 1 pushes the door, 2 "
                        "cycles its motor (off, opening, closing, to shut), L turns its limits off and on. 9 lets "
                        "the links collide with their neighbours, and back. 0 logs every joint's state. B gives chain "
-                       "joint 1 a 15 N break force, and back; R repairs broken joints. 3 destroys chain link 3. F2 "
-                       "cycles the physics debug lines, F4 goes on.",
+                       "joint 1 a 15 N break force, and back; R repairs broken joints. 4 teleports the door alone, 5 "
+                       "the door and its frame. 6 scales link 5, 7 adds or removes a lump on link 6, 8 moves it. 3 "
+                       "destroys chain link 3. F2 cycles the physics debug lines, F4 goes on.",
             .smokeKeys = {GLFW_KEY_9, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_2, GLFW_KEY_L, GLFW_KEY_2, GLFW_KEY_2,
-                          GLFW_KEY_L, GLFW_KEY_0, GLFW_KEY_B, GLFW_KEY_R, GLFW_KEY_B, GLFW_KEY_R, GLFW_KEY_3,
-                          GLFW_KEY_0}};
+                          GLFW_KEY_L, GLFW_KEY_0, GLFW_KEY_B, GLFW_KEY_R, GLFW_KEY_B, GLFW_KEY_R, GLFW_KEY_4,
+                          GLFW_KEY_4, GLFW_KEY_5, GLFW_KEY_5, GLFW_KEY_6, GLFW_KEY_6, GLFW_KEY_8, GLFW_KEY_7,
+                          GLFW_KEY_8, GLFW_KEY_8, GLFW_KEY_7, GLFW_KEY_3, GLFW_KEY_0}};
     }
 
     JointsScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
@@ -91,9 +98,9 @@ class JointsScene
     }
 
     // Update, while the scene is active: 1, 2 and L work the door, 9 toggles collideConnected on every chain joint
-    // between two links, 0 logs every joint's state, B and R break and repair chain joint 1, 3 destroys chain link 3,
-    // each TriggerEnter of the door's trigger and each JointBroken is logged, and each joint entity's name shows its
-    // readings. Events sent while another scene is active are read and dropped.
+    // between two links, 0 logs every joint's state, B and R break and repair chain joint 1, 4 to 8 teleport, scale and
+    // reshape, 3 destroys chain link 3, each TriggerEnter of the door's trigger and each JointBroken is logged, and
+    // each joint entity's name shows its readings. Events sent while another scene is active are read and dropped.
     void Update(Fenrir::App& app)
     {
         const bool active = app.GetActiveScene().GetName() == m_scene;
@@ -142,6 +149,26 @@ class JointsScene
             else if (event.key == GLFW_KEY_R)
             {
                 RepairJoints(app);
+            }
+            else if (event.key == GLFW_KEY_4)
+            {
+                TeleportDoor(app);
+            }
+            else if (event.key == GLFW_KEY_5)
+            {
+                TeleportDoorFrame(app);
+            }
+            else if (event.key == GLFW_KEY_6)
+            {
+                ScaleLink(app);
+            }
+            else if (event.key == GLFW_KEY_7)
+            {
+                ToggleLump(app);
+            }
+            else if (event.key == GLFW_KEY_8)
+            {
+                MoveLump(app);
             }
         }
         if (active)
@@ -227,6 +254,66 @@ class JointsScene
         app.Logger()->Info("Repaired " + std::to_string(repaired) + (repaired == 1 ? " joint" : " joints"));
     }
 
+    // 4: the door alone, out of its frame and back, by writing its Transform.
+    void TeleportDoor(Fenrir::App& app)
+    {
+        m_doorOut = !m_doorOut;
+        m_door.GetComponent<Fenrir::Transform>().pos.z += m_doorOut ? 0.7f : -0.7f;
+        app.Logger()->Info(m_doorOut ? "Door teleported 0.7 m out of its frame: its hinge pulls it back"
+                                     : "Door teleported 0.7 m back: its hinge pulls it back");
+    }
+
+    // 5: the door frame, and with it its posts and the door beneath it, a metre and back.
+    void TeleportDoorFrame(Fenrir::App& app)
+    {
+        m_frameMoved = !m_frameMoved;
+        m_doorFrame.GetComponent<Fenrir::Transform>().pos.z += m_frameMoved ? 1.0f : -1.0f;
+        app.Logger()->Info(m_frameMoved ? "Door and frame teleported a metre together: they line up at once"
+                                        : "Door and frame teleported a metre back together");
+    }
+
+    // 6: link 5 half as large again, and back. Its joints' frames follow its scale, so they stay on its ends.
+    void ScaleLink(Fenrir::App& app)
+    {
+        m_linkScaled = !m_linkScaled;
+        m_links[scaledLink].GetComponent<Fenrir::Transform>().scale = linkSize * (m_linkScaled ? 1.5f : 1.0f);
+        app.Logger()->Info(m_linkScaled ? "Link 5 scaled up by half: its anchors stay on its ends"
+                                        : "Link 5 back to its size");
+    }
+
+    // 7: a lump on the side of link 6, a child collider making it a compound body with its centre of mass off its
+    // middle, or none. Either way its body is rebuilt, and its joints with it.
+    void ToggleLump(Fenrir::App& app)
+    {
+        Fenrir::EntityList& entities = app.GetActiveScene().GetEntityList();
+        if (m_lump.IsValid())
+        {
+            entities.DestroyEntity(m_lump);
+            m_lump = Fenrir::Entity();
+            app.Logger()->Info("Link 6's lump removed: its anchors stay on its ends");
+            return;
+        }
+        // In link 6's scaled space: a 0.25 m cube against its side.
+        m_lump = Box(entities, "Lump", Fenrir::Math::Vec3(0.0f, 0.0f, lumpSide), lumpSize / linkSize,
+                     Fenrir::Math::Vec3(0.3f, 0.3f, 0.85f));
+        m_lump.AddComponent<Fenrir::Collider>();
+        m_links[lumpedLink].AddChild(m_lump);
+        app.Logger()->Info("Link 6 has a lump on its side: its anchors stay on its ends");
+    }
+
+    // 8: link 6's lump to its other side, reshaping its compound body, which keeps its backend body.
+    void MoveLump(Fenrir::App& app) const
+    {
+        if (!m_lump.IsValid())
+        {
+            app.Logger()->Info("Link 6 has no lump to move: 7 adds one");
+            return;
+        }
+        float& side = m_lump.GetComponent<Fenrir::Transform>().pos.z;
+        side = -side;
+        app.Logger()->Info("Link 6's lump moved to its other side: its anchors stay on its ends");
+    }
+
     // The joints' readings in their names: the door's angle, and how hard each joint pulls; "off" once disabled.
     void ShowReadings(Fenrir::App& app) const
     {
@@ -284,6 +371,13 @@ class JointsScene
     // Joint to joint. Each link is a little longer, so neighbours overlap at their joints.
     static constexpr float linkSpacing = 0.5f;
     static constexpr float linkLength = 0.6f;
+    // The link 6 scales, and the one 7 and 8 reshape.
+    static constexpr std::size_t scaledLink = 5;
+    static constexpr std::size_t lumpedLink = 6;
+    // Where 7's lump sits against link 6's side, in its scaled space: the link's half thickness and the lump's.
+    static constexpr float lumpSide = (0.075f + 0.125f) / 0.15f;
+    inline static const Fenrir::Math::Vec3 linkSize = Fenrir::Math::Vec3(linkLength, 0.15f, 0.15f);
+    inline static const Fenrir::Math::Vec3 lumpSize = Fenrir::Math::Vec3(0.25f);
     inline static const Fenrir::Math::Vec3 hook = Fenrir::Math::Vec3(1.5f, 2.5f, -12.0f);
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
 
@@ -310,6 +404,7 @@ class JointsScene
         Fenrir::Entity frame = entities.CreateEntity();
         frame.GetComponent<Fenrir::Name>().Set("Door frame");
         frame.GetComponent<Fenrir::Transform>().pos = Fenrir::Math::Vec3(-3.5f, -3.75f, -12.0f);
+        m_doorFrame = frame;
 
         const Fenrir::Math::Vec3 wood(0.55f, 0.35f, 0.2f);
         Fenrir::Entity post = Box(entities, "Post (hinge)", Fenrir::Math::Vec3(-0.6f, 1.1f, 0.0f),
@@ -439,10 +534,9 @@ class JointsScene
         for (int i = 0; i < linkCount; ++i)
         {
             const float start = hook.x + linkSpacing * static_cast<float>(i);
-            Fenrir::Entity link =
-                Box(entities, ("Link " + std::to_string(i)).c_str(),
-                    Fenrir::Math::Vec3(start + linkSpacing / 2.0f, hook.y, hook.z),
-                    Fenrir::Math::Vec3(linkLength, 0.15f, 0.15f), colours[static_cast<std::size_t>(i % 2)]);
+            Fenrir::Entity link = Box(entities, ("Link " + std::to_string(i)).c_str(),
+                                      Fenrir::Math::Vec3(start + linkSpacing / 2.0f, hook.y, hook.z), linkSize,
+                                      colours[static_cast<std::size_t>(i % 2)]);
             link.AddComponent<Fenrir::RigidBody>();
             link.AddComponent<Fenrir::Collider>();
             links.AddChild(link);
@@ -472,6 +566,11 @@ class JointsScene
     std::string m_scene;
     Fenrir::Entity m_door;
     Fenrir::Entity m_doorTrigger;
+    Fenrir::Entity m_doorFrame;
+    bool m_doorOut = false;
+    bool m_frameMoved = false;
+    bool m_linkScaled = false;
+    Fenrir::Entity m_lump;
     DoorMotor m_doorMotor = DoorMotor::Off;
     bool m_pushOpen = false;
     std::vector<Fenrir::Entity> m_links;
