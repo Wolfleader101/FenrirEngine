@@ -16,3 +16,13 @@ The character spec ships two DemoApp scenes on F5 through `DemoScenes` (examples
 - **Hand checks:** what the engine developer verifies by hand, and the `FENRIR_DEMO_KEYS` smoke runs.
 
 From "What does game code read back from a character, and which events?": the readouts can show `state.ground`, `groundBody`, `movedVelocity`, `carriedVelocity`, `onWall` and `onCeiling`; landing is derived by comparing with last tick, so a scene showing a landing counter proves the derivation. Characters send the existing contact events (with `ContactEvents`) and trigger events, so a trigger the character walks through and a `ContactEvents` character are the checks for them. A debug-line category could draw `groundNormal` and `movedVelocity`.
+
+From "Spike: a character walking a small level through the proposed model" (37): the spike's "Characters (spike)" scene (branch `prototype/fenrir-physics-character-spike`, `CharacterScene.hpp`) is a candidate for the C++ scene:
+
+- **Level:** a 30° ramp, a 55° slope, ten 0.3 m stairs to a 3 m ledge, a lift beside the ledge (1.5 m/s), a sideways shuttle (2 m/s), five 1 kg boxes, and a low ceiling to jump into.
+- **Camera:** a follow camera placed after the camera controller in `Update`, so it wins. WASD walks while it follows, and C frees the camera, giving WASD back to it, while the arrows still walk. Q/E orbit it.
+- **Readouts:** the character's `Name` shows its ground state, `velocity`, carried velocity and ground changes per second. Each ground change is logged with its tick, which is how the stair-descent flicker and the lift-turn hop were found. Logging the ground body ("on Lift") was the most useful readout.
+- **Autopilot:** an autopilot route (P) gives `FENRIR_DEMO_KEYS` something to walk, since smoke keys can only tap.
+- **Hand checks:** on a 60 Hz display, interpolation cannot be seen by eye. Leave it to the headless check, or drop the frame cap for the demo.
+- **Debug lines:** the scene had none. The character's look is two cubes over a capsule collider, and the colliders category does not draw characters. A character category drawing the capsule, the ground normal and `velocity` would show what the look hides.
+- **Game code:** the scene's Tick sets horizontal speed from the keys, which stops `stopOnSlope = false` from sliding. The demo should add input to the written-back velocity instead.
