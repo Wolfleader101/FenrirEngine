@@ -341,6 +341,14 @@ namespace Fenrir
      * trigger, or in another scene). It does nothing, with one warning each time it goes inactive, wakes the body left,
      * and works again by itself once both names are bodies. A joint whose bodies are all static or kinematic is idle,
      * not inactive: kept silently, it holds once one becomes dynamic. Motion-type changes keep a joint as it is.
+     *
+     * Writing one body's Transform, or reparenting it, teleports it alone: the other body stays where it is, and the
+     * joint pulls the two back together over the next steps, by position, so a teleport adds no velocity to them and
+     * never breaks the joint (one left out of a resting pose, or past the joint's limits, still falls while it is
+     * pulled back). How fast they come together is not promised. To move a jointed group as one, write each
+     * of its bodies' Transforms in the same tick; there is no group teleport. A kinematic body's moves are not
+     * teleports. Editing a body's colliders (their shapes, or the child colliders of a compound body added, removed or
+     * moved) keeps its joints' frames where they are on it, wherever its centre of mass goes.
      */
     struct Joint
     {
