@@ -33,3 +33,11 @@ From "How does a character interact with other bodies?": hand checks for pushing
 - two characters (one autopilot) blocking each other, one standing on the other and riding it;
 - a box resting on the character's head, which is not carried (a stated limit).
 A character debug-line category could draw the capsule its inner body presents to bodies and queries.
+
+From "What are the motion-test and sweep queries, and how does a character change shape?": the spike remade the character on a shape edit, and the spec reshapes it with a room check, so the scenes need a **crouch tunnel**: crouch to enter, release inside, and the character stays crouched (`state.shapeBlocked` in the readout) until it walks out and stands by itself. Further hand checks:
+- crouching on the ground keeps the feet down, and crouching mid-jump tucks them up to clear a ledge it otherwise could not;
+- a 1 kg box or another character above the head blocks standing; a trigger does not;
+- a scaled-up character (world scale) walks with its larger shape;
+- a mesh-shaped character goes inactive with one warning (the spike already shows this).
+
+Motion tests have no character of their own to prove them, so one scene could show a custom mover using them: a kinematic `RigidBody` moved by game code with `MoveCast` and `Depenetrate`, or a dash that stops at `MoveCast`'s safe distance and teleports the character there. A character debug-line category should draw the shape in use, which differs from the `Collider` while a stand-up is blocked.

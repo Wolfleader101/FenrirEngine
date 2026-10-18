@@ -186,7 +186,7 @@ An entity the physics world simulates as a deformable object (cloth, jelly).
 *Avoid:* cloth (one kind of soft body).
 
 **Character body**
-An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body. Game code sets the velocity it should move at, and physics moves it by sliding along whatever is in its way. It has exactly one collider, its own, and other bodies, queries and triggers see that collider as they see a body's. An entity is either a character body or a rigid body, never both. Gravity and jumping are part of the velocity game code sets; physics adds the velocity of the ground it stands on, and of ground it has just left, without changing the velocity game code set. It pushes the loose bodies it walks into, with a limited force, and presses down on what it stands on; loose bodies never push it back, but moving fixed-path bodies (doors, platforms) shove it along.
+An entity moved by game code through the physics world with character-style rules (walking, slopes, steps), rather than simulated as a rigid body. Game code sets the velocity it should move at, and physics moves it by sliding along whatever is in its way. It has exactly one collider, its own, and other bodies, queries and triggers see that collider as they see a body's. An entity is either a character body or a rigid body, never both. Gravity and jumping are part of the velocity game code sets; physics adds the velocity of the ground it stands on, and of ground it has just left, without changing the velocity game code set. It pushes the loose bodies it walks into, with a limited force, and presses down on what it stands on; loose bodies never push it back, but moving fixed-path bodies (doors, platforms) shove it along. A change to its shape (crouching, standing up) takes effect only once the new shape fits where it is; until then it keeps the old shape and reports that it is blocked.
 *Avoid:* character controller (as the name of the thing), player body, kinematic character (it is not a kinematic rigid body).
 
 **Carried velocity**
@@ -204,6 +204,10 @@ Ground under a character body no steeper than its slope limit, so it can stand a
 **Steep ground**
 Ground under a character body steeper than its slope limit: it is supported, but cannot walk up it and does not ride it.
 *Avoid:* wall (a wall is touched from the side, with nothing underneath).
+
+**Motion test**
+A query that asks how a shape would fare if it were moved, without moving anything: how far it can go along a motion before it is blocked and still stay clear, or which way and how far it must move to stop overlapping what it is in. Game code uses motion tests to build its own movement and to check for room, such as a ledge or headroom.
+*Avoid:* move (nothing moves), character query (any shape can be tested).
 
 **Collider**
 Geometry attached to a body: one collision shape, placed where its entity is, with a physics material, a collision layer, and optionally marked as a trigger. An entity has at most one; a collider with no rigid body or character body on its entity or above it is static.
