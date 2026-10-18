@@ -41,3 +41,14 @@ From "What are the motion-test and sweep queries, and how does a character chang
 - a mesh-shaped character goes inactive with one warning (the spike already shows this).
 
 Motion tests have no character of their own to prove them, so one scene could show a custom mover using them: a kinematic `RigidBody` moved by game code with `MoveCast` and `Depenetrate`, or a dash that stops at `MoveCast`'s safe distance and teleports the character there. A character debug-line category should draw the shape in use, which differs from the `Collider` while a stand-up is blocked.
+
+From "What does C# get for characters?" (38): what the C#-built scene must exercise, beyond what tests prove. This ticket decides the contents and keys. C++ places only a marker, and C# builds everything else:
+- a character with a capsule `Collider`;
+- a controller that adds gravity from `PhysicsWorld.Gravity`, jumps, and adds input to the written-back `Velocity`, so a `StopOnSlope = false` slide works;
+- a readout every frame from `State` (ground state, `GroundBody`'s name, `MovedVelocity`, `CarriedVelocity`, `ShapeBlocked`), with a landing counter from comparing with last tick;
+- a crouch key that writes `Collider.Shape` once, used through a crouch tunnel;
+- one motion test of the scene's own, such as a dash that stops at `MoveCast`'s safe distance and teleports there, filtered like the character with `Layers`;
+- ice, from reading `GroundCollider`'s `PhysicsMaterial`;
+- a `ContactEvents` or `TriggerEnter` readout naming the character.
+
+The C# scene does not repeat the C++ scene's push-mass and kinematic-door checks: C# reaches those unchanged.
