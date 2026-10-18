@@ -1,0 +1,18 @@
+# What are the motion-test and sweep queries, and how does a character change shape?
+
+Type: grilling
+Status: open
+Blocked by: 30, 32
+
+## Question
+
+The foundation deferred "character controller (including motion-test queries)" to this spec. What motion-test queries does `PhysicsWorld` gain, and how does a character crouch? Builds on [What does Jolt offer for characters?](30-what-jolt-offers-for-characters.md) and [How is a character body modelled in the ECS?](32-character-bodies-in-the-ecs.md), and follows the foundation's queries ("What does the query API look like?": plain-data hits, caller-supplied spans, `QueryFilter`, the last completed step).
+
+- **Motion tests:** a query that sweeps a shape from a pose along a motion and reports the first blocking hit and a safe position; a penetration query (`Collide`) that reports overlaps with depth and direction. Whether they are general `PhysicsWorld` queries or character-only.
+- **Shape changes:** changing a character's shape (crouch), and the check that there is room before standing back up; what happens when there is not.
+- **Allowed shapes:** capsule only, or any convex shape.
+- **Scale:** whether a character's world scale applies to its shape.
+
+Facts from "What does Jolt offer for characters?": `SetShape(shape, maxPenetration)` refuses a shape that penetrates deeper than the limit (the sample uses 1.5 × penetration slop), which is the room-to-stand check; the inner body's shape is set separately. `CastShape` gives a fraction, normal and initial overlaps; `CollideShape` gives a penetration axis and depth. The padding back-off Jolt uses for a safe position is private; today's `ShapeCast`/`Overlap` report no depth or safe fraction.
+
+From "How do other engines expose characters?": only Unreal (`UnCrouch`) and Tnua (a headroom sensor) check for room before standing up.
