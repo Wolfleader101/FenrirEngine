@@ -11,3 +11,5 @@ Do the character model from [How is a character body modelled in the ECS?](32-ch
 React to it: does the interface read well; does the ground state hold steady on slopes and stairs; does riding the platform feel right; does pushing boxes look right; does anything about Jolt leak. Record the lessons the spec needs.
 
 The spike's scene may later become the C++ character demo scene (see "What do the character demo scenes show?").
+
+From "How does a character move each tick?": prove the move as `PostTick` step 3b, before the step, in entity order: riding the kinematic platform (up, down and sideways; watch for Jolt's hover above a descending lift), walking and jumping off it with carried velocity, `velocity` trimmed against contacts (landing and a ceiling clear it; stairs and floor snaps never show in it), `stopOnSlope` holding still on the walkable slope, `maxSlope`/`stepHeight`/`floorSnap` at their defaults (45°, 0.4 m, 0.5 m), game code adding gravity, interpolated position and rotation at a frame rate above the tick rate, a teleport snapping, and two runs bit-identical with character IDs taken from entities.
