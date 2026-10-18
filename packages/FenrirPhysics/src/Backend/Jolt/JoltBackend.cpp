@@ -1642,7 +1642,18 @@ namespace Fenrir::Backend
     {
         const JPH::AABox before = m_impl->Bounds(id);
         const JPH::Ref<JPH::Shape> made = m_impl->MakeBodyShape(parts, entity);
+        const JPH::Vec3 centreBefore = m_impl->Bodies().GetShape(ToJolt(id))->GetCenterOfMass();
         m_impl->Bodies().SetShape(ToJolt(id), made, false, JPH::EActivation::Activate);
+        // Constraints hold their anchors relative to the centre of mass: told how far it moved, they keep them where
+        // they were relative to the body's origin, where a joint's frames are.
+        const JPH::Vec3 centreMoved = made->GetCenterOfMass() - centreBefore;
+        for (const Impl::JointSlot& slot : m_impl->joints)
+        {
+            if (slot.constraint != nullptr && (slot.bodyA.value == id.value || slot.bodyB.value == id.value))
+            {
+                slot.constraint->NotifyShapeChanged(ToJolt(id), centreMoved);
+            }
+        }
         m_impl->Bodies().SetUseManifoldReduction(ToJolt(id), made->GetType() != JPH::EShapeType::Compound);
         // The body keeps its own mass; its inertia follows the new shape.
         m_impl->Write(id, [&made, mass](JPH::Body& body) {
