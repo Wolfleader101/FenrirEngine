@@ -193,6 +193,18 @@ An entity moved by game code through the physics world with character-style rule
 The velocity of the ground a character body last stood on, which it keeps moving with after walking off or jumping, until it lands again or is teleported.
 *Avoid:* inherited velocity, momentum, platform velocity (the ground's own velocity while standing on it).
 
+**Ground state**
+What a character body was standing on at the end of its last move: walkable ground, steep ground, nothing underneath while touching something (a wall, a ledge), or nothing at all (in the air). With ground under it, it also names the ground's body and collider, where and at what angle it touches, and how the ground is moving. Physics reports it; landing and leaving the ground are changes in it that game code notices, not separate happenings.
+*Avoid:* grounded (as a yes/no; there are four states), floor (ground covers any surface underneath).
+
+**Walkable ground**
+Ground under a character body no steeper than its slope limit, so it can stand and walk on it, and ride it if it moves.
+*Avoid:* floor, flat ground.
+
+**Steep ground**
+Ground under a character body steeper than its slope limit: it is supported, but cannot walk up it and does not ride it.
+*Avoid:* wall (a wall is touched from the side, with nothing underneath).
+
 **Collider**
 Geometry attached to a body: one collision shape, placed where its entity is, with a physics material, a collision layer, and optionally marked as a trigger. An entity has at most one; a collider with no rigid body or character body on its entity or above it is static.
 *Avoid:* hitbox.

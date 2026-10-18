@@ -14,3 +14,5 @@ The character spec ships two DemoApp scenes on F5 through `DemoScenes` (examples
 - **Debug lines:** whether characters get a debug-line category (shape, ground normal, velocity).
 - **The spike's scene:** whether it becomes the C++ scene.
 - **Hand checks:** what the engine developer verifies by hand, and the `FENRIR_DEMO_KEYS` smoke runs.
+
+From "What does game code read back from a character, and which events?": the readouts can show `state.ground`, `groundBody`, `movedVelocity`, `carriedVelocity`, `onWall` and `onCeiling`; landing is derived by comparing with last tick, so a scene showing a landing counter proves the derivation. Characters send the existing contact events (with `ContactEvents`) and trigger events, so a trigger the character walks through and a `ContactEvents` character are the checks for them. A debug-line category could draw `groundNormal` and `movedVelocity`.
