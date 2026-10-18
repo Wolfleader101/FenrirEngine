@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved (built: PRs #14–#27 into dotnet-scripting)
 
 # FenrirPhysics joints: hinges, sliders, ropes and limbs between bodies, in C++ and C#
 
