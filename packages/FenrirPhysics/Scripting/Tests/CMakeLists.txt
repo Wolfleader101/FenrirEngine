@@ -9,7 +9,8 @@ add_executable(FenrirPhysicsScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${fenrir_scripting_tests_dir}")
+# The library's own src too, for the JointState mapping the tests check against the C# mirror.
+target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${fenrir_scripting_tests_dir}" ../src)
 target_link_libraries(FenrirPhysicsScriptingTests PRIVATE FenrirPhysicsScripting Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirPhysicsScriptingTests)
 fenrir_deploy_physics_scripting(FenrirPhysicsScriptingTests)

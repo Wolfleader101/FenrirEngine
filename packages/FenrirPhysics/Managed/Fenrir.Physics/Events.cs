@@ -5,7 +5,7 @@ namespace Fenrir.Physics;
 // The engine fills these fields in native memory; the compiler cannot see that.
 #pragma warning disable CS0649
 
-// The C# mirrors of the contact and trigger events a physics world sends (FenrirPhysics/Events.hpp), once per step, in
+// The C# mirrors of the contact, trigger and joint events a physics world sends (FenrirPhysics/Events.hpp), once per step, in
 // PostTick. Read them through an EventReader<T> field; each reader sees each event once. Each is checked against its native
 // layout whenever a script assembly loads, so a drift between the two fails the load and names the field. The entities are
 // links as the engine stores them (as in Relationship): read each one's Target. They may already be destroyed by the time an
@@ -69,4 +69,28 @@ public readonly struct TriggerExit : IEvent
     public readonly EntityLink Trigger;
     public readonly EntityLink OtherBody;
     public readonly EntityLink OtherCollider;
+}
+
+/// <summary>
+/// A joint broke: in the last step its load went over its <see cref="Joint"/>'s <see cref="Joint.BreakForce"/> or
+/// <see cref="Joint.BreakTorque"/>, so physics set its <see cref="Joint.Enabled"/> to false, which C# sees in the
+/// component. Sent only for breaks, never when game code disables a joint. Sorted by joint entity.
+/// </summary>
+/// <remarks>
+/// Read it every frame: a system that reads only now and then misses breaks. Repair a joint by setting
+/// <see cref="Joint.Enabled"/> back to true; one still over its threshold breaks again on the next step, with another event.
+/// </remarks>
+[NativeEvent("Fenrir.Physics.JointBroken")]
+public readonly struct JointBroken : IEvent
+{
+    /// <summary>The joint entity, whose Joint is now disabled.</summary>
+    public readonly EntityLink Joint;
+    /// <summary>The joint's BodyA.</summary>
+    public readonly EntityLink BodyA;
+    /// <summary>The joint's BodyB: <see cref="EntityLink.IsNull"/> for the world.</summary>
+    public readonly EntityLink BodyB;
+    /// <summary>Newtons, world space: what the joint applied to BodyB in the step that broke it (<see cref="JointState.Force"/>).</summary>
+    public readonly Vector3 Force;
+    /// <summary>Newton metres, world space, likewise (<see cref="JointState.Torque"/>).</summary>
+    public readonly Vector3 Torque;
 }

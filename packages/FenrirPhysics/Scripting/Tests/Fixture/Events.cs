@@ -11,6 +11,7 @@ public sealed class PhysicsEventRecorder : ISystem
     private readonly EventReader<ContactEnd> ends = new();
     private readonly EventReader<TriggerEnter> enters = new();
     private readonly EventReader<TriggerExit> exits = new();
+    private readonly EventReader<JointBroken> breaks = new();
 
     public void OnUpdate(in SystemContext context)
     {
@@ -22,6 +23,8 @@ public sealed class PhysicsEventRecorder : ISystem
             Events.Enters.Add(enter);
         foreach (var exit in exits.Read())
             Events.Exits.Add(exit);
+        foreach (var broken in breaks.Read())
+            Events.Breaks.Add(broken);
     }
 }
 
@@ -32,6 +35,7 @@ public static class Events
     public static readonly List<ContactEnd> Ends = new();
     public static readonly List<TriggerEnter> Enters = new();
     public static readonly List<TriggerExit> Exits = new();
+    public static readonly List<JointBroken> Breaks = new();
 
     public static int ContactBeginCount() => Begins.Count;
 
@@ -74,6 +78,18 @@ public static class Events
     public static uint ExitOtherBody(int index) => Exits[index].OtherBody.Target.Value;
 
     public static uint ExitOtherCollider(int index) => Exits[index].OtherCollider.Target.Value;
+
+    public static int JointBrokenCount() => Breaks.Count;
+
+    public static uint BrokenJoint(int index) => Breaks[index].Joint.Target.Value;
+
+    public static uint BrokenBodyA(int index) => Breaks[index].BodyA.Target.Value;
+
+    public static bool BrokenBodyBIsWorld(int index) => Breaks[index].BodyB.IsNull;
+
+    public static float BrokenForce(int index, int axis) => Axis(Breaks[index].Force, axis);
+
+    public static float BrokenTorque(int index, int axis) => Axis(Breaks[index].Torque, axis);
 
     // Switches reporting on the entity, in place, as a script would.
     public static void SetContactEvents(uint entity, bool enabled) =>

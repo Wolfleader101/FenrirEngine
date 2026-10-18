@@ -36,6 +36,33 @@ public struct JointFrames
     }
 }
 
+/// <summary>
+/// How a joint sits and how hard it pulls, as of the last step, from <see cref="PhysicsWorld.GetJointState"/>. The load
+/// is the average over the step's last collision step: approximate within a step, exact enough for steady loads.
+/// </summary>
+public struct JointState
+{
+    /// <summary>Newtons, world space: what the joint applies to BodyB (BodyA gets the negative).</summary>
+    public Vector3 Force;
+    /// <summary>Newton metres, world space, about the joint's anchor: what the joint applies to BodyB, likewise.</summary>
+    public Vector3 Torque;
+    /// <summary>
+    /// FrameB's pose in FrameA's axes: the identity is the rest pose. For a swing-twist joint, its rotation is in the
+    /// same terms as its motor's <see cref="SwingTwistMotor.TargetRotation"/>.
+    /// </summary>
+    public JointFrame Relative = new();
+    /// <summary>
+    /// A hinge's angle (radians, wrapped to (-pi, pi]), a slider's offset along FrameA's X (metres), a distance joint's
+    /// length (metres); 0 for the other kinds. A hinge's angle is FrameB's turn relative to FrameA, so its sign follows
+    /// which body is A.
+    /// </summary>
+    public float Position;
+
+    public JointState()
+    {
+    }
+}
+
 /// <summary>How hard a part of a joint pulls back.</summary>
 public struct JointSpring
 {

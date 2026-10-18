@@ -8,8 +8,12 @@
 
 **Blocked by:** 09 (Breaking and JointBroken); 12 (Joints in C#: component, kinds and FrameFromWorld).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `PhysicsScriptingTests`: `JointState` and `JointBroken` validate against their native layouts.
-- [ ] `GetJointState` reads a hinge angle; it reads zeroed with no world and for a non-joint, without throwing.
-- [ ] `EventReader<JointBroken>` sees one break; writing `Enabled = true` repairs the joint.
+- [x] `PhysicsScriptingTests`: `JointState` and `JointBroken` validate against their native layouts.
+- [x] `GetJointState` reads a hinge angle; it reads zeroed with no world and for a non-joint, without throwing.
+- [x] `EventReader<JointBroken>` sees one break; writing `Enabled = true` repairs the joint.
+
+Notes:
+- `JointState` crosses only by pointer (`PhysicsNative.GetJointState(joint, out state)`), so nothing checks it as scripts load. Its Iris mapping, with `JointFrame`'s, is in `Scripting/src/JointStateMapping.hpp`, which the scripting tests include to check it against the C# mirror (and that a drifted mapping is refused naming `'Position'`); they also read every field back against C++.
+- `JointBroken` is checked at load like the contact and trigger events, through `Detail::JointBrokenLayout`.

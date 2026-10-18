@@ -81,6 +81,40 @@ public static class Joints
         }
     }
 
+    // The state GetJointState last gave, kept for the tests to read value by value.
+    private static JointState lastState;
+
+    public static void ReadJointState(uint joint) => lastState = PhysicsWorld.GetJointState(new Entity(joint));
+
+    // One value of the last state: 0 to 2 the force's X, Y and Z, 3 to 5 the torque's, 6 to 8 the relative position's,
+    // 9 to 12 the relative rotation's W, X, Y and Z, and 13 the position.
+    public static float JointStateValue(int value)
+    {
+        JointState state = lastState;
+        return value switch
+        {
+            0 => state.Force.X,
+            1 => state.Force.Y,
+            2 => state.Force.Z,
+            3 => state.Torque.X,
+            4 => state.Torque.Y,
+            5 => state.Torque.Z,
+            6 => state.Relative.Position.X,
+            7 => state.Relative.Position.Y,
+            8 => state.Relative.Position.Z,
+            9 => state.Relative.Rotation.W,
+            10 => state.Relative.Rotation.X,
+            11 => state.Relative.Rotation.Y,
+            12 => state.Relative.Rotation.Z,
+            _ => state.Position,
+        };
+    }
+
+    public static bool IsEnabled(uint joint) => new Entity(joint).Get<Joint>().Value.Enabled;
+
+    // Repairs a broken joint, as game code would: by enabling it again, in place.
+    public static void Repair(uint joint) => new Entity(joint).Get<Joint>().Value.Enabled = true;
+
     // The frames FrameFromWorld last gave, kept for the tests to read value by value.
     private static JointFrames lastFrames;
 

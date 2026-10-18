@@ -10,13 +10,13 @@
 
 **Blocked by:** 01 (Writable entity links in C#); 06 (Limits, motors, springs and friction).
 
-**Status:** done on branch `claude/joints-csharp-6dbb97`, but for the warning in the last item, which ticket 10 (inactive and idle joints) adds: whichever of the two merges second should add a `WarningsAbout` check to the `default(Joint)` test.
+**Status:** resolved
 
 - [x] `PhysicsScriptingTests` with a `Joints.cs` fixture: `Joint` validates against its native layout (a drifted mirror fails the load naming `'Kind'`); `new Joint()` equals `Joint{}` (empty links, infinities, kind defaults), for its own kind and each kind's `new`.
 - [x] A C# system creates two bodies and a hinge joint between them in one system, and the hinge holds after playback.
 - [x] Assigning `Kind = new HingeJoint { ... }` and editing `Kind.Hinge.Motor.TargetVelocity` reach physics; reading `Kind.Slider` on a hinge throws.
 - [x] `FrameFromWorld` matches C++ under a scaled, rotated parent; the world overload equals C++ with an empty `bodyB`; a destroyed `bodyB` gives identity frames.
-- [ ] `default(Joint)` reads inactive with a warning and does not crash: inactive (holds nothing, zeroed state) and no crash are tested; the warning waits on ticket 10.
+- [x] `default(Joint)` reads inactive with a warning and does not crash: inactive (holds nothing, zeroed state), no crash, and ticket 10's inactive-joint warning, once, are tested.
 
 Notes:
 - Iris maps no struct without fields, so the C# `FixedJoint` and `BallJoint` each keep one private byte (`_unused`), mapped through one-byte native stand-ins. FenrirScripting's README says so under "Tagged unions".
