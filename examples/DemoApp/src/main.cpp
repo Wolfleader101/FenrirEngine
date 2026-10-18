@@ -644,6 +644,13 @@ int main(int argc, char* argv[])
         .AddSequentialSystems(Fenrir::SchedulePriority::Update,
                               {[&jointsScene](Fenrir::App& running) { jointsScene.Update(running); }});
     demoScenes.Register(JointsScene::Scene());
+#ifdef FENRIR_SCRIPTING
+    // Joints (C#), the second of the F4 family, built and run by C# (scripts/Physics/Joints.cs) as Physics (C#) is.
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, [](Fenrir::App& running) {
+        CSharpScenes::Create(running, CSharpScenes::jointsName, CSharpScenes::jointsId);
+    });
+    demoScenes.Register(CSharpScenes::Joints());
+#endif
 #endif
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
