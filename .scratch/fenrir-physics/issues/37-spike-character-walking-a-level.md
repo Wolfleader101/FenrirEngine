@@ -1,7 +1,7 @@
 # Spike: a character walking a small level through the proposed model
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 32, 33
 
 ## Question
