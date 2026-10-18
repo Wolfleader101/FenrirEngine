@@ -16,3 +16,5 @@ What does the physics scripting extension (`FenrirPhysicsScripting`, contract `F
 - **What the C# demo scene needs** that tests alone would not prove.
 
 From "How is a character body modelled in the ECS?" (ADR-0014): a character is driven by writing `CharacterBody::velocity`, a field, so C# needs no native move function (ADR-0009). `CharacterBody` holds plain fields (`velocity`, `enabled`, live settings) and no tagged union, so it maps directly. Physics never adds or removes components on a character, so nothing a C# system reads appears or disappears on landing. Inactive and disabled characters follow the foundation's silent no-op rules for native queries about them.
+
+From "How does a character move each tick?": `CharacterBody` gains plain live fields `maxSlope`, `stepHeight`, `floorSnap`, `stopOnSlope` and `interpolate`, so it still maps directly. Gravity is game code's: a C# system adds `PhysicsWorld` gravity times `dt` to `velocity`, so the world's gravity must be readable from C# (it already is, per "What does the physics scripting extension give C#?"). Carried velocity and ground velocity are ticket 34's state.
