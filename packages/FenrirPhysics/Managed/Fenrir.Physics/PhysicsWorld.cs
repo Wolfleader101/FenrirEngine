@@ -13,6 +13,12 @@ namespace Fenrir.Physics;
 /// noticed (not once per C# call site). Like every native function,
 /// none of these makes a structural change: forces are queued for the next step, and queries read the world as the last
 /// step left it.
+/// <para>
+/// <see cref="GetJointState"/> reads the zeroed state with no physics world or on an entity with no Joint, with that
+/// warning. It also reads zeroed, with no extra warning, for an inactive joint (physics already warns once each time one
+/// goes inactive) and for a joint made since the last step, until its first step. Joints need no wake call from C#: every change
+/// to a Joint wakes both its bodies.
+/// </para>
 /// </remarks>
 public static class PhysicsWorld
 {
@@ -127,6 +133,17 @@ public static class PhysicsWorld
     public static bool Bounds(Entity body, out Aabb bounds) => PhysicsNative.Bounds(body, out bounds);
 
     /// <summary>
+    /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is
+    /// written into its Joint. While a joint's bodies sleep, the force and torque keep the values they had when they fell
+    /// asleep; while it is disabled they are 0. The pose readings are always current.
+    /// </summary>
+    public static JointState GetJointState(Entity joint)
+    {
+        PhysicsNative.GetJointState(joint, out JointState state);
+        return state;
+    }
+
+    /// <summary>
     /// The world's gravity, in metres per second squared. Setting it takes effect from the next step on and wakes the
     /// world's bodies. Zero, and setting it does nothing, while the active scene has no physics world.
     /// </summary>
@@ -237,4 +254,8 @@ internal static unsafe partial class PhysicsNative
     // Joint.FrameFromWorld: an empty bodyB (uint.MaxValue) is the world. Needs only the active scene.
     [NativeFunction]
     public static partial void FrameFromWorld(Entity bodyA, Entity bodyB, in JointFrame anchor, out JointFrames frames);
+
+    // Writes the zeroed state when it reads nothing.
+    [NativeFunction]
+    public static partial void GetJointState(Entity joint, out JointState state);
 }

@@ -4,6 +4,7 @@
 // saw.
 
 #include "HeadlessApp.hpp"
+#include "JointStateMapping.hpp"
 #include "ScriptingProbe.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -804,8 +805,8 @@ TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted 
     ScriptingConfig config = PhysicsScriptingApp::Config(physics);
     std::vector<EventRegistration>& events = config.extensions[0].events;
     {
-        INFO("Physics's extension should share the four contact and trigger events with C#");
-        REQUIRE(events.size() == 4);
+        INFO("Physics's extension should share the contact and trigger events and JointBroken with C#");
+        REQUIRE(events.size() == 5);
     }
     const auto contactBegin = std::find_if(events.begin(), events.end(), [](const EventRegistration& event) {
         return event.name == "Fenrir.Physics.ContactBegin";
@@ -1133,6 +1134,10 @@ TEST_CASE("A default(Joint) from C# names no body of this scene, so it holds not
         REQUIRE(state.force == Math::Vec3(0.0f));
         REQUIRE(state.position == 0.0f);
     }
+    {
+        INFO("Physics should warn once that the joint is inactive, not on every step it stays so");
+        REQUIRE(WarningsAbout(test, "The Joint on entity " + std::to_string(holder) + " is inactive") == 1);
+    }
 }
 
 namespace
@@ -1205,5 +1210,211 @@ TEST_CASE("The Joint mirror is checked as scripts load, and a drifted one fails 
         INFO("The failed load did not name the component and the field");
         REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.Joint"));
         REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Kind'"));
+    }
+}
+
+namespace
+{
+    // A JointState's values in the order the fixture's JointStateValue numbers them: force, torque, the relative
+    // frame's position, its rotation as W, X, Y, Z, then position.
+    std::vector<float> ValuesOf(const JointState& state)
+    {
+        const Math::Vec3& at = state.relative.position;
+        const Math::Quat& turn = state.relative.rotation;
+        return {state.force.x, state.force.y, state.force.z, state.torque.x, state.torque.y, state.torque.z, at.x, at.y,
+                at.z,          turn.w,        turn.x,        turn.y,         turn.z,         state.position};
+    }
+
+    // The values of the JointState C# read last, in ValuesOf's order.
+    std::vector<float> CSharpRead(PhysicsScriptingApp& test)
+    {
+        std::vector<float> values;
+        for (int value = 0; value < 14; ++value)
+        {
+            values.push_back(test.Call<float>(JointsType, "JointStateValue", value));
+        }
+        return values;
+    }
+
+    // JointState as a native side that drifted from the C# mirror would map it: position has the wrong type.
+    struct DriftedJointState
+    {
+        Math::Vec3 force;
+        Math::Vec3 torque;
+        DriftedFrame relative;
+        std::int32_t position;
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<DriftedJointState>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.JointState";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(DriftedJointState, force, "Force"), IRIS_FIELD_AS(DriftedJointState, torque, "Torque"),
+        IRIS_FIELD_AS(DriftedJointState, relative, "Relative"), IRIS_FIELD_AS(DriftedJointState, position, "Position"));
+};
+
+TEST_CASE("The JointState mirror matches its native layout, and a drifted one is refused naming the field",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const Iris::Component* component = ScriptingProbe::Component(test.scripting);
+    REQUIRE(component != nullptr);
+    {
+        const auto checked = component->ValidateStruct<JointState>();
+        INFO("The C# JointState should match the native one: " << checked.diagnostic);
+        REQUIRE(checked.Succeeded());
+    }
+    {
+        const auto drifted = component->ValidateStruct<DriftedJointState>();
+        INFO("A JointState mapping that disagrees with the C# mirror should be refused, naming the field");
+        REQUIRE_FALSE(drifted.Succeeded());
+        REQUIRE(drifted.diagnostic.find("'Position'") != std::string::npos);
+    }
+}
+
+TEST_CASE("GetJointState from C# reads a hinge's angle, load and pose, as C++ does", "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    std::uint32_t door = 0;
+    const std::uint32_t joint = AddFixedDoor(test, Math::Vec3(0.0f, 5.0f, 0.0f), door);
+    test.Run(1);
+    test.Entities().GetEntity(joint).GetComponent<Joint>().kind = HingeJoint{
+        .motor = JointMotor{.mode = JointMotorMode::Position, .targetPosition = 0.5f, .spring = {.frequency = 4.0f}}};
+
+    test.Run(90);
+    test.Call<void>(JointsType, "ReadJointState", joint);
+
+    const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+    REQUIRE(world != nullptr);
+    const JointState cpp = world->GetJointState(test.Entities().GetEntity(joint));
+    {
+        const float angle = test.Call<float>(JointsType, "JointStateValue", 13);
+        INFO("The motor holds the door at 0.5 rad, so C# should read that angle, but it read " << angle);
+        REQUIRE(angle == Approx(0.5f).margin(0.02));
+    }
+    {
+        INFO("Holding the door up, the hinge pulls on it, so the load C# read should not be zero");
+        REQUIRE(test.Call<float>(JointsType, "JointStateValue", 1) > 1.0f);
+    }
+    {
+        INFO("C# should read the very force, torque, relative pose and angle C++ reads");
+        REQUIRE(CSharpRead(test) == ValuesOf(cpp));
+    }
+}
+
+TEST_CASE("GetJointState from C# reads zeroed with no world and for a non-joint, warning once in debug",
+          "[physics][scripting][joints]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t plain = test.Place(Math::Vec3(0.0f));
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
+    const std::vector<float> zeroed = ValuesOf(JointState{});
+
+    test.Call<void>(JointsType, "ReadJointState", plain);
+    {
+        INFO("With no physics world, C# should read the zeroed state, without throwing");
+        REQUIRE(CSharpRead(test) == zeroed);
+    }
+
+    AddStaticBox(test, Math::Vec3(0.0f, -5.0f, 0.0f));
+    test.Run(1);
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) != nullptr);
+    test.Call<void>(JointsType, "ReadJointState", plain);
+    {
+        INFO("On an entity with no Joint, C# should read the zeroed state, without throwing");
+        REQUIRE(CSharpRead(test) == zeroed);
+    }
+    test.Entities().DestroyEntity(plain);
+    test.Call<void>(JointsType, "ReadJointState", plain);
+    {
+        INFO("On an entity no longer alive, likewise");
+        REQUIRE(CSharpRead(test) == zeroed);
+    }
+#ifndef NDEBUG
+    {
+        test.Call<void>(JointsType, "ReadJointState", plain);
+        INFO("A debug build should warn once for no world and once for no Joint, not on every call");
+        REQUIRE(WarningsAbout(test, "GetJointState: the active scene has no physics world") == 1);
+        REQUIRE(WarningsAbout(test, "GetJointState: the entity has no Joint") == 1);
+    }
+#endif
+}
+
+namespace
+{
+    // A unit box hanging 0.5 beneath `hook` from a ball joint to the world, made in C++. Returns the joint entity.
+    std::uint32_t AddHangingBox(PhysicsScriptingApp& test, const Math::Vec3& hook, std::uint32_t& box)
+    {
+        box = AddBody(test, hook - Math::Vec3(0.0f, 0.5f, 0.0f));
+        const Entity boxEntity = test.Entities().GetEntity(box);
+        const JointFrames frames = FrameFromWorld(boxEntity, Entity(), JointFrame{hook});
+        Entity joint = test.Entities().CreateEntity();
+        joint.AddComponent<Joint>(
+            Joint{.bodyA = boxEntity, .frameA = frames.frameA, .frameB = frames.frameB, .kind = BallJoint{}});
+        return joint.GetId();
+    }
+} // namespace
+
+TEST_CASE("A C# system reads one JointBroken when a joint breaks, and writing Enabled = true from C# repairs it",
+          "[physics][scripting][joints][events]")
+{
+    PhysicsScriptingApp test;
+    const Math::Vec3 hook(0.0f, 10.0f, 0.0f);
+    std::uint32_t box = 0;
+    const std::uint32_t joint = AddHangingBox(test, hook, box);
+    CppSees<JointBroken> cpp;
+    cpp.Run(test, 30);
+    REQUIRE(cpp.events.empty());
+
+    // The box weighs 9.81 N, over this threshold.
+    test.Entities().GetEntity(joint).GetComponent<Joint>().breakForce = 5.0f;
+    cpp.Run(test, 2);
+
+    REQUIRE(cpp.events.size() == 1);
+    const JointBroken& seen = cpp.events[0];
+    {
+        INFO("The joint breaks once, so C# should read one JointBroken");
+        REQUIRE(test.Call<int>(EventsType, "JointBrokenCount") == 1);
+    }
+    {
+        INFO("C# should name the joint and the box, and read the world as an empty BodyB");
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BrokenJoint", 0) == joint);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BrokenBodyA", 0) == box);
+        REQUIRE(test.Call<bool>(EventsType, "BrokenBodyBIsWorld", 0));
+    }
+    {
+        INFO("C# should read the very load C++ read, which broke the joint");
+        REQUIRE(test.Call<float>(EventsType, "BrokenForce", 0, 0) == seen.force.x);
+        REQUIRE(test.Call<float>(EventsType, "BrokenForce", 0, 1) == seen.force.y);
+        REQUIRE(test.Call<float>(EventsType, "BrokenForce", 0, 2) == seen.force.z);
+        REQUIRE(test.Call<float>(EventsType, "BrokenTorque", 0, 0) == seen.torque.x);
+        REQUIRE(test.Call<float>(EventsType, "BrokenTorque", 0, 1) == seen.torque.y);
+        REQUIRE(test.Call<float>(EventsType, "BrokenTorque", 0, 2) == seen.torque.z);
+        REQUIRE(-test.Call<float>(EventsType, "BrokenForce", 0, 1) > 5.0f);
+    }
+    {
+        INFO("C# reads the component in place, so it should see physics's write of Enabled = false");
+        REQUIRE_FALSE(test.Call<bool>(JointsType, "IsEnabled", joint));
+    }
+
+    // A threshold the box's weight stays under, so the repaired joint holds.
+    test.Entities().GetEntity(joint).GetComponent<Joint>().breakForce = 50.0f;
+    test.Call<void>(JointsType, "Repair", joint);
+    REQUIRE(JointOn(test, joint).enabled);
+    cpp.Run(test, 120);
+
+    {
+        const Math::Vec3 at = test.Entities().GetEntity(box).GetComponent<Transform>().pos;
+        INFO("Repaired from C#, the joint should pull the box back beneath the hook, but it is at " << at.y);
+        REQUIRE(at.y == Approx(hook.y - 0.5f).margin(0.05));
+        REQUIRE(at.x == Approx(0.0f).margin(0.05));
+    }
+    {
+        INFO("Held under its new threshold, the repaired joint should not break again");
+        REQUIRE(cpp.events.size() == 1);
+        REQUIRE(test.Call<int>(EventsType, "JointBrokenCount") == 1);
+        REQUIRE(test.Call<bool>(JointsType, "IsEnabled", joint));
     }
 }
