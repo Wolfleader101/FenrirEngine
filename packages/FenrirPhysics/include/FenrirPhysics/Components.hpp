@@ -327,7 +327,8 @@ namespace Fenrir
         bool enabled = true;
     };
 
-    /** @brief Reports the body's contacts as ContactBegin and ContactEnd events. Put it on the rigid body's entity. */
+    /** @brief Reports the body's contacts as ContactBegin and ContactEnd events. Put it on the body entity (a rigid
+     * body or a character body). */
     struct ContactEvents
     {
         /** @brief Disabled, the body's contacts are not reported; disabling it ends those reported on the next step,
