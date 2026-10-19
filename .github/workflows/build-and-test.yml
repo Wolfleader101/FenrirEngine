@@ -111,8 +111,9 @@ jobs:
       - name: Configure
         run: cmake --preset ${{ matrix.preset }} ${{ env.FENRIR_CMAKE_OPTIONS }}
 
+      # -k 0: keep going after a failure, so one run reports every compile error.
       - name: Build
-        run: cmake --build out/build/${{ matrix.preset }}
+        run: cmake --build out/build/${{ matrix.preset }} -- -k 0
 
       - name: Test
         run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
