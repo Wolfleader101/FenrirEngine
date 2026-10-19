@@ -2,6 +2,7 @@
 // buffers.
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 
 #include "FenrirECS/EntityList.hpp"
@@ -12,6 +13,15 @@ namespace Fenrir
 {
     namespace
     {
+        // The gap a motion test leaves between a shape and what it was moved against, along that body's normal: the
+        // character's padding, so a custom mover and a character keep the same distance from walls.
+        constexpr float skin = 0.02f;
+
+        // How many times Depenetrate looks again from where its last offset put the shape, and how many overlaps it
+        // takes into account each time: a few, as a shape is rarely wedged between more.
+        constexpr int depenetrateTries = 4;
+        constexpr std::size_t depenetrateOverlaps = 16;
+
         // The unit direction of `direction`, or false if it has none.
         bool UnitDirection(const Math::Vec3& direction, Math::Vec3& unit)
         {
@@ -88,6 +98,70 @@ namespace Fenrir
             std::size_t m_count = 0;
         };
 
+        // Keeps the deepest of the penetrations it is given in `hits`, deepest first, each collider once at its
+        // deepest. Ties go to the lower collider entity, since the backend gives them in no particular order.
+        class Deepest
+        {
+          public:
+            Deepest(EntityList& entities, std::span<PenetrationHit> hits) : m_entities(&entities), m_hits(hits)
+            {
+            }
+
+            void operator()(const Backend::Penetration& found)
+            {
+                PenetrationHit hit{Entity(), Entity(), found.point, found.normal, found.depth};
+                if (!EntityOf(*m_entities, found.entity, hit.body) ||
+                    !EntityOf(*m_entities, found.collider, hit.collider))
+                {
+                    return;
+                }
+                const std::span<PenetrationHit> before = Listed();
+                if (const auto same = std::ranges::find(before, hit.collider, &PenetrationHit::collider);
+                    same != before.end())
+                {
+                    if (!Deeper(hit, *same))
+                    {
+                        return;
+                    }
+                    std::move(same + 1, before.end(), same);
+                    --m_count;
+                }
+                if (m_count == m_hits.size() && !Deeper(hit, m_hits[m_count - 1]))
+                {
+                    return;
+                }
+                // The last place is free, or holds the shallowest, which the new one pushes out.
+                if (m_count < m_hits.size())
+                {
+                    ++m_count;
+                }
+                const std::span<PenetrationHit> listed = Listed();
+                const auto at = std::upper_bound(listed.begin(), listed.end() - 1, hit, Deeper);
+                std::move_backward(at, listed.end() - 1, listed.end());
+                *at = hit;
+            }
+
+            [[nodiscard]] std::size_t Count() const
+            {
+                return m_count;
+            }
+
+          private:
+            static bool Deeper(const PenetrationHit& a, const PenetrationHit& b)
+            {
+                return a.depth > b.depth || (!(a.depth < b.depth) && a.collider.GetId() < b.collider.GetId());
+            }
+
+            std::span<PenetrationHit> Listed() const
+            {
+                return m_hits.first(m_count);
+            }
+
+            EntityList* m_entities;
+            std::span<PenetrationHit> m_hits;
+            std::size_t m_count = 0;
+        };
+
         // Writes the colliders it is given, with their bodies, to `hits` until it is full.
         class Overlaps
         {
@@ -122,7 +196,7 @@ namespace Fenrir
     Backend::QueryFilter PhysicsWorld::Impl::ToBackend(const QueryFilter& filter) const
     {
         const std::uint32_t ignored = filter.ignoreBody.IsValid() ? ResolveBody(filter.ignoreBody.GetId()) : ~0u;
-        return Backend::QueryFilter{filter.mask, ignored, filter.hitTriggers};
+        return Backend::QueryFilter{filter.mask, filter.layers, ignored, filter.hitTriggers};
     }
 
     std::optional<RaycastHit> PhysicsWorld::Raycast(const Math::Vec3& origin, const Math::Vec3& direction,
@@ -176,6 +250,31 @@ namespace Fenrir
         return nearest.Count();
     }
 
+    std::optional<MoveCastHit> PhysicsWorld::MoveCast(const CollisionShape& shape, const Transform& pose,
+                                                      const Math::Vec3& motion, const QueryFilter& filter) const
+    {
+        Math::Vec3 unit;
+        if (shape.Is<MeshShape>() || !UnitDirection(motion, unit))
+        {
+            return std::nullopt;
+        }
+        // Swept on by the skin, so a body just past the end of the motion still keeps the shape the skin away.
+        const float length = glm::length(motion);
+        MoveCastHit hit;
+        Nearest<MoveCastHit> nearest(*m_impl->m_entities, std::span(&hit, 1), length + skin);
+        m_impl->m_backend.CastMove(shape, pose.scale, pose.pos, pose.rot, unit, length + skin,
+                                   m_impl->ToBackend(filter), nearest);
+        if (nearest.Count() == 0)
+        {
+            return std::nullopt;
+        }
+        // Back from where it touches until the gap along the body's normal is the skin. Only bodies the shape moves
+        // towards block it, so the normal is against the motion.
+        const float towards = -glm::dot(hit.normal, unit);
+        hit.distance = std::max(0.0f, hit.distance - skin / towards);
+        return hit;
+    }
+
     std::size_t PhysicsWorld::Overlap(const CollisionShape& shape, const Transform& pose, std::span<OverlapHit> hits,
                                       const QueryFilter& filter) const
     {
@@ -186,6 +285,46 @@ namespace Fenrir
         Overlaps overlaps(*m_impl->m_entities, hits);
         m_impl->m_backend.CollideShape(shape, pose.scale, pose.pos, pose.rot, m_impl->ToBackend(filter), overlaps);
         return overlaps.Count();
+    }
+
+    std::size_t PhysicsWorld::Penetrations(const CollisionShape& shape, const Transform& pose,
+                                           std::span<PenetrationHit> hits, const QueryFilter& filter) const
+    {
+        if (hits.empty() || shape.Is<MeshShape>())
+        {
+            return 0;
+        }
+        Deepest deepest(*m_impl->m_entities, hits);
+        m_impl->m_backend.CollideDeep(shape, pose.scale, pose.pos, pose.rot, m_impl->ToBackend(filter), deepest);
+        return deepest.Count();
+    }
+
+    Math::Vec3 PhysicsWorld::Depenetrate(const CollisionShape& shape, const Transform& pose,
+                                         const QueryFilter& filter) const
+    {
+        std::array<PenetrationHit, depenetrateOverlaps> hits;
+        Transform moved = pose;
+        for (int i = 0; i < depenetrateTries; ++i)
+        {
+            const std::size_t count = Penetrations(shape, moved, hits, filter);
+            if (count == 0)
+            {
+                break;
+            }
+            // Deepest first, each overlap only by what the ones before it have not already moved the shape along its
+            // normal: two walls at right angles add up, two facing the same way do not.
+            Math::Vec3 step(0.0f);
+            for (const PenetrationHit& hit : std::span(hits).first(count))
+            {
+                const float remaining = hit.depth + skin - glm::dot(step, hit.normal);
+                if (remaining > 0.0f)
+                {
+                    step += hit.normal * remaining;
+                }
+            }
+            moved.pos += step;
+        }
+        return moved.pos - pose.pos;
     }
 
     std::size_t PhysicsWorld::OverlapPoint(const Math::Vec3& point, std::span<OverlapHit> hits,
