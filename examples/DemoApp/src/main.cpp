@@ -668,6 +668,14 @@ int main(int argc, char* argv[])
         .AddSequentialSystems(Fenrir::SchedulePriority::Update,
                               {[&characterScene](Fenrir::App& running) { characterScene.Update(running); }});
     demoScenes.Register(CharacterScene::Scene());
+#ifdef FENRIR_SCRIPTING
+    // Character (C#), the second of the F5 family, built and run by C# (scripts/Physics/Character.cs), with its own C#
+    // follow camera writing the DemoCamera it makes.
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, [](Fenrir::App& running) {
+        CSharpScenes::Create(running, CSharpScenes::characterName, CSharpScenes::characterId);
+    });
+    demoScenes.Register(CSharpScenes::Character());
+#endif
 #endif
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.

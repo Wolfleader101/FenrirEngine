@@ -193,7 +193,8 @@ public sealed class PaddleMover : ISystem
 }
 
 // Reads what physics reports: a body entering or leaving the trigger zone lights it up or puts its colour back, and a
-// sphere hitting something hard is logged. Each reader sees each event once.
+// sphere hitting something hard is logged. Each reader sees each event once. They are read in every scene and acted on
+// only in this one, so the other scenes' triggers and contacts are neither logged here nor logged later.
 [System(Phase.Update, Order = 110)]
 public sealed class PlaygroundEvents : ISystem
 {
@@ -203,8 +204,11 @@ public sealed class PlaygroundEvents : ISystem
 
     public void OnUpdate(in SystemContext context)
     {
+        bool active = Playground.IsActive(in context);
         foreach (var enter in enters.Read())
         {
+            if (!active)
+                continue;
             Entity body = enter.OtherBody.Target;
             context.Log.Info($"TriggerEnter: {Playground.NameOf(body)} entered the {Playground.NameOf(enter.Trigger.Target)}.");
             Retint(body, +1);
@@ -212,6 +216,8 @@ public sealed class PlaygroundEvents : ISystem
 
         foreach (var exit in exits.Read())
         {
+            if (!active)
+                continue;
             Entity body = exit.OtherBody.Target;
             context.Log.Info($"TriggerExit: {Playground.NameOf(body)} left the {Playground.NameOf(exit.Trigger.Target)}.");
             Retint(body, -1);
@@ -220,7 +226,7 @@ public sealed class PlaygroundEvents : ISystem
         foreach (var contact in contacts.Read())
         {
             // Only the hard hits: a resting pile begins small contacts all the time.
-            if (contact.RelativeSpeed < 3.0f)
+            if (!active || contact.RelativeSpeed < 3.0f)
                 continue;
             context.Log.Info($"ContactBegin: {Playground.NameOf(contact.BodyA.Target)} and " +
                              $"{Playground.NameOf(contact.BodyB.Target)} met at {contact.RelativeSpeed:0.0} m/s, " +
