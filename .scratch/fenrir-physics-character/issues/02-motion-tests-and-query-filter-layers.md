@@ -11,10 +11,12 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests`: `MoveCast` against a wall stops at the skin's gap; a clear motion returns nothing; a shape resting on the ground moving along it is not stuck at 0; grazing hits and starting in contact behave as documented.
-- [ ] `Penetrations` lists overlaps deepest first with direction and depth, and with a short span writes the deepest; `Depenetrate` frees one overlap and two at once, and is zero when clear.
-- [ ] A `MeshShape` finds nothing in all three; scale on the query shape applies as on a collider.
-- [ ] `QueryFilter::layers` filters by bodies' masks; `layers = 0` gives today's results for every foundation query (rays, shape casts, overlaps).
-- [ ] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
+- [x] `FenrirPhysicsTests`: `MoveCast` against a wall stops at the skin's gap; a clear motion returns nothing; a shape resting on the ground moving along it is not stuck at 0; grazing hits and starting in contact behave as documented.
+- [x] `Penetrations` lists overlaps deepest first with direction and depth, and with a short span writes the deepest; `Depenetrate` frees one overlap and two at once, and is zero when clear.
+- [x] A `MeshShape` finds nothing in all three; scale on the query shape applies as on a collider.
+- [x] `QueryFilter::layers` filters by bodies' masks; `layers = 0` gives today's results for every foundation query (rays, shape casts, overlaps).
+- [x] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
+
+**Resolved by:** branch claude/character-motion-tests-0d2c5a (not yet merged into dotnet-scripting). The proof is `FenrirPhysicsTests`' `[motion]` cases (`Tests/MotionTests.cpp`) and the two `[layers]` cases added to `Tests/Queries.cpp`. Choices the ticket left open: `Depenetrate` moves a shape out to the skin's gap (depth + 0.02 m), not to bare contact, so a freed shape is clear for `Penetrations` and blocked at once by a `MoveCast` into the same body; `Penetrations` lists a collider once, at its deepest (a mesh gives a result per triangle), ties ordered by collider entity; touching at depth 0 is not a penetration. The skin and the back-off live in `src/Queries.cpp`; the backend gained `CastMove` and `CollideDeep`. `ShapeCast` does in fact find convex bodies with a `MeshShape` (Jolt casts a mesh against a convex shape reversed), so the three motion tests check for a mesh themselves rather than relying on it; `ShapeCast` is unchanged.

@@ -114,11 +114,48 @@ namespace Fenrir
                                  float maxDistance, std::span<ShapeCastHit> hits, const QueryFilter& filter = {}) const;
 
         /**
+         * @brief How far `shape`, placed at `pose` (scaled as a collider is), can move along `motion` (a displacement:
+         * its length is how far) and stay clear, or none if the whole motion is clear. Moved `distance` along
+         * `motion`, the shape keeps a small gap (the skin, a fixed 0.02 m) from what blocked it, measured along that
+         * body's normal: a glancing hit stops it further back than a head-on one.
+         *
+         * Bodies the shape starts inside or touching, and bodies it moves away from, do not block it, so a shape
+         * resting on the ground can slide along it. A shape a MoveCast placed keeps the skin's gap, so moving it on
+         * into what blocked it is blocked at once (distance 0). Free a shape that starts inside a body with
+         * Depenetrate.
+         *
+         * To move a shape as a body would, filter as it does: `{ .mask = cf.mask, .layers = cf.layers,
+         * .ignoreBody = me }`, with `cf` its CollisionFilter (or a default one). A triangle-mesh shape (MeshShape)
+         * finds nothing.
+         */
+        [[nodiscard]] std::optional<MoveCastHit> MoveCast(const CollisionShape& shape, const Transform& pose,
+                                                          const Math::Vec3& motion,
+                                                          const QueryFilter& filter = {}) const;
+
+        /**
          * @brief Writes the colliders `shape`, placed at `pose` (scaled as a collider is), overlaps to `hits`, each
          * with its body, and returns how many it wrote, stopping when `hits` is full.
          */
         std::size_t Overlap(const CollisionShape& shape, const Transform& pose, std::span<OverlapHit> hits,
                             const QueryFilter& filter = {}) const;
+
+        /**
+         * @brief Writes the colliders `shape`, placed at `pose` (scaled as a collider is), overlaps to `hits`, each
+         * with its body, which way out of it and how deep, and returns how many it wrote. Deepest first, a collider
+         * once at its deepest; when there are more than `hits` holds, the deepest are written. A shape only touching
+         * a collider does not overlap it. A triangle-mesh shape (MeshShape) finds nothing.
+         */
+        std::size_t Penetrations(const CollisionShape& shape, const Transform& pose, std::span<PenetrationHit> hits,
+                                 const QueryFilter& filter = {}) const;
+
+        /**
+         * @brief The offset that moves `shape`, placed at `pose` (scaled as a collider is), out of everything it
+         * overlaps, leaving the skin's gap MoveCast leaves; zero when it overlaps nothing. Several overlaps are
+         * resolved together, over a few tries. Wedged in a crevice the shape may still overlap something once
+         * moved: check with Penetrations when that matters. A triangle-mesh shape (MeshShape) finds nothing.
+         */
+        [[nodiscard]] Math::Vec3 Depenetrate(const CollisionShape& shape, const Transform& pose,
+                                             const QueryFilter& filter = {}) const;
 
         /** @brief Writes the colliders containing `point` to `hits`, each with its body, and returns how many it wrote,
          * stopping when `hits` is full. */
