@@ -198,11 +198,17 @@ namespace Fenrir
         /** @brief Makes, in one batch in entity order, the backend character of each CharacterBody that can have one
          * and has none. */
         void MakeCharacters();
-        /** @brief Step 3b, before the step: moves each character by its velocity over `dt` seconds, one at a time in
-         * entity order, keeping each move's result for WriteBack. */
+        /** @brief Step 3b, before the step: applies each character's shape edit if it fits, then moves it by its
+         * velocity over `dt` seconds, one at a time in entity order, keeping each move's result for WriteBack. */
         void MoveCharacters(float dt);
-        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move. */
-        void WriteBackCharacter(Entity& entity, const Backend::CharacterMoved& moved);
+        struct CharacterRecord;
+        /** @brief Step 3b, for one character before its move: gives it its Collider's shape and world scale if they
+         * changed and fit, keeping the feet in place on the ground and the head in the air; otherwise marks it
+         * blocked, keeping the shape it has. */
+        void ApplyShape(const Entity& entity, CharacterRecord& record);
+        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, and whether
+         * its Collider's shape or scale is still waiting to fit. */
+        void WriteBackCharacter(Entity& entity, const Backend::CharacterMoved& moved, bool shapeBlocked);
 
         void WriteBack();
         void AdvancePoses();
@@ -312,13 +318,17 @@ namespace Fenrir
         // The joints the last step broke, sent with its contact and trigger events.
         std::vector<JointBroken> m_broken;
 
-        // What physics knows of a character body: its backend character, and where its last move left it. None for one
-        // that cannot have a backend character (beside a RigidBody, with no Collider, or with a shape a character
-        // cannot use).
+        // What physics knows of a character body: its backend character, where its last move left it, and the shape and
+        // world scale it has, which the diff compares the Collider and Transform against. None for one that cannot
+        // have a backend character (beside a RigidBody, with no Collider, or with a shape a character cannot use).
         struct CharacterRecord
         {
             Backend::CharacterId id;
             Backend::CharacterMoved moved;
+            CollisionShape shape;
+            Math::Vec3 scale = Math::Vec3(1.0f);
+            // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
+            bool shapeBlocked = false;
         };
         ComponentWatch m_characterWatch;
         // The entities with a CharacterBody now, as the watch has reported them, and their records, by entity:

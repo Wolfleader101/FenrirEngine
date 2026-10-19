@@ -422,6 +422,15 @@ namespace Fenrir::Backend
          */
         CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 
+        /**
+         * @brief Gives a character `shape` (which must pass CanMakeShape and not be a mesh) at `scale`, if it fits: its
+         * body changes with it, and the character moves along world +Y so that the lowest point of its shape stays
+         * where it was (`keepLowest`), or the highest. It does not fit where it would overlap what the character
+         * collides with, triggers aside, by more than a little; then nothing changes and it returns false. Never
+         * during a step.
+         */
+        bool ReshapeCharacter(CharacterId id, const CollisionShape& shape, const Math::Vec3& scale, bool keepLowest);
+
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);
 

@@ -1655,11 +1655,9 @@ namespace Fenrir::Backend
             return FromJolt(JPH::Vec3(character.GetPosition()) + characterPadding * JPH::Vec3::sAxisY());
         }
 
-        // Which contacts can be a character's ground: Jolt's supporting volume, a plane in the character's own space
-        // (at its position and rotation) with world +Y as its normal, below which a contact supports it. It lies where
-        // the shape's rounding begins at its bottom: a capsule's lower hemisphere, a sphere's lower half, a box's or
-        // hull's rounded bottom edge.
-        JPH::Plane SupportingVolume(const JPH::Shape& shape, JPH::QuatArg rotation)
+        // A character's convex shape's support function, relative to its centre of mass: a hull's at its scale.
+        const JPH::ConvexShape::Support* SupportOf(const JPH::Shape& shape, JPH::ConvexShape::ESupportMode mode,
+                                                   JPH::ConvexShape::SupportBuffer& buffer)
         {
             const JPH::Shape* convex = &shape;
             JPH::Vec3 scale = JPH::Vec3::sOne();
@@ -1669,14 +1667,34 @@ namespace Fenrir::Backend
                 convex = scaled.GetInnerShape();
                 scale = scaled.GetScale();
             }
+            return static_cast<const JPH::ConvexShape*>(convex)->GetSupportFunction(mode, buffer, scale);
+        }
+
+        // Which contacts can be a character's ground: Jolt's supporting volume, a plane in the character's own space
+        // (at its position and rotation) with world +Y as its normal, below which a contact supports it. It lies where
+        // the shape's rounding begins at its bottom: a capsule's lower hemisphere, a sphere's lower half, a box's or
+        // hull's rounded bottom edge.
+        JPH::Plane SupportingVolume(const JPH::Shape& shape, JPH::QuatArg rotation)
+        {
             const JPH::Vec3 up = rotation.Conjugated() * JPH::Vec3::sAxisY();
             JPH::ConvexShape::SupportBuffer buffer;
-            const JPH::ConvexShape::Support* support = static_cast<const JPH::ConvexShape*>(convex)->GetSupportFunction(
-                JPH::ConvexShape::ESupportMode::ExcludeConvexRadius, buffer, scale);
+            const JPH::ConvexShape::Support* support =
+                SupportOf(shape, JPH::ConvexShape::ESupportMode::ExcludeConvexRadius, buffer);
             // The lowest point of the shape's core, inside its rounding: the shape sits at its centre of mass, raised
             // by the padding.
             const JPH::Vec3 lowest = shape.GetCenterOfMass() + characterPadding * up + support->GetSupport(-up);
             return JPH::Plane(up, -up.Dot(lowest));
+        }
+
+        // How far a character's shape at `rotation` reaches from its position along the world unit `direction`: to its
+        // farthest point, rounding included.
+        float Reach(const JPH::Shape& shape, JPH::QuatArg rotation, JPH::Vec3Arg direction)
+        {
+            JPH::ConvexShape::SupportBuffer buffer;
+            const JPH::ConvexShape::Support* support =
+                SupportOf(shape, JPH::ConvexShape::ESupportMode::IncludeConvexRadius, buffer);
+            const JPH::Vec3 farthest = shape.GetCenterOfMass() + support->GetSupport(rotation.Conjugated() * direction);
+            return direction.Dot(rotation * farthest);
         }
 
         GroundState FromJolt(JPH::CharacterBase::EGroundState state)
@@ -1869,6 +1887,36 @@ namespace Fenrir::Backend
         }
         moved.velocity = FromJolt(kept);
         return moved;
+    }
+
+    bool World::ReshapeCharacter(CharacterId id, const CollisionShape& shape, const Math::Vec3& scale, bool keepLowest)
+    {
+        const Impl::CharacterSlot& slot = m_impl->characters[id.value];
+        JPH::CharacterVirtual& character = *slot.character;
+        const JPH::Ref<JPH::Shape> made = m_impl->MakeShape(shape, scale);
+        const JPH::Quat rotation = character.GetRotation();
+        const JPH::Vec3 kept = keepLowest ? -JPH::Vec3::sAxisY() : JPH::Vec3::sAxisY();
+        const JPH::RVec3 before = character.GetPosition();
+        const JPH::AABox bounds = m_impl->Bounds(BodyId{character.GetInnerBodyID().GetIndexAndSequenceNumber()});
+
+        // Tried where it would be, its kept end where the old shape's is. Jolt's sample allows a little more overlap
+        // than the solver leaves behind, so resting contacts never block.
+        const float shift = Reach(*character.GetShape(), rotation, kept) - Reach(*made, rotation, kept);
+        character.SetPosition(before + JPH::RVec3(shift * kept));
+        const float allowed = 1.5f * m_impl->system.GetPhysicsSettings().mPenetrationSlop;
+        const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
+        const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
+        if (!character.SetShape(made, allowed, broadPhase, layer, {}, {}, m_impl->tempAllocator))
+        {
+            character.SetPosition(before);
+            return false;
+        }
+        character.SetInnerBodyShape(made);
+        character.SetSupportingVolume(SupportingVolume(*made, rotation));
+        // What rested on or beside the old shape may now fall or be pushed.
+        m_impl->WakeAround(bounds);
+        m_impl->WakeAround(m_impl->Bounds(BodyId{character.GetInnerBodyID().GetIndexAndSequenceNumber()}));
+        return true;
     }
 
     void World::Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation)
