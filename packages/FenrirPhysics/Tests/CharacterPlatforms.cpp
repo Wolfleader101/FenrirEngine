@@ -357,3 +357,28 @@ TEST_CASE("Steep ground is not ridden: a character on a steep slope moving along
     INFO("it stood on the steep slope for " << steep << " ticks");
     REQUIRE(steep > 5);
 }
+
+TEST_CASE("Disabling a character clears carried velocity", "[physics][characters]")
+{
+    PhysicsApp test;
+    Entity shuttle = AddPlatform(test.Entities(), Math::Vec3(0.0f));
+    Entity character = AddCharacter(test.Entities(), Math::Vec3(0.0f));
+    std::shared_ptr<Input> input = Drive(test.app, character);
+    Settle(test);
+    Carry(test.app, shuttle, [](int) { return Math::Vec3(2.0f, 0.0f, 0.0f); });
+    test.Run(0.25);
+
+    input->jump = true;
+    test.Run(tick);
+    REQUIRE(character.GetComponent<CharacterBody>().state.carriedVelocity.x == Approx(2.0f).margin(1.0e-4));
+
+    character.GetComponent<CharacterBody>().enabled = false;
+    test.Run(tick);
+    character.GetComponent<CharacterBody>().enabled = true;
+    test.Run(tick);
+    const CharacterBody& body = character.GetComponent<CharacterBody>();
+    INFO("re-enabled in the air, it no longer carries the shuttle's speed");
+    REQUIRE(body.state.ground == GroundState::InAir);
+    REQUIRE(body.state.carriedVelocity == Math::Vec3(0.0f));
+    REQUIRE(body.state.movedVelocity.x == Approx(0.0f).margin(1.0e-4));
+}

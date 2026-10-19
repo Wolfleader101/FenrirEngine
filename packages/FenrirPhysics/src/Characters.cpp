@@ -3,11 +3,14 @@
 
 #include <cstdint>
 #include <set>
+#include <string>
 #include <vector>
 
+#include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
 
@@ -15,17 +18,64 @@ namespace Fenrir
 {
     namespace
     {
-        // Whether the character body on `entity` can have a backend character now.
-        bool CanBeCharacter(const Entity& entity, Backend::World& backend)
+        Entity ParentOf(const Entity& entity)
         {
-            if (entity.HasComponent<RigidBody>() || !entity.HasComponent<Collider>())
+            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
+        }
+
+        // Why the character body on `entity` cannot have a backend character now (it is inactive), or empty if it can.
+        std::string WhyNoCharacter(const Entity& entity, Backend::World& backend)
+        {
+            if (entity.HasComponent<RigidBody>())
+            {
+                return "its entity has a RigidBody, which works instead";
+            }
+            if (!entity.HasComponent<Collider>())
+            {
+                return "its entity has no Collider to give it a shape";
+            }
+            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+            if (shape.Is<MeshShape>())
+            {
+                return "its Collider is a MeshShape, which a character cannot use";
+            }
+            if (!backend.CanMakeShape(shape))
+            {
+                return "its Collider refers to a collision mesh that is released or cannot be used as its "
+                       "kind of shape";
+            }
+            return {};
+        }
+
+        // Whether the character body on `entity` should have a backend character now: enabled, and not inactive.
+        bool ShouldBeCharacter(const Entity& entity, Backend::World& backend)
+        {
+            return entity.GetComponent<CharacterBody>().enabled && WhyNoCharacter(entity, backend).empty();
+        }
+    } // namespace
+
+    bool PhysicsWorld::Impl::IsCharacterChild(std::uint32_t collider) const
+    {
+        const Entity entity = m_entities->GetEntity(collider);
+        // A trigger is its own body beneath anything.
+        if (entity.HasComponent<RigidBody>() || entity.HasComponent<Trigger>() || IsCharacterCollider(collider))
+        {
+            return false;
+        }
+        // The nearest ancestor that is a body host or a character decides: a RigidBody's compound, or no body at all.
+        for (Entity above = ParentOf(entity); above.IsValid(); above = ParentOf(above))
+        {
+            if (IsCharacterCollider(above.GetId()))
+            {
+                return true;
+            }
+            if (above.HasComponent<RigidBody>() && !above.HasComponent<Trigger>())
             {
                 return false;
             }
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
-            return !shape.Is<MeshShape>() && backend.CanMakeShape(shape);
         }
-    } // namespace
+        return false;
+    }
 
     bool PhysicsWorld::Impl::IsCharacterCollider(std::uint32_t entity) const
     {
@@ -39,7 +89,9 @@ namespace Fenrir
         std::vector<Backend::CharacterId> destroyed;
         for (auto it = m_characters.begin(); it != m_characters.end();)
         {
-            if (!changed.contains(it->first))
+            // Kept only while enabled and valid: one disabled, or gone inactive by a field edit (a mesh Collider),
+            // keeps no backend character, so nothing sees it.
+            if (!changed.contains(it->first) && ShouldBeCharacter(m_entities->GetEntity(it->first), m_backend))
             {
                 ++it;
                 continue;
@@ -54,10 +106,21 @@ namespace Fenrir
     {
         std::vector<std::uint32_t> entities;
         std::vector<Backend::CharacterDesc> descs;
+        std::erase_if(m_inactiveCharacters, [this](std::uint32_t id) { return !m_characterEntities.contains(id); });
         for (std::uint32_t id : m_characterEntities)
         {
             const Entity entity = m_entities->GetEntity(id);
-            if (m_characters.contains(id) || !CanBeCharacter(entity, m_backend))
+            const std::string why = WhyNoCharacter(entity, m_backend);
+            if (why.empty())
+            {
+                m_inactiveCharacters.erase(id);
+            }
+            else if (m_inactiveCharacters.insert(id).second)
+            {
+                m_logger->Warn("The CharacterBody of entity " + std::to_string(id) + " is inactive: " + why +
+                               "; it is a character again once it can be");
+            }
+            if (m_characters.contains(id) || !ShouldBeCharacter(entity, m_backend))
             {
                 continue;
             }
@@ -132,8 +195,8 @@ namespace Fenrir
         const CollisionShape& shape = entity.GetComponent<Collider>().shape;
         const Math::Vec3 scale = GetWorldTransform(entity).scale;
         record.shapeBlocked = false;
-        if ((Same(shape, record.shape) && Same(scale, record.scale)) || shape.Is<MeshShape>() ||
-            !m_backend.CanMakeShape(shape))
+        // A shape no character can use made it inactive in the drain, before the move.
+        if (Same(shape, record.shape) && Same(scale, record.scale))
         {
             return;
         }
@@ -148,6 +211,18 @@ namespace Fenrir
         }
         record.shape = shape;
         record.scale = scale;
+    }
+
+    void PhysicsWorld::Impl::ResetIdleCharacters()
+    {
+        for (std::uint32_t id : m_characterEntities)
+        {
+            if (!m_characters.contains(id))
+            {
+                // Disabled or inactive: only its state is written, so no ground it last stood on goes stale.
+                m_entities->GetEntity(id).GetComponent<CharacterBody>().state = CharacterState{};
+            }
+        }
     }
 
     void PhysicsWorld::Impl::WriteBackCharacter(Entity& entity, CharacterRecord& record)

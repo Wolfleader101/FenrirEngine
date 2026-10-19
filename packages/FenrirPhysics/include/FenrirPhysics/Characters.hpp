@@ -90,6 +90,13 @@ namespace Fenrir
      * the next move pushes the shape out of anything it now overlaps. Turn it in `Tick`, as a kinematic body is moved.
      * A parented character moves in world space: its local Transform is written back against its parent's world
      * transform, parents before children.
+     *
+     * It is inactive beside a RigidBody (which works instead, its Collider then the RigidBody's), with no Collider, or
+     * with a MeshShape: the component is kept, one warning is logged each time it becomes so, and it is a character
+     * again by itself once it can be. A solid collider on a child entity with no RigidBody of its own is not part of
+     * the character and makes no body, with one warning; a child Trigger works as beneath any body, and the character
+     * never sets it off. A joint naming a character is inactive. While disabled or inactive, nothing is written back
+     * but `state`, which reads as the defaults.
      */
     struct CharacterBody
     {
@@ -112,7 +119,9 @@ namespace Fenrir
          * between the last two steps, stair step-ups and ground snaps included, while `Tick` systems see the true one.
          * A teleport and a new character snap. PhysicsConfig can turn interpolation off for every character. */
         bool interpolate = true;
-        /** @brief Disabled: not moved, invisible to bodies, queries and triggers, and nothing written back. */
+        /** @brief Disabled: not moved, invisible to bodies, queries and triggers, `velocity` and the Transform left to
+         * game code, and `state` reset. Enabled again, it finds its contacts and ground where it is that tick, as a
+         * teleport does, and is not blended from where it was. */
         bool enabled = true;
         /** @brief Read-back: overwritten by physics after every move. */
         CharacterState state;

@@ -36,6 +36,11 @@
 //
 // T teleports the character to just above the start by writing its Transform's position, and the autopilot does so at
 // the end of each route. 2 toggles its interpolation, which a 60 Hz display with vsync barely shows.
+//
+// 4 toggles the CharacterBody's enabled: disabled, nothing sees it (the loose box falls through it), game code stops
+// driving it, and its state reads as the defaults; enabled again, it carries on where it stands. M swaps its Collider
+// to a mesh and back: a character cannot use a mesh, so it goes inactive with one warning, and is a character again
+// once the capsule is back.
 
 #ifdef FENRIR_PHYSICS
 
@@ -62,6 +67,7 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "Material.hpp"
 #include "ModelLibrary.hpp"
@@ -132,14 +138,14 @@ class CharacterScene
                             "character by 1.5 and back. A wall to the south-east, a low ceiling to the south-west, "
                             "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west, a lift "
                             "and a shuttle to the north-east. T teleports to the start, 2 toggles interpolation, 3 "
-                            "pauses the platforms. L "
-                            "logs the state, P walks the route by itself. F5 goes on.",
+                            "pauses the platforms, 4 toggles the character on and off, M swaps its collider to a mesh "
+                            "(inactive) and back. L logs the state, P walks the route by itself. F5 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot walks every piece while L logs the state, then stops, each key is tapped twice, and T ends it.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 75, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
         for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X,
-                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_2, GLFW_KEY_3})
+                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_M})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -148,7 +154,8 @@ class CharacterScene
         return scene;
     }
 
-    CharacterScene(const Model& cube, const Shader& flatShader) : m_cube(&cube), m_flatShader(&flatShader)
+    CharacterScene(Fenrir::Physics& physics, const Model& cube, const Shader& flatShader)
+        : m_physics(&physics), m_cube(&cube), m_flatShader(&flatShader)
     {
     }
 
@@ -211,6 +218,10 @@ class CharacterScene
         ++m_tick;
         MovePlatforms(dt);
         Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
+        if (!body.enabled || m_mesh)
+        {
+            return; // switched off or inactive: physics ignores it, so game code leaves it be too
+        }
         NoteGroundChange(app, body.state.ground);
         // A crouch-jump crouches as soon as the jump has left the ground: the feet tuck up 0.6 m.
         if (m_crouchJump && body.state.ground == Fenrir::GroundState::InAir)
@@ -299,6 +310,16 @@ class CharacterScene
         {
             m_platformsPaused = !m_platformsPaused;
             app.Logger()->Info(m_platformsPaused ? "3: platforms paused" : "3: platforms moving");
+        }
+        else if (key == GLFW_KEY_4)
+        {
+            bool& enabled = m_character.GetComponent<Fenrir::CharacterBody>().enabled;
+            enabled = !enabled;
+            app.Logger()->Info(enabled ? "4: character enabled" : "4: character disabled: nothing sees it");
+        }
+        else if (key == GLFW_KEY_M)
+        {
+            SwapToMesh(app, !m_mesh);
         }
         else if (key == GLFW_KEY_P)
         {
@@ -625,8 +646,27 @@ class CharacterScene
             return;
         }
         m_crouched = crouched;
-        m_character.GetComponent<Fenrir::Collider>().shape = crouched ? crouchedShape : standingShape;
+        if (!m_mesh)
+        {
+            m_character.GetComponent<Fenrir::Collider>().shape = crouched ? crouchedShape : standingShape;
+        }
         app.Logger()->Info(crouched ? "Crouch" : "Stand up (once there is room)");
+    }
+
+    // A mesh Collider makes the character inactive, with one warning from physics; the capsule makes it one again.
+    void SwapToMesh(Fenrir::App& app, bool mesh)
+    {
+        m_mesh = mesh;
+        Fenrir::CollisionShape& shape = m_character.GetComponent<Fenrir::Collider>().shape;
+        if (mesh)
+        {
+            shape = Fenrir::MeshShape{m_meshCollider};
+        }
+        else
+        {
+            shape = m_crouched ? crouchedShape : standingShape;
+        }
+        app.Logger()->Info(mesh ? "M: mesh collider, the character is inactive" : "M: capsule collider again");
     }
 
     // The look follows the shape in use: the one asked for, or the other while the change waits for room.
@@ -674,6 +714,8 @@ class CharacterScene
         reading += state.onWall ? ", on wall" : "";
         reading += state.onCeiling ? ", on ceiling" : "";
         reading += state.shapeBlocked ? ", shape blocked" : "";
+        reading += body.enabled ? "" : ", disabled";
+        reading += m_mesh ? ", inactive (mesh)" : "";
         reading +=
             ", " + std::to_string(m_landings) + " landings, " + std::to_string(m_changes.size()) + " ground changes/s";
         m_character.GetComponent<Fenrir::Name>().Set(reading.c_str());
@@ -715,6 +757,17 @@ class CharacterScene
         m_character.AddComponent<Fenrir::Collider>(Fenrir::Collider{standingShape});
         m_character.AddComponent<Fenrir::CharacterBody>();
 
+        // For M: a box the character's size as triangles, which a character cannot use.
+        std::array<Fenrir::Math::Vec3, 8> corners{};
+        for (std::size_t i = 0; i < corners.size(); ++i)
+        {
+            corners[i] = Fenrir::Math::Vec3((i & 1u) ? 0.3f : -0.3f, (i & 2u) ? footToCentre : -footToCentre,
+                                            (i & 4u) ? 0.3f : -0.3f);
+        }
+        static constexpr std::array<std::uint32_t, 36> triangles = {
+            0, 2, 1, 1, 2, 3, 4, 5, 6, 5, 7, 6, 0, 1, 4, 1, 5, 4, 2, 6, 3, 3, 6, 7, 0, 4, 2, 2, 4, 6, 1, 3, 5, 3, 7, 5};
+        m_meshCollider = m_physics->CreateCollisionMesh(corners, triangles);
+
         // Its look: a child with no collider, so not part of it (ADR-0014: no compound characters).
         m_look = Box("Character look", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.6f, 1.6f, 0.6f),
                      Fenrir::Math::Vec3(0.95f, 0.85f, 0.3f));
@@ -734,8 +787,11 @@ class CharacterScene
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
     inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
 
+    Fenrir::Physics* m_physics;
     const Model* m_cube;
     const Shader* m_flatShader;
+    Fenrir::CollisionMesh m_meshCollider;
+    bool m_mesh = false;
     Fenrir::EntityList* m_entities = nullptr;
     Fenrir::Entity m_character;
     Fenrir::Entity m_look;
