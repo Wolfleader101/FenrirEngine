@@ -140,5 +140,8 @@ public enum DebugDraw : uint
     /// <summary>Each joint's two frames as axes: frameA long (red, green, blue), frameB short (pink, yellow,
     /// cyan). They coincide at the rest pose and while the joint holds.</summary>
     Joints = 1u << 4,
-    All = Colliders | Contacts | Velocities | Bounds | Joints,
+    /// <summary>Each active character's shape in use (the crouched one while a stand-up is blocked), its ground
+    /// normal coloured by ground state, and its moved velocity.</summary>
+    Characters = 1u << 5,
+    All = Colliders | Contacts | Velocities | Bounds | Joints | Characters,
 }

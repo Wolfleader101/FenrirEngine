@@ -36,7 +36,13 @@ namespace Fenrir
            joint holds. A disabled joint (broken, or disabled by game code) is drawn Dimmed. An inactive joint draws
            only the frames on its bodies that are still bodies, in InactiveJoint grey; never its world end. */
         Joints = 1u << 4,
-        All = Colliders | Contacts | Velocities | Bounds | Joints
+        /** @brief Each active character, at its step pose: the shape it uses in the Character colour (the old one while
+           a shape edit waits, with `state.shapeBlocked` set: the shape bodies and queries see), a short line along its
+           ground normal from its ground point while on ground (Ground, or SteepGround), and a line along its
+           `state.movedVelocity` as far as it travels in a tenth of a second, as Velocities draws a body's. Colliders
+           never draws a character. */
+        Characters = 1u << 5,
+        All = Colliders | Contacts | Velocities | Bounds | Joints | Characters
     };
 
     /** @brief The categories in `a` or `b`. */
@@ -84,6 +90,12 @@ namespace Fenrir
         inline constexpr std::uint32_t JointBZ = 0x4DFFFFFFu;
         /** @brief Every axis of an inactive joint's frames, drawn only on its bodies that are still bodies. */
         inline constexpr std::uint32_t InactiveJoint = 0x6B6B6BFFu;
+        /** @brief A character's shape in use. */
+        inline constexpr std::uint32_t Character = 0xF2F2F2FFu;
+        /** @brief A character's ground normal on walkable ground (GroundState::OnGround). */
+        inline constexpr std::uint32_t Ground = 0x33E6B3FFu;
+        /** @brief A character's ground normal on ground too steep to walk (GroundState::OnSteepGround). */
+        inline constexpr std::uint32_t SteepGround = 0xB366FFFFu;
 
         /** @brief A sleeping body's collider colour, or a disabled joint's axis colour: `colour` at half brightness,
          * alpha unchanged. */

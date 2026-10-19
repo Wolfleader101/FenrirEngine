@@ -10,9 +10,13 @@ Inactive and disabled characters draw nothing. `Colliders` still skips character
 
 **Blocked by:** 10 (Shape changes and crouching): the blocked shape is drawn while `shapeBlocked`.
 
-**Status:** ready-for-agent
+**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-debug-lines-92a7f8`; tests in `Tests/CharacterDebugLines.cpp`, tag `[characters]`). Where the build settled something the ticket left open:
 
-- [ ] Tests: with `Characters` on, a known character gives the expected line count; with it off, none; `All` includes it; `Colliders` draws no lines for a character.
-- [ ] Tests: while `shapeBlocked`, the drawn shape is the crouched one; inactive and disabled characters draw nothing.
-- [ ] The C# debug-draw enum has the `Characters` value matching C++.
+- **Colours:** `DebugColour::Character` (near white, 0xF2F2F2), `Ground` (mint, 0x33E6B3) for a normal on walkable ground and `SteepGround` (violet, 0xB366FF) on ground too steep. The moved-velocity line is `Velocity` yellow, as a body's. A character in the air or only touching draws no normal.
+- **Lengths:** the ground normal is 0.5 m. The moved-velocity line starts at the character's centre (its Transform) and is left out when `movedVelocity` is zero, as `Velocities` leaves out a body at rest.
+- **Hull edges:** characters share the colliders' per-mesh edge cache, so a hull character asks the backend for its edges once while drawn.
+
+- [x] Tests: with `Characters` on, a known character gives the expected line count; with it off, none; `All` includes it; `Colliders` draws no lines for a character.
+- [x] Tests: while `shapeBlocked`, the drawn shape is the crouched one; inactive and disabled characters draw nothing.
+- [x] The C# debug-draw enum has the `Characters` value matching C++.
 - [ ] F2 cycles through "characters"; the lines show the shape, ground normal and moved velocity, and the larger shape under G (checked by hand).

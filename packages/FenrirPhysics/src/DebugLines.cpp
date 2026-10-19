@@ -27,6 +27,8 @@ namespace Fenrir
         // The length of a joint frame's axes: frameA's long, frameB's short, so both show where they coincide.
         constexpr float jointAxisA = 0.5f;
         constexpr float jointAxisB = 0.25f;
+        // The length of a character's ground normal.
+        constexpr float groundNormal = 0.5f;
 
         // Adds lines through a pose: points given in the shape's own space come out in world space.
         class LineWriter
@@ -169,14 +171,21 @@ namespace Fenrir
             m_shapeEdges.clear();
             return;
         }
+        // Hull and mesh edges are asked of the backend once per mesh while they are drawn; ids are never reused.
+        std::map<ShapeEdgesKey, std::vector<Math::Vec3>> used;
         if (Includes(m_debugDraw, DebugDraw::Colliders))
         {
-            DrawColliders();
+            DrawColliders(used);
         }
         if (Includes(m_debugDraw, DebugDraw::Joints))
         {
             DrawJoints();
         }
+        if (Includes(m_debugDraw, DebugDraw::Characters))
+        {
+            DrawCharacters(used);
+        }
+        m_shapeEdges = std::move(used);
         if (Includes(m_debugDraw, DebugDraw::Contacts))
         {
             for (const Backend::Touch& touch : m_backend.Touches())
@@ -218,10 +227,8 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::DrawColliders()
+    void PhysicsWorld::Impl::DrawColliders(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
     {
-        // Hull and mesh edges are asked of the backend once per mesh while they are drawn; ids are never reused.
-        std::map<ShapeEdgesKey, std::vector<Math::Vec3>> used;
         for (const auto& [id, record] : m_bodies)
         {
             if (!record.Active())
@@ -238,7 +245,35 @@ namespace Fenrir
                 }
             }
         }
-        m_shapeEdges = std::move(used);
+    }
+
+    void PhysicsWorld::Impl::DrawCharacters(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
+    {
+        // Only characters with a backend character: disabled and inactive ones have no record, and draw nothing.
+        for (const auto& [id, record] : m_characters)
+        {
+            // The shape it has, not the Collider's: while a shape edit waits, that is the one bodies and queries see.
+            const Part part{.entity = id,
+                            .shape = record.shape,
+                            .pose = Transform(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), record.scale),
+                            .usable = true,
+                            .filtered = false};
+            DrawPart(part, record.world, DebugColour::Character, used);
+
+            const Backend::CharacterMoved& moved = record.moved;
+            if (moved.ground == GroundState::OnGround || moved.ground == GroundState::OnSteepGround)
+            {
+                const std::uint32_t colour =
+                    moved.ground == GroundState::OnGround ? DebugColour::Ground : DebugColour::SteepGround;
+                m_debugLines.push_back(
+                    DebugLine{moved.groundPoint, moved.groundPoint + groundNormal * moved.groundNormal, colour});
+            }
+            if (moved.movedVelocity != Math::Vec3(0.0f))
+            {
+                m_debugLines.push_back(DebugLine{
+                    record.world.pos, record.world.pos + velocitySeconds * moved.movedVelocity, DebugColour::Velocity});
+            }
+        }
     }
 
     void PhysicsWorld::Impl::DrawJoints()
