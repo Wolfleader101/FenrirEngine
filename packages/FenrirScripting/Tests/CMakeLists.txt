@@ -108,7 +108,7 @@ add_test(NAME ScriptingDoesNotUseEnTT
 # `ctest -V -R FenrirScripting`) and give FenrirScriptingTests Catch2's options, for example a test name or "[scripting]".
 add_test(NAME FenrirScripting COMMAND FenrirScriptingTests --order decl)
 set_tests_properties(FenrirScripting PROPERTIES TIMEOUT 120 ENVIRONMENT
-    "FENRIR_TEST_FIXTURE=${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_FIXTURE_V2=${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_BAD_REPORTS=${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll;FENRIR_TEST_EXTENSION=${fenrir_extension_dir}/Fenrir.TestExtension.dll;FENRIR_TEST_EXTENSION_SCRIPT=${fenrir_extension_script_dir}/Fenrir.TestExtensionScript.dll;FENRIR_TEST_BROKEN_EXTENSION=${fenrir_broken_extension_dir}/Fenrir.BrokenExtension.dll;FENRIR_TEST_EXECUTABLE_DIR=$<TARGET_FILE_DIR:FenrirScriptingTests>")
+    "FENRIR_TEST_FIXTURE=${fenrir_fixture_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_FIXTURE_V2=${fenrir_fixture_v2_dir}/Fenrir.ScriptFixture.dll;FENRIR_TEST_BAD_REPORTS=${fenrir_bad_reports_dir}/Fenrir.BadReportFixture.dll;FENRIR_BAD_REPORT_FILE=${CMAKE_CURRENT_BINARY_DIR}/bad-report-mode.txt;FENRIR_TEST_EXTENSION=${fenrir_extension_dir}/Fenrir.TestExtension.dll;FENRIR_TEST_EXTENSION_SCRIPT=${fenrir_extension_script_dir}/Fenrir.TestExtensionScript.dll;FENRIR_TEST_BROKEN_EXTENSION=${fenrir_broken_extension_dir}/Fenrir.BrokenExtension.dll;FENRIR_TEST_EXECUTABLE_DIR=$<TARGET_FILE_DIR:FenrirScriptingTests>")
 
 
 # Ref<T> points into storage that can move, so the compiler must refuse every way of keeping it past the call that was

@@ -14,8 +14,9 @@ namespace Fenrir.BadReportFixture
 }
 
 // The tables the SDK's generator would write, written by hand so a test can make them report something wrong end to end
-// (every other refusal is checked without an assembly, in the rules tests). The mode comes from the FENRIR_BAD_REPORT
-// environment variable, read as the assembly loads:
+// (every other refusal is checked without an assembly, in the rules tests). The mode is read as the assembly loads from
+// the file the FENRIR_BAD_REPORT_FILE environment variable names (a file, because the test changes it after the runtime
+// has started, and on Linux and macOS .NET does not see environment changes made after it starts):
 //   (empty)                  one component and one event, reported once each: a sound script assembly
 //   duplicate-component      the component twice
 //   duplicate-event          the event twice
@@ -23,7 +24,14 @@ namespace Fenrir.Scripting.Generated
 {
     internal static unsafe class Reports
     {
-        public static string Mode => Environment.GetEnvironmentVariable("FENRIR_BAD_REPORT") ?? "";
+        public static string Mode
+        {
+            get
+            {
+                string? file = Environment.GetEnvironmentVariable("FENRIR_BAD_REPORT_FILE");
+                return file != null && System.IO.File.Exists(file) ? System.IO.File.ReadAllText(file).Trim() : "";
+            }
+        }
     }
 
     public static class ComponentTable
