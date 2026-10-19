@@ -10,15 +10,22 @@
 //
 // The level is built one function per piece, each with its own leg of the autopilot route, so later pieces add a
 // function, a leg and their keys without touching the others': flat ground with a white start pad, a wall to the
-// south-east to walk into (onWall), and a low ceiling to the south-west to jump into (onCeiling).
+// south-east to walk into (onWall), a low ceiling to the south-west to jump into (onCeiling), a crouch tunnel to the
+// north with a loose box over a gap in its roof and a trigger at its far end, and a ledge to the north-west only a
+// crouch-jump clears.
+//
+// Crouching is game code editing the character's Collider once: X toggles it, and G scales the character by 1.5 and
+// back. Physics applies a shape edit only once it fits, keeping the feet in place on the ground and tucking them up in
+// the air; until then the character keeps its old shape and its state says shapeBlocked. The character's look shows the
+// shape in use.
 //
 // The camera is a CharacterCamera: C++ game code that follows the character and writes the scene's DemoCamera, which
 // DemoCameras copies into the app's camera. C frees the camera (WASD flies it, the arrows still walk) and snaps it
 // back.
 //
 // The character's name shows its readings every frame: ground state and what it stands on, velocity, moved velocity,
-// onWall and onCeiling while set, how many times it has landed, and how often its ground state changed in the last
-// second. Each ground change is logged with its tick; L logs the whole state.
+// onWall, onCeiling and shapeBlocked while set, how many times it has landed, and how often its ground state changed in
+// the last second. Each ground change is logged with its tick; L logs the whole state.
 //
 // T teleports the character to just above the start by writing its Transform's position, and the autopilot does so at
 // the end of each route. 2 toggles its interpolation, which a 60 Hz display with vsync barely shows.
@@ -29,6 +36,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <numbers>
 #include <set>
@@ -113,15 +121,17 @@ class CharacterScene
                         .familyKey = DemoFamilyKey::characterController,
                         .keyHelp =
                             "WASD or the arrows walk (relative to the camera), Shift runs, Space jumps, Q and E "
-                            "turn the camera, C frees the camera and snaps it back. A wall to the south-east, a "
-                            "low ceiling to the south-west. T teleports to the start, 2 toggles interpolation. L "
+                            "turn the camera, C frees the camera and snaps it back, X toggles crouch, G scales the "
+                            "character by 1.5 and back. A wall to the south-east, a low ceiling to the south-west, "
+                            "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west. T "
+                            "teleports to the start, 2 toggles interpolation. L "
                             "logs the state, P walks the route by itself. F5 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot walks every piece while L logs the state, then stops, each key is tapped twice, and T ends it.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 25, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key :
-             {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_T, GLFW_KEY_2})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X,
+                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_2})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -141,6 +151,8 @@ class CharacterScene
         BuildGround();
         BuildWall();
         BuildLowCeiling();
+        BuildCrouchTunnel();
+        BuildCrouchJumpLedge();
         MakeCharacter();
 
         m_camera = m_entities->CreateEntity();
@@ -174,6 +186,7 @@ class CharacterScene
                               Fenrir::GetWorldTransform(m_character).pos + Fenrir::Math::Vec3(0.0f, 0.6f, 0.0f),
                               m_held.contains(GLFW_KEY_Q), m_held.contains(GLFW_KEY_E),
                               static_cast<float>(app.GetTime().deltaTime));
+        ShowLook();
         ShowReadings();
     }
 
@@ -189,6 +202,12 @@ class CharacterScene
         ++m_tick;
         Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
         NoteGroundChange(app, body.state.ground);
+        // A crouch-jump crouches as soon as the jump has left the ground: the feet tuck up 0.6 m.
+        if (m_crouchJump && body.state.ground == Fenrir::GroundState::InAir)
+        {
+            SetCrouched(app, true);
+            m_crouchJump = false;
+        }
 
         // Steered from the velocity physics wrote back, never set outright, so what physics trimmed stays trimmed and
         // a slide keeps its speed.
@@ -241,6 +260,16 @@ class CharacterScene
             m_followCamera.Toggle();
             app.Logger()->Info(m_followCamera.Following() ? "Camera follows the character"
                                                           : "Camera free: WASD flies it, the arrows walk");
+        }
+        else if (key == GLFW_KEY_X)
+        {
+            SetCrouched(app, !m_crouched);
+        }
+        else if (key == GLFW_KEY_G)
+        {
+            m_grown = !m_grown;
+            m_character.GetComponent<Fenrir::Transform>().scale = Fenrir::Math::Vec3(m_grown ? grownScale : 1.0f);
+            app.Logger()->Info(m_grown ? "Grow by 1.5 (once there is room)" : "Back to size");
         }
         else if (key == GLFW_KEY_L)
         {
@@ -298,12 +327,21 @@ class CharacterScene
 
     // Level pieces, each with its leg of the autopilot route.
 
+    enum class Crouch : std::uint8_t
+    {
+        Keep,
+        Down,
+        Up
+    };
+
     struct Waypoint
     {
         Fenrir::Math::Vec3 at;
-        bool jump = false;    // Jump on arriving.
-        float wait = 0.0f;    // Seconds to stand once there.
-        float giveUp = 10.0f; // Seconds to try for it: a waypoint behind a wall is walked into until then.
+        bool jump = false;            // Jump on arriving.
+        bool crouchJump = false;      // Jump on arriving, and crouch once in the air.
+        Crouch crouch = Crouch::Keep; // Crouch or stand on arriving.
+        float wait = 0.0f;            // Seconds to stand once there.
+        float giveUp = 10.0f;         // Seconds to try for it: a waypoint behind a wall is walked into until then.
     };
 
     void BuildGround()
@@ -351,12 +389,68 @@ class CharacterScene
                 Waypoint{.at = start, .wait = 0.5f}};
     }
 
+    // North: a tunnel 8 m long, 1.6 m wide and 1.3 m high, between a crouched head (1.0 m) and a standing one (1.6 m).
+    // Halfway along, its roof has a 1 m gap with a loose box lying over it, which still blocks standing up. A trigger
+    // fills the space just past its far end, clear of the ground and the tunnel, where a stand-up waiting since inside
+    // fits: triggers never block.
+    void BuildCrouchTunnel()
+    {
+        const Fenrir::Math::Vec3 colour(0.35f, 0.5f, 0.65f);
+        for (const float x : {-1.0f, 1.0f})
+        {
+            Box("Tunnel wall", Fenrir::Math::Vec3(x, 0.75f, -7.0f), Fenrir::Math::Vec3(0.4f, 1.5f, 8.0f), colour)
+                .AddComponent<Fenrir::Collider>();
+        }
+        // The roof either side of the gap from z = -6.5 to -7.5: its underside 1.3 m up, its top 1.5 m.
+        for (const float z : {-4.75f, -9.25f})
+        {
+            Box("Tunnel roof", Fenrir::Math::Vec3(0.0f, 1.4f, z), Fenrir::Math::Vec3(2.4f, 0.2f, 3.5f), colour)
+                .AddComponent<Fenrir::Collider>();
+        }
+        Fenrir::Entity box = Box("Roof-gap box", Fenrir::Math::Vec3(0.0f, 1.65f, -7.0f),
+                                 Fenrir::Math::Vec3(1.6f, 0.3f, 1.6f), Fenrir::Math::Vec3(0.8f, 0.55f, 0.3f));
+        box.AddComponent<Fenrir::RigidBody>();
+        box.AddComponent<Fenrir::Collider>();
+        Fenrir::Entity trigger = Box("Tunnel trigger", Fenrir::Math::Vec3(0.0f, 1.35f, -12.1f),
+                                     Fenrir::Math::Vec3(2.0f, 2.5f, 2.0f), Fenrir::Math::Vec3(0.3f, 0.7f, 0.35f));
+        trigger.AddComponent<Fenrir::Collider>();
+        trigger.AddComponent<Fenrir::Trigger>();
+    }
+
+    // Crouches into the tunnel and stands inside it, so shapeBlocked shows until the exit, then walks back around it.
+    static std::vector<Waypoint> CrouchTunnelLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, -1.5f), .crouch = Crouch::Down},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, -5.0f), .crouch = Crouch::Up},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, -12.5f), .wait = 0.5f},
+                Waypoint{.at = Fenrir::Math::Vec3(3.0f, 0.0f, -12.5f)},
+                Waypoint{.at = Fenrir::Math::Vec3(3.0f, 0.0f, -1.5f)},
+                Waypoint{.at = start, .wait = 0.5f}};
+    }
+
+    // North-west: a ledge 1.6 m high, its east face at x = -6.5. A standing jump lifts the feet 1.3 m; crouching in
+    // the air tucks them up 0.6 m more.
+    void BuildCrouchJumpLedge()
+    {
+        Box("Crouch-jump ledge", Fenrir::Math::Vec3(-8.0f, 0.8f, -6.0f), Fenrir::Math::Vec3(3.0f, 1.6f, 3.0f),
+            Fenrir::Math::Vec3(0.6f, 0.45f, 0.55f))
+            .AddComponent<Fenrir::Collider>();
+    }
+
+    // Crouch-jumps onto the ledge, stands up on it, and walks off its far side back to the start.
+    static std::vector<Waypoint> CrouchJumpLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(-5.0f, 0.0f, -6.0f), .crouchJump = true},
+                Waypoint{.at = Fenrir::Math::Vec3(-8.0f, 0.0f, -6.0f), .crouch = Crouch::Up, .wait = 1.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(-8.0f, 0.0f, -9.0f)}, Waypoint{.at = start, .wait = 0.5f}};
+    }
+
     // The route: each piece's leg in turn, over and over, each time ending with a teleport to the start.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg : {WallLeg(), LowCeilingLeg()})
+            for (const std::vector<Waypoint>& leg : {WallLeg(), LowCeilingLeg(), CrouchTunnelLeg(), CrouchJumpLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -379,9 +473,14 @@ class CharacterScene
             m_waited = 0.0f;
             return Fenrir::Math::Normalized(to) * walkSpeed;
         }
-        if (m_waited == 0.0f && next.jump)
+        if (m_waited == 0.0f)
         {
-            m_jump = true;
+            m_jump = m_jump || next.jump || next.crouchJump;
+            m_crouchJump = m_crouchJump || next.crouchJump;
+            if (next.crouch != Crouch::Keep)
+            {
+                SetCrouched(app, next.crouch == Crouch::Down);
+            }
         }
         m_waited += dt;
         if (m_waited >= next.wait)
@@ -395,6 +494,28 @@ class CharacterScene
             }
         }
         return Fenrir::Math::Vec3(0.0f);
+    }
+
+    // Game code's crouch: the Collider written once. Physics stands the character up once there is room.
+    void SetCrouched(Fenrir::App& app, bool crouched)
+    {
+        if (crouched == m_crouched)
+        {
+            return;
+        }
+        m_crouched = crouched;
+        m_character.GetComponent<Fenrir::Collider>().shape = crouched ? crouchedShape : standingShape;
+        app.Logger()->Info(crouched ? "Crouch" : "Stand up (once there is room)");
+    }
+
+    // The look follows the shape in use: the one asked for, or the other while the change waits for room.
+    void ShowLook() const
+    {
+        const bool blocked = m_character.GetComponent<Fenrir::CharacterBody>().state.shapeBlocked;
+        const bool crouched = blocked ? !m_crouched : m_crouched;
+        const Fenrir::CapsuleShape& shape = crouched ? crouchedShape : standingShape;
+        m_look.GetComponent<Fenrir::Transform>().scale =
+            Fenrir::Math::Vec3(0.6f, 2.0f * (shape.halfHeight + shape.radius), 0.6f);
     }
 
     // Each ground change, logged with its tick, and counted for the readings.
@@ -427,6 +548,7 @@ class CharacterScene
         reading += ", v " + Describe(body.velocity) + ", moved " + Describe(state.movedVelocity);
         reading += state.onWall ? ", on wall" : "";
         reading += state.onCeiling ? ", on ceiling" : "";
+        reading += state.shapeBlocked ? ", shape blocked" : "";
         reading +=
             ", " + std::to_string(m_landings) + " landings, " + std::to_string(m_changes.size()) + " ground changes/s";
         m_character.GetComponent<Fenrir::Name>().Set(reading.c_str());
@@ -437,11 +559,11 @@ class CharacterScene
         const Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
         const Fenrir::CharacterState& state = body.state;
         app.Logger()->Info("Tick {}: at {}, {} on {} ({}, at {}, normal {}), velocity {}, moved at {}, onWall {}, "
-                           "onCeiling {}",
+                           "onCeiling {}, shapeBlocked {}",
                            m_tick, Describe(Fenrir::GetWorldTransform(m_character).pos), NameOf(state.ground),
                            NameOf(state.groundBody), NameOf(state.groundCollider), Describe(state.groundPoint),
                            Describe(state.groundNormal), Describe(body.velocity), Describe(state.movedVelocity),
-                           state.onWall, state.onCeiling);
+                           state.onWall, state.onCeiling, state.shapeBlocked);
     }
 
     // A unit cube model scaled to `size`, in a flat colour. Its collider, if any, is the default unit box, scaled too.
@@ -463,14 +585,13 @@ class CharacterScene
         m_character = m_entities->CreateEntity();
         m_character.GetComponent<Fenrir::Name>().Set("Character");
         m_character.GetComponent<Fenrir::Transform>().pos = start + Fenrir::Math::Vec3(0.0f, footToCentre + 0.5f, 0.0f);
-        m_character.AddComponent<Fenrir::Collider>(
-            Fenrir::Collider{Fenrir::CapsuleShape{.halfHeight = 0.5f, .radius = 0.3f}});
+        m_character.AddComponent<Fenrir::Collider>(Fenrir::Collider{standingShape});
         m_character.AddComponent<Fenrir::CharacterBody>();
 
         // Its look: a child with no collider, so not part of it (ADR-0014: no compound characters).
-        Fenrir::Entity look = Box("Character look", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.6f, 1.6f, 0.6f),
-                                  Fenrir::Math::Vec3(0.95f, 0.85f, 0.3f));
-        m_character.AddChild(look);
+        m_look = Box("Character look", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.6f, 1.6f, 0.6f),
+                     Fenrir::Math::Vec3(0.95f, 0.85f, 0.3f));
+        m_character.AddChild(m_look);
     }
 
     static constexpr float footToCentre = 0.8f;
@@ -478,6 +599,9 @@ class CharacterScene
     static constexpr float runSpeed = 8.0f;
     static constexpr float acceleration = 30.0f; // m/s², the most the walk changes the velocity by.
     static constexpr float jumpSpeed = 5.0f;
+    static constexpr float grownScale = 1.5f;
+    static constexpr Fenrir::CapsuleShape standingShape{.halfHeight = 0.5f, .radius = 0.3f};
+    static constexpr Fenrir::CapsuleShape crouchedShape{.halfHeight = 0.2f, .radius = 0.3f};
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
     inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
 
@@ -485,10 +609,14 @@ class CharacterScene
     const Shader* m_flatShader;
     Fenrir::EntityList* m_entities = nullptr;
     Fenrir::Entity m_character;
+    Fenrir::Entity m_look;
     Fenrir::Entity m_camera;
     CharacterCamera m_followCamera;
     std::set<int> m_held;
     bool m_jump = false;
+    bool m_crouchJump = false;
+    bool m_crouched = false;
+    bool m_grown = false;
     bool m_autopilot = false;
     std::size_t m_waypoint = 0;
     float m_onWaypoint = 0.0f;

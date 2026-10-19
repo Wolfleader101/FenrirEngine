@@ -215,12 +215,16 @@ namespace Fenrir
          * physics's copy is teleported there (a moved parent included), and one whose world rotation alone differs is
          * turned. Neither sweeps. */
         void PushCharacterEdits();
-        /** @brief Step 3b, before the step: moves each character by its velocity over `dt` seconds, one at a time in
-         * entity order, keeping each move's result for WriteBack. */
+        /** @brief Step 3b, before the step: applies each character's shape edit if it fits, then moves it by its
+         * velocity over `dt` seconds, one at a time in entity order, keeping each move's result for WriteBack. */
         void MoveCharacters(float dt);
         struct CharacterRecord;
-        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, and the
-         * world transform the diff compares against. */
+        /** @brief Step 3b, for one character before its move: gives it its Collider's shape and world scale if they
+         * changed and fit, keeping the feet in place on the ground and the head in the air; otherwise marks it
+         * blocked, keeping the shape it has. */
+        void ApplyShape(const Entity& entity, CharacterRecord& record);
+        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, whether its
+         * Collider's shape or scale is still waiting to fit, and the world transform the diff compares against. */
         void WriteBackCharacter(Entity& entity, CharacterRecord& record);
 
         void WriteBack();
@@ -331,9 +335,9 @@ namespace Fenrir
         // The joints the last step broke, sent with its contact and trigger events.
         std::vector<JointBroken> m_broken;
 
-        // What physics knows of a character body: its backend character, and where its last move left it. None for one
-        // that cannot have a backend character (beside a RigidBody, with no Collider, or with a shape a character
-        // cannot use).
+        // What physics knows of a character body: its backend character, where its last move left it, and the shape and
+        // world scale it has, which the diff compares the Collider and Transform against. None for one that cannot
+        // have a backend character (beside a RigidBody, with no Collider, or with a shape a character cannot use).
         struct CharacterRecord
         {
             Backend::CharacterId id;
@@ -342,6 +346,10 @@ namespace Fenrir
             // teleport, and a rotation differing from it a turn.
             Transform world;
             Shown shown{};
+            CollisionShape shape;
+            Math::Vec3 scale = Math::Vec3(1.0f);
+            // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
+            bool shapeBlocked = false;
         };
         ComponentWatch m_characterWatch;
         // The entities with a CharacterBody now, as the watch has reported them, and their records, by entity:

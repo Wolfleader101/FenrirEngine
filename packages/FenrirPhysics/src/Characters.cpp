@@ -81,7 +81,9 @@ namespace Fenrir
                 m_characters.emplace(entities[i],
                                      CharacterRecord{.id = ids[i],
                                                      .moved = Backend::CharacterMoved{},
-                                                     .world = GetWorldTransform(m_entities->GetEntity(entities[i]))});
+                                                     .world = GetWorldTransform(m_entities->GetEntity(entities[i])),
+                                                     .shape = descs[i].shape,
+                                                     .scale = descs[i].scale});
             }
         }
     }
@@ -110,7 +112,9 @@ namespace Fenrir
     {
         for (auto& [id, record] : m_characters)
         {
-            const CharacterBody& body = m_entities->GetEntity(id).GetComponent<CharacterBody>();
+            const Entity entity = m_entities->GetEntity(id);
+            ApplyShape(entity, record);
+            const CharacterBody& body = entity.GetComponent<CharacterBody>();
             record.moved = m_backend.MoveCharacter(record.id,
                                                    Backend::CharacterMove{.velocity = body.velocity,
                                                                           .maxSlope = body.maxSlope,
@@ -119,6 +123,29 @@ namespace Fenrir
                                                                           .stopOnSlope = body.stopOnSlope},
                                                    dt);
         }
+    }
+
+    void PhysicsWorld::Impl::ApplyShape(const Entity& entity, CharacterRecord& record)
+    {
+        const CollisionShape& shape = entity.GetComponent<Collider>().shape;
+        const Math::Vec3 scale = GetWorldTransform(entity).scale;
+        record.shapeBlocked = false;
+        if ((Same(shape, record.shape) && Same(scale, record.scale)) || shape.Is<MeshShape>() ||
+            !m_backend.CanMakeShape(shape))
+        {
+            return;
+        }
+        // Crouching on the ground lowers the head; in the air it tucks the feet up.
+        const bool onGround =
+            record.moved.ground == GroundState::OnGround || record.moved.ground == GroundState::OnSteepGround;
+        if (!m_backend.ReshapeCharacter(record.id, shape, scale, onGround))
+        {
+            // The Collider keeps what game code asked for, and the next move tries it again.
+            record.shapeBlocked = true;
+            return;
+        }
+        record.shape = shape;
+        record.scale = scale;
     }
 
     void PhysicsWorld::Impl::WriteBackCharacter(Entity& entity, CharacterRecord& record)
@@ -145,6 +172,7 @@ namespace Fenrir
                                     .groundNormal = moved.groundNormal,
                                     .movedVelocity = moved.movedVelocity,
                                     .onWall = moved.onWall,
-                                    .onCeiling = moved.onCeiling};
+                                    .onCeiling = moved.onCeiling,
+                                    .shapeBlocked = record.shapeBlocked};
     }
 } // namespace Fenrir
