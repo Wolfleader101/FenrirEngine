@@ -13,7 +13,9 @@
 
 **Blocked by:** 03 (Character tracer bullet).
 
-**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-shape-changes-c645d0`). Where the build settled something the ticket left open:
+**Status:** resolved
+
+Built test-first on branch `claude/character-shape-changes-c645d0`; the user did the DemoApp hand check. Where the build settled something the ticket left open:
 
 - The shape edit is diffed and applied in 3b, just before each character's move, against the shape and world scale physics last gave the character (its diff copy), rather than diffed in step 2 beside ticket 05's teleports and turns: the check needs the ground state of the last move and the pose the step-2 edits leave, and both are at hand there.
 - The backend's checked reshape moves the character by the shift first and calls Jolt's `SetShape` there, at 1.5 × the penetration slop, putting it back where it was if the shape is refused; on a fit the inner body's shape and the supporting volume (the private ground rule) follow, and the bodies around the old and new shapes are woken. The shift comes from each shape's farthest point along world ±Y, rounding included, so it holds for a rotated or scaled shape too.
@@ -25,4 +27,4 @@
 - [x] Tests: a crouch on the ground fits and lowers the head with the feet in place; in the air it tucks the feet up with the head in place.
 - [x] Tests: a stand-up under a box is blocked with `shapeBlocked`, the `Collider` unchanged and queries seeing the crouched shape; removing the box lets it stand by itself on the next move; a trigger does not block.
 - [x] Tests: a scale edit is checked the same way; box, sphere, capsule and hull characters move; the centre shift is not a teleport and not in `movedVelocity`.
-- [ ] The tunnel crouch holds `shapeBlocked` until the exit, the roof-gap box blocks and the trigger does not, the crouch-jump clears the ledge, and G walks with the larger shape (checked by hand).
+- [x] The tunnel crouch holds `shapeBlocked` until the exit, the roof-gap box blocks and the trigger does not, the crouch-jump clears the ledge, and G walks with the larger shape (checked by hand).
