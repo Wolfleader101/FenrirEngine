@@ -1962,7 +1962,9 @@ namespace Fenrir::Backend
 
             bool ShouldCollide(JPH::ObjectLayer layer) const override
             {
-                return (m_layers->Key(layer).layers & m_filter->mask) != 0;
+                const LayerKey& key = m_layers->Key(layer);
+                return (key.layers & m_filter->mask) != 0 &&
+                       (m_filter->layers == 0u || (key.mask & m_filter->layers) != 0);
             }
 
           private:
@@ -2045,7 +2047,9 @@ namespace Fenrir::Backend
         class ShapeCastCollector final : public JPH::CastShapeCollector
         {
           public:
-            ShapeCastCollector(float maxDistance, HitSink sink) : m_maxDistance(maxDistance), m_sink(sink)
+            // `motion`, when given, is the cast's whole displacement: only hits that block a move along it are kept.
+            ShapeCastCollector(float maxDistance, HitSink sink, const JPH::Vec3* motion = nullptr)
+                : m_maxDistance(maxDistance), m_sink(sink), m_motion(motion)
             {
             }
 
@@ -2056,6 +2060,13 @@ namespace Fenrir::Backend
 
             void AddHit(const JPH::ShapeCastResult& result) override
             {
+                // As CharacterVirtual's sweep: a body the shape starts in or touching is not in the way (a mover
+                // resting on the ground slides along it), nor is one it moves away from.
+                if (m_motion != nullptr &&
+                    (!(result.mFraction > 0.0f) || !(result.mPenetrationAxis.Dot(*m_motion) > 0.0f)))
+                {
+                    return;
+                }
                 const JPH::Vec3 normal = -result.mPenetrationAxis.NormalizedOr(JPH::Vec3::sZero());
                 const float wanted = m_sink(QueryHit{EntityOf(*m_body), ColliderOf(*m_body, result.mSubShapeID2),
                                                      FromJolt(result.mContactPointOn1), FromJolt(normal),
@@ -2072,6 +2083,7 @@ namespace Fenrir::Backend
           private:
             float m_maxDistance;
             HitSink m_sink;
+            const JPH::Vec3* m_motion;
             const JPH::Body* m_body = nullptr;
         };
 
@@ -2108,6 +2120,37 @@ namespace Fenrir::Backend
             BodySink m_sink;
             const JPH::Body* m_body = nullptr;
             std::vector<std::uint32_t> m_reported;
+        };
+
+        // Hands each overlap with a depth to a sink.
+        class PenetrationCollector final : public JPH::CollideShapeCollector
+        {
+          public:
+            explicit PenetrationCollector(PenetrationSink sink) : m_sink(sink)
+            {
+            }
+
+            void OnBody(const JPH::Body& body) override
+            {
+                m_body = &body;
+            }
+
+            void AddHit(const JPH::CollideShapeResult& result) override
+            {
+                // Shapes only touching are reported at depth 0: nothing to get out of.
+                if (!(result.mPenetrationDepth > 0.0f))
+                {
+                    return;
+                }
+                // The axis moves the body out of the shape; the shape goes the other way.
+                const JPH::Vec3 out = -result.mPenetrationAxis.NormalizedOr(JPH::Vec3::sZero());
+                m_sink(Penetration{EntityOf(*m_body), ColliderOf(*m_body, result.mSubShapeID2),
+                                   FromJolt(result.mContactPointOn1), FromJolt(out), result.mPenetrationDepth});
+            }
+
+          private:
+            PenetrationSink m_sink;
+            const JPH::Body* m_body = nullptr;
         };
 
         JPH::Mat44 ToJolt(const Math::Vec3& position, const Math::Quat& rotation)
@@ -2157,6 +2200,33 @@ namespace Fenrir::Backend
                                                              filters.body);
     }
 
+    void World::CastMove(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                         const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
+                         const QueryFilter& filter, HitSink sink) const
+    {
+        if (!(maxDistance > 0.0f))
+        {
+            return;
+        }
+        const JPH::Ref<JPH::Shape> cast = m_impl->MakeQueryShape(shape, scale);
+        if (cast == nullptr)
+        {
+            return;
+        }
+        const JPH::Vec3 motion = ToJolt(direction) * maxDistance;
+        const JPH::RShapeCast shapeCast =
+            JPH::RShapeCast::sFromWorldTransform(cast, JPH::Vec3::sOne(), ToJolt(position, rotation), motion);
+        ShapeCastCollector collector(maxDistance, sink, &motion);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        // CharacterVirtual's sweep settings: a convex face is only met from the front, so a shape leaving a body
+        // through it is not stopped; a triangle stops it from either side, so it cannot pass through a thin floor.
+        JPH::ShapeCastSettings settings;
+        settings.mBackFaceModeTriangles = JPH::EBackFaceMode::CollideWithBackFaces;
+        settings.mBackFaceModeConvex = JPH::EBackFaceMode::IgnoreBackFaces;
+        m_impl->system.GetNarrowPhaseQueryNoLock().CastShape(shapeCast, settings, JPH::RVec3::sZero(), collector,
+                                                             filters.broadPhase, filters.layer, filters.body);
+    }
+
     void World::CollideShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
                              const Math::Quat& rotation, const QueryFilter& filter, BodySink sink) const
     {
@@ -2167,6 +2237,22 @@ namespace Fenrir::Backend
         }
         const JPH::Mat44 centreOfMass = ToJolt(position, rotation).PreTranslated(overlap->GetCenterOfMass());
         BodyCollector<JPH::CollideShapeCollector> collector(sink);
+        const QueryFilters filters(filter, m_impl->objectLayers);
+        m_impl->system.GetNarrowPhaseQueryNoLock().CollideShape(
+            overlap, JPH::Vec3::sOne(), centreOfMass, JPH::CollideShapeSettings(), JPH::RVec3::sZero(), collector,
+            filters.broadPhase, filters.layer, filters.body);
+    }
+
+    void World::CollideDeep(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                            const Math::Quat& rotation, const QueryFilter& filter, PenetrationSink sink) const
+    {
+        const JPH::Ref<JPH::Shape> overlap = m_impl->MakeQueryShape(shape, scale);
+        if (overlap == nullptr)
+        {
+            return;
+        }
+        const JPH::Mat44 centreOfMass = ToJolt(position, rotation).PreTranslated(overlap->GetCenterOfMass());
+        PenetrationCollector collector(sink);
         const QueryFilters filters(filter, m_impl->objectLayers);
         m_impl->system.GetNarrowPhaseQueryNoLock().CollideShape(
             overlap, JPH::Vec3::sOne(), centreOfMass, JPH::CollideShapeSettings(), JPH::RVec3::sZero(), collector,

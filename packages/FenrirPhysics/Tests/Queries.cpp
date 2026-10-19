@@ -329,6 +329,60 @@ TEST_CASE("A query's mask leaves out bodies in other layers", "[physics][queries
     REQUIRE_FALSE(WorldOf(test).Raycast(Math::Vec3(0.0f), east, 100.0f, QueryFilter{.mask = 0u}).has_value());
 }
 
+TEST_CASE("A query's layers leave out bodies whose masks exclude them, as a body's would", "[physics][queries][layers]")
+{
+    PhysicsApp test;
+    // Both in layer 0; the near one collides only with layer 1, the far one with everything.
+    Entity near = AddStatic(test.Entities(), Math::Vec3(3.0f, 0.0f, 0.0f));
+    near.AddComponent<CollisionFilter>(CollisionFilter{.layers = 1u << 0, .mask = 1u << 1});
+    Entity far = AddStatic(test.Entities(), Math::Vec3(6.0f, 0.0f, 0.0f));
+    test.Run(tick);
+
+    const std::optional<RaycastHit> inLayerTwo =
+        WorldOf(test).Raycast(Math::Vec3(0.0f), east, 100.0f, QueryFilter{.layers = 1u << 2});
+    INFO("a ray in layer 2 hit the nearer body, whose mask leaves layer 2 out, or found nothing");
+    REQUIRE(inLayerTwo.has_value());
+    REQUIRE(inLayerTwo->body == far);
+
+    const std::optional<RaycastHit> inLayerOne =
+        WorldOf(test).Raycast(Math::Vec3(0.0f), east, 100.0f, QueryFilter{.layers = 1u << 1});
+    INFO("a ray in layer 1 passed the nearer body, whose mask includes layer 1");
+    REQUIRE(inLayerOne.has_value());
+    REQUIRE(inLayerOne->body == near);
+
+    const std::optional<RaycastHit> inBoth =
+        WorldOf(test).Raycast(Math::Vec3(0.0f), east, 100.0f, QueryFilter{.layers = (1u << 1) | (1u << 2)});
+    INFO("a ray in layers 1 and 2 passed the nearer body, though its mask includes one of them");
+    REQUIRE(inBoth.has_value());
+    REQUIRE(inBoth->body == near);
+}
+
+TEST_CASE("A query's layers of 0 ignore bodies' masks in every query", "[physics][queries][layers]")
+{
+    PhysicsApp test;
+    // A hitbox: collides with nothing, but queries still find it.
+    Entity hitbox = AddStatic(test.Entities(), Math::Vec3(3.0f, 0.0f, 0.0f));
+    hitbox.AddComponent<CollisionFilter>(CollisionFilter{.layers = 1u << 0, .mask = 0u});
+    test.Run(tick);
+    PhysicsWorld& world = WorldOf(test);
+    const QueryFilter noLayers{.layers = 0u};
+
+    INFO("a ray with layers 0 missed a body that collides with nothing");
+    REQUIRE(world.Raycast(Math::Vec3(0.0f), east, 100.0f, noLayers)->body == hitbox);
+    const Transform atOrigin(Math::Vec3(0.0f), identity, Math::Vec3(1.0f));
+    INFO("a shape cast with layers 0 missed it");
+    REQUIRE(world.ShapeCast(SphereShape{0.25f}, atOrigin, east, 100.0f, noLayers)->body == hitbox);
+    std::array<OverlapHit, 4> hits;
+    const Transform overHitbox(Math::Vec3(3.0f, 0.0f, 0.0f), identity, Math::Vec3(1.0f));
+    INFO("an overlap with layers 0 missed it");
+    REQUIRE(world.Overlap(SphereShape{0.25f}, overHitbox, hits, noLayers) == 1);
+    INFO("a point overlap with layers 0 missed it");
+    REQUIRE(world.OverlapPoint(Math::Vec3(3.0f, 0.0f, 0.0f), hits, noLayers) == 1);
+
+    INFO("a ray in layer 0 found the body, whose mask is empty");
+    REQUIRE_FALSE(world.Raycast(Math::Vec3(0.0f), east, 100.0f, QueryFilter{.layers = 1u << 0}).has_value());
+}
+
 TEST_CASE("A query's ignored body is not found, so a body can cast from inside itself", "[physics][queries]")
 {
     PhysicsApp test;
