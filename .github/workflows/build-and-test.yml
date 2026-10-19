@@ -24,9 +24,7 @@ env:
 jobs:
   windows:
     name: Windows (${{ matrix.preset }})
-    # windows-2022 has Visual Studio 2022. windows-latest and windows-2025 now have Visual Studio 2026, whose STL no longer
-    # has the stdext::checked_array_iterator that the fmt bundled with the pinned spdlog uses.
-    runs-on: windows-2022
+    runs-on: windows-latest
     timeout-minutes: 90
     strategy:
       fail-fast: false
