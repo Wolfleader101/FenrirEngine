@@ -205,11 +205,14 @@ namespace Fenrir
 
         /** @brief Whether the Collider on `entity` is a character body's shape, and so makes no body of its own. */
         [[nodiscard]] bool IsCharacterCollider(std::uint32_t entity) const;
+        /** @brief Whether the Collider on `collider` is a solid collider beneath a character with no RigidBody of its
+         * own between: it is not part of the character, and makes no body. */
+        [[nodiscard]] bool IsCharacterChild(std::uint32_t collider) const;
         /** @brief Destroys the backend characters of the entities in `changed`, whose components came or went since
-         * the last tick: they are made again from what the entity has now. */
+         * the last tick (they are made again from what the entity has now), and of those disabled or gone inactive. */
         void DropCharacters(const std::set<std::uint32_t>& changed);
-        /** @brief Makes, in one batch in entity order, the backend character of each CharacterBody that can have one
-         * and has none. */
+        /** @brief Warns once about each CharacterBody that has gone inactive, then makes, in one batch in entity order,
+         * the backend character of each enabled one that can have one and has none. */
         void MakeCharacters();
         /** @brief Step 2, after the bodies' edits, in entity order: a character whose world position differs from
          * physics's copy is teleported there (a moved parent included), and one whose world rotation alone differs is
@@ -226,6 +229,9 @@ namespace Fenrir
         /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, whether its
          * Collider's shape or scale is still waiting to fit, and the world transform the diff compares against. */
         void WriteBackCharacter(Entity& entity, CharacterRecord& record);
+        /** @brief Step 5, for each CharacterBody with no backend character (disabled or inactive): its state reset to
+         * the defaults, and nothing else written. */
+        void ResetIdleCharacters();
 
         void WriteBack();
         void AdvancePoses();
@@ -336,8 +342,8 @@ namespace Fenrir
         std::vector<JointBroken> m_broken;
 
         // What physics knows of a character body: its backend character, where its last move left it, and the shape and
-        // world scale it has, which the diff compares the Collider and Transform against. None for one that cannot
-        // have a backend character (beside a RigidBody, with no Collider, or with a shape a character cannot use).
+        // world scale it has, which the diff compares the Collider and Transform against. None for one disabled, or
+        // inactive (beside a RigidBody, with no Collider, or with a shape a character cannot use).
         struct CharacterRecord
         {
             Backend::CharacterId id;
@@ -356,6 +362,11 @@ namespace Fenrir
         // characters are made and moved in that order.
         std::set<std::uint32_t> m_characterEntities;
         std::map<std::uint32_t, CharacterRecord> m_characters;
+        // CharacterBodies that cannot be characters now (beside a RigidBody, with no Collider, or with a shape a
+        // character cannot use), and solid colliders beneath a character: each is warned about once, when it becomes
+        // one.
+        std::set<std::uint32_t> m_inactiveCharacters;
+        std::set<std::uint32_t> m_characterChildren;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

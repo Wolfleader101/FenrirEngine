@@ -7,7 +7,8 @@
 - **Dynamic bodies never push a character:** they meet the inner body as an immovable kinematic wall. Knockback is game code writing `velocity`.
 - **Kinematic bodies shove** a character at exactly their own speed into it: the move treats them as surfaces moving at their velocity, and that speed shows in the written-back `velocity` until game code overwrites it. Stated limits documented: a fast body may overlap for a tick; crushing is not detected.
 - **Stated limit:** a body resting on a character (a box on its head) is not carried; it slips or is pushed out. A jump still pushes it up.
-- **DemoApp:** boxes of 1, 20 and 100 kg (names show mass and speed); a hinged seesaw (its angle shown); a kinematic paddle sweeping a lane (paused by 3); B throws a ball at the standing character; H drops a 1 kg box on the head. The autopilot walks the boxes, seesaw and paddle lane.
+- **Merged with 06 and 07:** `Push` pushes at the velocity the character actually moves at (game code's, plus ridden and carried). Ticket 07's carried-velocity trim used the full trim rule, so a paddle moving into the character went into carried velocity (then cleared on landing) and not into `velocity`; carried velocity now only loses its part going into a surface, down to none, and never takes on a surface's push.
+- **DemoApp:** in `CharacterScene.hpp`, `BuildPushBoxes` (east of the wall, x = 10, z = 3.5/5.5/7.5, clear of 07's lift and shuttle; 20 kg on friction 0.2, reset at each route wrap), `BuildSeesaw` (west, hinged at (-6, 0.6, 0), starting east end down), `BuildPaddleLane` (south, z = 11, kinematic, moved in `Tick` by `MovePaddle`), each with its leg; B (`ThrowBall`) and H (`DropBoxOnHead`) added to the smoke keys, and 3 pauses the paddle with 07's platforms. The smoke autopilot does not reach the new legs; P walks them by hand. The ball's `ContactBegin` log is ticket 11's.
 
 **Blocked by:** 03 (Character tracer bullet).
 

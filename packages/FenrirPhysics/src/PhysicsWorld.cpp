@@ -419,9 +419,16 @@ namespace Fenrir
         {
             return trigger;
         }
-        // The body a collider on the parent would belong to: the nearest ancestor body, if there is one.
-        const Entity host = NearestBodyHost(ParentOf(m_entities->GetEntity(trigger)));
-        return host.IsValid() ? host.GetId() : trigger;
+        // The nearest ancestor body or character, if there is one: a trigger beneath a character moves with it too.
+        for (Entity above = ParentOf(m_entities->GetEntity(trigger)); above.IsValid(); above = ParentOf(above))
+        {
+            if (IsCharacterCollider(above.GetId()) ||
+                (above.HasComponent<RigidBody>() && !above.HasComponent<Trigger>()))
+            {
+                return above.GetId();
+            }
+        }
+        return trigger;
     }
 
     PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(std::uint32_t entity)
@@ -537,11 +544,23 @@ namespace Fenrir
         // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
         // worked out every tick).
         std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
+        std::erase_if(m_characterChildren, [this](std::uint32_t id) { return !m_colliderEntities.contains(id); });
         for (std::uint32_t collider : m_colliderEntities)
         {
-            if (!IsCharacterCollider(collider))
+            if (IsCharacterCollider(collider))
             {
+                continue;
+            }
+            if (!IsCharacterChild(collider))
+            {
+                m_characterChildren.erase(collider);
                 assembly[BodyEntityOf(collider)].push_back(collider);
+            }
+            else if (m_characterChildren.insert(collider).second)
+            {
+                m_logger->Warn("The collider of entity " + std::to_string(collider) +
+                               " is beneath a character body, which has no compound shape; it makes no body until it "
+                               "has a RigidBody of its own or is moved from beneath the character");
             }
         }
 
@@ -781,6 +800,7 @@ namespace Fenrir
             record.linearVelocity = state.linearVelocity;
             record.angularVelocity = state.angularVelocity;
         }
+        ResetIdleCharacters();
     }
 
     CollisionFilter PhysicsWorld::Impl::EffectiveFilterOf(Entity& entity) const

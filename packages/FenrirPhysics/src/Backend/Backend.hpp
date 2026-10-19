@@ -83,10 +83,14 @@ namespace Fenrir::Backend
         std::uint32_t entity = 0;
     };
 
-    /** @brief One tick's move of a character: its velocity and the walking and pushing rules of its CharacterBody. */
+    /**
+     * @brief One tick's move of a character: its velocity, the carried velocity its last move left it, and the walking
+     * and pushing rules of its CharacterBody.
+     */
     struct CharacterMove
     {
         Math::Vec3 velocity = Math::Vec3(0.0f);
+        Math::Vec3 carried = Math::Vec3(0.0f);
         float maxSlope = 0.0f;
         float stepHeight = 0.0f;
         float floorSnap = 0.0f;
@@ -106,12 +110,20 @@ namespace Fenrir::Backend
         Math::Vec3 velocity = Math::Vec3(0.0f);
         /** @brief The move's displacement over its time. */
         Math::Vec3 movedVelocity = Math::Vec3(0.0f);
+        /**
+         * @brief What the next move carries: none on walkable ground; the whole ground velocity this move rode if it
+         * left that ground; otherwise the move's carried velocity, less the parts that went into what it touches.
+         */
+        Math::Vec3 carriedVelocity = Math::Vec3(0.0f);
         GroundState ground = GroundState::InAir;
         /** @brief On ground only: the ground body's entity and its collider's, ~0u otherwise. */
         std::uint32_t groundEntity = ~0u;
         std::uint32_t groundCollider = ~0u;
         Math::Vec3 groundPoint = Math::Vec3(0.0f);
         Math::Vec3 groundNormal = Math::Vec3(0.0f);
+        /** @brief On ground only: the ground's velocity at the character, as this tick's step will move it. */
+        Math::Vec3 groundVelocity = Math::Vec3(0.0f);
+        Math::Vec3 groundAngularVelocity = Math::Vec3(0.0f);
         bool onWall = false;
         bool onCeiling = false;
     };
@@ -422,7 +434,9 @@ namespace Fenrir::Backend
         /**
          * @brief Moves a character by `move` over `dt` seconds, sliding along what it hits, stepping up stairs and
          * sticking to the ground going down, filtered as its body is and passing through triggers. Before a step, so
-         * the bodies it touches are where the last step left them; its body is placed where it ends, at rest.
+         * the bodies it touches are where the last step left them; its body is placed where it ends, at rest. If its
+         * last move (or teleport) left it on walkable ground, it rides it: the ground's velocity now (after this
+         * tick's MoveKinematic) is added to the move, and its velocity is trimmed in the ground's frame.
          *
          * Dynamic bodies it hits are given an impulse towards its speed at the contact, capped by `pushForce` and
          * never downward, and its ground body, if dynamic, is pressed by `mass` under the world's gravity at the

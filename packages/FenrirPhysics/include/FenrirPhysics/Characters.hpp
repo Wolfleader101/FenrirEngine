@@ -35,16 +35,22 @@ namespace Fenrir
         Math::Vec3 groundPoint = Math::Vec3(0.0f);
         /** @brief World space, unit length, up from the ground, averaged over the ground contacts, on ground only. */
         Math::Vec3 groundNormal = Math::Vec3(0.0f);
-        /** @brief m/s, the ground's velocity at the character, on ground only. */
+        /** @brief m/s, the ground's velocity at the character, on ground only. Physics adds it to the next move on
+         * walkable ground, never to `velocity`. */
         Math::Vec3 groundVelocity = Math::Vec3(0.0f);
-        /** @brief rad/s, world space, the ground's angular velocity, on ground only. */
+        /** @brief rad/s, world space, the ground's angular velocity, on ground only. Physics never turns the character
+         * with its ground: game code that wants it turned with a turntable turns it by this. */
         Math::Vec3 groundAngularVelocity = Math::Vec3(0.0f);
         /**
          * @brief m/s, the last move's displacement over the tick's time: how fast the character actually moved, which
          * `velocity` (trimmed, and never measured from displacement) does not say.
          */
         Math::Vec3 movedVelocity = Math::Vec3(0.0f);
-        /** @brief m/s, the velocity of the ground the character left, added to each move until it lands. */
+        /**
+         * @brief m/s, the whole velocity of the walkable ground the character left (walking or jumping off), added to
+         * each move and trimmed by what it hits, as `velocity` is, until it lands. A teleport clears it. It is never in
+         * `velocity`; `movedVelocity` includes it.
+         */
         Math::Vec3 carriedVelocity = Math::Vec3(0.0f);
         /** @brief Touching a wall at the end of the move: a surface too steep to stand on that is not its ground. */
         bool onWall = false;
@@ -67,6 +73,13 @@ namespace Fenrir
      * `state.movedVelocity` is how fast the character actually moved. Gravity is game code's: physics adds none, so add
      * `PhysicsWorld::Gravity() * dt` each tick, and set `velocity.y` to jump.
      *
+     * A character rides the walkable ground it stands on, a lift, a shuttle, a raft or a turntable, with no game code:
+     * the ground's velocity at the character is added to its move, never to `velocity`, which is trimmed in the
+     * ground's frame, so a descending lift's speed is never taken for falling. Steep ground is not ridden. Leaving the
+     * ground keeps its velocity as `state.carriedVelocity` until landing. Moving before the step, a character trails a
+     * descending platform by one tick of travel (2.5 cm at 1.5 m/s), still on the ground; where a lift turns from down
+     * to up, that gap leaves it in the air for 1 to 4 ticks.
+     *
      * Its shape is the Collider on its entity, whose PhysicsMaterial and CollisionFilter apply to it as to any body;
      * that Collider makes no static body. The Transform sits at the collider's centre. Physics writes back only the
      * position; the shape takes the entity's full world rotation, and up is always world +Y.
@@ -77,6 +90,13 @@ namespace Fenrir
      * the next move pushes the shape out of anything it now overlaps. Turn it in `Tick`, as a kinematic body is moved.
      * A parented character moves in world space: its local Transform is written back against its parent's world
      * transform, parents before children.
+     *
+     * It is inactive beside a RigidBody (which works instead, its Collider then the RigidBody's), with no Collider, or
+     * with a MeshShape: the component is kept, one warning is logged each time it becomes so, and it is a character
+     * again by itself once it can be. A solid collider on a child entity with no RigidBody of its own is not part of
+     * the character and makes no body, with one warning; a child Trigger works as beneath any body, and the character
+     * never sets it off. A joint naming a character is inactive. While disabled or inactive, nothing is written back
+     * but `state`, which reads as the defaults.
      *
      * Other bodies: a move that hits a dynamic body pushes it towards the character's speed at the contact, aiming at
      * 0.9 × the closing speed (so a light box keeps pace and is never launched), with at most `pushForce` on each body
@@ -113,7 +133,9 @@ namespace Fenrir
          * between the last two steps, stair step-ups and ground snaps included, while `Tick` systems see the true one.
          * A teleport and a new character snap. PhysicsConfig can turn interpolation off for every character. */
         bool interpolate = true;
-        /** @brief Disabled: not moved, invisible to bodies, queries and triggers, and nothing written back. */
+        /** @brief Disabled: not moved, invisible to bodies, queries and triggers, `velocity` and the Transform left to
+         * game code, and `state` reset. Enabled again, it finds its contacts and ground where it is that tick, as a
+         * teleport does, and is not blended from where it was. */
         bool enabled = true;
         /** @brief Read-back: overwritten by physics after every move. */
         CharacterState state;

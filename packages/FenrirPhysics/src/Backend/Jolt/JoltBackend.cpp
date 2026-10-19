@@ -1906,7 +1906,20 @@ namespace Fenrir::Backend
         character.SetMaxSlopeAngle(move.maxSlope);
         // Its mass presses on the ground under the gravity passed below, which the move uses for nothing else.
         character.SetMass(move.mass);
-        character.SetLinearVelocity(velocity);
+
+        // Riding: the last move ended on walkable ground, whose velocity is added to this move and never to game
+        // code's. Read now, after this tick's MoveKinematic: Jolt's cached value is a tick old.
+        JPH::Vec3 ground = JPH::Vec3::sZero();
+        const bool riding = character.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+        if (riding)
+        {
+            character.UpdateGroundVelocity();
+            ground = character.GetGroundVelocity();
+        }
+        JPH::Vec3 carried = ToJolt(move.carried);
+        // What the character moves at, and so pushes at.
+        const JPH::Vec3 moving = velocity + carried + ground;
+        character.SetLinearVelocity(moving);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update;
         update.mStickToFloorStepDown = -move.floorSnap * up;
@@ -1916,7 +1929,7 @@ namespace Fenrir::Backend
         const JPH::RVec3 start = character.GetPosition();
         character.ExtendedUpdate(dt, m_impl->system.GetGravity(), update, broadPhase, layer, {}, {},
                                  m_impl->tempAllocator);
-        Push(m_impl->system, character, velocity, move.pushForce, dt);
+        Push(m_impl->system, character, moving, move.pushForce, dt);
 
         CharacterMoved moved;
         moved.position = CentreOf(character);
@@ -1934,6 +1947,12 @@ namespace Fenrir::Backend
             }
             moved.groundPoint = FromJolt(JPH::Vec3(character.GetGroundPosition()));
             moved.groundNormal = FromJolt(character.GetGroundNormal());
+            // Jolt found it at the move's end from this tick's body velocities, at the character.
+            moved.groundVelocity = FromJolt(character.GetGroundVelocity());
+            if (lock.Succeeded())
+            {
+                moved.groundAngularVelocity = FromJolt(lock.GetBody().GetAngularVelocity());
+            }
         }
 
         // Trimmed against what it touches at the end of the move, relative to each surface's own velocity, and never
@@ -1941,21 +1960,34 @@ namespace Fenrir::Backend
         //  - what faces up (ground, a slope, a step's edge) takes only the falling part, so walking never turns into
         //    climbing speed: all of it on walkable ground with stopOnSlope, otherwise its part into the surface, so
         //    the rest slides the character downhill;
-        //  - a wall or a ceiling takes the part going into it, along its normal.
+        //  - a wall or a ceiling takes the part going into it, along its normal;
+        //  - all of it in the frame of the ground it rode, so a descending lift's own speed is never taken for falling.
+        // Carried velocity is trimmed first, and only loses its part going into a surface, down to none: it never takes
+        // on a surface's own push, so a kinematic body shoving the character shows in `velocity`. What still goes into
+        // a surface after it is game code's.
         JPH::Vec3 kept = velocity;
+        const auto into = [&](JPH::Vec3Arg part, JPH::Vec3Arg normal, JPH::Vec3Arg surface) {
+            const float along = carried.Dot(normal);
+            if ((carried - surface).Dot(normal) < 0.0f)
+            {
+                carried += (std::min(surface.Dot(normal), std::max(along, 0.0f)) - along) * normal;
+            }
+            return Trim(part + carried, normal, surface) - carried;
+        };
         const auto touch = [&](JPH::Vec3Arg contactNormal, JPH::Vec3Arg surfaceNormal, JPH::Vec3Arg surfaceVelocity) {
+            const JPH::Vec3 surface = surfaceVelocity - ground;
             if (contactNormal.Dot(up) <= level)
             {
-                kept = Trim(kept, contactNormal, surfaceVelocity);
+                kept = into(kept, contactNormal, surface);
             }
             else if (move.stopOnSlope && !character.IsSlopeTooSteep(surfaceNormal))
             {
-                kept = Trim(kept, up, surfaceVelocity);
+                kept = into(kept, up, surface);
             }
             else
             {
                 const JPH::Vec3 vertical = kept.Dot(up) * up;
-                kept = kept - vertical + Trim(vertical, contactNormal, surfaceVelocity);
+                kept = kept - vertical + into(vertical, contactNormal, surface);
             }
         };
         for (const JPH::CharacterContact& contact : character.GetActiveContacts())
@@ -1982,6 +2014,16 @@ namespace Fenrir::Backend
             touch(character.GetGroundNormal(), character.GetGroundNormal(), character.GetGroundVelocity());
         }
         moved.velocity = FromJolt(kept);
+        // Landing clears carried velocity; leaving walkable ground (a jump included) carries all of what it rode.
+        if (moved.ground == GroundState::OnGround)
+        {
+            carried = JPH::Vec3::sZero();
+        }
+        else if (riding)
+        {
+            carried = ground;
+        }
+        moved.carriedVelocity = FromJolt(carried);
         return moved;
     }
 
