@@ -11,9 +11,15 @@
 
 **Blocked by:** 03 (Character tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-platforms-b6a6de`). Where the build settled something the ticket left open:
 
-- [ ] Tests: riding a lift up and down and a shuttle sideways, with `groundBody` naming it and no slipping; a jump off a lift rising at (1, 2, 0) m/s carries exactly that as `carriedVelocity`, none of it in `velocity`, cleared on landing.
-- [ ] Tests: riding a dynamic raft; riding a rotating platform without turning, with `groundAngularVelocity` reported; a teleport clears carried velocity; steep ground is not ridden.
-- [ ] Tests: standing on a descending lift never reads its speed as falling (`velocity.y` stays trimmed to 0).
+- Riding and carrying are the backend's, in `MoveCharacter`: it rides when Jolt's own ground state, from the last move or a teleport's refresh, is on ground, calling `UpdateGroundVelocity` first. The carried velocity goes in through `CharacterMove::carried` and comes back in `CharacterMoved::carriedVelocity` as what the next move carries (none on walkable ground, the whole ground velocity ridden on leaving it, otherwise trimmed). The pipeline keeps it in `CharacterRecord::moved`, and a teleport clears it there. Disabling (ticket 06) should clear it the same way.
+- The trim measures every contact in the frame of the ground ridden (surface velocity less the ground velocity added). Carried velocity is trimmed against each contact first, and game code's `velocity` takes what still goes into the surface, as the spike did.
+- `state.groundVelocity` is Jolt's ground velocity at the end of the move (this tick's body velocities, at the character), so it is also set on steep ground, where it is reported but not ridden. `state.groundAngularVelocity` is the ground body's angular velocity.
+- A test pins the stated limit: at an immediate down-to-up turn the character is off the lift for 3 ticks (at most 4 allowed).
+- The DemoApp's lift waits at the bottom for boarding, goes up 3 m, down 1.5 m and at once up again (the turn that shows the hop), then down. The shuttle waits at its south end. The autopilot waits for each to begin its wait before boarding.
+
+- [x] Tests: riding a lift up and down and a shuttle sideways, with `groundBody` naming it and no slipping; a jump off a lift rising at (1, 2, 0) m/s carries exactly that as `carriedVelocity`, none of it in `velocity`, cleared on landing.
+- [x] Tests: riding a dynamic raft; riding a rotating platform without turning, with `groundAngularVelocity` reported; a teleport clears carried velocity; steep ground is not ridden.
+- [x] Tests: standing on a descending lift never reads its speed as falling (`velocity.y` stays trimmed to 0).
 - [ ] Lift and shuttle ridden, a jump off the lift keeps `carriedVelocity` until landing, and the hover at the lift's turn shows as stated (checked by hand).
