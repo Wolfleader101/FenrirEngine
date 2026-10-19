@@ -239,9 +239,10 @@ namespace Fenrir
 
         // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
         void DrawDebugLines();
-        void DrawColliders();
-        void DrawJoints();
         struct ShapeEdgesKey;
+        void DrawColliders(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
+        void DrawJoints();
+        void DrawCharacters(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
         void DrawPart(const Part& part, const Transform& body, std::uint32_t colour,
                       std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
 

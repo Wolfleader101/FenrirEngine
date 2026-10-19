@@ -398,10 +398,14 @@ class PhysicsDemo
     };
 
     // What F2 steps through, starting from none.
-    static constexpr std::array<DebugMode, 7> debugModes = {
-        DebugMode{Fenrir::DebugDraw::None, "off"},          DebugMode{Fenrir::DebugDraw::Colliders, "colliders"},
-        DebugMode{Fenrir::DebugDraw::Contacts, "contacts"}, DebugMode{Fenrir::DebugDraw::Velocities, "velocities"},
-        DebugMode{Fenrir::DebugDraw::Bounds, "bounds"},     DebugMode{Fenrir::DebugDraw::Joints, "joints"},
+    static constexpr std::array<DebugMode, 8> debugModes = {
+        DebugMode{Fenrir::DebugDraw::None, "off"},
+        DebugMode{Fenrir::DebugDraw::Colliders, "colliders"},
+        DebugMode{Fenrir::DebugDraw::Contacts, "contacts"},
+        DebugMode{Fenrir::DebugDraw::Velocities, "velocities"},
+        DebugMode{Fenrir::DebugDraw::Bounds, "bounds"},
+        DebugMode{Fenrir::DebugDraw::Joints, "joints"},
+        DebugMode{Fenrir::DebugDraw::Characters, "characters"},
         DebugMode{Fenrir::DebugDraw::All, "all"},
     };
 
