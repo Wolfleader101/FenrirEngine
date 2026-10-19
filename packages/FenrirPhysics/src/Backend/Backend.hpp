@@ -83,13 +83,17 @@ namespace Fenrir::Backend
         std::uint32_t entity = 0;
     };
 
-    /** @brief One tick's move of a character: its velocity and the walking rules of its CharacterBody. */
+    /** @brief One tick's move of a character: its velocity and the walking and pushing rules of its CharacterBody. */
     struct CharacterMove
     {
         Math::Vec3 velocity = Math::Vec3(0.0f);
         float maxSlope = 0.0f;
         float stepHeight = 0.0f;
         float floorSnap = 0.0f;
+        /** @brief Newtons: the most force a push of a dynamic body applies; 0 pushes nothing. */
+        float pushForce = 0.0f;
+        /** @brief Kilograms: the weight pressed on the ground, under the world's gravity; 0 presses nothing. */
+        float mass = 0.0f;
         bool stopOnSlope = true;
     };
 
@@ -419,6 +423,11 @@ namespace Fenrir::Backend
          * @brief Moves a character by `move` over `dt` seconds, sliding along what it hits, stepping up stairs and
          * sticking to the ground going down, filtered as its body is and passing through triggers. Before a step, so
          * the bodies it touches are where the last step left them; its body is placed where it ends, at rest.
+         *
+         * Dynamic bodies it hits are given an impulse towards its speed at the contact, capped by `pushForce` and
+         * never downward, and its ground body, if dynamic, is pressed by `mass` under the world's gravity at the
+         * ground point: both act in the next step. A dynamic body never pushes it; a kinematic one moving into it does,
+         * at that body's speed.
          */
         CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 

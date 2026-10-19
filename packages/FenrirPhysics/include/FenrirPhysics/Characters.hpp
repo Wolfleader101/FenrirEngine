@@ -77,6 +77,19 @@ namespace Fenrir
      * the next move pushes the shape out of anything it now overlaps. Turn it in `Tick`, as a kinematic body is moved.
      * A parented character moves in world space: its local Transform is written back against its parent's world
      * transform, parents before children.
+     *
+     * Other bodies: a move that hits a dynamic body pushes it towards the character's speed at the contact, aiming at
+     * 0.9 × the closing speed (so a light box keeps pace and is never launched), with at most `pushForce` on each body
+     * and never downward; static and kinematic bodies are not pushed. A move that ends on ground presses the ground
+     * body with `mass` under the world's gravity, scaled by how the ground faces it, so a character tips a seesaw or
+     * sinks a raft. Both act in the step after the move. A dynamic body never pushes a character: it meets the
+     * character as an immovable wall and stops or bounces off, and knockback is game code writing `velocity`. A
+     * kinematic body (a door, a paddle) moving into a character shoves it at exactly the body's speed, whatever its
+     * `mass`, and that speed shows in the written-back `velocity` until game code overwrites it. Stated limits: a fast
+     * kinematic body may overlap a character for a tick until the next move pushes it out; a character caught between
+     * a kinematic body and a wall is not crushed or detected, but stays overlapped and stuck (`state.onWall` and the
+     * contacts show it); and a body resting on a character (a box on its head) is not carried along, but slips or is
+     * pushed out, though a jump still pushes it up.
      */
     struct CharacterBody
     {
@@ -89,9 +102,10 @@ namespace Fenrir
         /** @brief Metres: how far down the character sticks to the ground walking down slopes and steps. 0 turns it
          * off. */
         float floorSnap = 0.5f;
-        /** @brief Newtons: the most force a push applies to a dynamic body. 0 turns pushing off. */
+        /** @brief Newtons: the most force a move's push applies to each dynamic body it hits. 0 turns pushing off. */
         float pushForce = 100.0f;
-        /** @brief Kilograms: only the character's weight on its ground. 0 turns it off. */
+        /** @brief Kilograms: only the character's weight on its ground; it does not change pushing or being pushed. 0
+         * turns it off. */
         float mass = 70.0f;
         /** @brief On walkable ground, the falling part of `velocity` does not slide the character down a slope. */
         bool stopOnSlope = true;
