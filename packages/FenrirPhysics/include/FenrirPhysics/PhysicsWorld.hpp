@@ -9,6 +9,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"
 #include "FenrirPhysics/Joints.hpp"

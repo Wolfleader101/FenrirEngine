@@ -12,7 +12,8 @@
 //   (scripts/Sparks.cs). DemoMesh     a component C# adds to make an entity visible, without knowing the renderer
 //   (DemoMesh.hpp, scripts/DemoMesh.cs). SceneClick   the editor's SceneClickEvent, a click in the scene view as a ray
 //   (scripts/Controls.cs). CSharpScene  the marker C++ puts in a scene for C# to build, naming which one
-//   (CSharpScenes.hpp, scripts/CSharpScene.cs).
+//   (CSharpScenes.hpp, scripts/CSharpScene.cs). DemoCamera   where a scene wants the camera, written by its own follow
+//   camera in C++ or C# (DemoCamera.hpp, scripts/DemoCamera.cs).
 
 #ifdef FENRIR_SCRIPTING
 
@@ -21,6 +22,7 @@
 #include <cstdlib>
 #include <memory>
 
+#include "DemoCamera.hpp"
 #include "DemoMesh.hpp"
 #include "Events.hpp"
 #include "FenrirApp/App.hpp"
@@ -112,6 +114,14 @@ struct Iris::StructMapping<DemoMesh>
 };
 
 template <>
+struct Iris::StructMapping<DemoCamera>
+{
+    static constexpr std::string_view typeName = "DemoScripts.DemoCamera";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(DemoCamera, Position), IRIS_FIELD(DemoCamera, Yaw),
+                                                      IRIS_FIELD(DemoCamera, Pitch), IRIS_FIELD(DemoCamera, Active));
+};
+
+template <>
 struct Iris::StructMapping<SceneClickEvent>
 {
     static constexpr std::string_view typeName = "DemoScripts.SceneClick";
@@ -128,7 +138,8 @@ namespace ScriptingDemo
         extension.name = "DemoApp";
         extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob"),
                                 Fenrir::MakeComponent<DemoMesh>("Demo.DemoMesh"),
-                                Fenrir::MakeComponent<CSharpScene>("Demo.CSharpScene")};
+                                Fenrir::MakeComponent<CSharpScene>("Demo.CSharpScene"),
+                                Fenrir::MakeComponent<DemoCamera>("Demo.DemoCamera")};
         extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"),
                             Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey"),
                             Fenrir::MakeEvent<SceneClickEvent>("Demo.SceneClick")};

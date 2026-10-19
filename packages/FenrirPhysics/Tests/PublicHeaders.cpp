@@ -1,6 +1,7 @@
 // FenrirPhysics hides its physics backend at compile time (ADR-0010). This file includes the public headers before
 // anything else, so if one of them ever reaches for Jolt, or Jolt's include path or definitions reach a user of
 // FenrirPhysics (this test target is one), the build fails here.
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/CollisionLayers.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"

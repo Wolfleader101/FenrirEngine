@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "FenrirMath/Math.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Joints.hpp"
 
@@ -56,6 +57,59 @@ namespace Fenrir::Backend
         /** @brief Where the constraint comes in the solve: lower first. Distinct for each joint, so the solve order
          * depends only on which joints exist, not on the order they were made and removed in. */
         std::uint32_t priority = 0;
+    };
+
+    /** @brief A character in one World. Valid until the character is destroyed. */
+    struct CharacterId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /**
+     * @brief Everything needed to make a character: a collide-and-slide shape with a kinematic body of the same shape
+     * that other bodies, queries and triggers see.
+     */
+    struct CharacterDesc
+    {
+        /** @brief Any shape but a mesh; it must pass CanMakeShape. */
+        CollisionShape shape;
+        /** @brief Its entity's world scale, baked into the shape. */
+        Math::Vec3 scale = Math::Vec3(1.0f);
+        CollisionFilter filter;
+        /** @brief The shape's centre, as a collider's Transform is. */
+        Math::Vec3 position = Math::Vec3(0.0f);
+        Math::Quat rotation = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        /** @brief The character's entity: it names it as body and collider in hits and contacts, and is its ID. */
+        std::uint32_t entity = 0;
+    };
+
+    /** @brief One tick's move of a character: its velocity and the walking rules of its CharacterBody. */
+    struct CharacterMove
+    {
+        Math::Vec3 velocity = Math::Vec3(0.0f);
+        float maxSlope = 0.0f;
+        float stepHeight = 0.0f;
+        float floorSnap = 0.0f;
+        bool stopOnSlope = true;
+    };
+
+    /** @brief Where a move left a character, and what it touches there. */
+    struct CharacterMoved
+    {
+        /** @brief The shape's centre. */
+        Math::Vec3 position = Math::Vec3(0.0f);
+        /** @brief The move's velocity, less the parts that went into what it touches at the end of the move. */
+        Math::Vec3 velocity = Math::Vec3(0.0f);
+        /** @brief The move's displacement over its time. */
+        Math::Vec3 movedVelocity = Math::Vec3(0.0f);
+        GroundState ground = GroundState::InAir;
+        /** @brief On ground only: the ground body's entity and its collider's, ~0u otherwise. */
+        std::uint32_t groundEntity = ~0u;
+        std::uint32_t groundCollider = ~0u;
+        Math::Vec3 groundPoint = Math::Vec3(0.0f);
+        Math::Vec3 groundNormal = Math::Vec3(0.0f);
+        bool onWall = false;
+        bool onCeiling = false;
     };
 
     /** @brief How a body moves and responds: the parts of RigidBody the backend needs. */
@@ -331,6 +385,23 @@ namespace Fenrir::Backend
         /** @brief Disables a joint after a step, as a break does: it holds nothing and its bodies collide with each
          * other from the next step. Wakes nothing: a joint is checked for breaking only while its bodies are awake. */
         void DisableJoint(JointId id);
+
+        /**
+         * @brief Makes the characters in one batch, in order, writing their ids to `ids` (the same length as
+         * `characters`), each with its contacts and ground found where it stands. A character that is not made (the
+         * world is full) gets the default CharacterId. Never during a step.
+         */
+        void CreateCharacters(std::span<const CharacterDesc> characters, std::span<CharacterId> ids);
+
+        /** @brief Destroys the characters, each with the body that stands for it. Never during a step. */
+        void DestroyCharacters(std::span<const CharacterId> ids);
+
+        /**
+         * @brief Moves a character by `move` over `dt` seconds, sliding along what it hits, stepping up stairs and
+         * sticking to the ground going down, filtered as its body is and passing through triggers. Before a step, so
+         * the bodies it touches are where the last step left them; its body is placed where it ends, at rest.
+         */
+        CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

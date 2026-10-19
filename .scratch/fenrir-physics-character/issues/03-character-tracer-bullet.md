@@ -14,13 +14,19 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved, but for the F5 hand check, which is the user's (built test-first on branch `claude/character-tracer-bullet-51480a`). Where the build settled something the ticket left open:
 
-- [ ] `FenrirPhysicsTests` (through the frame seam): `CharacterBody{}` has the spec's defaults; a character added beside a `Collider` falls under game-code gravity and lands, with `velocity.y` within 1e-3 of 0 for 60 ticks after landing; a jump into a ceiling clears upward speed and sets `onCeiling`; walking into a wall trims the speed into it and sets `onWall`.
-- [ ] Ground state: `OnGround` with the ground fields naming the floor, `InAir` with them empty; `movedVelocity` is the last move's displacement over `dt`.
-- [ ] A raycast and an overlap hit the character, naming its entity as body and collider; the character's `Collider` makes no static body.
-- [ ] Removing and re-adding `CharacterBody` in one tick rebuilds it; destroying a world with characters is clean; two runs of a walking character are bit-identical.
-- [ ] ADR-0014 states a teleport is a position change and drops the base-of-shape conversion.
-- [ ] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
-- [ ] `FENRIR_DEMO_SCENE="Character (C++)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
+- The inner body's `BodyID` comes from Jolt's body allocator in batch order (inner bodies made in entity order, after the bodies' batch), not `mInnerBodyIDOverride`: an override needs an ID known to be free, and allocation in batch order gives the same reproducibility. The bit-identical test covers it on one thread and many.
+- The trim runs after `ExtendedUpdate`, over its end-of-move contacts (`GetActiveContacts`), as the trim bullet asks; Jolt's contact-solve hook sees mid-move contacts instead, so it is not used yet.
+- Jolt's character position is the collider's centre less its 0.02 m padding (Jolt places the shape and inner body that far above the position); written back, it is the centre again.
+- Ground state already maps all four of Jolt's states (`NotSupported` as `Touching`, which a jump into the ceiling or beside the wall shows for a tick); ticket 04 pins `OnSteepGround` and `Touching` and the face-normal rule. The walking rules are passed to the move from the component every tick, untested until 04.
+- Not built here: teleports and rotation writes (05), `enabled` and inactive warnings (06; a character beside a `RigidBody`, with no `Collider` or with a mesh simply has no backend character), pushing settings and the inner body's `PhysicsMaterial` (08, 09). A `Collider` on an entity with a `CharacterBody` and no `RigidBody` is never a static body.
+
+- [x] `FenrirPhysicsTests` (through the frame seam): `CharacterBody{}` has the spec's defaults; a character added beside a `Collider` falls under game-code gravity and lands, with `velocity.y` within 1e-3 of 0 for 60 ticks after landing; a jump into a ceiling clears upward speed and sets `onCeiling`; walking into a wall trims the speed into it and sets `onWall`.
+- [x] Ground state: `OnGround` with the ground fields naming the floor, `InAir` with them empty; `movedVelocity` is the last move's displacement over `dt`.
+- [x] A raycast and an overlap hit the character, naming its entity as body and collider; the character's `Collider` makes no static body.
+- [x] Removing and re-adding `CharacterBody` in one tick rebuilds it; destroying a world with characters is clean; two runs of a walking character are bit-identical.
+- [x] ADR-0014 states a teleport is a position change and drops the base-of-shape conversion.
+- [x] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
+- [x] `FENRIR_DEMO_SCENE="Character (C++)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
 - [ ] F5 toggles Default ⇄ Character (C++); the camera follows, Q/E orbit, C frees it and snaps back; the character walks, jumps, stops at the wall and the ceiling; readouts are live (checked by hand).

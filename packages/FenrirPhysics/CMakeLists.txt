@@ -3,6 +3,7 @@
 add_subdirectory(libs)
 
 add_library(FenrirPhysics STATIC
+    include/FenrirPhysics/Characters.hpp
     include/FenrirPhysics/CollisionLayers.hpp
     include/FenrirPhysics/Components.hpp
     include/FenrirPhysics/DebugLines.hpp
@@ -13,6 +14,7 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Queries.hpp
 
     src/BodyComponents.hpp
+    src/Characters.cpp
     src/CollisionLayers.cpp
     src/DebugLines.cpp
     src/Joints.cpp
