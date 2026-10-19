@@ -152,4 +152,31 @@ namespace PhysicsTest
     {
         return Fenrir::GetWorldTransform(entity).pos;
     }
+
+    // A frame a little under a third of a tick: ticks land on different frames, with varied fractions left over.
+    inline constexpr double shortFrame = tick * 0.3;
+
+    // The fraction of a tick owed after the frame just run: how far between its last two step poses a body is shown.
+    inline float FractionOf(const Fenrir::App& app)
+    {
+        return static_cast<float>(app.GetTime().accumulator / app.GetTime().tickRate);
+    }
+
+    inline Fenrir::Math::Vec3 Blend(const Fenrir::Math::Vec3& from, const Fenrir::Math::Vec3& to, float fraction)
+    {
+        return from + (to - from) * fraction;
+    }
+
+    using Poses = std::shared_ptr<std::vector<Fenrir::Transform>>;
+
+    // Records an entity's world transform after each step: physics's PostTick system runs before systems added after
+    // it, so these are the step poses.
+    inline Poses RecordStepPoses(Fenrir::App& app, const Fenrir::Entity& entity)
+    {
+        auto poses = std::make_shared<std::vector<Fenrir::Transform>>();
+        app.AddSequentialSystems(Fenrir::SchedulePriority::PostTick, {[poses, entity](Fenrir::App&) {
+                                     poses->push_back(Fenrir::GetWorldTransform(entity));
+                                 }});
+        return poses;
+    }
 } // namespace PhysicsTest

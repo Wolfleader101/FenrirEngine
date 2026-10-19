@@ -18,32 +18,6 @@ using Catch::Approx;
 
 namespace
 {
-    // A frame a little under a third of a tick: ticks land on different frames, with varied fractions left over.
-    constexpr double shortFrame = tick * 0.3;
-
-    // The fraction of a tick owed after the frame just run: how far between its last two step poses a body is shown.
-    float FractionOf(const App& app)
-    {
-        return static_cast<float>(app.GetTime().accumulator / app.GetTime().tickRate);
-    }
-
-    Math::Vec3 Blend(const Math::Vec3& from, const Math::Vec3& to, float fraction)
-    {
-        return from + (to - from) * fraction;
-    }
-
-    using Poses = std::shared_ptr<std::vector<Transform>>;
-
-    // Records an entity's world transform after each step: physics's PostTick system runs before systems added after
-    // it, so these are the step poses.
-    Poses RecordStepPoses(App& app, const Entity& entity)
-    {
-        auto poses = std::make_shared<std::vector<Transform>>();
-        app.AddSequentialSystems(SchedulePriority::PostTick,
-                                 {[poses, entity](App&) { poses->push_back(GetWorldTransform(entity)); }});
-        return poses;
-    }
-
     // Records the entity's world transform as Tick systems see it, each tick.
     Poses RecordTickPoses(App& app, const Entity& entity)
     {

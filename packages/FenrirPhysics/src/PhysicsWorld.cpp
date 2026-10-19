@@ -161,11 +161,6 @@ namespace Fenrir
             }
         }
 
-        bool Same(const Transform& a, const Transform& b)
-        {
-            return Same(a.pos, b.pos) && Same(a.rot, b.rot) && Same(a.scale, b.scale);
-        }
-
         // How many ancestors the entity has: blending writes parents before children.
         int DepthOf(const Entity& entity)
         {
@@ -261,6 +256,7 @@ namespace Fenrir
     {
         SyncBodies();
         PushEdits(dt);
+        PushCharacterEdits();
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
         SyncJoints(dt);
         ApplyPushes();
@@ -275,41 +271,66 @@ namespace Fenrir
         DrawDebugLines();
     }
 
+    void PhysicsWorld::Impl::Shown::Advance(const Transform& world)
+    {
+        previous = snap ? world : current;
+        current = world;
+        snap = false;
+        heldByGame = false;
+    }
+
+    void PhysicsWorld::Impl::Shown::Restore(Transform& local, bool turnIsTeleport)
+    {
+        const bool moved = !Same(local.pos, shownLocal.pos);
+        const bool turned = !Same(local.rot, shownLocal.rot) || !Same(local.scale, shownLocal.scale);
+        // Game code moved or turned it during Update: what it changed stays, and the rest goes back to the true pose,
+        // so a turn alone does not leave it at its blended position.
+        if (!moved)
+        {
+            local.pos = trueLocal.pos;
+        }
+        if (!turned)
+        {
+            local.rot = trueLocal.rot;
+            local.scale = trueLocal.scale;
+        }
+        if (moved || turned)
+        {
+            heldByGame = true;
+            // Nothing blends across a jump.
+            snap = snap || moved || turnIsTeleport;
+        }
+    }
+
     void PhysicsWorld::Impl::AdvancePoses()
     {
         for (auto& [id, record] : m_bodies)
         {
-            record.previous = record.snap ? record.world : record.current;
-            record.current = record.world;
-            record.snap = false;
-            record.heldByGame = false;
+            record.shown.Advance(record.world);
+        }
+        for (auto& [id, record] : m_characters)
+        {
+            record.shown.Advance(record.world);
         }
     }
 
     void PhysicsWorld::Impl::Restore()
     {
+        const auto restore = [this](std::uint32_t id, Shown& shown, bool turnIsTeleport) {
+            if (shown.blended && m_entities->HasEntity(id))
+            {
+                shown.Restore(m_entities->GetEntity(id).GetComponent<Transform>(), turnIsTeleport);
+            }
+            shown.blended = false;
+        };
         for (auto& [id, record] : m_bodies)
         {
-            if (!record.blended)
-            {
-                continue;
-            }
-            record.blended = false;
-            if (!m_entities->HasEntity(id))
-            {
-                continue;
-            }
-            Transform& local = m_entities->GetEntity(id).GetComponent<Transform>();
-            if (Same(local, record.shownLocal))
-            {
-                local = record.trueLocal;
-            }
-            else
-            {
-                // Game code moved it during Update: its value stays, and nothing blends across the jump.
-                record.snap = true;
-                record.heldByGame = true;
-            }
+            restore(id, record.shown, true);
+        }
+        // A character's turn is not a teleport.
+        for (auto& [id, record] : m_characters)
+        {
+            restore(id, record.shown, false);
         }
     }
 
@@ -319,16 +340,29 @@ namespace Fenrir
         {
             int depth;
             Entity entity;
-            Record* record;
-            // Shown at its step pose: a body that is not interpolated, written only because an ancestor is.
+            const Transform* stepPose;
+            Shown* shown;
+            // Shown at its step pose: one that is not interpolated, written only because an ancestor is.
             bool atStepPose;
         };
         std::vector<Blended> blended;
         std::vector<Blended> carried;
         std::set<std::uint32_t> interpolated;
+        const auto add = [&](std::uint32_t id, const Transform& stepPose, Shown& shown, bool interpolate) {
+            Entity entity = m_entities->GetEntity(id);
+            if (interpolate)
+            {
+                interpolated.insert(id);
+                blended.push_back(Blended{DepthOf(entity), entity, &stepPose, &shown, false});
+            }
+            else
+            {
+                carried.push_back(Blended{DepthOf(entity), entity, &stepPose, &shown, true});
+            }
+        };
         for (auto& [id, record] : m_bodies)
         {
-            if (!record.Active() || record.motion.motionType == MotionType::Static || record.heldByGame ||
+            if (!record.Active() || record.motion.motionType == MotionType::Static || record.shown.heldByGame ||
                 !m_entities->HasEntity(id))
             {
                 continue; // an inactive collider has no simulated pose to show
@@ -339,17 +373,17 @@ namespace Fenrir
             {
                 continue;
             }
-            if (rigidBody->interpolate)
-            {
-                interpolated.insert(id);
-                blended.push_back(Blended{DepthOf(entity), entity, &record, false});
-            }
-            else
-            {
-                carried.push_back(Blended{DepthOf(entity), entity, &record, true});
-            }
+            add(id, record.world, record.shown, rigidBody->interpolate);
         }
-        // A body that is not interpolated is still moved by an interpolated ancestor's blend, through its local
+        for (auto& [id, record] : m_characters)
+        {
+            if (record.shown.heldByGame || !m_entities->HasEntity(id))
+            {
+                continue;
+            }
+            add(id, record.world, record.shown, m_entities->GetEntity(id).GetComponent<CharacterBody>().interpolate);
+        }
+        // One that is not interpolated is still moved by an interpolated ancestor's blend, through its local
         // Transform: it is written back at its own step pose, so it is shown where it is.
         for (const Blended& body : carried)
         {
@@ -369,20 +403,20 @@ namespace Fenrir
         // Every true local Transform is saved before any is overwritten.
         for (const Blended& body : blended)
         {
-            body.record->trueLocal = body.entity.GetComponent<Transform>();
+            body.shown->trueLocal = body.entity.GetComponent<Transform>();
         }
         for (const Blended& body : blended)
         {
-            Record& record = *body.record;
-            Transform world = record.world;
+            Shown& shown = *body.shown;
+            Transform world = *body.stepPose;
             if (!body.atStepPose)
             {
-                world.pos = record.previous.pos + (record.current.pos - record.previous.pos) * fraction;
-                world.rot = Math::Slerp(record.previous.rot, record.current.rot, fraction);
+                world.pos = shown.previous.pos + (shown.current.pos - shown.previous.pos) * fraction;
+                world.rot = Math::Slerp(shown.previous.rot, shown.current.rot, fraction);
             }
             SetWorldTransform(body.entity, world);
-            record.shownLocal = body.entity.GetComponent<Transform>();
-            record.blended = true;
+            shown.shownLocal = body.entity.GetComponent<Transform>();
+            shown.blended = true;
         }
     }
 
@@ -695,7 +729,7 @@ namespace Fenrir
                 // position, so they still hold the same load, and starting them from nothing would overshoot it and
                 // could break them.
                 m_backend.Teleport(record.id, world.pos, world.rot);
-                record.snap = true;
+                record.shown.snap = true;
             }
             record.world = world;
 
@@ -755,7 +789,7 @@ namespace Fenrir
             Entity entity = m_entities->GetEntity(id);
             if (isCharacter)
             {
-                WriteBackCharacter(entity, m_characters.at(id).moved);
+                WriteBackCharacter(entity, m_characters.at(id));
                 continue;
             }
             Record& record = m_bodies.at(id);
