@@ -8,7 +8,7 @@ add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds
                                   DebugLines.cpp Joints.cpp JointCollisions.cpp JointSettings.cpp JointState.cpp
                                   JointBreaking.cpp JointEdges.cpp JointMoves.cpp MotionTests.cpp Characters.cpp
                                   CharacterShapes.cpp CharacterPoses.cpp CharacterSwitching.cpp CharacterPlatforms.cpp
-                                  CharacterPushes.cpp CharacterTest.hpp
+                                  CharacterPushes.cpp CharacterSlopes.cpp CharacterTest.hpp
                                   PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)
 add_test(NAME FenrirPhysics COMMAND FenrirPhysicsTests)

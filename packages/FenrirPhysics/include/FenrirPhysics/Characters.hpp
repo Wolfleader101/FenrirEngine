@@ -33,7 +33,11 @@ namespace Fenrir
         Entity groundCollider;
         /** @brief World space, where the character touches its ground, on ground only. */
         Math::Vec3 groundPoint = Math::Vec3(0.0f);
-        /** @brief World space, unit length, up from the ground, averaged over the ground contacts, on ground only. */
+        /**
+         * @brief World space, unit length, up from the ground, averaged over the ground contacts, on ground only. Each
+         * is the normal of the face touched, which is also how its steepness is judged: a box's rounded edge counts as
+         * the face it rounds, so a step's edge is not steep ground.
+         */
         Math::Vec3 groundNormal = Math::Vec3(0.0f);
         /** @brief m/s, the ground's velocity at the character, on ground only. Physics adds it to the next move on
          * walkable ground, never to `velocity`. */
@@ -72,6 +76,13 @@ namespace Fenrir
      * measured from displacement, so game code wanting the speed it asked for keeps its own copy, and
      * `state.movedVelocity` is how fast the character actually moved. Gravity is game code's: physics adds none, so add
      * `PhysicsWorld::Gravity() * dt` each tick, and set `velocity.y` to jump.
+     *
+     * Walking: velocity into ground steeper than `maxSlope` is cancelled, so it is not climbed; steps up to
+     * `stepHeight` are walked up, and the character sticks to the ground up to `floorSnap` below it walking down slopes
+     * and steps. A step-up or a ground snap never shows in `velocity`, only in `state.movedVelocity`. Standing on a
+     * walkable slope it stays put, unless `stopOnSlope` is off: then the falling part of `velocity` slides it downhill,
+     * but only if game code adds its input to the written-back velocity; setting the horizontal speed every tick
+     * throws the slide's speed away, and the character only creeps.
      *
      * A character rides the walkable ground it stands on, a lift, a shuttle, a raft or a turntable, with no game code:
      * the ground's velocity at the character is added to its move, never to `velocity`, which is trimmed in the
