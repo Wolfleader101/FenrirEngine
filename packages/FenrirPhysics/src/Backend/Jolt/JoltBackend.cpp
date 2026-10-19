@@ -1811,7 +1811,18 @@ namespace Fenrir::Backend
         const JPH::Vec3 up = JPH::Vec3::sAxisY();
         const JPH::Vec3 velocity = ToJolt(move.velocity);
         character.SetMaxSlopeAngle(move.maxSlope);
-        character.SetLinearVelocity(velocity);
+
+        // Riding: the last move ended on walkable ground, whose velocity is added to this move and never to game
+        // code's. Read now, after this tick's MoveKinematic: Jolt's cached value is a tick old.
+        JPH::Vec3 ground = JPH::Vec3::sZero();
+        const bool riding = character.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+        if (riding)
+        {
+            character.UpdateGroundVelocity();
+            ground = character.GetGroundVelocity();
+        }
+        JPH::Vec3 carried = ToJolt(move.carried);
+        character.SetLinearVelocity(velocity + carried + ground);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update;
         update.mStickToFloorStepDown = -move.floorSnap * up;
@@ -1838,6 +1849,12 @@ namespace Fenrir::Backend
             }
             moved.groundPoint = FromJolt(JPH::Vec3(character.GetGroundPosition()));
             moved.groundNormal = FromJolt(character.GetGroundNormal());
+            // Jolt found it at the move's end from this tick's body velocities, at the character.
+            moved.groundVelocity = FromJolt(character.GetGroundVelocity());
+            if (lock.Succeeded())
+            {
+                moved.groundAngularVelocity = FromJolt(lock.GetBody().GetAngularVelocity());
+            }
         }
 
         // Trimmed against what it touches at the end of the move, relative to each surface's own velocity, and never
@@ -1845,21 +1862,28 @@ namespace Fenrir::Backend
         //  - what faces up (ground, a slope, a step's edge) takes only the falling part, so walking never turns into
         //    climbing speed: all of it on walkable ground with stopOnSlope, otherwise its part into the surface, so
         //    the rest slides the character downhill;
-        //  - a wall or a ceiling takes the part going into it, along its normal.
+        //  - a wall or a ceiling takes the part going into it, along its normal;
+        //  - all of it in the frame of the ground it rode, so a descending lift's own speed is never taken for falling.
+        // Carried velocity is trimmed the same way, first: what still goes into a surface after it is game code's.
         JPH::Vec3 kept = velocity;
+        const auto into = [&](JPH::Vec3Arg part, JPH::Vec3Arg normal, JPH::Vec3Arg surface) {
+            carried = Trim(carried, normal, surface);
+            return Trim(part + carried, normal, surface) - carried;
+        };
         const auto touch = [&](JPH::Vec3Arg contactNormal, JPH::Vec3Arg surfaceNormal, JPH::Vec3Arg surfaceVelocity) {
+            const JPH::Vec3 surface = surfaceVelocity - ground;
             if (contactNormal.Dot(up) <= level)
             {
-                kept = Trim(kept, contactNormal, surfaceVelocity);
+                kept = into(kept, contactNormal, surface);
             }
             else if (move.stopOnSlope && !character.IsSlopeTooSteep(surfaceNormal))
             {
-                kept = Trim(kept, up, surfaceVelocity);
+                kept = into(kept, up, surface);
             }
             else
             {
                 const JPH::Vec3 vertical = kept.Dot(up) * up;
-                kept = kept - vertical + Trim(vertical, contactNormal, surfaceVelocity);
+                kept = kept - vertical + into(vertical, contactNormal, surface);
             }
         };
         for (const JPH::CharacterContact& contact : character.GetActiveContacts())
@@ -1886,6 +1910,16 @@ namespace Fenrir::Backend
             touch(character.GetGroundNormal(), character.GetGroundNormal(), character.GetGroundVelocity());
         }
         moved.velocity = FromJolt(kept);
+        // Landing clears carried velocity; leaving walkable ground (a jump included) carries all of what it rode.
+        if (moved.ground == GroundState::OnGround)
+        {
+            carried = JPH::Vec3::sZero();
+        }
+        else if (riding)
+        {
+            carried = ground;
+        }
+        moved.carriedVelocity = FromJolt(carried);
         return moved;
     }
 

@@ -160,6 +160,7 @@ namespace Fenrir
             {
                 // Its contacts and ground are found again where it now is, so this tick's move starts from there.
                 m_backend.TeleportCharacter(record.id, world.pos, world.rot);
+                record.moved.carriedVelocity = Math::Vec3(0.0f);
                 record.shown.snap = true;
             }
             else if (!Same(world.rot, record.world.rot))
@@ -180,6 +181,7 @@ namespace Fenrir
             const CharacterBody& body = entity.GetComponent<CharacterBody>();
             record.moved = m_backend.MoveCharacter(record.id,
                                                    Backend::CharacterMove{.velocity = body.velocity,
+                                                                          .carried = record.moved.carriedVelocity,
                                                                           .maxSlope = body.maxSlope,
                                                                           .stepHeight = body.stepHeight,
                                                                           .floorSnap = body.floorSnap,
@@ -245,7 +247,10 @@ namespace Fenrir
                                     .groundCollider = handle(moved.groundCollider),
                                     .groundPoint = moved.groundPoint,
                                     .groundNormal = moved.groundNormal,
+                                    .groundVelocity = moved.groundVelocity,
+                                    .groundAngularVelocity = moved.groundAngularVelocity,
                                     .movedVelocity = moved.movedVelocity,
+                                    .carriedVelocity = moved.carriedVelocity,
                                     .onWall = moved.onWall,
                                     .onCeiling = moved.onCeiling,
                                     .shapeBlocked = record.shapeBlocked};
