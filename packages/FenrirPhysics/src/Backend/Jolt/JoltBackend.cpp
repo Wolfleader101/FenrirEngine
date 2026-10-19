@@ -1175,6 +1175,9 @@ namespace Fenrir::Backend
                 const auto it = touching.find(each.key);
                 if (it == touching.end())
                 {
+                    // Characters are made and destroyed only between steps, so their bodies are known here.
+                    each.touch.isCharacter1 = characterListener.others.contains(each.key.body1);
+                    each.touch.isCharacter2 = characterListener.others.contains(each.key.body2);
                     touching.emplace(each.key, each.touch);
                     changes.push_back(TouchChange{TouchChange::Kind::Begin, each.touch});
                 }
@@ -1957,6 +1960,51 @@ namespace Fenrir::Backend
             }
         }
 
+        // What a character touches at the end of its move: the contacts it collided with, one per collider touched (the
+        // first in Jolt's sorted order), as its body would. `moving` is its velocity at the start of the move.
+        std::vector<Touch> ContactsOf(const JPH::PhysicsSystem& system, const CharacterListener& listener,
+                                      const JPH::CharacterVirtual& character, JPH::Vec3Arg moving)
+        {
+            std::vector<Touch> contacts;
+            const auto self = static_cast<std::uint32_t>(character.GetUserData());
+            const BodyId inner{character.GetInnerBodyID().GetIndexAndSequenceNumber()};
+            for (const JPH::CharacterContact& contact : character.GetActiveContacts())
+            {
+                if (!contact.mHadCollision || contact.mWasDiscarded || contact.mIsSensorB)
+                {
+                    continue;
+                }
+                JPH::BodyLockRead lock(system.GetBodyLockInterfaceNoLock(), contact.mBodyB);
+                if (!lock.Succeeded())
+                {
+                    continue;
+                }
+                const std::uint32_t entity = EntityOf(lock.GetBody());
+                const std::uint32_t collider = ColliderOf(lock.GetBody(), contact.mSubShapeIDB);
+                if (std::ranges::any_of(contacts, [&](const Touch& each) {
+                        return each.entity2 == entity && each.collider2 == collider;
+                    }))
+                {
+                    continue;
+                }
+                // Jolt's contact normal points from what it touches to the character.
+                const JPH::Vec3 normal = -contact.mContactNormal;
+                contacts.push_back(
+                    Touch{.body1 = inner,
+                          .body2 = BodyId{contact.mBodyB.GetIndexAndSequenceNumber()},
+                          .entity1 = self,
+                          .entity2 = entity,
+                          .collider1 = self,
+                          .collider2 = collider,
+                          .isCharacter1 = true,
+                          .isCharacter2 = listener.others.contains(contact.mBodyB.GetIndexAndSequenceNumber()),
+                          .point = FromJolt(JPH::Vec3(contact.mPosition)),
+                          .normal = FromJolt(normal),
+                          .relativeSpeed = (moving - contact.mLinearVelocity).Dot(normal)});
+            }
+            return contacts;
+        }
+
         // A character moves against what its body collides with, but through triggers, which see it through its body.
         class CharacterBroadPhaseFilter final : public JPH::BroadPhaseLayerFilter
         {
@@ -2187,6 +2235,7 @@ namespace Fenrir::Backend
             carried = ground;
         }
         moved.carriedVelocity = FromJolt(carried);
+        moved.contacts = ContactsOf(m_impl->system, m_impl->characterListener, character, moving);
         return moved;
     }
 

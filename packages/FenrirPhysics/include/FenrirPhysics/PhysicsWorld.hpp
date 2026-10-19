@@ -24,11 +24,11 @@ namespace Fenrir
     /** @brief One contact of a body, as PhysicsWorld::ForEachContact reports it. */
     struct Contact
     {
-        /** @brief The rigid body entity asked about. */
+        /** @brief The body entity (a rigid body or a character body) asked about. */
         Entity body;
         /** @brief The collider entity of `body` touching: `body` itself, or one beneath it in a compound body. */
         Entity collider;
-        /** @brief The rigid body entity `body` touches. */
+        /** @brief The body entity (a rigid body or a character body) `body` touches. */
         Entity otherBody;
         /** @brief The collider entity of `otherBody` touching. */
         Entity otherCollider;
@@ -80,6 +80,11 @@ namespace Fenrir
          * it belongs to) has now (as of the last step), whether or not contacts are reported as events. Contacts are as
          * ContactBegin and ContactEnd tell them: one resting on another that has fallen asleep is still touching.
          * Overlaps with triggers are not contacts. None for an entity no longer alive.
+         *
+         * A character's contacts are those its last move ended touching, so unlike a body's they come from before the
+         * step: the walls, ground and ceilings it is against, and the bodies it pushed, with their point and normal (a
+         * wall jump's). A dynamic body that met only the character's body in the step lists it, but is not listed for
+         * the character.
          */
         void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 

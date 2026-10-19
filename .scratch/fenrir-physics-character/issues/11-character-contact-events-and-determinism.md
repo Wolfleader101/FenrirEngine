@@ -14,11 +14,18 @@
 
 **Blocked by:** 06 (Disabled and inactive characters); 08 (Pushing, weight and kinematic shoves); 09 (Characters among bodies).
 
-**Status:** ready-for-agent
+**Status:** resolved (built test-first on branch `claude/character-contacts-determinism-dcef05`; tests in `Tests/CharacterContacts.cpp`, tags `[characters][events]`). Where the build settled something the ticket left open:
 
-- [ ] Tests: walking onto and off a static floor gives one `ContactBegin` and one `ContactEnd`; a ball bouncing off a standing character gives exactly one `ContactBegin`, then one `ContactEnd`.
-- [ ] Tests: character and body contacts arrive in one sorted stream, one pair per entity pair; two characters touching give one pair ordered by entity.
-- [ ] Tests: disabling, making inactive and removing a character each end its contacts on the next step; dropping `ContactEvents` on the other side ends them too.
-- [ ] Tests: `ForEachContact` lists a wall's point and normal for a character against it.
-- [ ] The determinism scene is bit-identical over 300 ticks in two runs, single- and multi-threaded.
+- **What a move touches:** the end-of-move contacts Jolt marks as collided (`mHadCollision`, not discarded, not a sensor), one per collider touched, the first in Jolt's sorted order. Jolt marks a contact collided once it is within its collision tolerance and not moving away, so a character standing still keeps its floor, and a wall it walks along without pressing into does not flicker.
+- **Where the union lives:** the backend flags each touch whose body is a character's (`Touch::isCharacter1/2`, set when the pair begins, so an end after the character is gone still knows) and returns each move's contacts in `CharacterMoved::contacts`. `PhysicsWorld::Impl::TrackCharacterContacts` keeps the character pairs touching after each step (`m_characterTouches`): each character's move contacts, then its body's step contacts, keyed and oriented as body contacts are; the body path skips flagged touches. A pair both sources begin at once takes the move's point, normal and `relativeSpeed`, since the move ran first. The begins and ends join the body ones before the one sort.
+- **Kinematic bodies never touch a character's body in the step** (Jolt does not collide kinematic with kinematic or static), so with them and other characters the moves alone count, as the spec says, with no filtering needed.
+- **`ForEachContact` on a body** also lists the characters touching it, as the events tell it (a wall lists the character leaning on it); on a character only its move's contacts, so a ball met only in the step is listed for the ball and not for the character. The doc comment says so.
+- **Normals:** a character meeting a floor's rounded edge first begins with the edge's normal (y ≈ 0.99), as a body would.
+- **DemoApp:** B's ball has `ContactEvents`; the scene reads `ContactBegin` each frame and logs each one naming the ball ("B: the ball began touching the character at 5.6 m/s"), the ground included.
+
+- [x] Tests: walking onto and off a static floor gives one `ContactBegin` and one `ContactEnd`; a ball bouncing off a standing character gives exactly one `ContactBegin`, then one `ContactEnd`.
+- [x] Tests: character and body contacts arrive in one sorted stream, one pair per entity pair; two characters touching give one pair ordered by entity.
+- [x] Tests: disabling, making inactive and removing a character each end its contacts on the next step; dropping `ContactEvents` on the other side ends them too.
+- [x] Tests: `ForEachContact` lists a wall's point and normal for a character against it.
+- [x] The determinism scene is bit-identical over 300 ticks in two runs, single- and multi-threaded.
 - [ ] B's ball logs its `ContactBegin` naming the character (checked by running).

@@ -104,6 +104,46 @@ namespace Fenrir::Backend
         bool stopOnSlope = true;
     };
 
+    /**
+     * @brief Two bodies touching, as the backend sees it: a contact, or an overlap if one is a trigger. A pair stops
+     * being found when both its bodies fall asleep (or one sleeps and the other is static); it keeps touching.
+     */
+    struct Touch
+    {
+        /** @brief The two bodies, in no meaningful order. */
+        BodyId body1;
+        BodyId body2;
+        /** @brief Their entities, as given in their BodyDesc; kept after a body is destroyed. */
+        std::uint32_t entity1 = 0;
+        std::uint32_t entity2 = 0;
+        /** @brief The entities of the colliders touching, one of each body (a compound body's part keeps its own). */
+        std::uint32_t collider1 = 0;
+        std::uint32_t collider2 = 0;
+        bool isTrigger1 = false;
+        bool isTrigger2 = false;
+        /** @brief Whether each is a character's body (its inner body). */
+        bool isCharacter1 = false;
+        bool isCharacter2 = false;
+        /** @brief Where they touch, in world space, as last found. */
+        Math::Vec3 point = Math::Vec3(0.0f);
+        /** @brief Unit length, from body 1 to body 2, as last found. */
+        Math::Vec3 normal = Math::Vec3(0.0f);
+        /** @brief How fast they were closing along `normal` when they began touching. */
+        float relativeSpeed = 0.0f;
+    };
+
+    /** @brief A pair that began or stopped touching over one step. */
+    struct TouchChange
+    {
+        enum class Kind : std::uint8_t
+        {
+            Begin,
+            End
+        };
+        Kind kind;
+        Touch touch;
+    };
+
     /** @brief Where a move left a character, and what it touches there. */
     struct CharacterMoved
     {
@@ -129,6 +169,12 @@ namespace Fenrir::Backend
         Math::Vec3 groundAngularVelocity = Math::Vec3(0.0f);
         bool onWall = false;
         bool onCeiling = false;
+        /**
+         * @brief What it touches at the end of the move, triggers aside: one Touch per collider touched, the character
+         * as body 1 (`normal` from it to what it touches), in the backend's order. `relativeSpeed` is the closing speed
+         * along `normal` at the start of the move.
+         */
+        std::vector<Touch> contacts;
     };
 
     /** @brief How a body moves and responds: the parts of RigidBody the backend needs. */
@@ -176,43 +222,6 @@ namespace Fenrir::Backend
         std::uint32_t entity = 0;
         /** @brief A trigger: a kinematic body, kept awake, that pushes nothing and finds static bodies too. */
         bool isTrigger = false;
-    };
-
-    /**
-     * @brief Two bodies touching, as the backend sees it: a contact, or an overlap if one is a trigger. A pair stops
-     * being found when both its bodies fall asleep (or one sleeps and the other is static); it keeps touching.
-     */
-    struct Touch
-    {
-        /** @brief The two bodies, in no meaningful order. */
-        BodyId body1;
-        BodyId body2;
-        /** @brief Their entities, as given in their BodyDesc; kept after a body is destroyed. */
-        std::uint32_t entity1 = 0;
-        std::uint32_t entity2 = 0;
-        /** @brief The entities of the colliders touching, one of each body (a compound body's part keeps its own). */
-        std::uint32_t collider1 = 0;
-        std::uint32_t collider2 = 0;
-        bool isTrigger1 = false;
-        bool isTrigger2 = false;
-        /** @brief Where they touch, in world space, as last found. */
-        Math::Vec3 point = Math::Vec3(0.0f);
-        /** @brief Unit length, from body 1 to body 2, as last found. */
-        Math::Vec3 normal = Math::Vec3(0.0f);
-        /** @brief How fast they were closing along `normal` when they began touching. */
-        float relativeSpeed = 0.0f;
-    };
-
-    /** @brief A pair that began or stopped touching over one step. */
-    struct TouchChange
-    {
-        enum class Kind : std::uint8_t
-        {
-            Begin,
-            End
-        };
-        Kind kind;
-        Touch touch;
     };
 
     /** @brief A body's pose and velocities after a step. */

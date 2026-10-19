@@ -46,7 +46,8 @@
 // slippery feet speeds up slowly, the 100 kg one does not move), each named with its mass and speed; to the west, a
 // seesaw hinged at its middle that the character's weight tips, named with its angle; to the south, a kinematic paddle
 // sweeping a lane that shoves the character at its own speed, which 3 pauses with the platforms. B throws a ball at the
-// character, which bounces off without moving it, and H drops a 1 kg box on its head, which it does not carry. The
+// character, which bounces off without moving it (the ball has ContactEvents, so each ContactBegin it is in is logged,
+// the bounce's naming the character), and H drops a 1 kg box on its head, which it does not carry. The
 // autopilot resets the boxes each time round.
 //
 // Walking: far west, a ledge 3 m high is reached by a 30° ramp and by ten stairs 0.3 m high, which the character walks
@@ -85,6 +86,7 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
@@ -158,7 +160,8 @@ class CharacterScene
                             "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west, a lift "
                             "and a shuttle to the north-east. Boxes of 1, 20 and 100 kg east of the wall, a seesaw to "
                             "the west, a paddle's lane to the south, and past it a second character walking a loop, "
-                            "which 6 stops and starts. B throws a ball at the character, H drops a box on its head. "
+                            "which 6 stops and starts. B throws a ball at the character, logging its contacts, H drops "
+                            "a box on its head. "
                             "Far west, a ledge 3 m up with a 30° ramp and ten 0.3 m stairs to it, and a "
                             "55° slope that cannot be walked up. T teleports to the start, 1 toggles stopOnSlope, 2 "
                             "toggles interpolation, 3 pauses the platforms and the paddle, 4 toggles the character on "
@@ -223,6 +226,19 @@ class CharacterScene
             }
             m_held.insert(event.key);
             OnKey(app, event.key);
+        }
+        // Read every frame, active or not, so a scene coming back does not log old contacts.
+        for (const Fenrir::ContactBegin& event : m_contacts.Read(app))
+        {
+            if (active && m_ball.IsValid() && (event.bodyA == m_ball || event.bodyB == m_ball))
+            {
+                const Fenrir::Entity& other = event.bodyA == m_ball ? event.bodyB : event.bodyA;
+                // The characters' Names hold their live readouts.
+                const std::string touched = other == m_character ? "the character"
+                                            : other == m_second  ? "the second character"
+                                                                 : NameOf(other);
+                app.Logger()->Info("B: the ball began touching {} at {:.1f} m/s", touched, event.relativeSpeed);
+            }
         }
         if (!active)
         {
@@ -777,6 +793,7 @@ class CharacterScene
             m_ball.AddComponent<Fenrir::RigidBody>();
             m_ball.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::SphereShape{.radius = 0.5f}});
             m_ball.AddComponent<Fenrir::PhysicsMaterial>(Fenrir::PhysicsMaterial{.restitution = 0.6f});
+            m_ball.AddComponent<Fenrir::ContactEvents>();
         }
         const float yaw = m_followCamera.Yaw() * std::numbers::pi_v<float> / 180.0f;
         const Fenrir::Math::Vec3 ahead(std::cos(yaw), 0.0f, std::sin(yaw));
@@ -1185,6 +1202,7 @@ class CharacterScene
     std::size_t m_landings = 0;
     std::vector<std::size_t> m_changes;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
+    Fenrir::EventReader<Fenrir::ContactBegin> m_contacts;
 };
 
 #endif // FENRIR_PHYSICS
