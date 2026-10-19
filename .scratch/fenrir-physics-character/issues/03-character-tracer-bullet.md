@@ -14,7 +14,9 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** resolved, but for the F5 hand check, which is the user's (built test-first on branch `claude/character-tracer-bullet-51480a`). Where the build settled something the ticket left open:
+**Status:** resolved
+
+Built test-first on branch `claude/character-tracer-bullet-51480a`; the user did the F5 hand check after it merged. Where the build settled something the ticket left open:
 
 - The inner body's `BodyID` comes from Jolt's body allocator in batch order (inner bodies made in entity order, after the bodies' batch), not `mInnerBodyIDOverride`: an override needs an ID known to be free, and allocation in batch order gives the same reproducibility. The bit-identical test covers it on one thread and many.
 - The trim runs after `ExtendedUpdate`, over its end-of-move contacts (`GetActiveContacts`), as the trim bullet asks; Jolt's contact-solve hook sees mid-move contacts instead, so it is not used yet.
@@ -29,4 +31,4 @@
 - [x] ADR-0014 states a teleport is a position change and drops the base-of-shape conversion.
 - [x] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
 - [x] `FENRIR_DEMO_SCENE="Character (C++)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
-- [ ] F5 toggles Default ⇄ Character (C++); the camera follows, Q/E orbit, C frees it and snaps back; the character walks, jumps, stops at the wall and the ceiling; readouts are live (checked by hand).
+- [x] F5 toggles Default ⇄ Character (C++); the camera follows, Q/E orbit, C frees it and snaps back; the character walks, jumps, stops at the wall and the ceiling; readouts are live (checked by hand).

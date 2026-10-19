@@ -1871,6 +1871,27 @@ namespace Fenrir::Backend
         return moved;
     }
 
+    void World::TeleportCharacter(CharacterId id, const Math::Vec3& position, const Math::Quat& rotation)
+    {
+        const Impl::CharacterSlot& slot = m_impl->characters[id.value];
+        JPH::CharacterVirtual& character = *slot.character;
+        character.SetPosition(CharacterPosition(position));
+        TurnCharacter(id, rotation);
+        // Otherwise the next move starts from the contacts where it was: stuck to a floor it left, say.
+        const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
+        const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
+        character.RefreshContacts(broadPhase, layer, {}, {}, m_impl->tempAllocator);
+    }
+
+    void World::TurnCharacter(CharacterId id, const Math::Quat& rotation)
+    {
+        JPH::CharacterVirtual& character = *m_impl->characters[id.value].character;
+        const JPH::Quat turned = ToJolt(rotation);
+        character.SetRotation(turned);
+        // The ground rule is in the character's own space, and measured along world +Y.
+        character.SetSupportingVolume(SupportingVolume(*character.GetShape(), turned));
+    }
+
     void World::Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation)
     {
         const JPH::AABox before = m_impl->Bounds(id);
