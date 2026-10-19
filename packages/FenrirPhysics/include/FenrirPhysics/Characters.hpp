@@ -121,6 +121,15 @@ namespace Fenrir
      * a kinematic body and a wall is not crushed or detected, but stays overlapped and stuck (`state.onWall` and the
      * contacts show it); and a body resting on a character (a box on its head) is not carried along, but slips or is
      * pushed out, though a jump still pushes it up.
+     *
+     * Bodies, queries and triggers meet a character as a kinematic body of its shape, named by its entity as body and
+     * collider: triggers report it during the step, `QueryFilter::ignoreBody` skips it, and hits carry no character
+     * flag. Its entity's CollisionFilter filters both what meets it and its own moves, under the one symmetric rule, so
+     * a character ignoring a layer walks through that layer's bodies, and those bodies, triggers and queries pass
+     * through it; its entity's PhysicsMaterial is what bodies hitting or resting on it feel, and never changes how it
+     * moves. Edits to either apply from the next tick. Characters block each other and neither pushes the other: one
+     * standing on another rides it (`state.groundBody` names it), and one standing on this character never holds it
+     * down, so a jump lifts it. In entity order, a character's move meets the others where their last moves left them.
      */
     struct CharacterBody
     {
