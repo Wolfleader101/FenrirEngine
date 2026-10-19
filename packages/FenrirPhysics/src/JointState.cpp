@@ -81,7 +81,7 @@ namespace Fenrir
         // From the bodies' poses after the last step, never their interpolated Transforms.
         const JointFrame frameA =
             InWorld(JointFrame{record.applied.frameA.position * record.scaleA, record.applied.frameA.rotation},
-                    a->second.current);
+                    a->second.shown.current);
         JointFrame frameB = record.applied.frameB;
         if (record.applied.bodyB != Entity())
         {
@@ -91,7 +91,7 @@ namespace Fenrir
                 return JointState{};
             }
             frameB = InWorld(JointFrame{record.applied.frameB.position * record.scaleB, record.applied.frameB.rotation},
-                             b->second.current);
+                             b->second.shown.current);
         }
         const Math::Quat toA = Math::Conjugate(frameA.rotation);
 

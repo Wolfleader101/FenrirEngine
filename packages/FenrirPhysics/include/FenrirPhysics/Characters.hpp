@@ -70,6 +70,13 @@ namespace Fenrir
      * Its shape is the Collider on its entity, whose PhysicsMaterial and CollisionFilter apply to it as to any body;
      * that Collider makes no static body. The Transform sits at the collider's centre. Physics writes back only the
      * position; the shape takes the entity's full world rotation, and up is always world +Y.
+     *
+     * Writing the Transform's world position (moving its parent included) teleports the character: no sweep, its
+     * contacts and `state` found from that tick's move where it now is, `velocity` kept, and no blend across the jump.
+     * Writing only its rotation turns the shape where it stands, with no sweep, and is not a teleport: it blends, and
+     * the next move pushes the shape out of anything it now overlaps. Turn it in `Tick`, as a kinematic body is moved.
+     * A parented character moves in world space: its local Transform is written back against its parent's world
+     * transform, parents before children.
      */
     struct CharacterBody
     {
@@ -88,7 +95,9 @@ namespace Fenrir
         float mass = 70.0f;
         /** @brief On walkable ground, the falling part of `velocity` does not slide the character down a slope. */
         bool stopOnSlope = true;
-        /** @brief As RigidBody::interpolate: position and rotation blend between the last two steps. */
+        /** @brief As RigidBody::interpolate: between ticks the Transform holds its position and rotation blended
+         * between the last two steps, stair step-ups and ground snaps included, while `Tick` systems see the true one.
+         * A teleport and a new character snap. PhysicsConfig can turn interpolation off for every character. */
         bool interpolate = true;
         /** @brief Disabled: not moved, invisible to bodies, queries and triggers, and nothing written back. */
         bool enabled = true;

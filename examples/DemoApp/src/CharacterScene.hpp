@@ -19,6 +19,9 @@
 // The character's name shows its readings every frame: ground state and what it stands on, velocity, moved velocity,
 // onWall and onCeiling while set, how many times it has landed, and how often its ground state changed in the last
 // second. Each ground change is logged with its tick; L logs the whole state.
+//
+// T teleports the character to just above the start by writing its Transform's position, and the autopilot does so at
+// the end of each route. 2 toggles its interpolation, which a 60 Hz display with vsync barely shows.
 
 #ifdef FENRIR_PHYSICS
 
@@ -108,19 +111,22 @@ class CharacterScene
     {
         DemoScene scene{.name = name,
                         .familyKey = DemoFamilyKey::characterController,
-                        .keyHelp = "WASD or the arrows walk (relative to the camera), Shift runs, Space jumps, Q and E "
-                                   "turn the camera, C frees the camera and snaps it back. A wall to the south-east, a "
-                                   "low ceiling to the south-west. L logs the state, P walks the route by itself. F5 "
-                                   "goes on.",
+                        .keyHelp =
+                            "WASD or the arrows walk (relative to the camera), Shift runs, Space jumps, Q and E "
+                            "turn the camera, C frees the camera and snaps it back. A wall to the south-east, a "
+                            "low ceiling to the south-west. T teleports to the start, 2 toggles interpolation. L "
+                            "logs the state, P walks the route by itself. F5 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
-        // The autopilot walks every piece while L logs the state, then stops, and each key is tapped twice.
+        // The autopilot walks every piece while L logs the state, then stops, each key is tapped twice, and T ends it.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 25, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT})
+        for (const int key :
+             {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_T, GLFW_KEY_2})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
         scene.smokeKeys.push_back(GLFW_KEY_L);
+        scene.smokeKeys.push_back(GLFW_KEY_T);
         return scene;
     }
 
@@ -186,7 +192,7 @@ class CharacterScene
 
         // Steered from the velocity physics wrote back, never set outright, so what physics trimmed stays trimmed and
         // a slide keeps its speed.
-        const Fenrir::Math::Vec3 walk = m_autopilot ? AutopilotWalk(dt) : KeyboardWalk();
+        const Fenrir::Math::Vec3 walk = m_autopilot ? AutopilotWalk(app, dt) : KeyboardWalk();
         Fenrir::Math::Vec3 horizontal(body.velocity.x, 0.0f, body.velocity.z);
         const Fenrir::Math::Vec3 change = walk - horizontal;
         const float most = acceleration * dt;
@@ -240,6 +246,16 @@ class CharacterScene
         {
             LogState(app);
         }
+        else if (key == GLFW_KEY_T)
+        {
+            TeleportToStart(app);
+        }
+        else if (key == GLFW_KEY_2)
+        {
+            bool& interpolate = m_character.GetComponent<Fenrir::CharacterBody>().interpolate;
+            interpolate = !interpolate;
+            app.Logger()->Info(interpolate ? "2: interpolation on" : "2: interpolation off");
+        }
         else if (key == GLFW_KEY_P)
         {
             m_autopilot = !m_autopilot;
@@ -247,6 +263,14 @@ class CharacterScene
             m_onWaypoint = 0.0f;
             app.Logger()->Info(m_autopilot ? "Autopilot: walking the route" : "Autopilot off");
         }
+    }
+
+    // A teleport: only the position is written, so physics puts it there with no sweep and finds its ground anew.
+    // Half a metre up, so it is seen to drop onto the pad.
+    void TeleportToStart(Fenrir::App& app)
+    {
+        m_character.GetComponent<Fenrir::Transform>().pos = start + Fenrir::Math::Vec3(0.0f, footToCentre + 0.5f, 0.0f);
+        app.Logger()->Info("T: teleported to the start");
     }
 
     // The keys' walk on the ground plane, relative to where the camera looks. While the camera is free, WASD is the
@@ -327,7 +351,7 @@ class CharacterScene
                 Waypoint{.at = start, .wait = 0.5f}};
     }
 
-    // The route: each piece's leg in turn, over and over.
+    // The route: each piece's leg in turn, over and over, each time ending with a teleport to the start.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
@@ -342,7 +366,7 @@ class CharacterScene
     }
 
     // The autopilot's walk towards its next waypoint, jumping and waiting where it says.
-    Fenrir::Math::Vec3 AutopilotWalk(float dt)
+    Fenrir::Math::Vec3 AutopilotWalk(Fenrir::App& app, float dt)
     {
         const std::vector<Waypoint>& route = Route();
         const Waypoint& next = route[m_waypoint % route.size()];
@@ -365,6 +389,10 @@ class CharacterScene
             ++m_waypoint;
             m_waited = 0.0f;
             m_onWaypoint = 0.0f;
+            if (m_waypoint % route.size() == 0)
+            {
+                TeleportToStart(app);
+            }
         }
         return Fenrir::Math::Vec3(0.0f);
     }
