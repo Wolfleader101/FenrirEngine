@@ -23,3 +23,5 @@ Rules for review: `CODING_STANDARDS.md`.
 ## Shell on Windows
 
 Write multi-line files with the Write tool, not Bash heredocs: apostrophes and backslashes in them mis-parse, and `cat >` with no input hangs the call.
+
+For `git show <rev>:<path>` in Bash, prefix `MSYS_NO_PATHCONV=1` (or use PowerShell): Git Bash otherwise rewrites the `rev:path` argument as a Windows path.
