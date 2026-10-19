@@ -244,11 +244,12 @@ namespace Fenrir::Backend
         Result (*m_call)(void*, Args...);
     };
 
-    /** @brief Which bodies a query finds: those in a layer of `mask`, other than `ignoreEntity`'s, and triggers only
-     * if `hitTriggers`. */
+    /** @brief Which bodies a query finds: those in a layer of `mask` whose own mask includes one of `layers` (any
+     * mask when `layers` is 0), other than `ignoreEntity`'s, and triggers only if `hitTriggers`. */
     struct QueryFilter
     {
         std::uint32_t mask = ~0u;
+        std::uint32_t layers = 0u;
         /** @brief The entity whose body is not found; the default matches no entity. */
         std::uint32_t ignoreEntity = ~0u;
         bool hitTriggers = false;
@@ -273,6 +274,24 @@ namespace Fenrir::Backend
     /** @brief Given the entities of each body found and of its collider, once per collider; returns false to stop the
      * query. */
     using BodySink = FunctionRef<bool(std::uint32_t, std::uint32_t)>;
+
+    /** @brief Where a shape overlaps one collider of a body. */
+    struct Penetration
+    {
+        /** @brief The body's entity. */
+        std::uint32_t entity;
+        /** @brief The entity of the body's collider overlapped. */
+        std::uint32_t collider;
+        /** @brief The shape's deepest point inside the collider. */
+        Math::Vec3 point;
+        /** @brief The unit direction that moves the shape out along the shortest path. */
+        Math::Vec3 normal;
+        /** @brief How far along `normal` the shape must move: more than 0. */
+        float depth;
+    };
+
+    /** @brief Given each penetration, in no particular order; a collider may be given more than once. */
+    using PenetrationSink = FunctionRef<void(const Penetration&)>;
 
     /** @brief Given each edge of a shape, from one end to the other. */
     using EdgeSink = FunctionRef<void(const Math::Vec3&, const Math::Vec3&)>;
@@ -476,9 +495,20 @@ namespace Fenrir::Backend
                        const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
                        const QueryFilter& filter, HitSink sink) const;
 
+        /** @brief Sweeps `shape` as CastShape does, reporting only the hits that block a move: those after the start
+         * (not overlapping or touching at distance 0) and moving towards the body. Each hit's distance is where the
+         * shape touches. */
+        void CastMove(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                      const Math::Quat& rotation, const Math::Vec3& direction, float maxDistance,
+                      const QueryFilter& filter, HitSink sink) const;
+
         /** @brief Finds the bodies `shape` (`scale` baked in, as for a body) at a pose overlaps. */
         void CollideShape(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
                           const Math::Quat& rotation, const QueryFilter& filter, BodySink sink) const;
+
+        /** @brief Finds how deep `shape` (`scale` baked in, as for a body) at a pose is in each body it overlaps. */
+        void CollideDeep(const CollisionShape& shape, const Math::Vec3& scale, const Math::Vec3& position,
+                         const Math::Quat& rotation, const QueryFilter& filter, PenetrationSink sink) const;
 
         /** @brief Finds the bodies containing `point`. */
         void CollidePoint(const Math::Vec3& point, const QueryFilter& filter, BodySink sink) const;
