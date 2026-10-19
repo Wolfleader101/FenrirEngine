@@ -105,10 +105,10 @@ public struct OverlapHit
 /// <summary>One contact of a body, as of the last step.</summary>
 public struct Contact
 {
-    /// <summary>The body asked about, and its collider touching.</summary>
+    /// <summary>The body entity (a rigid body or a character body) asked about, and its collider touching.</summary>
     public Entity Body;
     public Entity Collider;
-    /// <summary>The body it touches, and that body's collider.</summary>
+    /// <summary>The body entity (a rigid body or a character body) it touches, and that body's collider.</summary>
     public Entity OtherBody;
     public Entity OtherCollider;
     /// <summary>Where they touch, in world space.</summary>

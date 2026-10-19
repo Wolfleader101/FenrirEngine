@@ -99,7 +99,9 @@ public struct Trigger : IComponent
     }
 }
 
-/// <summary>Reports the body's contacts as events. Put it on the rigid body's entity.</summary>
+/// <summary>
+/// Reports the body's contacts as events. Put it on the body entity (a rigid body or a character body).
+/// </summary>
 [NativeComponent("Fenrir.Physics.ContactEvents")]
 public struct ContactEvents : IComponent
 {

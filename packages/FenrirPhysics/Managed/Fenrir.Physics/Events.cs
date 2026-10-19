@@ -19,7 +19,7 @@ namespace Fenrir.Physics;
 [NativeEvent("Fenrir.Physics.ContactBegin")]
 public readonly struct ContactBegin : IEvent
 {
-    /// <summary>The rigid body entities.</summary>
+    /// <summary>The body entities (each a rigid body or a character body).</summary>
     public readonly EntityLink BodyA;
     public readonly EntityLink BodyB;
     /// <summary>The collider entities touching (each its body's entity, or one beneath it in a compound body).</summary>
@@ -53,7 +53,7 @@ public readonly struct TriggerEnter : IEvent
 {
     /// <summary>The trigger's collider entity.</summary>
     public readonly EntityLink Trigger;
-    /// <summary>The rigid body entity of the collider that entered.</summary>
+    /// <summary>The body entity (a rigid body or a character body) of the collider that entered.</summary>
     public readonly EntityLink OtherBody;
     /// <summary>The collider entity that entered.</summary>
     public readonly EntityLink OtherCollider;

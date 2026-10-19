@@ -11,10 +11,12 @@
 
 **Blocked by:** 01 (Read-only fields through Ref<T>); 10 (Shape changes and crouching); 11 (Character contact events, ForEachContact and determinism).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `PhysicsScriptingTests` with a `Characters.cs` fixture: `CharacterBody` validates against its native layout; `new CharacterBody()` equals C++'s `CharacterBody{}`, including the empty ground links.
-- [ ] A C# system makes a character, adds gravity, lands it and reads `State.Ground == OnGround` with `GroundBody` naming the floor; writing `Velocity` moves it; writing `State` does not compile.
-- [ ] A crouch writes `Collider` once; `ShapeBlocked` is true under a box and clears once the box is gone.
-- [ ] `ContactBegin` read in C# names the character; `ContactsOf` lists its contacts.
-- [ ] Disabled and inactive characters' `State` reads as defaults; nothing throws.
+- [x] `PhysicsScriptingTests` with a `Characters.cs` fixture: `CharacterBody` validates against its native layout; `new CharacterBody()` equals C++'s `CharacterBody{}`, including the empty ground links.
+- [x] A C# system makes a character, adds gravity, lands it and reads `State.Ground == OnGround` with `GroundBody` naming the floor; writing `Velocity` moves it; writing `State` does not compile.
+- [x] A crouch writes `Collider` once; `ShapeBlocked` is true under a box and clears once the box is gone.
+- [x] `ContactBegin` read in C# names the character; `ContactsOf` lists its contacts.
+- [x] Disabled and inactive characters' `State` reads as defaults; nothing throws.
+
+**Resolved by:** branch claude/character-csharp-8b4a4a. The proof is `FenrirPhysicsScriptingTests`' `[characters]` cases, through the fixture's `Characters` class and its Tick system `CharacterController` (`Tests/Fixture/Characters.cs`), which adds `PhysicsWorld.Gravity * dt` and a test-set walk to every character's `Velocity`. `CharacterBody` maps through `Detail::CharacterBodyLayout` and `CharacterStateLayout` (each ground entity an `EntityLinkView`), so the mirror is checked as scripts load; a drifted one fails the load naming `State`. Writing `State` is refused at compile time by new `PhysicsCompile-*` CTest cases (`Tests/CompileFail`, run by FenrirScripting's `ExpectCompile.cmake`, which gained an optional `PROPERTY` for the physics contract's folder): `body.State = ...` is CS8331 and `body.State.Ground = ...` is CS0191, while reading it through `Ref<CharacterBody>` and `ReadOnlyRef<CharacterBody>` compiles. `ContactsOf` needed no native change: a character's entity has a `Collider`, so it already counts as having a body.
