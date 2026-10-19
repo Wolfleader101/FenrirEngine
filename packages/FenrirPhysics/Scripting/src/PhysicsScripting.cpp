@@ -17,6 +17,7 @@
 #include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
@@ -357,6 +358,79 @@ struct Iris::StructMapping<Fenrir::Detail::JointLayout>
         IRIS_FIELD_AS(Layout, kind, "Kind"), IRIS_FIELD_AS(Layout, enabled, "Enabled"),
         IRIS_FIELD_AS(Layout, collideConnected, "CollideConnected"), IRIS_FIELD_AS(Layout, breakForce, "BreakForce"),
         IRIS_FIELD_AS(Layout, breakTorque, "BreakTorque"));
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::GroundState>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.GroundState";
+};
+
+namespace Fenrir::Detail
+{
+    // CharacterState holds Entities, so these stand in for it and CharacterBody, as for Joint: the same members in the
+    // same order, each Entity as the link the engine stores. MakeComponent checks the size and alignment; the scripting
+    // tests read and write real characters through them.
+    struct CharacterStateLayout
+    {
+        GroundState ground;
+        EntityLinkView groundBody;
+        EntityLinkView groundCollider;
+        Math::Vec3 groundPoint;
+        Math::Vec3 groundNormal;
+        Math::Vec3 groundVelocity;
+        Math::Vec3 groundAngularVelocity;
+        Math::Vec3 movedVelocity;
+        Math::Vec3 carriedVelocity;
+        bool onWall;
+        bool onCeiling;
+        bool shapeBlocked;
+    };
+    static_assert(sizeof(CharacterStateLayout) == sizeof(CharacterState) &&
+                      alignof(CharacterStateLayout) == alignof(CharacterState),
+                  "CharacterState changed shape: update CharacterStateLayout and the C# CharacterState.");
+
+    struct CharacterBodyLayout
+    {
+        Math::Vec3 velocity;
+        float maxSlope;
+        float stepHeight;
+        float floorSnap;
+        float pushForce;
+        float mass;
+        bool stopOnSlope;
+        bool interpolate;
+        bool enabled;
+        CharacterStateLayout state;
+    };
+} // namespace Fenrir::Detail
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::CharacterStateLayout>
+{
+    using Layout = Fenrir::Detail::CharacterStateLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.CharacterState";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, ground, "Ground"), IRIS_FIELD_AS(Layout, groundBody, "GroundBody"),
+        IRIS_FIELD_AS(Layout, groundCollider, "GroundCollider"), IRIS_FIELD_AS(Layout, groundPoint, "GroundPoint"),
+        IRIS_FIELD_AS(Layout, groundNormal, "GroundNormal"), IRIS_FIELD_AS(Layout, groundVelocity, "GroundVelocity"),
+        IRIS_FIELD_AS(Layout, groundAngularVelocity, "GroundAngularVelocity"),
+        IRIS_FIELD_AS(Layout, movedVelocity, "MovedVelocity"),
+        IRIS_FIELD_AS(Layout, carriedVelocity, "CarriedVelocity"), IRIS_FIELD_AS(Layout, onWall, "OnWall"),
+        IRIS_FIELD_AS(Layout, onCeiling, "OnCeiling"), IRIS_FIELD_AS(Layout, shapeBlocked, "ShapeBlocked"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::CharacterBodyLayout>
+{
+    using Layout = Fenrir::Detail::CharacterBodyLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.CharacterBody";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, velocity, "Velocity"), IRIS_FIELD_AS(Layout, maxSlope, "MaxSlope"),
+        IRIS_FIELD_AS(Layout, stepHeight, "StepHeight"), IRIS_FIELD_AS(Layout, floorSnap, "FloorSnap"),
+        IRIS_FIELD_AS(Layout, pushForce, "PushForce"), IRIS_FIELD_AS(Layout, mass, "Mass"),
+        IRIS_FIELD_AS(Layout, stopOnSlope, "StopOnSlope"), IRIS_FIELD_AS(Layout, interpolate, "Interpolate"),
+        IRIS_FIELD_AS(Layout, enabled, "Enabled"), IRIS_FIELD_AS(Layout, state, "State"));
 };
 
 namespace Fenrir::Detail
@@ -1003,6 +1077,7 @@ namespace Fenrir
             MakeComponent<Trigger>("Fenrir.Physics.Trigger"),
             MakeComponent<ContactEvents>("Fenrir.Physics.ContactEvents"),
             MakeComponent<Joint, Detail::JointLayout>("Fenrir.Physics.Joint"),
+            MakeComponent<CharacterBody, Detail::CharacterBodyLayout>("Fenrir.Physics.CharacterBody"),
         };
         extension.events = {
             MakeEvent<ContactBegin, Detail::ContactBeginLayout>("Fenrir.Physics.ContactBegin"),

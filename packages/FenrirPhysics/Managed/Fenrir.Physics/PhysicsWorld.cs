@@ -165,9 +165,11 @@ public static class PhysicsWorld
     }
 
     /// <summary>
-    /// Writes the contacts the rigid body <paramref name="body"/> has now (as of the last step) to
-    /// <paramref name="contacts"/>, and returns how many it wrote, stopping when the span is full. Overlaps with triggers
-    /// are not contacts.
+    /// Writes the contacts the body entity <paramref name="body"/> (a rigid body or a character body) has now (as of the
+    /// last step) to <paramref name="contacts"/>, and returns how many it wrote, stopping when the span is full. Overlaps
+    /// with triggers are not contacts. A character's contacts are those its last move ended touching, so unlike a body's
+    /// they come from before the step: the walls, ground and ceilings it is against and the bodies it pushed, with their
+    /// point and normal (a wall jump's).
     /// </summary>
     public static unsafe int ContactsOf(Entity body, Span<Contact> contacts)
     {

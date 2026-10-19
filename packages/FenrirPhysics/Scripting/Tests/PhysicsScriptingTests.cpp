@@ -30,6 +30,7 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
@@ -1644,4 +1645,276 @@ TEST_CASE("With no physics world, the motion tests from C# find nothing, warning
         REQUIRE(WarningsAbout(test, "Depenetrate: the active scene has no physics world") == 1);
     }
 #endif
+}
+
+namespace
+{
+    constexpr const char* CharactersType = "Fenrir.PhysicsScriptFixture.Characters";
+
+    const CharacterBody& CharacterOn(PhysicsScriptingApp& test, std::uint32_t entity)
+    {
+        Entity holder = test.Entities().GetEntity(entity);
+        INFO("The CharacterBody C# added did not reach the entity");
+        REQUIRE(holder.HasComponent<CharacterBody>());
+        return holder.GetComponent<CharacterBody>();
+    }
+
+    // Whether `state` is CharacterState{}, field by field.
+    bool IsNew(const CharacterState& state)
+    {
+        const CharacterState fresh{};
+        return state.ground == fresh.ground && state.groundBody == fresh.groundBody &&
+               state.groundCollider == fresh.groundCollider && state.groundPoint == fresh.groundPoint &&
+               state.groundNormal == fresh.groundNormal && state.groundVelocity == fresh.groundVelocity &&
+               state.groundAngularVelocity == fresh.groundAngularVelocity &&
+               state.movedVelocity == fresh.movedVelocity && state.carriedVelocity == fresh.carriedVelocity &&
+               state.onWall == fresh.onWall && state.onCeiling == fresh.onCeiling &&
+               state.shapeBlocked == fresh.shapeBlocked;
+    }
+} // namespace
+
+TEST_CASE("A new CharacterBody from C# has C++'s defaults, its ground links empty", "[physics][scripting][characters]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
+    test.Call<void>(CharactersType, "AddNewCharacter", entity);
+    test.ApplyChanges();
+
+    const CharacterBody& body = CharacterOn(test, entity);
+    const CharacterBody expected{};
+    {
+        INFO("New, the settings should be C++'s: still, 45 degrees, 0.4 m steps, 0.5 m snap, 100 N, 70 kg");
+        REQUIRE(body.velocity == expected.velocity);
+        REQUIRE(body.maxSlope == expected.maxSlope);
+        REQUIRE(body.stepHeight == expected.stepHeight);
+        REQUIRE(body.floorSnap == expected.floorSnap);
+        REQUIRE(body.pushForce == expected.pushForce);
+        REQUIRE(body.mass == expected.mass);
+    }
+    {
+        INFO("New, the character should stop on slopes, interpolate and be enabled, as in C++");
+        REQUIRE(body.stopOnSlope == expected.stopOnSlope);
+        REQUIRE(body.interpolate == expected.interpolate);
+        REQUIRE(body.enabled == expected.enabled);
+    }
+    {
+        INFO("New, the state should be CharacterState{}: in the air, both ground links empty Entities, all zero");
+        REQUIRE(body.state.groundBody == Entity());
+        REQUIRE(body.state.groundCollider == Entity());
+        REQUIRE(IsNew(body.state));
+    }
+}
+
+namespace
+{
+    // CharacterBody as a native side that drifted from the C# mirror would map it: its state is raw bytes.
+    struct DriftedCharacterBody
+    {
+        Math::Vec3 velocity;
+        float maxSlope;
+        float stepHeight;
+        float floorSnap;
+        float pushForce;
+        float mass;
+        bool stopOnSlope;
+        bool interpolate;
+        bool enabled;
+        alignas(CharacterState) std::uint8_t state[sizeof(CharacterState)];
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<DriftedCharacterBody>
+{
+    using Drifted = DriftedCharacterBody;
+    static constexpr std::string_view typeName = "Fenrir.Physics.CharacterBody";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Drifted, velocity, "Velocity"), IRIS_FIELD_AS(Drifted, maxSlope, "MaxSlope"),
+        IRIS_FIELD_AS(Drifted, stepHeight, "StepHeight"), IRIS_FIELD_AS(Drifted, floorSnap, "FloorSnap"),
+        IRIS_FIELD_AS(Drifted, pushForce, "PushForce"), IRIS_FIELD_AS(Drifted, mass, "Mass"),
+        IRIS_FIELD_AS(Drifted, stopOnSlope, "StopOnSlope"), IRIS_FIELD_AS(Drifted, interpolate, "Interpolate"),
+        IRIS_FIELD_AS(Drifted, enabled, "Enabled"), IRIS_FIELD_AS(Drifted, state, "State"));
+};
+
+TEST_CASE("The CharacterBody mirror is checked as scripts load, and a drifted one fails the load naming the field",
+          "[physics][scripting][characters]")
+{
+    Testing::HeadlessApp headless;
+    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
+    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    std::vector<ComponentRegistration>& components = config.extensions[0].components;
+    const auto character =
+        std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
+            return component.name == "Fenrir.Physics.CharacterBody";
+        });
+    {
+        INFO("Physics's extension should share the CharacterBody component with C#");
+        REQUIRE(character != components.end());
+    }
+    *character = MakeComponent<CharacterBody, DriftedCharacterBody>("Fenrir.Physics.CharacterBody");
+
+    Scripting scripting = Scripting::Install(headless.Get(), config);
+
+    {
+        INFO("A CharacterBody mirror that disagrees with the native layout left scripts loaded");
+        REQUIRE_FALSE(scripting.HasScripts());
+    }
+    {
+        INFO("The failed load did not name the component and the field");
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.CharacterBody"));
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'State'"));
+    }
+}
+
+TEST_CASE("A C# system makes a character, adds gravity and lands it, then walks it by writing Velocity",
+          "[physics][scripting][characters]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t ground = AddGround(test);
+    const auto character = test.Call<std::uint32_t>(CharactersType, "MakeCharacter", 0.0f, 2.0f, 0.0f);
+    test.ApplyChanges();
+
+    test.Run(90);
+
+    {
+        INFO("Falling by the gravity the C# system adds, the character should land and read OnGround in C#");
+        REQUIRE(test.Call<int>(CharactersType, "Ground", character) == static_cast<int>(GroundState::OnGround));
+        REQUIRE(test.Call<std::uint32_t>(CharactersType, "GroundBody", character) == ground);
+    }
+    {
+        const float height = test.Call<float>(CharactersType, "Height", character);
+        INFO("A capsule 0.6 + 0.3 from its centre to its feet should stand at 0.9 on the ground, but it is at "
+             << height);
+        REQUIRE(height == Approx(0.9f).margin(0.05));
+    }
+    {
+        const CharacterState& state = CharacterOn(test, character).state;
+        INFO("C++ should read the same state C# read");
+        REQUIRE(state.ground == GroundState::OnGround);
+        REQUIRE(state.groundBody.GetId() == ground);
+    }
+
+    test.Call<void>(CharactersType, "SetWalk", 2.0f, 0.0f);
+    test.Run(30);
+
+    const float east = test.Call<float>(CharactersType, "East", character);
+    INFO("Walking at 2 m/s for half a second should move the character about 1 m along x, but it is at " << east);
+    REQUIRE(east == Approx(1.0f).margin(0.1));
+    REQUIRE(test.Call<int>(CharactersType, "Ground", character) == static_cast<int>(GroundState::OnGround));
+}
+
+TEST_CASE("A C# crouch writes the Collider once, a stand-up under a box is blocked, and it stands once the box is gone",
+          "[physics][scripting][characters]")
+{
+    PhysicsScriptingApp test;
+    AddGround(test);
+    const auto character = test.Call<std::uint32_t>(CharactersType, "MakeCharacter", 0.0f, 1.0f, 0.0f);
+    test.ApplyChanges();
+    test.Run(60);
+    REQUIRE(test.Call<int>(CharactersType, "Ground", character) == static_cast<int>(GroundState::OnGround));
+
+    // Crouch to 1 m tall, once.
+    test.Call<void>(CharactersType, "SetCapsule", character, 0.2f);
+    test.Run(10);
+    {
+        const float height = test.Call<float>(CharactersType, "Height", character);
+        INFO("Crouched on ground the feet stay down, so the centre should drop to 0.5, but it is at " << height);
+        REQUIRE(height == Approx(0.5f).margin(0.05));
+        REQUIRE_FALSE(test.Call<bool>(CharactersType, "ShapeBlocked", character));
+    }
+
+    // A static slab whose underside is at 1.3: room to crouch (1 m), none to stand (1.8 m).
+    Entity slab = test.Entities().GetEntity(test.Place(Math::Vec3(0.0f, 1.55f, 0.0f)));
+    slab.AddComponent<Collider>(Collider{BoxShape{Math::Vec3(1.0f, 0.25f, 1.0f)}});
+    test.Run(2);
+    // Stand up, once.
+    test.Call<void>(CharactersType, "SetCapsule", character, 0.6f);
+    test.Run(10);
+    {
+        INFO("Standing up under the slab does not fit, so C# should read ShapeBlocked and the crouched height");
+        REQUIRE(test.Call<bool>(CharactersType, "ShapeBlocked", character));
+        REQUIRE(test.Call<float>(CharactersType, "Height", character) == Approx(0.5f).margin(0.05));
+    }
+
+    test.Entities().DestroyEntity(slab);
+    test.Run(10);
+    {
+        INFO("With the slab gone, physics should retry the stand-up with no new write from C#, and it should fit");
+        REQUIRE_FALSE(test.Call<bool>(CharactersType, "ShapeBlocked", character));
+        const float height = test.Call<float>(CharactersType, "Height", character);
+        INFO("Standing, the centre should be back at 0.9, but it is at " << height);
+        REQUIRE(height == Approx(0.9f).margin(0.05));
+    }
+}
+
+TEST_CASE("A character landing sends a ContactBegin C# reads naming it, and ContactsOf from C# lists its ground",
+          "[physics][scripting][characters][events]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t ground = AddGround(test);
+    const auto character = test.Call<std::uint32_t>(CharactersType, "MakeCharacter", 0.0f, 1.5f, 0.0f);
+    test.Call<void>(CharactersType, "ReportContacts", character);
+    test.ApplyChanges();
+
+    test.Run(60);
+
+    {
+        INFO("The character lands once and stays, so C# should read one ContactBegin, the ground as A, the character "
+             "as B, as body and as collider");
+        REQUIRE(test.Call<int>(EventsType, "ContactBeginCount") == 1);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginBodyA", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginBodyB", 0) == character);
+        REQUIRE(test.Call<std::uint32_t>(EventsType, "BeginColliderB", 0) == character);
+    }
+    {
+        INFO("ContactsOf the character from C# should list its move's contact with the ground, pointing down to it");
+        REQUIRE(test.Call<int>(WorldType, "ContactsOf", character, 4) == 1);
+        REQUIRE(test.Call<std::uint32_t>(WorldType, "ContactBody", 0) == character);
+        REQUIRE(test.Call<std::uint32_t>(WorldType, "ContactOtherBody", 0) == ground);
+        REQUIRE(test.Call<std::uint32_t>(WorldType, "ContactOtherCollider", 0) == ground);
+        REQUIRE(test.Call<float>(WorldType, "ContactNormalY", 0) == Approx(-1.0f).margin(0.01));
+    }
+}
+
+TEST_CASE("Disabled, inactive and default(CharacterBody) characters read the default State from C#, and nothing throws",
+          "[physics][scripting][characters]")
+{
+    PhysicsScriptingApp test;
+    AddGround(test);
+    const auto disabled = test.Call<std::uint32_t>(CharactersType, "MakeCharacter", -2.0f, 1.0f, 0.0f);
+    const auto inactive = test.Call<std::uint32_t>(CharactersType, "MakeCharacter", 2.0f, 1.0f, 0.0f);
+    test.ApplyChanges();
+    test.Run(60);
+    {
+        INFO("Both characters should have landed first, so their state is not the default");
+        REQUIRE_FALSE(test.Call<bool>(CharactersType, "StateIsNew", disabled));
+        REQUIRE_FALSE(test.Call<bool>(CharactersType, "StateIsNew", inactive));
+    }
+
+    test.Call<void>(CharactersType, "Disable", disabled);
+    // A RigidBody beside the CharacterBody makes the character inactive.
+    test.Call<void>(CharactersType, "AddRigidBody", inactive);
+    const std::uint32_t zeroed = test.Place(Math::Vec3(0.0f, 5.0f, 5.0f));
+    test.Entities().GetEntity(zeroed).AddComponent<Collider>();
+    test.Call<void>(CharactersType, "AddDefaultCharacter", zeroed);
+    test.ApplyChanges();
+    test.Run(5);
+
+    {
+        INFO("A disabled character's state should read as a new CharacterState in C#: in the air, links empty, zeros");
+        REQUIRE(test.Call<bool>(CharactersType, "StateIsNew", disabled));
+        REQUIRE(IsNew(CharacterOn(test, disabled).state));
+    }
+    {
+        INFO("An inactive character's state should read as the defaults too, with physics's one warning");
+        REQUIRE(test.Call<bool>(CharactersType, "StateIsNew", inactive));
+        REQUIRE(WarningsAbout(test, "The CharacterBody of entity " + std::to_string(inactive) + " is inactive") == 1);
+    }
+    {
+        INFO("default(CharacterBody) is a disabled character: its state reads as the defaults, it does not move, and "
+             "nothing warns about it");
+        REQUIRE(test.Call<bool>(CharactersType, "StateIsNew", zeroed));
+        REQUIRE(test.Entities().GetEntity(zeroed).GetComponent<Transform>().pos.y == 5.0f);
+        REQUIRE(WarningsAbout(test, "The CharacterBody of entity " + std::to_string(zeroed)) == 0);
+    }
 }
