@@ -146,6 +146,8 @@ fenrir_expect_compile(PointerField OK)          # a pointer field makes the acce
 fenrir_expect_compile(LatePart OK)              # IComponent named only on a later part of a partial struct
 fenrir_expect_compile(ManagedComponent FENRIR0004)  # a component holding a reference: a clear error
 fenrir_expect_compile(ReadOnlyStruct CS1929)    # a readonly component has no writable accessors
+fenrir_expect_compile(ReadOnlyFieldRead OK)     # a readonly field is read through Ref<T>, beside writable ones
+fenrir_expect_compile(ReadOnlyFieldWrite CS8331)  # but never written through it
 # The hierarchy is readable but never writable from C#.
 fenrir_expect_compile(RelationshipRead OK)             # reads through a ReadOnlyRef work
 fenrir_expect_compile(RelationshipRef CS0315)          # there is no Ref<Relationship>

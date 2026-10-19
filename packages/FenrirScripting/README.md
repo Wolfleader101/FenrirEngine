@@ -77,8 +77,10 @@ void Nudge(Ref<Transform> t)
   `public ref Vec3 Position => ref self.Value.Position;`. A property that returns `ref` is a variable, so
   `t.Position.X += 1` assigns through it. The `t.Value.Position.X` spelling the spec kept as a fallback also works,
   but is not needed.
-- **What gets a property.** Public and internal instance fields. Not exposed: static and `const` fields, `readonly`
-  fields (there is no `ref` to give), and fixed buffers. A field named `Value` or `IsNull` would be shadowed by
+- **What gets a property.** Public and internal instance fields. A `readonly` field gets a `ref readonly` property, so
+  a system holding `Ref<T>` to write the rest reads it in place, and assigning to it is a compile error (`CS8331`,
+  checked by `RefCompile-ReadOnlyFieldWrite`): that is how a component keeps a part only the engine writes. Not
+  exposed: static and `const` fields, and fixed buffers. A field named `Value` or `IsNull` would be shadowed by
   `Ref<T>`'s own members, so the generator warns (`FENRIR0001`) and it stays reachable as `t.Value.Value`. A generic
   component warns (`FENRIR0002`). A keyword-named field (`@class`) works. A nested or internal component gets an
   accessors class of the matching accessibility. A `partial` component works, but keep all of its fields in one
