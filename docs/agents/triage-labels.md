@@ -10,7 +10,7 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 | `ready-for-human`          | `ready-for-human`    | Requires human implementation            |
 | `wontfix`                  | `wontfix`            | Will not be actioned                     |
 
-`resolved` marks a finished ticket (done). It isn't a triage role, but local tickets use it as their final status.
+`resolved` marks a finished ticket (done). It isn't a triage role, but local tickets use it as their final status. An implementation ticket is `Status: resolved` once its PR merges, and the Status line holds only that word, because blocking and frontier checks match it exactly. A check left for the user goes on its own line below it, `Hand check: <what to verify>`, and whoever merges the PR after the check deletes that line.
 
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 

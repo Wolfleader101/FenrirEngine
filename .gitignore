@@ -454,3 +454,5 @@ FodyWeavers.xsd
 out/
 
 .vscode/
+# Local agent settings (.claude links to .agents)
+.agents/settings.local.json

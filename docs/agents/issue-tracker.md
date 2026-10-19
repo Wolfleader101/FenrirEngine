@@ -28,3 +28,4 @@ Used by `/wayfinder`. The **map** is a file with one **child** file per ticket.
 - **Frontier**: scan `.scratch/<effort>/issues/` for files that are open, unblocked, and unclaimed; first by number wins.
 - **Claim**: set `Status: claimed` and save before any work.
 - **Resolve**: append the answer under an `## Answer` heading, set `Status: resolved`, then append a context pointer (gist + link) to the map's Decisions-so-far in `map.md`.
+- **Concurrent sessions**: each ticket session that runs alongside another works in its own git worktree, because one checkout has one git index and a commit there picks up whatever another session has staged. Its tracker edits go on its own branch, which is merged into the base afterwards.
