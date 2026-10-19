@@ -75,6 +75,9 @@ namespace Fenrir::Backend
         CollisionShape shape;
         /** @brief Its entity's world scale, baked into the shape. */
         Math::Vec3 scale = Math::Vec3(1.0f);
+        /** @brief Its body's surface: what other bodies feel. A character's own moves ignore it. */
+        PhysicsMaterial material;
+        /** @brief Its body's filter, which also filters its moves. */
         CollisionFilter filter;
         /** @brief The shape's centre, as a collider's Transform is. */
         Math::Vec3 position = Math::Vec3(0.0f);
@@ -442,11 +445,22 @@ namespace Fenrir::Backend
          * never downward, and its ground body, if dynamic, is pressed by `mass` under the world's gravity at the
          * ground point: both act in the next step. A dynamic body never pushes it; a kinematic one moving into it does,
          * at that body's speed.
+         *
+         * Another character's body is a kinematic body moving at that character's last move's displacement over its
+         * time, so standing on a character rides it; it never pushes this one sideways, and one standing on this
+         * character is not in its way.
          */
         CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 
         /** @brief Puts a character at a pose at once, with no sweep, and finds its contacts and ground there. */
         void TeleportCharacter(CharacterId id, const Math::Vec3& position, const Math::Quat& rotation);
+
+        /** @brief Changes the surface of a character's body. */
+        void SetCharacterMaterial(CharacterId id, const PhysicsMaterial& material);
+
+        /** @brief Changes which layers a character's body is in and collides with, and so what its moves meet, waking
+         * the bodies near it. */
+        void SetCharacterFilter(CharacterId id, const CollisionFilter& filter);
 
         /** @brief Turns a character's shape where it stands, with no sweep: its next move pushes it out of anything
          * it now overlaps. Up stays world +Y. */

@@ -52,4 +52,14 @@ namespace Fenrir
         }
         return Same(a.As<BoxShape>().halfExtents, b.As<BoxShape>().halfExtents);
     }
+
+    [[nodiscard]] inline bool Same(const PhysicsMaterial& a, const PhysicsMaterial& b)
+    {
+        return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
+    }
+
+    [[nodiscard]] inline bool Same(const CollisionFilter& a, const CollisionFilter& b)
+    {
+        return a.layers == b.layers && a.mask == b.mask;
+    }
 } // namespace Fenrir

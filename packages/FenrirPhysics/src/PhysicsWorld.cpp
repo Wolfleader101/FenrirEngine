@@ -31,11 +31,6 @@ namespace Fenrir
                    Same(a.angularDamping, b.angularDamping) && Same(a.gravityScale, b.gravityScale);
         }
 
-        bool Same(const PhysicsMaterial& a, const PhysicsMaterial& b)
-        {
-            return Same(a.friction, b.friction) && Same(a.restitution, b.restitution);
-        }
-
         Entity ParentOf(const Entity& entity)
         {
             return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
@@ -64,11 +59,6 @@ namespace Fenrir
                 }
             }
             return PhysicsMaterial{};
-        }
-
-        bool Same(const CollisionFilter& a, const CollisionFilter& b)
-        {
-            return a.layers == b.layers && a.mask == b.mask;
         }
 
         // Read from the body's entity: it applies to all the body's colliders.

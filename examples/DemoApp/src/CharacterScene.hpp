@@ -54,6 +54,11 @@
 // onto it reads on steep ground and slides back down. Standing on the ramp it stays put; 1 turns stopOnSlope off, and
 // it slides down at full speed, since game code steers the written-back velocity rather than setting it. 5 turns
 // stairs and ground snapping off: the first step blocks it, and walking down it leaves the ground.
+//
+// Another character: south of the paddle's lane, a second character, a box 0.9 m high and 1.2 m square, walks a square
+// loop driven by C++ game code as the player is. It blocks the player and neither pushes the other; 6 stops it, so the
+// player can jump onto it, and starts it again, and standing on it the player rides it ("on ground: Character 2").
+// Its name shows its own ground state.
 
 #ifdef FENRIR_PHYSICS
 
@@ -152,8 +157,9 @@ class CharacterScene
                             "character by 1.5 and back. A wall to the south-east, a low ceiling to the south-west, "
                             "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west, a lift "
                             "and a shuttle to the north-east. Boxes of 1, 20 and 100 kg east of the wall, a seesaw to "
-                            "the west, a paddle's lane to the south. B throws a ball at the character, H drops a box "
-                            "on its head. Far west, a ledge 3 m up with a 30° ramp and ten 0.3 m stairs to it, and a "
+                            "the west, a paddle's lane to the south, and past it a second character walking a loop, "
+                            "which 6 stops and starts. B throws a ball at the character, H drops a box on its head. "
+                            "Far west, a ledge 3 m up with a 30° ramp and ten 0.3 m stairs to it, and a "
                             "55° slope that cannot be walked up. T teleports to the start, 1 toggles stopOnSlope, 2 "
                             "toggles interpolation, 3 pauses the platforms and the paddle, 4 toggles the character on "
                             "and off, 5 toggles stairs and ground snapping, M swaps its collider to a mesh (inactive) "
@@ -164,7 +170,7 @@ class CharacterScene
         scene.smokeKeys.push_back(GLFW_KEY_P);
         for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X,
                               GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_M,
-                              GLFW_KEY_B, GLFW_KEY_H, GLFW_KEY_5})
+                              GLFW_KEY_B, GLFW_KEY_H, GLFW_KEY_5, GLFW_KEY_6})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -193,6 +199,7 @@ class CharacterScene
         BuildPaddleLane();
         BuildSlopesAndStairs();
         MakeCharacter();
+        MakeSecondCharacter();
 
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Character camera");
@@ -241,6 +248,7 @@ class CharacterScene
         ++m_tick;
         MovePlatforms(dt);
         MovePaddle(dt);
+        WalkSecondCharacter(*world, dt);
         Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
         if (!body.enabled || m_mesh)
         {
@@ -355,6 +363,11 @@ class CharacterScene
             bool& enabled = m_character.GetComponent<Fenrir::CharacterBody>().enabled;
             enabled = !enabled;
             app.Logger()->Info(enabled ? "4: character enabled" : "4: character disabled: nothing sees it");
+        }
+        else if (key == GLFW_KEY_6)
+        {
+            m_secondWalking = !m_secondWalking;
+            app.Logger()->Info(m_secondWalking ? "6: second character walking" : "6: second character stopped");
         }
         else if (key == GLFW_KEY_M)
         {
@@ -658,6 +671,43 @@ class CharacterScene
     {
         return {Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, paddleLaneZ), .wait = 6.0f, .giveUp = 4.0f},
                 Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 1.5f)}, Waypoint{.at = start, .wait = 0.5f}};
+    }
+
+    // South of the paddle's lane: a second character, a box with a flat top to stand on, low enough to jump onto.
+    void MakeSecondCharacter()
+    {
+        m_second = Box("Character 2", SecondCorner(0) + Fenrir::Math::Vec3(0.0f, 0.45f, 0.0f),
+                       Fenrir::Math::Vec3(1.2f, 0.9f, 1.2f), Fenrir::Math::Vec3(0.3f, 0.75f, 0.85f));
+        m_second.AddComponent<Fenrir::Collider>();
+        m_second.AddComponent<Fenrir::CharacterBody>();
+    }
+
+    // The corners of its loop, a 6 m square, walked anticlockwise seen from above.
+    static Fenrir::Math::Vec3 SecondCorner(std::size_t i)
+    {
+        static constexpr std::array<std::array<float, 2>, 4> corners = {
+            std::array{-3.0f, 14.0f}, std::array{3.0f, 14.0f}, std::array{3.0f, 18.0f}, std::array{-3.0f, 18.0f}};
+        const std::array<float, 2>& corner = corners[i % corners.size()];
+        return Fenrir::Math::Vec3(corner[0], 0.0f, corner[1]);
+    }
+
+    // Game code for the second character, as for the player: horizontal speed towards the next corner (none while 6
+    // has stopped it) and gravity, both added to the velocity physics wrote back.
+    void WalkSecondCharacter(const Fenrir::PhysicsWorld& world, float dt)
+    {
+        Fenrir::CharacterBody& body = m_second.GetComponent<Fenrir::CharacterBody>();
+        Fenrir::Math::Vec3 to = SecondCorner(m_secondCorner) - Fenrir::GetWorldTransform(m_second).pos;
+        to.y = 0.0f;
+        if (Fenrir::Math::Magnitude(to) < 0.1f)
+        {
+            ++m_secondCorner;
+        }
+        const Fenrir::Math::Vec3 walk = m_secondWalking && Fenrir::Math::Magnitude(to) > 0.0f
+                                            ? Fenrir::Math::Normalized(to) * secondSpeed
+                                            : Fenrir::Math::Vec3(0.0f);
+        body.velocity.x = walk.x;
+        body.velocity.z = walk.z;
+        body.velocity.y += world.Gravity().y * dt;
     }
 
     // Far west: a ledge 3 m high from x = -16 to -20, reached from the east by a 30° ramp (z = -1.5) and by ten steps
@@ -1006,6 +1056,16 @@ class CharacterScene
         std::snprintf(text.data(), text.size(), "Seesaw: %.1f deg",
                       static_cast<double>(std::asin(along.y) * 180.0f / std::numbers::pi_v<float>));
         m_seesaw.GetComponent<Fenrir::Name>().Set(text.data());
+
+        const Fenrir::CharacterState& second = m_second.GetComponent<Fenrir::CharacterBody>().state;
+        std::string secondReading = std::string("Character 2 (") + NameOf(second.ground);
+        // Not the player's name, which is its readings, and names this character while it stands on it.
+        if (second.groundBody.IsValid() && second.groundBody != m_character)
+        {
+            secondReading += ": " + NameOf(second.groundBody);
+        }
+        secondReading += m_secondWalking ? ")" : ", stopped)";
+        m_second.GetComponent<Fenrir::Name>().Set(secondReading.c_str());
     }
 
     void LogState(Fenrir::App& app) const
@@ -1076,6 +1136,7 @@ class CharacterScene
     static constexpr float paddleLaneZ = 11.0f;
     static constexpr float paddleReach = 4.5f; // The paddle sweeps from x = -4.5 to 4.5.
     static constexpr float paddleSpeed = 1.5f;
+    static constexpr float secondSpeed = 1.5f;
     static constexpr float ledgeTop = 3.0f;
     static constexpr float ledgeEastX = -16.0f;
     static constexpr float rampAngle = std::numbers::pi_v<float> / 6.0f;            // 30°
@@ -1106,6 +1167,9 @@ class CharacterScene
     float m_paddleHeading = 1.0f;
     Fenrir::Entity m_ball;
     Fenrir::Entity m_headBox;
+    Fenrir::Entity m_second;
+    std::size_t m_secondCorner = 1;
+    bool m_secondWalking = true;
     CharacterCamera m_followCamera;
     std::set<int> m_held;
     bool m_jump = false;
