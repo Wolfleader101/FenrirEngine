@@ -12,7 +12,9 @@
 
 **Blocked by:** 03 (Character tracer bullet).
 
-**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-pushing-6d3dfb`). Where the build settled something the ticket left open:
+**Status:** resolved
+
+Built test-first on branch `claude/character-pushing-6d3dfb`; the user did the DemoApp hand check. Where the build settled something the ticket left open:
 
 - **Pushes are FenrirPhysics's, not Jolt's.** Jolt's `CharacterVirtual` pushes a body each time a contact is first hit in a collision iteration, and again in its stair and step-forward test moves, so a move starting a push applied two or three times its max strength (a 20 kg crate on friction 0.2 sped up at 13 m/s² for its first tenth of a second, not 3). The character's listener turns Jolt's impulses off (`mCanReceiveImpulses = false`), and after `ExtendedUpdate` the backend's `Push` applies Jolt's own impulse (0.9 × the closing speed at the contact against the move's velocity, plus its penetration push-out, through the body's effective mass at the contact, the downward part cancelled) over the end-of-move contacts, capped by `pushForce × dt` per body over the whole move.
 - **Dynamic bodies never push:** the same listener sets `mCanPushCharacter = false` for dynamic bodies, so a ball moving into the character during its move is a still wall there too, not only in the step (before, a 10 m/s ball shoved a standing character 0.28 m). For ticket 07: this includes a dynamic ground body's velocity in the move's constraints, so riding a raft must come from the ground velocity added to the move, as the spec says.
@@ -23,4 +25,4 @@
 - [x] Tests (`Tests/CharacterPushes.cpp`): a 1 kg box is pushed at pace; a 20 kg crate with friction 0.2 accelerates at about 3 m/s² from the start of the push; a 100 kg box with friction 0.5 does not move; `pushForce = 0` pushes nothing; a character landing on a floating box with `mass = 0` never pushes it down.
 - [x] Tests: a seesaw tips under `mass`, and not with `mass = 0`; a ball thrown at a standing character bounces off without moving it.
 - [x] Tests: a kinematic paddle shoves the character at its own speed, visible in the written-back `velocity`.
-- [ ] 1 and 20 kg boxes move and 100 kg does not; the seesaw tips; the paddle shoves; B's ball bounces off; H's box is left behind (checked by hand).
+- [x] 1 and 20 kg boxes move and 100 kg does not; the seesaw tips; the paddle shoves; B's ball bounces off; H's box is left behind (checked by hand).
