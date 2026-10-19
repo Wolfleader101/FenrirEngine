@@ -14,7 +14,8 @@ namespace Fenrir.Scripting.Generators;
 /// <summary>
 /// For every struct implementing <c>Fenrir.Scripting.IComponent</c>, emits C# 14 extension properties on
 /// <c>Ref&lt;T&gt;</c>, one per public or internal instance field, each returning <c>ref</c> to the field in the
-/// component's storage. A script then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site. Every component
+/// component's storage (<c>ref readonly</c> for a <c>readonly</c> field, which scripts read but never write). A script
+/// then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site. Every component
 /// also gets <c>ref readonly</c> properties on <c>ReadOnlyRef&lt;T&gt;</c>, and a component that only implements
 /// <c>IReadOnlyComponent</c> gets nothing else, so scripts cannot write it.
 /// </summary>
@@ -116,7 +117,8 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
 
         string fullName = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         bool needsUnsafe = false;
-        // Two views of the same fields: writable accessors on Ref<T>, and ref readonly ones on ReadOnlyRef<T>.
+        // Two views of the same fields: accessors on Ref<T> (writable except for readonly fields), and ref readonly ones on
+        // ReadOnlyRef<T>.
         var writableMembers = new StringBuilder();
         var readOnlyMembers = new StringBuilder();
         foreach (IFieldSymbol field in symbol.GetMembers().OfType<IFieldSymbol>())
@@ -141,10 +143,11 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
             string name = Identifier(field.Name);
             readOnlyMembers.Append("        ").Append(access).Append(" ref readonly ").Append(type).Append(' ').Append(name)
                            .Append(" => ref self.Value.").Append(name).Append(";\n");
-            // A readonly field (or any field of a readonly struct) has no ref to give out for writing.
-            if (writable && !field.IsReadOnly && !symbol.IsReadOnly)
-                writableMembers.Append("        ").Append(access).Append(" ref ").Append(type).Append(' ').Append(name)
-                               .Append(" => ref self.Value.").Append(name).Append(";\n");
+            // A readonly field has no ref to give out for writing, so Ref<T> reads it in place as ReadOnlyRef<T> does. A
+            // readonly struct gets nothing on Ref<T> (the generator warns below).
+            if (writable && !symbol.IsReadOnly)
+                writableMembers.Append("        ").Append(access).Append(field.IsReadOnly ? " ref readonly " : " ref ")
+                               .Append(type).Append(' ').Append(name).Append(" => ref self.Value.").Append(name).Append(";\n");
         }
         if (writable && symbol.IsReadOnly)
             diagnostics.Add(new DiagnosticInfo(ReadOnlyComponent, location, new[] { symbol.Name }));

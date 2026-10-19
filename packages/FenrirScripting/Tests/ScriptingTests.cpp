@@ -288,6 +288,39 @@ struct Iris::StructMapping<TestNative::ColliderLayout<TestNative::Misnamed>>
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Layout, shape, "Shape"));
 };
 
+// A component with a part only C++ writes, shaped like a character body and its state: C# mirrors the reading as a
+// readonly field, so scripts read it through the same Ref<T> that writes the rate.
+namespace TestNative
+{
+    struct GaugeReading
+    {
+        float level = 0.0F;
+        std::int32_t samples = 0;
+    };
+
+    struct Gauge
+    {
+        float rate = 0.0F;
+        GaugeReading reading;
+    };
+} // namespace TestNative
+
+template <>
+struct Iris::StructMapping<TestNative::GaugeReading>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.GaugeReading";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::GaugeReading, level, "Level"),
+                                                      IRIS_FIELD_AS(TestNative::GaugeReading, samples, "Samples"));
+};
+
+template <>
+struct Iris::StructMapping<TestNative::Gauge>
+{
+    static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Gauge";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::Gauge, rate, "Rate"),
+                                                      IRIS_FIELD_AS(TestNative::Gauge, reading, "Reading"));
+};
+
 // Events the tests register from outside FenrirScripting, and a deliberately wrong mapping of the same C# struct.
 namespace TestNative
 {
@@ -1416,6 +1449,60 @@ namespace
         ExpectTheMirrorRefused(MakeComponent<TestNative::Collider, TestNative::ColliderLayout<TestNative::Misnamed>>(
                                    "Test.MisnamedCollider"),
                                "'_ball'", "'_sphere'");
+    }
+
+    // ---- a native component with a read-only part
+
+    constexpr const char* GaugeProbeType = "Fenrir.ScriptFixture.GaugeProbe";
+
+    // A C# system reads a reading C++ wrote through the writable Ref<Gauge> its query hands out, from the component's
+    // own storage, and writes the rate from it.
+    void AReadOnlyFieldIsReadThroughRefInPlace()
+    {
+        HeadlessApp headless;
+        // Scripting is released in the Exit phase, so what C# saw is read by an Exit system registered first.
+        Scripting* installed = nullptr;
+        float seenLevel = -1.0F;
+        std::int32_t seenSamples = -1;
+        std::uint64_t seenAddress = 0;
+        headless.Get().AddSequentialSystems(SchedulePriority::Exit, {[&](App&) {
+                                                seenLevel = CallIn<float>(GaugeProbeType, *installed, "SeenLevel");
+                                                seenSamples =
+                                                    CallIn<std::int32_t>(GaugeProbeType, *installed, "SeenSamples");
+                                                seenAddress =
+                                                    CallIn<std::uint64_t>(GaugeProbeType, *installed, "SeenAddress");
+                                            }});
+        auto scripting =
+            Scripting::Install(headless.Get(), ConfigFor(fixture, {MakeComponent<TestNative::Gauge>("Test.Gauge")}));
+        installed = &scripting;
+        {
+            INFO("The gauge was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto entity = headless.Get().GetActiveScene().GetEntityList().CreateEntity();
+        entity.AddComponent<TestNative::Gauge>().reading = {0.5F, 3};
+        CallIn<void>(GaugeProbeType, scripting, "Enable");
+
+        headless.Run(1);
+
+        auto& gauge = entity.GetComponent<TestNative::Gauge>();
+        {
+            INFO("C# did not read the reading C++ wrote");
+            REQUIRE((seenLevel == 0.5F && seenSamples == 3));
+        }
+        {
+            INFO("C# read a copy of the reading, not the component's storage");
+            REQUIRE(seenAddress == AddressOf(&gauge.reading));
+        }
+        {
+            INFO("The rate C# wrote through the same Ref did not reach C++");
+            REQUIRE(gauge.rate == 1.5F);
+        }
+
+        {
+            INFO("The system failed: " + Errors(headless));
+            REQUIRE(Errors(headless).empty());
+        }
     }
 
     // ---- entity links written from C#
@@ -4322,6 +4409,11 @@ TEST_CASE("a duplicate script component is refused and leaves nothing behind", "
 TEST_CASE("a duplicate script event is refused and leaves nothing behind", "[scripting]")
 {
     ADuplicateScriptEventIsRefused();
+}
+
+TEST_CASE("a readonly field is read through Ref<T> in a C# system, in place", "[scripting]")
+{
+    AReadOnlyFieldIsReadThroughRefInPlace();
 }
 
 TEST_CASE("a native tagged union validates against its C# mirror", "[scripting]")

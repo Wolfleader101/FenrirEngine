@@ -8,9 +8,9 @@ This is FenrirScripting work, independent of physics, and lands before any chara
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Generator tests: a `readonly` field of a writable component gets a `ref readonly` accessor on `Ref<T>`, and the existing `ReadOnlyRef<T>` accessor is unchanged.
-- [ ] Generator tests: writing that field through `Ref<T>` does not compile (the generator's diagnostics or a compile-failure case).
-- [ ] `ScriptingTests`: a test component with a `readonly` field written by C++ reads back through `Ref<T>` in a C# system, in place.
-- [ ] Writable fields of the same component are still writable through `Ref<T>`; components with no `readonly` fields generate exactly what they did before.
+- [x] Generator tests: a `readonly` field of a writable component gets a `ref readonly` accessor on `Ref<T>`, and the existing `ReadOnlyRef<T>` accessor is unchanged.
+- [x] Generator tests: writing that field through `Ref<T>` does not compile (the generator's diagnostics or a compile-failure case).
+- [x] `ScriptingTests`: a test component with a `readonly` field written by C++ reads back through `Ref<T>` in a C# system, in place.
+- [x] Writable fields of the same component are still writable through `Ref<T>`; components with no `readonly` fields generate exactly what they did before.
