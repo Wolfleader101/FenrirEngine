@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved (built: PRs #28–#42 into dotnet-scripting)
 
 # FenrirPhysics character bodies: walking, stairs, platforms, pushing and crouching, with motion tests, in C++ and C#
 
