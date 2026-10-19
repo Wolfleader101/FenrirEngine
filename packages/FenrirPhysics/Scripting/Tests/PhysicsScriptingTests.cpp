@@ -5,12 +5,14 @@
 
 #include "HeadlessApp.hpp"
 #include "JointStateMapping.hpp"
+#include "QueryMirrors.hpp"
 #include "ScriptingProbe.hpp"
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -1417,4 +1419,225 @@ TEST_CASE("A C# system reads one JointBroken when a joint breaks, and writing En
         REQUIRE(test.Call<int>(EventsType, "JointBrokenCount") == 1);
         REQUIRE(test.Call<bool>(JointsType, "IsEnabled", joint));
     }
+}
+
+TEST_CASE("The QueryFilter, MoveCastHit and PenetrationHit mirrors match their native layouts",
+          "[physics][scripting][motion]")
+{
+    PhysicsScriptingApp test;
+    const Iris::Component* component = ScriptingProbe::Component(test.scripting);
+    REQUIRE(component != nullptr);
+    {
+        const auto checked = component->ValidateStruct<Detail::ScriptQueryFilter>();
+        INFO("The C# QueryFilter, Layers included, should match the native mirror: " << checked.diagnostic);
+        REQUIRE(checked.Succeeded());
+    }
+    {
+        const auto checked = component->ValidateStruct<Detail::ScriptMoveCastHit>();
+        INFO("The C# MoveCastHit should match the native mirror: " << checked.diagnostic);
+        REQUIRE(checked.Succeeded());
+    }
+    {
+        const auto checked = component->ValidateStruct<Detail::ScriptPenetrationHit>();
+        INFO("The C# PenetrationHit should match the native mirror: " << checked.diagnostic);
+        REQUIRE(checked.Succeeded());
+    }
+}
+
+namespace
+{
+    constexpr const char* MotionTestsType = "Fenrir.PhysicsScriptFixture.Motion";
+
+    Transform At(const Math::Vec3& position)
+    {
+        return Transform(position, Identity, Math::Vec3(1.0f));
+    }
+
+    // The point, normal and distance (or depth) of the hit C# read last, as x, y and z of each, then the scalar.
+    std::vector<float> CSharpHitValues(PhysicsScriptingApp& test)
+    {
+        std::vector<float> values;
+        for (int value = 0; value < 7; ++value)
+        {
+            values.push_back(test.Call<float>(MotionTestsType, "HitValue", value));
+        }
+        return values;
+    }
+
+    std::vector<float> ValuesOf(const Math::Vec3& point, const Math::Vec3& normal, float scalar)
+    {
+        return {point.x, point.y, point.z, normal.x, normal.y, normal.z, scalar};
+    }
+} // namespace
+
+TEST_CASE("MoveCast from C# stops a box short of a wall exactly as C++ does", "[physics][scripting][motion]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t wall = AddStaticBox(test, Math::Vec3(5.0f, 0.0f, 0.0f));
+    test.Run(1);
+    const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    const std::optional<MoveCastHit> cpp =
+        world->MoveCast(BoxShape{}, At(Math::Vec3(0.0f)), Math::Vec3(10.0f, 0.0f, 0.0f));
+    REQUIRE(cpp.has_value());
+    {
+        INFO("A unit box moved 10 m along +x from C# was not blocked by the wall at x = 5");
+        REQUIRE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, NoEntity, 0u));
+    }
+    {
+        INFO("C# should name the wall as body and collider");
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "HitBody") == wall);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "HitCollider") == wall);
+    }
+    {
+        INFO("C# should read the very point, normal and safe distance C++ reads (about 3.98 m, short of the wall)");
+        REQUIRE(CSharpHitValues(test) == ValuesOf(cpp->point, cpp->normal, cpp->distance));
+        REQUIRE(test.Call<float>(MotionTestsType, "HitValue", 6) == Approx(3.98f).margin(1e-3f));
+    }
+    {
+        INFO("A motion clear of every body should find nothing from C#");
+        REQUIRE_FALSE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 3.0f, NoEntity, 0u));
+    }
+}
+
+TEST_CASE("Penetrations from C# lists what a box overlaps, deepest first, exactly as C++ does",
+          "[physics][scripting][motion]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t ground = AddGround(test);
+    // Its face at x = 0.3.
+    const std::uint32_t wall = AddStaticBox(test, Math::Vec3(0.8f, 0.0f, 0.0f));
+    test.Run(1);
+    const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    // A unit box 0.1 m down into the ground and 0.2 m into the wall.
+    const Transform sunk = At(Math::Vec3(0.0f, 0.4f, 0.0f));
+    std::array<PenetrationHit, 4> cpp;
+    REQUIRE(world->Penetrations(BoxShape{}, sunk, cpp) == 2);
+    {
+        INFO("From C#, the box should overlap the ground and the wall");
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 0.0f, 0.4f, 0.0f, 4, NoEntity, 0u) == 2);
+    }
+    {
+        INFO("C# should list the wall, 0.2 m deep, before the ground, 0.1 m deep, as C++ does");
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "PenetrationBody", 0) == wall);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "PenetrationCollider", 0) == wall);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "PenetrationBody", 1) == ground);
+    }
+    for (std::size_t index = 0; index < 2; ++index)
+    {
+        test.Call<void>(MotionTestsType, "ReadPenetration", static_cast<int>(index));
+        INFO("C# should read the very point, way out and depth C++ reads for overlap " << index);
+        REQUIRE(CSharpHitValues(test) == ValuesOf(cpp[index].point, cpp[index].normal, cpp[index].depth));
+    }
+    {
+        INFO("A span of one should hold the deepest overlap, the wall");
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 0.0f, 0.4f, 0.0f, 1, NoEntity, 0u) == 1);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "PenetrationBody", 0) == wall);
+    }
+    {
+        INFO("A box clear of every body should overlap nothing from C#");
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 0.0f, 3.0f, 0.0f, 4, NoEntity, 0u) == 0);
+    }
+}
+
+TEST_CASE("Depenetrate from C# moves a box out of the ground exactly as C++ does", "[physics][scripting][motion]")
+{
+    PhysicsScriptingApp test;
+    AddGround(test);
+    test.Run(1);
+    const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
+    REQUIRE(world != nullptr);
+
+    // A unit box 0.1 m down into the ground.
+    const Math::Vec3 cpp = world->Depenetrate(BoxShape{}, At(Math::Vec3(0.0f, 0.4f, 0.0f)));
+    test.Call<void>(MotionTestsType, "DepenetrateBox", 0.0f, 0.4f, 0.0f, NoEntity, 0u);
+    {
+        const std::vector<float> offset = {test.Call<float>(MotionTestsType, "Offset", 0),
+                                           test.Call<float>(MotionTestsType, "Offset", 1),
+                                           test.Call<float>(MotionTestsType, "Offset", 2)};
+        INFO("C# should read the very offset C++ reads: up 0.1 m and the skin, but it read ("
+             << offset[0] << ", " << offset[1] << ", " << offset[2] << ")");
+        REQUIRE(offset == std::vector<float>{cpp.x, cpp.y, cpp.z});
+        REQUIRE(offset[1] == Approx(0.12f).margin(1e-3f));
+    }
+    test.Call<void>(MotionTestsType, "DepenetrateBox", 0.0f, 3.0f, 0.0f, NoEntity, 0u);
+    {
+        INFO("A box clear of every body should not be moved from C#");
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 1) == 0.0f);
+    }
+}
+
+TEST_CASE("Motion tests from C# filtered like a body pass what that body would pass, and Layers 0 finds every body",
+          "[physics][scripting][motion][layers]")
+{
+    PhysicsScriptingApp test;
+    // Debris in layer 1 that collides only with layer 1, then a wall in layer 0.
+    const std::uint32_t debris = AddStaticBox(test, Math::Vec3(3.0f, 0.0f, 0.0f));
+    test.Entities().GetEntity(debris).AddComponent<CollisionFilter>(
+        CollisionFilter{.layers = 1u << 1, .mask = 1u << 1});
+    const std::uint32_t wall = AddStaticBox(test, Math::Vec3(6.0f, 0.0f, 0.0f));
+    const std::uint32_t mover = AddStaticBox(test, Math::Vec3(0.0f));
+    test.Run(1);
+    // The mover's filter: a new CollisionFilter's layer 0.
+    const std::uint32_t moverLayers = CollisionFilter{}.layers;
+
+    {
+        INFO("A box filtered like a body in layer 0 should pass the debris, which does not collide with layer 0, and "
+             "its own body, and stop at the wall");
+        REQUIRE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, mover, moverLayers));
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "HitBody") == wall);
+    }
+    {
+        INFO("With Layers 0, the debris's mask is ignored, so it blocks the box");
+        REQUIRE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, mover, 0u));
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "HitBody") == debris);
+    }
+    {
+        INFO("A box inside the debris, filtered like the mover, should overlap nothing and need no offset");
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 3.0f, 0.0f, 0.0f, 4, mover, moverLayers) == 0);
+        test.Call<void>(MotionTestsType, "DepenetrateBox", 3.0f, 0.2f, 0.0f, mover, moverLayers);
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 1) == 0.0f);
+    }
+    {
+        INFO("With Layers 0, the same box should overlap the debris and be moved out of it");
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 3.0f, 0.0f, 0.0f, 4, mover, 0u) == 1);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "PenetrationBody", 0) == debris);
+        test.Call<void>(MotionTestsType, "DepenetrateBox", 3.0f, 0.2f, 0.0f, mover, 0u);
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 1) > 0.0f);
+    }
+    {
+        INFO("The foundation's queries take Layers too: a ray along +x in layer 0 should pass the debris");
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "RaycastEast", mover, moverLayers) == wall);
+        REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "RaycastEast", mover, 0u) == debris);
+    }
+}
+
+TEST_CASE("With no physics world, the motion tests from C# find nothing, warning once each in debug",
+          "[physics][scripting][motion]")
+{
+    PhysicsScriptingApp test;
+    // No frame has run with a body in the scene, so there is no physics world.
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
+
+    for (int call = 0; call < 2; ++call)
+    {
+        INFO("With no world, MoveCast should return false, Penetrations 0 and Depenetrate zero, without throwing");
+        REQUIRE_FALSE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, NoEntity, 0u));
+        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 0.0f, 0.0f, 0.0f, 4, NoEntity, 0u) == 0);
+        test.Call<void>(MotionTestsType, "DepenetrateBox", 0.0f, 0.0f, 0.0f, NoEntity, 0u);
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 0) == 0.0f);
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 1) == 0.0f);
+        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 2) == 0.0f);
+    }
+#ifndef NDEBUG
+    {
+        INFO("A debug build should warn once for each, not on every call, that it had no world");
+        REQUIRE(WarningsAbout(test, "MoveCast: the active scene has no physics world") == 1);
+        REQUIRE(WarningsAbout(test, "Penetrations: the active scene has no physics world") == 1);
+        REQUIRE(WarningsAbout(test, "Depenetrate: the active scene has no physics world") == 1);
+    }
+#endif
 }
