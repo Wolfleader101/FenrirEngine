@@ -14,7 +14,7 @@ cmake --build out/build/clang-x64-debug
 ctest --test-dir out/build/clang-x64-debug
 ```
 
-CI (`.github/workflows/build-and-test.yml`) runs these steps on every pull request and on pushes to `dotnet-scripting` and `main`, for the clang and MSVC x64 presets in Debug and Release and for `linux-debug`, without the DemoApp.
+CI (`.github/workflows/build-and-test.yml`) runs these steps without the DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`.
 
 | Option | Default | Effect |
 | --- | --- | --- |

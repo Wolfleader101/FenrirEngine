@@ -28,12 +28,9 @@ jobs:
     timeout-minutes: 90
     strategy:
       fail-fast: false
+      # Pull requests build one preset per compiler, a Debug and a Release; pushes to dotnet-scripting and main build all four.
       matrix:
-        preset:
-          - clang-x64-debug
-          - clang-x64-release
-          - msvc-x64-debug
-          - msvc-x64-release
+        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["clang-x64-debug", "msvc-x64-release"]' || '["clang-x64-debug", "clang-x64-release", "msvc-x64-debug", "msvc-x64-release"]') }}
     steps:
       - uses: actions/checkout@v4
         with:
