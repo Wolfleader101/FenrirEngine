@@ -20,8 +20,8 @@ namespace Fenrir
      * @brief Makes the entity's collider a rigid body the physics world simulates (ADR-0011). Plain data: physics finds
      * edits by comparing it, each tick, with what it last applied.
      *
-     * A collider without a RigidBody is static, as is `RigidBody{MotionType::Static}`. Switching `motionType` is a
-     * field edit and takes effect on the next tick.
+     * A collider without a RigidBody is static (unless its entity has a CharacterBody, whose shape it is), as is
+     * `RigidBody{MotionType::Static}`. Switching `motionType` is a field edit and takes effect on the next tick.
      *
      * The body's colliders are the one on its own entity and those on entities beneath it that have no RigidBody of
      * their own: a compound body, whose mass is spread over all its colliders. A RigidBody with no collider at all is
@@ -263,8 +263,8 @@ namespace Fenrir
     /**
      * @brief Gives the entity collision geometry, placed at its world transform and scaled by its world scale. One per
      * entity. It belongs to the body of the nearest of its entity and that entity's ancestors with a RigidBody; without
-     * one the collider is static. Adding, removing or moving a collider beneath a body rebuilds that body's shape on
-     * the next tick.
+     * one the collider is static, unless its own entity has a CharacterBody, which makes it that character's shape.
+     * Adding, removing or moving a collider beneath a body rebuilds that body's shape on the next tick.
      *
      * The scale is baked into the backend's shape, so changing the shape's dimensions or the entity's scale rebuilds
      * that shape on the next tick: fine occasionally, costly every tick. Each kind's shape documents how it takes a

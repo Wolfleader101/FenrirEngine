@@ -15,6 +15,7 @@
 #include "Backend/Backend.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
@@ -185,6 +186,24 @@ namespace Fenrir
         /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
         [[nodiscard]] JointState StateOf(const Entity& joint) const;
         void ApplyPushes();
+
+        // Character bodies (Characters.cpp): each a backend character, made after the bodies' batch and destroyed
+        // before it.
+
+        /** @brief Whether the Collider on `entity` is a character body's shape, and so makes no body of its own. */
+        [[nodiscard]] bool IsCharacterCollider(std::uint32_t entity) const;
+        /** @brief Destroys the backend characters of the entities in `changed`, whose components came or went since
+         * the last tick: they are made again from what the entity has now. */
+        void DropCharacters(const std::set<std::uint32_t>& changed);
+        /** @brief Makes, in one batch in entity order, the backend character of each CharacterBody that can have one
+         * and has none. */
+        void MakeCharacters();
+        /** @brief Step 3b, before the step: moves each character by its velocity over `dt` seconds, one at a time in
+         * entity order, keeping each move's result for WriteBack. */
+        void MoveCharacters(float dt);
+        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move. */
+        void WriteBackCharacter(Entity& entity, const Backend::CharacterMoved& moved);
+
         void WriteBack();
         void AdvancePoses();
         void SendEvents(App& app);
@@ -292,6 +311,20 @@ namespace Fenrir
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
         // The joints the last step broke, sent with its contact and trigger events.
         std::vector<JointBroken> m_broken;
+
+        // What physics knows of a character body: its backend character, and where its last move left it. None for one
+        // that cannot have a backend character (beside a RigidBody, with no Collider, or with a shape a character
+        // cannot use).
+        struct CharacterRecord
+        {
+            Backend::CharacterId id;
+            Backend::CharacterMoved moved;
+        };
+        ComponentWatch m_characterWatch;
+        // The entities with a CharacterBody now, as the watch has reported them, and their records, by entity:
+        // characters are made and moved in that order.
+        std::set<std::uint32_t> m_characterEntities;
+        std::map<std::uint32_t, CharacterRecord> m_characters;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

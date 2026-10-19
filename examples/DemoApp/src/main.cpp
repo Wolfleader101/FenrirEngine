@@ -21,6 +21,7 @@
 
 #include <iostream>
 
+#include "DemoCamera.hpp"
 #include "DemoMesh.hpp"
 #include "DemoScenes.hpp"
 #include "Editor.hpp"
@@ -38,6 +39,7 @@
 #include <array>
 #include <cmath>
 
+#include "CharacterScene.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
 #endif
@@ -651,7 +653,21 @@ int main(int argc, char* argv[])
     });
     demoScenes.Register(CSharpScenes::Joints());
 #endif
+
+    // Character (C++), the first of the F5 family, made in PostInit once the cube is loaded. Its camera writes the
+    // scene's DemoCamera in Update, before DemoCameras copies it.
+    CharacterScene characterScene(cube, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&characterScene](Fenrir::App& running) { characterScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&characterScene](Fenrir::App& running) { characterScene.Tick(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&characterScene](Fenrir::App& running) { characterScene.Update(running); }});
+    demoScenes.Register(CharacterScene::Scene());
 #endif
+
+    // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.
+    DemoCameras demoCameras(camera);
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
 
@@ -670,6 +686,8 @@ int main(int argc, char* argv[])
 
         .AddSystems(Fenrir::SchedulePriority::Update,
                     {BIND_CAMERA_CONTROLLER_FN(CameraController::Update, cameraController)})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&demoCameras](Fenrir::App& running) { demoCameras.Update(running); }})
         // The physics debug lines are drawn after the scene and before the editor unbinds the scene's framebuffer.
         .AddSequentialSystems(Fenrir::SchedulePriority::Update, {BIND_GL_RENDERER_FN(GLRenderer::Update, glRenderer),
 #ifdef FENRIR_PHYSICS
