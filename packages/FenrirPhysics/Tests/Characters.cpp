@@ -12,74 +12,13 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "CharacterTest.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
-#include "PhysicsTestApp.hpp"
 
 using namespace Fenrir;
 using namespace PhysicsTest;
 using Catch::Approx;
-
-namespace
-{
-    // A capsule 1.6 m tall and 0.3 m round: its centre is 0.8 m above its feet.
-    constexpr float footToCentre = 0.8f;
-
-    Entity AddCharacter(EntityList& entities, const Math::Vec3& feet)
-    {
-        Entity character = Place(entities, feet + Math::Vec3(0.0f, footToCentre, 0.0f));
-        character.AddComponent<Collider>(Collider{CapsuleShape{.halfHeight = 0.5f, .radius = 0.3f}});
-        character.AddComponent<CharacterBody>();
-        return character;
-    }
-
-    Entity AddStatic(EntityList& entities, const Math::Vec3& centre, const Math::Vec3& halfExtents)
-    {
-        Entity block = Place(entities, centre);
-        block.AddComponent<Collider>(Collider{BoxShape{halfExtents}});
-        return block;
-    }
-
-    float FeetOf(const Entity& character)
-    {
-        return PositionOf(character).y - footToCentre;
-    }
-
-    // What game code asks of a character each tick.
-    struct Input
-    {
-        Math::Vec3 walk = Math::Vec3(0.0f);
-        bool jump = false;
-    };
-
-    constexpr float jumpSpeed = 5.0f;
-
-    // The game code the spec asks for, in Tick: horizontal speed from input, gravity added to what physics wrote back,
-    // and a jump only from walkable ground.
-    std::shared_ptr<Input> Drive(App& app, const Entity& character)
-    {
-        auto input = std::make_shared<Input>();
-        app.AddSequentialSystems(SchedulePriority::Tick, {[input, character](App& running) {
-                                     const PhysicsWorld* world = PhysicsWorld::Of(running.GetActiveScene());
-                                     if (world == nullptr || !character.IsValid() ||
-                                         !character.HasComponent<CharacterBody>())
-                                     {
-                                         return;
-                                     }
-                                     const float dt = static_cast<float>(running.GetTime().tickRate);
-                                     CharacterBody& body = character.GetComponent<CharacterBody>();
-                                     body.velocity.x = input->walk.x;
-                                     body.velocity.z = input->walk.z;
-                                     body.velocity.y += world->Gravity().y * dt;
-                                     if (input->jump && body.state.ground == GroundState::OnGround)
-                                     {
-                                         body.velocity.y = jumpSpeed;
-                                         input->jump = false;
-                                     }
-                                 }});
-        return input;
-    }
-} // namespace
 
 TEST_CASE("A CharacterBody made with no arguments has the spec's defaults", "[physics][characters]")
 {

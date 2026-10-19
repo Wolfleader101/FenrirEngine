@@ -47,15 +47,16 @@ namespace Fenrir
         void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
 
         /**
-         * @brief `BeforeTicks`: put back the true pose of each body Blend wrote, so `Tick` systems and the diff see
-         * real simulation state. A body whose `Transform` game code changed since keeps the game's value, which the
-         * next step takes as a teleport.
+         * @brief `BeforeTicks`: put back the true pose of each body and character Blend wrote, so `Tick` systems and
+         * the diff see real simulation state. The parts of a `Transform` game code changed since keep the game's
+         * values, and the rest go back to the true pose. The next step takes a changed body as a teleport, and a
+         * character only if its position changed.
          */
         void Restore();
 
         /**
-         * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's pose `fraction` of the way from its
-         * previous step pose to its current one, parents before children. A dynamic or kinematic body that is not
+         * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's and character's pose `fraction` of
+         * the way from its previous step pose to its current one, parents before children. One that is not
          * interpolated, beneath one that is, is written at its step pose, so its parent's blend does not carry it.
          */
         void Blend(float fraction);
@@ -95,6 +96,28 @@ namespace Fenrir
             bool filtered;
         };
 
+        // How a body or character is shown between ticks: its world poses after the step before last and after the
+        // last step. A teleport or a new one snaps: previous = current after its next step, so nothing blends across
+        // the jump.
+        struct Shown
+        {
+            /** @brief After a step that left it at `world`. */
+            void Advance(const Transform& world);
+            /** @brief `BeforeTicks`, for one Blend wrote to `local`: put back the true pose, but for the parts game
+             * code changed since, which a step takes as a teleport if it moved it, or if `turnIsTeleport`. */
+            void Restore(Transform& local, bool turnIsTeleport);
+
+            Transform previous;
+            Transform current;
+            bool snap = true;
+            // Game code wrote the Transform during Update: shown as written until a step has taken it.
+            bool heldByGame = false;
+            // Whether Blend wrote its Transform, the true local Transform it replaced, and the one it wrote.
+            bool blended = false;
+            Transform trueLocal;
+            Transform shownLocal;
+        };
+
         // What physics last applied to a body, or wrote back from it: the diff compares the components against it.
         // A body none of whose colliders can be made (their collision meshes were released), or that the world was too
         // full to make, keeps a record with no backend body: it is inactive, skipped by every step, until its
@@ -116,17 +139,7 @@ namespace Fenrir
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
 
-            // Interpolation: the world poses after the step before last and after the last step. A teleport or a new
-            // body snaps: previous = current after its next step, so nothing blends across the jump.
-            Transform previous;
-            Transform current;
-            bool snap = true;
-            // Game code wrote the Transform during Update: shown as written until a step has taken it.
-            bool heldByGame = false;
-            // Whether Blend wrote this body's Transform, the true local Transform it replaced, and the one it wrote.
-            bool blended = false;
-            Transform trueLocal;
-            Transform shownLocal;
+            Shown shown{};
             // A trigger: a kinematic body following its entity, whatever RigidBody the entity has.
             bool isTrigger = false;
         };
@@ -198,6 +211,10 @@ namespace Fenrir
         /** @brief Makes, in one batch in entity order, the backend character of each CharacterBody that can have one
          * and has none. */
         void MakeCharacters();
+        /** @brief Step 2, after the bodies' edits, in entity order: a character whose world position differs from
+         * physics's copy is teleported there (a moved parent included), and one whose world rotation alone differs is
+         * turned. Neither sweeps. */
+        void PushCharacterEdits();
         /** @brief Step 3b, before the step: applies each character's shape edit if it fits, then moves it by its
          * velocity over `dt` seconds, one at a time in entity order, keeping each move's result for WriteBack. */
         void MoveCharacters(float dt);
@@ -206,9 +223,9 @@ namespace Fenrir
          * changed and fit, keeping the feet in place on the ground and the head in the air; otherwise marks it
          * blocked, keeping the shape it has. */
         void ApplyShape(const Entity& entity, CharacterRecord& record);
-        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, and whether
-         * its Collider's shape or scale is still waiting to fit. */
-        void WriteBackCharacter(Entity& entity, const Backend::CharacterMoved& moved, bool shapeBlocked);
+        /** @brief Step 5, for one character: its position, trimmed velocity and state, from its last move, whether its
+         * Collider's shape or scale is still waiting to fit, and the world transform the diff compares against. */
+        void WriteBackCharacter(Entity& entity, CharacterRecord& record);
 
         void WriteBack();
         void AdvancePoses();
@@ -325,6 +342,10 @@ namespace Fenrir
         {
             Backend::CharacterId id;
             Backend::CharacterMoved moved;
+            // Its world transform as physics last applied it or wrote it back: a position differing from it is a
+            // teleport, and a rotation differing from it a turn.
+            Transform world;
+            Shown shown{};
             CollisionShape shape;
             Math::Vec3 scale = Math::Vec3(1.0f);
             // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.

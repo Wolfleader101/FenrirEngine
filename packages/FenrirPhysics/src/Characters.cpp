@@ -78,10 +78,33 @@ namespace Fenrir
         {
             if (ids[i].value != Backend::CharacterId{}.value)
             {
-                m_characters.emplace(
-                    entities[i],
-                    CharacterRecord{.id = ids[i], .moved = {}, .shape = descs[i].shape, .scale = descs[i].scale});
+                m_characters.emplace(entities[i],
+                                     CharacterRecord{.id = ids[i],
+                                                     .moved = Backend::CharacterMoved{},
+                                                     .world = GetWorldTransform(m_entities->GetEntity(entities[i])),
+                                                     .shape = descs[i].shape,
+                                                     .scale = descs[i].scale});
             }
+        }
+    }
+
+    void PhysicsWorld::Impl::PushCharacterEdits()
+    {
+        for (auto& [id, record] : m_characters)
+        {
+            const Transform world = GetWorldTransform(m_entities->GetEntity(id));
+            if (!Same(world.pos, record.world.pos))
+            {
+                // Its contacts and ground are found again where it now is, so this tick's move starts from there.
+                m_backend.TeleportCharacter(record.id, world.pos, world.rot);
+                record.shown.snap = true;
+            }
+            else if (!Same(world.rot, record.world.rot))
+            {
+                // Not a teleport: the next move pushes the turned shape out of anything it now overlaps.
+                m_backend.TurnCharacter(record.id, world.rot);
+            }
+            record.world = world;
         }
     }
 
@@ -125,12 +148,19 @@ namespace Fenrir
         record.scale = scale;
     }
 
-    void PhysicsWorld::Impl::WriteBackCharacter(Entity& entity, const Backend::CharacterMoved& moved, bool shapeBlocked)
+    void PhysicsWorld::Impl::WriteBackCharacter(Entity& entity, CharacterRecord& record)
     {
-        // Only the position: the rotation and scale stay game code's.
+        // Only the position: the rotation and scale stay game code's, bit for bit, not recomputed through a parent.
+        const Backend::CharacterMoved& moved = record.moved;
         Transform world = GetWorldTransform(entity);
         world.pos = moved.position;
+        Transform& local = entity.GetComponent<Transform>();
+        const Transform kept = local;
         SetWorldTransform(entity, world);
+        local.rot = kept.rot;
+        local.scale = kept.scale;
+        // Read back the way the diff reads, so rounding through a parent is not taken for a teleport.
+        record.world = GetWorldTransform(entity);
 
         const auto handle = [this](std::uint32_t id) { return id == ~0u ? Entity() : m_entities->HandleOf(id); };
         CharacterBody& body = entity.GetComponent<CharacterBody>();
@@ -143,6 +173,6 @@ namespace Fenrir
                                     .movedVelocity = moved.movedVelocity,
                                     .onWall = moved.onWall,
                                     .onCeiling = moved.onCeiling,
-                                    .shapeBlocked = shapeBlocked};
+                                    .shapeBlocked = record.shapeBlocked};
     }
 } // namespace Fenrir

@@ -331,3 +331,25 @@ TEST_CASE("A crouch's shift is not a teleport: velocity is kept, and the shift i
     REQUIRE(body.velocity.x == Approx(1.5f).margin(1.0e-3));
     REQUIRE(body.state.ground == GroundState::OnGround);
 }
+
+TEST_CASE("A crouch's shift blends under interpolation, as a move does, rather than snapping as a teleport",
+          "[physics][characters][shapes][interpolation]")
+{
+    PhysicsApp test{PhysicsConfig{}};
+    AddGround(test.Entities());
+    Entity character = AddCharacter(test.Entities(), Math::Vec3(0.0f));
+    Drive(test.app, character);
+    test.Run(0.5);
+    const float standingCentre = PositionOf(character).y;
+
+    character.GetComponent<Collider>().shape = crouched;
+    bool blended = false;
+    for (int frame = 0; frame < 12 && !blended; ++frame)
+    {
+        test.app.RunFrame(0.3 * tick);
+        const float shown = PositionOf(character).y;
+        blended = shown < standingCentre - 0.01f && shown > standingCentre - 0.29f;
+    }
+    INFO("some frame shows the centre part of the way down its 0.3 m shift");
+    REQUIRE(blended);
+}

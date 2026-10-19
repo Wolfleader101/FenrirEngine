@@ -422,6 +422,13 @@ namespace Fenrir::Backend
          */
         CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 
+        /** @brief Puts a character at a pose at once, with no sweep, and finds its contacts and ground there. */
+        void TeleportCharacter(CharacterId id, const Math::Vec3& position, const Math::Quat& rotation);
+
+        /** @brief Turns a character's shape where it stands, with no sweep: its next move pushes it out of anything
+         * it now overlaps. Up stays world +Y. */
+        void TurnCharacter(CharacterId id, const Math::Quat& rotation);
+
         /**
          * @brief Gives a character `shape` (which must pass CanMakeShape and not be a mesh) at `scale`, if it fits: its
          * body changes with it, and the character moves along world +Y so that the lowest point of its shape stays
