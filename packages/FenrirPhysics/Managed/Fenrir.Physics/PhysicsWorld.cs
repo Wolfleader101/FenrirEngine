@@ -3,16 +3,17 @@ using Fenrir.Scripting;
 namespace Fenrir.Physics;
 
 /// <summary>
-/// The active scene's physics world, from C#: forces, queries, body state, gravity, debug lines and collision meshes,
-/// as <c>Fenrir::PhysicsWorld</c> and <c>Fenrir::Physics</c> offer them in C++ (whose documentation says what each does).
+/// The active scene's physics world, from C#: forces, queries, motion tests, body state, gravity, debug lines and
+/// collision meshes, as <c>Fenrir::PhysicsWorld</c> and <c>Fenrir::Physics</c> offer them in C++ (whose documentation
+/// says what each does).
 /// </summary>
 /// <remarks>
 /// Nothing here throws. When the active scene has no physics world yet (one is made the first tick it has a body), the
-/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero, and in
-/// a debug build of the engine a warning is logged once per process for each place in the engine's native code that
-/// noticed (not once per C# call site). Like every native function,
-/// none of these makes a structural change: forces are queued for the next step, and queries read the world as the last
-/// step left it.
+/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero: with
+/// no world, <see cref="MoveCast"/> returns <c>false</c>, <see cref="Penetrations"/> 0 and <see cref="Depenetrate"/> a
+/// zero offset. In a debug build of the engine a warning is logged once per process for each place in the engine's
+/// native code that noticed (not once per C# call site). Like every native function, none of these makes a structural
+/// change: forces are queued for the next step, and queries and motion tests read the world as the last step left it.
 /// <para>
 /// <see cref="GetJointState"/> reads the zeroed state with no physics world or on an entity with no Joint, with that
 /// warning. It also reads zeroed, with no extra warning, for an inactive joint (physics already warns once each time one
@@ -90,6 +91,29 @@ public static class PhysicsWorld
     }
 
     /// <summary>
+    /// How far <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), can move along
+    /// <paramref name="motion"/> (a displacement: its length is how far) and stay clear. Moved
+    /// <see cref="MoveCastHit.Distance"/> along <paramref name="motion"/>, the shape keeps a small gap (the skin, a fixed
+    /// 0.02 m) from what blocked it, measured along that body's normal: a glancing hit stops it further back than a
+    /// head-on one. Bodies the shape starts inside or touching, and bodies it moves away from, do not block it, so a
+    /// shape resting on the ground can slide along it. A shape a MoveCast placed keeps the skin's gap, so moving it on
+    /// into what blocked it is blocked at once (distance 0). Free a shape that starts inside a body with
+    /// <see cref="Depenetrate"/>. A triangle-mesh shape (<see cref="MeshShape"/>) finds nothing.
+    /// </summary>
+    /// <remarks>
+    /// To move a shape as a body would, filter as it does:
+    /// <c>new QueryFilter { Mask = cf.Mask, Layers = cf.Layers, IgnoreBody = me }</c>, with <c>cf</c> its CollisionFilter
+    /// (or a new one).
+    /// </remarks>
+    /// <returns>Whether something blocks the motion; <paramref name="hit"/> is default when nothing does.</returns>
+    public static bool MoveCast(CollisionShape shape, Transform pose, Vector3 motion, out MoveCastHit hit,
+                                QueryFilter? filter = null)
+    {
+        QueryFilter chosen = filter ?? new QueryFilter();
+        return PhysicsNative.MoveCast(in shape, in pose, in motion, in chosen, out hit);
+    }
+
+    /// <summary>
     /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
     /// overlaps to <paramref name="hits"/>, each with its body, and returns how many it wrote, stopping when the span is full.
     /// </summary>
@@ -98,6 +122,35 @@ public static class PhysicsWorld
         QueryFilter chosen = filter ?? new QueryFilter();
         fixed (OverlapHit* first = hits)
             return PhysicsNative.Overlap(in shape, in pose, in chosen, first, hits.Length);
+    }
+
+    /// <summary>
+    /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
+    /// overlaps to <paramref name="hits"/>, each with its body, which way out of it and how deep, and returns how many it
+    /// wrote. Deepest first, a collider once at its deepest; when there are more than the span holds, the deepest are
+    /// written. A shape only touching a collider does not overlap it. A triangle-mesh shape (<see cref="MeshShape"/>)
+    /// finds nothing. Filter like a body as for <see cref="MoveCast"/>.
+    /// </summary>
+    public static unsafe int Penetrations(CollisionShape shape, Transform pose, Span<PenetrationHit> hits,
+                                          QueryFilter? filter = null)
+    {
+        QueryFilter chosen = filter ?? new QueryFilter();
+        fixed (PenetrationHit* first = hits)
+            return PhysicsNative.Penetrations(in shape, in pose, in chosen, first, hits.Length);
+    }
+
+    /// <summary>
+    /// The offset that moves <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), out
+    /// of everything it overlaps, leaving the skin's gap <see cref="MoveCast"/> leaves; zero when it overlaps nothing.
+    /// Several overlaps are resolved together, over a few tries. Wedged in a crevice the shape may still overlap
+    /// something once moved: check with <see cref="Penetrations"/> when that matters. A triangle-mesh shape
+    /// (<see cref="MeshShape"/>) finds nothing. Filter like a body as for <see cref="MoveCast"/>.
+    /// </summary>
+    public static Vector3 Depenetrate(CollisionShape shape, Transform pose, QueryFilter? filter = null)
+    {
+        QueryFilter chosen = filter ?? new QueryFilter();
+        PhysicsNative.Depenetrate(in shape, in pose, in chosen, out Vector3 offset);
+        return offset;
     }
 
     /// <summary>
@@ -220,8 +273,21 @@ internal static unsafe partial class PhysicsNative
                                            float maxDistance, in QueryFilter filter, ShapeCastHit* hits, int capacity);
 
     [NativeFunction]
+    public static partial bool MoveCast(in CollisionShape shape, in Transform pose, in Vector3 motion,
+                                        in QueryFilter filter, out MoveCastHit hit);
+
+    [NativeFunction]
     public static partial int Overlap(in CollisionShape shape, in Transform pose, in QueryFilter filter, OverlapHit* hits,
                                       int capacity);
+
+    [NativeFunction]
+    public static partial int Penetrations(in CollisionShape shape, in Transform pose, in QueryFilter filter,
+                                           PenetrationHit* hits, int capacity);
+
+    // Writes zero when there is no world.
+    [NativeFunction]
+    public static partial bool Depenetrate(in CollisionShape shape, in Transform pose, in QueryFilter filter,
+                                           out Vector3 offset);
 
     [NativeFunction]
     public static partial int OverlapPoint(in Vector3 point, in QueryFilter filter, OverlapHit* hits, int capacity);

@@ -4,13 +4,25 @@ namespace Fenrir.Physics;
 
 // What PhysicsWorld's queries and state functions take and give. Each is laid out exactly as FenrirPhysicsScripting's
 // native mirror of the C++ type, with an entity as its 32-bit value; the native side checks its own sizes at compile time,
-// and the scripting tests read every field back.
+// the scripting tests check QueryFilter, MoveCastHit and PenetrationHit against their mirrors' mappings, and they read
+// every field back.
 
 /// <summary>Which bodies a query can find. New, it finds every body except triggers.</summary>
 public struct QueryFilter
 {
     /// <summary>The collision layers to find, one bit per layer: a body is found if it is in any of them.</summary>
     public uint Mask = uint.MaxValue;
+    /// <summary>
+    /// The layers the query is in, one bit per layer: when non-zero, a body is found only if its CollisionFilter mask
+    /// includes one of them, the rule two bodies collide by. 0 when new, which ignores bodies' masks, so a ray still finds
+    /// a hitbox that collides with nothing.
+    /// </summary>
+    /// <remarks>
+    /// To find what a body would collide with, filter as it does:
+    /// <c>new QueryFilter { Mask = cf.Mask, Layers = cf.Layers, IgnoreBody = me }</c>, with <c>cf</c> its CollisionFilter
+    /// (or a new one).
+    /// </remarks>
+    public uint Layers;
     /// <summary>A body never found, such as the one casting the query. None when new.</summary>
     public Entity IgnoreBody = new(uint.MaxValue);
     /// <summary>Whether triggers are found.</summary>
@@ -49,6 +61,36 @@ public struct ShapeCastHit
     public Vector3 Normal;
     /// <summary>How far the shape travelled before it touched: 0 for a shape that starts touching.</summary>
     public float Distance;
+}
+
+/// <summary>Where a moved shape is blocked (<see cref="PhysicsWorld.MoveCast"/>).</summary>
+public struct MoveCastHit
+{
+    /// <summary>The entity of the body that blocked the shape.</summary>
+    public Entity Body;
+    /// <summary>The entity of the collider that blocked it.</summary>
+    public Entity Collider;
+    /// <summary>Where the shape touches the body, on the shape, in world space.</summary>
+    public Vector3 Point;
+    /// <summary>The body's surface normal where it was touched, pointing towards the shape.</summary>
+    public Vector3 Normal;
+    /// <summary>How far the shape can travel along the motion and stay clear of the body: the safe distance.</summary>
+    public float Distance;
+}
+
+/// <summary>A body a shape overlaps, and how to get out of it (<see cref="PhysicsWorld.Penetrations"/>).</summary>
+public struct PenetrationHit
+{
+    /// <summary>The entity of the body.</summary>
+    public Entity Body;
+    /// <summary>The entity of the collider.</summary>
+    public Entity Collider;
+    /// <summary>The shape's deepest point inside the collider, in world space.</summary>
+    public Vector3 Point;
+    /// <summary>The unit direction that moves the shape out of the collider along the shortest path.</summary>
+    public Vector3 Normal;
+    /// <summary>How far along <see cref="Normal"/> the shape must move to stop overlapping the collider: more than 0.</summary>
+    public float Depth;
 }
 
 /// <summary>A body a shape or point overlaps.</summary>

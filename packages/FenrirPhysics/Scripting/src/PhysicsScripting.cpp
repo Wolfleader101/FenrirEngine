@@ -27,6 +27,7 @@
 #include "FenrirScripting/EngineMappings.hpp"
 #include "JointStateMapping.hpp"
 #include "PhysicsState.hpp"
+#include "QueryMirrors.hpp"
 
 // How the physics components and events look to C#: each mapping is checked against its mirror in the Fenrir.Physics
 // contract (Managed/Fenrir.Physics) whenever a script assembly loads, so a drift fails the load and names the field.
@@ -553,16 +554,14 @@ namespace Fenrir
             return Push<&PhysicsWorld::AddAngularImpulse>(context, entity, impulse, "AddAngularImpulse");
         }
 
-        // The C# mirrors of the query types (Managed/Fenrir.Physics/Queries.cs), with entities as their 32-bit values,
-        // since a Fenrir::Entity holds a pointer to its list. They cross only by pointer, so nothing checks them at
-        // load: the sizes are checked here and the scripting tests read every field back.
-        struct ScriptQueryFilter
-        {
-            std::uint32_t mask;
-            std::uint32_t ignoreBody;
-            bool hitTriggers;
-        };
-        static_assert(sizeof(ScriptQueryFilter) == 12, "Keep ScriptQueryFilter as the C# QueryFilter lays it out.");
+        using Detail::ScriptMoveCastHit;
+        using Detail::ScriptPenetrationHit;
+        using Detail::ScriptQueryFilter;
+
+        // The C# mirrors of the other query types (Managed/Fenrir.Physics/Queries.cs), with entities as their 32-bit
+        // values, since a Fenrir::Entity holds a pointer to its list. They cross only by pointer, so nothing checks
+        // them at load: the sizes are checked here and the scripting tests read every field back. QueryMirrors.hpp has
+        // the rest, with mappings the tests check.
 
         // RaycastHit and ShapeCastHit, which have the same fields.
         struct ScriptHit
@@ -582,9 +581,10 @@ namespace Fenrir
                 return {};
             }
             return QueryFilter{.mask = filter->mask,
-                               .ignoreBody = filter->ignoreBody == Entity::Null
+                               .layers = filter->layers,
+                               .ignoreBody = filter->ignoreBody.value == Entity::Null
                                                  ? Entity()
-                                                 : context.Entities().HandleOf(filter->ignoreBody),
+                                                 : context.Entities().HandleOf(filter->ignoreBody.value),
                                .hitTriggers = filter->hitTriggers};
         }
 
@@ -688,6 +688,27 @@ namespace Fenrir
             return static_cast<std::int32_t>(count);
         }
 
+        bool MoveCast(const CallContext& context, const CollisionShape* shape, const Transform* pose,
+                      const Math::Vec3* motion, const ScriptQueryFilter* filter, ScriptMoveCastHit* hit)
+        {
+            PhysicsWorld* world = WorldFor(context, "MoveCast");
+            if (world == nullptr || shape == nullptr || pose == nullptr || motion == nullptr || hit == nullptr)
+            {
+                return false;
+            }
+            const std::optional<MoveCastHit> found = world->MoveCast(*shape, *pose, *motion, ToFilter(context, filter));
+            if (!found)
+            {
+                return false;
+            }
+            *hit = ScriptMoveCastHit{.body = {found->body.GetId()},
+                                     .collider = {found->collider.GetId()},
+                                     .point = found->point,
+                                     .normal = found->normal,
+                                     .distance = found->distance};
+            return true;
+        }
+
         std::int32_t Overlap(const CallContext& context, const CollisionShape* shape, const Transform* pose,
                              const ScriptQueryFilter* filter, ScriptOverlapHit* hits, std::int32_t capacity)
         {
@@ -700,6 +721,44 @@ namespace Fenrir
             const std::size_t count = world->Overlap(*shape, *pose, found, ToFilter(context, filter));
             std::transform(found.begin(), found.begin() + static_cast<std::ptrdiff_t>(count), hits, ToScriptOverlap);
             return static_cast<std::int32_t>(count);
+        }
+
+        std::int32_t Penetrations(const CallContext& context, const CollisionShape* shape, const Transform* pose,
+                                  const ScriptQueryFilter* filter, ScriptPenetrationHit* hits, std::int32_t capacity)
+        {
+            PhysicsWorld* world = WorldFor(context, "Penetrations");
+            if (world == nullptr || shape == nullptr || pose == nullptr || hits == nullptr)
+            {
+                return 0;
+            }
+            std::vector<PenetrationHit> found = Buffer<PenetrationHit>(capacity);
+            const std::size_t count = world->Penetrations(*shape, *pose, found, ToFilter(context, filter));
+            std::transform(found.begin(), found.begin() + static_cast<std::ptrdiff_t>(count), hits,
+                           [](const PenetrationHit& hit) {
+                               return ScriptPenetrationHit{.body = {hit.body.GetId()},
+                                                           .collider = {hit.collider.GetId()},
+                                                           .point = hit.point,
+                                                           .normal = hit.normal,
+                                                           .depth = hit.depth};
+                           });
+            return static_cast<std::int32_t>(count);
+        }
+
+        bool Depenetrate(const CallContext& context, const CollisionShape* shape, const Transform* pose,
+                         const ScriptQueryFilter* filter, Math::Vec3* offset)
+        {
+            if (offset == nullptr)
+            {
+                return false;
+            }
+            *offset = Math::Vec3(0.0f);
+            PhysicsWorld* world = WorldFor(context, "Depenetrate");
+            if (world == nullptr || shape == nullptr || pose == nullptr)
+            {
+                return false;
+            }
+            *offset = world->Depenetrate(*shape, *pose, ToFilter(context, filter));
+            return true;
         }
 
         std::int32_t OverlapPoint(const CallContext& context, const Math::Vec3* point, const ScriptQueryFilter* filter,
@@ -920,7 +979,10 @@ namespace Fenrir
             NativeFunction::Make<&RaycastAll>(prefix + "RaycastAll"),
             NativeFunction::Make<&ShapeCast>(prefix + "ShapeCast"),
             NativeFunction::Make<&ShapeCastAll>(prefix + "ShapeCastAll"),
+            NativeFunction::Make<&MoveCast>(prefix + "MoveCast"),
             NativeFunction::Make<&Overlap>(prefix + "Overlap"),
+            NativeFunction::Make<&Penetrations>(prefix + "Penetrations"),
+            NativeFunction::Make<&Depenetrate>(prefix + "Depenetrate"),
             NativeFunction::Make<&OverlapPoint>(prefix + "OverlapPoint"),
             NativeFunction::Make<&ContactsOf>(prefix + "ContactsOf"),
             NativeFunction::Make<&IsSleeping>(prefix + "IsSleeping"),
