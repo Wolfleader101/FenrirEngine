@@ -1,5 +1,7 @@
 # Builds one case of the CompileFail project and checks the result. Run by CTest in script mode:
-#   cmake -DDOTNET=... -DPROJECT=... -DSDK=<sdk dir>/ -DCASE=<name> -DWORK=<dir> -DEXPECT=<OK|error code> [-DALSO=<error code>] -P ExpectCompile.cmake
+#   cmake -DDOTNET=... -DPROJECT=... -DSDK=<sdk dir>/ -DCASE=<name> -DWORK=<dir> -DEXPECT=<OK|error code> [-DALSO=<error code>]
+#       [-DPROPERTY=<Name>=<value>] -P ExpectCompile.cmake
+# PROPERTY, when set, is one more MSBuild property the project needs (an extension's contract folder, say).
 # EXPECT=OK means the case must compile. An error code (CS8345) means the build must fail, and every error it reports
 # must be that one (or ALSO, one error the compiler adds on its own beside it), so a case cannot pass because something
 # unrelated broke.
@@ -10,9 +12,13 @@ foreach(required DOTNET PROJECT SDK CASE WORK EXPECT)
 endforeach()
 
 file(REMOVE_RECURSE "${WORK}/${CASE}")
+set(extra_property "")
+if(DEFINED PROPERTY AND NOT PROPERTY STREQUAL "")
+    set(extra_property "-p:${PROPERTY}")
+endif()
 execute_process(
     COMMAND "${DOTNET}" build "${PROJECT}" --configuration Release -nologo -v:q --no-incremental
-        "-p:FenrirScriptingSdk=${SDK}" "-p:Case=${CASE}"
+        "-p:FenrirScriptingSdk=${SDK}" "-p:Case=${CASE}" ${extra_property}
         "-p:BaseIntermediateOutputPath=${WORK}/${CASE}/obj/" "-p:OutputPath=${WORK}/${CASE}/bin/"
     RESULT_VARIABLE result
     OUTPUT_VARIABLE output

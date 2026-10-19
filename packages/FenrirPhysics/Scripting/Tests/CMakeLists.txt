@@ -38,3 +38,25 @@ add_dependencies(FenrirPhysicsScriptingTests FenrirPhysicsScriptFixture)
 add_test(NAME FenrirPhysicsScripting COMMAND FenrirPhysicsScriptingTests --order decl)
 set_tests_properties(FenrirPhysicsScripting PROPERTIES TIMEOUT 300 ENVIRONMENT
     "FENRIR_TEST_PHYSICS_FIXTURE=${fenrir_physics_fixture_dir}/Fenrir.PhysicsScriptFixture.dll")
+
+# What the compiler must refuse in a script using the Fenrir.Physics contract: each case is one small C# file built
+# against the SDK and the contract, checked by FenrirScripting's ExpectCompile. The control must compile, so a failure
+# below is the rule and not a broken setup. Build everything before running these.
+set(fenrir_physics_compile_work "${CMAKE_CURRENT_BINARY_DIR}/compile-fail")
+function(fenrir_physics_expect_compile case expect)
+    add_test(NAME "PhysicsCompile-${case}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DDOTNET=${IRIS_DOTNET_EXECUTABLE}"
+            "-DPROJECT=${CMAKE_CURRENT_SOURCE_DIR}/CompileFail/CompileFail.csproj"
+            "-DSDK=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+            "-DPROPERTY=FenrirPhysicsContractDir=${FENRIR_PHYSICS_CONTRACT_DIR}/"
+            "-DCASE=${case}"
+            "-DWORK=${fenrir_physics_compile_work}"
+            "-DEXPECT=${expect}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/cmake/ExpectCompile.cmake")
+    set_tests_properties("PhysicsCompile-${case}" PROPERTIES TIMEOUT 120)
+endfunction()
+# A character's state is read through Ref<CharacterBody>, beside the Velocity it writes, but never written.
+fenrir_physics_expect_compile(CharacterStateRead OK)
+fenrir_physics_expect_compile(CharacterStateWrite CS8331)
+fenrir_physics_expect_compile(CharacterStateFieldWrite CS0191)
