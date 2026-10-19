@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
+option(FENRIR_BUILD_EXAMPLES "Build the DemoApp (needs its third-party libraries in examples/DemoApp/libs, which are not submodules)" ON)
 
 # One CTest run for every package that has tests.
 if(FENRIR_BUILD_TESTS)
@@ -62,4 +63,6 @@ if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)
 endif()
 
-add_subdirectory(examples)
+if(FENRIR_BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
