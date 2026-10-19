@@ -2,6 +2,8 @@
 
 #include "FenrirMath/Math.hpp"
 
+#include <cstring>
+
 namespace Fenrir
 {
     struct Transform

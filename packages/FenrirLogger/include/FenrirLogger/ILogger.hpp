@@ -1,6 +1,7 @@
 #pragma once
 
 #include <format>
+#include <memory>
 #include <string_view>
 
 namespace Fenrir
