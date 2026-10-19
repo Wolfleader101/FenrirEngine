@@ -53,8 +53,8 @@ namespace
         // A hinge turns about its frame's X axis: here the world's Z.
         const Math::Quat alongZ = Math::AngleAxis(std::numbers::pi_v<float> / 2.0f, Math::Vec3(0.0f, 1.0f, 0.0f));
         const JointFrames frames = FrameFromWorld(plank, Entity(), JointFrame{Math::Vec3(0.0f, 0.6f, 0.0f), alongZ});
-        plank.AddComponent<Joint>(
-            Joint{.bodyA = plank, .frameA = frames.frameA, .frameB = frames.frameB, .kind = HingeJoint{}});
+        plank.AddComponent<Joint>(Joint{
+            .bodyA = plank, .bodyB = Entity(), .frameA = frames.frameA, .frameB = frames.frameB, .kind = HingeJoint{}});
         return plank;
     }
 
@@ -185,6 +185,7 @@ TEST_CASE("A character landing on a floating box with mass 0 does not push it do
         INFO("tick " << t << ": box velocity.y " << box.GetComponent<RigidBody>().linearVelocity.y);
         REQUIRE(box.GetComponent<RigidBody>().linearVelocity.y > -1.0e-3f);
     }
+    INFO("the character landed on the box");
     REQUIRE(landed);
 }
 

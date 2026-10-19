@@ -29,6 +29,13 @@
 //
 // T teleports the character to just above the start by writing its Transform's position, and the autopilot does so at
 // the end of each route. 2 toggles its interpolation, which a 60 Hz display with vsync barely shows.
+//
+// Other bodies: to the east, boxes of 1, 20 and 100 kg to walk into (the 1 kg one keeps pace, the 20 kg one on
+// slippery feet speeds up slowly, the 100 kg one does not move), each named with its mass and speed; to the west, a
+// seesaw hinged at its middle that the character's weight tips, named with its angle; to the south, a kinematic paddle
+// sweeping a lane that shoves the character at its own speed, which 3 pauses. B throws a ball at the character, which
+// bounces off without moving it, and H drops a 1 kg box on its head, which it does not carry. The autopilot resets the
+// boxes each time round.
 
 #ifdef FENRIR_PHYSICS
 
@@ -55,6 +62,7 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "Material.hpp"
 #include "ModelLibrary.hpp"
@@ -123,7 +131,9 @@ class CharacterScene
                             "WASD or the arrows walk (relative to the camera), Shift runs, Space jumps, Q and E "
                             "turn the camera, C frees the camera and snaps it back, X toggles crouch, G scales the "
                             "character by 1.5 and back. A wall to the south-east, a low ceiling to the south-west, "
-                            "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west. T "
+                            "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west. Boxes "
+                            "of 1, 20 and 100 kg to the east, a seesaw to the west, a paddle's lane to the south (3 "
+                            "pauses it). B throws a ball at the character, H drops a box on its head. T "
                             "teleports to the start, 2 toggles interpolation. L "
                             "logs the state, P walks the route by itself. F5 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
@@ -131,7 +141,7 @@ class CharacterScene
         scene.smokeKeys.insert(scene.smokeKeys.end(), 25, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
         for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X,
-                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_2})
+                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_B, GLFW_KEY_H})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -153,6 +163,9 @@ class CharacterScene
         BuildLowCeiling();
         BuildCrouchTunnel();
         BuildCrouchJumpLedge();
+        BuildPushBoxes();
+        BuildSeesaw();
+        BuildPaddleLane();
         MakeCharacter();
 
         m_camera = m_entities->CreateEntity();
@@ -200,6 +213,7 @@ class CharacterScene
         }
         const float dt = static_cast<float>(app.GetTime().tickRate);
         ++m_tick;
+        MovePaddle(dt);
         Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
         NoteGroundChange(app, body.state.ground);
         // A crouch-jump crouches as soon as the jump has left the ground: the feet tuck up 0.6 m.
@@ -284,6 +298,19 @@ class CharacterScene
             bool& interpolate = m_character.GetComponent<Fenrir::CharacterBody>().interpolate;
             interpolate = !interpolate;
             app.Logger()->Info(interpolate ? "2: interpolation on" : "2: interpolation off");
+        }
+        else if (key == GLFW_KEY_3)
+        {
+            m_paused = !m_paused;
+            app.Logger()->Info(m_paused ? "3: paddle paused" : "3: paddle sweeping");
+        }
+        else if (key == GLFW_KEY_B)
+        {
+            ThrowBall(app);
+        }
+        else if (key == GLFW_KEY_H)
+        {
+            DropBoxOnHead(app);
         }
         else if (key == GLFW_KEY_P)
         {
@@ -445,12 +472,175 @@ class CharacterScene
                 Waypoint{.at = Fenrir::Math::Vec3(-8.0f, 0.0f, -9.0f)}, Waypoint{.at = start, .wait = 0.5f}};
     }
 
+    // East: boxes of 1, 20 and 100 kg, a metre on a side, each in its own row. The 20 kg one has slippery feet
+    // (friction 0.2 against the ground's 0.5), so the push's 100 N beats its friction and it speeds up slowly; the
+    // 100 kg one's friction is far more than 100 N, so it does not move.
+    void BuildPushBoxes()
+    {
+        const std::array<float, 3> masses = {1.0f, 20.0f, 100.0f};
+        for (std::size_t i = 0; i < m_pushBoxes.size(); ++i)
+        {
+            Fenrir::Entity box = Box("Push box", PushBoxHome(i), Fenrir::Math::Vec3(1.0f),
+                                     Fenrir::Math::Vec3(0.8f, 0.6f - 0.2f * static_cast<float>(i), 0.35f));
+            box.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = masses[i]});
+            box.AddComponent<Fenrir::Collider>();
+            if (masses[i] == 20.0f)
+            {
+                box.AddComponent<Fenrir::PhysicsMaterial>(Fenrir::PhysicsMaterial{.friction = 0.2f});
+            }
+            m_pushBoxes[i] = box;
+            m_pushMasses[i] = masses[i];
+        }
+    }
+
+    static Fenrir::Math::Vec3 PushBoxHome(std::size_t i)
+    {
+        return Fenrir::Math::Vec3(6.0f, 0.5f, -1.5f - 2.0f * static_cast<float>(i));
+    }
+
+    // Puts the boxes back where they started, at rest.
+    void ResetPushBoxes()
+    {
+        for (std::size_t i = 0; i < m_pushBoxes.size(); ++i)
+        {
+            m_pushBoxes[i].GetComponent<Fenrir::Transform>().pos = PushBoxHome(i);
+            m_pushBoxes[i].GetComponent<Fenrir::Transform>().rot = identity;
+            Fenrir::RigidBody& body = m_pushBoxes[i].GetComponent<Fenrir::RigidBody>();
+            body.linearVelocity = Fenrir::Math::Vec3(0.0f);
+            body.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        }
+    }
+
+    // Walks into each box in turn for a few seconds.
+    static std::vector<Waypoint> PushBoxesLeg()
+    {
+        std::vector<Waypoint> leg;
+        for (std::size_t i = 0; i < 3; ++i)
+        {
+            const float z = PushBoxHome(i).z;
+            leg.push_back(Waypoint{.at = Fenrir::Math::Vec3(4.0f, 0.0f, z)});
+            leg.push_back(Waypoint{.at = Fenrir::Math::Vec3(12.0f, 0.0f, z), .giveUp = 3.0f});
+            leg.push_back(Waypoint{.at = Fenrir::Math::Vec3(4.0f, 0.0f, z)});
+        }
+        leg.push_back(Waypoint{.at = start, .wait = 0.5f});
+        return leg;
+    }
+
+    // West: a 4 m plank, 20 kg, hinged at its middle 0.6 m up to the world about Z, lying with its east end on the
+    // ground. Walked up from the east, it tips west once the character is past the hinge.
+    void BuildSeesaw()
+    {
+        const Fenrir::Math::Vec3 hinge(-6.0f, 0.6f, 0.0f);
+        // Its east end down: 0.55 m over 2 m.
+        const float tilt = std::asin(0.55f / 2.0f);
+        m_seesaw = Box("Seesaw", hinge, Fenrir::Math::Vec3(4.0f, 0.1f, 1.2f), Fenrir::Math::Vec3(0.7f, 0.5f, 0.3f));
+        m_seesaw.GetComponent<Fenrir::Transform>().rot =
+            Fenrir::Math::AngleAxis(-tilt, Fenrir::Math::Vec3(0.0f, 0.0f, 1.0f));
+        m_seesaw.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = 20.0f});
+        m_seesaw.AddComponent<Fenrir::Collider>();
+        // A hinge turns about its frame's X axis: here the world's Z.
+        const Fenrir::Math::Quat alongZ =
+            Fenrir::Math::AngleAxis(std::numbers::pi_v<float> / 2.0f, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+        const Fenrir::JointFrames frames =
+            Fenrir::FrameFromWorld(m_seesaw, Fenrir::Entity(), Fenrir::JointFrame{hinge, alongZ});
+        m_seesaw.AddComponent<Fenrir::Joint>(Fenrir::Joint{.bodyA = m_seesaw,
+                                                           .bodyB = Fenrir::Entity(),
+                                                           .frameA = frames.frameA,
+                                                           .frameB = frames.frameB,
+                                                           .kind = Fenrir::HingeJoint{}});
+        // Its stand, a look only, under the hinge.
+        Box("Seesaw stand", Fenrir::Math::Vec3(hinge.x, 0.25f, 0.0f), Fenrir::Math::Vec3(0.2f, 0.5f, 1.4f),
+            Fenrir::Math::Vec3(0.4f));
+    }
+
+    // Walks up the low end past the hinge, tipping it, and back down the other way.
+    static std::vector<Waypoint> SeesawLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(-2.5f, 0.0f, 0.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(-7.5f, 0.0f, 0.0f), .wait = 1.5f, .giveUp = 4.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(-2.5f, 0.0f, 0.0f), .wait = 1.0f, .giveUp = 4.0f},
+                Waypoint{.at = start, .wait = 0.5f}};
+    }
+
+    // South: a lane past the wall and the low ceiling, swept east and west by a kinematic paddle.
+    void BuildPaddleLane()
+    {
+        Box("Paddle lane", Fenrir::Math::Vec3(0.0f, 0.005f, paddleLaneZ), Fenrir::Math::Vec3(10.0f, 0.01f, 2.4f),
+            Fenrir::Math::Vec3(0.6f, 0.6f, 0.65f));
+        m_paddle = Box("Paddle", Fenrir::Math::Vec3(-paddleReach, 0.6f, paddleLaneZ),
+                       Fenrir::Math::Vec3(0.3f, 1.2f, 2.0f), Fenrir::Math::Vec3(0.3f, 0.45f, 0.75f));
+        m_paddle.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
+        m_paddle.AddComponent<Fenrir::Collider>();
+    }
+
+    // Game code moves a kinematic body by writing its Transform in Tick: back and forth across the lane.
+    void MovePaddle(float dt)
+    {
+        if (m_paused)
+        {
+            return;
+        }
+        Fenrir::Math::Vec3& at = m_paddle.GetComponent<Fenrir::Transform>().pos;
+        at.x += m_paddleHeading * paddleSpeed * dt;
+        if (std::abs(at.x) >= paddleReach)
+        {
+            at.x = std::clamp(at.x, -paddleReach, paddleReach);
+            m_paddleHeading = -m_paddleHeading;
+        }
+    }
+
+    // Stands in the lane while the paddle shoves it (walking to it for 4 s at most, so it does not walk back against
+    // the paddle once shoved), then walks back.
+    static std::vector<Waypoint> PaddleLaneLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, paddleLaneZ), .wait = 6.0f, .giveUp = 4.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 1.5f)}, Waypoint{.at = start, .wait = 0.5f}};
+    }
+
+    // B: a ball thrown at the character from 4 m ahead of it, the way the camera looks, at chest height.
+    void ThrowBall(Fenrir::App& app)
+    {
+        if (!m_ball.IsValid())
+        {
+            m_ball =
+                Box("Ball", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.3f), Fenrir::Math::Vec3(0.9f, 0.2f, 0.2f));
+            m_ball.AddComponent<Fenrir::RigidBody>();
+            m_ball.AddComponent<Fenrir::Collider>(Fenrir::Collider{Fenrir::SphereShape{.radius = 0.5f}});
+            m_ball.AddComponent<Fenrir::PhysicsMaterial>(Fenrir::PhysicsMaterial{.restitution = 0.6f});
+        }
+        const float yaw = m_followCamera.Yaw() * std::numbers::pi_v<float> / 180.0f;
+        const Fenrir::Math::Vec3 ahead(std::cos(yaw), 0.0f, std::sin(yaw));
+        m_ball.GetComponent<Fenrir::Transform>().pos =
+            Fenrir::GetWorldTransform(m_character).pos + ahead * 4.0f + Fenrir::Math::Vec3(0.0f, 0.3f, 0.0f);
+        // 10 m/s at it, and a little up against the drop on the way.
+        m_ball.GetComponent<Fenrir::RigidBody>().linearVelocity = -ahead * 10.0f + Fenrir::Math::Vec3(0.0f, 2.0f, 0.0f);
+        app.Logger()->Info("B: ball thrown");
+    }
+
+    // H: a 1 kg box dropped onto the character's head.
+    void DropBoxOnHead(Fenrir::App& app)
+    {
+        if (!m_headBox.IsValid())
+        {
+            m_headBox = Box("Head box", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.4f),
+                            Fenrir::Math::Vec3(0.3f, 0.75f, 0.4f));
+            m_headBox.AddComponent<Fenrir::RigidBody>();
+            m_headBox.AddComponent<Fenrir::Collider>();
+        }
+        m_headBox.GetComponent<Fenrir::Transform>().pos =
+            Fenrir::GetWorldTransform(m_character).pos + Fenrir::Math::Vec3(0.0f, 1.6f, 0.0f);
+        m_headBox.GetComponent<Fenrir::Transform>().rot = identity;
+        m_headBox.GetComponent<Fenrir::RigidBody>().linearVelocity = Fenrir::Math::Vec3(0.0f);
+        app.Logger()->Info("H: box dropped on the head");
+    }
+
     // The route: each piece's leg in turn, over and over, each time ending with a teleport to the start.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg : {WallLeg(), LowCeilingLeg(), CrouchTunnelLeg(), CrouchJumpLeg()})
+            for (const std::vector<Waypoint>& leg : {WallLeg(), LowCeilingLeg(), CrouchTunnelLeg(), CrouchJumpLeg(),
+                                                     PushBoxesLeg(), SeesawLeg(), PaddleLaneLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -491,6 +681,7 @@ class CharacterScene
             if (m_waypoint % route.size() == 0)
             {
                 TeleportToStart(app);
+                ResetPushBoxes();
             }
         }
         return Fenrir::Math::Vec3(0.0f);
@@ -552,6 +743,20 @@ class CharacterScene
         reading +=
             ", " + std::to_string(m_landings) + " landings, " + std::to_string(m_changes.size()) + " ground changes/s";
         m_character.GetComponent<Fenrir::Name>().Set(reading.c_str());
+
+        std::array<char, 64> text{};
+        for (std::size_t i = 0; i < m_pushBoxes.size(); ++i)
+        {
+            const Fenrir::Math::Vec3 v = m_pushBoxes[i].GetComponent<Fenrir::RigidBody>().linearVelocity;
+            std::snprintf(text.data(), text.size(), "Push box %.0f kg: %.2f m/s", static_cast<double>(m_pushMasses[i]),
+                          static_cast<double>(Fenrir::Math::Magnitude(Fenrir::Math::Vec3(v.x, 0.0f, v.z))));
+            m_pushBoxes[i].GetComponent<Fenrir::Name>().Set(text.data());
+        }
+        // The plank's turn about the hinge, positive with its west end down.
+        const Fenrir::Math::Vec3 along = Fenrir::GetWorldTransform(m_seesaw).rot * Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f);
+        std::snprintf(text.data(), text.size(), "Seesaw: %.1f deg",
+                      static_cast<double>(std::asin(along.y) * 180.0f / std::numbers::pi_v<float>));
+        m_seesaw.GetComponent<Fenrir::Name>().Set(text.data());
     }
 
     void LogState(Fenrir::App& app) const
@@ -604,6 +809,9 @@ class CharacterScene
     static constexpr Fenrir::CapsuleShape crouchedShape{.halfHeight = 0.2f, .radius = 0.3f};
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
     inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f);
+    static constexpr float paddleLaneZ = 11.0f;
+    static constexpr float paddleReach = 4.5f; // The paddle sweeps from x = -4.5 to 4.5.
+    static constexpr float paddleSpeed = 1.5f;
 
     const Model* m_cube;
     const Shader* m_flatShader;
@@ -611,6 +819,14 @@ class CharacterScene
     Fenrir::Entity m_character;
     Fenrir::Entity m_look;
     Fenrir::Entity m_camera;
+    std::array<Fenrir::Entity, 3> m_pushBoxes;
+    std::array<float, 3> m_pushMasses{};
+    Fenrir::Entity m_seesaw;
+    Fenrir::Entity m_paddle;
+    float m_paddleHeading = 1.0f;
+    bool m_paused = false;
+    Fenrir::Entity m_ball;
+    Fenrir::Entity m_headBox;
     CharacterCamera m_followCamera;
     std::set<int> m_held;
     bool m_jump = false;

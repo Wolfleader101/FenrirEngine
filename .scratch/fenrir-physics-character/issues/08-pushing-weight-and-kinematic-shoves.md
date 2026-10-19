@@ -11,9 +11,15 @@
 
 **Blocked by:** 03 (Character tracer bullet).
 
-**Status:** ready-for-agent
+**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-pushing-6d3dfb`). Where the build settled something the ticket left open:
 
-- [ ] Tests: a 1 kg box is pushed at pace; a 20 kg crate with friction 0.2 accelerates at about 3 m/s²; a 100 kg box with friction 0.5 does not move; `pushForce = 0` pushes nothing; no push is ever downward.
-- [ ] Tests: a seesaw tips under `mass`, and not with `mass = 0`; a ball thrown at a standing character bounces off without moving it.
-- [ ] Tests: a kinematic paddle shoves the character at its own speed, visible in the written-back `velocity`.
+- **Pushes are FenrirPhysics's, not Jolt's.** Jolt's `CharacterVirtual` pushes a body each time a contact is first hit in a collision iteration, and again in its stair and step-forward test moves, so a move starting a push applied two or three times its max strength (a 20 kg crate on friction 0.2 sped up at 13 m/s² for its first tenth of a second, not 3). The character's listener turns Jolt's impulses off (`mCanReceiveImpulses = false`), and after `ExtendedUpdate` the backend's `Push` applies Jolt's own impulse (0.9 × the closing speed at the contact against the move's velocity, plus its penetration push-out, through the body's effective mass at the contact, the downward part cancelled) over the end-of-move contacts, capped by `pushForce × dt` per body over the whole move.
+- **Dynamic bodies never push:** the same listener sets `mCanPushCharacter = false` for dynamic bodies, so a ball moving into the character during its move is a still wall there too, not only in the step (before, a 10 m/s ball shoved a standing character 0.28 m). For ticket 07: this includes a dynamic ground body's velocity in the move's constraints, so riding a raft must come from the ground velocity added to the move, as the spec says.
+- **Kinematic shoves needed a fix to Jolt's solve:** a standing character's ground constraint, solved first, can leave a 1e-6 m/s trace of push-out upward; Jolt's velocity-reversal check then ends the solve before the kinematic paddle's constraint is reached, so the paddle shoved on alternate ticks (moved 0, then 3 m/s). The listener's `OnContactSolve` snaps a solved velocity within Jolt's own `IsNearZero(1e-8)` to zero; the shove is then exactly the paddle's speed every tick.
+- **Weight** is Jolt's: `mass` goes to `SetMass` each move, and the gravity passed to `ExtendedUpdate` is the world's (`PhysicsSystem::GetGravity`), used by Jolt only for that impulse. `CharacterMove` carries `pushForce` and `mass`.
+- **DemoApp:** in `CharacterScene.hpp`, `BuildPushBoxes` (east, rows at x = 6; 20 kg on friction 0.2, reset at each route wrap), `BuildSeesaw` (west, hinged at (-6, 0.6, 0), starting east end down), `BuildPaddleLane` (south, z = 11, kinematic, moved in `Tick` by `MovePaddle`), each with its leg; keys 3 (pauses the paddle; ticket 07 should pause its platforms on the same flag), B (`ThrowBall`) and H (`DropBoxOnHead`), added to the smoke keys. The smoke autopilot (25 s) does not reach the new legs; P walks them by hand. The ball's `ContactBegin` log is ticket 11's.
+
+- [x] Tests (`Tests/CharacterPushes.cpp`): a 1 kg box is pushed at pace; a 20 kg crate with friction 0.2 accelerates at about 3 m/s² from the start of the push; a 100 kg box with friction 0.5 does not move; `pushForce = 0` pushes nothing; a character landing on a floating box with `mass = 0` never pushes it down.
+- [x] Tests: a seesaw tips under `mass`, and not with `mass = 0`; a ball thrown at a standing character bounces off without moving it.
+- [x] Tests: a kinematic paddle shoves the character at its own speed, visible in the written-back `velocity`.
 - [ ] 1 and 20 kg boxes move and 100 kg does not; the seesaw tips; the paddle shoves; B's ball bounces off; H's box is left behind (checked by hand).
