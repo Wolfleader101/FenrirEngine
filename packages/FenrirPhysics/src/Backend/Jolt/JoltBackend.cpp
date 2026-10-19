@@ -695,6 +695,47 @@ namespace Fenrir::Backend
             std::mutex m_mutex;
             std::vector<Found> m_found;
         };
+
+        // How a character's move treats what it touches: a dynamic body never pushes it, so a ball thrown at it, moving
+        // into it at the move, is a wall that does not move. Kinematic bodies still do: the move meets them as surfaces
+        // moving at their velocity. Jolt pushes nothing itself: it would push a body again at each of the move's
+        // collision iterations and stair tests, so a move could push with several times its force (Push does it once).
+        class CharacterListener final : public JPH::CharacterContactListener
+        {
+          public:
+            void OnContactAdded(const JPH::CharacterVirtual*, const JPH::CharacterContact& contact,
+                                JPH::CharacterContactSettings& settings) override
+            {
+                Decide(contact, settings);
+            }
+
+            void OnContactPersisted(const JPH::CharacterVirtual*, const JPH::CharacterContact& contact,
+                                    JPH::CharacterContactSettings& settings) override
+            {
+                Decide(contact, settings);
+            }
+
+            // A standing character's falling speed, taken by the ground, can leave a trace of the ground's push-out
+            // pointing back up: Jolt then reads the velocity as reversed and ends the move, before a kinematic body
+            // moving into the character has its turn. Jolt's own tolerance for no velocity calls it none.
+            void OnContactSolve(const JPH::CharacterVirtual*, const JPH::BodyID&, const JPH::SubShapeID&, JPH::RVec3Arg,
+                                JPH::Vec3Arg, JPH::Vec3Arg, const JPH::PhysicsMaterial*, JPH::Vec3Arg,
+                                JPH::Vec3& velocity) override
+            {
+                if (velocity.IsNearZero(1.0e-8f))
+                {
+                    velocity = JPH::Vec3::sZero();
+                }
+            }
+
+          private:
+            static void Decide(const JPH::CharacterContact& contact, JPH::CharacterContactSettings& settings)
+            {
+                settings.mCanPushCharacter = contact.mMotionTypeB != JPH::EMotionType::Dynamic;
+                settings.mCanReceiveImpulses = false;
+            }
+        };
+
         // Runs a step's jobs on the App's worker threads. The stepping thread is not one of them: it waits on a
         // barrier, which runs the barrier's jobs itself while it waits (JobSystemWithBarrier). A job already run that
         // way does nothing when a worker reaches it, so the step finishes even with every worker busy elsewhere, or if
@@ -1219,6 +1260,7 @@ namespace Fenrir::Backend
         };
         std::vector<CharacterSlot> characters;
         std::vector<std::uint32_t> freeCharacters;
+        CharacterListener characterListener;
 
         // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
         // excluded pair and taking it away when it leaves its last. Never during a step.
@@ -1718,6 +1760,56 @@ namespace Fenrir::Backend
             return into < 0.0f ? velocity - into * normal : velocity;
         }
 
+        // Pushes the dynamic bodies a character's move hit, as Jolt's CharacterVirtual would: an impulse along each
+        // contact's normal aiming at 0.9 × the closing speed at the contact (and pushing a body out of the shape it is
+        // in), never downward, but with `force × dt` at most for each body over the whole move.
+        void Push(JPH::PhysicsSystem& system, const JPH::CharacterVirtual& character, JPH::Vec3Arg velocity,
+                  float force, float dt)
+        {
+            constexpr float damping = 0.9f;
+            constexpr float penetrationResolution = 0.4f;
+            const JPH::Vec3 up = JPH::Vec3::sAxisY();
+            // What each body pushed so far may still take, in order of first hit.
+            std::vector<std::pair<JPH::BodyID, float>> left;
+            for (const JPH::CharacterContact& contact : character.GetActiveContacts())
+            {
+                if (!contact.mHadCollision || contact.mWasDiscarded || contact.mIsSensorB ||
+                    contact.mMotionTypeB != JPH::EMotionType::Dynamic)
+                {
+                    continue;
+                }
+                const float closing = (velocity - contact.mLinearVelocity).Dot(contact.mContactNormal);
+                const float wanted =
+                    -closing * damping - std::min(contact.mDistance, 0.0f) * penetrationResolution / dt;
+                if (wanted <= 0.0f)
+                {
+                    continue;
+                }
+                auto budget = std::find_if(left.begin(), left.end(),
+                                           [&](const auto& each) { return each.first == contact.mBodyB; });
+                if (budget == left.end())
+                {
+                    budget = left.insert(left.end(), {contact.mBodyB, force * dt});
+                }
+                JPH::BodyLockWrite lock(system.GetBodyLockInterfaceNoLock(), contact.mBodyB);
+                if (!lock.SucceededAndIsInBroadPhase() || budget->second <= 0.0f)
+                {
+                    continue;
+                }
+                const JPH::Body& body = lock.GetBody();
+                // The body's mass as the contact feels it along the normal, turning included.
+                const JPH::Vec3 arm = JPH::Vec3(contact.mPosition - body.GetCenterOfMassPosition());
+                const JPH::Vec3 jacobian = arm.Cross(contact.mContactNormal);
+                const float inverseMass = body.GetInverseInertia().Multiply3x3(jacobian).Dot(jacobian) +
+                                          body.GetMotionProperties()->GetInverseMass();
+                const float impulse = std::min(wanted / inverseMass, budget->second);
+                budget->second -= impulse;
+                JPH::Vec3 pushed = -impulse * contact.mContactNormal;
+                pushed -= std::min(pushed.Dot(up), 0.0f) * up;
+                system.GetBodyInterfaceNoLock().AddImpulse(contact.mBodyB, pushed, contact.mPosition);
+            }
+        }
+
         // A character moves against what its body collides with, but through triggers, which see it through its body.
         class CharacterBroadPhaseFilter final : public JPH::BroadPhaseLayerFilter
         {
@@ -1766,6 +1858,7 @@ namespace Fenrir::Backend
                 ids[i] = CharacterId{};
                 continue;
             }
+            character->SetListener(&m_impl->characterListener);
             const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, settings->mInnerBodyLayer);
             const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, settings->mInnerBodyLayer);
             character->RefreshContacts(broadPhase, layer, {}, {}, m_impl->tempAllocator);
@@ -1811,6 +1904,8 @@ namespace Fenrir::Backend
         const JPH::Vec3 up = JPH::Vec3::sAxisY();
         const JPH::Vec3 velocity = ToJolt(move.velocity);
         character.SetMaxSlopeAngle(move.maxSlope);
+        // Its mass presses on the ground under the gravity passed below, which the move uses for nothing else.
+        character.SetMass(move.mass);
 
         // Riding: the last move ended on walkable ground, whose velocity is added to this move and never to game
         // code's. Read now, after this tick's MoveKinematic: Jolt's cached value is a tick old.
@@ -1822,7 +1917,9 @@ namespace Fenrir::Backend
             ground = character.GetGroundVelocity();
         }
         JPH::Vec3 carried = ToJolt(move.carried);
-        character.SetLinearVelocity(velocity + carried + ground);
+        // What the character moves at, and so pushes at.
+        const JPH::Vec3 moving = velocity + carried + ground;
+        character.SetLinearVelocity(moving);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update;
         update.mStickToFloorStepDown = -move.floorSnap * up;
@@ -1832,6 +1929,7 @@ namespace Fenrir::Backend
         const JPH::RVec3 start = character.GetPosition();
         character.ExtendedUpdate(dt, m_impl->system.GetGravity(), update, broadPhase, layer, {}, {},
                                  m_impl->tempAllocator);
+        Push(m_impl->system, character, moving, move.pushForce, dt);
 
         CharacterMoved moved;
         moved.position = CentreOf(character);
@@ -1864,10 +1962,16 @@ namespace Fenrir::Backend
         //    the rest slides the character downhill;
         //  - a wall or a ceiling takes the part going into it, along its normal;
         //  - all of it in the frame of the ground it rode, so a descending lift's own speed is never taken for falling.
-        // Carried velocity is trimmed the same way, first: what still goes into a surface after it is game code's.
+        // Carried velocity is trimmed first, and only loses its part going into a surface, down to none: it never takes
+        // on a surface's own push, so a kinematic body shoving the character shows in `velocity`. What still goes into
+        // a surface after it is game code's.
         JPH::Vec3 kept = velocity;
         const auto into = [&](JPH::Vec3Arg part, JPH::Vec3Arg normal, JPH::Vec3Arg surface) {
-            carried = Trim(carried, normal, surface);
+            const float along = carried.Dot(normal);
+            if ((carried - surface).Dot(normal) < 0.0f)
+            {
+                carried += (std::min(surface.Dot(normal), std::max(along, 0.0f)) - along) * normal;
+            }
             return Trim(part + carried, normal, surface) - carried;
         };
         const auto touch = [&](JPH::Vec3Arg contactNormal, JPH::Vec3Arg surfaceNormal, JPH::Vec3Arg surfaceVelocity) {

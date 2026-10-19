@@ -85,7 +85,7 @@ namespace Fenrir::Backend
 
     /**
      * @brief One tick's move of a character: its velocity, the carried velocity its last move left it, and the walking
-     * rules of its CharacterBody.
+     * and pushing rules of its CharacterBody.
      */
     struct CharacterMove
     {
@@ -94,6 +94,10 @@ namespace Fenrir::Backend
         float maxSlope = 0.0f;
         float stepHeight = 0.0f;
         float floorSnap = 0.0f;
+        /** @brief Newtons: the most force a push of a dynamic body applies; 0 pushes nothing. */
+        float pushForce = 0.0f;
+        /** @brief Kilograms: the weight pressed on the ground, under the world's gravity; 0 presses nothing. */
+        float mass = 0.0f;
         bool stopOnSlope = true;
     };
 
@@ -433,6 +437,11 @@ namespace Fenrir::Backend
          * the bodies it touches are where the last step left them; its body is placed where it ends, at rest. If its
          * last move (or teleport) left it on walkable ground, it rides it: the ground's velocity now (after this
          * tick's MoveKinematic) is added to the move, and its velocity is trimmed in the ground's frame.
+         *
+         * Dynamic bodies it hits are given an impulse towards its speed at the contact, capped by `pushForce` and
+         * never downward, and its ground body, if dynamic, is pressed by `mass` under the world's gravity at the
+         * ground point: both act in the next step. A dynamic body never pushes it; a kinematic one moving into it does,
+         * at that body's speed.
          */
         CharacterMoved MoveCharacter(CharacterId id, const CharacterMove& move, float dt);
 

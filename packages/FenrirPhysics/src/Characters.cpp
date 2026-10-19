@@ -185,6 +185,8 @@ namespace Fenrir
                                                                           .maxSlope = body.maxSlope,
                                                                           .stepHeight = body.stepHeight,
                                                                           .floorSnap = body.floorSnap,
+                                                                          .pushForce = body.pushForce,
+                                                                          .mass = body.mass,
                                                                           .stopOnSlope = body.stopOnSlope},
                                                    dt);
         }
