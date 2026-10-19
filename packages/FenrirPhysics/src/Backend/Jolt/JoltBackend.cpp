@@ -700,9 +700,42 @@ namespace Fenrir::Backend
         // into it at the move, is a wall that does not move. Kinematic bodies still do: the move meets them as surfaces
         // moving at their velocity. Jolt pushes nothing itself: it would push a body again at each of the move's
         // collision iterations and stair tests, so a move could push with several times its force (Push does it once).
+        //
+        // Another character's body, placed after each of its moves at rest, is met moving at that character's last
+        // move's velocity, so a character standing on it rides it. It pushes only from beneath: met beside or above, a
+        // character pushed out of it would push back on its next move, and the two would shove each other along. A
+        // character standing on this one is not met at all: met as a ceiling at rest it would hold this one down, where
+        // a jump lifts a rider as it lifts a box on its head.
         class CharacterListener final : public JPH::CharacterContactListener
         {
           public:
+            // Each character's body, by its BodyID, with the character and its last move's velocity. Written only
+            // between steps, from the thread that moves characters.
+            struct Other
+            {
+                const JPH::CharacterVirtual* character;
+                JPH::Vec3 moved;
+            };
+            std::unordered_map<JPH::uint32, Other> others;
+
+            void OnAdjustBodyVelocity(const JPH::CharacterVirtual*, const JPH::Body& body, JPH::Vec3& linear,
+                                      JPH::Vec3& angular) override
+            {
+                if (const auto it = others.find(body.GetID().GetIndexAndSequenceNumber()); it != others.end())
+                {
+                    linear = it->second.moved;
+                    angular = JPH::Vec3::sZero();
+                }
+            }
+
+            bool OnContactValidate(const JPH::CharacterVirtual* character,
+                                   const JPH::CharacterContact& contact) override
+            {
+                const auto it = others.find(contact.mBodyB.GetIndexAndSequenceNumber());
+                return it == others.end() || !it->second.character->IsSupported() ||
+                       it->second.character->GetGroundBodyID() != character->GetInnerBodyID();
+            }
+
             void OnContactAdded(const JPH::CharacterVirtual*, const JPH::CharacterContact& contact,
                                 JPH::CharacterContactSettings& settings) override
             {
@@ -729,9 +762,13 @@ namespace Fenrir::Backend
             }
 
           private:
-            static void Decide(const JPH::CharacterContact& contact, JPH::CharacterContactSettings& settings)
+            void Decide(const JPH::CharacterContact& contact, JPH::CharacterContactSettings& settings) const
             {
-                settings.mCanPushCharacter = contact.mMotionTypeB != JPH::EMotionType::Dynamic;
+                // Within this of horizontal, a contact's normal faces neither up nor down.
+                constexpr float level = 1.0e-3f;
+                const bool character = others.contains(contact.mBodyB.GetIndexAndSequenceNumber());
+                settings.mCanPushCharacter = contact.mMotionTypeB != JPH::EMotionType::Dynamic &&
+                                             (!character || contact.mContactNormal.GetY() > level);
                 settings.mCanReceiveImpulses = false;
             }
         };
@@ -1969,6 +2006,11 @@ namespace Fenrir::Backend
                 continue;
             }
             character->SetListener(&m_impl->characterListener);
+            const JPH::BodyID inner = character->GetInnerBodyID();
+            m_impl->Bodies().SetFriction(inner, desc.material.friction);
+            m_impl->Bodies().SetRestitution(inner, desc.material.restitution);
+            m_impl->characterListener.others.emplace(inner.GetIndexAndSequenceNumber(),
+                                                     CharacterListener::Other{character.GetPtr(), JPH::Vec3::sZero()});
             const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, settings->mInnerBodyLayer);
             const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, settings->mInnerBodyLayer);
             character->RefreshContacts(broadPhase, layer, {}, {}, m_impl->tempAllocator);
@@ -1998,8 +2040,9 @@ namespace Fenrir::Backend
                 continue;
             }
             Impl::CharacterSlot& slot = m_impl->characters[id.value];
-            const JPH::AABox bounds =
-                m_impl->Bounds(BodyId{slot.character->GetInnerBodyID().GetIndexAndSequenceNumber()});
+            const JPH::uint32 inner = slot.character->GetInnerBodyID().GetIndexAndSequenceNumber();
+            const JPH::AABox bounds = m_impl->Bounds(BodyId{inner});
+            m_impl->characterListener.others.erase(inner);
             slot.character = nullptr;
             m_impl->objectLayers.Release(slot.layer);
             m_impl->freeCharacters.push_back(id.value);
@@ -2049,7 +2092,10 @@ namespace Fenrir::Backend
 
         CharacterMoved moved;
         moved.position = CentreOf(character);
-        moved.movedVelocity = FromJolt(JPH::Vec3(character.GetPosition() - start) / dt);
+        const JPH::Vec3 displaced = JPH::Vec3(character.GetPosition() - start) / dt;
+        moved.movedVelocity = FromJolt(displaced);
+        // What the other characters' moves see its body moving at, until its next move.
+        m_impl->characterListener.others.at(character.GetInnerBodyID().GetIndexAndSequenceNumber()).moved = displaced;
         const Ground after = GroundOf(m_impl->system, character);
         moved.ground = after.state;
         if (after.contact != nullptr)
@@ -2154,6 +2200,21 @@ namespace Fenrir::Backend
         const CharacterBroadPhaseFilter broadPhase(m_impl->objectVsBroadPhase, slot.layer);
         const JPH::DefaultObjectLayerFilter layer(m_impl->objectPairs, slot.layer);
         character.RefreshContacts(broadPhase, layer, {}, {}, m_impl->tempAllocator);
+    }
+
+    void World::SetCharacterMaterial(CharacterId id, const PhysicsMaterial& material)
+    {
+        SetMaterial(BodyId{m_impl->characters[id.value].character->GetInnerBodyID().GetIndexAndSequenceNumber()},
+                    material);
+    }
+
+    void World::SetCharacterFilter(CharacterId id, const CollisionFilter& filter)
+    {
+        Impl::CharacterSlot& slot = m_impl->characters[id.value];
+        const BodyId inner{slot.character->GetInnerBodyID().GetIndexAndSequenceNumber()};
+        SetFilter(inner, filter);
+        // Its moves are filtered through its body's layer.
+        slot.layer = m_impl->Bodies().GetObjectLayer(ToJolt(inner));
     }
 
     void World::TurnCharacter(CharacterId id, const Math::Quat& rotation)

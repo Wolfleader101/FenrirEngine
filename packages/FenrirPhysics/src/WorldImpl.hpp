@@ -214,9 +214,10 @@ namespace Fenrir
         /** @brief Warns once about each CharacterBody that has gone inactive, then makes, in one batch in entity order,
          * the backend character of each enabled one that can have one and has none. */
         void MakeCharacters();
-        /** @brief Step 2, after the bodies' edits, in entity order: a character whose world position differs from
-         * physics's copy is teleported there (a moved parent included), and one whose world rotation alone differs is
-         * turned. Neither sweeps. */
+        /** @brief Step 2, after the bodies' edits, in entity order: its entity's PhysicsMaterial and CollisionFilter
+         * given to its body if they changed; a character whose world position differs from physics's copy is
+         * teleported there (a moved parent included), and one whose world rotation alone differs is turned. Neither
+         * sweeps. */
         void PushCharacterEdits();
         /** @brief Step 3b, before the step: applies each character's shape edit if it fits, then moves it by its
          * velocity over `dt` seconds, one at a time in entity order, keeping each move's result for WriteBack. */
@@ -355,6 +356,9 @@ namespace Fenrir
             Shown shown{};
             CollisionShape shape;
             Math::Vec3 scale = Math::Vec3(1.0f);
+            // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.
+            PhysicsMaterial material;
+            CollisionFilter filter;
             // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
             bool shapeBlocked = false;
         };

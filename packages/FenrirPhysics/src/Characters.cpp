@@ -47,6 +47,18 @@ namespace Fenrir
             return {};
         }
 
+        // A character's body is its entity's: the entity's PhysicsMaterial is what other bodies feel on it, and its
+        // CollisionFilter filters both the body and the character's moves.
+        PhysicsMaterial MaterialOf(const Entity& entity)
+        {
+            return entity.HasComponent<PhysicsMaterial>() ? entity.GetComponent<PhysicsMaterial>() : PhysicsMaterial{};
+        }
+
+        CollisionFilter FilterOf(const Entity& entity)
+        {
+            return entity.HasComponent<CollisionFilter>() ? entity.GetComponent<CollisionFilter>() : CollisionFilter{};
+        }
+
         // Whether the character body on `entity` should have a backend character now: enabled, and not inactive.
         bool ShouldBeCharacter(const Entity& entity, Backend::World& backend)
         {
@@ -125,12 +137,11 @@ namespace Fenrir
                 continue;
             }
             const Transform world = GetWorldTransform(entity);
-            const CollisionFilter filter =
-                entity.HasComponent<CollisionFilter>() ? entity.GetComponent<CollisionFilter>() : CollisionFilter{};
             entities.push_back(id);
             descs.push_back(Backend::CharacterDesc{.shape = entity.GetComponent<Collider>().shape,
                                                    .scale = world.scale,
-                                                   .filter = filter,
+                                                   .material = MaterialOf(entity),
+                                                   .filter = FilterOf(entity),
                                                    .position = world.pos,
                                                    .rotation = world.rot,
                                                    .entity = id});
@@ -146,7 +157,9 @@ namespace Fenrir
                                                      .moved = Backend::CharacterMoved{},
                                                      .world = GetWorldTransform(m_entities->GetEntity(entities[i])),
                                                      .shape = descs[i].shape,
-                                                     .scale = descs[i].scale});
+                                                     .scale = descs[i].scale,
+                                                     .material = descs[i].material,
+                                                     .filter = descs[i].filter});
             }
         }
     }
@@ -155,7 +168,21 @@ namespace Fenrir
     {
         for (auto& [id, record] : m_characters)
         {
-            const Transform world = GetWorldTransform(m_entities->GetEntity(id));
+            const Entity entity = m_entities->GetEntity(id);
+            const PhysicsMaterial material = MaterialOf(entity);
+            if (!Same(material, record.material))
+            {
+                m_backend.SetCharacterMaterial(record.id, material);
+                record.material = material;
+            }
+            const CollisionFilter filter = FilterOf(entity);
+            if (!Same(filter, record.filter))
+            {
+                m_backend.SetCharacterFilter(record.id, filter);
+                record.filter = filter;
+            }
+
+            const Transform world = GetWorldTransform(entity);
             if (!Same(world.pos, record.world.pos))
             {
                 // Its contacts and ground are found again where it now is, so this tick's move starts from there.

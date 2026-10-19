@@ -11,7 +11,9 @@
 
 **Blocked by:** 03 (Character tracer bullet).
 
-**Status:** resolved, but for the DemoApp hand check, which is the user's (built test-first on branch `claude/character-platforms-b6a6de`). Where the build settled something the ticket left open:
+**Status:** resolved
+
+Built test-first on branch `claude/character-platforms-b6a6de`; the user did the DemoApp hand check. Where the build settled something the ticket left open:
 
 - Riding and carrying are the backend's, in `MoveCharacter`: it rides when Jolt's own ground state, from the last move or a teleport's refresh, is on ground, calling `UpdateGroundVelocity` first. The carried velocity goes in through `CharacterMove::carried` and comes back in `CharacterMoved::carriedVelocity` as what the next move carries (none on walkable ground, the whole ground velocity ridden on leaving it, otherwise trimmed). The pipeline keeps it in `CharacterRecord::moved`, and a teleport clears it there. Disabling (ticket 06) drops the record, so re-enabling starts with none (tested).
 - The trim measures every contact in the frame of the ground ridden (surface velocity less the ground velocity added). Carried velocity is trimmed against each contact first, and game code's `velocity` takes what still goes into the surface, as the spike did.
@@ -22,4 +24,4 @@
 - [x] Tests: riding a lift up and down and a shuttle sideways, with `groundBody` naming it and no slipping; a jump off a lift rising at (1, 2, 0) m/s carries exactly that as `carriedVelocity`, none of it in `velocity`, cleared on landing.
 - [x] Tests: riding a dynamic raft; riding a rotating platform without turning, with `groundAngularVelocity` reported; a teleport clears carried velocity; steep ground is not ridden.
 - [x] Tests: standing on a descending lift never reads its speed as falling (`velocity.y` stays trimmed to 0).
-- [ ] Lift and shuttle ridden, a jump off the lift keeps `carriedVelocity` until landing, and the hover at the lift's turn shows as stated (checked by hand).
+- [x] Lift and shuttle ridden, a jump off the lift keeps `carriedVelocity` until landing, and the hover at the lift's turn shows as stated (checked by hand).
