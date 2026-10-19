@@ -238,7 +238,8 @@ namespace Fenrir
           m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
           m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
-          m_jointWatch(entities.Watch(ComponentType::Native<Joint>()))
+          m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
+          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
@@ -247,6 +248,8 @@ namespace Fenrir
         entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
         const ComponentType joints[] = {ComponentType::Native<Joint>()};
         entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
+        const ComponentType characters[] = {ComponentType::Native<CharacterBody>()};
+        entities.ForEachWith(characters, [this](std::uint32_t entity) { m_characterEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -261,6 +264,8 @@ namespace Fenrir
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
         SyncJoints(dt);
         ApplyPushes();
+        // 3b: before the step, so a character's pushes act in it and it moves against the bodies the step will move.
+        MoveCharacters(dt);
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
         MeasureJoints();
@@ -512,6 +517,8 @@ namespace Fenrir
         };
         track(m_rigidBodies, m_rigidBodyEntities, [](const Entity& e) { return e.HasComponent<RigidBody>(); });
         track(m_colliders, m_colliderEntities, [](const Entity& e) { return e.HasComponent<Collider>(); });
+        // Becoming or ceasing to be a character body changes whether the entity's collider is a body of its own.
+        track(m_characterWatch, m_characterEntities, [](const Entity& e) { return e.HasComponent<CharacterBody>(); });
         // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs, and which body it
         // is part of.
         for (const ComponentChange& change : m_triggers.Drain())
@@ -525,7 +532,10 @@ namespace Fenrir
         std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
         for (std::uint32_t collider : m_colliderEntities)
         {
-            assembly[BodyEntityOf(collider)].push_back(collider);
+            if (!IsCharacterCollider(collider))
+            {
+                assembly[BodyEntityOf(collider)].push_back(collider);
+            }
         }
 
         for (std::uint32_t rigidBody : m_rigidBodyEntities)
@@ -569,6 +579,8 @@ namespace Fenrir
             it = m_bodies.erase(it);
         }
         RemoveJointsOf(destroyed);
+        // Characters before the bodies' batch, and made after it, so their bodies come in a reproducible order.
+        DropCharacters(changed);
         m_backend.DestroyBodies(destroyed);
 
         std::vector<std::uint32_t> entities;
@@ -615,6 +627,7 @@ namespace Fenrir
         {
             m_bodies.at(entities[i]).id = ids[i];
         }
+        MakeCharacters();
     }
 
     void PhysicsWorld::Impl::PushEdits(float dt)
@@ -721,22 +734,31 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::WriteBack()
     {
-        // Parents before children: a body's local Transform is written against its parent's world transform, so a
-        // parent written after it would move it again.
-        std::vector<std::pair<int, std::uint32_t>> order;
+        // Parents before children: a body's or character's local Transform is written against its parent's world
+        // transform, so a parent written after it would move it again.
+        std::vector<std::tuple<int, std::uint32_t, bool>> order;
         for (const auto& [id, record] : m_bodies)
         {
             if (record.motion.motionType == MotionType::Dynamic && record.Active())
             {
-                order.emplace_back(DepthOf(m_entities->GetEntity(id)), id);
+                order.emplace_back(DepthOf(m_entities->GetEntity(id)), id, false);
             }
+        }
+        for (const auto& [id, record] : m_characters)
+        {
+            order.emplace_back(DepthOf(m_entities->GetEntity(id)), id, true);
         }
         std::ranges::sort(order);
 
-        for (const auto& [depth, id] : order)
+        for (const auto& [depth, id, isCharacter] : order)
         {
-            Record& record = m_bodies.at(id);
             Entity entity = m_entities->GetEntity(id);
+            if (isCharacter)
+            {
+                WriteBackCharacter(entity, m_characters.at(id).moved);
+                continue;
+            }
+            Record& record = m_bodies.at(id);
             const Backend::BodyState state = m_backend.GetState(record.id);
 
             Transform world = record.world;

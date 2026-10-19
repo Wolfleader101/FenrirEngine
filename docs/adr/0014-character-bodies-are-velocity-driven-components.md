@@ -20,7 +20,7 @@ struct CharacterBody
 - **One kind of character.** It is collide-and-slide, and other bodies, queries and triggers always see it as a kinematic body of its shape. Hits and events name its entity. Privately it is a Jolt `CharacterVirtual` with an inner kinematic body, which game code never sees (ADR-0010).
 - **Its shape is the entity's own `Collider`.** The entity's `PhysicsMaterial` and `CollisionFilter` apply to it as to any body.
   - There are no compound characters. A solid collider on a child entity (with no `RigidBody` of its own) is not part of the character: it gets no body, with one warning. A `Trigger` beneath a character works as it does beneath any body.
-  - The `Transform` sits at the collider's centre, as for every collider, and physics converts to Jolt's base-of-shape position privately.
+  - The `Transform` sits at the collider's centre, as for every collider. *Amended 2026-10-19:* there is no base-of-shape conversion: Jolt's character position can be the collider's centre, and a supporting-volume plane set from the shape decides which contacts can be ground (the character spike's lesson 5).
 - **Beside `RigidBody`, never with it.** An entity with both has an active `RigidBody` and an inactive character body.
   - A character body is also inactive with no `Collider`, or with a shape kind characters cannot use.
   - Inactive means: the component is kept, there is no backend character, one warning is logged, and the character comes back as soon as it is valid. While inactive, the character does not move, nothing sees it, and nothing is written back.
@@ -30,7 +30,7 @@ struct CharacterBody
 - **Pose.** Physics writes back only the position (through `SetWorldTransform`).
   - The shape takes the entity's full world rotation, like any collider. Turning the character, and keeping it upright, is game code's job.
   - Up is world +Y: slope and step rules are measured along it whatever the shape's rotation.
-  - Writing the `Transform` is a teleport: no sweep, contacts and ground state refreshed at once, `velocity` kept.
+  - Writing the `Transform`'s world position is a teleport: no sweep, contacts and ground state refreshed at once, `velocity` kept. *Amended 2026-10-19:* only a change of world position is a teleport. Writing only a rotation is applied without a sweep and is not a teleport, so turning a character every tick stays smooth (character spec, "Teleports").
 - **Parents.** A character body moves in world space, like a dynamic body. Its local `Transform` is written back against its parent's world transform, and moving the parent teleports it. It is never part of a parent `RigidBody`'s compound.
 - **Switching.** `enabled = false` makes the character inert and invisible without a structural change.
   - Every exposed setting is a live field edit.
