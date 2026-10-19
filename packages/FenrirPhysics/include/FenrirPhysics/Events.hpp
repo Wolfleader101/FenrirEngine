@@ -14,12 +14,16 @@ namespace Fenrir
      * enabled ContactEvents.
      *
      * A and B are ordered by entity id, `bodyA` first. A body falling asleep does not end a contact.
+     *
+     * A character is named as both body and collider. Its contacts with static and kinematic bodies and other
+     * characters are found by its moves, before the step; with dynamic bodies, also by its body in the step, so a ball
+     * that bounces off between two moves is still reported. Either way, one pair of entities makes one contact.
      */
     struct ContactBegin
     {
-        /** @brief The rigid body entity of A, the lower entity id. */
+        /** @brief The body entity (a rigid body or a character body) of A, the lower entity id. */
         Entity bodyA;
-        /** @brief The rigid body entity of B. */
+        /** @brief The body entity (a rigid body or a character body) of B. */
         Entity bodyB;
         /** @brief A's collider entity touching: `bodyA` itself, or one beneath it in a compound body. */
         Entity colliderA;
@@ -40,9 +44,9 @@ namespace Fenrir
      */
     struct ContactEnd
     {
-        /** @brief The rigid body entity of A, as in its ContactBegin. */
+        /** @brief The body entity (a rigid body or a character body) of A, as in its ContactBegin. */
         Entity bodyA;
-        /** @brief The rigid body entity of B, as in its ContactBegin. */
+        /** @brief The body entity (a rigid body or a character body) of B, as in its ContactBegin. */
         Entity bodyB;
         /** @brief A's collider entity, as in its ContactBegin. */
         Entity colliderA;
@@ -55,7 +59,7 @@ namespace Fenrir
     {
         /** @brief The trigger's collider entity. */
         Entity trigger;
-        /** @brief The rigid body entity of the collider that entered. */
+        /** @brief The body entity (a rigid body or a character body) of the collider that entered. */
         Entity otherBody;
         /** @brief The collider entity that entered. */
         Entity otherCollider;
@@ -69,7 +73,8 @@ namespace Fenrir
     {
         /** @brief The trigger's collider entity, as in its TriggerEnter. */
         Entity trigger;
-        /** @brief The rigid body entity of the collider that left, as in its TriggerEnter. */
+        /** @brief The body entity (a rigid body or a character body) of the collider that left, as in its TriggerEnter.
+         */
         Entity otherBody;
         /** @brief The collider entity that left, as in its TriggerEnter. */
         Entity otherCollider;

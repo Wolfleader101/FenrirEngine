@@ -10,6 +10,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Backend/Backend.hpp"
@@ -155,6 +156,10 @@ namespace Fenrir
             auto operator<=>(const ContactKey&) const = default;
         };
 
+        /** @brief A contact's key, A and B in entity order so the order does not depend on the backend's body ids, and
+         * the touch turned to match: its normal from A to B. */
+        [[nodiscard]] static std::pair<ContactKey, Backend::Touch> Oriented(const Backend::Touch& touch);
+
         // An overlap reported by a TriggerEnter and not yet exited.
         struct OverlapKey
         {
@@ -237,6 +242,9 @@ namespace Fenrir
         void WriteBack();
         void AdvancePoses();
         void SendEvents(App& app);
+        /** @brief Step 6, before the events are sorted: brings m_characterTouches up to date from each character's
+         * end-of-move contacts and its body's step contacts, adding the begins and ends of the pairs reported. */
+        void TrackCharacterContacts(std::vector<ContactBegin>& begins, std::vector<ContactEnd>& ends);
 
         // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
         void DrawDebugLines();
@@ -375,6 +383,9 @@ namespace Fenrir
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;
+        // The pairs with a character touching after the last step, whether reported or not, oriented as their key:
+        // touching while either the character's last move or its body's step finds them.
+        std::map<ContactKey, Backend::Touch> m_characterTouches;
         std::set<OverlapKey> m_reportedOverlaps;
 
         struct Push
