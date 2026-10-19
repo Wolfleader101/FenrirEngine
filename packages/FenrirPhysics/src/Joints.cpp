@@ -355,6 +355,11 @@ namespace Fenrir
             {
                 return std::string(name) + " is in another scene";
             }
+            if (IsCharacterCollider(body.GetId()))
+            {
+                return std::string(name) + " (entity " + std::to_string(body.GetId()) +
+                       ") is a character body, which a joint cannot join";
+            }
             return std::string(name) + " (entity " + std::to_string(body.GetId()) +
                    ") is not a body entity: a RigidBody's, or a standalone static collider's, with a collider physics "
                    "could make";

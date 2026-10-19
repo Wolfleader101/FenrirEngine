@@ -656,7 +656,7 @@ int main(int argc, char* argv[])
 
     // Character (C++), the first of the F5 family, made in PostInit once the cube is loaded. Its camera writes the
     // scene's DemoCamera in Update, before DemoCameras copies it.
-    CharacterScene characterScene(cube, aabbShader);
+    CharacterScene characterScene(physics, cube, aabbShader);
     app.AddSystem(Fenrir::SchedulePriority::PostInit,
                   [&characterScene](Fenrir::App& running) { characterScene.Init(running); })
         .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
