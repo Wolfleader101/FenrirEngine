@@ -28,4 +28,4 @@
 - [x] Tests: disabling, making inactive and removing a character each end its contacts on the next step; dropping `ContactEvents` on the other side ends them too.
 - [x] Tests: `ForEachContact` lists a wall's point and normal for a character against it.
 - [x] The determinism scene is bit-identical over 300 ticks in two runs, single- and multi-threaded.
-- [ ] B's ball logs its `ContactBegin` naming the character (checked by running).
+- [x] B's ball logs its `ContactBegin` naming the character (checked by running: the clang Debug smoke run with `FENRIR_DEMO_KEYS=1` logs "B: the ball began touching the character at 5.6 m/s" for each throw, then a second, slower touch as it drops back against the character, and no errors).
