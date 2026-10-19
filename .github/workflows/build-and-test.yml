@@ -1,0 +1,114 @@
+name: Build and test
+
+# Builds the engine and runs its tests (README.md, "Building and testing") with every CMakePresets.json preset CI can run.
+# The DemoApp is left out (FENRIR_BUILD_EXAMPLES=OFF): its third-party libraries in examples/DemoApp/libs are not submodules.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dotnet-scripting
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  # Matches the projects' TargetFramework (net10.0); the repo has no global.json.
+  DOTNET_VERSION: 10.0.x
+  FENRIR_CMAKE_OPTIONS: -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_PHYSICS=ON -DFENRIR_BUILD_TESTS=ON -DFENRIR_BUILD_EXAMPLES=OFF
+
+jobs:
+  windows:
+    name: Windows (${{ matrix.preset }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      # Pull requests build one preset per compiler, a Debug and a Release; pushes to dotnet-scripting and main build all four.
+      matrix:
+        preset: ${{ fromJSON(github.event_name == 'pull_request' && '["clang-x64-debug", "msvc-x64-release"]' || '["clang-x64-debug", "clang-x64-release", "msvc-x64-debug", "msvc-x64-release"]') }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # The presets use Ninja with an external x64 architecture, so both clang and cl need the MSVC x64 environment.
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Tool versions
+        run: |
+          cmake --version
+          ninja --version
+          dotnet --list-sdks
+          if ("${{ matrix.preset }}".StartsWith("clang")) { clang++ --version }
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} ${{ env.FENRIR_CMAKE_OPTIONS }}
+
+      - name: Build
+        run: cmake --build out/build/${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
+
+  linux:
+    name: Linux (${{ matrix.preset }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - linux-debug
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Install Ninja
+        run: sudo apt-get update && sudo apt-get install -y ninja-build
+
+      - name: Tool versions
+        run: |
+          cmake --version
+          ninja --version
+          clang++ --version
+          dotnet --list-sdks
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }} ${{ env.FENRIR_CMAKE_OPTIONS }}
+
+      # -k 0: keep going after a failure, so one run reports every compile error.
+      - name: Build
+        run: cmake --build out/build/${{ matrix.preset }} -- -k 0
+
+      - name: Test
+        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure

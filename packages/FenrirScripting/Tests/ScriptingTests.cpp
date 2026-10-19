@@ -451,6 +451,8 @@ namespace
     const std::filesystem::path fixtureV2 = FromEnvironment("FENRIR_TEST_FIXTURE_V2");
     // The hand-written assembly whose tables report what the generator never would.
     const std::filesystem::path badReports = FromEnvironment("FENRIR_TEST_BAD_REPORTS");
+    // The file the bad-report fixture reads its mode from (see BadReportMode).
+    const std::filesystem::path badReportModeFile = FromEnvironment("FENRIR_BAD_REPORT_FILE");
     // The test extension's contract, the script assembly that uses it, and a contract no extension satisfies.
     const std::filesystem::path testExtension = FromEnvironment("FENRIR_TEST_EXTENSION");
     const std::filesystem::path extensionScript = FromEnvironment("FENRIR_TEST_EXTENSION_SCRIPT");
@@ -3578,6 +3580,8 @@ namespace
     }
 
     // Tells the bad-report fixture what to report as it loads (see BadReports.cs); restored to a sound report on exit.
+    // The mode goes through a file, not the environment: on Linux and macOS .NET reads the environment once, as the
+    // runtime starts, so a variable set afterwards never reaches the fixture.
     struct BadReportMode
     {
         explicit BadReportMode(const char* mode)
@@ -3593,11 +3597,7 @@ namespace
 
         static void Set(const char* mode)
         {
-#ifdef _WIN32
-            _putenv_s("FENRIR_BAD_REPORT", mode);
-#else
-            setenv("FENRIR_BAD_REPORT", mode, 1);
-#endif
+            std::ofstream(badReportModeFile, std::ios::trunc) << mode;
         }
     };
 
