@@ -49,6 +49,12 @@
 // character, which bounces off without moving it, and H drops a 1 kg box on its head, which it does not carry. The
 // autopilot resets the boxes each time round.
 //
+// Walking: far west, a ledge 3 m high is reached by a 30° ramp and by ten stairs 0.3 m high, which the character walks
+// up and down on the ground every tick, with no game code; beside them a 55° slope cannot be walked up, and jumped
+// onto it reads on steep ground and slides back down. Standing on the ramp it stays put; 1 turns stopOnSlope off, and
+// it slides down at full speed, since game code steers the written-back velocity rather than setting it. 5 turns
+// stairs and ground snapping off: the first step blocks it, and walking down it leaves the ground.
+//
 // Another character: south of the paddle's lane, a second character, a box 0.9 m high and 1.2 m square, walks a square
 // loop driven by C++ game code as the player is. It blocks the player and neither pushes the other; 6 stops it, so the
 // player can jump onto it, and starts it again, and standing on it the player rides it ("on ground: Character 2").
@@ -152,17 +158,19 @@ class CharacterScene
                             "a crouch tunnel to the north, a ledge only a crouch-jump clears to the north-west, a lift "
                             "and a shuttle to the north-east. Boxes of 1, 20 and 100 kg east of the wall, a seesaw to "
                             "the west, a paddle's lane to the south, and past it a second character walking a loop, "
-                            "which 6 stops and starts. B throws a ball at the character, H drops a box "
-                            "on its head. T teleports to the start, 2 toggles interpolation, 3 pauses the platforms "
-                            "and the paddle, 4 toggles the character on and off, M swaps its collider to a mesh "
-                            "(inactive) and back. L logs the state, P walks the route by itself. F5 goes on.",
+                            "which 6 stops and starts. B throws a ball at the character, H drops a box on its head. "
+                            "Far west, a ledge 3 m up with a 30° ramp and ten 0.3 m stairs to it, and a "
+                            "55° slope that cannot be walked up. T teleports to the start, 1 toggles stopOnSlope, 2 "
+                            "toggles interpolation, 3 pauses the platforms and the paddle, 4 toggles the character on "
+                            "and off, 5 toggles stairs and ground snapping, M swaps its collider to a mesh (inactive) "
+                            "and back. L logs the state, P walks the route by itself. F5 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot walks every piece while L logs the state, then stops, each key is tapped twice, and T ends it.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 75, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key :
-             {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X, GLFW_KEY_G,
-              GLFW_KEY_T, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_M, GLFW_KEY_B, GLFW_KEY_H, GLFW_KEY_6})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_Q, GLFW_KEY_E, GLFW_KEY_LEFT_SHIFT, GLFW_KEY_X,
+                              GLFW_KEY_G, GLFW_KEY_T, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_3, GLFW_KEY_4, GLFW_KEY_M,
+                              GLFW_KEY_B, GLFW_KEY_H, GLFW_KEY_5, GLFW_KEY_6})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -189,6 +197,7 @@ class CharacterScene
         BuildPushBoxes();
         BuildSeesaw();
         BuildPaddleLane();
+        BuildSlopesAndStairs();
         MakeCharacter();
         MakeSecondCharacter();
 
@@ -322,6 +331,21 @@ class CharacterScene
         else if (key == GLFW_KEY_T)
         {
             TeleportToStart(app);
+        }
+        else if (key == GLFW_KEY_1)
+        {
+            bool& stopOnSlope = m_character.GetComponent<Fenrir::CharacterBody>().stopOnSlope;
+            stopOnSlope = !stopOnSlope;
+            app.Logger()->Info(stopOnSlope ? "1: stopOnSlope on: stands still on the ramp"
+                                           : "1: stopOnSlope off: slides down the ramp");
+        }
+        else if (key == GLFW_KEY_5)
+        {
+            Fenrir::CharacterBody& body = m_character.GetComponent<Fenrir::CharacterBody>();
+            const bool on = body.stepHeight == 0.0f;
+            body.stepHeight = on ? Fenrir::CharacterBody{}.stepHeight : 0.0f;
+            body.floorSnap = on ? Fenrir::CharacterBody{}.floorSnap : 0.0f;
+            app.Logger()->Info(on ? "5: stairs and ground snapping on" : "5: stairs and ground snapping off");
         }
         else if (key == GLFW_KEY_2)
         {
@@ -686,6 +710,63 @@ class CharacterScene
         body.velocity.y += world.Gravity().y * dt;
     }
 
+    // Far west: a ledge 3 m high from x = -16 to -20, reached from the east by a 30° ramp (z = -1.5) and by ten steps
+    // 0.3 m high and 0.5 m deep (z = -6), with a 55° slope leaning on it (z = 5) that cannot be walked up.
+    void BuildSlopesAndStairs()
+    {
+        const Fenrir::Math::Vec3 colour(0.55f, 0.5f, 0.4f);
+        Box("Ledge", Fenrir::Math::Vec3(-18.0f, 0.5f * ledgeTop, 0.0f), Fenrir::Math::Vec3(4.0f, ledgeTop, 16.0f),
+            colour)
+            .AddComponent<Fenrir::Collider>();
+        SlopeUpToLedge("Ramp", rampAngle, -1.5f);
+        SlopeUpToLedge("Steep slope", steepAngle, 5.0f);
+        for (int i = 0; i < stepCount; ++i)
+        {
+            const float top = static_cast<float>(i + 1) * stepRise;
+            Box("Step",
+                Fenrir::Math::Vec3(stairsFootX - (static_cast<float>(i) + 0.5f) * stepDepth, 0.5f * top, stairsZ),
+                Fenrir::Math::Vec3(stepDepth, top, 2.0f), colour * (i % 2 == 0 ? 1.0f : 0.85f))
+                .AddComponent<Fenrir::Collider>();
+        }
+    }
+
+    // A slab 2 m wide and 0.4 m thick rising west at `angle` from the ground to the ledge's top at its east face.
+    void SlopeUpToLedge(const char* slopeName, float angle, float z)
+    {
+        const float length = ledgeTop / std::sin(angle);
+        // Turned about Z so its east end is down; the top face's middle is halfway up, half its run east of the ledge.
+        const Fenrir::Math::Quat turn = Fenrir::Math::AngleAxis(-angle, Fenrir::Math::Vec3(0.0f, 0.0f, 1.0f));
+        const Fenrir::Math::Vec3 middle(ledgeEastX + 0.5f * length * std::cos(angle), 0.5f * ledgeTop, z);
+        Fenrir::Entity slope = Box(slopeName, middle - turn * Fenrir::Math::Vec3(0.0f, 0.2f, 0.0f),
+                                   Fenrir::Math::Vec3(length, 0.4f, 2.0f), Fenrir::Math::Vec3(0.5f, 0.55f, 0.45f));
+        slope.GetComponent<Fenrir::Transform>().rot = turn;
+        slope.AddComponent<Fenrir::Collider>();
+    }
+
+    // Up the ramp (standing still halfway up), along the ledge and down the stairs, up them again and down the ramp;
+    // then a running jump onto the steep slope, so it reads on steep ground and slides back down.
+    static std::vector<Waypoint> SlopesAndStairsLeg()
+    {
+        const float rampZ = -1.5f;
+        const float ledgeX = -17.5f;
+        const float footX = -10.5f;
+        const float halfwayUpRamp = ledgeEastX + 0.5f * ledgeTop / std::tan(rampAngle);
+        return {Waypoint{.at = Fenrir::Math::Vec3(-3.0f, 0.0f, rampZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(footX, 0.0f, rampZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(halfwayUpRamp, 0.0f, rampZ), .wait = 1.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(ledgeX, 0.0f, rampZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(ledgeX, 0.0f, stairsZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(footX, 0.0f, stairsZ), .wait = 0.5f},
+                Waypoint{.at = Fenrir::Math::Vec3(ledgeX, 0.0f, stairsZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(ledgeX, 0.0f, rampZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(footX, 0.0f, rampZ)},
+                Waypoint{.at = Fenrir::Math::Vec3(footX, 0.0f, 5.0f)},
+                // A running jump onto the slope, walking on into it as it slides back down.
+                Waypoint{.at = Fenrir::Math::Vec3(-12.6f, 0.0f, 5.0f), .jump = true},
+                Waypoint{.at = Fenrir::Math::Vec3(-15.5f, 0.0f, 5.0f), .giveUp = 2.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(footX, 0.0f, 5.0f)}, Waypoint{.at = start, .wait = 0.5f}};
+    }
+
     // B: a ball thrown at the character from 4 m ahead of it, the way the camera looks, at chest height.
     void ThrowBall(Fenrir::App& app)
     {
@@ -826,8 +907,10 @@ class CharacterScene
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg : {WallLeg(), LowCeilingLeg(), CrouchTunnelLeg(), CrouchJumpLeg(),
-                                                     PlatformsLeg(), PushBoxesLeg(), SeesawLeg(), PaddleLaneLeg()})
+            // The slopes and stairs first, so a smoke run's autopilot walks them.
+            for (const std::vector<Waypoint>& leg :
+                 {SlopesAndStairsLeg(), WallLeg(), LowCeilingLeg(), CrouchTunnelLeg(), CrouchJumpLeg(), PlatformsLeg(),
+                  PushBoxesLeg(), SeesawLeg(), PaddleLaneLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -1054,6 +1137,15 @@ class CharacterScene
     static constexpr float paddleReach = 4.5f; // The paddle sweeps from x = -4.5 to 4.5.
     static constexpr float paddleSpeed = 1.5f;
     static constexpr float secondSpeed = 1.5f;
+    static constexpr float ledgeTop = 3.0f;
+    static constexpr float ledgeEastX = -16.0f;
+    static constexpr float rampAngle = std::numbers::pi_v<float> / 6.0f;            // 30°
+    static constexpr float steepAngle = 55.0f * std::numbers::pi_v<float> / 180.0f; // 55°
+    static constexpr int stepCount = 10;
+    static constexpr float stepRise = 0.3f;
+    static constexpr float stepDepth = 0.5f;
+    static constexpr float stairsFootX = -11.0f;
+    static constexpr float stairsZ = -6.0f;
 
     Fenrir::Physics* m_physics;
     const Model* m_cube;

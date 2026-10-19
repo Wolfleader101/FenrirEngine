@@ -1797,6 +1797,116 @@ namespace Fenrir::Backend
             return into < 0.0f ? velocity - into * normal : velocity;
         }
 
+        // How steep a character's contact is, judged by the face it touches rather than its contact normal (the spec's
+        // rounded-edge rule): on a box's rounded edge Jolt's surface normal is the edge's own once it is steeper than
+        // the side face's, so a step's edge would read as steep ground. The face of the touched shape facing up is
+        // taken instead when the contact lies on it or on its rounding (FenrirPhysics rounds by at most Jolt's default
+        // convex radius), and it faces up more. Otherwise Jolt's surface normal stands.
+        JPH::Vec3 FaceNormal(const JPH::PhysicsSystem& system, const JPH::CharacterContact& contact)
+        {
+            const JPH::Vec3 up = JPH::Vec3::sAxisY();
+            // Met from the side, it is a side face and not its rounding; another character has no faces.
+            if (contact.mContactNormal.Dot(up) <= level || !contact.mCharacterIDB.IsInvalid())
+            {
+                return contact.mSurfaceNormal;
+            }
+            JPH::BodyLockRead lock(system.GetBodyLockInterfaceNoLock(), contact.mBodyB);
+            if (!lock.Succeeded())
+            {
+                return contact.mSurfaceNormal;
+            }
+            // The face's corners relative to the contact.
+            JPH::Shape::SupportingFace face;
+            lock.GetBody().GetTransformedShape().GetSupportingFace(contact.mSubShapeIDB, -up, contact.mPosition, face);
+            if (face.size() < 3)
+            {
+                return contact.mSurfaceNormal;
+            }
+            JPH::Vec3 normal = (face[1] - face[0]).Cross(face[2] - face[0]).NormalizedOr(JPH::Vec3::sZero());
+            normal = normal.Dot(up) < 0.0f ? -normal : normal;
+            if (normal.Dot(up) <= contact.mSurfaceNormal.Dot(up))
+            {
+                return contact.mSurfaceNormal;
+            }
+            constexpr float reach = JPH::cDefaultConvexRadius + 1.0e-3f;
+            if (std::abs(normal.Dot(face[0])) > reach)
+            {
+                return contact.mSurfaceNormal;
+            }
+            JPH::Vec3 centre = JPH::Vec3::sZero();
+            for (JPH::Vec3Arg corner : face)
+            {
+                centre += corner;
+            }
+            centre /= static_cast<float>(face.size());
+            for (JPH::uint i = 0; i < face.size(); ++i)
+            {
+                const JPH::Vec3 corner = face[i];
+                JPH::Vec3 outward =
+                    (face[(i + 1) % face.size()] - corner).Cross(normal).NormalizedOr(JPH::Vec3::sZero());
+                outward = outward.Dot(corner - centre) < 0.0f ? -outward : outward;
+                if (-corner.Dot(outward) > reach)
+                {
+                    return contact.mSurfaceNormal;
+                }
+            }
+            return normal;
+        }
+
+        // What a character stands on, from the contacts Jolt found, each judged by FaceNormal: Jolt's ground state,
+        // except that ground Jolt reads as steep is walkable when the face of one of its supporting contacts is.
+        struct Ground
+        {
+            GroundState state = GroundState::InAir;
+            // OnGround and OnSteepGround only: the most upward-facing supporting contact, and the faces' normals
+            // averaged, as Jolt averages its surface normals.
+            const JPH::CharacterContact* contact = nullptr;
+            JPH::Vec3 normal = JPH::Vec3::sZero();
+        };
+
+        Ground GroundOf(const JPH::PhysicsSystem& system, const JPH::CharacterVirtual& character)
+        {
+            Ground ground;
+            ground.state = FromJolt(character.GetGroundState());
+            if (!character.IsSupported())
+            {
+                return ground;
+            }
+            const JPH::Vec3 up = JPH::Vec3::sAxisY();
+            const JPH::RMat44 toCharacter =
+                JPH::RMat44::sInverseRotationTranslation(character.GetRotation(), character.GetPosition());
+            bool walkable = false;
+            float best = -FLT_MAX;
+            JPH::Vec3 averaged = JPH::Vec3::sZero();
+            for (const JPH::CharacterContact& contact : character.GetActiveContacts())
+            {
+                if (!contact.mHadCollision || contact.mWasDiscarded ||
+                    character.GetSupportingVolume().SignedDistance(JPH::Vec3(toCharacter * contact.mPosition)) > 0.0f)
+                {
+                    continue;
+                }
+                const JPH::Vec3 face = FaceNormal(system, contact);
+                walkable = walkable || !character.IsSlopeTooSteep(face);
+                if (face.Dot(up) > best)
+                {
+                    best = face.Dot(up);
+                    ground.contact = &contact;
+                    ground.normal = face;
+                }
+                // As Jolt: faces within 85° of up are averaged.
+                if (face.Dot(up) >= 0.08f)
+                {
+                    averaged += face;
+                }
+            }
+            ground.normal = averaged.NormalizedOr(ground.normal);
+            if (walkable)
+            {
+                ground.state = GroundState::OnGround;
+            }
+            return ground;
+        }
+
         // Pushes the dynamic bodies a character's move hit, as Jolt's CharacterVirtual would: an impulse along each
         // contact's normal aiming at 0.9 × the closing speed at the contact (and pushing a body out of the shape it is
         // in), never downward, but with `force × dt` at most for each body over the whole move.
@@ -1953,15 +2063,21 @@ namespace Fenrir::Backend
         // Riding: the last move ended on walkable ground, whose velocity is added to this move and never to game
         // code's. Read now, after this tick's MoveKinematic: Jolt's cached value is a tick old.
         JPH::Vec3 ground = JPH::Vec3::sZero();
-        const bool riding = character.GetGroundState() == JPH::CharacterBase::EGroundState::OnGround;
+        const Ground before = GroundOf(m_impl->system, character);
+        const bool riding = before.state == GroundState::OnGround;
         if (riding)
         {
             character.UpdateGroundVelocity();
             ground = character.GetGroundVelocity();
         }
         JPH::Vec3 carried = ToJolt(move.carried);
-        // What the character moves at, and so pushes at.
-        const JPH::Vec3 moving = velocity + carried + ground;
+        // What the character moves at, and so pushes at. On walkable ground with stopOnSlope the falling part moves it
+        // no more than the trim below leaves it in `velocity`: pressed into a slope, it would slide down it.
+        JPH::Vec3 moving = velocity + carried + ground;
+        if (riding && move.stopOnSlope)
+        {
+            moving -= std::min(velocity.Dot(up), 0.0f) * up;
+        }
         character.SetLinearVelocity(moving);
 
         JPH::CharacterVirtual::ExtendedUpdateSettings update;
@@ -1980,19 +2096,18 @@ namespace Fenrir::Backend
         moved.movedVelocity = FromJolt(displaced);
         // What the other characters' moves see its body moving at, until its next move.
         m_impl->characterListener.others.at(character.GetInnerBodyID().GetIndexAndSequenceNumber()).moved = displaced;
-        moved.ground = FromJolt(character.GetGroundState());
-        const JPH::BodyID groundBody = character.GetGroundBodyID();
-        const JPH::SubShapeID groundSubShape = character.GetGroundSubShapeID();
-        if (moved.ground == GroundState::OnGround || moved.ground == GroundState::OnSteepGround)
+        const Ground after = GroundOf(m_impl->system, character);
+        moved.ground = after.state;
+        if (after.contact != nullptr)
         {
-            JPH::BodyLockRead lock(m_impl->system.GetBodyLockInterfaceNoLock(), groundBody);
+            JPH::BodyLockRead lock(m_impl->system.GetBodyLockInterfaceNoLock(), after.contact->mBodyB);
             if (lock.Succeeded())
             {
                 moved.groundEntity = EntityOf(lock.GetBody());
-                moved.groundCollider = ColliderOf(lock.GetBody(), groundSubShape);
+                moved.groundCollider = ColliderOf(lock.GetBody(), after.contact->mSubShapeIDB);
             }
-            moved.groundPoint = FromJolt(JPH::Vec3(character.GetGroundPosition()));
-            moved.groundNormal = FromJolt(character.GetGroundNormal());
+            moved.groundPoint = FromJolt(JPH::Vec3(after.contact->mPosition));
+            moved.groundNormal = FromJolt(after.normal);
             // Jolt found it at the move's end from this tick's body velocities, at the character.
             moved.groundVelocity = FromJolt(character.GetGroundVelocity());
             if (lock.Succeeded())
@@ -2020,13 +2135,13 @@ namespace Fenrir::Backend
             }
             return Trim(part + carried, normal, surface) - carried;
         };
-        const auto touch = [&](JPH::Vec3Arg contactNormal, JPH::Vec3Arg surfaceNormal, JPH::Vec3Arg surfaceVelocity) {
+        const auto touch = [&](JPH::Vec3Arg contactNormal, bool tooSteep, JPH::Vec3Arg surfaceVelocity) {
             const JPH::Vec3 surface = surfaceVelocity - ground;
             if (contactNormal.Dot(up) <= level)
             {
                 kept = into(kept, contactNormal, surface);
             }
-            else if (move.stopOnSlope && !character.IsSlopeTooSteep(surfaceNormal))
+            else if (move.stopOnSlope && !tooSteep)
             {
                 kept = into(kept, up, surface);
             }
@@ -2042,22 +2157,24 @@ namespace Fenrir::Backend
             {
                 continue;
             }
-            touch(contact.mContactNormal, contact.mSurfaceNormal, contact.mLinearVelocity);
+            // Judged by its face, as the ground is: a step's rounded edge is neither steep nor a wall.
+            const bool tooSteep = character.IsSlopeTooSteep(contact.mSurfaceNormal) &&
+                                  character.IsSlopeTooSteep(FaceNormal(m_impl->system, contact));
+            touch(contact.mContactNormal, tooSteep, contact.mLinearVelocity);
             const float facing = contact.mContactNormal.Dot(up);
-            const bool isGround = contact.mBodyB == groundBody && contact.mSubShapeIDB == groundSubShape;
             if (facing < -level)
             {
                 moved.onCeiling = true;
             }
-            else if (!isGround && (facing <= level || character.IsSlopeTooSteep(contact.mSurfaceNormal)))
+            else if (&contact != after.contact && (facing <= level || tooSteep))
             {
                 moved.onWall = true;
             }
         }
-        if (character.IsSupported())
+        if (after.contact != nullptr)
         {
             // A character standing still hits nothing in its move: its ground still takes what presses into it.
-            touch(character.GetGroundNormal(), character.GetGroundNormal(), character.GetGroundVelocity());
+            touch(after.normal, after.state == GroundState::OnSteepGround, character.GetGroundVelocity());
         }
         moved.velocity = FromJolt(kept);
         // Landing clears carried velocity; leaving walkable ground (a jump included) carries all of what it rode.
