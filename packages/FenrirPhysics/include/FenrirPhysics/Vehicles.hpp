@@ -142,17 +142,52 @@ namespace Fenrir
         float limitedSlipRatio = 1.4f;
     };
 
+    /** @brief How a motorcycle keeps itself up: it leans into turns, and stands at rest. */
+    struct MotorcycleLean
+    {
+        /** @brief Disabled, the bike falls over. A live edit. */
+        bool enabled = true;
+        /** @brief Radians: the most it leans, kept within 0 and a quarter turn. Changing it rebuilds the vehicle
+         * privately, keeping the engine speed, the gear and the wheels' spin. */
+        float maxAngle = std::numbers::pi_v<float> / 4.0f;
+        /** @brief Caps steering by speed so the lean stays under `maxAngle`. A live edit. */
+        bool limitSteering = true;
+    };
+
+    /**
+     * @brief A motorcycle: two wheels in line, leaning into turns and standing at rest by itself through `lean`. The
+     * physics backend marks its motorcycles as still in development, so a backend upgrade may change how one leans.
+     *
+     * Like a wheeled vehicle, it drives both wheels until game code names differentials: give it one
+     * VehicleDifferential naming only its rear wheel to ride like the backend's sample bike.
+     */
+    struct MotorcycleVehicle
+    {
+        VehicleEngine engine = {.maxTorque = 150.0f, .minRpm = 1000.0f, .maxRpm = 10000.0f, .peakTorqueRpm = 6000.0f};
+        VehicleTransmission transmission = {.gearCount = 6,
+                                            .firstGear = 2.27f,
+                                            .topGear = 0.88f,
+                                            .reverseGear = 4.0f,
+                                            .shiftUpRpm = 8000.0f,
+                                            .shiftDownRpm = 2000.0f,
+                                            .clutchStrength = 2.0f};
+        /** @brief The limited-slip ratio between differentials. */
+        float limitedSlipRatio = 1.4f;
+        MotorcycleLean lean = {};
+    };
+
     /** @brief Which kind of vehicle a VehicleKind holds. */
     enum class VehicleType : std::uint8_t
     {
-        Wheeled
+        Wheeled,
+        Motorcycle
     };
 
     /**
      * @brief A vehicle kind: exactly one kind of vehicle and its drivetrain, by value, as JointKind holds a joint.
      *
-     * Assign a kind to change it (`vehicle.kind = WheeledVehicle{}`); read or edit its settings through the checked
-     * view
+     * Assign a kind to change it (`vehicle.kind = MotorcycleVehicle{}`): a private rebuild that keeps the engine speed,
+     * the gear and the wheels' spin. Read or edit its settings through the checked view
      * (`vehicle.kind.As<WheeledVehicle>()`). Reading it as a kind it does not hold asserts.
      */
     class VehicleKind
@@ -168,13 +203,18 @@ namespace Fenrir
         {
         }
 
+        /** @brief A motorcycle. Implicit, so one can be assigned where a kind is wanted. */
+        VehicleKind(MotorcycleVehicle motorcycle) : m_type(VehicleType::Motorcycle), m_motorcycle(motorcycle)
+        {
+        }
+
         /** @brief The kind of vehicle held. */
         [[nodiscard]] VehicleType Type() const
         {
             return m_type;
         }
 
-        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle). */
+        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle or MotorcycleVehicle). */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -201,19 +241,35 @@ namespace Fenrir
         template <typename T>
         static constexpr VehicleType TypeOf()
         {
-            static_assert(std::is_same_v<T, WheeledVehicle>, "VehicleKind holds WheeledVehicle");
-            return VehicleType::Wheeled;
+            if constexpr (std::is_same_v<T, WheeledVehicle>)
+            {
+                return VehicleType::Wheeled;
+            }
+            else
+            {
+                static_assert(std::is_same_v<T, MotorcycleVehicle>, "VehicleKind holds WheeledVehicle or "
+                                                                    "MotorcycleVehicle");
+                return VehicleType::Motorcycle;
+            }
         }
 
         template <typename T, typename Self>
         static auto& Member(Self& self)
         {
-            return self.m_wheeled;
+            if constexpr (TypeOf<T>() == VehicleType::Wheeled)
+            {
+                return self.m_wheeled;
+            }
+            else
+            {
+                return self.m_motorcycle;
+            }
         }
 
         VehicleType m_type;
         union {
             WheeledVehicle m_wheeled;
+            MotorcycleVehicle m_motorcycle;
         };
     };
 

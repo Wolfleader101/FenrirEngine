@@ -11,7 +11,7 @@ add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds
                                   CharacterPushes.cpp CharacterDebugLines.cpp CharacterSlopes.cpp CharacterAmongBodies.cpp
                                   CharacterContacts.cpp Vehicles.cpp VehiclePoses.cpp VehicleSettings.cpp VehicleGearbox.cpp
                                   VehicleDifferentials.cpp VehicleSwitching.cpp VehicleRebuilds.cpp
-                                  VehicleDebugLines.cpp VehicleGround.cpp VehicleParking.cpp
+                                  VehicleDebugLines.cpp VehicleGround.cpp VehicleParking.cpp VehicleMotorcycles.cpp
                                   CharacterTest.hpp VehicleTest.hpp
                                   PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)
@@ -26,4 +26,9 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     add_test(NAME FenrirPhysics-JointKindWrongViewAsserts COMMAND JointKindWrongView)
     set_tests_properties(FenrirPhysics-JointKindWrongViewAsserts PROPERTIES
         PASS_REGULAR_EXPRESSION "JointKind::As: the joint is a different kind" TIMEOUT 60)
+    add_executable(VehicleKindWrongView VehicleKindWrongView.cpp)
+    target_link_libraries(VehicleKindWrongView PRIVATE FenrirPhysics)
+    add_test(NAME FenrirPhysics-VehicleKindWrongViewAsserts COMMAND VehicleKindWrongView)
+    set_tests_properties(FenrirPhysics-VehicleKindWrongViewAsserts PROPERTIES
+        PASS_REGULAR_EXPRESSION "VehicleKind::As: the vehicle is a different kind" TIMEOUT 60)
 endif()
