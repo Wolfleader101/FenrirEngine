@@ -436,7 +436,11 @@ TEST_CASE("Adding and removing a wheel rebuilds the vehicle with its new wheel s
 
 namespace
 {
-    // A car over bumps and into a turn: the chassis's and every wheel's world pose after each tick.
+    // When the car turns, once past the bumps.
+    constexpr int turnAt = 420;
+
+    // A car over bumps and into a turn: the chassis's and every wheel's world pose after each tick, the chassis's
+    // first of each five.
     std::vector<Transform> DriveRecorded(const PhysicsConfig& config)
     {
         PhysicsApp test(config);
@@ -450,7 +454,7 @@ namespace
         Car car = AddCar(test.Entities(), Math::Vec3(0.0f, 1.0f, 0.0f));
         Drive(test.app, car.chassis, [](int index, Vehicle& vehicle) {
             vehicle.input.forward = 1.0f;
-            vehicle.input.steer = index > 300 ? 0.6f : 0.0f;
+            vehicle.input.steer = index > turnAt ? 0.6f : 0.0f;
         });
         std::vector<Transform> poses;
         for (int i = 0; i < 600; ++i)
@@ -481,8 +485,10 @@ TEST_CASE("Two drives of a car over bumps are bit-identical over 600 ticks, thre
     single.useWorkerThreads = false;
     const std::vector<Transform> first = DriveRecorded(threaded);
 
-    INFO("the car went over the bumps");
-    REQUIRE(first[first.size() - 5].pos.z < -30.0f);
+    // The last bump is at z = -37.
+    const float beforeTurning = first[5 * turnAt].pos.z;
+    INFO("the car went over the bumps before it turned (it was at z = " << beforeTurning << ")");
+    REQUIRE(beforeTurning < -40.0f);
     INFO("a second threaded run gives every chassis and wheel pose, bit for bit");
     REQUIRE(BitIdentical(first, DriveRecorded(threaded)));
     INFO("and so does a run on one thread");
