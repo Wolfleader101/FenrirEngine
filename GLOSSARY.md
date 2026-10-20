@@ -139,6 +139,10 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components and C++ events, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension.
 *Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).
 
+**Tagged union**
+A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest.
+*Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
+
 **Native function**
 A C++ function that C# calls, declared once on each side and named by the full name of the C# method that calls it (`Namespace.Type.Method`). In C++ its first parameter is the call context; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
 *Avoid:* binding, internal call (the Iris-level term), engine API.
