@@ -248,6 +248,11 @@ namespace Fenrir
      * Plain data that physics compares each tick with what it last applied (ADR-0011). A vehicle with no wheels is
      * valid but inert. Its body needs a collider it can make, as any body does; the chassis must not be scaled to size
      * its look: give it an unscaled BoxShape of the right size and a scaled look as a child.
+     *
+     * Without a dynamic RigidBody with a solid collider, or beside a CharacterBody, it is inactive, with one warning
+     * each time it becomes so: a chassis turned kinematic or static, or losing its RigidBody or collider, is a plain
+     * body (if any), its `state` and its wheels' reset and its wheel entities left where they were. Valid again, it is
+     * built fresh with nothing carried over, so a car made kinematic for a cutscene restarts at idle in neutral.
      */
     struct Vehicle
     {
@@ -258,7 +263,8 @@ namespace Fenrir
         /** @brief Radians: the cone around world up the chassis cannot pitch or roll past. π (the default) is off;
          * about 60° stops rollovers. */
         float maxTilt = std::numbers::pi_v<float>;
-        /** @brief Disabled, the entity is a plain rigid body resting on its chassis. */
+        /** @brief Disabled, the entity is a plain rigid body resting on its chassis, its `state` and its wheels' reset
+         * and its wheel entities left where they were. Enabled again, it is built fresh with nothing carried over. */
         bool enabled = true;
         /** @brief Read-back: overwritten by physics after every step. */
         VehicleState state = {};
@@ -317,6 +323,10 @@ namespace Fenrir
      *
      * Adding, removing or relinking a wheel rebuilds its vehicle. There is no per-wheel switch: destroy the wheel
      * entity or unlink it to take the wheel off.
+     *
+     * A wheel naming no other entity of its scene with a Vehicle, or sharing its entity with a RigidBody, a
+     * CharacterBody or any Collider (a trigger's included), is inactive: left out of its vehicle, with one warning
+     * each time it becomes so, and back by itself once valid. A Joint naming a wheel entity names no body.
      */
     struct VehicleWheel
     {

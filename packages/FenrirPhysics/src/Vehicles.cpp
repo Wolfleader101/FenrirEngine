@@ -9,13 +9,16 @@
 #include <numbers>
 #include <set>
 #include <span>
+#include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
 
@@ -195,20 +198,71 @@ namespace Fenrir
         record = VehicleRecord{};
     }
 
-    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::ChassisBodyOf(std::uint32_t chassis) const
+    std::string PhysicsWorld::Impl::WhyNoChassis(std::uint32_t chassis) const
     {
         const Entity entity = m_entities->GetEntity(chassis);
-        if (entity.HasComponent<CharacterBody>() || !entity.HasComponent<RigidBody>())
+        if (entity.HasComponent<CharacterBody>())
         {
-            return nullptr;
+            return "it is beside a CharacterBody";
+        }
+        if (!entity.HasComponent<RigidBody>())
+        {
+            return "it has no RigidBody";
         }
         const auto it = m_bodies.find(chassis);
-        if (it == m_bodies.end() || !it->second.Active() || it->second.isTrigger ||
-            it->second.motion.motionType != MotionType::Dynamic)
+        if (it == m_bodies.end() || !it->second.Active())
         {
-            return nullptr;
+            return "its RigidBody has no collider physics could make";
         }
-        return &it->second;
+        if (it->second.isTrigger)
+        {
+            return "its collider is a trigger, which gives its RigidBody no solid collider";
+        }
+        if (it->second.motion.motionType != MotionType::Dynamic)
+        {
+            return it->second.motion.motionType == MotionType::Kinematic ? "its RigidBody is kinematic"
+                                                                         : "its RigidBody is static";
+        }
+        return {};
+    }
+
+    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::ChassisBodyOf(std::uint32_t chassis) const
+    {
+        return WhyNoChassis(chassis).empty() ? &m_bodies.at(chassis) : nullptr;
+    }
+
+    std::string PhysicsWorld::Impl::WhyNoWheel(std::uint32_t wheel) const
+    {
+        const Entity entity = m_entities->GetEntity(wheel);
+        const Entity& chassis = entity.GetComponent<VehicleWheel>().vehicle;
+        // A wheel names a vehicle of its own scene, and is no body itself.
+        if (!chassis.IsValid())
+        {
+            return "its vehicle is empty or not alive";
+        }
+        const std::string named = "its vehicle (entity " + std::to_string(chassis.GetId()) + ")";
+        if (chassis != m_entities->HandleOf(chassis.GetId()))
+        {
+            return named + " is in another scene";
+        }
+        if (chassis.GetId() == wheel)
+        {
+            return "it is on its vehicle's chassis entity";
+        }
+        if (!m_vehicleEntities.contains(chassis.GetId()))
+        {
+            return named + " has no Vehicle";
+        }
+        for (const auto& [has, component] : {std::pair{entity.HasComponent<RigidBody>(), "a RigidBody"},
+                                             std::pair{entity.HasComponent<CharacterBody>(), "a CharacterBody"},
+                                             std::pair{entity.HasComponent<Collider>(), "a Collider"}})
+        {
+            if (has)
+            {
+                return std::string("it shares its entity with ") + component;
+            }
+        }
+        return {};
     }
 
     std::map<std::uint32_t, std::vector<std::uint32_t>> PhysicsWorld::Impl::WheelsByVehicle() const
@@ -216,40 +270,63 @@ namespace Fenrir
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheels;
         for (const std::uint32_t id : m_wheelEntities)
         {
-            const Entity entity = m_entities->GetEntity(id);
-            const Entity& chassis = entity.GetComponent<VehicleWheel>().vehicle;
-            // A wheel names a vehicle of its own scene, and is no body itself.
-            if (!chassis.IsValid() || chassis != m_entities->HandleOf(chassis.GetId()) ||
-                !m_vehicleEntities.contains(chassis.GetId()) || chassis.GetId() == id ||
-                entity.HasComponent<RigidBody>() || entity.HasComponent<CharacterBody>() ||
-                entity.HasComponent<Collider>())
+            if (WhyNoWheel(id).empty())
             {
-                continue;
+                // In entity order, as m_wheelEntities is.
+                wheels[m_entities->GetEntity(id).GetComponent<VehicleWheel>().vehicle.GetId()].push_back(id);
             }
-            // In entity order, as m_wheelEntities is.
-            wheels[chassis.GetId()].push_back(id);
         }
         return wheels;
     }
 
+    void PhysicsWorld::Impl::WarnAboutInactiveVehicles()
+    {
+        const auto warn = [this](const std::set<std::uint32_t>& entities, std::set<std::uint32_t>& inactive, auto why,
+                                 const std::string& component, const std::string& until) {
+            std::erase_if(inactive, [&entities](std::uint32_t id) { return !entities.contains(id); });
+            for (const std::uint32_t id : entities)
+            {
+                const std::string reason = why(id);
+                if (reason.empty())
+                {
+                    inactive.erase(id);
+                }
+                else if (inactive.insert(id).second)
+                {
+                    m_logger->Warn("The " + component + " of entity " + std::to_string(id) + " is inactive: " + reason +
+                                   ". " + until);
+                }
+            }
+        };
+        warn(
+            m_vehicleEntities, m_inactiveVehicles, [this](std::uint32_t id) { return WhyNoChassis(id); }, "Vehicle",
+            "It is built fresh once its entity has a dynamic RigidBody with a solid collider and no CharacterBody.");
+        warn(
+            m_wheelEntities, m_inactiveWheels, [this](std::uint32_t id) { return WhyNoWheel(id); }, "VehicleWheel",
+            "It is left out of its vehicle until it names another entity of its scene with a Vehicle and shares its "
+            "entity with no RigidBody, CharacterBody or Collider.");
+    }
+
     void PhysicsWorld::Impl::SyncVehicles()
     {
+        WarnAboutInactiveVehicles();
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheelsOf = WheelsByVehicle();
         // In chassis entity order, so vehicles are made, and so solved, in a reproducible order.
         for (const std::uint32_t chassis : m_vehicleEntities)
         {
             VehicleRecord& record = m_vehicles[chassis];
+            Entity entity = m_entities->GetEntity(chassis);
+            const Vehicle& vehicle = entity.GetComponent<Vehicle>();
             const Record* body = ChassisBodyOf(chassis);
             const std::vector<std::uint32_t>& wheels = wheelsOf[chassis];
-            if (body == nullptr || wheels.empty())
+            if (!vehicle.enabled || body == nullptr || wheels.empty())
             {
-                // No body to drive, or nothing to drive it with: a plain rigid body, if any.
+                // Disabled, inactive, or with nothing to drive it: a plain rigid body, if any, its state reset in step
+                // 5. Enabled and valid again, it is built fresh: the record holds nothing to carry over.
                 DropVehicle(record);
                 continue;
             }
 
-            Entity entity = m_entities->GetEntity(chassis);
-            const Vehicle& vehicle = entity.GetComponent<Vehicle>();
             bool wake = false;
             if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels)
             {
