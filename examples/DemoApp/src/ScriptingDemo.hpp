@@ -13,7 +13,8 @@
 //   (DemoMesh.hpp, scripts/DemoMesh.cs). SceneClick   the editor's SceneClickEvent, a click in the scene view as a ray
 //   (scripts/Controls.cs). CSharpScene  the marker C++ puts in a scene for C# to build, naming which one
 //   (CSharpScenes.hpp, scripts/CSharpScene.cs). DemoCamera   where a scene wants the camera, written by its own follow
-//   camera in C++ or C# (DemoCamera.hpp, scripts/DemoCamera.cs).
+//   camera in C++ or C# (DemoCamera.hpp, scripts/DemoCamera.cs). DemoGamepad  the first connected gamepad, written by
+//   C++ for a scene's own driving code in C++ or C# to read (DemoGamepad.hpp, scripts/DemoGamepad.cs).
 
 #ifdef FENRIR_SCRIPTING
 
@@ -23,6 +24,7 @@
 #include <memory>
 
 #include "DemoCamera.hpp"
+#include "DemoGamepad.hpp"
 #include "DemoMesh.hpp"
 #include "Events.hpp"
 #include "FenrirApp/App.hpp"
@@ -121,6 +123,24 @@ struct Iris::StructMapping<DemoCamera>
                                                       IRIS_FIELD(DemoCamera, Pitch), IRIS_FIELD(DemoCamera, Active));
 };
 
+// The engine's contract has no Vector2, so the demo maps glm::vec2 to one of its own (scripts/DemoGamepad.cs).
+template <>
+struct Iris::StructMapping<glm::vec2>
+{
+    static constexpr std::string_view typeName = "DemoScripts.Vector2";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(glm::vec2, x, "X"), IRIS_FIELD_AS(glm::vec2, y, "Y"));
+};
+
+template <>
+struct Iris::StructMapping<DemoGamepad>
+{
+    static constexpr std::string_view typeName = "DemoScripts.DemoGamepad";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD(DemoGamepad, Connected), IRIS_FIELD(DemoGamepad, LeftStick), IRIS_FIELD(DemoGamepad, RightStick),
+        IRIS_FIELD(DemoGamepad, LeftTrigger), IRIS_FIELD(DemoGamepad, RightTrigger), IRIS_FIELD(DemoGamepad, Buttons));
+};
+
 template <>
 struct Iris::StructMapping<SceneClickEvent>
 {
@@ -139,7 +159,8 @@ namespace ScriptingDemo
         extension.components = {Fenrir::MakeComponent<Bob>("Demo.Bob"),
                                 Fenrir::MakeComponent<DemoMesh>("Demo.DemoMesh"),
                                 Fenrir::MakeComponent<CSharpScene>("Demo.CSharpScene"),
-                                Fenrir::MakeComponent<DemoCamera>("Demo.DemoCamera")};
+                                Fenrir::MakeComponent<DemoCamera>("Demo.DemoCamera"),
+                                Fenrir::MakeComponent<DemoGamepad>("Demo.DemoGamepad")};
         extension.events = {Fenrir::MakeEvent<BurstEvent>("Demo.Burst"),
                             Fenrir::MakeEvent<KeyboardKeyEvent>("Demo.KeyboardKey"),
                             Fenrir::MakeEvent<SceneClickEvent>("Demo.SceneClick")};

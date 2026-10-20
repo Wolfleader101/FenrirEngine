@@ -24,6 +24,11 @@
 // The camera is a VehicleCamera: C++ game code that chases the car and writes the scene's DemoCamera, which
 // DemoCameras copies into the app's camera. C frees the camera (WASD flies it, the arrows still drive) and snaps it
 // back.
+//
+// A gamepad drives too, read from the scene's DemoGamepad, which DemoGamepads writes each frame. Beyond the deadzone a
+// trigger or the left stick wins over its keys, its value going straight into the input; its buttons press the keys
+// they stand for (padKeys), so a key's action is the pad's too. The right stick turns the chase camera round the car,
+// and it swings back behind on release. Unplugged, the pad reads all zero, which lets go of everything it held.
 
 #ifdef FENRIR_PHYSICS
 
@@ -40,6 +45,7 @@
 #include <GLFW/glfw3.h>
 
 #include "DemoCamera.hpp"
+#include "DemoGamepad.hpp"
 #include "DemoScenes.hpp"
 #include "Events.hpp"
 #include "FenrirApp/App.hpp"
@@ -69,8 +75,11 @@ class VehicleCamera
         m_following = !m_following;
     }
 
-    /** @brief Each frame: swings round behind `target`'s forward (-Z) and writes the camera into `camera`. */
-    void Update(DemoCamera& camera, const Fenrir::Transform& target, float dt)
+    /**
+     * @brief Each frame: swings round behind `target`'s forward (-Z) and writes the camera into `camera`. `look`, each
+     * axis in [-1, 1] as a gamepad's stick, turns it round the target and tilts it; at zero it springs back behind.
+     */
+    void Update(DemoCamera& camera, const Fenrir::Transform& target, const Fenrir::Math::Vec2& look, float dt)
     {
         camera.Active = m_following ? 1 : 0;
         if (!m_following)
@@ -86,13 +95,16 @@ class VehicleCamera
             turn -= 360.0f * std::round(turn / 360.0f);
             m_yaw += turn * std::min(1.0f, catchUp * dt);
         }
-        const float yaw = m_yaw * degrees;
-        const float pitch = pitchDegrees * degrees;
+        // Pushed down, the stick looks down from higher up.
+        const Fenrir::Math::Vec2 orbit(look.x * orbitYawDegrees, -look.y * orbitPitchDegrees);
+        m_orbit += (orbit - m_orbit) * std::min(1.0f, orbitCatchUp * dt);
+        const float yaw = (m_yaw + m_orbit.x) * degrees;
+        const float pitch = (pitchDegrees + m_orbit.y) * degrees;
         const Fenrir::Math::Vec3 front(std::cos(pitch) * std::cos(yaw), std::sin(pitch),
                                        std::cos(pitch) * std::sin(yaw));
         camera.Position = target.pos + Fenrir::Math::Vec3(0.0f, height, 0.0f) - front * distance;
-        camera.Yaw = m_yaw;
-        camera.Pitch = pitchDegrees;
+        camera.Yaw = m_yaw + m_orbit.x;
+        camera.Pitch = pitchDegrees + m_orbit.y;
     }
 
   private:
@@ -100,9 +112,13 @@ class VehicleCamera
     static constexpr float distance = 9.0f;
     static constexpr float height = 1.5f;
     static constexpr float pitchDegrees = -15.0f;
-    static constexpr float catchUp = 3.0f; // How much of its turn it makes up per second.
+    static constexpr float catchUp = 3.0f;           // How much of its turn it makes up per second.
+    static constexpr float orbitYawDegrees = 180.0f; // A full push sideways looks at the target from the front.
+    static constexpr float orbitPitchDegrees = 20.0f;
+    static constexpr float orbitCatchUp = 6.0f; // As catchUp, for following the stick and springing back.
 
     float m_yaw = -90.0f;
+    Fenrir::Math::Vec2 m_orbit = Fenrir::Math::Vec2(0.0f); // Degrees of yaw and pitch the stick has turned it by.
     bool m_following = true;
 };
 
@@ -124,7 +140,11 @@ class VehicleScene
                                    "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
                                    "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
                                    "undo). 4 switches the car off (a plain box) and on; 9 makes its chassis kinematic "
-                                   "(the car inactive, with a warning) and back. F6 goes on.",
+                                   "(the car inactive, with a warning) and back. F6 goes on. A gamepad drives too: the "
+                                   "right trigger drives, the left trigger brakes and then reverses, the left stick "
+                                   "steers, A pulls the handbrake, the right stick looks round the car; X is M, the "
+                                   "bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 (left), and "
+                                   "Start 9.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
@@ -158,6 +178,10 @@ class VehicleScene
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Vehicle camera");
         m_camera.AddComponent<DemoCamera>();
+
+        m_gamepad = m_entities->CreateEntity();
+        m_gamepad.GetComponent<Fenrir::Name>().Set("Gamepad");
+        m_gamepad.AddComponent<DemoGamepad>();
     }
 
     // Update, while the scene is active and before DemoCameras: keys, the camera, and the car's readings.
@@ -180,9 +204,14 @@ class VehicleScene
         }
         if (!active)
         {
+            // DemoGamepads writes only the active scene's: let go of what the pad held, so nothing is stuck on return.
+            m_gamepad.GetComponent<DemoGamepad>() = DemoGamepad{};
+            m_padHeld.clear();
             return;
         }
+        PressPadKeys(app);
         m_followCamera.Update(m_camera.GetComponent<DemoCamera>(), Fenrir::GetWorldTransform(m_car.chassis),
+                              Beyond(m_gamepad.GetComponent<DemoGamepad>().RightStick),
                               static_cast<float>(app.GetTime().deltaTime));
         ShowReadings();
     }
@@ -215,6 +244,47 @@ class VehicleScene
         float speed = 12.0f; // m/s
         bool manual = false; // Whether the way there is driven in Manual, changing gear by hand.
     };
+
+    // A pad button and the key it presses while held.
+    struct PadKey
+    {
+        int button;
+        int key;
+    };
+
+    // The spec's buttons, then the scene's other keys on the buttons it leaves free. A key no ticket handles yet does
+    // nothing, so Y (F: get out and in) and Back (R: right the vehicle) work once their keys do.
+    static constexpr std::array<PadKey, 12> padKeys = {
+        PadKey{GLFW_GAMEPAD_BUTTON_A, GLFW_KEY_SPACE},        PadKey{GLFW_GAMEPAD_BUTTON_LEFT_BUMPER, GLFW_KEY_Q},
+        PadKey{GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER, GLFW_KEY_E}, PadKey{GLFW_GAMEPAD_BUTTON_Y, GLFW_KEY_F},
+        PadKey{GLFW_GAMEPAD_BUTTON_BACK, GLFW_KEY_R},         PadKey{GLFW_GAMEPAD_BUTTON_X, GLFW_KEY_M},
+        PadKey{GLFW_GAMEPAD_BUTTON_B, GLFW_KEY_LEFT_SHIFT},   PadKey{GLFW_GAMEPAD_BUTTON_DPAD_UP, GLFW_KEY_1},
+        PadKey{GLFW_GAMEPAD_BUTTON_DPAD_RIGHT, GLFW_KEY_2},   PadKey{GLFW_GAMEPAD_BUTTON_DPAD_DOWN, GLFW_KEY_7},
+        PadKey{GLFW_GAMEPAD_BUTTON_DPAD_LEFT, GLFW_KEY_4},    PadKey{GLFW_GAMEPAD_BUTTON_START, GLFW_KEY_9}};
+
+    // Each frame: a pad button just pressed presses its key, as the keyboard's would; one let go (or unplugged)
+    // releases it. The pad's held keys are kept apart from the keyboard's, so neither lets go of the other's.
+    void PressPadKeys(Fenrir::App& app)
+    {
+        const DemoGamepad& pad = m_gamepad.GetComponent<DemoGamepad>();
+        for (const PadKey& padKey : padKeys)
+        {
+            if (!pad.Held(padKey.button))
+            {
+                m_padHeld.erase(padKey.key);
+            }
+            else if (m_padHeld.insert(padKey.key).second)
+            {
+                OnKey(app, padKey.key);
+            }
+        }
+    }
+
+    // A stick with each axis inside the deadzone read as zero.
+    static Fenrir::Math::Vec2 Beyond(const Fenrir::Math::Vec2& stick)
+    {
+        return {std::abs(stick.x) > deadzone ? stick.x : 0.0f, std::abs(stick.y) > deadzone ? stick.y : 0.0f};
+    }
 
     void OnKey(Fenrir::App& app, int key)
     {
@@ -310,12 +380,12 @@ class VehicleScene
         vehicle.input.gear = std::clamp(vehicle.input.gear + by, -1, top);
     }
 
-    // The keys as normalised input, or the autopilot's while it drives. While the camera is free, WASD is the
-    // camera's, so only the arrows drive.
+    // The keys and the pad as normalised input, or the autopilot's while it drives. While the camera is free, WASD is
+    // the camera's, so only the arrows drive.
     void Drive(Fenrir::App& app)
     {
         const bool wasd = m_followCamera.Following();
-        const auto held = [this](int key) { return m_held.contains(key); };
+        const auto held = [this](int key) { return m_held.contains(key) || m_padHeld.contains(key); };
         float throttle = held(GLFW_KEY_UP) || (wasd && held(GLFW_KEY_W)) ? 1.0f : 0.0f;
         float back = held(GLFW_KEY_DOWN) || (wasd && held(GLFW_KEY_S)) ? 1.0f : 0.0f;
         float steer = 0.0f;
@@ -323,6 +393,11 @@ class VehicleScene
         steer -= held(GLFW_KEY_LEFT) || (wasd && held(GLFW_KEY_A)) ? 1.0f : 0.0f;
         float clutch = held(GLFW_KEY_LEFT_SHIFT) || held(GLFW_KEY_RIGHT_SHIFT) ? 1.0f : 0.0f;
         bool manual = m_manual;
+        // The pad wins beyond the deadzone. The left trigger is S's: it brakes, then reverses once stopped.
+        const DemoGamepad& pad = m_gamepad.GetComponent<DemoGamepad>();
+        throttle = pad.RightTrigger > deadzone ? pad.RightTrigger : throttle;
+        back = pad.LeftTrigger > deadzone ? pad.LeftTrigger : back;
+        steer = std::abs(pad.LeftStick.x) > deadzone ? pad.LeftStick.x : steer;
         if (m_autopilot)
         {
             Autopilot(app, throttle, back, steer, manual, clutch);
@@ -676,6 +751,7 @@ class VehicleScene
     static constexpr float reached = 6.0f;      // m: the autopilot moves on this close to a waypoint.
     static constexpr long shiftTicks = 30;      // The autopilot's least time between shifts by hand.
     static constexpr long clutchTicks = 10;     // How long it holds the clutch for each.
+    static constexpr float deadzone = 0.15f;    // A pad's trigger or stick axis this close to rest leaves the keys be.
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     const Model* m_cube;
@@ -684,8 +760,10 @@ class VehicleScene
     Fenrir::EntityList* m_entities = nullptr;
     Driven m_car;
     Fenrir::Entity m_camera;
+    Fenrir::Entity m_gamepad;
     VehicleCamera m_followCamera;
     std::set<int> m_held;
+    std::set<int> m_padHeld; // The keys the pad's buttons hold (padKeys).
     bool m_autopilot = false;
     bool m_manual = false;        // The gearbox mode M last chose; the autopilot drives each waypoint in its own.
     long m_shifted = -shiftTicks; // The tick the autopilot last shifted by hand.
