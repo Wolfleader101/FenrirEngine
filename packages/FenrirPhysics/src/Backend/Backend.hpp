@@ -15,6 +15,7 @@
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 
 namespace Fenrir
 {
@@ -57,6 +58,85 @@ namespace Fenrir::Backend
         /** @brief Where the constraint comes in the solve: lower first. Distinct for each joint, so the solve order
          * depends only on which joints exist, not on the order they were made and removed in. */
         std::uint32_t priority = 0;
+    };
+
+    /** @brief PROTOTYPE: a vehicle in one World. Valid until the vehicle is destroyed. */
+    struct VehicleId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /** @brief PROTOTYPE: one wheel, settings already in range. */
+    struct VehicleWheelDesc
+    {
+        /** @brief Chassis-local from the body origin, the chassis's world scale applied: the centre at full
+         * extension. */
+        Math::Vec3 position = Math::Vec3(0.0f);
+        /** @brief Its settings; vehicle, position and state ignored. */
+        VehicleWheel wheel;
+        /** @brief A rebuild's carried spin (rad/s), 0 for a new wheel. */
+        float spin = 0.0f;
+    };
+
+    /** @brief PROTOTYPE: a differential by wheel index, -1 for none. */
+    struct VehicleDifferentialDesc
+    {
+        int left = -1;
+        int right = -1;
+        VehicleDifferential settings;
+    };
+
+    /** @brief PROTOTYPE: an anti-roll bar by wheel index. */
+    struct VehicleAntiRollBarDesc
+    {
+        int left = 0;
+        int right = 1;
+        float stiffness = 0.0f;
+    };
+
+    /** @brief PROTOTYPE: everything needed to make a vehicle on a made dynamic body. */
+    struct VehicleDesc
+    {
+        BodyId body;
+        /** @brief Settings already in range. */
+        VehicleKind kind;
+        std::vector<VehicleWheelDesc> wheels;
+        /** @brief Empty: every wheel driven, each by its own differential (wheeled and motorcycle). */
+        std::vector<VehicleDifferentialDesc> differentials;
+        std::vector<VehicleAntiRollBarDesc> antiRollBars;
+        VehicleProbe probe = VehicleProbe::Cylinder;
+        float maxTilt = 0.0f;
+        std::uint32_t priority = 0;
+        /** @brief A rebuild's carried engine RPM (0: idle) and gear. */
+        float rpm = 0.0f;
+        int gear = 0;
+    };
+
+    /** @brief PROTOTYPE: one wheel as the last collision step left it. */
+    struct VehicleWheelRead
+    {
+        bool onGround = false;
+        std::uint32_t groundEntity = ~0u;
+        std::uint32_t groundCollider = ~0u;
+        Math::Vec3 contactPoint = Math::Vec3(0.0f);
+        Math::Vec3 contactNormal = Math::Vec3(0.0f);
+        Math::Vec3 groundVelocity = Math::Vec3(0.0f);
+        float compression = 0.0f;
+        float suspensionForce = 0.0f;
+        float longitudinalSlip = 0.0f;
+        float lateralSlip = 0.0f;
+        float angularVelocity = 0.0f;
+        /** @brief + right. */
+        float steerAngle = 0.0f;
+        /** @brief Radians, wrapped to [0, 2π). */
+        float spinAngle = 0.0f;
+    };
+
+    /** @brief PROTOTYPE: a vehicle after a step. */
+    struct VehicleRead
+    {
+        VehicleState state;
+        std::vector<VehicleWheelRead> wheels;
     };
 
     /** @brief A character in one World. Valid until the character is destroyed. */
@@ -483,6 +563,23 @@ namespace Fenrir::Backend
          * during a step.
          */
         bool ReshapeCharacter(CharacterId id, const CollisionShape& shape, const Math::Vec3& scale, bool keepLowest);
+
+        // PROTOTYPE vehicles: never during a step.
+
+        /** @brief Makes a vehicle on a made dynamic body: run inside each Step as a step listener. */
+        [[nodiscard]] VehicleId CreateVehicle(const VehicleDesc& desc);
+        /** @brief Before its body is destroyed. */
+        void DestroyVehicle(VehicleId id);
+        /** @brief Live settings: same kind, wheel count and maxAngle as it was made with. Patches each wheel's
+         * settings in place, waking the chassis. */
+        void UpdateVehicle(VehicleId id, const VehicleDesc& desc);
+        /** @brief Applies driver input, clamped; wakes the chassis if `wake`. */
+        void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
+        /** @brief The vehicle's state and its wheels' after the last step. */
+        [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
+        /** @brief A wheel's pose relative to its chassis origin, for a compression, steer (+ right) and spin. */
+        [[nodiscard]] JointFrame WheelPose(VehicleId id, std::size_t wheel, float compression, float steer,
+                                           float spin) const;
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

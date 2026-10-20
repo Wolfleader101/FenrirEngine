@@ -224,11 +224,15 @@ namespace Fenrir
         PushCharacterEdits();
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
         SyncJoints(dt);
+        // PROTOTYPE: after the bodies' edits, so a chassis made or remade in steps 1-2 exists.
+        SyncVehicles();
         ApplyPushes();
         // 3b: before the step, so a character's pushes act in it and it moves against the bodies the step will move.
         MoveCharacters(dt);
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        // PROTOTYPE: after the chassis, so wheels are posed against its new pose.
+        WriteBackVehicles(dt);
         MeasureJoints();
         BreakJoints();
         SendEvents(app);
@@ -383,6 +387,7 @@ namespace Fenrir
             shown.shownLocal = body.entity.GetComponent<Transform>();
             shown.blended = true;
         }
+        BlendVehicles(fraction);
     }
 
     std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
@@ -597,6 +602,7 @@ namespace Fenrir
             it = m_bodies.erase(it);
         }
         RemoveJointsOf(destroyed);
+        RemoveVehiclesOf(destroyed);
         // Characters before the bodies' batch, and made after it, so their bodies come in a reproducible order.
         DropCharacters(changed);
         m_backend.DestroyBodies(destroyed);

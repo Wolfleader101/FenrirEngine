@@ -42,6 +42,7 @@
 #include "CharacterScene.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
+#include "VehicleScene.hpp"
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
@@ -676,6 +677,16 @@ int main(int argc, char* argv[])
     });
     demoScenes.Register(CSharpScenes::Character());
 #endif
+
+    // PROTOTYPE: Vehicles (spike), the F6 family's only scene (VehicleScene.hpp).
+    VehicleScene vehicleScene(cube, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&vehicleScene](Fenrir::App& running) { vehicleScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&vehicleScene](Fenrir::App& running) { vehicleScene.Tick(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&vehicleScene](Fenrir::App& running) { vehicleScene.Update(running); }});
+    demoScenes.Register(VehicleScene::Scene());
 #endif
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.

@@ -21,6 +21,7 @@
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScene/Scene.hpp"
 
 namespace Fenrir
@@ -239,6 +240,20 @@ namespace Fenrir
          * the defaults, and nothing else written. */
         void ResetIdleCharacters();
 
+        // PROTOTYPE vehicles (Vehicles.cpp): each a backend vehicle on its chassis's body, synced after the joints in
+        // step 2, written back after the bodies in step 5, and its wheels blended after the bodies in AfterTicks.
+        struct VehicleRecord;
+        /** @brief Destroys the vehicles on any of `bodies`, which are about to be destroyed, keeping what a rebuild
+         * carries. */
+        void RemoveVehiclesOf(std::span<const Backend::BodyId> bodies);
+        /** @brief Step 2: makes, rebuilds or updates each vehicle in chassis entity order, and pushes its input. */
+        void SyncVehicles();
+        /** @brief Step 5: each vehicle's state, its wheels' states and their poses. */
+        void WriteBackVehicles(float dt);
+        /** @brief AfterTicks: each wheel posed against its chassis's blended pose, `fraction` between its last two
+         * step poses. */
+        void BlendVehicles(float fraction);
+
         void WriteBack();
         void AdvancePoses();
         void SendEvents(App& app);
@@ -380,6 +395,45 @@ namespace Fenrir
         // one.
         std::set<std::uint32_t> m_inactiveCharacters;
         std::set<std::uint32_t> m_characterChildren;
+
+        // PROTOTYPE: a wheel's chassis-local pose inputs after a step: compression, steer and unwrapped spin.
+        struct WheelPoseState
+        {
+            float compression = 0.0f;
+            float steer = 0.0f;
+            float spin = 0.0f;
+        };
+
+        // PROTOTYPE: what physics knows of a vehicle, by chassis entity.
+        struct VehicleRecord
+        {
+            [[nodiscard]] bool Made() const
+            {
+                return id.value != Backend::VehicleId{}.value;
+            }
+
+            Backend::VehicleId id;
+            Backend::BodyId body;
+            VehicleType type = VehicleType::Wheeled;
+            float maxLean = 0.0f;
+            // Its wheels' entities, in entity order, as it was made.
+            std::vector<std::uint32_t> wheels;
+            // What was last applied, to see edits: the settings and the input.
+            std::vector<std::uint32_t> settings;
+            std::vector<std::uint32_t> input;
+            Backend::VehicleRead read;
+            std::vector<WheelPoseState> previous;
+            std::vector<WheelPoseState> current;
+            std::vector<float> wrappedSpin;
+            bool snap = true;
+            // What a rebuild carries: engine RPM and gear, and each wheel's spin by entity.
+            float rpm = 0.0f;
+            int gear = 0;
+            std::map<std::uint32_t, float> spins;
+        };
+        std::map<std::uint32_t, VehicleRecord> m_vehicles;
+        // Warned about once each, until valid again.
+        std::set<std::uint32_t> m_inactiveVehicles;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;
