@@ -8,7 +8,7 @@
 
 **Blocked by:** 02 (`[TaggedUnion]` tracer bullet)
 
-**Status:** ready-for-agent
+**Status:** resolved (built on branch `claude/tagged-union-physics`, on top of 02's). ADR-0011's 2026-10-16 amendment, which said the pattern is written by hand, gains a second amendment. The conversions' parameter is now `value` for every kind, `JointKind`'s `fixedJoint` included; only a call naming the argument could notice.
 
-- [ ] Every existing `PhysicsScriptingTests` case passes unchanged, including the layout validation of `Collider` and `Joint`, the exact message "The shape is a Box, not a Sphere.", and the joint test that `new JointKind()` equals C++'s default.
-- [ ] `CollisionShape.cs` and `JointKind` hold no hand-written view, conversion, `Type`, constructor or `Expect`.
+- [x] Every existing `PhysicsScriptingTests` case passes unchanged, including the layout validation of `Collider` and `Joint`, the exact message "The shape is a Box, not a Sphere.", and the joint test that `new JointKind()` equals C++'s default.
+- [x] `CollisionShape.cs` and `JointKind` hold no hand-written view, conversion, `Type`, constructor or `Expect`.
