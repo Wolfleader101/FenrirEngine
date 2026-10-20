@@ -267,7 +267,7 @@ A joint that does nothing because one of the things it names is not currently a 
 *Avoid:* dormant joint, dangling joint, invalid joint.
 
 **Vehicle**
-A rigid body driven over the ground on wheels or tracks, by driver input game code sets. Its rigid body, the *chassis*, is the only part of it that collides; its wheels touch the ground without being bodies. It has exactly one *vehicle kind*. Switched off, it is a plain rigid body resting on its chassis.
+A rigid body that rolls over the ground on wheels or tracks, driven by driver input game code sets (or, for a *trailer*, towed). Its rigid body, the *chassis*, is the only part of it that collides; its wheels touch the ground without being bodies. It has exactly one *vehicle kind*. Switched off, it is a plain rigid body resting on its chassis.
 *Avoid:* vehicle constraint, vehicle controller (the physics backend's words), car (one kind of vehicle).
 
 **Chassis**
@@ -275,7 +275,7 @@ A vehicle's rigid body: the entity the vehicle lives on, and the only part of th
 *Avoid:* hull (the physics backend's word for its shape), vehicle body.
 
 **Wheel**
-Where a vehicle meets the ground: it finds the ground beneath it, carries the chassis on its suspension, and drives, brakes and steers. It is never a body, and nothing collides with it. Each wheel lives on its own entity, the *wheel entity*, which names its vehicle and is posed by physics so the wheel can be drawn.
+Where a vehicle meets the ground: it finds the ground beneath it, carries the chassis on its suspension, and drives, brakes and steers. It is never a body, and nothing collides with it; it never stands on a character body. Each wheel lives on its own entity, the *wheel entity*, which names its vehicle and is posed by physics so the wheel can be drawn.
 *Avoid:* tyre (only the part that grips), wheel collider.
 
 **Track**
@@ -286,8 +286,13 @@ One of a tracked vehicle's two belts, left or right, driving every wheel that si
 How a vehicle is driven. One of:
 - *wheeled*: steered by turning wheels (a car, a truck);
 - *motorcycle*: two wheels, leaning into turns;
-- *tracked*: steered by driving its two tracks at different speeds.
+- *tracked*: steered by driving its two tracks at different speeds;
+- *trailer*: no engine, only rolling, braking and steering (a trailer, a hand cart).
 *Avoid:* tank (for the kind), vehicle type (for the idea; the code's enum may say type).
+
+**Trailer**
+A vehicle with no engine, which rolls, brakes and may steer but never drives itself. It is usually towed by a joint to another vehicle's chassis; its brakes are whatever game code sets on it.
+*Avoid:* unpowered vehicle, towed vehicle.
 
 **Driver input**
 What game code sets on a vehicle to drive it: how hard to drive forward or back, which way to steer, how hard to brake and to pull the handbrake (for a tracked vehicle, each track's speed instead of steering), and, with a manual gearbox, which gear and how far the clutch is pressed. It stays as set until game code changes it; physics never writes it.
