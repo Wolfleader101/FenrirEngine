@@ -3163,6 +3163,56 @@ namespace Fenrir::Backend
             // Jolt's lateral slip is in degrees.
             Fill(out.mLateralFriction, wheel.lateral, 180.0f / JPH::JPH_PI);
         }
+
+        // A vehicle's differentials, their torque shares normalised: Jolt asserts that they sum to 1 within 1e-6. None
+        // drives each of `wheelCount` wheels equally, by a differential of its own with the defaults.
+        void Fill(JPH::Array<JPH::VehicleDifferentialSettings>& out, std::span<const VehicleDifferentialDesc> given,
+                  std::size_t wheelCount)
+        {
+            std::vector<VehicleDifferentialDesc> differentials(given.begin(), given.end());
+            if (differentials.empty())
+            {
+                for (std::size_t i = 0; i < wheelCount; ++i)
+                {
+                    differentials.push_back(VehicleDifferentialDesc{.leftWheel = static_cast<int>(i)});
+                }
+            }
+            double total = 0.0;
+            for (const VehicleDifferentialDesc& differential : differentials)
+            {
+                total += differential.torqueShare;
+            }
+            out.clear();
+            float shared = 0.0f;
+            for (std::size_t i = 0; i < differentials.size(); ++i)
+            {
+                const VehicleDifferentialDesc& differential = differentials[i];
+                JPH::VehicleDifferentialSettings& made = out.emplace_back();
+                made.mLeftWheel = differential.leftWheel;
+                made.mRightWheel = differential.rightWheel;
+                made.mDifferentialRatio = differential.ratio;
+                made.mLeftRightSplit = differential.leftRightSplit;
+                made.mLimitedSlipRatio = differential.limitedSlipRatio;
+                // All shares 0: shared equally. The last takes what is left, so the shares sum to 1 exactly.
+                const double share =
+                    total > 0.0 ? differential.torqueShare / total : 1.0 / static_cast<double>(differentials.size());
+                made.mEngineTorqueRatio =
+                    i + 1 == differentials.size() ? std::max(1.0f - shared, 0.0f) : static_cast<float>(share);
+                shared += made.mEngineTorqueRatio;
+            }
+        }
+
+        void Fill(JPH::VehicleAntiRollBars& out, std::span<const VehicleAntiRollBarDesc> given)
+        {
+            out.clear();
+            for (const VehicleAntiRollBarDesc& bar : given)
+            {
+                JPH::VehicleAntiRollBar& made = out.emplace_back();
+                made.mLeftWheel = bar.leftWheel;
+                made.mRightWheel = bar.rightWheel;
+                made.mStiffness = bar.stiffness;
+            }
+        }
     } // namespace
 
     VehicleId World::CreateVehicle(const VehicleDesc& desc)
@@ -3173,6 +3223,7 @@ namespace Fenrir::Backend
         settings.mUp = vehicleUp;
         settings.mForward = vehicleForward;
         settings.mConstraintPriority = desc.priority;
+        Fill(settings.mAntiRollBars, desc.antiRollBars);
         // Each vehicle its own wheel settings: its wheels read them by reference.
         for (const VehicleWheelDesc& wheel : desc.wheels)
         {
@@ -3183,15 +3234,7 @@ namespace Fenrir::Backend
         auto* controller = new JPH::WheeledVehicleControllerSettings();
         Fill(controller->mEngine, wheeled.engine);
         Fill(controller->mTransmission, wheeled.transmission);
-        // Every wheel driven equally, each by a differential of its own.
-        for (std::size_t i = 0; i < desc.wheels.size(); ++i)
-        {
-            JPH::VehicleDifferentialSettings differential;
-            differential.mLeftWheel = static_cast<int>(i);
-            differential.mRightWheel = -1;
-            differential.mEngineTorqueRatio = 1.0f / static_cast<float>(desc.wheels.size());
-            controller->mDifferentials.push_back(differential);
-        }
+        Fill(controller->mDifferentials, desc.differentials, desc.wheels.size());
         controller->mDifferentialLimitedSlipRatio = wheeled.limitedSlipRatio;
         settings.mController = controller;
 
@@ -3244,6 +3287,18 @@ namespace Fenrir::Backend
         {
             m_impl->Bodies().ActivateBody(ToJolt(slot.body));
         }
+    }
+
+    void World::SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials)
+    {
+        const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+        Fill(controller.GetDifferentials(), differentials, slot.constraint->GetWheels().size());
+    }
+
+    void World::SetVehicleAntiRollBars(VehicleId id, std::span<const VehicleAntiRollBarDesc> antiRollBars)
+    {
+        Fill(m_impl->vehicles[id.value].constraint->GetAntiRollBars(), antiRollBars);
     }
 
     VehicleRead World::ReadVehicle(VehicleId id) const

@@ -352,4 +352,50 @@ namespace Fenrir
         /** @brief Read-back: overwritten by physics after every step. */
         VehicleWheelState state = {};
     };
+
+    /**
+     * @brief A differential: shares a vehicle's engine torque between two of its wheels (or gives one wheel its share),
+     * on any entity. A vehicle with no differential naming its wheels drives every wheel equally; adding any
+     * differential replaces that, and a wheel in no differential only rolls and brakes. A rear-wheel-drive car is one
+     * differential naming its two rear wheels.
+     *
+     * An empty wheel is "none", so a differential naming one wheel drives just that wheel. A wheel that is not a wheel
+     * entity, or wheels of two different vehicles, make it inactive, with a warning, until its wheels are fixed. Edits
+     * apply on the next tick and wake the chassis.
+     */
+    struct VehicleDifferential
+    {
+        /** @brief A wheel entity, or empty for none. */
+        Entity leftWheel = {};
+        /** @brief A wheel entity of the same vehicle, or empty for none. */
+        Entity rightWheel = {};
+        /** @brief The gearbox's turns per turn of the wheels. */
+        float ratio = 3.42f;
+        /** @brief How the torque is split across the two wheels: 0 all left, 0.5 even, 1 all right. */
+        float leftRightSplit = 0.5f;
+        /** @brief The fastest wheel's speed over the slowest's past which all the torque goes to the slower one: above
+         * 1. A very large value is an open differential. */
+        float limitedSlipRatio = 1.4f;
+        /** @brief This differential's share of the engine torque, against the other differentials of its vehicle:
+         * the shares are normalised, so they need not sum to 1. */
+        float torqueShare = 1.0f;
+    };
+
+    /**
+     * @brief An anti-roll bar: stops a vehicle leaning in corners by pushing its two wheels' suspensions towards the
+     * same compression, on any entity. A vehicle has none by default. It works only while both wheels are on the
+     * ground.
+     *
+     * A wheel that is not a wheel entity, or wheels of two different vehicles, make it inactive, with a warning, until
+     * its wheels are fixed; with a wheel empty it does nothing. Edits apply on the next tick and wake the chassis.
+     */
+    struct VehicleAntiRollBar
+    {
+        /** @brief A wheel entity, usually on the vehicle's left. */
+        Entity leftWheel = {};
+        /** @brief A wheel entity of the same vehicle, usually the left wheel's partner on the right. */
+        Entity rightWheel = {};
+        /** @brief N/m: the push per metre of difference in the two wheels' compression. 0 does nothing. */
+        float stiffness = 1000.0f;
+    };
 } // namespace Fenrir

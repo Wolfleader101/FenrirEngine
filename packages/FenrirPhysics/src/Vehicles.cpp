@@ -7,8 +7,10 @@
 #include <cstdint>
 #include <map>
 #include <numbers>
+#include <optional>
 #include <set>
 #include <span>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -16,6 +18,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
 
@@ -119,6 +122,38 @@ namespace Fenrir
             return corrected;
         }
 
+        bool Same(const Backend::VehicleDifferentialDesc& a, const Backend::VehicleDifferentialDesc& b)
+        {
+            return a.leftWheel == b.leftWheel && a.rightWheel == b.rightWheel && Fenrir::Same(a.ratio, b.ratio) &&
+                   Fenrir::Same(a.leftRightSplit, b.leftRightSplit) &&
+                   Fenrir::Same(a.limitedSlipRatio, b.limitedSlipRatio) && Fenrir::Same(a.torqueShare, b.torqueShare);
+        }
+
+        bool Same(const Backend::VehicleAntiRollBarDesc& a, const Backend::VehicleAntiRollBarDesc& b)
+        {
+            return a.leftWheel == b.leftWheel && a.rightWheel == b.rightWheel && Fenrir::Same(a.stiffness, b.stiffness);
+        }
+
+        template <typename T>
+        bool Same(const std::vector<T>& a, const std::vector<T>& b)
+        {
+            return std::ranges::equal(a, b, [](const T& x, const T& y) { return Same(x, y); });
+        }
+
+        // The kinds of out-of-range value a differential or anti-roll bar can hold, each warned about once per
+        // component.
+        enum LinkProblem : std::uint32_t
+        {
+            LimitedSlipAtOrBelowOne = 1u << 0,
+            RatioNotPositive = 1u << 1,
+            SplitOutOfRange = 1u << 2,
+            NegativeTorqueShare = 1u << 3,
+            NegativeStiffness = 1u << 4,
+        };
+
+        // Just above 0: the least gearbox-to-wheel ratio a differential can have.
+        constexpr float minDifferentialRatio = 1e-3f;
+
         // A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised by its
         // compression, steered about +Y, then spun about its axle, X (rolling forward turns its top towards -Z).
         Transform WheelPose(const Math::Vec3& position, const Backend::VehicleWheelRead& read)
@@ -171,6 +206,163 @@ namespace Fenrir
                     }
                 }
             });
+        // A differential or anti-roll bar removed, or removed and added again, is new: it is warned about afresh. Its
+        // edits and relinks are diffed in step 2.
+        const auto link = [this](ComponentWatch& watch, std::map<std::uint32_t, VehicleLinkRecord>& records, auto has) {
+            for (const ComponentChange& change : watch.Drain())
+            {
+                records.erase(change.entity);
+                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
+                {
+                    records.try_emplace(change.entity);
+                }
+            }
+        };
+        link(m_differentialWatch, m_differentials,
+             [](const Entity& e) { return e.HasComponent<VehicleDifferential>(); });
+        link(m_antiRollBarWatch, m_antiRollBars, [](const Entity& e) { return e.HasComponent<VehicleAntiRollBar>(); });
+    }
+
+    std::map<std::uint32_t, PhysicsWorld::Impl::VehicleLinks> PhysicsWorld::Impl::LinksByVehicle(
+        const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf)
+    {
+        // The vehicle a differential or anti-roll bar's wheels belong to, and their wheel indices, -1 for none. None
+        // for one that names no wheel of a vehicle's wheel set, or is inactive: then it warns, if it was not already.
+        struct Named
+        {
+            std::uint32_t chassis;
+            int left;
+            int right;
+        };
+        const auto name = [this, &wheelsOf](const char* type, std::uint32_t entity, VehicleLinkRecord& record,
+                                            const Entity& left, const Entity& right) -> std::optional<Named> {
+            std::string wrong;
+            std::optional<Entity> vehicle;
+            for (const Entity& wheel : {left, right})
+            {
+                if (!wheel.IsValid())
+                {
+                    continue;
+                }
+                if (wheel != m_entities->HandleOf(wheel.GetId()) || !wheel.HasComponent<VehicleWheel>())
+                {
+                    wrong = "it names entity " + std::to_string(wheel.GetId()) + ", which is not a wheel entity";
+                    break;
+                }
+                const Entity& chassis = wheel.GetComponent<VehicleWheel>().vehicle;
+                if (vehicle && chassis != *vehicle)
+                {
+                    wrong = "its wheels belong to two different vehicles";
+                    break;
+                }
+                vehicle = chassis;
+            }
+            if (!wrong.empty())
+            {
+                if (!record.inactive)
+                {
+                    m_logger->Warn(std::string("The ") + type + " on entity " + std::to_string(entity) +
+                                   " is inactive: " + wrong +
+                                   ". It does nothing until its wheels are wheel entities of one vehicle.");
+                    record.inactive = true;
+                }
+                return std::nullopt;
+            }
+            record.inactive = false;
+            // Naming no wheel, or a wheel that is not one of its vehicle's wheels now: nothing to do.
+            const auto wheels = vehicle && vehicle->IsValid() ? wheelsOf.find(vehicle->GetId()) : wheelsOf.end();
+            if (wheels == wheelsOf.end())
+            {
+                return std::nullopt;
+            }
+            constexpr int none = -1;
+            constexpr int notOfTheSet = -2;
+            const auto indexOf = [&wheels](const Entity& wheel) {
+                if (!wheel.IsValid())
+                {
+                    return none;
+                }
+                const auto at = std::ranges::find(wheels->second, wheel.GetId());
+                return at == wheels->second.end() ? notOfTheSet : static_cast<int>(at - wheels->second.begin());
+            };
+            const Named named{.chassis = vehicle->GetId(), .left = indexOf(left), .right = indexOf(right)};
+            if (named.left == notOfTheSet || named.right == notOfTheSet)
+            {
+                return std::nullopt;
+            }
+            return named;
+        };
+        const auto warn = [this](const char* type, std::uint32_t entity, VehicleLinkRecord& record, LinkProblem problem,
+                                 const char* message) {
+            if ((record.warned & problem) == 0)
+            {
+                record.warned |= problem;
+                m_logger->Warn(std::string("The ") + type + " on entity " + std::to_string(entity) + ": " + message);
+            }
+        };
+
+        std::map<std::uint32_t, VehicleLinks> links;
+        // In entity order, as the records are.
+        for (auto& [entity, record] : m_differentials)
+        {
+            const auto& differential = m_entities->GetEntity(entity).GetComponent<VehicleDifferential>();
+            const char* type = "VehicleDifferential";
+            const std::optional<Named> named =
+                name(type, entity, record, differential.leftWheel, differential.rightWheel);
+            if (!named)
+            {
+                continue;
+            }
+            Backend::VehicleDifferentialDesc desc{.leftWheel = named->left,
+                                                  .rightWheel = named->right,
+                                                  .ratio = differential.ratio,
+                                                  .leftRightSplit = differential.leftRightSplit,
+                                                  .limitedSlipRatio = differential.limitedSlipRatio,
+                                                  .torqueShare = differential.torqueShare};
+            // Written to catch NaN too.
+            if (!(desc.limitedSlipRatio >= minLimitedSlipRatio))
+            {
+                desc.limitedSlipRatio = minLimitedSlipRatio;
+                warn(type, entity, record, LimitedSlipAtOrBelowOne,
+                     "a limited-slip ratio at or below 1 is raised to just above it");
+            }
+            if (!(desc.ratio >= minDifferentialRatio))
+            {
+                desc.ratio = minDifferentialRatio;
+                warn(type, entity, record, RatioNotPositive, "a ratio at or below 0 is raised to a small minimum");
+            }
+            if (!(desc.leftRightSplit >= 0.0f && desc.leftRightSplit <= 1.0f))
+            {
+                desc.leftRightSplit = desc.leftRightSplit > 1.0f ? 1.0f : 0.0f;
+                warn(type, entity, record, SplitOutOfRange, "a left-right split outside 0 to 1 is clamped into it");
+            }
+            if (!(desc.torqueShare >= 0.0f))
+            {
+                desc.torqueShare = 0.0f;
+                warn(type, entity, record, NegativeTorqueShare, "a negative torque share is treated as 0");
+            }
+            links[named->chassis].differentials.push_back(desc);
+        }
+        for (auto& [entity, record] : m_antiRollBars)
+        {
+            const auto& bar = m_entities->GetEntity(entity).GetComponent<VehicleAntiRollBar>();
+            const char* type = "VehicleAntiRollBar";
+            const std::optional<Named> named = name(type, entity, record, bar.leftWheel, bar.rightWheel);
+            // With a wheel empty, it has nothing to push against.
+            if (!named || named->left < 0 || named->right < 0)
+            {
+                continue;
+            }
+            Backend::VehicleAntiRollBarDesc desc{
+                .leftWheel = named->left, .rightWheel = named->right, .stiffness = bar.stiffness};
+            if (!(desc.stiffness >= 0.0f))
+            {
+                desc.stiffness = 0.0f;
+                warn(type, entity, record, NegativeStiffness, "a negative stiffness is treated as 0");
+            }
+            links[named->chassis].antiRollBars.push_back(desc);
+        }
+        return links;
     }
 
     void PhysicsWorld::Impl::RemoveVehiclesOf(std::span<const Backend::BodyId> bodies)
@@ -235,6 +427,7 @@ namespace Fenrir
     void PhysicsWorld::Impl::SyncVehicles()
     {
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheelsOf = WheelsByVehicle();
+        std::map<std::uint32_t, VehicleLinks> linksOf = LinksByVehicle(wheelsOf);
         // In chassis entity order, so vehicles are made, and so solved, in a reproducible order.
         for (const std::uint32_t chassis : m_vehicleEntities)
         {
@@ -250,6 +443,7 @@ namespace Fenrir
 
             Entity entity = m_entities->GetEntity(chassis);
             const Vehicle& vehicle = entity.GetComponent<Vehicle>();
+            const VehicleLinks& links = linksOf[chassis];
             bool wake = false;
             if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels)
             {
@@ -258,6 +452,8 @@ namespace Fenrir
                 desc.body = body->id;
                 desc.kind = InRange(vehicle.kind);
                 desc.priority = chassis;
+                desc.differentials = links.differentials;
+                desc.antiRollBars = links.antiRollBars;
                 for (const std::uint32_t wheel : wheels)
                 {
                     const VehicleWheel& settings = m_entities->GetEntity(wheel).GetComponent<VehicleWheel>();
@@ -267,11 +463,25 @@ namespace Fenrir
                 record.id = m_backend.CreateVehicle(desc);
                 record.body = body->id;
                 record.wheels = wheels;
+                record.links = links;
                 for (const Backend::VehicleWheelDesc& wheel : desc.wheels)
                 {
                     record.positions.push_back(wheel.position);
                 }
                 PoseWheels(record, m_backend.ReadVehicle(record.id), body->world);
+                wake = true;
+            }
+            // Differential and anti-roll-bar edits and relinks, live.
+            if (!Same(links.differentials, record.links.differentials))
+            {
+                m_backend.SetVehicleDifferentials(record.id, links.differentials);
+                record.links.differentials = links.differentials;
+                wake = true;
+            }
+            if (!Same(links.antiRollBars, record.links.antiRollBars))
+            {
+                m_backend.SetVehicleAntiRollBars(record.id, links.antiRollBars);
+                record.links.antiRollBars = links.antiRollBars;
                 wake = true;
             }
 
