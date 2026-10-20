@@ -153,6 +153,8 @@ class VehicleScene
                                    "X is M, the bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 "
                                    "(left), and Start 9.",
                         .smokeKeys = {GLFW_KEY_P}};
+        // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
+        scene.smokeKeys.insert(scene.smokeKeys.begin(), 7, GLFW_KEY_F2);
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);

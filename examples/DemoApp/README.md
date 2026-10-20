@@ -29,7 +29,7 @@ keys.
 | Right mouse (hold) and move | Looks around. |
 | `W` `A` `S` `D`, `Shift` | Moves the camera; `Shift` is faster. The scroll wheel zooms. `F1` turns the camera controls off and on. |
 | Left click in the scene view | Selects the entity under the cursor in the editor. In the Physics (C#) scene it also casts a ray from C#. |
-| `F2` | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, joints, characters, all (physics on). The mode is the app's, so it carries across a scene switch. |
+| `F2` | Cycles the physics debug lines: off, colliders, contacts, velocities, bounds, joints, characters, vehicles, all (physics on). The mode is the app's, so it carries across a scene switch. |
 | `F3` | Switches between Default and Physics (C#) (physics and scripting on; without scripting it does nothing). |
 | `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
 | `F4` | Steps Default → Joints (C++) → Joints (C#) → Default (physics on; without scripting it switches between Default and Joints (C++)). |

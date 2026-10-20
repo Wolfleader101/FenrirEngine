@@ -1,6 +1,7 @@
 // A physics world's debug lines, made after each step from FenrirPhysics's own record of its bodies (shape, step pose,
 // motion type, trigger flag) and what it asks the backend privately (contacts, bounds, sleep, velocity, the edges of a
-// cooked hull or mesh). Never through the backend's own debug renderer, so they look the same whatever the backend.
+// cooked hull or mesh, each vehicle's wheels). Never through the backend's own debug renderer, so they look the same
+// whatever the backend.
 
 #include <array>
 #include <cmath>
@@ -29,6 +30,8 @@ namespace Fenrir
         constexpr float jointAxisB = 0.25f;
         // The length of a character's ground normal.
         constexpr float groundNormal = 0.5f;
+        // Half the size of the cross-tick at a vehicle wheel's centre on its suspension.
+        constexpr float suspensionTick = 0.08f;
 
         // Adds lines through a pose: points given in the shape's own space come out in world space.
         class LineWriter
@@ -146,6 +149,22 @@ namespace Fenrir
             }
             return sleeping ? DebugColour::Dimmed(colour) : colour;
         }
+
+        // A wheel's contact colour: the worse of its two slips against its tyres'.
+        std::uint32_t GripColour(const VehicleWheel& settings, const Backend::VehicleWheelRead& read)
+        {
+            const float along = std::abs(read.longitudinalSlip);
+            const float across = std::abs(read.lateralSlip);
+            if (along > settings.longitudinal.slideSlip || across > settings.lateral.slideSlip)
+            {
+                return DebugColour::PastSlideSlip;
+            }
+            if (along > settings.longitudinal.peakSlip || across > settings.lateral.peakSlip)
+            {
+                return DebugColour::PastPeakSlip;
+            }
+            return DebugColour::Gripping;
+        }
     } // namespace
 
     void PhysicsWorld::SetDebugDraw(DebugDraw categories)
@@ -184,6 +203,10 @@ namespace Fenrir
         if (Includes(m_debugDraw, DebugDraw::Characters))
         {
             DrawCharacters(used);
+        }
+        if (Includes(m_debugDraw, DebugDraw::Vehicles))
+        {
+            DrawVehicles();
         }
         m_shapeEdges = std::move(used);
         if (Includes(m_debugDraw, DebugDraw::Contacts))
@@ -272,6 +295,54 @@ namespace Fenrir
             {
                 m_debugLines.push_back(DebugLine{
                     record.world.pos, record.world.pos + velocitySeconds * moved.movedVelocity, DebugColour::Velocity});
+            }
+        }
+    }
+
+    void PhysicsWorld::Impl::DrawVehicles()
+    {
+        // Only vehicles with a backend vehicle: disabled and inactive ones have none, and draw nothing.
+        const Math::Quat none(1.0f, 0.0f, 0.0f, 0.0f);
+        for (const auto& [chassis, record] : m_vehicles)
+        {
+            if (!record.Made())
+            {
+                continue;
+            }
+            const Transform& body = m_bodies.at(chassis).world;
+            const Backend::VehicleRead read = m_backend.ReadVehicle(record.id);
+            for (std::size_t i = 0; i < record.given.size(); ++i)
+            {
+                const Backend::VehicleWheelDesc& given = record.given[i];
+                const Backend::VehicleWheelRead& wheel = read.wheels[i];
+                const Transform pose = WheelPose(given, wheel);
+
+                // The suspension in the chassis's axes: from the top of its travel down to full extension, with a
+                // cross-tick across it at the wheel's centre, in the axes of the wheel's mount.
+                const LineWriter suspension(m_debugLines, body.pos, body.rot, DebugColour::Suspension);
+                suspension(given.position + given.steeringAxis * given.settings.suspension.travel, given.position);
+                for (const Math::Vec3& axis : {xAxis, zAxis})
+                {
+                    const Math::Vec3 across = suspensionTick * (given.rest * axis);
+                    suspension(pose.pos - across, pose.pos + across);
+                }
+
+                // The wheel in its own plane, Y and Z about its axle X, with a spoke up its Y.
+                const LineWriter rim(m_debugLines, body.pos + body.rot * pose.pos, body.rot * pose.rot,
+                                     DebugColour::Wheel);
+                const float radius = given.settings.radius;
+                rim.Arc(Math::Vec3(0.0f), yAxis, zAxis, radius, 0.0f, 2.0f * pi, circleSegments);
+                rim(Math::Vec3(0.0f), radius * yAxis);
+
+                if (wheel.onGround)
+                {
+                    const LineWriter contact(m_debugLines, wheel.contactPoint, none, GripColour(given.settings, wheel));
+                    for (const Math::Vec3& axis : {xAxis, yAxis, zAxis})
+                    {
+                        contact(-contactCross * axis, contactCross * axis);
+                    }
+                    contact(Math::Vec3(0.0f), contactNormal * wheel.contactNormal);
+                }
             }
         }
     }
