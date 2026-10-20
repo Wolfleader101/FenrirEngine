@@ -113,16 +113,16 @@ A new debug-line category, `Vehicles`, draws each wheel's suspension, its circle
 
 ### Prerequisite: the `[TaggedUnion]` generator (FenrirScripting)
 
-`VehicleKind` is the engine's third tagged union, the trigger "What does C# get for joints?" set for the generator ("What does C# get for vehicles?", decision 1). The generator is designed in its own open ticket, **"What does a `[TaggedUnion]` generator emit, and what does its author still write?"** (`.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md`). This spec does not redesign it. What the vehicles work needs from it, fixed by ticket 47:
+`VehicleKind` is the engine's third tagged union, the trigger "What does C# get for joints?" set for the generator ("What does C# get for vehicles?", decision 1). The generator is designed in its own ticket, **"What does a `[TaggedUnion]` generator emit, and what does its author still write?"** (`.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md`, resolved; build tickets 02–04 beside it). This spec does not redesign it. What the vehicles work needs from it, fixed by ticket 47 and amended by the generator ticket:
 
-- **The author writes** the tag enum (backed by `byte`), `[TaggedUnion(Offset = 4)]` on a `[StructLayout(LayoutKind.Explicit)] public partial struct`, the tag field at `[FieldOffset(0)]`, and one private field per kind at `[FieldOffset(Offset)]`, paired with the enum member of the same name. The fields stay hand-written because the native mapping (`IRIS_FIELD_AS`) and Iris's layout check name them.
-- **The generator emits** a parameterless constructor setting the tag-0 kind to its `new()` (so `new()` and `default` agree on the kind), `Type`, one `[UnscopedRef] ref` view per kind named after the enum member, an implicit conversion from each kind, and `InvalidOperationException` on the wrong view in the existing message shape.
-- **Build errors** (generator diagnostics) for: a struct that is not partial; a field with no matching enum member, or an enum member with no field; a kind field not at `Offset`, or the tag not at 0; a kind that is not unmanaged; an enum not backed by `byte`.
-- **`CollisionShape` and `JointKind` move onto it in the same ticket**, with their existing tests passing unchanged, which proves the surface is the same. The FenrirScripting README's "Tagged unions" section is rewritten around the generator. Script authors can use it too.
+- **The author writes** the tag enum (any enum; the engine's are backed by `byte`), `[TaggedUnion(Noun = "vehicle")]` on a `[StructLayout(LayoutKind.Explicit)] public partial struct`, the tag field at `[FieldOffset(0)]`, and one private field per kind at one shared `[FieldOffset(n)]`, named `_` plus its enum member with the first letter lowered. The offset is written only there; the attribute has no `Offset`. The fields stay hand-written because the native mapping (`IRIS_FIELD_AS`) and Iris's layout check name them.
+- **The generator emits** a parameterless constructor setting the tag-0 kind to its `new()` (so `new()` and `default` agree on the kind), `Type`, one `[UnscopedRef] ref` view per kind named after the enum member, an implicit conversion from each kind, and `InvalidOperationException` on the wrong view: "The {noun} is a {kind}, not a {wanted}.", the noun being `Noun` or, left out, the struct's name.
+- **Build errors** (generator diagnostics FENRIR0030–0038) for, among others: a struct that is not partial; a field with no matching enum member, or an enum member with no field; kind fields not sharing one offset, or the tag not at 0; a kind that is not unmanaged; an author-written member the generator emits. The full list is the generator ticket's.
+- **`CollisionShape` and `JointKind` move onto it** (generator build ticket 04; `CollisionShape`'s `_hull` becomes `_convexHull` in C# and its one native mapping string), with their existing tests passing unchanged, which proves the surface is the same. The FenrirScripting README's "Tagged unions" section is rewritten around the generator. Script authors can use it too.
 - **`VehicleKind` needs nothing beyond that:** four kinds at offset 4, one of them empty (`TrailerVehicle`, one unused byte, as `FixedJoint`).
 - The generator emits no C++. Each union's native side, including `VehicleKind`'s plain stand-in in `FenrirPhysicsScripting`, stays hand-written.
 - No ADR: the generator emits exactly the hand-written surface, so pasting that code back removes it.
-- **Left to the generator ticket:** see Further Notes, "Open, owned by the generator ticket" (the `_hull` field name).
+- **The `_hull` field name** is settled by the generator ticket: one name rule, no override, so the move renames it.
 - It lands and is tested before the vehicle extension work.
 
 **No other prerequisites.** Read-only fields through `Ref<T>` (the character spec) and `EntityLink` made from an `Entity` with `EntityLink.None` (the joints spec) are built. FenrirECS needs nothing new: the vehicle watches use the foundation's component watches.
@@ -380,7 +380,7 @@ All in `src/Backend/Jolt/`; no public header names Jolt.
     - `Vehicle`: `VehicleKind Kind = new()`, `VehicleInput Input`, `VehicleProbe Probe = Cylinder`, `float MaxTilt = π`, `bool Enabled = true`, `public readonly VehicleState State`;
     - `VehicleWheel`: `EntityLink Vehicle = EntityLink.None`, `Position`, `Track`, the settings in C++'s order, `public readonly VehicleWheelState State`;
     - `VehicleDifferential` and `VehicleAntiRollBar`: `EntityLink LeftWheel` and `RightWheel`, both `EntityLink.None` when new, then their settings;
-  - `VehicleKind`, made with the generator: tag `VehicleType : byte { Wheeled, Motorcycle, Tracked, Trailer }`, views `Wheeled`, `Motorcycle`, `Tracked` and `Trailer`, kinds `WheeledVehicle`, `MotorcycleVehicle`, `TrackedVehicle` and `TrailerVehicle` at offset 4; `TrailerVehicle` holds one unused byte; `new VehicleKind()` is wheeled;
+  - `VehicleKind`, made with the generator: `[TaggedUnion(Noun = "vehicle")]`, tag `VehicleType : byte { Wheeled, Motorcycle, Tracked, Trailer }`, views `Wheeled`, `Motorcycle`, `Tracked` and `Trailer`, kinds `WheeledVehicle`, `MotorcycleVehicle`, `TrackedVehicle` and `TrailerVehicle` at offset 4; `TrailerVehicle` holds one unused byte; `new VehicleKind()` is wheeled;
   - the settings structs `VehicleEngine`, `VehicleTransmission` (with `TransmissionMode`), `VehicleTrack`, `MotorcycleLean`, `VehicleSuspension` (whose `Spring` is the existing `JointSpring`), `VehicleTyre` and `VehicleInput`, and the enums `VehicleProbe` and `VehicleTrackSide`, under C++'s names;
   - `VehicleState` and `VehicleWheelState` as `readonly struct`s with `readonly` fields; `VehicleWheelState.GroundBody` and `GroundCollider` are `EntityLink`s, `EntityLink.None` when new;
   - `DebugDraw.Vehicles` in `PhysicsWorld.cs`.
@@ -515,8 +515,7 @@ All in `src/Backend/Jolt/`; no public header names Jolt.
 
 ## Further Notes
 
-- **Open, owned by the generator ticket** (the user left it there at review, 2026-10-20; it does not block `/to-tickets`):
-  1. **The generator's field-name rule against `CollisionShape`'s `_hull`.** Ticket 47 says each private kind field is named `_` plus its enum member in camelCase, that a field with no matching enum member is a build error, and that moving `CollisionShape` and `JointKind` onto the generator changes no native code. `CollisionShape`'s `ConvexHull` kind is held in `_hull` (C# `CollisionShape.cs` and `IRIS_FIELD_AS(Layout, hull, "_hull")` in `PhysicsScripting.cpp`), so under the rule it must become `_convexHull`, which changes one native mapping line. The generator ticket raised this case itself (its sub-question 2, an explicit `[UnionKind]` on the field). Either the rule gains an explicit mapping, or the move renames `_hull` in both languages. The generator ticket owns the choice; this spec only needs `VehicleKind` and the two moved unions to work.
+- **Settled by the generator ticket** (`.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md`): the field-name rule has no override, so moving `CollisionShape` renames `_hull` to `_convexHull` in C# and in its one native mapping string (generator build ticket 04). It also allows any enum as the tag, drops ticket 47's `Offset =` and adds an optional `Noun` for the wrong-view message.
 - **ADR-0015 is amended by the first build ticket,** as `CODING_STANDARDS.md` asks of a change that makes an ADR false:
   - `VehicleKind` has four alternatives, adding `TrailerVehicle` (ticket 45);
   - the left-or-right field is `VehicleTrackSide track`, since `VehicleTrack` is the per-track settings struct (ticket 43; the spike's name);
@@ -528,7 +527,7 @@ All in `src/Backend/Jolt/`; no public header names Jolt.
   - ADR-0015, with ADR-0009 to ADR-0014 still applying;
   - research branches `research/jolt-vehicles` (`c891ac5`) and `research/engine-vehicle-models` (`7e98980`);
   - the spike branch `prototype/fenrir-physics-vehicles-spike` (`a5c6d8c`);
-  - the generator's own ticket, `.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md` (open).
+  - the generator's own ticket, `.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md` (resolved), and its build tickets 02–04.
 - **Where tickets disagreed,** the later one is followed:
   - the probe defaults to `Cylinder` for every kind (46, over 43's `Ray` for tracked);
   - the hard point sits a private margin above the travel, min length = margin (46, over 43's min length 0 at the top of the travel);
