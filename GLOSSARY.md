@@ -266,6 +266,33 @@ What a joint did in the last step: the force and torque it carried, and where it
 A joint that does nothing because one of the things it names is not currently a rigid body it can join (gone, never a body, the same body twice, or in another scene). It is kept as it is and becomes active again by itself once both names are valid. Unlike a disabled joint, nobody switched it off; a joint whose bodies all cannot move is not inactive, only idle.
 *Avoid:* dormant joint, dangling joint, invalid joint.
 
+**Vehicle**
+A rigid body driven over the ground on wheels or tracks, by driver input game code sets. Its rigid body, the *chassis*, is the only part of it that collides; its wheels touch the ground without being bodies. It has exactly one *vehicle kind*. Switched off, it is a plain rigid body resting on its chassis.
+*Avoid:* vehicle constraint, vehicle controller (the physics backend's words), car (one kind of vehicle).
+
+**Chassis**
+A vehicle's rigid body: the entity the vehicle lives on, and the only part of the vehicle that collides with anything.
+*Avoid:* hull (the physics backend's word for its shape), vehicle body.
+
+**Wheel**
+Where a vehicle meets the ground: it finds the ground beneath it, carries the chassis on its suspension, and drives, brakes and steers. It is never a body, and nothing collides with it. Each wheel lives on its own entity, the *wheel entity*, which names its vehicle and is posed by physics so the wheel can be drawn.
+*Avoid:* tyre (only the part that grips), wheel collider.
+
+**Track**
+One of a tracked vehicle's two belts, left or right, driving every wheel that sits on it.
+*Avoid:* tread.
+
+**Vehicle kind**
+How a vehicle is driven. One of:
+- *wheeled*: steered by turning wheels (a car, a truck);
+- *motorcycle*: two wheels, leaning into turns;
+- *tracked*: steered by driving its two tracks at different speeds.
+*Avoid:* tank (for the kind), vehicle type (for the idea; the code's enum may say type).
+
+**Driver input**
+What game code sets on a vehicle to drive it: how hard to drive forward or back, which way to steer, how hard to brake and to pull the handbrake (for a tracked vehicle, each track's speed instead of steering). It stays as set until game code changes it; physics never writes it.
+*Avoid:* controls, commands.
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
