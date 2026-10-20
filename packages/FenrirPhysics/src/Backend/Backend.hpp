@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -104,6 +105,27 @@ namespace Fenrir::Backend
         float stiffness = 1000.0f;
     };
 
+    /** @brief One wheel's spin, carried from a vehicle to the one rebuilt in its place. */
+    struct VehicleWheelSpin
+    {
+        /** @brief rad/s, + rolls forward. */
+        float angularVelocity = 0.0f;
+        /** @brief Radians, + forward, within one turn. */
+        float spinAngle = 0.0f;
+    };
+
+    /** @brief What a rebuilt vehicle carries over from the one it replaces. */
+    struct VehicleCarry
+    {
+        float engineRpm = 0.0f;
+        /** @brief -1 reverse, 0 neutral, 1 and up forward. */
+        int gear = 0;
+        /** @brief 0 engaged, 1 fully disengaged. */
+        float clutch = 0.0f;
+        /** @brief In the new vehicle's wheel order: a new wheel's is still. */
+        std::vector<VehicleWheelSpin> wheels;
+    };
+
     /**
      * @brief Everything needed to make a vehicle on a made dynamic body. Chassis-local +Y is up and -Z is forward. Its
      * kind's settings are already in range.
@@ -122,6 +144,8 @@ namespace Fenrir::Backend
         float maxTilt = std::numbers::pi_v<float>;
         /** @brief Where the vehicle comes in the solve: lower first, as JointDesc::priority. */
         std::uint32_t priority = 0;
+        /** @brief None starts it at idle in neutral, its wheels still. */
+        std::optional<VehicleCarry> carried;
     };
 
     /** @brief One wheel as the last collision step left it. */
@@ -584,7 +608,8 @@ namespace Fenrir::Backend
         /**
          * @brief Makes a vehicle on a made dynamic body, waking it: from the next Step it runs inside each collision
          * step, every wheel probing the ground beneath it, filtered as the body is and never finding the body itself or
-         * a trigger. Its wheels start still, its engine at idle and its gearbox in neutral. Never during a step.
+         * a trigger. Its wheels start still, its engine at idle and its gearbox in neutral, unless it carries those
+         * over from `desc.carried`. Never during a step.
          */
         [[nodiscard]] VehicleId CreateVehicle(const VehicleDesc& desc);
 
