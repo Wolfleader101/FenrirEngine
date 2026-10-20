@@ -21,6 +21,7 @@
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScene/Scene.hpp"
 
 namespace Fenrir
@@ -37,10 +38,10 @@ namespace Fenrir
 
         /**
          * @brief One tick: make and remove bodies and joints for the components added and removed since the last tick
-         * (a joint's constraint before its bodies go, and after they come), push the edits game code made to
-         * components and world transforms, bodies before joints, step by `dt` seconds, write dynamic bodies' poses and
-         * velocities back, break overloaded joints, and send the step's contact, trigger and JointBroken events to
-         * `app`.
+         * (a joint's constraint and a vehicle before their bodies go, and after they come), push the edits game code
+         * made to components and world transforms, bodies before joints and joints before vehicles, step by `dt`
+         * seconds, write dynamic bodies' poses and velocities back and then vehicles' states and wheel poses, break
+         * overloaded joints, and send the step's contact, trigger and JointBroken events to `app`.
          */
         void Step(App& app, float dt);
 
@@ -239,6 +240,32 @@ namespace Fenrir
          * the defaults, and nothing else written. */
         void ResetIdleCharacters();
 
+        // Vehicles (Vehicles.cpp): each a backend vehicle on its chassis's body, removed before its body goes, made
+        // after the joints in step 2, and written back after the bodies in step 5.
+
+        /** @brief Drains the Vehicle and VehicleWheel watches, with the body watches: a vehicle whose Vehicle or one of
+         * whose wheels came or went since the last tick loses its backend vehicle, made again in step 2. */
+        void DrainVehicles();
+        /** @brief Removes the backend vehicles on any of `bodies`, which are about to be destroyed. */
+        void RemoveVehiclesOf(std::span<const Backend::BodyId> bodies);
+        struct VehicleRecord;
+        /** @brief Removes the vehicle's backend vehicle, if it has one, and forgets what was applied to it. */
+        void DropVehicle(VehicleRecord& record);
+        /** @brief The made dynamic body of the chassis on `chassis`, if it can be a vehicle's; null otherwise. */
+        [[nodiscard]] const Record* ChassisBodyOf(std::uint32_t chassis) const;
+        /** @brief Each vehicle's wheel entities that can be its wheels, in entity order, by chassis entity. */
+        [[nodiscard]] std::map<std::uint32_t, std::vector<std::uint32_t>> WheelsByVehicle() const;
+        /** @brief Step 2, after the joints, in chassis entity order: makes the backend vehicle of each chassis with a
+         * dynamic body and wheels, remade when its body or wheel set changed, and gives it its driver input, waking the
+         * chassis on a change. */
+        void SyncVehicles();
+        /** @brief Writes each of the vehicle's wheel entities' world position and rotation from `read`, against the
+         * chassis pose `chassis`, parents before children. */
+        void PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis);
+        /** @brief Step 5, after the bodies: each vehicle's state, its wheels' states and their poses; the states of
+         * those with no backend vehicle reset. */
+        void WriteBackVehicles();
+
         void WriteBack();
         void AdvancePoses();
         void SendEvents(App& app);
@@ -380,6 +407,29 @@ namespace Fenrir
         // one.
         std::set<std::uint32_t> m_inactiveCharacters;
         std::set<std::uint32_t> m_characterChildren;
+
+        // What physics knows of a vehicle, by chassis entity: its backend vehicle, the body and wheel entities it was
+        // made with, and the driver input last given to it. None while its chassis has no dynamic body or no wheels.
+        struct VehicleRecord
+        {
+            [[nodiscard]] bool Made() const
+            {
+                return id.value != Backend::VehicleId{}.value;
+            }
+
+            Backend::VehicleId id;
+            Backend::BodyId body;
+            // In wheel order (entity order), with each wheel's position as given to the backend.
+            std::vector<std::uint32_t> wheels;
+            std::vector<Math::Vec3> positions;
+            VehicleInput input;
+        };
+        ComponentWatch m_vehicleWatch;
+        ComponentWatch m_wheelWatch;
+        // The entities with a Vehicle, and with a VehicleWheel, now, as the watches have reported them.
+        std::set<std::uint32_t> m_vehicleEntities;
+        std::set<std::uint32_t> m_wheelEntities;
+        std::map<std::uint32_t, VehicleRecord> m_vehicles;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

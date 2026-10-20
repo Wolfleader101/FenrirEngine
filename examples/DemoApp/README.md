@@ -6,9 +6,9 @@ some only in C#). It is also the smoke test of C# scripting in a real app (the p
 
 ## Scenes and controls
 
-The demo has up to four scenes, and the editor shows whichever is active. Each feature family gets one F-key, which steps through
+The demo has several scenes, and the editor shows whichever is active. Each feature family gets one F-key, which steps through
 the family's scenes and back to Default (`src/DemoScenes.hpp`); another family's key jumps to its first scene. `F3` is physics from
-C#, `F4` joints; `F5` to `F8` are kept for the character controller, vehicles, ragdolls and soft bodies. Entering a scene logs its
+C#, `F4` joints, `F5` the character controller and `F6` vehicles; `F7` and `F8` are kept for ragdolls and soft bodies. Entering a scene logs its
 keys.
 
 - **Default**, the one it starts in: two backpacks, four lights and, with physics on, the C++ physics demo (a stack of boxes on a
@@ -19,6 +19,8 @@ keys.
   keys).
 - **Joints (C#)**, with physics and scripting both on: a breakable bridge, a lift, a spring rope and a limb, built and run entirely
   by a C# script (see "The C# joints scene" below).
+- **Vehicles (C++)**, with physics on: a car driven round a track of bumps and a ramp, with a chase camera, built in C++
+  (`src/VehicleScene.hpp`, whose header describes it; entering the scene logs its keys).
 
 | Key or button | Does |
 |---|---|
@@ -30,6 +32,7 @@ keys.
 | `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
 | `F4` | Steps Default → Joints (C++) → Joints (C#) → Default (physics on; without scripting it switches between Default and Joints (C++)). |
 | `J` | In the Physics (C#) scene: kicks every box and sphere into the air. |
+| `F6` | Switches between Default and Vehicles (C++) (physics on). |
 
 Physics steps only the active scene, so the scene you switch away from waits, bodies mid-air and all, and carries on from there
 when you switch back. The scripting demo's C# systems also act only on the active scene, and each scene's keys act only while it
@@ -130,7 +133,7 @@ To run one scene by itself, `FENRIR_DEMO_SCENE=<name>` starts in it (by its name
 FENRIR_DEMO_SCENE="Physics (C#)" FENRIR_DEMO_KEYS=1 ./DemoApp.exe
 ```
 
-The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`.
+The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scene is `"Vehicles (C++)"`.
 
 ### Change the script while the demo runs
 

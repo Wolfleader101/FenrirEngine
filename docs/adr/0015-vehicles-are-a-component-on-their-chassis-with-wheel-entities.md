@@ -11,26 +11,31 @@ A **vehicle** is a `Vehicle` component on the entity of a dynamic `RigidBody`, i
 ```cpp
 struct Vehicle
 {
-    VehicleKind kind;   // tagged union: WheeledVehicle, MotorcycleVehicle, TrackedVehicle
-    VehicleInput input; // forward [-1, 1], steer [-1, 1] (+ right), brake [0, 1], handbrake [0, 1]
+    VehicleKind kind;   // tagged union: WheeledVehicle, MotorcycleVehicle, TrackedVehicle, TrailerVehicle
+    VehicleInput input; // forward [-1, 1], steer [-1, 1] (+ right), brake [0, 1], handbrake [0, 1],
+                        // leftTrack and rightTrack [-1, 1] (1 by default), gear and clutch
+    VehicleProbe probe = VehicleProbe::Cylinder; // how every wheel finds the ground
+    float maxTilt = pi;                          // the cone the chassis can't pitch or roll past; pi is off
     bool enabled = true;
+    VehicleState state; // read-back, written by physics after every step
 };
 
 struct VehicleWheel
 {
-    Entity vehicle;      // the chassis entity
-    Math::Vec3 position; // chassis-local, from the chassis origin
-    VehicleTrack track;  // left or right; read only by tracked vehicles
-    // wheel settings decided by later tickets
+    Entity vehicle;         // the chassis entity
+    Math::Vec3 position;    // chassis-local, from the chassis origin
+    VehicleTrackSide track; // left or right; read only by tracked vehicles
+    // radius, width, inertia, angles, suspension, steering, brakes and tyres
+    VehicleWheelState state; // read-back, written by physics after every step
 };
 ```
 
 - **The chassis is the body.** `Vehicle` sits beside the entity's `RigidBody` and `Collider`, and the chassis is the only part of a vehicle that collides. A body is at most one vehicle, so one component per type is enough.
 - **Axes are a convention:** chassis-local +Y is up and −Z is forward, matching the engine's Y-up, right-handed conventions and the camera's default front. A model authored facing another way is turned on a child mesh entity.
 - **The kind is a tagged union,** as `CollisionShape` is in `Collider` and `JointKind` is in `Joint`. Each alternative holds that kind's drivetrain. Changing kind is an assignment, and physics rebuilds the backend vehicle privately.
-- **Driver input is normalised and persistent.** Game code writes `input` in `Tick`, and physics applies it in `PostTick`. A tracked vehicle's alternative adds left and right track ratios and ignores `steer` and `handbrake`: turning a steering value into track speeds is game code's job. Physics never writes `input`. A value stays until game code changes it, so input is not a one-shot request.
+- **Driver input is normalised and persistent.** Game code writes `input` in `Tick`, and physics applies it in `PostTick`. The left and right track ratios sit in the shared `VehicleInput`, defaulting to 1; a tracked vehicle reads them and ignores `steer` and `handbrake`, and the other kinds ignore them: turning a steering value into track speeds is game code's job. Physics never writes `input`. A value stays until game code changes it, so input is not a one-shot request.
 - **Wheels live on wheel entities.**
-  - The `vehicle` link is explicit, never "my parent", so a wheel entity can sit anywhere in the hierarchy (usually under the chassis).
+  - The `vehicle` link is explicit, never "my parent", so a wheel entity can sit anywhere in the hierarchy. Keep it out of the chassis's hierarchy: physics writes a wheel's world position and rotation but never its scale, so under a scaled chassis its mesh would stretch.
   - `position` is local to the chassis origin, not the centre of mass, and follows the chassis's world scale, as joint frames do (ADR-0013). Wheel dimensions are absolute metres and are not scaled.
   - The wheel entity's `Transform` is output only. Physics writes the wheel's pose (spin, steer, suspension travel) into it for drawing, and never reads a mount point from it. Game code writing it has no effect.
   - Wheel order, which is the backend's wheel index, is entity order. Differentials and anti-roll bars name wheel entities.
@@ -56,5 +61,5 @@ struct VehicleWheel
 ## Consequences
 
 - Physics keeps a private index from each vehicle to its wheel entities, in entity order, and rebuilds the backend vehicle when that set changes.
-- `VehicleKind` is the engine's third tagged union. "What does C# get for vehicles?" decides whether that is the trigger for the deferred `[TaggedUnion]` generator.
+- `VehicleKind` is the engine's third tagged union. "What does C# get for vehicles?" made it the trigger for the deferred `[TaggedUnion]` generator, which writes its C# members.
 - A wheel entity's `Transform` is written by physics, like a dynamic body's, so the diff must not take that write for an edit.

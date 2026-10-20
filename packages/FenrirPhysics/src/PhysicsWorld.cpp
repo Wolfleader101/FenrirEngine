@@ -199,7 +199,9 @@ namespace Fenrir
           m_colliders(entities.Watch(ComponentType::Native<Collider>())),
           m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
           m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
-          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>()))
+          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>())),
+          m_vehicleWatch(entities.Watch(ComponentType::Native<Vehicle>())),
+          m_wheelWatch(entities.Watch(ComponentType::Native<VehicleWheel>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
@@ -210,6 +212,10 @@ namespace Fenrir
         entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
         const ComponentType characters[] = {ComponentType::Native<CharacterBody>()};
         entities.ForEachWith(characters, [this](std::uint32_t entity) { m_characterEntities.insert(entity); });
+        const ComponentType vehicles[] = {ComponentType::Native<Vehicle>()};
+        entities.ForEachWith(vehicles, [this](std::uint32_t entity) { m_vehicleEntities.insert(entity); });
+        const ComponentType wheels[] = {ComponentType::Native<VehicleWheel>()};
+        entities.ForEachWith(wheels, [this](std::uint32_t entity) { m_wheelEntities.insert(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -224,11 +230,15 @@ namespace Fenrir
         PushCharacterEdits();
         // After the bodies' edits: a body's scale decides whether its joints are recreated.
         SyncJoints(dt);
+        // After the joints: a vehicle is made after its body and its body's joints.
+        SyncVehicles();
         ApplyPushes();
         // 3b: before the step, so a character's pushes act in it and it moves against the bodies the step will move.
         MoveCharacters(dt);
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
+        // After the chassis: wheels are posed against its new pose.
+        WriteBackVehicles();
         MeasureJoints();
         BreakJoints();
         SendEvents(app);
@@ -532,6 +542,7 @@ namespace Fenrir
             changed.insert(change.entity);
         }
         DrainJoints();
+        DrainVehicles();
 
         // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
         // worked out every tick).
@@ -597,6 +608,7 @@ namespace Fenrir
             it = m_bodies.erase(it);
         }
         RemoveJointsOf(destroyed);
+        RemoveVehiclesOf(destroyed);
         // Characters before the bodies' batch, and made after it, so their bodies come in a reproducible order.
         DropCharacters(changed);
         m_backend.DestroyBodies(destroyed);

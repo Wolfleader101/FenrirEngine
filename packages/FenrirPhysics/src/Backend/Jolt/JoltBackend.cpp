@@ -63,6 +63,9 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Vehicle/VehicleCollisionTester.h>
+#include <Jolt/Physics/Vehicle/VehicleConstraint.h>
+#include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
 #include <Jolt/RegisterTypes.h>
 JPH_SUPPRESS_WARNING_POP
 
@@ -1302,6 +1305,41 @@ namespace Fenrir::Backend
         std::vector<std::uint32_t> freeCharacters;
         CharacterListener characterListener;
 
+        // What a vehicle's wheels ask before probing a body: never its own chassis. Called on job threads during a
+        // step, so it reads only what was fixed before the step, and never locks.
+        class ProbeFilter final : public JPH::BodyFilter
+        {
+          public:
+            explicit ProbeFilter(JPH::BodyID chassis) : m_chassis(chassis)
+            {
+            }
+
+            bool ShouldCollide(const JPH::BodyID& body) const override
+            {
+                return body != m_chassis;
+            }
+
+            bool ShouldCollideLocked(const JPH::Body& body) const override
+            {
+                return body.GetID() != m_chassis;
+            }
+
+          private:
+            JPH::BodyID m_chassis;
+        };
+
+        // The vehicles, by VehicleId, each with its own wheel settings (its wheels read them by reference) and the
+        // tester and filter its wheels probe with. A freed slot has no constraint, and is reused.
+        struct VehicleSlot
+        {
+            JPH::Ref<JPH::VehicleConstraint> constraint;
+            JPH::Ref<JPH::VehicleCollisionTester> tester;
+            std::unique_ptr<ProbeFilter> filter;
+            BodyId body;
+        };
+        std::vector<VehicleSlot> vehicles;
+        std::vector<std::uint32_t> freeVehicles;
+
         // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
         // excluded pair and taking it away when it leaves its last. Never during a step.
         void SetExcludes(JointSlot& slot, bool excludes)
@@ -1435,6 +1473,15 @@ namespace Fenrir::Backend
 
     World::~World()
     {
+        // Vehicles before their bodies: each points at its body.
+        for (const Impl::VehicleSlot& slot : m_impl->vehicles)
+        {
+            if (slot.constraint != nullptr)
+            {
+                m_impl->system.RemoveStepListener(slot.constraint);
+                m_impl->system.RemoveConstraint(slot.constraint);
+            }
+        }
         // Characters before any body: each removes and destroys its own body.
         m_impl->characters.clear();
         // Constraints before bodies: Jolt's constraints point at their bodies.
@@ -3024,6 +3071,234 @@ namespace Fenrir::Backend
                 sink(c, a);
             }
         }
+    }
+
+    // Vehicles: chassis-local +Y up and -Z forward, so +X is right. Jolt's steer angle is + left; ours is + right.
+
+    namespace
+    {
+        const JPH::Vec3 vehicleUp(0.0f, 1.0f, 0.0f);
+        const JPH::Vec3 vehicleForward(0.0f, 0.0f, -1.0f);
+
+        // Forward ratios spaced geometrically from first to top.
+        JPH::Array<float> GearRatios(const VehicleTransmission& transmission)
+        {
+            JPH::Array<float> ratios;
+            const int count = transmission.gearCount;
+            for (int i = 0; i < count; ++i)
+            {
+                const float t = count == 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(count - 1);
+                ratios.push_back(transmission.firstGear * std::pow(transmission.topGear / transmission.firstGear, t));
+            }
+            return ratios;
+        }
+
+        void Fill(JPH::VehicleEngineSettings& out, const VehicleEngine& engine)
+        {
+            out.mMaxTorque = engine.maxTorque;
+            out.mMinRPM = engine.minRpm;
+            out.mMaxRPM = engine.maxRpm;
+            out.mInertia = engine.inertia;
+            out.mAngularDamping = engine.angularDamping;
+            // Jolt's curve is over RPM / maxRpm, in fractions of maxTorque.
+            out.mNormalizedTorque.Clear();
+            out.mNormalizedTorque.AddPoint(engine.minRpm / engine.maxRpm, engine.torqueAtMinRpm);
+            out.mNormalizedTorque.AddPoint(engine.peakTorqueRpm / engine.maxRpm, 1.0f);
+            out.mNormalizedTorque.AddPoint(1.0f, engine.torqueAtMaxRpm);
+        }
+
+        void Fill(JPH::VehicleTransmissionSettings& out, const VehicleTransmission& transmission)
+        {
+            out.mMode = JPH::ETransmissionMode::Auto;
+            out.mGearRatios = GearRatios(transmission);
+            out.mReverseGearRatios = {-transmission.reverseGear};
+            out.mSwitchTime = transmission.switchTime;
+            out.mClutchReleaseTime = transmission.clutchReleaseTime;
+            out.mSwitchLatency = transmission.switchLatency;
+            out.mShiftUpRPM = transmission.shiftUpRpm;
+            out.mShiftDownRPM = transmission.shiftDownRpm;
+            out.mClutchStrength = transmission.clutchStrength;
+        }
+
+        // Friction from 0 to the peak, down to the slide value, and level from there; `slipScale` turns the slips
+        // into Jolt's units.
+        void Fill(JPH::LinearCurve& out, const VehicleTyre& tyre, float slipScale)
+        {
+            out.Clear();
+            out.AddPoint(0.0f, 0.0f);
+            out.AddPoint(tyre.peakSlip * slipScale, tyre.peakFriction);
+            out.AddPoint(tyre.slideSlip * slipScale, tyre.slideFriction);
+        }
+
+        // A wheel for Jolt: the suspension straight down and the wheel facing forward.
+        void Fill(JPH::WheelSettingsWV& out, const VehicleWheelDesc& desc)
+        {
+            const VehicleWheel& wheel = desc.settings;
+            out.mSteeringAxis = vehicleUp;
+            out.mSuspensionDirection = -vehicleUp;
+            out.mWheelUp = vehicleUp;
+            out.mWheelForward = vehicleForward;
+            const bool rigid = wheel.suspension.travel <= 0.0f || wheel.suspension.spring.frequency <= 0.0f;
+            const float travel = rigid ? 0.0f : wheel.suspension.travel;
+            // Jolt's hard point is a margin above the top of the travel: its bump stop engages only below its min
+            // length, and a probe starting inside the ground finds it at length 0, so with no margin a bottomed-out
+            // wheel never stops the chassis sinking.
+            const float margin = wheel.radius;
+            out.mPosition = ToJolt(desc.position) + vehicleUp * (travel + margin);
+            out.mSuspensionMinLength = margin;
+            out.mSuspensionMaxLength = travel + margin;
+            out.mSuspensionPreloadLength = wheel.suspension.preload;
+            // A rigid suspension's spring never acts (its travel is 0), but Jolt wants a frequency above 0.
+            out.mSuspensionSpring =
+                JPH::SpringSettings(JPH::ESpringMode::FrequencyAndDamping,
+                                    rigid ? 1.0f : wheel.suspension.spring.frequency, wheel.suspension.spring.damping);
+            out.mRadius = wheel.radius;
+            out.mWidth = wheel.width;
+            out.mInertia = wheel.inertia;
+            out.mAngularDamping = wheel.angularDamping;
+            out.mMaxSteerAngle = wheel.maxSteerAngle;
+            out.mMaxBrakeTorque = wheel.maxBrakeTorque;
+            out.mMaxHandBrakeTorque = wheel.maxHandbrakeTorque;
+            Fill(out.mLongitudinalFriction, wheel.longitudinal, 1.0f);
+            // Jolt's lateral slip is in degrees.
+            Fill(out.mLateralFriction, wheel.lateral, 180.0f / JPH::JPH_PI);
+        }
+    } // namespace
+
+    VehicleId World::CreateVehicle(const VehicleDesc& desc)
+    {
+        Impl& impl = *m_impl;
+        const WheeledVehicle& wheeled = desc.kind.As<WheeledVehicle>();
+        JPH::VehicleConstraintSettings settings;
+        settings.mUp = vehicleUp;
+        settings.mForward = vehicleForward;
+        settings.mConstraintPriority = desc.priority;
+        // Each vehicle its own wheel settings: its wheels read them by reference.
+        for (const VehicleWheelDesc& wheel : desc.wheels)
+        {
+            auto* made = new JPH::WheelSettingsWV();
+            Fill(*made, wheel);
+            settings.mWheels.emplace_back(made);
+        }
+        auto* controller = new JPH::WheeledVehicleControllerSettings();
+        Fill(controller->mEngine, wheeled.engine);
+        Fill(controller->mTransmission, wheeled.transmission);
+        // Every wheel driven equally, each by a differential of its own.
+        for (std::size_t i = 0; i < desc.wheels.size(); ++i)
+        {
+            JPH::VehicleDifferentialSettings differential;
+            differential.mLeftWheel = static_cast<int>(i);
+            differential.mRightWheel = -1;
+            differential.mEngineTorqueRatio = 1.0f / static_cast<float>(desc.wheels.size());
+            controller->mDifferentials.push_back(differential);
+        }
+        controller->mDifferentialLimitedSlipRatio = wheeled.limitedSlipRatio;
+        settings.mController = controller;
+
+        Impl::VehicleSlot slot;
+        slot.body = desc.body;
+        {
+            JPH::BodyLockWrite lock(impl.system.GetBodyLockInterfaceNoLock(), ToJolt(desc.body));
+            JPH_ASSERT(lock.Succeeded());
+            slot.constraint = new JPH::VehicleConstraint(lock.GetBody(), settings);
+        }
+        slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body));
+        slot.tester = new JPH::VehicleCollisionTesterCastCylinder(impl.Bodies().GetObjectLayer(ToJolt(desc.body)));
+        slot.tester->SetBodyFilter(slot.filter.get());
+        slot.constraint->SetVehicleCollisionTester(slot.tester);
+
+        impl.system.AddConstraint(slot.constraint);
+        impl.system.AddStepListener(slot.constraint);
+        // Jolt wakes nothing when a constraint is added.
+        impl.Bodies().ActivateBody(ToJolt(desc.body));
+
+        if (impl.freeVehicles.empty())
+        {
+            impl.vehicles.push_back(std::move(slot));
+            return VehicleId{static_cast<std::uint32_t>(impl.vehicles.size() - 1)};
+        }
+        const std::uint32_t index = impl.freeVehicles.back();
+        impl.freeVehicles.pop_back();
+        impl.vehicles[index] = std::move(slot);
+        return VehicleId{index};
+    }
+
+    void World::DestroyVehicle(VehicleId id)
+    {
+        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        m_impl->system.RemoveStepListener(slot.constraint);
+        m_impl->system.RemoveConstraint(slot.constraint);
+        m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+        slot = Impl::VehicleSlot{};
+        m_impl->freeVehicles.push_back(id.value);
+    }
+
+    void World::SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake)
+    {
+        const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+        // Jolt's right is ours.
+        controller.SetDriverInput(input.forward, input.steer, input.brake, input.handbrake);
+        // Jolt does not wake a vehicle's body on input.
+        if (wake)
+        {
+            m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+        }
+    }
+
+    VehicleRead World::ReadVehicle(VehicleId id) const
+    {
+        const Impl& impl = *m_impl;
+        const Impl::VehicleSlot& slot = impl.vehicles[id.value];
+        const JPH::VehicleConstraint& constraint = *slot.constraint;
+        const JPH::BodyLockInterfaceNoLock& locks = impl.system.GetBodyLockInterfaceNoLock();
+        VehicleRead read;
+
+        {
+            JPH::BodyLockRead lock(locks, ToJolt(slot.body));
+            JPH_ASSERT(lock.Succeeded());
+            const JPH::Body& body = lock.GetBody();
+            read.state.forwardSpeed = body.GetLinearVelocity().Dot(body.GetRotation() * vehicleForward);
+        }
+        const auto& controller = static_cast<const JPH::WheeledVehicleController&>(*constraint.GetController());
+        read.state.engineRpm = controller.GetEngine().GetCurrentRPM();
+        read.state.gear = controller.GetTransmission().GetCurrentGear();
+        read.state.clutch = 1.0f - controller.GetTransmission().GetClutchFriction();
+        read.state.shifting = controller.GetTransmission().IsSwitchingGear();
+
+        for (const JPH::Wheel* each : constraint.GetWheels())
+        {
+            const auto& wheel = static_cast<const JPH::WheelWV&>(*each);
+            const JPH::WheelSettings& settings = *wheel.GetSettings();
+            VehicleWheelRead out;
+            out.compression = std::clamp(settings.mSuspensionMaxLength - wheel.GetSuspensionLength(), 0.0f,
+                                         settings.mSuspensionMaxLength - settings.mSuspensionMinLength);
+            out.angularVelocity = wheel.GetAngularVelocity();
+            out.steerAngle = -wheel.GetSteerAngle();
+            out.spinAngle = wheel.GetRotationAngle();
+            out.longitudinalSlip = wheel.mLongitudinalSlip;
+            out.lateralSlip = wheel.mLateralSlip;
+            // The suspension's impulse over the last collision step.
+            out.suspensionForce =
+                impl.collisionStepTime > 0.0f ? wheel.GetSuspensionLambda() / impl.collisionStepTime : 0.0f;
+            if (wheel.HasContact())
+            {
+                JPH::BodyLockRead lock(locks, wheel.GetContactBodyID());
+                // A ground body destroyed since the step is no ground.
+                if (lock.Succeeded())
+                {
+                    out.onGround = true;
+                    ++read.state.wheelsOnGround;
+                    out.groundEntity = EntityOf(lock.GetBody());
+                    out.groundCollider = ColliderOf(lock.GetBody(), wheel.GetContactSubShapeID());
+                    out.contactPoint = FromJolt(JPH::Vec3(wheel.GetContactPosition()));
+                    out.contactNormal = FromJolt(wheel.GetContactNormal());
+                    out.groundVelocity = FromJolt(wheel.GetContactPointVelocity());
+                }
+            }
+            read.wheels.push_back(out);
+        }
+        return read;
     }
 
     void World::Step(float dt, int collisionSteps)
