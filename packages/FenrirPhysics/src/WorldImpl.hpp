@@ -243,8 +243,9 @@ namespace Fenrir
         // Vehicles (Vehicles.cpp): each a backend vehicle on its chassis's body, removed before its body goes, made
         // after the joints in step 2, and written back after the bodies in step 5.
 
-        /** @brief Drains the Vehicle and VehicleWheel watches, with the body watches: a vehicle whose Vehicle or one of
-         * whose wheels came or went since the last tick loses its backend vehicle, made again in step 2. */
+        /** @brief Drains the Vehicle, VehicleWheel, VehicleDifferential and VehicleAntiRollBar watches, with the body
+         * watches: a vehicle whose Vehicle or one of whose wheels came or went since the last tick loses its backend
+         * vehicle, made again in step 2. */
         void DrainVehicles();
         /** @brief Removes the backend vehicles on any of `bodies`, which are about to be destroyed. */
         void RemoveVehiclesOf(std::span<const Backend::BodyId> bodies);
@@ -256,8 +257,8 @@ namespace Fenrir
         /** @brief Each vehicle's wheel entities that can be its wheels, in entity order, by chassis entity. */
         [[nodiscard]] std::map<std::uint32_t, std::vector<std::uint32_t>> WheelsByVehicle() const;
         /** @brief Step 2, after the joints, in chassis entity order: makes the backend vehicle of each chassis with a
-         * dynamic body and wheels, remade when its body or wheel set changed, and gives it its driver input, waking the
-         * chassis on a change. */
+         * dynamic body and wheels, remade when its body or wheel set changed, and gives it its differentials, anti-roll
+         * bars and driver input, waking the chassis on a change. */
         void SyncVehicles();
         /** @brief The backend's wheel for the wheel on `entity`, its settings corrected (each kind of out-of-range
          * value warned about once per wheel) and its position scaled by `scale`, the chassis's world scale. */
@@ -272,6 +273,17 @@ namespace Fenrir
         /** @brief Step 5, after the bodies: each vehicle's state, its wheels' states and their poses; the states of
          * those with no backend vehicle reset. */
         void WriteBackVehicles();
+        // A vehicle's differentials and anti-roll bars, by wheel index, as they are to be given to its backend vehicle.
+        struct VehicleLinks
+        {
+            std::vector<Backend::VehicleDifferentialDesc> differentials;
+            std::vector<Backend::VehicleAntiRollBarDesc> antiRollBars;
+        };
+        /** @brief Each vehicle's differentials and anti-roll bars, in entity order, by chassis entity, from `wheelsOf`
+         * (WheelsByVehicle): out-of-range values corrected and those naming wrong wheels inactive, each with a
+         * warning. */
+        [[nodiscard]] std::map<std::uint32_t, VehicleLinks> LinksByVehicle(
+            const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf);
 
         void WriteBack();
         void AdvancePoses();
@@ -434,6 +446,8 @@ namespace Fenrir
             VehicleProbe probe = VehicleProbe::Cylinder;
             float maxTilt = 0.0f;
             VehicleInput input;
+            // The differentials and anti-roll bars last given to it.
+            VehicleLinks links;
             // The kind as game code last gave it, to notice its edits, and as applied, in range.
             VehicleKind kind;
             VehicleKind applied;
@@ -447,6 +461,17 @@ namespace Fenrir
         std::set<std::uint32_t> m_vehicleEntities;
         std::set<std::uint32_t> m_wheelEntities;
         std::map<std::uint32_t, VehicleRecord> m_vehicles;
+        // What physics knows of a VehicleDifferential or VehicleAntiRollBar, by its entity: whether it is inactive,
+        // warned about each time it becomes so, and the kinds of out-of-range value already warned about, each once.
+        struct VehicleLinkRecord
+        {
+            bool inactive = false;
+            std::uint32_t warned = 0;
+        };
+        ComponentWatch m_differentialWatch;
+        ComponentWatch m_antiRollBarWatch;
+        std::map<std::uint32_t, VehicleLinkRecord> m_differentials;
+        std::map<std::uint32_t, VehicleLinkRecord> m_antiRollBars;
         // The kinds of out-of-range value each wheel entity has been warned about, so each is warned about once.
         std::map<std::uint32_t, std::uint32_t> m_wheelWarnings;
 
