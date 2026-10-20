@@ -15,15 +15,21 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests` (through the frame seam): every component's `{}` has the spec's defaults; the default car does 0–100 km/h near the spike's 8.8 s on flat tarmac, shifting up through Automatic, and brakes to a stop; a wheel with no `maxSteerAngle` never steers and one with it steers with `steer`; `input` is never written by physics.
-- [ ] State: on a known drive the `VehicleState` fields and each `VehicleWheelState` field read as expected; `compression` stays within `0..travel`; ground fields name the floor's body and collider; in the air they are empty and zero.
-- [ ] A bottomed-out wheel stops the chassis (the private margin): a car dropped from height does not sink its chassis into the floor.
-- [ ] Wheel poses: at `position` before the first step; with every angle 0 the wheel's rotation equals the chassis's, X the axle; scale never written; a game write to a wheel `Transform` is overwritten.
-- [ ] Input wakes a sleeping chassis; a vehicle with no wheels is valid and inert; adding and removing a wheel rebuilds the vehicle.
-- [ ] Two runs of the car over the bumps are bit-identical over 600 ticks, single- and multi-threaded; a paused world changes nothing; destroying a world with a vehicle is clean.
-- [ ] ADR-0015 carries the five amendments.
-- [ ] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
-- [ ] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
+- [x] `FenrirPhysicsTests` (through the frame seam): every component's `{}` has the spec's defaults; the default car does 0–100 km/h near the spike's 8.8 s on flat tarmac, shifting up through Automatic, and brakes to a stop; a wheel with no `maxSteerAngle` never steers and one with it steers with `steer`; `input` is never written by physics.
+- [x] State: on a known drive the `VehicleState` fields and each `VehicleWheelState` field read as expected; `compression` stays within `0..travel`; ground fields name the floor's body and collider; in the air they are empty and zero.
+- [x] A bottomed-out wheel stops the chassis (the private margin): a car dropped from height does not sink its chassis into the floor.
+- [x] Wheel poses: at `position` before the first step; with every angle 0 the wheel's rotation equals the chassis's, X the axle; scale never written; a game write to a wheel `Transform` is overwritten.
+- [x] Input wakes a sleeping chassis; a vehicle with no wheels is valid and inert; adding and removing a wheel rebuilds the vehicle.
+- [x] Two runs of the car over the bumps are bit-identical over 600 ticks, single- and multi-threaded; a paused world changes nothing; destroying a world with a vehicle is clean.
+- [x] ADR-0015 carries the five amendments.
+- [x] No public FenrirPhysics header names Jolt; Clang and MSVC x64 debug and release presets build without new warnings.
+- [x] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
 - [ ] F6 toggles Default ⇄ Vehicles (C++); the camera chases, C frees it and snaps back; the car drives over the bumps and ramp with its wheels spinning, steering and compressing; the readouts are live (checked by hand).
+
+**Resolved by:** branch claude/vehicle-tracer-bullet-32e5e5 (not yet merged into dotnet-scripting). The proof is `FenrirPhysicsTests`' `[vehicles]` cases (`Tests/Vehicles.cpp`, `Tests/VehiclePoses.cpp`, helpers in `Tests/VehicleTest.hpp`) and the `FENRIR_DEMO_SCENE="Vehicles (C++)" FENRIR_DEMO_KEYS=1` smoke run; the last box (driving the scene by hand) is left for a person. Choices the ticket left open:
+- Backend vehicles are made in step 2, after `SyncJoints`, so "after bodies and joints" holds literally; step 1 only removes them (with the joints, before bodies go). A vehicle with no wheels gets no backend vehicle at all (Jolt asserts on an empty wheel list), so its `state` reads as the defaults.
+- Settings are applied when the backend vehicle is made, from every field the wheeled kind has (including `maxHandbrakeTorque`); they become live edits in 02 and 03. Out-of-range settings are corrected silently into what Jolt's asserts accept (`InRange` in `src/Vehicles.cpp`); 02 and 03 add the one-warning rule there.
+- Wheel poses are composed in FenrirPhysics from the read-back (compression, steer, wrapped spin) rather than by a backend `WheelPose`; the backend gained `CreateVehicle`, `DestroyVehicle`, `SetVehicleInput` and `ReadVehicle`, and `UpdateVehicle` is left to the tickets that make settings live.
+- Under full throttle in first gear the default car's front tyres spin (the car squats onto its rear wheels), so the read-back test drives at 0.2 throttle.

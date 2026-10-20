@@ -42,6 +42,7 @@
 #include "CharacterScene.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
+#include "VehicleScene.hpp"
 #endif
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
@@ -676,6 +677,17 @@ int main(int argc, char* argv[])
     });
     demoScenes.Register(CSharpScenes::Character());
 #endif
+
+    // Vehicles (C++), the first of the F6 family, made in PostInit once the models are loaded. Its chase camera
+    // writes the scene's DemoCamera in Update, before DemoCameras copies it.
+    VehicleScene vehicleScene(cube, sphere, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&vehicleScene](Fenrir::App& running) { vehicleScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&vehicleScene](Fenrir::App& running) { vehicleScene.Tick(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&vehicleScene](Fenrir::App& running) { vehicleScene.Update(running); }});
+    demoScenes.Register(VehicleScene::Scene());
 #endif
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.

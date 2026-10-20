@@ -10,6 +10,7 @@
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 
 #ifdef JPH_VERSION_MAJOR
 #error "A FenrirPhysics public header includes Jolt."
