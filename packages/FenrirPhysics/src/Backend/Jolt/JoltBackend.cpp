@@ -3313,6 +3313,18 @@ namespace Fenrir::Backend
             JPH_ASSERT(lock.Succeeded());
             slot.constraint = new JPH::VehicleConstraint(lock.GetBody(), settings);
         }
+        if (desc.carried)
+        {
+            auto& made = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+            made.GetEngine().SetCurrentRPM(desc.carried->engineRpm);
+            made.GetTransmission().Set(desc.carried->gear, 1.0f - desc.carried->clutch);
+            for (std::size_t i = 0; i < desc.carried->wheels.size(); ++i)
+            {
+                JPH::Wheel& wheel = *slot.constraint->GetWheel(static_cast<JPH::uint>(i));
+                wheel.SetAngularVelocity(desc.carried->wheels[i].angularVelocity);
+                wheel.SetRotationAngle(desc.carried->wheels[i].spinAngle);
+            }
+        }
         slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body));
         impl.Retest(slot);
 

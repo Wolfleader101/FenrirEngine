@@ -427,12 +427,12 @@ namespace Fenrir
             [this](std::uint32_t entity) {
                 if (const auto it = m_vehicles.find(entity); it != m_vehicles.end())
                 {
-                    DropVehicle(it->second);
+                    DropVehicle(it->second, false);
                     m_vehicles.erase(it);
                 }
             });
-        // A wheel that came or went, even one that came back, changes its vehicle's wheel set, and is warned about
-        // afresh.
+        // A wheel that came or went, even one that came back, changes its vehicle's wheel set (a rebuild, carrying
+        // over), and is warned about afresh.
         track(
             m_wheelWatch, m_wheelEntities, [](const Entity& e) { return e.HasComponent<VehicleWheel>(); },
             [this](std::uint32_t entity) {
@@ -441,7 +441,7 @@ namespace Fenrir
                 {
                     if (std::ranges::find(record.wheels, entity) != record.wheels.end())
                     {
-                        DropVehicle(record);
+                        DropVehicle(record, true);
                     }
                 }
             });
@@ -465,8 +465,10 @@ namespace Fenrir
     std::map<std::uint32_t, PhysicsWorld::Impl::VehicleLinks> PhysicsWorld::Impl::LinksByVehicle(
         const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf)
     {
-        // The vehicle a differential or anti-roll bar's wheels belong to, and their wheel indices, -1 for none. None
-        // for one that names no wheel of a vehicle's wheel set, or is inactive: then it warns, if it was not already.
+        // The vehicle a differential or anti-roll bar's wheels belong to, and their wheel indices, -1 for none. A name
+        // that has died (its entity destroyed, or its VehicleWheel removed while named) is none, warned about once.
+        // None for one that names no live wheel of a vehicle's wheel set, or is inactive: then it warns, if it was not
+        // already.
         struct Named
         {
             std::uint32_t chassis;
@@ -477,25 +479,53 @@ namespace Fenrir
                                             const Entity& left, const Entity& right) -> std::optional<Named> {
             std::string wrong;
             std::optional<Entity> vehicle;
+            std::set<std::uint32_t> alive;
+            std::set<std::uint32_t> dead;
             for (const Entity& wheel : {left, right})
             {
-                if (!wheel.IsValid())
+                if (wheel == Entity())
                 {
                     continue;
                 }
-                if (wheel != m_entities->HandleOf(wheel.GetId()) || !wheel.HasComponent<VehicleWheel>())
+                const std::uint32_t id = wheel.GetId();
+                if (!wheel.IsValid())
                 {
-                    wrong = "it names entity " + std::to_string(wheel.GetId()) + ", which is not a wheel entity";
-                    break;
+                    dead.insert(id);
+                    continue;
                 }
+                if (wheel != m_entities->HandleOf(id) || !wheel.HasComponent<VehicleWheel>())
+                {
+                    if (record.wheels.contains(id))
+                    {
+                        alive.insert(id);
+                        dead.insert(id);
+                    }
+                    else if (wrong.empty())
+                    {
+                        wrong = "it names entity " + std::to_string(id) + ", which is not a wheel entity";
+                    }
+                    continue;
+                }
+                alive.insert(id);
                 const Entity& chassis = wheel.GetComponent<VehicleWheel>().vehicle;
-                if (vehicle && chassis != *vehicle)
+                if (vehicle && chassis != *vehicle && wrong.empty())
                 {
                     wrong = "its wheels belong to two different vehicles";
-                    break;
                 }
                 vehicle = chassis;
             }
+            for (const std::uint32_t id : dead)
+            {
+                if (!record.dead.contains(id))
+                {
+                    m_logger->Warn(std::string("The ") + type + " on entity " + std::to_string(entity) +
+                                   " names entity " + std::to_string(id) +
+                                   ", whose wheel has died (the entity destroyed or its VehicleWheel removed): it "
+                                   "treats that name as empty.");
+                }
+            }
+            record.wheels = std::move(alive);
+            record.dead = std::move(dead);
             if (!wrong.empty())
             {
                 if (!record.inactive)
@@ -508,7 +538,9 @@ namespace Fenrir
                 return std::nullopt;
             }
             record.inactive = false;
-            // Naming no wheel, or a wheel that is not one of its vehicle's wheels now: nothing to do.
+            // Naming no live wheel, or a wheel that is not one of its vehicle's wheels now: nothing to do. With no
+            // live wheel it names no vehicle, so one that was its vehicle's only differential leaves it driving every
+            // wheel.
             const auto wheels = vehicle && vehicle->IsValid() ? wheelsOf.find(vehicle->GetId()) : wheelsOf.end();
             if (wheels == wheelsOf.end())
             {
@@ -516,8 +548,8 @@ namespace Fenrir
             }
             constexpr int none = -1;
             constexpr int notOfTheSet = -2;
-            const auto indexOf = [&wheels](const Entity& wheel) {
-                if (!wheel.IsValid())
+            const auto indexOf = [&wheels, &record](const Entity& wheel) {
+                if (wheel == Entity() || record.dead.contains(wheel.GetId()))
                 {
                     return none;
                 }
@@ -612,21 +644,37 @@ namespace Fenrir
                     return body.value == record.body.value;
                 }))
             {
-                DropVehicle(record);
+                // Rebuilt in this drain, it carries over; gone for good, it is inactive in step 2, which forgets it.
+                DropVehicle(record, true);
             }
         }
     }
 
-    void PhysicsWorld::Impl::DropVehicle(VehicleRecord& record)
+    void PhysicsWorld::Impl::DropVehicle(VehicleRecord& record, bool carryOver)
     {
+        std::optional<VehicleRecord::Carry> carry = carryOver ? record.carry : std::nullopt;
         if (record.Made())
         {
+            if (carryOver)
+            {
+                const Backend::VehicleRead read = m_backend.ReadVehicle(record.id);
+                carry = VehicleRecord::Carry{.engineRpm = read.state.engineRpm,
+                                             .gear = read.state.gear,
+                                             .clutch = read.state.clutch,
+                                             .wheels = {}};
+                for (std::size_t i = 0; i < record.wheels.size(); ++i)
+                {
+                    carry->wheels[record.wheels[i]] = Backend::VehicleWheelSpin{
+                        .angularVelocity = read.wheels[i].angularVelocity, .spinAngle = read.wheels[i].spinAngle};
+                }
+            }
             m_backend.DestroyVehicle(record.id);
         }
         // What was warned about stays warned about: a rebuild is no reason to warn again.
         const std::uint32_t warned = record.warned;
         record = VehicleRecord{};
         record.warned = warned;
+        record.carry = std::move(carry);
     }
 
     std::string PhysicsWorld::Impl::WhyNoChassis(std::uint32_t chassis) const
@@ -755,7 +803,7 @@ namespace Fenrir
             {
                 // Disabled, inactive, or with nothing to drive it: a plain rigid body, if any, its state reset in step
                 // 5. Enabled and valid again, it is built fresh: the record holds nothing to carry over.
-                DropVehicle(record);
+                DropVehicle(record, false);
                 continue;
             }
 
@@ -763,7 +811,8 @@ namespace Fenrir
             bool wake = false;
             if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels)
             {
-                DropVehicle(record);
+                // A wheel-set change or the chassis's body rebuilt: what still maps carries over, a new wheel still.
+                DropVehicle(record, true);
                 Backend::VehicleDesc desc;
                 desc.body = body->id;
                 desc.kind = InRange(vehicle.kind, chassis, record.warned, *m_logger);
@@ -777,6 +826,21 @@ namespace Fenrir
                     const VehicleWheel& settings = m_entities->GetEntity(wheel).GetComponent<VehicleWheel>();
                     desc.wheels.push_back(WheelDesc(wheel, settings, body->world.scale));
                     record.appliedWheels.push_back(settings);
+                }
+                if (record.carry)
+                {
+                    desc.carried = Backend::VehicleCarry{
+                        .engineRpm = record.carry->engineRpm,
+                        .gear = std::min(record.carry->gear, desc.kind.As<WheeledVehicle>().transmission.gearCount),
+                        .clutch = record.carry->clutch,
+                        .wheels = {}};
+                    for (const std::uint32_t wheel : wheels)
+                    {
+                        const auto spin = record.carry->wheels.find(wheel);
+                        desc.carried->wheels.push_back(spin == record.carry->wheels.end() ? Backend::VehicleWheelSpin{}
+                                                                                          : spin->second);
+                    }
+                    record.carry.reset();
                 }
                 record.id = m_backend.CreateVehicle(desc);
                 record.body = body->id;

@@ -253,6 +253,12 @@ namespace Fenrir
      * each time it becomes so: a chassis turned kinematic or static, or losing its RigidBody or collider, is a plain
      * body (if any), its `state` and its wheels' reset and its wheel entities left where they were. Valid again, it is
      * built fresh with nothing carried over, so a car made kinematic for a cutscene restarts at idle in neutral.
+     *
+     * Respawning is a Transform write: a teleport keeps the engine speed and wheel spin, as a body's velocity is kept,
+     * and the wheels are posed on the chassis's new pose at once. A rebuild (a wheel added, removed or relinked, or the
+     * chassis's body rebuilt in one tick, as when its collider is swapped) keeps the engine speed, the gear and each
+     * remaining wheel's spin; a new wheel starts still. A change to the chassis's scale moves the wheels with it, with
+     * no rebuild.
      */
     struct Vehicle
     {
@@ -379,6 +385,10 @@ namespace Fenrir
      * An empty wheel is "none", so a differential naming one wheel drives just that wheel. A wheel that is not a wheel
      * entity, or wheels of two different vehicles, make it inactive, with a warning, until its wheels are fixed. Edits
      * apply on the next tick and wake the chassis.
+     *
+     * A wheel that dies while named (its entity destroyed, or its VehicleWheel removed) is treated as empty, with one
+     * warning: a rear-wheel-drive car that loses a rear wheel drives the other. Limit: a differential left with no live
+     * wheel names no vehicle, so if it was its vehicle's only differential, the vehicle drives every wheel again.
      */
     struct VehicleDifferential
     {
@@ -404,7 +414,9 @@ namespace Fenrir
      * ground.
      *
      * A wheel that is not a wheel entity, or wheels of two different vehicles, make it inactive, with a warning, until
-     * its wheels are fixed; with a wheel empty it does nothing. Edits apply on the next tick and wake the chassis.
+     * its wheels are fixed; with a wheel empty it does nothing. A wheel that dies while named (its entity destroyed, or
+     * its VehicleWheel removed) is treated as empty, with one warning. Edits apply on the next tick and wake the
+     * chassis.
      */
     struct VehicleAntiRollBar
     {

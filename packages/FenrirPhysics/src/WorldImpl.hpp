@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <span>
 #include <string>
@@ -250,8 +251,11 @@ namespace Fenrir
         /** @brief Removes the backend vehicles on any of `bodies`, which are about to be destroyed. */
         void RemoveVehiclesOf(std::span<const Backend::BodyId> bodies);
         struct VehicleRecord;
-        /** @brief Removes the vehicle's backend vehicle, if it has one, and forgets what was applied to it. */
-        void DropVehicle(VehicleRecord& record);
+        /** @brief Removes the vehicle's backend vehicle, if it has one, and forgets what was applied to it. For a
+         * rebuild
+         * (`carryOver`), its engine speed, gear and wheel spins are kept for the vehicle made next, or kept from an
+         * earlier rebuild's drop if it has none; otherwise the vehicle made next starts fresh. */
+        void DropVehicle(VehicleRecord& record, bool carryOver);
         /** @brief Why the Vehicle on `chassis` is inactive: no made dynamic body with a solid collider, or beside a
          * CharacterBody. Empty if it can be a vehicle. */
         [[nodiscard]] std::string WhyNoChassis(std::uint32_t chassis) const;
@@ -463,6 +467,15 @@ namespace Fenrir
             // The kinds of out-of-range value its kind holds and has been warned about: each is warned about once per
             // vehicle until a valid value clears it.
             std::uint32_t warned = 0;
+            // Dropped for a rebuild: what the vehicle made next carries over, each wheel's spin by its entity.
+            struct Carry
+            {
+                float engineRpm = 0.0f;
+                int gear = 0;
+                float clutch = 0.0f;
+                std::map<std::uint32_t, Backend::VehicleWheelSpin> wheels;
+            };
+            std::optional<Carry> carry;
         };
         ComponentWatch m_vehicleWatch;
         ComponentWatch m_wheelWatch;
@@ -479,6 +492,10 @@ namespace Fenrir
         {
             bool inactive = false;
             std::uint32_t warned = 0;
+            // The entities it names that have been wheels while named, so one that loses its VehicleWheel is a dead
+            // name rather than a wrong one; and its dead names, each warned about once.
+            std::set<std::uint32_t> wheels;
+            std::set<std::uint32_t> dead;
         };
         ComponentWatch m_differentialWatch;
         ComponentWatch m_antiRollBarWatch;
