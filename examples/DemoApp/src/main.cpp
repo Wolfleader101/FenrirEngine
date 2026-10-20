@@ -22,6 +22,7 @@
 #include <iostream>
 
 #include "DemoCamera.hpp"
+#include "DemoGamepad.hpp"
 #include "DemoMesh.hpp"
 #include "DemoScenes.hpp"
 #include "Editor.hpp"
@@ -692,6 +693,10 @@ int main(int argc, char* argv[])
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.
     DemoCameras demoCameras(camera);
+    // Before the ticks, so game code reading the active scene's DemoGamepad in Tick or Update sees this frame's pad.
+    DemoGamepads demoGamepads;
+    app.AddSystem(Fenrir::SchedulePriority::BeforeTicks,
+                  [&demoGamepads](Fenrir::App& running) { demoGamepads.Update(running); });
 
     AssetLoader assetLoader(*app.Logger().get(), projectSettings.assetPath, glRenderer);
 
