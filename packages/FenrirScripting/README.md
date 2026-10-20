@@ -248,12 +248,72 @@ share a storage, and a native mismatch. Systems will join the order when they ex
 ## Tagged unions
 
 A component can hold a tagged union: a tag saying which kind it holds and overlapping storage for one of several kinds
-(FenrirPhysics's `CollisionShape` and `JointKind` are two). Nothing special is needed to share it: Iris's struct mapping accepts C#'s
-explicit layout and checks every field by name, offset and kind, and nothing stops two fields sharing an offset. The C#
-side is written by hand, in one pattern. On the native side, the mapping lists the tag and each kind in declaration order,
-with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend (or, for a package that must not
-name Iris, as FenrirPhysics's unions do, map a plain stand-in with the same members through
-`MakeComponent<T, Mapping>`):
+(FenrirPhysics's `CollisionShape` and `JointKind` are two). Iris's struct mapping accepts C#'s explicit layout and checks
+every field by name, offset and kind, and nothing stops two fields sharing an offset. On the C# side, the `[TaggedUnion]`
+source generator writes the members; the author writes the tag enum and the fields:
+
+```csharp
+public enum ShapeType : byte { Box, Sphere }      // mirrors the C++ enum's values
+
+[TaggedUnion(Noun = "shape")]
+[StructLayout(LayoutKind.Explicit)]
+public partial struct Shape
+{
+    [FieldOffset(0)] private ShapeType _type;     // the tag: the one enum field at offset 0
+    [FieldOffset(4)] private BoxShape _box;       // one private field per kind, at the union's offset (the C++ offsetof)
+    [FieldOffset(4)] private SphereShape _sphere;
+}
+```
+
+- **The tag** is the one enum-typed instance field at offset 0, of any underlying type (the engine's unions use `byte`,
+  as their C++ enums are `std::uint8_t`; the scripting tests' `Shape` uses `int`). The enum is written by hand because it
+  must mirror C++'s values.
+- **Every other instance field is a kind**, named `_` plus its tag member with the first letter lowered: `ShapeType.Box`
+  is `_box`, `ConvexHull` is `_convexHull`. There is no other way to pair them. The native mapping names these fields.
+- **The offset is written out**, in `[FieldOffset]`: C# cannot see the C++ union's alignment (the union starts at its own
+  alignment after the tag). A wrong one fails the load, naming the field.
+- **`Noun`** is what the wrong-view message calls the union. Left out, the message uses the struct's name.
+
+The generator adds, to the author's partial, exactly what a hand-written union has. This is what `Shape` above expands to:
+
+```csharp
+public Shape() { _type = ShapeType.Box; _box = new(); }   // the kind whose tag value is 0, with its defaults
+
+public readonly ShapeType Type => _type;
+
+// A checked view per kind, named after its tag member: a reference into the shape, so writes land in the component's storage.
+[UnscopedRef] public ref BoxShape Box { get { Expect(ShapeType.Box); return ref _box; } }
+[UnscopedRef] public ref SphereShape Sphere { get { Expect(ShapeType.Sphere); return ref _sphere; } }
+
+// Assigning a kind by value sets the tag with it.
+public static implicit operator Shape(BoxShape value) => new() { _type = ShapeType.Box, _box = value };
+public static implicit operator Shape(SphereShape value) => new() { _type = ShapeType.Sphere, _sphere = value };
+
+private readonly void Expect(ShapeType wanted)
+{
+    if (_type != wanted) throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
+}
+```
+
+So `collider.Shape = new SphereShape { Radius = 1 }` changes the kind, `collider.Shape.Box.HalfExtents.Y = 2` edits a box
+in place, and reading the wrong kind's view throws `InvalidOperationException`, as C++'s asserting `As<T>()` does. It
+generates nothing else (no equality, `ToString` or `Match`), and it works the same in a contract assembly and a script
+assembly.
+
+- **`default(Shape)` is not `new Shape()`.** It is the tag-0 kind with every setting zero, not that kind's defaults.
+- **An empty kind** (a C++ `struct FixedJoint {};`, which takes one byte) cannot be mapped, because Iris maps no struct
+  without fields. Its C# struct keeps one private `byte` field and the native stand-in maps a one-byte member in its
+  place, as FenrirPhysics's `FixedJoint` and `BallJoint` do.
+- **Components defined in C# may hold a union too**: their struct is their definition, so there is no native side.
+- **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
+  value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
+  bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
+
+**The native side is written by hand.** The generator emits no C++. The mapping lists the tag and each kind in
+declaration order, with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend (or, for a
+package that must not name Iris, as FenrirPhysics's unions do, map a plain stand-in with the same members through
+`MakeComponent<T, Mapping>`). The load checks what couples the two sides: the field names, their order, the offset and
+the tag's size. Adding a kind means the C++ union, the C++ enum, the mapping, the C# enum member and one C# field.
 
 ```cpp
 class Shape {
@@ -274,50 +334,10 @@ template <> struct Iris::StructMapping<Shape> {
 };
 ```
 
-```csharp
-[StructLayout(LayoutKind.Explicit)]
-public struct Shape
-{
-    [FieldOffset(0)] private ShapeType _type;      // the tag, private so only a conversion changes it
-    [FieldOffset(4)] private BoxShape _box;        // every kind at the union's offset (the C++ offsetof)
-    [FieldOffset(4)] private SphereShape _sphere;
-
-    public readonly ShapeType Type => _type;
-
-    // A checked view per kind: a reference into the shape, so writes land in the component's storage.
-    [UnscopedRef] public ref BoxShape Box { get { Expect(ShapeType.Box); return ref _box; } }
-    [UnscopedRef] public ref SphereShape Sphere { get { Expect(ShapeType.Sphere); return ref _sphere; } }
-
-    // Assigning a kind by value sets the tag with it.
-    public static implicit operator Shape(BoxShape box) => new() { _type = ShapeType.Box, _box = box };
-    public static implicit operator Shape(SphereShape sphere) => new() { _type = ShapeType.Sphere, _sphere = sphere };
-
-    private readonly void Expect(ShapeType wanted)
-    {
-        if (_type != wanted) throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
-    }
-}
-```
-
-So `collider.Shape = new SphereShape { Radius = 1 }` changes the kind, `collider.Shape.Box.HalfExtents.Y = 2` edits a box
-in place, and reading the wrong kind's view throws `InvalidOperationException`, as C++'s asserting `As<T>()` does.
-
-- **The mirror is checked like any other.** A kind at the wrong offset or under the wrong name fails the load, naming the
-  field. The offsets must be the C++ ones: the union starts at its own alignment after the tag.
-- **An empty kind** (a C++ `struct FixedJoint {};`, which takes one byte) cannot be mapped, because Iris maps no struct
-  without fields. Its C# struct keeps one private `byte` field and the native stand-in maps a one-byte member in its
-  place, as FenrirPhysics's `FixedJoint` and `BallJoint` do.
-- **Components defined in C# may use the pattern too**, by hand: their struct is their definition, so it needs only to be
-  unmanaged.
-- **A `[TaggedUnion]` source generator is planned.** It would write the tag, the views, the conversions and the wrong-kind
-  exception, the public surface every hand-written union already has, so it can replace them without touching a caller
-  (the offsets stay by hand: C# cannot see the C++ union's alignment). Its trigger: a script author wants a union, or a
-  third engine union appears (FenrirPhysics's `CollisionShape` is the first, and its `JointKind` the second).
-- **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
-  value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
-  bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
-- The `ScriptingTests` tagged-union tests are the proof: a native component holding one validates, round-trips through a C#
-  system both ways, throws for the wrong kind, and is refused with a wrong offset or name.
+The `ScriptingTests` tagged-union tests are the proof: a native component holding a generated union validates,
+round-trips through a C# system both ways, throws for the wrong kind with its noun or its type's name, and a hand-written
+mirror with a wrong offset or name is refused. The `TaggedUnion*` compile cases cover a byte and an `int` tag, an empty
+kind and a nested union.
 
 ## Creating, destroying, adding and removing
 
