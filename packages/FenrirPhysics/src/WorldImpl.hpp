@@ -53,7 +53,7 @@ namespace Fenrir
          * @brief `BeforeTicks`: put back the true pose of each body and character Blend wrote, so `Tick` systems and
          * the diff see real simulation state. The parts of a `Transform` game code changed since keep the game's
          * values, and the rest go back to the true pose. The next step takes a changed body as a teleport, and a
-         * character only if its position changed.
+         * character only if its position changed. Wheels go back to their true poses whatever game code wrote.
          */
         void Restore();
 
@@ -61,6 +61,7 @@ namespace Fenrir
          * @brief `AfterTicks`: write each interpolated dynamic or kinematic body's and character's pose `fraction` of
          * the way from its previous step pose to its current one, parents before children. One that is not
          * interpolated, beneath one that is, is written at its step pose, so its parent's blend does not carry it.
+         * Then each interpolated chassis's wheels, blended with it (BlendWheels).
          */
         void Blend(float fraction);
 
@@ -109,6 +110,9 @@ namespace Fenrir
             /** @brief `BeforeTicks`, for one Blend wrote to `local`: put back the true pose, but for the parts game
              * code changed since, which a step takes as a teleport if it moved it, or if `turnIsTeleport`. */
             void Restore(Transform& local, bool turnIsTeleport);
+            /** @brief Its world pose `fraction` of the way from its previous step pose to its current one, with its
+             * current scale. */
+            [[nodiscard]] Transform Between(float fraction) const;
 
             Transform previous;
             Transform current;
@@ -288,9 +292,18 @@ namespace Fenrir
         /** @brief Writes each of the vehicle's wheel entities' world position and rotation from `read`, against the
          * chassis pose `chassis`, parents before children. */
         void PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis);
-        /** @brief Step 5, after the bodies: each vehicle's state, its wheels' states and their poses; the states of
-         * those with no backend vehicle reset. */
-        void WriteBackVehicles();
+        /** @brief Step 5, after the bodies, for a step of `dt` seconds: each vehicle's state, its wheels' states and
+         * their poses, and how its wheels are shown between ticks; the states of those with no backend vehicle reset.
+         * A sleeping vehicle keeps the state it fell asleep with, its wheels' spin 0. */
+        void WriteBackVehicles(float dt);
+        /** @brief After a step of `dt` seconds left the vehicle's wheels as `read`: their last two steps for
+         * BlendWheels, the spin unwrapped. A new vehicle, or one whose chassis was `teleported`, snaps. */
+        void AdvanceWheels(VehicleRecord& record, const Backend::VehicleRead& read, float dt, bool teleported);
+        /** @brief Part of Blend, after the bodies: poses the wheels of each vehicle whose chassis Blend blended,
+         * `fraction` of the way between their last two steps in the chassis's axes, on the chassis's blended pose. */
+        void BlendWheels(float fraction);
+        /** @brief Part of Restore: puts back the true pose of each wheel BlendWheels wrote. */
+        void RestoreWheels();
         // A vehicle's differentials and anti-roll bars, by wheel index, as they are to be given to its backend vehicle.
         struct VehicleLinks
         {
@@ -464,6 +477,7 @@ namespace Fenrir
             std::vector<Backend::VehicleWheelDesc> given;
             VehicleProbe probe = VehicleProbe::Cylinder;
             float maxTilt = 0.0f;
+            // The driver input as game code last wrote it: any change wakes the chassis.
             VehicleInput input;
             // The differentials and anti-roll bars last given to it.
             VehicleLinks links;
@@ -482,6 +496,25 @@ namespace Fenrir
                 std::map<std::uint32_t, Backend::VehicleWheelSpin> wheels;
             };
             std::optional<Carry> carry;
+            // Asleep: the read the step it fell asleep left, its wheels still, kept until it wakes.
+            std::optional<Backend::VehicleRead> parked;
+
+            // How its wheels are shown between ticks, in the chassis's axes, in wheel order: as the step before last
+            // and the last step left them, the spin unwrapped. A new vehicle, or its chassis teleported, snaps: the
+            // two are the same after its next step, so nothing blends across the jump.
+            struct WheelShown
+            {
+                float compression = 0.0f;
+                float steer = 0.0f;
+                float spin = 0.0f;
+            };
+            std::vector<WheelShown> previous;
+            std::vector<WheelShown> current;
+            bool snap = true;
+            // Whether BlendWheels wrote the wheel entities' Transforms, and each wheel entity's true local Transform
+            // it replaced.
+            bool blended = false;
+            std::vector<std::pair<Entity, Transform>> trueLocals;
         };
         ComponentWatch m_vehicleWatch;
         ComponentWatch m_wheelWatch;

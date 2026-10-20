@@ -52,7 +52,8 @@ namespace Fenrir
          * of the way through a tick, so it moves smoothly at any frame rate, one step behind the simulation. Between
          * ticks its `Transform` holds the blended pose; `Tick` systems see the true one. Turn it off for a body game
          * code moves every frame, so it does not lag a step. Off, the body is shown at its step pose, even beneath an
-         * interpolated parent. PhysicsConfig can turn interpolation off for every body.
+         * interpolated parent. PhysicsConfig can turn interpolation off for every body. A vehicle's wheels follow its
+         * chassis's.
          */
         bool interpolate = true;
     };
