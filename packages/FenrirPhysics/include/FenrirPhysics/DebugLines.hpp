@@ -42,7 +42,15 @@ namespace Fenrir
            `state.movedVelocity` as far as it travels in a tenth of a second, as Velocities draws a body's. Colliders
            never draws a character. */
         Characters = 1u << 5,
-        All = Colliders | Contacts | Velocities | Bounds | Joints | Characters
+        /** @brief Each wheel of each active, enabled vehicle, at its step pose: its suspension, a line in the
+           Suspension colour from the top of its travel down to its full-extension point (VehicleWheel::position), with
+           a short cross-tick at the wheel's centre; the wheel, a circle of its radius in its plane in the Wheel colour,
+           with one spoke so its spin and steer show; and while on ground, a small cross at its contact point and a
+           short line along the contact normal, coloured by its grip: Gripping, PastPeakSlip (either slip past its
+           tyre's `peakSlip`) or PastSlideSlip (either past its `slideSlip`). Probe shapes are not drawn. Disabled and
+           inactive vehicles draw nothing; Colliders still draws their chassis. */
+        Vehicles = 1u << 6,
+        All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles
     };
 
     /** @brief The categories in `a` or `b`. */
@@ -96,6 +104,17 @@ namespace Fenrir
         inline constexpr std::uint32_t Ground = 0x33E6B3FFu;
         /** @brief A character's ground normal on ground too steep to walk (GroundState::OnSteepGround). */
         inline constexpr std::uint32_t SteepGround = 0xB366FFFFu;
+        /** @brief A vehicle wheel's suspension and its cross-tick. */
+        inline constexpr std::uint32_t Suspension = 0x8C8CFFFFu;
+        /** @brief A vehicle wheel's circle and spoke. */
+        inline constexpr std::uint32_t Wheel = 0xD9B380FFu;
+        /** @brief A vehicle wheel's contact while both its slips are within its tyres' `peakSlip`. */
+        inline constexpr std::uint32_t Gripping = 0x33FF33FFu;
+        /** @brief A vehicle wheel's contact while either slip is past its tyre's `peakSlip`, and neither past its
+         * `slideSlip`. */
+        inline constexpr std::uint32_t PastPeakSlip = 0xFFC21AFFu;
+        /** @brief A vehicle wheel's contact while either slip is past its tyre's `slideSlip`. */
+        inline constexpr std::uint32_t PastSlideSlip = 0xFF1A8CFFu;
 
         /** @brief A sleeping body's collider colour, or a disabled joint's axis colour: `colour` at half brightness,
          * alpha unchanged. */

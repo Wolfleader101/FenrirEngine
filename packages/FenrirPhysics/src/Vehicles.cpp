@@ -390,19 +390,19 @@ namespace Fenrir
         // Just above 0: the least gearbox-to-wheel ratio a differential can have.
         constexpr float minDifferentialRatio = 1e-3f;
 
-        // A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised up its steering
-        // axis by its compression, turned by its camber and toe, steered about its steering axis, then spun about its
-        // axle, X (rolling forward turns its top towards -Z).
-        Transform WheelPose(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
-        {
-            const Math::Quat steer = Math::AngleAxis(-read.steerAngle, wheel.steeringAxis);
-            const Math::Quat spin = Math::AngleAxis(-read.spinAngle, Math::Vec3(1.0f, 0.0f, 0.0f));
-            Transform pose;
-            pose.pos = wheel.position + wheel.steeringAxis * read.compression;
-            pose.rot = steer * wheel.rest * spin;
-            return pose;
-        }
     } // namespace
+
+    Transform PhysicsWorld::Impl::WheelPose(const Backend::VehicleWheelDesc& wheel,
+                                            const Backend::VehicleWheelRead& read)
+    {
+        // Rolling forward turns the wheel's top towards -Z.
+        const Math::Quat steer = Math::AngleAxis(-read.steerAngle, wheel.steeringAxis);
+        const Math::Quat spin = Math::AngleAxis(-read.spinAngle, Math::Vec3(1.0f, 0.0f, 0.0f));
+        Transform pose;
+        pose.pos = wheel.position + wheel.steeringAxis * read.compression;
+        pose.rot = steer * wheel.rest * spin;
+        return pose;
+    }
 
     void PhysicsWorld::Impl::DrainVehicles()
     {
