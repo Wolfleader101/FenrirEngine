@@ -82,6 +82,28 @@ namespace Fenrir::Backend
         VehicleWheel settings;
     };
 
+    /** @brief One differential of a vehicle, naming at least one wheel, its settings already in range. */
+    struct VehicleDifferentialDesc
+    {
+        /** @brief Wheel indices, -1 for none. */
+        int leftWheel = -1;
+        int rightWheel = -1;
+        float ratio = 3.42f;
+        float leftRightSplit = 0.5f;
+        float limitedSlipRatio = 1.4f;
+        /** @brief Not negative; normalised by the backend across the vehicle's differentials. */
+        float torqueShare = 1.0f;
+    };
+
+    /** @brief One anti-roll bar of a vehicle, naming two wheels, its stiffness not negative. */
+    struct VehicleAntiRollBarDesc
+    {
+        /** @brief Wheel indices. */
+        int leftWheel = 0;
+        int rightWheel = 0;
+        float stiffness = 1000.0f;
+    };
+
     /**
      * @brief Everything needed to make a vehicle on a made dynamic body. Chassis-local +Y is up and -Z is forward. Its
      * kind's settings are already in range.
@@ -92,6 +114,9 @@ namespace Fenrir::Backend
         VehicleKind kind;
         /** @brief In wheel order. */
         std::vector<VehicleWheelDesc> wheels;
+        /** @brief None drives every wheel equally, each by a differential of its own with the defaults. */
+        std::vector<VehicleDifferentialDesc> differentials;
+        std::vector<VehicleAntiRollBarDesc> antiRollBars;
         VehicleProbe probe = VehicleProbe::Cylinder;
         /** @brief Radians, 0 to π; π is off. */
         float maxTilt = std::numbers::pi_v<float>;
@@ -577,6 +602,13 @@ namespace Fenrir::Backend
         /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call: in Manual its
          * gear and clutch too, at once. Wakes its body if `wake`. */
         void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
+
+        /** @brief Replaces a vehicle's differentials, as VehicleDesc::differentials: none drives every wheel equally.
+         * Never during a step. */
+        void SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials);
+
+        /** @brief Replaces a vehicle's anti-roll bars. Never during a step. */
+        void SetVehicleAntiRollBars(VehicleId id, std::span<const VehicleAntiRollBarDesc> antiRollBars);
 
         /** @brief A vehicle and its wheels as the last step (or its making) left them. */
         [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;

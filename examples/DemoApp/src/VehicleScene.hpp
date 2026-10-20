@@ -6,11 +6,12 @@
 // The car is a vehicle on its chassis: a dynamic RigidBody with an unscaled box Collider and a Vehicle, its look a
 // scaled child with no collider. Each wheel is a VehicleWheel on its own unscaled wheel entity, not a child of the
 // chassis, naming the chassis; physics poses the wheel entity, and its look is a child: a sphere scaled to the tyre,
-// with a stripe across it to show its spin. Every setting is the default but the front wheels' steering, so it drives
-// all four wheels through an automatic gearbox. Game code in Tick turns the keys into driver input; physics writes the
-// car's state and each wheel's back after every step, and their names show it every frame. Settings are live edits:
-// 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height as the car
-// drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
+// with a stripe across it to show its spin. Every setting is the default but the front wheels' steering; a
+// VehicleDifferential on an entity of its own drives the rear wheels through an automatic gearbox, and two
+// VehicleAntiRollBars, front and rear, keep it level in corners. Game code in Tick turns the keys into driver input;
+// physics writes the car's state and each wheel's back after every step, and their names show it every frame. Settings
+// are live edits: 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height
+// as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
 //
 // M switches the car's gearbox between Automatic and Manual. In Manual, game code changes gear: E and Q shift up and
 // down (down past neutral is reverse), W is the pedal in the gear's direction, S brakes, and Shift holds the clutch.
@@ -151,6 +152,7 @@ class VehicleScene
         BuildBumps();
         BuildRamp();
         MakeCar();
+        GiveCarDrivetrain();
 
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Vehicle camera");
@@ -507,6 +509,24 @@ class VehicleScene
                                                                   .maxSteerAngle = z < 0.0f ? 0.5f : 0.0f},
                                              at));
             }
+        }
+    }
+
+    // The car's rear-wheel drive and anti-roll bars: a VehicleDifferential naming its rear wheels replaces the
+    // all-wheel-drive default, and a VehicleAntiRollBar across each pair of wheels keeps it level in corners. Each is
+    // an entity of its own, naming two wheel entities.
+    void GiveCarDrivetrain()
+    {
+        Fenrir::Entity differential = m_entities->CreateEntity();
+        differential.GetComponent<Fenrir::Name>().Set("Car rear differential");
+        differential.AddComponent<Fenrir::VehicleDifferential>(
+            Fenrir::VehicleDifferential{.leftWheel = m_car.wheels[2], .rightWheel = m_car.wheels[3]});
+        for (const std::size_t left : {0u, 2u})
+        {
+            Fenrir::Entity bar = m_entities->CreateEntity();
+            bar.GetComponent<Fenrir::Name>().Set(left == 0 ? "Car front anti-roll bar" : "Car rear anti-roll bar");
+            bar.AddComponent<Fenrir::VehicleAntiRollBar>(
+                Fenrir::VehicleAntiRollBar{.leftWheel = m_car.wheels[left], .rightWheel = m_car.wheels[left + 1]});
         }
     }
 
