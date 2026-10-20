@@ -65,7 +65,12 @@ namespace Fenrir
     /**
      * @brief A tyre's friction against its slip: it rises from 0 at no slip to `peakFriction` at `peakSlip`, falls to
      * `slideFriction` at `slideSlip`, and stays there. Along the wheel slip is a ratio, across it an angle in radians.
-     * The value is combined with the ground's PhysicsMaterial::friction as bodies combine theirs.
+     *
+     * Grip on each surface: the curve's value combines with the ground's PhysicsMaterial::friction as the geometric
+     * mean, `sqrt(tyre * ground)`, as bodies combine theirs, so one `friction` means the same to bodies and tyres and
+     * ice, grass and tarmac need no surface table. The ground's friction is its body's material (a compound body's is
+     * its own entity's, or else its first collider's). Set ice very low: 0.05 under a 1.2 tyre still grips at 0.24.
+     * The chassis's own PhysicsMaterial plays no part: it is only what bodies touching the chassis feel.
      */
     struct VehicleTyre
     {
@@ -259,6 +264,19 @@ namespace Fenrir
      * chassis's body rebuilt in one tick, as when its collider is swapped) keeps the engine speed, the gear and each
      * remaining wheel's spin; a new wheel starts still. A change to the chassis's scale moves the wheels with it, with
      * no rebuild.
+     *
+     * What is ground is decided by layers alone: each wheel's probe filters as the chassis's CollisionFilter does,
+     * finding only what the chassis would collide with, and never a trigger, the chassis itself or a character. Probes
+     * ignore joints, as queries do, so a joint's `collideConnected` never hides ground. A character is never ground:
+     * a vehicle meets one with its chassis, as an immovable wall, and to roll over something make it a dynamic or
+     * static body. A character pushes the chassis with its CharacterBody::pushForce, as it pushes any body, which
+     * barely moves a car, and one standing on the chassis rides it and presses on it with its weight. A wheel on a
+     * dynamic body pushes, loads and wakes it; on moving ground its slip is measured against
+     * the ground's velocity, so a vehicle parked on a kinematic platform rides it through tyre grip. Over light dynamic
+     * bodies the chassis dips: an artifact of the solver's mass ratio.
+     *
+     * Only the chassis collides: queries and contact events see its body and name its entity, a body falling onto a
+     * wheel passes through it to the chassis, and QueryFilter::ignoreBody takes the chassis entity to skip the vehicle.
      */
     struct Vehicle
     {

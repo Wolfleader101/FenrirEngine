@@ -1314,27 +1314,26 @@ namespace Fenrir::Backend
         std::vector<std::uint32_t> freeCharacters;
         CharacterListener characterListener;
 
-        // What a vehicle's wheels ask before probing a body: never its own chassis. Called on job threads during a
-        // step, so it reads only what was fixed before the step, and never locks.
+        // What a vehicle's wheels ask before probing a body: never its own chassis or a character's inner body, so a
+        // character is never ground. Triggers the probes skip themselves. Called on job threads during a step, so it
+        // reads only what was fixed before the step (characters are added and removed between steps), and never
+        // locks.
         class ProbeFilter final : public JPH::BodyFilter
         {
           public:
-            explicit ProbeFilter(JPH::BodyID chassis) : m_chassis(chassis)
+            ProbeFilter(JPH::BodyID chassis, const CharacterListener& characterBodies)
+                : m_chassis(chassis), m_characters(&characterBodies)
             {
             }
 
             bool ShouldCollide(const JPH::BodyID& body) const override
             {
-                return body != m_chassis;
-            }
-
-            bool ShouldCollideLocked(const JPH::Body& body) const override
-            {
-                return body.GetID() != m_chassis;
+                return body != m_chassis && !m_characters->others.contains(body.GetIndexAndSequenceNumber());
             }
 
           private:
             JPH::BodyID m_chassis;
+            const CharacterListener* m_characters;
         };
 
         // The vehicles, by VehicleId, each with its own wheel settings (its wheels read them by reference, so they are
@@ -3325,7 +3324,7 @@ namespace Fenrir::Backend
                 wheel.SetRotationAngle(desc.carried->wheels[i].spinAngle);
             }
         }
-        slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body));
+        slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body), impl.characterListener);
         impl.Retest(slot);
 
         impl.system.AddConstraint(slot.constraint);
