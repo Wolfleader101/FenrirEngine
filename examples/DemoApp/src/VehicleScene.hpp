@@ -386,9 +386,8 @@ class VehicleScene
         {
             Fenrir::Entity bar = m_entities->CreateEntity();
             bar.GetComponent<Fenrir::Name>().Set(left == 0 ? "Car front anti-roll bar" : "Car rear anti-roll bar");
-            // Stiff enough to see: the default 1000 N/m is little against the springs' 30000 or so.
-            bar.AddComponent<Fenrir::VehicleAntiRollBar>(Fenrir::VehicleAntiRollBar{
-                .leftWheel = m_car.wheels[left], .rightWheel = m_car.wheels[left + 1], .stiffness = 10000.0f});
+            bar.AddComponent<Fenrir::VehicleAntiRollBar>(
+                Fenrir::VehicleAntiRollBar{.leftWheel = m_car.wheels[left], .rightWheel = m_car.wheels[left + 1]});
         }
     }
 
