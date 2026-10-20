@@ -201,7 +201,9 @@ namespace Fenrir
           m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
           m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>())),
           m_vehicleWatch(entities.Watch(ComponentType::Native<Vehicle>())),
-          m_wheelWatch(entities.Watch(ComponentType::Native<VehicleWheel>()))
+          m_wheelWatch(entities.Watch(ComponentType::Native<VehicleWheel>())),
+          m_differentialWatch(entities.Watch(ComponentType::Native<VehicleDifferential>())),
+          m_antiRollBarWatch(entities.Watch(ComponentType::Native<VehicleAntiRollBar>()))
     {
         // A watch records only what happens after it is made: the components already there are found once, here.
         const ComponentType colliders[] = {ComponentType::Native<Collider>()};
@@ -216,6 +218,10 @@ namespace Fenrir
         entities.ForEachWith(vehicles, [this](std::uint32_t entity) { m_vehicleEntities.insert(entity); });
         const ComponentType wheels[] = {ComponentType::Native<VehicleWheel>()};
         entities.ForEachWith(wheels, [this](std::uint32_t entity) { m_wheelEntities.insert(entity); });
+        const ComponentType differentials[] = {ComponentType::Native<VehicleDifferential>()};
+        entities.ForEachWith(differentials, [this](std::uint32_t entity) { m_differentials.try_emplace(entity); });
+        const ComponentType antiRollBars[] = {ComponentType::Native<VehicleAntiRollBar>()};
+        entities.ForEachWith(antiRollBars, [this](std::uint32_t entity) { m_antiRollBars.try_emplace(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const

@@ -25,7 +25,7 @@ namespace
     // The default engine's idle.
     constexpr float idleRpm = 1000.0f;
 
-    /** How many warnings say `component` (with its preposition: "Vehicle of") on `entity` went inactive. */
+    /** How many warnings say `component` (with its preposition: "Vehicle on") on `entity` went inactive. */
     std::ptrdiff_t WarningsAbout(const PhysicsApp& test, const std::string& component, const Entity& entity)
     {
         const std::string about = "The " + component + " entity " + std::to_string(entity.GetId()) + " is inactive";
@@ -150,7 +150,7 @@ TEST_CASE("Each kind of inactive vehicle warns once on going inactive, resets it
         c.invalidate(car.chassis);
         test.Run(0.25);
         INFO(c.what << ": the vehicle gave one warning on going inactive, and no more while it stayed inactive");
-        REQUIRE(WarningsAbout(test, "Vehicle of", car.chassis) == 1);
+        REQUIRE(WarningsAbout(test, "Vehicle on", car.chassis) == 1);
         INFO("its state and its wheels' are reset");
         RequireReset(StateOf(car));
         RequireReset(StateOf(car.wheels[0]));
@@ -159,12 +159,12 @@ TEST_CASE("Each kind of inactive vehicle warns once on going inactive, resets it
         test.Run(1.0);
         INFO("valid again, it is a vehicle on its four wheels, with no further warning");
         REQUIRE(StateOf(car).wheelsOnGround == 4);
-        REQUIRE(WarningsAbout(test, "Vehicle of", car.chassis) == 1);
+        REQUIRE(WarningsAbout(test, "Vehicle on", car.chassis) == 1);
 
         c.invalidate(car.chassis);
         test.Run(tick);
         INFO("going inactive again warns again");
-        REQUIRE(WarningsAbout(test, "Vehicle of", car.chassis) == 2);
+        REQUIRE(WarningsAbout(test, "Vehicle on", car.chassis) == 2);
     }
 }
 
@@ -183,7 +183,7 @@ TEST_CASE("A chassis made kinematic for a cutscene and back starts fresh at idle
     test.Run(1.0);
     INFO("kinematic, it is inactive with one warning and reads reset");
     REQUIRE(test.warnings.size() == 1);
-    REQUIRE(WarningsAbout(test, "Vehicle of", car.chassis) == 1);
+    REQUIRE(WarningsAbout(test, "Vehicle on", car.chassis) == 1);
     RequireReset(StateOf(car));
 
     body.motionType = MotionType::Dynamic;
@@ -241,8 +241,8 @@ TEST_CASE("Each kind of inactive wheel warns once and is left out of its vehicle
         c.invalidate(middle, floor);
         test.Run(0.5);
         INFO(c.what << ": the wheel gave one warning, and the car stands on its other four");
-        REQUIRE(WarningsAbout(test, "VehicleWheel of", middle) == 1);
-        REQUIRE(WarningsAbout(test, "Vehicle of", car.chassis) == 0);
+        REQUIRE(WarningsAbout(test, "VehicleWheel on", middle) == 1);
+        REQUIRE(WarningsAbout(test, "Vehicle on", car.chassis) == 0);
         REQUIRE(StateOf(car).wheelsOnGround == 4);
         RequireReset(StateOf(middle));
 
@@ -257,7 +257,7 @@ TEST_CASE("Each kind of inactive wheel warns once and is left out of its vehicle
         test.Run(0.5);
         INFO("valid again, it is one of the car's wheels, with no further warning");
         REQUIRE(StateOf(car).wheelsOnGround == 5);
-        REQUIRE(WarningsAbout(test, "VehicleWheel of", middle) == 1);
+        REQUIRE(WarningsAbout(test, "VehicleWheel on", middle) == 1);
     }
 }
 
@@ -272,7 +272,7 @@ TEST_CASE("A wheel on its own chassis entity is inactive with one warning, and t
     test.Run(1.0);
     INFO("one warning about the wheel, none about the vehicle, which stands on its four other wheels");
     REQUIRE(test.warnings.size() == 1);
-    REQUIRE(WarningsAbout(test, "VehicleWheel of", car.chassis) == 1);
+    REQUIRE(WarningsAbout(test, "VehicleWheel on", car.chassis) == 1);
     REQUIRE(StateOf(car).wheelsOnGround == 4);
     REQUIRE_FALSE(StateOf(car.chassis).onGround);
 

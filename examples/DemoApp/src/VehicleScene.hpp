@@ -6,9 +6,15 @@
 // The car is a vehicle on its chassis: a dynamic RigidBody with an unscaled box Collider and a Vehicle, its look a
 // scaled child with no collider. Each wheel is a VehicleWheel on its own unscaled wheel entity, not a child of the
 // chassis, naming the chassis; physics poses the wheel entity, and its look is a child: a sphere scaled to the tyre,
-// with a stripe across it to show its spin. Every setting is the default but the front wheels' steering, so it drives
-// all four wheels through an automatic gearbox. Game code in Tick turns the keys into driver input; physics writes the
-// car's state and each wheel's back after every step, and their names show it every frame.
+// with a stripe across it to show its spin. Every setting is the default but the front wheels' steering; a
+// VehicleDifferential on an entity of its own drives the rear wheels through an automatic gearbox, and two
+// VehicleAntiRollBars, front and rear, keep it level in corners. Game code in Tick turns the keys into driver input;
+// physics writes the car's state and each wheel's back after every step, and their names show it every frame. Settings
+// are live edits: 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height
+// as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
+//
+// M switches the car's gearbox between Automatic and Manual. In Manual, game code changes gear: E and Q shift up and
+// down (down past neutral is reverse), W is the pedal in the gear's direction, S brakes, and Shift holds the clutch.
 //
 // The track is built one function per piece, each with its own leg of the autopilot route, so later pieces add a
 // function, a leg and their keys without touching the others': tarmac (friction 0.5) with a white start pad at the
@@ -113,17 +119,23 @@ class VehicleScene
                         .keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
                                    "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
                                    "still drive) and snaps it back. North of the start: ten bumps, then a ramp. L logs "
-                                   "the car's state, P drives the track by itself. 4 switches the car off (a plain "
-                                   "box) and on; 9 makes its chassis kinematic (the car inactive, with a warning) and "
-                                   "back. F6 goes on.",
+                                   "the car's state, P drives the track by itself. M switches the gearbox between "
+                                   "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
+                                   "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
+                                   "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
+                                   "undo). 4 switches the car off (a plain box) and on; 9 makes its chassis kinematic "
+                                   "(the car inactive, with a warning) and back. F6 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
-        scene.smokeKeys.insert(scene.smokeKeys.end(), 40, GLFW_KEY_L);
+        scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_4, GLFW_KEY_9})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
+        // Manual, up two gears, down one, the clutch, and back to Automatic.
+        scene.smokeKeys.insert(scene.smokeKeys.end(), {GLFW_KEY_M, GLFW_KEY_E, GLFW_KEY_E, GLFW_KEY_Q,
+                                                       GLFW_KEY_LEFT_SHIFT, GLFW_KEY_L, GLFW_KEY_M});
         scene.smokeKeys.push_back(GLFW_KEY_L);
         return scene;
     }
@@ -141,6 +153,7 @@ class VehicleScene
         BuildBumps();
         BuildRamp();
         MakeCar();
+        GiveCarDrivetrain();
 
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Vehicle camera");
@@ -200,6 +213,7 @@ class VehicleScene
     {
         Fenrir::Math::Vec3 at;
         float speed = 12.0f; // m/s
+        bool manual = false; // Whether the way there is driven in Manual, changing gear by hand.
     };
 
     void OnKey(Fenrir::App& app, int key)
@@ -228,6 +242,72 @@ class VehicleScene
         {
             ToggleKinematic(app);
         }
+        else if (key == GLFW_KEY_M)
+        {
+            m_manual = !m_manual;
+            Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+            // On in the gear it is in, or first from neutral.
+            vehicle.input.gear = vehicle.state.gear == 0 ? 1 : vehicle.state.gear;
+            app.Logger()->Info(m_manual ? "M: Manual gearbox: E/Q shift, Shift holds the clutch"
+                                        : "M: Automatic gearbox");
+        }
+        else if ((key == GLFW_KEY_E || key == GLFW_KEY_Q) && m_manual)
+        {
+            Shift(key == GLFW_KEY_E ? 1 : -1);
+            app.Logger()->Info("{}: gear {}", key == GLFW_KEY_E ? "E" : "Q",
+                               m_car.chassis.GetComponent<Fenrir::Vehicle>().input.gear);
+        }
+        else if (key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_7)
+        {
+            OnSettingsKey(app, key);
+        }
+    }
+
+    // 1, 2 and 7: live edits to the car's settings, each undone by pressing it again.
+    void OnSettingsKey(Fenrir::App& app, int key)
+    {
+        if (key == GLFW_KEY_1)
+        {
+            m_softSprings = !m_softSprings;
+            for (Fenrir::Entity& wheel : m_car.wheels)
+            {
+                wheel.GetComponent<Fenrir::VehicleWheel>().suspension.spring =
+                    m_softSprings ? Fenrir::JointSpring{.frequency = 1.15f, .damping = 0.4f}
+                                  : Fenrir::JointSpring{.frequency = 1.5f, .damping = 0.5f};
+            }
+            app.Logger()->Info(m_softSprings ? "1: soft springs, 1.15 Hz: the car sits lower and rolls more"
+                                             : "1: stock springs, 1.5 Hz");
+        }
+        else if (key == GLFW_KEY_2)
+        {
+            m_bigWheels = !m_bigWheels;
+            const float radius = m_bigWheels ? 0.45f : 0.3f;
+            for (Fenrir::Entity& entity : m_car.wheels)
+            {
+                Fenrir::VehicleWheel& wheel = entity.GetComponent<Fenrir::VehicleWheel>();
+                wheel.radius = radius;
+                // The look follows: the tyre, the wheel entity's only child, is scaled to the new size.
+                entity.GetComponent<Fenrir::Relationship>().firstChild.GetComponent<Fenrir::Transform>().scale =
+                    Fenrir::Math::Vec3(wheel.width, 2.0f * radius, 2.0f * radius);
+            }
+            app.Logger()->Info(m_bigWheels ? "2: big wheels, 0.45 m: the car sits higher" : "2: stock wheels, 0.3 m");
+        }
+        else
+        {
+            Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+            const bool limited = vehicle.maxTilt < std::numbers::pi_v<float>;
+            vehicle.maxTilt = limited ? std::numbers::pi_v<float> : 60.0f * degrees;
+            app.Logger()->Info(limited ? "7: tilt limit off"
+                                       : "7: tilt limited to 60 degrees: the car cannot roll over");
+        }
+    }
+
+    // Manual: one gear up or down, from reverse (-1) through neutral to the top gear.
+    void Shift(int by)
+    {
+        Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+        const int top = vehicle.kind.As<Fenrir::WheeledVehicle>().transmission.gearCount;
+        vehicle.input.gear = std::clamp(vehicle.input.gear + by, -1, top);
     }
 
     // The keys as normalised input, or the autopilot's while it drives. While the camera is free, WASD is the
@@ -241,12 +321,26 @@ class VehicleScene
         float steer = 0.0f;
         steer += held(GLFW_KEY_RIGHT) || (wasd && held(GLFW_KEY_D)) ? 1.0f : 0.0f;
         steer -= held(GLFW_KEY_LEFT) || (wasd && held(GLFW_KEY_A)) ? 1.0f : 0.0f;
+        float clutch = held(GLFW_KEY_LEFT_SHIFT) || held(GLFW_KEY_RIGHT_SHIFT) ? 1.0f : 0.0f;
+        bool manual = m_manual;
         if (m_autopilot)
         {
-            Autopilot(app, throttle, back, steer);
+            Autopilot(app, throttle, back, steer, manual, clutch);
         }
 
         Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+        vehicle.kind.As<Fenrir::WheeledVehicle>().transmission.mode =
+            manual ? Fenrir::TransmissionMode::Manual : Fenrir::TransmissionMode::Automatic;
+        vehicle.input.steer = steer;
+        vehicle.input.handbrake = held(GLFW_KEY_SPACE) ? 1.0f : 0.0f;
+        vehicle.input.clutch = clutch;
+        if (manual)
+        {
+            // The gear sets the direction: forward is the pedal, and back brakes.
+            vehicle.input.forward = throttle;
+            vehicle.input.brake = back;
+            return;
+        }
         // Asked to go the other way, it brakes until it has all but stopped, then drives that way.
         const float speed = vehicle.state.forwardSpeed;
         float forward = throttle - back;
@@ -265,12 +359,10 @@ class VehicleScene
         }
         vehicle.input.forward = forward;
         vehicle.input.brake = brake;
-        vehicle.input.steer = steer;
-        vehicle.input.handbrake = held(GLFW_KEY_SPACE) ? 1.0f : 0.0f;
     }
 
-    // Steers for the next waypoint of the route, and holds its speed.
-    void Autopilot(Fenrir::App& app, float& throttle, float& back, float& steer)
+    // Steers for the next waypoint of the route, and holds its speed, in the waypoint's gearbox mode.
+    void Autopilot(Fenrir::App& app, float& throttle, float& back, float& steer, bool& manual, float& clutch)
     {
         const std::vector<Waypoint>& route = Route();
         const Waypoint& next = route[m_waypoint % route.size()];
@@ -292,6 +384,43 @@ class VehicleScene
         const float speed = m_car.chassis.GetComponent<Fenrir::Vehicle>().state.forwardSpeed;
         throttle = speed < wanted ? 0.7f : 0.0f;
         back = 0.0f;
+        manual = next.manual;
+        if (manual)
+        {
+            clutch = ShiftByHand();
+        }
+    }
+
+    // The autopilot in Manual, as a driver would: up a gear past 4000 RPM, down below 2000, never more often than
+    // twice a second, the clutch held for a moment each time. Returns the clutch.
+    float ShiftByHand()
+    {
+        const Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+        const int top = vehicle.kind.As<Fenrir::WheeledVehicle>().transmission.gearCount;
+        const int gear = vehicle.input.gear;
+        if (m_tick - m_shifted >= shiftTicks)
+        {
+            const float rpm = vehicle.state.engineRpm;
+            int wanted = gear;
+            if (gear < 1)
+            {
+                wanted = 1;
+            }
+            else if (rpm > 4000.0f && gear < top)
+            {
+                wanted = gear + 1;
+            }
+            else if (rpm < 2000.0f && gear > 1)
+            {
+                wanted = gear - 1;
+            }
+            if (wanted != gear)
+            {
+                Shift(wanted - gear);
+                m_shifted = m_tick;
+            }
+        }
+        return m_tick - m_shifted < clutchTicks ? 1.0f : 0.0f;
     }
 
     // Track pieces, each with its leg of the autopilot route.
@@ -346,12 +475,23 @@ class VehicleScene
                 Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), .speed = 6.0f}};
     }
 
+    // The gearbox: a loop to the west in Manual, the autopilot changing gear by hand, then back to the start.
+    static std::vector<Waypoint> GearboxLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(-25.0f, 0.0f, -10.0f), .manual = true},
+                Waypoint{.at = Fenrir::Math::Vec3(-25.0f, 0.0f, -110.0f), .speed = 20.0f, .manual = true},
+                Waypoint{.at = Fenrir::Math::Vec3(-50.0f, 0.0f, -110.0f), .manual = true},
+                Waypoint{.at = Fenrir::Math::Vec3(-50.0f, 0.0f, 10.0f), .speed = 20.0f, .manual = true},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 15.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), .speed = 6.0f}};
+    }
+
     // The route: each piece's leg in turn, over and over.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg : {BumpsLeg(), RampLeg()})
+            for (const std::vector<Waypoint>& leg : {BumpsLeg(), RampLeg(), GearboxLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -401,6 +541,24 @@ class VehicleScene
         body.angularVelocity = Fenrir::Math::Vec3(0.0f);
         app.Logger()->Info(kinematic ? "9: the chassis is kinematic: the car is inactive"
                                      : "9: the chassis is dynamic: the car starts again at idle in neutral");
+    }
+
+    // The car's rear-wheel drive and anti-roll bars: a VehicleDifferential naming its rear wheels replaces the
+    // all-wheel-drive default, and a VehicleAntiRollBar across each pair of wheels keeps it level in corners. Each is
+    // an entity of its own, naming two wheel entities.
+    void GiveCarDrivetrain()
+    {
+        Fenrir::Entity differential = m_entities->CreateEntity();
+        differential.GetComponent<Fenrir::Name>().Set("Car rear differential");
+        differential.AddComponent<Fenrir::VehicleDifferential>(
+            Fenrir::VehicleDifferential{.leftWheel = m_car.wheels[2], .rightWheel = m_car.wheels[3]});
+        for (const std::size_t left : {0u, 2u})
+        {
+            Fenrir::Entity bar = m_entities->CreateEntity();
+            bar.GetComponent<Fenrir::Name>().Set(left == 0 ? "Car front anti-roll bar" : "Car rear anti-roll bar");
+            bar.AddComponent<Fenrir::VehicleAntiRollBar>(
+                Fenrir::VehicleAntiRollBar{.leftWheel = m_car.wheels[left], .rightWheel = m_car.wheels[left + 1]});
+        }
     }
 
     // A chassis: unscaled, with a box collider of `half` extents, its look a scaled child with no collider.
@@ -516,6 +674,8 @@ class VehicleScene
     static constexpr float degrees = std::numbers::pi_v<float> / 180.0f;
     static constexpr float stoppedSpeed = 0.5f; // m/s: below it, S reverses rather than brakes.
     static constexpr float reached = 6.0f;      // m: the autopilot moves on this close to a waypoint.
+    static constexpr long shiftTicks = 30;      // The autopilot's least time between shifts by hand.
+    static constexpr long clutchTicks = 10;     // How long it holds the clutch for each.
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     const Model* m_cube;
@@ -527,6 +687,10 @@ class VehicleScene
     VehicleCamera m_followCamera;
     std::set<int> m_held;
     bool m_autopilot = false;
+    bool m_manual = false;        // The gearbox mode M last chose; the autopilot drives each waypoint in its own.
+    long m_shifted = -shiftTicks; // The tick the autopilot last shifted by hand.
+    bool m_softSprings = false;
+    bool m_bigWheels = false;
     std::size_t m_waypoint = 0;
     long m_tick = 0;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;

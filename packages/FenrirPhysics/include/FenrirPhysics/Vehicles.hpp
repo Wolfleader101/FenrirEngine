@@ -40,7 +40,7 @@ namespace Fenrir
     /** @brief How every wheel of a vehicle finds the ground beneath it. */
     enum class VehicleProbe : std::uint8_t
     {
-        /** @brief A ray down the suspension, with a fixed 80° slope limit against the world's up. */
+        /** @brief A ray down the suspension, with a fixed 80° slope limit against the world's up (against gravity). */
         Ray,
         /** @brief A sphere cast down the suspension, with the same slope limit. */
         Sphere,
@@ -259,9 +259,10 @@ namespace Fenrir
         /** @brief The kind and its drivetrain: WheeledVehicle by default. */
         VehicleKind kind = {};
         VehicleInput input = {};
+        /** @brief How every wheel finds the ground. A live edit: the next step probes the new way. */
         VehicleProbe probe = VehicleProbe::Cylinder;
-        /** @brief Radians: the cone around world up the chassis cannot pitch or roll past. π (the default) is off;
-         * about 60° stops rollovers. */
+        /** @brief Radians: the cone around world up the chassis cannot pitch or roll past, a live edit. π (the
+         * default) is off; about 60° stops rollovers. Kept within 0 to π. */
         float maxTilt = std::numbers::pi_v<float>;
         /** @brief Disabled, the entity is a plain rigid body resting on its chassis, its `state` and its wheels' reset
          * and its wheel entities left where they were. Enabled again, it is built fresh with nothing carried over. */
@@ -316,12 +317,16 @@ namespace Fenrir
      * nothing collides with it. Wheel order is entity order.
      *
      * Physics poses the wheel entity for drawing: its world position and rotation (never its scale) are the chassis's
-     * pose times the wheel's own, `position` raised by its compression, then steered, then spun about its X, the axle.
-     * With no angle set its rotation is the chassis's, so left and right wheels can share a symmetric mesh. The
+     * pose times the wheel's own: `position` raised by its compression along the suspension, then turned by its
+     * camber and toe, then steered about the steering axis, then spun about its X, the axle. With no angle set its
+     * rotation is the chassis's, so left and right wheels can share a symmetric mesh. The
      * Transform is output only: game code's writes to it are overwritten, and physics never reads a mount point from
      * it. Keep wheel entities unscaled and out of the chassis's hierarchy, and give each a scaled look as a child.
      *
-     * Adding, removing or relinking a wheel rebuilds its vehicle. There is no per-wheel switch: destroy the wheel
+     * Every setting is a live edit, applied on the next tick and waking the chassis. Out-of-range values are corrected
+     * with one warning per wheel: negative inertias, frictions, brake torques, travel and widths are treated as 0, the
+     * radius is raised to a small minimum, and `maxSteerAngle`, `caster`, `camber` and `toe` are kept below a quarter
+     * turn. Adding, removing or relinking a wheel rebuilds its vehicle. There is no per-wheel switch: destroy the wheel
      * entity or unlink it to take the wheel off.
      *
      * A wheel naming no other entity of its scene with a Vehicle, or sharing its entity with a RigidBody, a
@@ -344,11 +349,13 @@ namespace Fenrir
         /** @brief kg m². */
         float inertia = 0.9f;
         float angularDamping = 0.2f;
-        /** @brief Radians: tilts the suspension and steering axis back. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + tilts the top of the suspension and steering axis back (+Z), as a motorcycle's fork. */
         float caster = 0.0f;
-        /** @brief Radians: tilts the wheel's top. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + tilts the wheel's top outwards, away from the chassis's middle. Mirrored by the sign of
+         * `position.x`; a wheel at x = 0 counts as a right-hand one. */
         float camber = 0.0f;
-        /** @brief Radians: turns the wheel's front. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + turns the wheel's front inwards (toe-in). Mirrored by the sign of `position.x`; a wheel at
+         * x = 0 counts as a right-hand one. */
         float toe = 0.0f;
         VehicleSuspension suspension = {};
         /** @brief Radians at full `steer`: 0 does not steer. */
@@ -361,5 +368,51 @@ namespace Fenrir
         VehicleTyre lateral = {.peakSlip = 0.052f, .peakFriction = 1.2f, .slideSlip = 0.35f, .slideFriction = 1.0f};
         /** @brief Read-back: overwritten by physics after every step. */
         VehicleWheelState state = {};
+    };
+
+    /**
+     * @brief A differential: shares a vehicle's engine torque between two of its wheels (or gives one wheel its share),
+     * on any entity. A vehicle with no differential naming its wheels drives every wheel equally; adding any
+     * differential replaces that, and a wheel in no differential only rolls and brakes. A rear-wheel-drive car is one
+     * differential naming its two rear wheels.
+     *
+     * An empty wheel is "none", so a differential naming one wheel drives just that wheel. A wheel that is not a wheel
+     * entity, or wheels of two different vehicles, make it inactive, with a warning, until its wheels are fixed. Edits
+     * apply on the next tick and wake the chassis.
+     */
+    struct VehicleDifferential
+    {
+        /** @brief A wheel entity, or empty for none. */
+        Entity leftWheel = {};
+        /** @brief A wheel entity of the same vehicle, or empty for none. */
+        Entity rightWheel = {};
+        /** @brief The gearbox's turns per turn of the wheels. */
+        float ratio = 3.42f;
+        /** @brief How the torque is split across the two wheels: 0 all left, 0.5 even, 1 all right. */
+        float leftRightSplit = 0.5f;
+        /** @brief The fastest wheel's speed over the slowest's past which all the torque goes to the slower one: above
+         * 1. A very large value is an open differential. */
+        float limitedSlipRatio = 1.4f;
+        /** @brief This differential's share of the engine torque, against the other differentials of its vehicle:
+         * the shares are normalised, so they need not sum to 1. */
+        float torqueShare = 1.0f;
+    };
+
+    /**
+     * @brief An anti-roll bar: stops a vehicle leaning in corners by pushing its two wheels' suspensions towards the
+     * same compression, on any entity. A vehicle has none by default. It works only while both wheels are on the
+     * ground.
+     *
+     * A wheel that is not a wheel entity, or wheels of two different vehicles, make it inactive, with a warning, until
+     * its wheels are fixed; with a wheel empty it does nothing. Edits apply on the next tick and wake the chassis.
+     */
+    struct VehicleAntiRollBar
+    {
+        /** @brief A wheel entity, usually on the vehicle's left. */
+        Entity leftWheel = {};
+        /** @brief A wheel entity of the same vehicle, usually the left wheel's partner on the right. */
+        Entity rightWheel = {};
+        /** @brief N/m: the push per metre of difference in the two wheels' compression. 0 does nothing. */
+        float stiffness = 1000.0f;
     };
 } // namespace Fenrir
