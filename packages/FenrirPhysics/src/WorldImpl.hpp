@@ -252,13 +252,22 @@ namespace Fenrir
         struct VehicleRecord;
         /** @brief Removes the vehicle's backend vehicle, if it has one, and forgets what was applied to it. */
         void DropVehicle(VehicleRecord& record);
+        /** @brief Why the Vehicle on `chassis` is inactive: no made dynamic body with a solid collider, or beside a
+         * CharacterBody. Empty if it can be a vehicle. */
+        [[nodiscard]] std::string WhyNoChassis(std::uint32_t chassis) const;
+        /** @brief Why the VehicleWheel on `wheel` is inactive: naming no other entity of its scene with a Vehicle, or
+         * beside a RigidBody, CharacterBody or Collider. Empty if it can be a wheel. */
+        [[nodiscard]] std::string WhyNoWheel(std::uint32_t wheel) const;
+        /** @brief Warns once about each Vehicle and each VehicleWheel that has gone inactive since the last tick. */
+        void WarnAboutInactiveVehicles();
         /** @brief The made dynamic body of the chassis on `chassis`, if it can be a vehicle's; null otherwise. */
         [[nodiscard]] const Record* ChassisBodyOf(std::uint32_t chassis) const;
         /** @brief Each vehicle's wheel entities that can be its wheels, in entity order, by chassis entity. */
         [[nodiscard]] std::map<std::uint32_t, std::vector<std::uint32_t>> WheelsByVehicle() const;
-        /** @brief Step 2, after the joints, in chassis entity order: makes the backend vehicle of each chassis with a
-         * dynamic body and wheels, remade when its body or wheel set changed, and gives it its differentials, anti-roll
-         * bars and driver input, waking the chassis on a change. */
+        /** @brief Step 2, after the joints, in chassis entity order: warns about vehicles and wheels gone inactive,
+         * makes the backend vehicle of each enabled chassis with a dynamic body and wheels, remade when its body or
+         * wheel set changed, and gives it its differentials, anti-roll bars and driver input, waking the chassis on a
+         * change. */
         void SyncVehicles();
         /** @brief The backend's wheel for the wheel on `entity`, its settings corrected (each kind of out-of-range
          * value warned about once per wheel) and its position scaled by `scale`, the chassis's world scale. */
@@ -428,7 +437,7 @@ namespace Fenrir
         std::set<std::uint32_t> m_characterChildren;
 
         // What physics knows of a vehicle, by chassis entity: its backend vehicle, the body and wheel entities it was
-        // made with, and the driver input and kind last given to it. None while its chassis has no dynamic body or no
+        // made with, and the driver input and kind last given to it. None while it is disabled or inactive, or has no
         // wheels.
         struct VehicleRecord
         {
@@ -461,6 +470,9 @@ namespace Fenrir
         std::set<std::uint32_t> m_vehicleEntities;
         std::set<std::uint32_t> m_wheelEntities;
         std::map<std::uint32_t, VehicleRecord> m_vehicles;
+        // Vehicles and wheels that are inactive now: each is warned about once, when it becomes so.
+        std::set<std::uint32_t> m_inactiveVehicles;
+        std::set<std::uint32_t> m_inactiveWheels;
         // What physics knows of a VehicleDifferential or VehicleAntiRollBar, by its entity: whether it is inactive,
         // warned about each time it becomes so, and the kinds of out-of-range value already warned about, each once.
         struct VehicleLinkRecord

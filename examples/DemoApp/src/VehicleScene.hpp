@@ -123,12 +123,13 @@ class VehicleScene
                                    "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
                                    "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
                                    "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
-                                   "undo). F6 goes on.",
+                                   "undo). 4 switches the car off (a plain box) and on; 9 makes its chassis kinematic "
+                                   "(the car inactive, with a warning) and back. F6 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_7})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -232,6 +233,14 @@ class VehicleScene
             m_autopilot = !m_autopilot;
             m_waypoint = 0;
             app.Logger()->Info(m_autopilot ? "P: autopilot: driving the track" : "P: autopilot off");
+        }
+        else if (key == GLFW_KEY_4)
+        {
+            ToggleEnabled(app);
+        }
+        else if (key == GLFW_KEY_9)
+        {
+            ToggleKinematic(app);
         }
         else if (key == GLFW_KEY_M)
         {
@@ -510,6 +519,28 @@ class VehicleScene
                                              at));
             }
         }
+    }
+
+    // 4: the car switched off, a plain box rolling on its chassis with its wheels left behind, and on again, built
+    // fresh.
+    void ToggleEnabled(Fenrir::App& app)
+    {
+        bool& enabled = m_car.chassis.GetComponent<Fenrir::Vehicle>().enabled;
+        enabled = !enabled;
+        app.Logger()->Info(enabled ? "4: the car is on again, built fresh" : "4: the car is off: a plain rolling box");
+    }
+
+    // 9: the car's chassis kinematic and still, as for a cutscene, which makes the vehicle inactive with one warning;
+    // then dynamic again, the car built fresh at idle in neutral.
+    void ToggleKinematic(Fenrir::App& app)
+    {
+        Fenrir::RigidBody& body = m_car.chassis.GetComponent<Fenrir::RigidBody>();
+        const bool kinematic = body.motionType == Fenrir::MotionType::Dynamic;
+        body.motionType = kinematic ? Fenrir::MotionType::Kinematic : Fenrir::MotionType::Dynamic;
+        body.linearVelocity = Fenrir::Math::Vec3(0.0f);
+        body.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        app.Logger()->Info(kinematic ? "9: the chassis is kinematic: the car is inactive"
+                                     : "9: the chassis is dynamic: the car starts again at idle in neutral");
     }
 
     // The car's rear-wheel drive and anti-roll bars: a VehicleDifferential naming its rear wheels replaces the
