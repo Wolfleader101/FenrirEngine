@@ -20,7 +20,10 @@
 
 **Blocked by:** 02 (`[TaggedUnion]` tracer bullet)
 
-**Status:** ready-for-agent
+**Status:** resolved (built on branch `claude/tagged-union-diagnostics`, on top of 02's). Where the build settled something the ticket left open:
+- `[TaggedUnion]` stays struct-only, as ticket 01 decided, so a class gets the compiler's CS0592 beside FENRIR0030; its case allows that one extra error, as `NativeFunctionTypeNotPartial` allows CS8795. A union that is its own kind likewise gets the compiler's CS0523 (a layout cycle) beside FENRIR0036.
+- FENRIR0033 also refuses a `readonly` kind field, which a writable view cannot return.
+- A misnamed kind field is reported once, as FENRIR0033 naming the field the unpaired tag member would have, and not also as FENRIR0034 for that member.
 
-- [ ] One `fenrir_expect_compile` case per ID in `Tests/CompileFail/`, each failing with exactly that ID and no other error. Where one ID covers several shapes (0030 a class and a non-partial container; 0031 readonly, generic and `ref struct`; 0035 mismatched offsets and an offset inside the tag; 0036 managed, self and duplicate kinds; 0037 each emitted member; 0038 no zero and a duplicate value), a case for each.
-- [ ] The OK cases from ticket 02 still pass.
+- [x] One `fenrir_expect_compile` case per ID in `Tests/CompileFail/`, each failing with exactly that ID and no other error. Where one ID covers several shapes (0030 a class and a non-partial container; 0031 readonly, generic and `ref struct`; 0035 mismatched offsets and an offset inside the tag; 0036 managed, self and duplicate kinds; 0037 each emitted member; 0038 no zero and a duplicate value), a case for each.
+- [x] The OK cases from ticket 02 still pass.

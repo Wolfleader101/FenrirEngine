@@ -300,6 +300,20 @@ in place, and reading the wrong kind's view throws `InvalidOperationException`, 
 generates nothing else (no equality, `ToString` or `Match`), and it works the same in a contract assembly and a script
 assembly.
 
+A union the generator cannot write for is a build error of its own, and gets no members, so that error is the one shown:
+
+| Error | Refused |
+| --- | --- |
+| FENRIR0030 | Not a `partial struct`, or inside a type that is not partial. |
+| FENRIR0031 | A `readonly` struct (it hands out writable views), a generic one, or a `ref struct`. |
+| FENRIR0032 | No single enum-typed field at offset 0 to be the tag. |
+| FENRIR0033 | A kind field that is not private, is `readonly`, or is not named after a tag member. |
+| FENRIR0034 | A tag member with no kind field. |
+| FENRIR0035 | Kinds at different offsets, or at an offset inside the tag. |
+| FENRIR0036 | A kind that is not an unmanaged struct, is the union itself, or has the same type as another kind. |
+| FENRIR0037 | A member the generator writes, written by hand: the parameterless constructor, `Type`, a view, a conversion from a kind, or `Expect`. |
+| FENRIR0038 | A tag with no member of value 0 (the kind `new()` makes), or two members of one value. |
+
 - **`default(Shape)` is not `new Shape()`.** It is the tag-0 kind with every setting zero, not that kind's defaults.
 - **An empty kind** (a C++ `struct FixedJoint {};`, which takes one byte) cannot be mapped, because Iris maps no struct
   without fields. Its C# struct keeps one private `byte` field and the native stand-in maps a one-byte member in its
@@ -337,7 +351,7 @@ template <> struct Iris::StructMapping<Shape> {
 The `ScriptingTests` tagged-union tests are the proof: a native component holding a generated union validates,
 round-trips through a C# system both ways, throws for the wrong kind with its noun or its type's name, and a hand-written
 mirror with a wrong offset or name is refused. The `TaggedUnion*` compile cases cover a byte and an `int` tag, an empty
-kind and a nested union.
+kind and a nested union, and one case per refusal.
 
 ## Creating, destroying, adding and removing
 
