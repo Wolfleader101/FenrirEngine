@@ -64,6 +64,7 @@ JPH_SUPPRESS_WARNINGS
 #include <Jolt/Physics/Constraints/SwingTwistConstraint.h>
 #include <Jolt/Physics/PhysicsSettings.h>
 #include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Vehicle/MotorcycleController.h>
 #include <Jolt/Physics/Vehicle/VehicleCollisionTester.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
@@ -1347,13 +1348,16 @@ namespace Fenrir::Backend
             std::unique_ptr<ProbeFilter> filter;
             VehicleProbe probe = VehicleProbe::Cylinder;
             BodyId body;
+            // Its controller: a motorcycle's is a wheeled one that leans.
+            VehicleType type = VehicleType::Wheeled;
         };
         std::vector<VehicleSlot> vehicles;
         std::vector<std::uint32_t> freeVehicles;
 
         // Gives a vehicle a new collision tester for its probe, from its body's object layer and the world's up as
         // they are now: the tester holds both. Ray and sphere stop at an 80 degree slope; the sphere is the smallest
-        // wheel's size, so it fits every wheel's cast.
+        // wheel's size, so it fits every wheel's cast. A motorcycle's cylinder is fully rounded, as in Jolt's sample,
+        // so a leaning wheel rolls on its edge.
         void Retest(VehicleSlot& slot)
         {
             const JPH::ObjectLayer layer = Bodies().GetObjectLayer(ToJolt(slot.body));
@@ -1374,7 +1378,8 @@ namespace Fenrir::Backend
             }
             else
             {
-                slot.tester = new JPH::VehicleCollisionTesterCastCylinder(layer);
+                slot.tester = new JPH::VehicleCollisionTesterCastCylinder(
+                    layer, slot.type == VehicleType::Motorcycle ? 1.0f : 0.1f);
             }
             slot.tester->SetBodyFilter(slot.filter.get());
             slot.constraint->SetVehicleCollisionTester(slot.tester);
@@ -3266,6 +3271,26 @@ namespace Fenrir::Backend
             }
         }
 
+        // A motorcycle's lean switches; its lean limit is set only when it is made.
+        void Fill(JPH::MotorcycleController& out, const MotorcycleLean& lean)
+        {
+            out.EnableLeanController(lean.enabled);
+            out.EnableLeanSteeringLimit(lean.limitSteering);
+        }
+
+        // Jolt applies a motorcycle's lean damping in every velocity iteration, and diverges once damping × the
+        // collision-step time exceeds the chassis's roll inertia (16.7 kg m² at Jolt's 1000 and 60 Hz; a light bike's
+        // box can have 10.4). So the damping is capped at half the roll inertia over the collision-step time. Jolt's
+        // spring of 5000 is kept: scaled down with the inertia, it is too weak to lean the bike against a turn.
+        void CapLeanDamping(JPH::MotorcycleController& bike, const JPH::Body& body, float collisionStepTime)
+        {
+            const float jolts = JPH::MotorcycleControllerSettings().mLeanSpringDamping;
+            const JPH::MotionProperties& motion = *body.GetMotionProperties();
+            const float inverse = motion.GetLocalSpaceInverseInertia().Multiply3x3(vehicleForward).Dot(vehicleForward);
+            // A chassis that cannot roll (an inverse inertia of 0) has no limit.
+            bike.SetLeanSpringDamping(inverse > 0.0f ? std::min(jolts, 0.5f / (inverse * collisionStepTime)) : jolts);
+        }
+
         void Fill(JPH::VehicleAntiRollBars& out, std::span<const VehicleAntiRollBarDesc> given)
         {
             out.clear();
@@ -3282,7 +3307,8 @@ namespace Fenrir::Backend
     VehicleId World::CreateVehicle(const VehicleDesc& desc)
     {
         Impl& impl = *m_impl;
-        const WheeledVehicle& wheeled = desc.kind.As<WheeledVehicle>();
+        const WheeledVehicle wheeled = DrivetrainOf(desc.kind);
+        const bool motorcycle = desc.kind.Is<MotorcycleVehicle>();
         JPH::VehicleConstraintSettings settings;
         settings.mUp = vehicleUp;
         settings.mForward = vehicleForward;
@@ -3298,7 +3324,17 @@ namespace Fenrir::Backend
             settings.mWheels.emplace_back(made);
             slot.wheels.push_back(made);
         }
-        auto* controller = new JPH::WheeledVehicleControllerSettings();
+        JPH::WheeledVehicleControllerSettings* controller = nullptr;
+        if (motorcycle)
+        {
+            auto* bike = new JPH::MotorcycleControllerSettings();
+            bike->mMaxLeanAngle = desc.kind.As<MotorcycleVehicle>().lean.maxAngle;
+            controller = bike;
+        }
+        else
+        {
+            controller = new JPH::WheeledVehicleControllerSettings();
+        }
         Fill(controller->mEngine, wheeled.engine);
         Fill(controller->mTransmission, wheeled.transmission);
         Fill(controller->mDifferentials, desc.differentials, desc.wheels.size());
@@ -3307,10 +3343,16 @@ namespace Fenrir::Backend
 
         slot.body = desc.body;
         slot.probe = desc.probe;
+        slot.type = desc.kind.Type();
         {
             JPH::BodyLockWrite lock(impl.system.GetBodyLockInterfaceNoLock(), ToJolt(desc.body));
             JPH_ASSERT(lock.Succeeded());
             slot.constraint = new JPH::VehicleConstraint(lock.GetBody(), settings);
+        }
+        if (motorcycle)
+        {
+            Fill(static_cast<JPH::MotorcycleController&>(*slot.constraint->GetController()),
+                 desc.kind.As<MotorcycleVehicle>().lean);
         }
         if (desc.carried)
         {
@@ -3357,7 +3399,7 @@ namespace Fenrir::Backend
     {
         const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
         auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
-        const WheeledVehicle& wheeled = kind.As<WheeledVehicle>();
+        const WheeledVehicle wheeled = DrivetrainOf(kind);
         // Jolt's engine and gearbox are their own settings, read every step.
         JPH::VehicleEngine& engine = controller.GetEngine();
         Fill(engine, wheeled.engine);
@@ -3374,6 +3416,10 @@ namespace Fenrir::Backend
             transmission.Set(wheeled.transmission.gearCount, transmission.GetClutchFriction());
         }
         controller.SetDifferentialLimitedSlipRatio(wheeled.limitedSlipRatio);
+        if (kind.Is<MotorcycleVehicle>())
+        {
+            Fill(static_cast<JPH::MotorcycleController&>(controller), kind.As<MotorcycleVehicle>().lean);
+        }
         m_impl->Bodies().ActivateBody(ToJolt(slot.body));
     }
 
@@ -3421,6 +3467,12 @@ namespace Fenrir::Backend
             JPH_ASSERT(lock.Succeeded());
             const JPH::Body& body = lock.GetBody();
             read.state.forwardSpeed = body.GetLinearVelocity().Dot(body.GetRotation() * vehicleForward);
+            if (slot.type == VehicleType::Motorcycle)
+            {
+                // + right: a bike leaning right has its right side down.
+                const JPH::Vec3 right = body.GetRotation() * JPH::Vec3::sAxisX();
+                read.state.leanAngle = -std::asin(std::clamp(right.Dot(constraint.GetWorldUp()), -1.0f, 1.0f));
+            }
         }
         const auto& controller = static_cast<const JPH::WheeledVehicleController&>(*constraint.GetController());
         read.state.engineRpm = controller.GetEngine().GetCurrentRPM();
@@ -3501,6 +3553,14 @@ namespace Fenrir::Backend
         }
 
         m_impl->CutMotorsAtLimits(dt);
+        for (Impl::VehicleSlot& slot : m_impl->vehicles)
+        {
+            if (slot.constraint != nullptr && slot.type == VehicleType::Motorcycle)
+            {
+                CapLeanDamping(static_cast<JPH::MotorcycleController&>(*slot.constraint->GetController()),
+                               *slot.constraint->GetVehicleBody(), dt / static_cast<float>(collisionSteps));
+            }
+        }
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         m_impl->collisionStepTime = dt / static_cast<float>(collisionSteps);

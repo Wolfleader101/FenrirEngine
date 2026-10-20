@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <memory>
+#include <numbers>
 #include <vector>
 
 #include "FenrirECS/WorldTransform.hpp"
@@ -52,6 +53,45 @@ namespace PhysicsTest
             }
         }
         return car;
+    }
+
+    inline constexpr float motorcycleMass = 240.0f;
+    inline constexpr float forkAngle = std::numbers::pi_v<float> / 6.0f;
+
+    /** Jolt's sample motorcycle: a 240 kg unscaled box chassis (roll inertia 10.4 kg m²), the default
+     * MotorcycleVehicle, a front wheel with a 30° fork caster that steers 30°, and a rear wheel, in that order, the
+     * rear one alone driven by a differential. */
+    inline Car AddMotorcycle(Fenrir::EntityList& entities, const Fenrir::Math::Vec3& at,
+                             const Fenrir::Math::Quat& rotation = identity)
+    {
+        Car bike;
+        bike.chassis = Place(entities, at);
+        bike.chassis.GetComponent<Fenrir::Transform>().rot = rotation;
+        bike.chassis.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = motorcycleMass});
+        bike.chassis.AddComponent<Fenrir::Collider>(
+            Fenrir::Collider{Fenrir::BoxShape{Fenrir::Math::Vec3(0.2f, 0.3f, 0.4f)}});
+        bike.chassis.AddComponent<Fenrir::Vehicle>(Fenrir::Vehicle{.kind = Fenrir::MotorcycleVehicle{}});
+        for (const float z : {-0.75f, 0.75f})
+        {
+            const bool front = z < 0.0f;
+            const Fenrir::Math::Vec3 position(0.0f, -0.6f, z);
+            Fenrir::Entity wheel = Place(entities, at + rotation * position);
+            wheel.AddComponent<Fenrir::VehicleWheel>(Fenrir::VehicleWheel{
+                .vehicle = bike.chassis,
+                .position = position,
+                .radius = 0.31f,
+                .width = 0.05f,
+                .caster = front ? forkAngle : 0.0f,
+                .suspension = {.travel = 0.2f, .spring = {.frequency = front ? 1.5f : 2.0f, .damping = 0.5f}},
+                .maxSteerAngle = front ? forkAngle : 0.0f,
+                .maxBrakeTorque = front ? 500.0f : 250.0f,
+                .maxHandbrakeTorque = front ? 0.0f : 250.0f});
+            bike.wheels.push_back(wheel);
+        }
+        Fenrir::Entity differential = entities.CreateEntity();
+        differential.AddComponent<Fenrir::VehicleDifferential>(
+            Fenrir::VehicleDifferential{.rightWheel = bike.wheels[1], .ratio = 1.93f * 40.0f / 16.0f});
+        return bike;
     }
 
     /** A static floor of `friction` whose top is at y = 0, `size` across. */

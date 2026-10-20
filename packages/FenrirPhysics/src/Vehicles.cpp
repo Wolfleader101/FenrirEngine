@@ -82,7 +82,7 @@ namespace Fenrir
         // are. In Manual `forward` is a pedal, so reversing is the gear's job.
         VehicleInput Clamped(const VehicleInput& input, const VehicleKind& kind)
         {
-            const VehicleTransmission& transmission = kind.As<WheeledVehicle>().transmission;
+            const VehicleTransmission transmission = Backend::DrivetrainOf(kind).transmission;
             const bool manual = transmission.mode == TransmissionMode::Manual;
             VehicleInput clamped = input;
             clamped.forward = std::clamp(input.forward, manual ? 0.0f : -1.0f, 1.0f);
@@ -112,13 +112,25 @@ namespace Fenrir
                    Fenrir::Same(a.switchLatency, b.switchLatency) && Fenrir::Same(a.clutchStrength, b.clutchStrength);
         }
 
-        // Whether two kinds' settings are the same: a difference is a live edit.
+        // Whether changing from kind `a` to `b` rebuilds the vehicle: a different kind, or a motorcycle's lean limit.
+        bool Rebuilds(const VehicleKind& a, const VehicleKind& b)
+        {
+            return a.Type() != b.Type() ||
+                   (a.Is<MotorcycleVehicle>() &&
+                    !Fenrir::Same(a.As<MotorcycleVehicle>().lean.maxAngle, b.As<MotorcycleVehicle>().lean.maxAngle));
+        }
+
+        // Whether two kinds that do not rebuild (Rebuilds) have the same settings: a difference is a live edit.
         bool Same(const VehicleKind& a, const VehicleKind& b)
         {
-            const WheeledVehicle& x = a.As<WheeledVehicle>();
-            const WheeledVehicle& y = b.As<WheeledVehicle>();
+            const WheeledVehicle x = Backend::DrivetrainOf(a);
+            const WheeledVehicle y = Backend::DrivetrainOf(b);
+            const bool sameLean =
+                !a.Is<MotorcycleVehicle>() ||
+                (a.As<MotorcycleVehicle>().lean.enabled == b.As<MotorcycleVehicle>().lean.enabled &&
+                 a.As<MotorcycleVehicle>().lean.limitSteering == b.As<MotorcycleVehicle>().lean.limitSteering);
             return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
-                   Fenrir::Same(x.limitedSlipRatio, y.limitedSlipRatio);
+                   Fenrir::Same(x.limitedSlipRatio, y.limitedSlipRatio) && sameLean;
         }
 
         // Just below a quarter turn: the most a wheel steers or leans.
@@ -340,13 +352,25 @@ namespace Fenrir
         VehicleKind InRange(const VehicleKind& kind, std::uint32_t entity, std::uint32_t& warned, ILogger& logger)
         {
             VehicleKind corrected = kind;
-            WheeledVehicle& wheeled = corrected.As<WheeledVehicle>();
             std::uint32_t found = 0;
-            Correct(wheeled.engine, wheeled.transmission, found);
-            if (wheeled.limitedSlipRatio <= 1.0f)
+            const auto correct = [&found](auto& drivetrain) {
+                Correct(drivetrain.engine, drivetrain.transmission, found);
+                if (drivetrain.limitedSlipRatio <= 1.0f)
+                {
+                    drivetrain.limitedSlipRatio = minLimitedSlipRatio;
+                    found |= LimitedSlipAtMostOne;
+                }
+            };
+            if (corrected.Is<MotorcycleVehicle>())
             {
-                wheeled.limitedSlipRatio = minLimitedSlipRatio;
-                found |= LimitedSlipAtMostOne;
+                MotorcycleVehicle& motorcycle = corrected.As<MotorcycleVehicle>();
+                correct(motorcycle);
+                // Silently, as the tilt limit is: the backend takes its tangent.
+                motorcycle.lean.maxAngle = std::clamp(motorcycle.lean.maxAngle, 0.0f, maxAngle);
+            }
+            else
+            {
+                correct(corrected.As<WheeledVehicle>());
             }
             for (const auto& [problem, message] : kindProblems)
             {
@@ -810,9 +834,11 @@ namespace Fenrir
 
             const VehicleLinks& links = linksOf[chassis];
             bool wake = false;
-            if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels)
+            if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels ||
+                Rebuilds(record.kind, vehicle.kind))
             {
-                // A wheel-set change or the chassis's body rebuilt: what still maps carries over, a new wheel still.
+                // A wheel-set change, the chassis's body rebuilt, a kind change or a motorcycle's lean limit: what
+                // still maps carries over, a new wheel still.
                 DropVehicle(record, true);
                 Backend::VehicleDesc desc;
                 desc.body = body->id;
@@ -832,7 +858,7 @@ namespace Fenrir
                 {
                     desc.carried = Backend::VehicleCarry{
                         .engineRpm = record.carry->engineRpm,
-                        .gear = std::min(record.carry->gear, desc.kind.As<WheeledVehicle>().transmission.gearCount),
+                        .gear = std::min(record.carry->gear, Backend::DrivetrainOf(desc.kind).transmission.gearCount),
                         .clutch = record.carry->clutch,
                         .wheels = {}};
                     for (const std::uint32_t wheel : wheels)
@@ -859,7 +885,8 @@ namespace Fenrir
             {
                 if (!Same(vehicle.kind, record.kind))
                 {
-                    // A live edit: the engine, the gearbox and the limited-slip ratio, from the next step.
+                    // A live edit: the engine, the gearbox, the limited-slip ratio and a motorcycle's lean switches,
+                    // from the next step.
                     record.applied = InRange(vehicle.kind, chassis, record.warned, *m_logger);
                     m_backend.UpdateVehicle(record.id, record.applied);
                     record.kind = vehicle.kind;
