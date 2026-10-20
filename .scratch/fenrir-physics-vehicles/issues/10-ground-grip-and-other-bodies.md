@@ -10,11 +10,18 @@
 
 **Blocked by:** 03 (Wheel settings, probe and tilt limit).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests`: probes filter by the chassis's `CollisionFilter`; they skip triggers, the chassis and a character's inner body.
-- [ ] A car driven at a character is stopped by the chassis with no wheel on the capsule.
-- [ ] Grip: the spike's table within tolerance: on ice the wheels spin with slip past `slideSlip`; grass is slower than tarmac.
-- [ ] A wheel on a dynamic box pushes it; a parked vehicle rides a kinematic platform; queries name the chassis and `ignoreBody` skips it.
-- [ ] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs with no errors, in Debug and Release.
+- [x] `FenrirPhysicsTests`: probes filter by the chassis's `CollisionFilter`; they skip triggers, the chassis and a character's inner body.
+- [x] A car driven at a character is stopped by the chassis with no wheel on the capsule.
+- [x] Grip: the spike's table within tolerance: on ice the wheels spin with slip past `slideSlip`; grass is slower than tarmac.
+- [x] A wheel on a dynamic box pushes it; a parked vehicle rides a kinematic platform; queries name the chassis and `ignoreBody` skips it.
+- [x] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs with no errors, in Debug and Release.
 - [ ] On ice the wheels spin ("sliding"); grass is looser than tarmac; the car shoves the crates with the stated dip; the pedestrian stops the car at the chassis and the wheels never climb them; a parked vehicle rides the ferry (checked by hand).
+
+**Resolved by:** PR #58 (branch claude/zealous-euler-8ec9ac), stacked on #57 (ticket 13, on #56). The proof is `FenrirPhysicsTests`' `[ground]` cases (`Tests/VehicleGround.cpp`) and the `FENRIR_DEMO_SCENE="Vehicles (C++)" FENRIR_DEMO_KEYS=1` smoke run, whose autopilot now drives a whole lap: the ice and grass lanes, the crates and the ferry both ways. The last box (feeling the grip, the dip and the ferry by hand) is left for a person. Findings and choices:
+- The backend's probe body filter drops the chassis and any body in the character listener's map of inner bodies, which is written only between steps, so job threads read it without a lock. Triggers were already skipped by Jolt's testers (they ignore sensors), and the layer rule is the chassis's own object layer; ticket 03's `Retest` already remade the tester on a relayer.
+- Without the filter a wheel dropped over a standing character stood on its capsule; the `[ground]` case for it fails with the filter removed.
+- Grip needed no code: Jolt's default combine is already the geometric mean. The spike's table is matched closely: 34.6, 71.6 and 80.4 km/h after 5 s at full throttle on 0.05, 0.3 and 0.5, and 21.5, 35.9 and 38.5 m braking.
+- A car stops at a standing character only while game code sets the character's velocity each tick, as games do. A character left with no game code keeps the velocity a push wrote back, and drifts away from the car. The demo's pedestrian is held still by game code each tick for this reason.
+- The demo's autopilot waypoints gain a reach distance and an optional ferry dock. Before a waypoint with a dock, the car waits braked until the ferry is at that dock (to drive aboard, until it has only just docked). Riding across braked shows a parked car carried through its tyres' grip.
