@@ -259,6 +259,13 @@ namespace Fenrir
          * dynamic body and wheels, remade when its body or wheel set changed, and gives it its driver input, waking the
          * chassis on a change. */
         void SyncVehicles();
+        /** @brief The backend's wheel for the wheel on `entity`, its settings corrected (each kind of out-of-range
+         * value warned about once per wheel) and its position scaled by `scale`, the chassis's world scale. */
+        [[nodiscard]] Backend::VehicleWheelDesc WheelDesc(std::uint32_t entity, const VehicleWheel& wheel,
+                                                          const Math::Vec3& scale);
+        /** @brief Patches a made vehicle's edited wheels, probe and tilt limit into its backend vehicle; true if
+         * anything changed. */
+        bool SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale);
         /** @brief Writes each of the vehicle's wheel entities' world position and rotation from `read`, against the
          * chassis pose `chassis`, parents before children. */
         void PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis);
@@ -419,9 +426,12 @@ namespace Fenrir
 
             Backend::VehicleId id;
             Backend::BodyId body;
-            // In wheel order (entity order), with each wheel's position as given to the backend.
+            // In wheel order (entity order), with each wheel's settings as last applied and as given to the backend.
             std::vector<std::uint32_t> wheels;
-            std::vector<Math::Vec3> positions;
+            std::vector<VehicleWheel> applied;
+            std::vector<Backend::VehicleWheelDesc> given;
+            VehicleProbe probe = VehicleProbe::Cylinder;
+            float maxTilt = 0.0f;
             VehicleInput input;
         };
         ComponentWatch m_vehicleWatch;
@@ -430,6 +440,8 @@ namespace Fenrir
         std::set<std::uint32_t> m_vehicleEntities;
         std::set<std::uint32_t> m_wheelEntities;
         std::map<std::uint32_t, VehicleRecord> m_vehicles;
+        // The kinds of out-of-range value each wheel entity has been warned about, so each is warned about once.
+        std::map<std::uint32_t, std::uint32_t> m_wheelWarnings;
 
         // What game code has been told is touching, so every begin and enter gets its end and exit.
         std::set<ContactKey> m_reportedContacts;

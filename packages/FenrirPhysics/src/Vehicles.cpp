@@ -9,6 +9,7 @@
 #include <numbers>
 #include <set>
 #include <span>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirLogger/ILogger.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
 
@@ -39,6 +41,32 @@ namespace Fenrir
             return depth;
         }
 
+        bool Same(const JointSpring& a, const JointSpring& b)
+        {
+            return Fenrir::Same(a.frequency, b.frequency) && Fenrir::Same(a.damping, b.damping);
+        }
+
+        bool Same(const VehicleTyre& a, const VehicleTyre& b)
+        {
+            return Fenrir::Same(a.peakSlip, b.peakSlip) && Fenrir::Same(a.peakFriction, b.peakFriction) &&
+                   Fenrir::Same(a.slideSlip, b.slideSlip) && Fenrir::Same(a.slideFriction, b.slideFriction);
+        }
+
+        // Whether two wheels have the same settings: every field but the vehicle it names and its state.
+        bool Same(const VehicleWheel& a, const VehicleWheel& b)
+        {
+            return Fenrir::Same(a.position, b.position) && a.track == b.track && Fenrir::Same(a.radius, b.radius) &&
+                   Fenrir::Same(a.width, b.width) && Fenrir::Same(a.inertia, b.inertia) &&
+                   Fenrir::Same(a.angularDamping, b.angularDamping) && Fenrir::Same(a.caster, b.caster) &&
+                   Fenrir::Same(a.camber, b.camber) && Fenrir::Same(a.toe, b.toe) &&
+                   Fenrir::Same(a.suspension.travel, b.suspension.travel) &&
+                   Same(a.suspension.spring, b.suspension.spring) &&
+                   Fenrir::Same(a.suspension.preload, b.suspension.preload) &&
+                   Fenrir::Same(a.maxSteerAngle, b.maxSteerAngle) && Fenrir::Same(a.maxBrakeTorque, b.maxBrakeTorque) &&
+                   Fenrir::Same(a.maxHandbrakeTorque, b.maxHandbrakeTorque) && Same(a.longitudinal, b.longitudinal) &&
+                   Same(a.lateral, b.lateral);
+        }
+
         bool Same(const VehicleInput& a, const VehicleInput& b)
         {
             return Fenrir::Same(a.forward, b.forward) && Fenrir::Same(a.steer, b.steer) &&
@@ -58,33 +86,129 @@ namespace Fenrir
             return clamped;
         }
 
-        // Just below a quarter turn: the most a wheel steers.
+        // Just below a quarter turn: the most a wheel steers or leans.
         constexpr float maxAngle = 0.4999f * std::numbers::pi_v<float>;
         constexpr float minRadius = 0.01f;
+        // The backend divides by a wheel's inertia: 0, as written or corrected, is this little.
+        constexpr float minInertia = 1e-3f;
         // Just above 1: a limited-slip ratio of 1 or less locks the differential.
         constexpr float minLimitedSlipRatio = 1.001f;
 
-        // A wheel's settings corrected into the ranges the backend can use.
-        VehicleWheel InRange(const VehicleWheel& wheel)
+        // The kinds of out-of-range value a wheel can hold, each warned about once per wheel.
+        enum WheelProblem : std::uint32_t
         {
-            VehicleWheel corrected = wheel;
-            for (float* value :
-                 {&corrected.width, &corrected.inertia, &corrected.angularDamping, &corrected.suspension.travel,
-                  &corrected.suspension.preload, &corrected.suspension.spring.frequency,
-                  &corrected.suspension.spring.damping, &corrected.maxBrakeTorque, &corrected.maxHandbrakeTorque})
+            NegativeSize = 1u << 0,
+            SmallRadius = 1u << 1,
+            NegativeInertia = 1u << 2,
+            NegativeDamping = 1u << 3,
+            NegativeSuspension = 1u << 4,
+            NegativeTorque = 1u << 5,
+            AngleTooLarge = 1u << 6,
+            NegativeFriction = 1u << 7,
+            BadSlip = 1u << 8,
+        };
+
+        // Corrects a wheel's out-of-range settings into the ranges the backend can use, warning about each kind of
+        // value the first time the wheel holds one.
+        class WheelCorrector
+        {
+          public:
+            WheelCorrector(std::uint32_t entity, std::uint32_t& warned, ILogger& logger)
+                : m_entity(entity), m_warned(&warned), m_logger(&logger)
             {
-                *value = std::max(*value, 0.0f);
             }
-            corrected.radius = std::max(corrected.radius, minRadius);
-            corrected.maxSteerAngle = std::clamp(corrected.maxSteerAngle, -maxAngle, maxAngle);
-            for (VehicleTyre* tyre : {&corrected.longitudinal, &corrected.lateral})
+
+            [[nodiscard]] VehicleWheel Corrected(const VehicleWheel& wheel)
             {
-                tyre->peakSlip = std::max(tyre->peakSlip, 0.0f);
-                tyre->slideSlip = std::max(tyre->slideSlip, tyre->peakSlip + 1e-4f);
-                tyre->peakFriction = std::max(tyre->peakFriction, 0.0f);
-                tyre->slideFriction = std::max(tyre->slideFriction, 0.0f);
+                VehicleWheel corrected = wheel;
+                NotNegative(corrected.width, NegativeSize, "a negative width is treated as 0");
+                if (corrected.radius < minRadius)
+                {
+                    corrected.radius = minRadius;
+                    Warn(SmallRadius, "a radius below 1 cm is raised to it");
+                }
+                NotNegative(corrected.inertia, NegativeInertia, "a negative inertia is treated as 0");
+                corrected.inertia = std::max(corrected.inertia, minInertia);
+                NotNegative(corrected.angularDamping, NegativeDamping, "a negative angular damping is treated as 0");
+                VehicleSuspension& suspension = corrected.suspension;
+                for (float* value : {&suspension.travel, &suspension.preload, &suspension.spring.frequency,
+                                     &suspension.spring.damping})
+                {
+                    NotNegative(*value, NegativeSuspension,
+                                "a negative suspension travel, preload, frequency or damping is treated as 0");
+                }
+                for (float* value : {&corrected.maxBrakeTorque, &corrected.maxHandbrakeTorque})
+                {
+                    NotNegative(*value, NegativeTorque, "a negative brake torque is treated as 0");
+                }
+                for (float* angle : {&corrected.maxSteerAngle, &corrected.caster, &corrected.camber, &corrected.toe})
+                {
+                    if (*angle < -maxAngle || *angle > maxAngle)
+                    {
+                        *angle = std::clamp(*angle, -maxAngle, maxAngle);
+                        Warn(AngleTooLarge,
+                             "a maxSteerAngle, caster, camber or toe of a quarter turn or more is kept below it");
+                    }
+                }
+                for (VehicleTyre* tyre : {&corrected.longitudinal, &corrected.lateral})
+                {
+                    NotNegative(tyre->peakFriction, NegativeFriction, "a negative tyre friction is treated as 0");
+                    NotNegative(tyre->slideFriction, NegativeFriction, "a negative tyre friction is treated as 0");
+                    NotNegative(tyre->peakSlip, BadSlip, "a negative peak slip is treated as 0");
+                    if (tyre->slideSlip <= tyre->peakSlip)
+                    {
+                        tyre->slideSlip = tyre->peakSlip + 1e-4f;
+                        Warn(BadSlip, "a slide slip not past the peak slip is moved just past it");
+                    }
+                }
+                return corrected;
             }
-            return corrected;
+
+          private:
+            void Warn(WheelProblem problem, const char* message)
+            {
+                if ((*m_warned & problem) != 0)
+                {
+                    return;
+                }
+                *m_warned |= problem;
+                m_logger->Warn("The VehicleWheel on entity " + std::to_string(m_entity) + ": " + message);
+            }
+
+            void NotNegative(float& value, WheelProblem problem, const char* message)
+            {
+                if (value < 0.0f)
+                {
+                    value = 0.0f;
+                    Warn(problem, message);
+                }
+            }
+
+            std::uint32_t m_entity;
+            std::uint32_t* m_warned;
+            ILogger* m_logger;
+        };
+
+        // A wheel for the backend, from its corrected settings and its position with the chassis's scale applied.
+        // Caster tilts the steering axis's top back (+Z), camber the wheel's top out and toe its front in, mirrored
+        // for a wheel on the left (x < 0).
+        Backend::VehicleWheelDesc DescOf(const VehicleWheel& corrected, const Math::Vec3& position)
+        {
+            const float side = position.x < 0.0f ? -1.0f : 1.0f;
+            Backend::VehicleWheelDesc desc;
+            desc.position = position;
+            desc.steeringAxis =
+                Math::AngleAxis(corrected.caster, Math::Vec3(1.0f, 0.0f, 0.0f)) * Math::Vec3(0.0f, 1.0f, 0.0f);
+            desc.rest = Math::AngleAxis(side * corrected.toe, Math::Vec3(0.0f, 1.0f, 0.0f)) *
+                        Math::AngleAxis(-side * corrected.camber, Math::Vec3(0.0f, 0.0f, 1.0f));
+            desc.settings = corrected;
+            return desc;
+        }
+
+        // A tilt limit from 0 to a half turn, silently: a half turn or more is off.
+        float TiltOf(const Vehicle& vehicle)
+        {
+            return std::clamp(vehicle.maxTilt, 0.0f, std::numbers::pi_v<float>);
         }
 
         // An engine and gearbox corrected into the ranges the backend can use.
@@ -119,15 +243,16 @@ namespace Fenrir
             return corrected;
         }
 
-        // A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised by its
-        // compression, steered about +Y, then spun about its axle, X (rolling forward turns its top towards -Z).
-        Transform WheelPose(const Math::Vec3& position, const Backend::VehicleWheelRead& read)
+        // A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised up its steering
+        // axis by its compression, turned by its camber and toe, steered about its steering axis, then spun about its
+        // axle, X (rolling forward turns its top towards -Z).
+        Transform WheelPose(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
         {
-            const Math::Quat steer = Math::AngleAxis(-read.steerAngle, Math::Vec3(0.0f, 1.0f, 0.0f));
+            const Math::Quat steer = Math::AngleAxis(-read.steerAngle, wheel.steeringAxis);
             const Math::Quat spin = Math::AngleAxis(-read.spinAngle, Math::Vec3(1.0f, 0.0f, 0.0f));
             Transform pose;
-            pose.pos = position + Math::Vec3(0.0f, read.compression, 0.0f);
-            pose.rot = steer * spin;
+            pose.pos = wheel.position + wheel.steeringAxis * read.compression;
+            pose.rot = steer * wheel.rest * spin;
             return pose;
         }
     } // namespace
@@ -159,10 +284,12 @@ namespace Fenrir
                     m_vehicles.erase(it);
                 }
             });
-        // A wheel that came or went, even one that came back, changes its vehicle's wheel set.
+        // A wheel that came or went, even one that came back, changes its vehicle's wheel set, and is warned about
+        // afresh.
         track(
             m_wheelWatch, m_wheelEntities, [](const Entity& e) { return e.HasComponent<VehicleWheel>(); },
             [this](std::uint32_t entity) {
+                m_wheelWarnings.erase(entity);
                 for (auto& [chassis, record] : m_vehicles)
                 {
                     if (std::ranges::find(record.wheels, entity) != record.wheels.end())
@@ -257,22 +384,27 @@ namespace Fenrir
                 Backend::VehicleDesc desc;
                 desc.body = body->id;
                 desc.kind = InRange(vehicle.kind);
+                desc.probe = vehicle.probe;
+                desc.maxTilt = TiltOf(vehicle);
                 desc.priority = chassis;
                 for (const std::uint32_t wheel : wheels)
                 {
                     const VehicleWheel& settings = m_entities->GetEntity(wheel).GetComponent<VehicleWheel>();
-                    desc.wheels.push_back(Backend::VehicleWheelDesc{.position = settings.position * body->world.scale,
-                                                                    .settings = InRange(settings)});
+                    desc.wheels.push_back(WheelDesc(wheel, settings, body->world.scale));
+                    record.applied.push_back(settings);
                 }
                 record.id = m_backend.CreateVehicle(desc);
                 record.body = body->id;
                 record.wheels = wheels;
-                for (const Backend::VehicleWheelDesc& wheel : desc.wheels)
-                {
-                    record.positions.push_back(wheel.position);
-                }
+                record.given = desc.wheels;
+                record.probe = vehicle.probe;
+                record.maxTilt = vehicle.maxTilt;
                 PoseWheels(record, m_backend.ReadVehicle(record.id), body->world);
                 wake = true;
+            }
+            else
+            {
+                wake = SyncVehicleSettings(record, vehicle, body->world.scale);
             }
 
             const VehicleInput input = Clamped(vehicle.input);
@@ -280,6 +412,44 @@ namespace Fenrir
             m_backend.SetVehicleInput(record.id, input, wake);
             record.input = input;
         }
+    }
+
+    Backend::VehicleWheelDesc PhysicsWorld::Impl::WheelDesc(std::uint32_t entity, const VehicleWheel& wheel,
+                                                            const Math::Vec3& scale)
+    {
+        const VehicleWheel corrected = WheelCorrector(entity, m_wheelWarnings[entity], *m_logger).Corrected(wheel);
+        return DescOf(corrected, wheel.position * scale);
+    }
+
+    bool PhysicsWorld::Impl::SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale)
+    {
+        bool changed = false;
+        for (std::size_t i = 0; i < record.wheels.size(); ++i)
+        {
+            const VehicleWheel& wheel = m_entities->GetEntity(record.wheels[i]).GetComponent<VehicleWheel>();
+            // A wheel's position follows the chassis's scale, so a scale change moves it, as an edit does.
+            if (Same(wheel, record.applied[i]) && Fenrir::Same(wheel.position * scale, record.given[i].position))
+            {
+                continue;
+            }
+            record.given[i] = WheelDesc(record.wheels[i], wheel, scale);
+            m_backend.UpdateVehicleWheel(record.id, i, record.given[i]);
+            record.applied[i] = wheel;
+            changed = true;
+        }
+        if (vehicle.probe != record.probe)
+        {
+            m_backend.SetVehicleProbe(record.id, vehicle.probe);
+            record.probe = vehicle.probe;
+            changed = true;
+        }
+        if (!Fenrir::Same(vehicle.maxTilt, record.maxTilt))
+        {
+            m_backend.SetVehicleMaxTilt(record.id, TiltOf(vehicle));
+            record.maxTilt = vehicle.maxTilt;
+            changed = true;
+        }
+        return changed;
     }
 
     void PhysicsWorld::Impl::PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read,
@@ -295,7 +465,7 @@ namespace Fenrir
         for (const auto& [depth, id, i] : order)
         {
             Entity wheel = m_entities->GetEntity(id);
-            const Transform local = WheelPose(record.positions[i], read.wheels[i]);
+            const Transform local = WheelPose(record.given[i], read.wheels[i]);
             // The scale stays game code's.
             Transform world = GetWorldTransform(wheel);
             world.pos = chassis.pos + chassis.rot * local.pos;

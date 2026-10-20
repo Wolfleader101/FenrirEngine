@@ -8,7 +8,9 @@
 // chassis, naming the chassis; physics poses the wheel entity, and its look is a child: a sphere scaled to the tyre,
 // with a stripe across it to show its spin. Every setting is the default but the front wheels' steering, so it drives
 // all four wheels through an automatic gearbox. Game code in Tick turns the keys into driver input; physics writes the
-// car's state and each wheel's back after every step, and their names show it every frame.
+// car's state and each wheel's back after every step, and their names show it every frame. Settings are live edits:
+// 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height as the car
+// drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
 //
 // The track is built one function per piece, each with its own leg of the autopilot route, so later pieces add a
 // function, a leg and their keys without touching the others': tarmac (friction 0.5) with a white start pad at the
@@ -113,12 +115,13 @@ class VehicleScene
                         .keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
                                    "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
                                    "still drive) and snaps it back. North of the start: ten bumps, then a ramp. L logs "
-                                   "the car's state, P drives the track by itself. F6 goes on.",
+                                   "the car's state, P drives the track by itself. 1 softens the springs, 2 fits "
+                                   "big wheels, 7 limits the tilt to 60 degrees (each again to undo). F6 goes on.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 40, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_7})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -217,6 +220,49 @@ class VehicleScene
             m_autopilot = !m_autopilot;
             m_waypoint = 0;
             app.Logger()->Info(m_autopilot ? "P: autopilot: driving the track" : "P: autopilot off");
+        }
+        else if (key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_7)
+        {
+            OnSettingsKey(app, key);
+        }
+    }
+
+    // 1, 2 and 7: live edits to the car's settings, each undone by pressing it again.
+    void OnSettingsKey(Fenrir::App& app, int key)
+    {
+        if (key == GLFW_KEY_1)
+        {
+            m_softSprings = !m_softSprings;
+            for (Fenrir::Entity& wheel : m_car.wheels)
+            {
+                wheel.GetComponent<Fenrir::VehicleWheel>().suspension.spring =
+                    m_softSprings ? Fenrir::JointSpring{.frequency = 1.15f, .damping = 0.4f}
+                                  : Fenrir::JointSpring{.frequency = 1.5f, .damping = 0.5f};
+            }
+            app.Logger()->Info(m_softSprings ? "1: soft springs, 1.15 Hz: the car sits lower and rolls more"
+                                             : "1: stock springs, 1.5 Hz");
+        }
+        else if (key == GLFW_KEY_2)
+        {
+            m_bigWheels = !m_bigWheels;
+            const float radius = m_bigWheels ? 0.45f : 0.3f;
+            for (Fenrir::Entity& entity : m_car.wheels)
+            {
+                Fenrir::VehicleWheel& wheel = entity.GetComponent<Fenrir::VehicleWheel>();
+                wheel.radius = radius;
+                // The look follows: the tyre, the wheel entity's only child, is scaled to the new size.
+                entity.GetComponent<Fenrir::Relationship>().firstChild.GetComponent<Fenrir::Transform>().scale =
+                    Fenrir::Math::Vec3(wheel.width, 2.0f * radius, 2.0f * radius);
+            }
+            app.Logger()->Info(m_bigWheels ? "2: big wheels, 0.45 m: the car sits higher" : "2: stock wheels, 0.3 m");
+        }
+        else
+        {
+            Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+            const bool limited = vehicle.maxTilt < std::numbers::pi_v<float>;
+            vehicle.maxTilt = limited ? std::numbers::pi_v<float> : 60.0f * degrees;
+            app.Logger()->Info(limited ? "7: tilt limit off"
+                                       : "7: tilt limited to 60 degrees: the car cannot roll over");
         }
     }
 
@@ -495,6 +541,8 @@ class VehicleScene
     VehicleCamera m_followCamera;
     std::set<int> m_held;
     bool m_autopilot = false;
+    bool m_softSprings = false;
+    bool m_bigWheels = false;
     std::size_t m_waypoint = 0;
     long m_tick = 0;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
