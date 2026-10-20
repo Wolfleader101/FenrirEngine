@@ -20,9 +20,11 @@ Diagnostics are ticket 03. Here a malformed union may produce a compiler error f
 
 **Blocked by:** 01 (resolved)
 
-**Status:** ready-for-agent
+**Status:** resolved (built on branch `claude/tagged-union-tracer-bullet`). Where the build settled something the ticket left open:
+- The message test is a new `ScriptingTests` case reading the exact message of the fixture's `Shape` (`Noun = "shape"`) and of a second fixture union, `Solid`, with no noun ("The Solid is a Sphere, not a Box."). The four existing cases are unchanged.
+- The compile cases are `TaggedUnionControl` (a `byte` tag and a noun, every member used), `TaggedUnionEmptyKind`, `TaggedUnionNested` (no noun) and `TaggedUnionIntTag`.
 
-- [ ] The four existing `ScriptingTests` tagged-union cases pass unchanged with the fixture's `Shape` on the generator (it validates, round-trips, the wrong view throws, a wrong offset or name is refused at load).
-- [ ] `fenrir_expect_compile` OK cases: `TaggedUnionControl`; an empty kind (one unused byte); a union nested in a partial class; an `int` tag and a `byte` tag; with and without `Noun`.
-- [ ] A test reads the generated message both with `Noun` and without it.
-- [ ] The README section describes the attribute and shows the expansion.
+- [x] The four existing `ScriptingTests` tagged-union cases pass unchanged with the fixture's `Shape` on the generator (it validates, round-trips, the wrong view throws, a wrong offset or name is refused at load).
+- [x] `fenrir_expect_compile` OK cases: `TaggedUnionControl`; an empty kind (one unused byte); a union nested in a partial class; an `int` tag and a `byte` tag; with and without `Noun`.
+- [x] A test reads the generated message both with `Noun` and without it.
+- [x] The README section describes the attribute and shows the expansion.

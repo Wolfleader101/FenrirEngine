@@ -174,3 +174,8 @@ fenrir_expect_compile(NativeFunctionTwoNamespaceBlocks OK)    # one type, one fi
 fenrir_expect_compile(NativeFunctionOverload FENRIR0024)
 fenrir_expect_compile(NativeFunctionStringResult FENRIR0025)
 fenrir_expect_compile(NativeFunctionUnsupported FENRIR0026)
+# A [TaggedUnion] struct gets the hand-written union's members from the generator.
+fenrir_expect_compile(TaggedUnionControl OK)     # a byte tag and a noun, every generated member used
+fenrir_expect_compile(TaggedUnionEmptyKind OK)   # a kind with no fields
+fenrir_expect_compile(TaggedUnionNested OK)      # a union, its tag and kinds nested in a partial class, with no noun
+fenrir_expect_compile(TaggedUnionIntTag OK)      # an int tag
