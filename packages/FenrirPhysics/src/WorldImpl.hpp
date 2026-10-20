@@ -416,7 +416,8 @@ namespace Fenrir
         std::set<std::uint32_t> m_characterChildren;
 
         // What physics knows of a vehicle, by chassis entity: its backend vehicle, the body and wheel entities it was
-        // made with, and the driver input last given to it. None while its chassis has no dynamic body or no wheels.
+        // made with, and the driver input and kind last given to it. None while its chassis has no dynamic body or no
+        // wheels.
         struct VehicleRecord
         {
             [[nodiscard]] bool Made() const
@@ -428,11 +429,17 @@ namespace Fenrir
             Backend::BodyId body;
             // In wheel order (entity order), with each wheel's settings as last applied and as given to the backend.
             std::vector<std::uint32_t> wheels;
-            std::vector<VehicleWheel> applied;
+            std::vector<VehicleWheel> appliedWheels;
             std::vector<Backend::VehicleWheelDesc> given;
             VehicleProbe probe = VehicleProbe::Cylinder;
             float maxTilt = 0.0f;
             VehicleInput input;
+            // The kind as game code last gave it, to notice its edits, and as applied, in range.
+            VehicleKind kind;
+            VehicleKind applied;
+            // The kinds of out-of-range value its kind holds and has been warned about: each is warned about once per
+            // vehicle until a valid value clears it.
+            std::uint32_t warned = 0;
         };
         ComponentWatch m_vehicleWatch;
         ComponentWatch m_wheelWatch;

@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -3157,7 +3158,8 @@ namespace Fenrir::Backend
 
         void Fill(JPH::VehicleTransmissionSettings& out, const VehicleTransmission& transmission)
         {
-            out.mMode = JPH::ETransmissionMode::Auto;
+            out.mMode = transmission.mode == TransmissionMode::Manual ? JPH::ETransmissionMode::Manual
+                                                                      : JPH::ETransmissionMode::Auto;
             out.mGearRatios = GearRatios(transmission);
             out.mReverseGearRatios = {-transmission.reverseGear};
             out.mSwitchTime = transmission.switchTime;
@@ -3166,6 +3168,20 @@ namespace Fenrir::Backend
             out.mShiftUpRPM = transmission.shiftUpRpm;
             out.mShiftDownRPM = transmission.shiftDownRpm;
             out.mClutchStrength = transmission.clutchStrength;
+        }
+
+        // Finishes an automatic shift under way at once, the clutch engaged: Jolt counts a shift down only in Auto, so
+        // a gearbox switched to Manual mid-shift would otherwise stay shifting (and its body awake) for good. Each
+        // update clears one of the shift's timers, keeping the gear: driven its own way, at an RPM that shifts neither
+        // up nor down.
+        void FinishShift(JPH::VehicleTransmission& transmission)
+        {
+            const int gear = transmission.GetCurrentGear();
+            const float direction = gear > 0 ? 1.0f : (gear < 0 ? -1.0f : 0.0f);
+            while (!transmission.AllowSleep())
+            {
+                transmission.Update(std::numeric_limits<float>::max(), transmission.mShiftDownRPM, direction, false);
+            }
         }
 
         // Friction from 0 to the peak, down to the slide value, and level from there; `slipScale` turns the slips
@@ -3283,12 +3299,42 @@ namespace Fenrir::Backend
         m_impl->freeVehicles.push_back(id.value);
     }
 
+    void World::UpdateVehicle(VehicleId id, const VehicleKind& kind)
+    {
+        const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+        const WheeledVehicle& wheeled = kind.As<WheeledVehicle>();
+        // Jolt's engine and gearbox are their own settings, read every step.
+        JPH::VehicleEngine& engine = controller.GetEngine();
+        Fill(engine, wheeled.engine);
+        engine.ClampRPM();
+        JPH::VehicleTransmission& transmission = controller.GetTransmission();
+        if (transmission.mMode == JPH::ETransmissionMode::Auto && wheeled.transmission.mode == TransmissionMode::Manual)
+        {
+            FinishShift(transmission);
+        }
+        Fill(transmission, wheeled.transmission);
+        // Fewer gears than the one engaged: the top one.
+        if (transmission.GetCurrentGear() > wheeled.transmission.gearCount)
+        {
+            transmission.Set(wheeled.transmission.gearCount, transmission.GetClutchFriction());
+        }
+        controller.SetDifferentialLimitedSlipRatio(wheeled.limitedSlipRatio);
+        m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+    }
+
     void World::SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake)
     {
         const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
         auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
         // Jolt's right is ours.
         controller.SetDriverInput(input.forward, input.steer, input.brake, input.handbrake);
+        // In Manual the gear and clutch are game code's; Jolt's clutch is the friction it gives, 1 engaged.
+        JPH::VehicleTransmission& transmission = controller.GetTransmission();
+        if (transmission.mMode == JPH::ETransmissionMode::Manual)
+        {
+            transmission.Set(input.gear, 1.0f - input.clutch);
+        }
         // Jolt does not wake a vehicle's body on input.
         if (wake)
         {

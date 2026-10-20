@@ -567,8 +567,15 @@ namespace Fenrir::Backend
          */
         void DestroyVehicle(VehicleId id);
 
-        /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call. Wakes its
-         * body if `wake`. */
+        /**
+         * @brief Applies a vehicle's kind, already in range, from the next Step: its engine (the current RPM kept in
+         * its new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic
+         * shift under way is finished at once) and its limited-slip ratio. Wakes its body. Never during a step.
+         */
+        void UpdateVehicle(VehicleId id, const VehicleKind& kind);
+
+        /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call: in Manual its
+         * gear and clutch too, at once. Wakes its body if `wake`. */
         void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
 
         /** @brief A vehicle and its wheels as the last step (or its making) left them. */
