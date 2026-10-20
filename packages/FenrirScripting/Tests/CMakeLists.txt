@@ -174,3 +174,33 @@ fenrir_expect_compile(NativeFunctionTwoNamespaceBlocks OK)    # one type, one fi
 fenrir_expect_compile(NativeFunctionOverload FENRIR0024)
 fenrir_expect_compile(NativeFunctionStringResult FENRIR0025)
 fenrir_expect_compile(NativeFunctionUnsupported FENRIR0026)
+# A [TaggedUnion] struct gets the hand-written union's members from the generator.
+fenrir_expect_compile(TaggedUnionControl OK)     # a byte tag and a noun, every generated member used
+fenrir_expect_compile(TaggedUnionEmptyKind OK)   # a kind with no fields
+fenrir_expect_compile(TaggedUnionNested OK)      # a union, its tag and kinds nested in a partial class, with no noun
+fenrir_expect_compile(TaggedUnionIntTag OK)      # an int tag
+# A [TaggedUnion] the generator cannot write for is refused with its own error, and gets nothing.
+fenrir_expect_compile(TaggedUnionClass FENRIR0030 CS0592)       # a class is not a union (the compiler adds CS0592)
+fenrir_expect_compile(TaggedUnionNotPartial FENRIR0030)         # the generator cannot add to a struct that is not partial
+fenrir_expect_compile(TaggedUnionContainerNotPartial FENRIR0030) # nor to one inside a class that is not partial
+fenrir_expect_compile(TaggedUnionReadOnly FENRIR0031)           # a readonly struct cannot hand out writable views
+fenrir_expect_compile(TaggedUnionGeneric FENRIR0031)            # a generic union
+fenrir_expect_compile(TaggedUnionRefStruct FENRIR0031)          # a ref struct cannot be stored in a component
+fenrir_expect_compile(TaggedUnionNoTag FENRIR0032)              # the tag is not at offset 0
+fenrir_expect_compile(TaggedUnionTwoTags FENRIR0032)            # two enums at offset 0: which is the tag?
+fenrir_expect_compile(TaggedUnionPublicKind FENRIR0033)         # a kind field must be private
+fenrir_expect_compile(TaggedUnionReadOnlyKind FENRIR0033)       # a view cannot be a writable reference to a readonly field
+fenrir_expect_compile(TaggedUnionMisnamedKind FENRIR0033)       # Metal is _metal, not _steel
+fenrir_expect_compile(TaggedUnionMissingKind FENRIR0034)        # CrateType.Metal has no field
+fenrir_expect_compile(TaggedUnionMismatchedOffsets FENRIR0035)  # the kinds must overlap at one offset
+fenrir_expect_compile(TaggedUnionOffsetInsideTag FENRIR0035)    # an int tag takes four bytes, so the kinds cannot start at 2
+fenrir_expect_compile(TaggedUnionManagedKind FENRIR0036)        # a kind holding a reference cannot live in native storage
+fenrir_expect_compile(TaggedUnionSelfKind FENRIR0036 CS0523)    # a union cannot be its own kind (the compiler adds CS0523)
+fenrir_expect_compile(TaggedUnionDuplicateKind FENRIR0036)      # two kinds of one type would need two conversions from it
+fenrir_expect_compile(TaggedUnionWrittenConstructor FENRIR0037) # the generator writes the parameterless constructor
+fenrir_expect_compile(TaggedUnionWrittenType FENRIR0037)        # the generator writes Type
+fenrir_expect_compile(TaggedUnionWrittenView FENRIR0037)        # the generator writes each view
+fenrir_expect_compile(TaggedUnionWrittenConversion FENRIR0037)  # the generator writes each conversion
+fenrir_expect_compile(TaggedUnionWrittenExpect FENRIR0037)      # the generator writes Expect
+fenrir_expect_compile(TaggedUnionNoZero FENRIR0038)             # new() makes the kind with tag value 0, and there is none
+fenrir_expect_compile(TaggedUnionDuplicateValue FENRIR0038)     # two tag members with one value: the message could not say which it is

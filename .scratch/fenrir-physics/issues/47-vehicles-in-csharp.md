@@ -119,3 +119,7 @@ From "How does a vehicle step each tick, and what does game code read back?": `V
     - A key toggles `DebugDraw.Vehicles`.
     - A flip-reset key follows the recipe.
     - Not getting in and out, which stays the C++ scene's.
+
+## Comments
+
+- 2026-10-20: The generator ticket (`.scratch/fenrir-scripting-tagged-union/issues/01-tagged-union-generator.md`) amends decision 2: the tag may be any enum, the attribute has no `Offset` (the fields' `[FieldOffset]` is the only copy) but takes an optional `Noun` for the wrong-view message, and `CollisionShape`'s `_hull` is renamed `_convexHull` on both sides, so the move changes one native string.

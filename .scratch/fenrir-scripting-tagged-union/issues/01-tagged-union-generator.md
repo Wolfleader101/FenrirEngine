@@ -1,7 +1,7 @@
 # What does a `[TaggedUnion]` generator emit, and what does its author still write?
 
 Type: grilling
-Status: open
+Status: resolved
 Blocked by: none
 
 ## Question
@@ -114,3 +114,79 @@ The IDs need a block, perhaps FENRIR0030–0039, since 0006–0009 and 0015–00
 
 - Equality, `ToString`, a `Match`/`Switch` helper, or pattern-matching support. None of these exist on the hand-written unions, so emitting them would break "exactly the hand-written surface".
 - Generating C++ from C#, or C# from C++ headers.
+
+## Answer
+
+**The author writes the tag enum, the attribute and the private fields; the generator writes every member.** Ticket 47 ("What does C# get for vehicles?", decision 2) fixed most of it. This grilling keeps that shape and changes three details, each forced by the code: a kind field is paired with its tag member by one name rule with no override, so `CollisionShape`'s `_hull` becomes `_convexHull`; the tag may be any enum, not only a `byte` one; and the attribute takes no offset but an optional noun for the message. The other open questions are settled below. Build tickets 02–04 sit beside this one. No ADR: the generator emits the hand-written surface, so pasting that code back removes it, and the one rename is a private field. Glossary: **tagged union** already says what this settles; no change.
+
+**Facts found in the code** (on `claude/ecstatic-elgamal-a57263`, at `8336265`):
+- `JointKind` is already hand-written (`Joints.cs:244`), not only planned: tag at 0, kinds at 4, fields `_fixed` … `_swingTwist`, message "The joint is a {_type}, not a {wanted}.". Its conversion's parameter is `fixedJoint` because `fixed` is a C# keyword.
+- `CollisionShape`'s kinds sit at 8, with `_hull` for `ShapeType.ConvexHull`, and its native stand-in maps `IRIS_FIELD_AS(Layout, hull, "_hull")` (`PhysicsScripting.cpp:141`).
+- The test fixture's `Shape` has an `int32` tag on both sides (`Shapes.cs`, `ScriptingTests.cpp:110`), its kinds at 4, and no constructor. `ScriptingTests` checks only that its wrong view throws.
+- `PhysicsScriptingTests.cpp:594` requires the exact message "The shape is a Box, not a Sphere.". The noun can't come from the type name, since `JointKind` would give "kind".
+- FENRIR0030 onwards is free; the existing generators use 0001–0005, 0010–0014 and 0020–0026, and test only through `fenrir_expect_compile`.
+
+### Decisions
+
+1. **What the author writes.** A `[StructLayout(LayoutKind.Explicit)]` `partial struct` with `[TaggedUnion]`, the tag enum, the tag field at `[FieldOffset(0)]`, and one private field per kind at one shared `[FieldOffset(n)]`:
+
+   ```csharp
+   public enum ShapeType : byte { Box, Sphere, Capsule, ConvexHull, Mesh }
+
+   [TaggedUnion(Noun = "shape")]
+   [StructLayout(LayoutKind.Explicit)]
+   public partial struct CollisionShape
+   {
+       [FieldOffset(0)] private ShapeType _type;
+       [FieldOffset(8)] private BoxShape _box;
+       [FieldOffset(8)] private SphereShape _sphere;
+       [FieldOffset(8)] private CapsuleShape _capsule;
+       [FieldOffset(8)] private ConvexHullShape _convexHull;
+       [FieldOffset(8)] private MeshShape _mesh;
+   }
+   ```
+
+   - **The tag** is the one enum-typed instance field at offset 0. Its name is the author's (every union so far uses `_type`, which the native mapping names). The enum may have any underlying type; the engine's unions use `byte` because their C++ enums are `std::uint8_t`. The enum is the author's, because it must mirror C++'s values.
+   - **Every other instance field is a kind**, named `_` plus its tag member with the first letter lowered (`ConvexHull` → `_convexHull`, `SwingTwist` → `_swingTwist`). One rule, no override attribute and no pairing by order.
+   - **The offset is written only in `[FieldOffset]`.** C# can't see the C++ union's alignment, so there is no computed default, and the attribute has no `Offset`: it would only repeat the number. A wrong offset is refused by Iris's load check, naming the field.
+   - **`TaggedUnionAttribute`** goes in `Fenrir.Scripting` (struct targets only), with one optional property, `string? Noun`.
+   - Rejected: the generator emitting the fields from a list of kinds (ticket 47 rejected it too: the native mapping names the fields); `[UnionKind(...)]` to keep `_hull` (a second pairing rule forever, for one private field); pairing fields with members by declaration order (two swapped fields still compile, as `ref SphereShape Box`); a `byte`-only tag (the generator can't see C++, Iris already compares the tag's size, and the fixture's `int32` tag would have to change on both sides).
+2. **What the generator emits**, into the author's partial, exactly the hand-written surface:
+   - a parameterless constructor setting the tag to the member with value 0 and that kind's field to `new()`, so `new CollisionShape()` is a unit box and `new JointKind()` a fixed joint;
+   - `public readonly <Tag> Type => <tag field>;`
+   - one `[UnscopedRef] public ref <Kind> <Member>` view per kind, named after the tag member, calling `Expect` first. Every kind gets one, even an empty one;
+   - one `public static implicit operator <Union>(<Kind> value)` per kind, setting the tag and the field;
+   - `private readonly void Expect(<Tag> wanted)`, throwing `InvalidOperationException($"The {noun} is a {_type}, not a {wanted}.")`. The noun is `Noun`, or the struct's name as written when it is left out. `CollisionShape` says `Noun = "shape"`, `JointKind` `"joint"` and `VehicleKind` `"vehicle"`.
+
+   Nothing else: no equality, `ToString` or `Match`. `default(T)` is the tag-0 kind with zeroed settings. It is documented, not prevented, as ticket 47 decided for `default(Vehicle)`.
+3. **Diagnostics,** all errors:
+
+   | ID | Refused |
+   |---|---|
+   | FENRIR0030 | The type is not a `partial struct`, or a type containing it is not partial (as FENRIR0022). |
+   | FENRIR0031 | The struct is `readonly` (it can't hand out writable views), generic, or a `ref struct`. |
+   | FENRIR0032 | There is no single enum-typed field at offset 0 to be the tag. |
+   | FENRIR0033 | A kind field is not a private instance field, or its name is not `_` plus a tag member, first letter lowered. |
+   | FENRIR0034 | A tag member has no kind field. |
+   | FENRIR0035 | The kind fields do not share one offset, or that offset is less than the tag's size. |
+   | FENRIR0036 | A kind is not unmanaged, is the union itself, or has the same type as another kind (which would duplicate a conversion). |
+   | FENRIR0037 | The author wrote a member the generator emits: a parameterless constructor, `Type`, a view, a conversion or `Expect`. The generator never skips one. |
+   | FENRIR0038 | The tag enum has no member with value 0 (the constructor needs it), or two members share a value (the message would be ambiguous). |
+
+   - No diagnostic for a `bool` inside a kind: the danger is a by-value copy from C++, which the generator can't see. It stays a README note.
+   - No diagnostic for a missing `[StructLayout(LayoutKind.Explicit)]`: the compiler already refuses `[FieldOffset]` without it (CS0636).
+   - No rule for a `[TaggedUnion]` that is itself a component. It works through `Ref<U>.Value` and is not documented.
+4. **Contracts and scripts follow the same rules.** A script union has no C++ side, but the offset is explicit anyway, so nothing needs to differ. Script authors wanting a union was the trigger's other half.
+5. **The C++ side stays hand-written.** The generator emits no C++: each union, its `As<T>()` and its mapping (or plain stand-in) stay in the owning package. Iris's load check already covers what couples the two sides: the field names, order, offset and tag size. No helper macro, no extra `static_assert`. Adding a kind means the C++ union, the C++ enum, the mapping, the C# enum member and one C# field. Forgetting the C# field is FENRIR0034 at compile time.
+6. **Tests: `fenrir_expect_compile` only,** as for every other generator, with no Roslyn snapshot tests.
+   - OK cases: `TaggedUnionControl`; an empty kind (one unused byte, as `FixedJoint`); a union nested in a partial class; an `int` tag; with and without `Noun`.
+   - One compile-fail case per diagnostic.
+   - **Acceptance:** `Tests/Fixture/Shapes.cs`'s `Shape` on the generator with its four `ScriptingTests` cases unchanged (`MisplacedShape` and `MisnamedShape` stay hand-written, being deliberately wrong); `CollisionShape` and `JointKind` on it with every existing physics test unchanged, including the exact message and the layout check that proves `_convexHull` landed on both sides.
+7. **Three build tickets:**
+   - **02, the tracer bullet:** the attribute, the generator emitting the full surface for a well-formed union, the fixture's `Shape` moved onto it, the OK cases, and the README "Tagged unions" rewrite.
+   - **03, diagnostics:** FENRIR0030–0038 with a compile-fail case each. Blocked by 02.
+   - **04, the move:** `CollisionShape` (with the `_convexHull` rename in C# and the one native string) and `JointKind` moved onto the generator. Blocked by 02.
+
+   The vehicles spec's ticket 15 is blocked by 02 and 03, so `VehicleKind` is written with the guard rails in place. 04 can run beside the vehicles work.
+   - Rejected: one ticket for all of it (ticket 47's sketch), since the diagnostics and the move are each independent of the vehicles work.
+8. **Records.** The vehicles spec's prerequisite section, its C# bullet and its "Open, owned by the generator ticket" note, and its ticket 15, are amended to match. Ticket 47 stays as written, with a comment pointing here. The FenrirPhysics map's vehicles-spec entry points at the build tickets.

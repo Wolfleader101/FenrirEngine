@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Fenrir.Scripting;
 
@@ -240,8 +239,9 @@ public enum JointType : byte
 /// Assigning a kind changes it; each kind's view reads or edits it in place and throws
 /// <see cref="InvalidOperationException"/> if the joint is another kind. New, it is a fixed joint.
 /// </summary>
+[TaggedUnion(Noun = "joint")]
 [StructLayout(LayoutKind.Explicit)]
-public struct JointKind
+public partial struct JointKind
 {
     [FieldOffset(0)] private JointType _type;
     [FieldOffset(4)] private FixedJoint _fixed;
@@ -250,96 +250,6 @@ public struct JointKind
     [FieldOffset(4)] private HingeJoint _hinge;
     [FieldOffset(4)] private SliderJoint _slider;
     [FieldOffset(4)] private SwingTwistJoint _swingTwist;
-
-    public JointKind()
-    {
-        _type = JointType.Fixed;
-        _fixed = new FixedJoint();
-    }
-
-    public readonly JointType Type => _type;
-
-    [UnscopedRef]
-    public ref FixedJoint Fixed
-    {
-        get
-        {
-            Expect(JointType.Fixed);
-            return ref _fixed;
-        }
-    }
-
-    [UnscopedRef]
-    public ref BallJoint Ball
-    {
-        get
-        {
-            Expect(JointType.Ball);
-            return ref _ball;
-        }
-    }
-
-    [UnscopedRef]
-    public ref DistanceJoint Distance
-    {
-        get
-        {
-            Expect(JointType.Distance);
-            return ref _distance;
-        }
-    }
-
-    [UnscopedRef]
-    public ref HingeJoint Hinge
-    {
-        get
-        {
-            Expect(JointType.Hinge);
-            return ref _hinge;
-        }
-    }
-
-    [UnscopedRef]
-    public ref SliderJoint Slider
-    {
-        get
-        {
-            Expect(JointType.Slider);
-            return ref _slider;
-        }
-    }
-
-    [UnscopedRef]
-    public ref SwingTwistJoint SwingTwist
-    {
-        get
-        {
-            Expect(JointType.SwingTwist);
-            return ref _swingTwist;
-        }
-    }
-
-    public static implicit operator JointKind(FixedJoint fixedJoint) =>
-        new() { _type = JointType.Fixed, _fixed = fixedJoint };
-
-    public static implicit operator JointKind(BallJoint ball) => new() { _type = JointType.Ball, _ball = ball };
-
-    public static implicit operator JointKind(DistanceJoint distance) =>
-        new() { _type = JointType.Distance, _distance = distance };
-
-    public static implicit operator JointKind(HingeJoint hinge) => new() { _type = JointType.Hinge, _hinge = hinge };
-
-    public static implicit operator JointKind(SliderJoint slider) =>
-        new() { _type = JointType.Slider, _slider = slider };
-
-    public static implicit operator JointKind(SwingTwistJoint swingTwist) =>
-        new() { _type = JointType.SwingTwist, _swingTwist = swingTwist };
-
-    private readonly void Expect(JointType wanted)
-    {
-        if (_type != wanted)
-            throw new InvalidOperationException($"The joint is a {_type}, not a {wanted}.");
-    }
 }
 
 /// <summary>
