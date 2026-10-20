@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <numbers>
 #include <span>
 #include <type_traits>
 #include <utility>
@@ -72,7 +73,12 @@ namespace Fenrir::Backend
         /** @brief Relative to the body's origin, in the body's axes and world units (the chassis's world scale already
          * applied): the wheel's centre at full extension. */
         Math::Vec3 position = Math::Vec3(0.0f);
-        /** @brief Its settings; `vehicle`, `position` and `state` are ignored. */
+        /** @brief In the body's axes, unit: the steering axis, pointing up. The suspension runs down it. */
+        Math::Vec3 steeringAxis = Math::Vec3(0.0f, 1.0f, 0.0f);
+        /** @brief In the body's axes, before steering: turns X to the wheel's axle (its right), Y to its up and -Z to
+         * its forward. */
+        Math::Quat rest = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        /** @brief Its settings; `vehicle`, `position`, the angles and `state` are ignored. */
         VehicleWheel settings;
     };
 
@@ -111,6 +117,9 @@ namespace Fenrir::Backend
         /** @brief None drives every wheel equally, each by a differential of its own with the defaults. */
         std::vector<VehicleDifferentialDesc> differentials;
         std::vector<VehicleAntiRollBarDesc> antiRollBars;
+        VehicleProbe probe = VehicleProbe::Cylinder;
+        /** @brief Radians, 0 to π; π is off. */
+        float maxTilt = std::numbers::pi_v<float>;
         /** @brief Where the vehicle comes in the solve: lower first, as JointDesc::priority. */
         std::uint32_t priority = 0;
     };
@@ -583,8 +592,15 @@ namespace Fenrir::Backend
          */
         void DestroyVehicle(VehicleId id);
 
-        /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call. Wakes its
-         * body if `wake`. */
+        /**
+         * @brief Applies a vehicle's kind, already in range, from the next Step: its engine (the current RPM kept in
+         * its new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic
+         * shift under way is finished at once) and its limited-slip ratio. Wakes its body. Never during a step.
+         */
+        void UpdateVehicle(VehicleId id, const VehicleKind& kind);
+
+        /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call: in Manual its
+         * gear and clutch too, at once. Wakes its body if `wake`. */
         void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
 
         /** @brief Replaces a vehicle's differentials, as VehicleDesc::differentials: none drives every wheel equally.
@@ -596,6 +612,17 @@ namespace Fenrir::Backend
 
         /** @brief A vehicle and its wheels as the last step (or its making) left them. */
         [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
+
+        /** @brief Gives one of a vehicle's wheels, by its wheel index, new settings, patched in place: its spin and
+         * suspension carry on from where they are. Wakes nothing. Never during a step. */
+        void UpdateVehicleWheel(VehicleId id, std::size_t wheel, const VehicleWheelDesc& desc);
+
+        /** @brief How a vehicle's wheels find the ground from the next step. Wakes nothing. Never during a step. */
+        void SetVehicleProbe(VehicleId id, VehicleProbe probe);
+
+        /** @brief The cone, in radians from 0 to π, around world up past which a vehicle's body cannot pitch or roll;
+         * π is off. Wakes nothing. Never during a step. */
+        void SetVehicleMaxTilt(VehicleId id, float maxTilt);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

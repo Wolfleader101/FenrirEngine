@@ -40,7 +40,7 @@ namespace Fenrir
     /** @brief How every wheel of a vehicle finds the ground beneath it. */
     enum class VehicleProbe : std::uint8_t
     {
-        /** @brief A ray down the suspension, with a fixed 80° slope limit against the world's up. */
+        /** @brief A ray down the suspension, with a fixed 80° slope limit against the world's up (against gravity). */
         Ray,
         /** @brief A sphere cast down the suspension, with the same slope limit. */
         Sphere,
@@ -254,9 +254,10 @@ namespace Fenrir
         /** @brief The kind and its drivetrain: WheeledVehicle by default. */
         VehicleKind kind = {};
         VehicleInput input = {};
+        /** @brief How every wheel finds the ground. A live edit: the next step probes the new way. */
         VehicleProbe probe = VehicleProbe::Cylinder;
-        /** @brief Radians: the cone around world up the chassis cannot pitch or roll past. π (the default) is off;
-         * about 60° stops rollovers. */
+        /** @brief Radians: the cone around world up the chassis cannot pitch or roll past, a live edit. π (the
+         * default) is off; about 60° stops rollovers. Kept within 0 to π. */
         float maxTilt = std::numbers::pi_v<float>;
         /** @brief Disabled, the entity is a plain rigid body resting on its chassis. */
         bool enabled = true;
@@ -310,12 +311,16 @@ namespace Fenrir
      * nothing collides with it. Wheel order is entity order.
      *
      * Physics poses the wheel entity for drawing: its world position and rotation (never its scale) are the chassis's
-     * pose times the wheel's own, `position` raised by its compression, then steered, then spun about its X, the axle.
-     * With no angle set its rotation is the chassis's, so left and right wheels can share a symmetric mesh. The
+     * pose times the wheel's own: `position` raised by its compression along the suspension, then turned by its
+     * camber and toe, then steered about the steering axis, then spun about its X, the axle. With no angle set its
+     * rotation is the chassis's, so left and right wheels can share a symmetric mesh. The
      * Transform is output only: game code's writes to it are overwritten, and physics never reads a mount point from
      * it. Keep wheel entities unscaled and out of the chassis's hierarchy, and give each a scaled look as a child.
      *
-     * Adding, removing or relinking a wheel rebuilds its vehicle. There is no per-wheel switch: destroy the wheel
+     * Every setting is a live edit, applied on the next tick and waking the chassis. Out-of-range values are corrected
+     * with one warning per wheel: negative inertias, frictions, brake torques, travel and widths are treated as 0, the
+     * radius is raised to a small minimum, and `maxSteerAngle`, `caster`, `camber` and `toe` are kept below a quarter
+     * turn. Adding, removing or relinking a wheel rebuilds its vehicle. There is no per-wheel switch: destroy the wheel
      * entity or unlink it to take the wheel off.
      */
     struct VehicleWheel
@@ -334,11 +339,13 @@ namespace Fenrir
         /** @brief kg m². */
         float inertia = 0.9f;
         float angularDamping = 0.2f;
-        /** @brief Radians: tilts the suspension and steering axis back. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + tilts the top of the suspension and steering axis back (+Z), as a motorcycle's fork. */
         float caster = 0.0f;
-        /** @brief Radians: tilts the wheel's top. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + tilts the wheel's top outwards, away from the chassis's middle. Mirrored by the sign of
+         * `position.x`; a wheel at x = 0 counts as a right-hand one. */
         float camber = 0.0f;
-        /** @brief Radians: turns the wheel's front. Mirrored by the sign of `position.x`. */
+        /** @brief Radians: + turns the wheel's front inwards (toe-in). Mirrored by the sign of `position.x`; a wheel at
+         * x = 0 counts as a right-hand one. */
         float toe = 0.0f;
         VehicleSuspension suspension = {};
         /** @brief Radians at full `steer`: 0 does not steer. */

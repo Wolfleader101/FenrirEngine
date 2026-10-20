@@ -12,6 +12,7 @@
 #include <cmath>
 #include <cstdarg>
 #include <cstdio>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -1258,6 +1259,14 @@ namespace Fenrir::Backend
             }
             Bodies().SetObjectLayer(ToJolt(id), objectLayers.Acquire(key));
             objectLayers.Release(old);
+            // A vehicle's wheels probe with its body's layer, and the old one may now stand for another key.
+            for (VehicleSlot& slot : vehicles)
+            {
+                if (slot.constraint != nullptr && slot.body.value == id.value)
+                {
+                    Retest(slot);
+                }
+            }
             WakeAround(Bounds(id));
         }
 
@@ -1328,17 +1337,49 @@ namespace Fenrir::Backend
             JPH::BodyID m_chassis;
         };
 
-        // The vehicles, by VehicleId, each with its own wheel settings (its wheels read them by reference) and the
-        // tester and filter its wheels probe with. A freed slot has no constraint, and is reused.
+        // The vehicles, by VehicleId, each with its own wheel settings (its wheels read them by reference, so they are
+        // patched in place) and the tester and filter its wheels probe with. A freed slot has no constraint, and is
+        // reused.
         struct VehicleSlot
         {
             JPH::Ref<JPH::VehicleConstraint> constraint;
+            std::vector<JPH::Ref<JPH::WheelSettingsWV>> wheels;
             JPH::Ref<JPH::VehicleCollisionTester> tester;
             std::unique_ptr<ProbeFilter> filter;
+            VehicleProbe probe = VehicleProbe::Cylinder;
             BodyId body;
         };
         std::vector<VehicleSlot> vehicles;
         std::vector<std::uint32_t> freeVehicles;
+
+        // Gives a vehicle a new collision tester for its probe, from its body's object layer and the world's up as
+        // they are now: the tester holds both. Ray and sphere stop at an 80 degree slope; the sphere is the smallest
+        // wheel's size, so it fits every wheel's cast.
+        void Retest(VehicleSlot& slot)
+        {
+            const JPH::ObjectLayer layer = Bodies().GetObjectLayer(ToJolt(slot.body));
+            const JPH::Vec3 up = (-system.GetGravity()).NormalizedOr(JPH::Vec3::sAxisY());
+            const float maxSlope = JPH::DegreesToRadians(80.0f);
+            if (slot.probe == VehicleProbe::Ray)
+            {
+                slot.tester = new JPH::VehicleCollisionTesterRay(layer, up, maxSlope);
+            }
+            else if (slot.probe == VehicleProbe::Sphere)
+            {
+                float radius = slot.wheels.front()->mRadius;
+                for (const JPH::Ref<JPH::WheelSettingsWV>& wheel : slot.wheels)
+                {
+                    radius = std::min(radius, wheel->mRadius);
+                }
+                slot.tester = new JPH::VehicleCollisionTesterCastSphere(layer, radius, up, maxSlope);
+            }
+            else
+            {
+                slot.tester = new JPH::VehicleCollisionTesterCastCylinder(layer);
+            }
+            slot.tester->SetBodyFilter(slot.filter.get());
+            slot.constraint->SetVehicleCollisionTester(slot.tester);
+        }
 
         // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
         // excluded pair and taking it away when it leaves its last. Never during a step.
@@ -2477,6 +2518,14 @@ namespace Fenrir::Backend
     void World::SetGravity(const Math::Vec3& gravity)
     {
         m_impl->system.SetGravity(ToJolt(gravity));
+        // A ray or sphere probe holds the world's up.
+        for (Impl::VehicleSlot& slot : m_impl->vehicles)
+        {
+            if (slot.constraint != nullptr && slot.probe != VehicleProbe::Cylinder)
+            {
+                m_impl->Retest(slot);
+            }
+        }
         // Jolt does not wake sleeping bodies for a gravity change, and a body at rest in zero gravity falls asleep.
         JPH::BodyIDVector ids;
         m_impl->system.GetBodies(ids);
@@ -3109,7 +3158,8 @@ namespace Fenrir::Backend
 
         void Fill(JPH::VehicleTransmissionSettings& out, const VehicleTransmission& transmission)
         {
-            out.mMode = JPH::ETransmissionMode::Auto;
+            out.mMode = transmission.mode == TransmissionMode::Manual ? JPH::ETransmissionMode::Manual
+                                                                      : JPH::ETransmissionMode::Auto;
             out.mGearRatios = GearRatios(transmission);
             out.mReverseGearRatios = {-transmission.reverseGear};
             out.mSwitchTime = transmission.switchTime;
@@ -3118,6 +3168,20 @@ namespace Fenrir::Backend
             out.mShiftUpRPM = transmission.shiftUpRpm;
             out.mShiftDownRPM = transmission.shiftDownRpm;
             out.mClutchStrength = transmission.clutchStrength;
+        }
+
+        // Finishes an automatic shift under way at once, the clutch engaged: Jolt counts a shift down only in Auto, so
+        // a gearbox switched to Manual mid-shift would otherwise stay shifting (and its body awake) for good. Each
+        // update clears one of the shift's timers, keeping the gear: driven its own way, at an RPM that shifts neither
+        // up nor down.
+        void FinishShift(JPH::VehicleTransmission& transmission)
+        {
+            const int gear = transmission.GetCurrentGear();
+            const float direction = gear > 0 ? 1.0f : (gear < 0 ? -1.0f : 0.0f);
+            while (!transmission.AllowSleep())
+            {
+                transmission.Update(std::numeric_limits<float>::max(), transmission.mShiftDownRPM, direction, false);
+            }
         }
 
         // Friction from 0 to the peak, down to the slide value, and level from there; `slipScale` turns the slips
@@ -3130,21 +3194,22 @@ namespace Fenrir::Backend
             out.AddPoint(tyre.slideSlip * slipScale, tyre.slideFriction);
         }
 
-        // A wheel for Jolt: the suspension straight down and the wheel facing forward.
+        // A wheel for Jolt: the suspension down its steering axis, and the wheel turned by its camber and toe.
         void Fill(JPH::WheelSettingsWV& out, const VehicleWheelDesc& desc)
         {
             const VehicleWheel& wheel = desc.settings;
-            out.mSteeringAxis = vehicleUp;
-            out.mSuspensionDirection = -vehicleUp;
-            out.mWheelUp = vehicleUp;
-            out.mWheelForward = vehicleForward;
+            const JPH::Vec3 axis = ToJolt(desc.steeringAxis).Normalized();
+            out.mSteeringAxis = axis;
+            out.mSuspensionDirection = -axis;
+            out.mWheelUp = ToJolt(desc.rest * Math::Vec3(0.0f, 1.0f, 0.0f)).Normalized();
+            out.mWheelForward = ToJolt(desc.rest * Math::Vec3(0.0f, 0.0f, -1.0f)).Normalized();
             const bool rigid = wheel.suspension.travel <= 0.0f || wheel.suspension.spring.frequency <= 0.0f;
             const float travel = rigid ? 0.0f : wheel.suspension.travel;
             // Jolt's hard point is a margin above the top of the travel: its bump stop engages only below its min
             // length, and a probe starting inside the ground finds it at length 0, so with no margin a bottomed-out
             // wheel never stops the chassis sinking.
             const float margin = wheel.radius;
-            out.mPosition = ToJolt(desc.position) + vehicleUp * (travel + margin);
+            out.mPosition = ToJolt(desc.position) + axis * (travel + margin);
             out.mSuspensionMinLength = margin;
             out.mSuspensionMaxLength = travel + margin;
             out.mSuspensionPreloadLength = wheel.suspension.preload;
@@ -3224,12 +3289,15 @@ namespace Fenrir::Backend
         settings.mForward = vehicleForward;
         settings.mConstraintPriority = desc.priority;
         Fill(settings.mAntiRollBars, desc.antiRollBars);
+        settings.mMaxPitchRollAngle = desc.maxTilt;
+        Impl::VehicleSlot slot;
         // Each vehicle its own wheel settings: its wheels read them by reference.
         for (const VehicleWheelDesc& wheel : desc.wheels)
         {
-            auto* made = new JPH::WheelSettingsWV();
+            JPH::Ref<JPH::WheelSettingsWV> made = new JPH::WheelSettingsWV();
             Fill(*made, wheel);
             settings.mWheels.emplace_back(made);
+            slot.wheels.push_back(made);
         }
         auto* controller = new JPH::WheeledVehicleControllerSettings();
         Fill(controller->mEngine, wheeled.engine);
@@ -3238,17 +3306,15 @@ namespace Fenrir::Backend
         controller->mDifferentialLimitedSlipRatio = wheeled.limitedSlipRatio;
         settings.mController = controller;
 
-        Impl::VehicleSlot slot;
         slot.body = desc.body;
+        slot.probe = desc.probe;
         {
             JPH::BodyLockWrite lock(impl.system.GetBodyLockInterfaceNoLock(), ToJolt(desc.body));
             JPH_ASSERT(lock.Succeeded());
             slot.constraint = new JPH::VehicleConstraint(lock.GetBody(), settings);
         }
         slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body));
-        slot.tester = new JPH::VehicleCollisionTesterCastCylinder(impl.Bodies().GetObjectLayer(ToJolt(desc.body)));
-        slot.tester->SetBodyFilter(slot.filter.get());
-        slot.constraint->SetVehicleCollisionTester(slot.tester);
+        impl.Retest(slot);
 
         impl.system.AddConstraint(slot.constraint);
         impl.system.AddStepListener(slot.constraint);
@@ -3276,12 +3342,42 @@ namespace Fenrir::Backend
         m_impl->freeVehicles.push_back(id.value);
     }
 
+    void World::UpdateVehicle(VehicleId id, const VehicleKind& kind)
+    {
+        const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+        const WheeledVehicle& wheeled = kind.As<WheeledVehicle>();
+        // Jolt's engine and gearbox are their own settings, read every step.
+        JPH::VehicleEngine& engine = controller.GetEngine();
+        Fill(engine, wheeled.engine);
+        engine.ClampRPM();
+        JPH::VehicleTransmission& transmission = controller.GetTransmission();
+        if (transmission.mMode == JPH::ETransmissionMode::Auto && wheeled.transmission.mode == TransmissionMode::Manual)
+        {
+            FinishShift(transmission);
+        }
+        Fill(transmission, wheeled.transmission);
+        // Fewer gears than the one engaged: the top one.
+        if (transmission.GetCurrentGear() > wheeled.transmission.gearCount)
+        {
+            transmission.Set(wheeled.transmission.gearCount, transmission.GetClutchFriction());
+        }
+        controller.SetDifferentialLimitedSlipRatio(wheeled.limitedSlipRatio);
+        m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+    }
+
     void World::SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake)
     {
         const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
         auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
         // Jolt's right is ours.
         controller.SetDriverInput(input.forward, input.steer, input.brake, input.handbrake);
+        // In Manual the gear and clutch are game code's; Jolt's clutch is the friction it gives, 1 engaged.
+        JPH::VehicleTransmission& transmission = controller.GetTransmission();
+        if (transmission.mMode == JPH::ETransmissionMode::Manual)
+        {
+            transmission.Set(input.gear, 1.0f - input.clutch);
+        }
         // Jolt does not wake a vehicle's body on input.
         if (wake)
         {
@@ -3354,6 +3450,33 @@ namespace Fenrir::Backend
             read.wheels.push_back(out);
         }
         return read;
+    }
+
+    void World::UpdateVehicleWheel(VehicleId id, std::size_t wheel, const VehicleWheelDesc& desc)
+    {
+        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        // Jolt reads it by reference, and its checks ran only when the wheel was made: physics checked these values.
+        Fill(*slot.wheels[wheel], desc);
+        // The sphere is sized from the wheels.
+        if (slot.probe == VehicleProbe::Sphere)
+        {
+            m_impl->Retest(slot);
+        }
+    }
+
+    void World::SetVehicleProbe(VehicleId id, VehicleProbe probe)
+    {
+        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        if (slot.probe != probe)
+        {
+            slot.probe = probe;
+            m_impl->Retest(slot);
+        }
+    }
+
+    void World::SetVehicleMaxTilt(VehicleId id, float maxTilt)
+    {
+        m_impl->vehicles[id.value].constraint->SetMaxPitchRollAngle(maxTilt);
     }
 
     void World::Step(float dt, int collisionSteps)
