@@ -309,7 +309,9 @@ namespace Fenrir
             m_backend.DestroyVehicle(record.id);
         }
         // What was warned about stays warned about: a rebuild is no reason to warn again.
-        record = VehicleRecord{.warned = record.warned};
+        const std::uint32_t warned = record.warned;
+        record = VehicleRecord{};
+        record.warned = warned;
     }
 
     const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::ChassisBodyOf(std::uint32_t chassis) const
