@@ -21,6 +21,8 @@ C# components cannot hold a tagged union today, so scripting needs that capabili
 
 *Amended 2026-10-16:* that capability now exists. A component may hold a tagged union, written in C# by hand in one pattern (FenrirScripting's README, "Tagged unions"), and C# reads and writes `Collider` and its `CollisionShape` that way.
 
+*Amended 2026-10-20:* the pattern is no longer written by hand. FenrirScripting's `[TaggedUnion]` generator writes it from the tag and the kind fields, and `CollisionShape` and `JointKind` use it.
+
 ## Edits are found by diffing, not by hooks
 
 FenrirECS will report component adds and removes (a neutral API, per ADR-0008), and physics creates and destroys bodies from those, in a batch before the step. Field edits are not reported. Each tick, physics compares each body's components against its private copy of what it last applied or wrote back (for a shape, the tag and the active kind's fields) and pushes the differences to the backend.
