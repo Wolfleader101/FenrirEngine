@@ -18,7 +18,7 @@
 - [x] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs with no errors, in Debug and Release.
 - [ ] M then E/Q shift by hand, Shift holds the clutch, and the gear readout follows (checked by hand).
 
-**Resolved by:** branch claude/vehicles-engine-gearbox-41572a (not yet merged into dotnet-scripting). The proof is `FenrirPhysicsTests`' `[vehicle-gearbox]` cases (`Tests/VehicleGearbox.cpp`) and the `FENRIR_DEMO_SCENE="Vehicles (C++)" FENRIR_DEMO_KEYS=1` smoke run; the last box (shifting by hand) is left for a person. Choices the ticket left open:
+**Resolved by:** PR #53 (branch claude/vehicles-engine-gearbox-41572a), merged into dotnet-scripting. The proof is `FenrirPhysicsTests`' `[vehicle-gearbox]` cases (`Tests/VehicleGearbox.cpp`) and the `FENRIR_DEMO_SCENE="Vehicles (C++)" FENRIR_DEMO_KEYS=1` smoke run; the last box (shifting by hand) is left for a person. Choices the ticket left open:
 - Live edits go through the new `Backend::World::UpdateVehicle`, which refills Jolt's engine and gearbox settings in place, keeps the engine's RPM in its new range, moves the engaged gear down to the top one if there are fewer gears now, and sets the limited-slip ratio. Physics keeps the kind as game code gave it to notice edits, and as applied, in range, to clamp input against.
 - Switching to Manual mid-shift finishes the automatic shift at once (`FinishShift`): Jolt counts a shift's timers down only in Auto, so `shifting` would otherwise stay set and the chassis never sleep.
 - In Manual the gear and clutch are given to Jolt every tick (`VehicleTransmission::Set(gear, 1 - clutch)`), so `state` echoes them from the tick they are set. `input.gear` is clamped to -1 through `gearCount` and `clutch` to 0 through 1.
