@@ -33,6 +33,11 @@
 // tyres' grip. A pedestrian, a standing character, waits on the start straight: a car meets it with its chassis and
 // stops, and its wheels never climb it. The autopilot steers round it.
 //
+// West of the gearbox loop, a 15 degree parking slope up to a platform and down again. Parking is the handbrake, with
+// no helper: held on the slope, the car stays put and falls asleep, keeping its state; any input wakes it. The
+// autopilot parks halfway up for a few seconds. Between ticks the wheels are drawn with the chassis, blended as it is:
+// 5 switches the chassis's interpolation off and on, and off, the wheels still move with it, at its step poses.
+//
 // The camera is a VehicleCamera: C++ game code that chases the car and writes the scene's DemoCamera, which
 // DemoCameras copies into the app's camera. C frees the camera (WASD flies it, the arrows still drive) and snaps it
 // back.
@@ -148,31 +153,33 @@ class VehicleScene
     {
         DemoScene scene{.name = name,
                         .familyKey = DemoFamilyKey::vehicles,
-                        .keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
-                                   "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
-                                   "still drive) and snaps it back. North of the start: a pedestrian, ten bumps, then "
-                                   "a ramp. East: an ice lane, a grass lane, a wall of crates and a ferry across a gap "
-                                   "to a far bank. L logs "
-                                   "the car's state, P drives the track by itself. M switches the gearbox between "
-                                   "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
-                                   "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
-                                   "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
-                                   "undo). 4 switches the car off (a plain box) and on; 9 makes its chassis kinematic "
-                                   "(the car inactive, with a warning) and back. T respawns the car at the start; 8 "
-                                   "destroys its rear-left wheel (a warning) and remakes it. F6 goes on. A gamepad "
-                                   "drives too: the right trigger drives, the left trigger brakes and then reverses, "
-                                   "the left stick steers, A pulls the handbrake, the right stick looks round the car; "
-                                   "X is M, the bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 "
-                                   "(left), and Start 9.",
+                        .keyHelp =
+                            "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
+                            "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
+                            "still drive) and snaps it back. North of the start: a pedestrian, ten bumps, then "
+                            "a ramp. East: an ice lane, a grass lane, a wall of crates and a ferry across a gap "
+                            "to a far bank, and west a 15 degree parking slope. L logs "
+                            "the car's state, P drives the track by itself. M switches the gearbox between "
+                            "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
+                            "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
+                            "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
+                            "undo). 4 switches the car off (a plain box) and on; 5 switches its interpolation off "
+                            "and on; 9 makes its chassis kinematic "
+                            "(the car inactive, with a warning) and back. T respawns the car at the start; 8 "
+                            "destroys its rear-left wheel (a warning) and remakes it. F6 goes on. A gamepad "
+                            "drives too: the right trigger drives, the left trigger brakes and then reverses, "
+                            "the left stick steers, A pulls the handbrake, the right stick looks round the car; "
+                            "X is M, the bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 "
+                            "(left), and Start 9.",
                         .smokeKeys = {GLFW_KEY_P}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
         scene.smokeKeys.insert(scene.smokeKeys.begin(), 7, GLFW_KEY_F2);
         // The autopilot drives a whole lap, every piece and the ferry both ways, while L logs the state, then stops,
         // and each key is tapped twice.
-        scene.smokeKeys.insert(scene.smokeKeys.end(), 240, GLFW_KEY_L);
+        scene.smokeKeys.insert(scene.smokeKeys.end(), 290, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9,
-                              GLFW_KEY_T, GLFW_KEY_8})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_5, GLFW_KEY_7,
+                              GLFW_KEY_9, GLFW_KEY_T, GLFW_KEY_8})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -199,6 +206,7 @@ class VehicleScene
         BuildCrates();
         BuildFerry();
         BuildPedestrian();
+        BuildSlope();
         MakeCar();
         GiveCarDrivetrain();
 
@@ -286,6 +294,7 @@ class VehicleScene
         Dock dock = Dock::None;
         // Whether the way there drives onto the ferry, so it waits for the ferry to have just docked.
         bool board = false;
+        float park = 0.0f; // s: on reaching it, the autopilot holds the handbrake this long before going on.
     };
 
     // A pad button and the key it presses while held.
@@ -350,6 +359,10 @@ class VehicleScene
         else if (key == GLFW_KEY_4)
         {
             ToggleEnabled(app);
+        }
+        else if (key == GLFW_KEY_5)
+        {
+            ToggleInterpolation(app);
         }
         else if (key == GLFW_KEY_9)
         {
@@ -445,6 +458,7 @@ class VehicleScene
         float clutch = held(GLFW_KEY_LEFT_SHIFT) || held(GLFW_KEY_RIGHT_SHIFT) ? 1.0f : 0.0f;
         bool manual = m_manual;
         bool hold = false;
+        bool handbrake = held(GLFW_KEY_SPACE);
         // The pad wins beyond the deadzone. The left trigger is S's: it brakes, then reverses once stopped.
         const DemoGamepad& pad = m_gamepad.GetComponent<DemoGamepad>();
         throttle = pad.RightTrigger > deadzone ? pad.RightTrigger : throttle;
@@ -452,14 +466,14 @@ class VehicleScene
         steer = std::abs(pad.LeftStick.x) > deadzone ? pad.LeftStick.x : steer;
         if (m_autopilot)
         {
-            Autopilot(app, throttle, back, steer, manual, clutch, hold);
+            Autopilot(app, throttle, back, steer, manual, clutch, hold, handbrake);
         }
 
         Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
         vehicle.kind.As<Fenrir::WheeledVehicle>().transmission.mode =
             manual ? Fenrir::TransmissionMode::Manual : Fenrir::TransmissionMode::Automatic;
         vehicle.input.steer = steer;
-        vehicle.input.handbrake = held(GLFW_KEY_SPACE) ? 1.0f : 0.0f;
+        vehicle.input.handbrake = handbrake ? 1.0f : 0.0f;
         vehicle.input.clutch = clutch;
         if (manual)
         {
@@ -490,9 +504,10 @@ class VehicleScene
     }
 
     // Steers for the next waypoint of the route, and holds its speed, in the waypoint's gearbox mode. Before a
-    // waypoint that waits for the ferry it holds the car braked until the ferry is ready.
+    // waypoint that waits for the ferry it holds the car braked until the ferry is ready; at one to park at, it pulls
+    // the handbrake and lets go of everything else for a while.
     void Autopilot(Fenrir::App& app, float& throttle, float& back, float& steer, bool& manual, float& clutch,
-                   bool& hold)
+                   bool& hold, bool& handbrake)
     {
         const std::vector<Waypoint>& route = Route();
         const Waypoint& next = route[m_waypoint % route.size()];
@@ -510,8 +525,24 @@ class VehicleScene
         const Fenrir::Transform at = Fenrir::GetWorldTransform(m_car.chassis);
         Fenrir::Math::Vec3 to = next.at - at.pos;
         to.y = 0.0f;
-        if (Fenrir::Math::Magnitude(to) < next.reach)
+        // Parking, it stays parked wherever the handbrake stopped it, short of the waypoint or past it.
+        const bool reached = m_parkedTicks > 0 || Fenrir::Math::Magnitude(to) < next.reach;
+        if (reached && m_parkedTicks < static_cast<long>(static_cast<double>(next.park) / app.GetTime().tickRate))
         {
+            if (m_parkedTicks++ == 0)
+            {
+                app.Logger()->Info("Autopilot: parked with the handbrake for {} s", next.park);
+            }
+            throttle = 0.0f;
+            back = 0.0f;
+            steer = 0.0f;
+            manual = false;
+            handbrake = true;
+            return;
+        }
+        if (reached)
+        {
+            m_parkedTicks = 0;
             ++m_waypoint;
             app.Logger()->Info("Autopilot: waypoint {} reached", m_waypoint % route.size());
             return;
@@ -800,13 +831,56 @@ class VehicleScene
                 Waypoint{.at = pedestrianFeet + Fenrir::Math::Vec3(-3.5f, 0.0f, -4.0f), .speed = 5.0f, .reach = 2.0f}};
     }
 
+    // West of the gearbox loop, at x = -80: a ramp 6 m wide rising north at 15 degrees for 12 m, a platform 10 m long
+    // at its top, and a ramp down the far side, the spike's parking slope.
+    void BuildSlope()
+    {
+        const float rise = slopeLength * std::sin(slopeAngle);
+        const float run = slopeLength * std::cos(slopeAngle);
+        const float thickness = 0.5f;
+        for (const float side : {1.0f, -1.0f})
+        {
+            // Its top's middle, half the rise up: the south ramp up, the north one down.
+            const float z = side > 0.0f ? slopeZ - 0.5f * run : slopeZ - run - platformLength - 0.5f * run;
+            const Fenrir::Math::Quat tilt =
+                Fenrir::Math::AngleAxis(side * slopeAngle, Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f));
+            Fenrir::Entity ramp = Static(
+                "Parking slope",
+                Fenrir::Math::Vec3(slopeX, 0.5f * rise, z) - tilt * Fenrir::Math::Vec3(0.0f, 0.5f * thickness, 0.0f),
+                Fenrir::Math::Vec3(6.0f, thickness, slopeLength), Fenrir::Math::Vec3(0.55f, 0.5f, 0.45f));
+            ramp.GetComponent<Fenrir::Transform>().rot = tilt;
+        }
+        Static("Parking platform", Fenrir::Math::Vec3(slopeX, 0.5f * rise, slopeZ - run - 0.5f * platformLength),
+               Fenrir::Math::Vec3(6.0f, rise, platformLength), Fenrir::Math::Vec3(0.5f, 0.45f, 0.4f));
+    }
+
+    // West to the slope's foot, halfway up it to park for 5 s, on over the platform and down, and back to the start.
+    static std::vector<Waypoint> SlopeLeg()
+    {
+        const float run = slopeLength * std::cos(slopeAngle);
+        return {Waypoint{.at = Fenrir::Math::Vec3(-15.0f, 0.0f, 15.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(slopeX, 0.0f, slopeZ + 12.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(slopeX, 0.0f, slopeZ + 2.0f), .speed = 5.0f, .reach = 2.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(slopeX, 0.0f, slopeZ - 0.5f * run),
+                         .speed = 3.0f,
+                         .reach = 2.0f,
+                         .park = 5.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(slopeX, 0.0f, slopeZ - run - platformLength - 2.0f * run),
+                         .speed = 5.0f,
+                         .reach = 3.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(-65.0f, 0.0f, -70.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(-65.0f, 0.0f, 15.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 15.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), .speed = 6.0f}};
+    }
+
     // The route: each piece's leg in turn, over and over.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg :
-                 {PedestrianLeg(), BumpsLeg(), RampLeg(), GearboxLeg(), IceLeg(), GrassLeg(), CratesLeg(), FerryLeg()})
+            for (const std::vector<Waypoint>& leg : {PedestrianLeg(), BumpsLeg(), RampLeg(), GearboxLeg(), SlopeLeg(),
+                                                     IceLeg(), GrassLeg(), CratesLeg(), FerryLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -843,6 +917,16 @@ class VehicleScene
         bool& enabled = m_car.chassis.GetComponent<Fenrir::Vehicle>().enabled;
         enabled = !enabled;
         app.Logger()->Info(enabled ? "4: the car is on again, built fresh" : "4: the car is off: a plain rolling box");
+    }
+
+    // 5: the chassis's interpolation off and on. Its wheels follow it either way: off, both are drawn at their step
+    // poses, so the car moves in steps at a frame rate above the tick rate.
+    void ToggleInterpolation(Fenrir::App& app)
+    {
+        bool& interpolate = m_car.chassis.GetComponent<Fenrir::RigidBody>().interpolate;
+        interpolate = !interpolate;
+        app.Logger()->Info(interpolate ? "5: the car is interpolated, its wheels with it"
+                                       : "5: the car is not interpolated: it and its wheels are drawn at step poses");
     }
 
     // 9: the car's chassis kinematic and still, as for a cutscene, which makes the vehicle inactive with one warning;
@@ -1073,6 +1157,11 @@ class VehicleScene
     static constexpr float grassX = 52.0f;  // The grass lane's middle.
     static constexpr float cratesX = 70.0f; // The middle of the crates' lane.
     static constexpr float ferryZ = -30.0f; // The line the ferry crosses on.
+    static constexpr float slopeX = -80.0f; // The parking slope's middle.
+    static constexpr float slopeZ = -20.0f; // Its foot.
+    static constexpr float slopeAngle = 15.0f * degrees;
+    static constexpr float slopeLength = 12.0f;    // m, along each ramp.
+    static constexpr float platformLength = 10.0f; // m, across the top.
     inline static const Fenrir::Math::Vec3 pedestrianFeet = Fenrir::Math::Vec3(0.0f, 0.0f, -10.0f);
 
     const Model* m_cube;
@@ -1097,6 +1186,7 @@ class VehicleScene
     bool m_bigWheels = false;
     std::size_t m_waypoint = 0;
     std::size_t m_setOff = 0; // The waypoint the autopilot last set off for: it holds for the ferry only before.
+    long m_parkedTicks = 0;   // How long the autopilot has been parked at its waypoint, in ticks.
     long m_tick = 0;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
 };

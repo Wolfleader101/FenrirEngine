@@ -4,6 +4,7 @@
 // to Backend::World.
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <numbers>
@@ -881,10 +882,10 @@ namespace Fenrir
                 wake = true;
             }
 
-            const VehicleInput input = Clamped(vehicle.input, record.applied);
-            wake = wake || !Same(input, record.input);
-            m_backend.SetVehicleInput(record.id, input, wake);
-            record.input = input;
+            // Any change wakes it, even one its ranges clamp away.
+            wake = wake || !Same(vehicle.input, record.input);
+            m_backend.SetVehicleInput(record.id, Clamped(vehicle.input, record.applied), wake);
+            record.input = vehicle.input;
         }
     }
 
@@ -948,7 +949,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::WriteBackVehicles()
+    void PhysicsWorld::Impl::WriteBackVehicles(float dt)
     {
         const auto handle = [this](std::uint32_t id) { return id == ~0u ? Entity() : m_entities->HandleOf(id); };
         std::set<std::uint32_t> posed;
@@ -960,7 +961,16 @@ namespace Fenrir
                 vehicle.state = VehicleState{};
                 continue;
             }
-            const Backend::VehicleRead read = m_backend.ReadVehicle(record.id);
+            // Asleep, it keeps what the step it fell asleep left: the backend stopped its wheels then.
+            if (!m_backend.IsSleeping(record.body))
+            {
+                record.parked.reset();
+            }
+            else if (!record.parked)
+            {
+                record.parked = m_backend.ReadVehicle(record.id);
+            }
+            const Backend::VehicleRead read = record.parked ? *record.parked : m_backend.ReadVehicle(record.id);
             vehicle.state = read.state;
             for (std::size_t i = 0; i < record.wheels.size(); ++i)
             {
@@ -981,7 +991,9 @@ namespace Fenrir
                 posed.insert(record.wheels[i]);
             }
             // After the chassis's write-back, against its step pose.
-            PoseWheels(record, read, m_bodies.at(chassis).world);
+            const Record& body = m_bodies.at(chassis);
+            PoseWheels(record, read, body.world);
+            AdvanceWheels(record, read, dt, body.shown.snap);
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
         for (const std::uint32_t wheel : m_wheelEntities)
@@ -990,6 +1002,116 @@ namespace Fenrir
             {
                 m_entities->GetEntity(wheel).GetComponent<VehicleWheel>().state = VehicleWheelState{};
             }
+        }
+    }
+
+    void PhysicsWorld::Impl::AdvanceWheels(VehicleRecord& record, const Backend::VehicleRead& read, float dt,
+                                           bool teleported)
+    {
+        const bool snap = record.snap || teleported || record.current.size() != read.wheels.size();
+        constexpr float turn = 2.0f * std::numbers::pi_v<float>;
+        std::vector<VehicleRecord::WheelShown> now;
+        for (std::size_t i = 0; i < read.wheels.size(); ++i)
+        {
+            const Backend::VehicleWheelRead& wheel = read.wheels[i];
+            VehicleRecord::WheelShown shown{
+                .compression = wheel.compression, .steer = wheel.steerAngle, .spin = wheel.spinAngle};
+            if (!snap)
+            {
+                // The backend wraps the angle: unwrapped, it is the one nearest where the wheel's speed took it.
+                const float expected = record.current[i].spin + wheel.angularVelocity * dt;
+                shown.spin += turn * std::round((expected - shown.spin) / turn);
+            }
+            now.push_back(shown);
+        }
+        record.previous = snap ? now : std::move(record.current);
+        record.current = std::move(now);
+        // Both by the same whole turns, so the angles stay small.
+        for (std::size_t i = 0; i < record.current.size(); ++i)
+        {
+            const float turns = turn * std::round(record.previous[i].spin / turn);
+            record.previous[i].spin -= turns;
+            record.current[i].spin -= turns;
+        }
+        record.snap = false;
+    }
+
+    void PhysicsWorld::Impl::BlendWheels(float fraction)
+    {
+        for (auto& [chassis, record] : m_vehicles)
+        {
+            // Shown as its chassis is: only a chassis Blend blended (interpolated, and not held by game code) carries
+            // its wheels between steps. Otherwise they stay at their step poses.
+            const auto body = m_bodies.find(chassis);
+            if (!record.Made() || record.current.size() != record.wheels.size() || body == m_bodies.end() ||
+                !body->second.shown.blended || !m_entities->HasEntity(chassis))
+            {
+                continue;
+            }
+            const Entity entity = m_entities->GetEntity(chassis);
+            if (!entity.HasComponent<RigidBody>() || !entity.GetComponent<RigidBody>().interpolate)
+            {
+                continue;
+            }
+            // A wheel entity destroyed since the last step, in a frame with no tick: its vehicle is rebuilt in the next
+            // drain, and until then its wheels stay at their step poses.
+            if (!std::ranges::all_of(record.wheels, [this](std::uint32_t id) { return m_entities->HasEntity(id); }))
+            {
+                continue;
+            }
+            const Transform at = body->second.shown.Between(fraction);
+            // Every true local Transform is saved before any is overwritten.
+            record.trueLocals.clear();
+            for (const std::uint32_t id : record.wheels)
+            {
+                const Entity wheel = m_entities->GetEntity(id);
+                record.trueLocals.emplace_back(wheel, wheel.GetComponent<Transform>());
+            }
+            // Parents before children, as PoseWheels does.
+            std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
+            for (std::size_t i = 0; i < record.wheels.size(); ++i)
+            {
+                order.emplace_back(DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
+            }
+            std::ranges::sort(order);
+            for (const auto& [depth, id, i] : order)
+            {
+                const VehicleRecord::WheelShown& from = record.previous[i];
+                const VehicleRecord::WheelShown& to = record.current[i];
+                Backend::VehicleWheelRead between;
+                between.compression = from.compression + (to.compression - from.compression) * fraction;
+                between.steerAngle = from.steer + (to.steer - from.steer) * fraction;
+                between.spinAngle = from.spin + (to.spin - from.spin) * fraction;
+                const Transform local = WheelPose(record.given[i], between);
+                Entity wheel = m_entities->GetEntity(id);
+                // The scale stays game code's.
+                Transform world = GetWorldTransform(wheel);
+                world.pos = at.pos + at.rot * local.pos;
+                world.rot = at.rot * local.rot;
+                SetWorldTransform(wheel, world);
+            }
+            record.blended = true;
+        }
+    }
+
+    void PhysicsWorld::Impl::RestoreWheels()
+    {
+        // A wheel's Transform is output only: whatever game code wrote since goes, as the next step would overwrite it.
+        for (auto& [chassis, record] : m_vehicles)
+        {
+            if (!record.blended)
+            {
+                continue;
+            }
+            // A wheel entity destroyed since is skipped, though its id may name a newer entity.
+            for (const auto& [wheel, local] : record.trueLocals)
+            {
+                if (wheel.IsValid())
+                {
+                    wheel.GetComponent<Transform>() = local;
+                }
+            }
+            record.blended = false;
         }
     }
 } // namespace Fenrir

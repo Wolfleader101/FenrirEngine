@@ -3504,6 +3504,18 @@ namespace Fenrir::Backend
         const JPH::EPhysicsUpdateError error =
             m_impl->system.Update(dt, collisionSteps, &m_impl->tempAllocator, m_impl->jobs.get());
         m_impl->collisionStepTime = dt / static_cast<float>(collisionSteps);
+        // Jolt lets a vehicle sleep with its wheels turning below 10°/s, and turns them on while it sleeps, unbraked:
+        // a sleeping vehicle's wheels are stopped, so it keeps its pose.
+        for (Impl::VehicleSlot& slot : m_impl->vehicles)
+        {
+            if (slot.constraint != nullptr && !m_impl->Bodies().IsActive(ToJolt(slot.body)))
+            {
+                for (JPH::Wheel* wheel : slot.constraint->GetWheels())
+                {
+                    wheel->SetAngularVelocity(0.0f);
+                }
+            }
+        }
         if (error != JPH::EPhysicsUpdateError::None)
         {
             m_impl->logger->Warn("Physics step ran out of room for body pairs or contacts (error " +

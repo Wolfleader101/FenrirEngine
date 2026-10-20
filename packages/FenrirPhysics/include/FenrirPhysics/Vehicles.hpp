@@ -219,7 +219,8 @@ namespace Fenrir
 
     /**
      * @brief How the last collision step left a vehicle: written by physics into Vehicle::state after every step.
-     * Game code's edits are overwritten. Fields a kind does not have stay 0.
+     * Game code's edits are overwritten. Fields a kind does not have stay 0. A sleeping vehicle keeps its last state,
+     * and its wheels theirs, with their spin 0.
      */
     struct VehicleState
     {
@@ -277,6 +278,12 @@ namespace Fenrir
      *
      * Only the chassis collides: queries and contact events see its body and name its entity, a body falling onto a
      * wheel passes through it to the chassis, and QueryFilter::ignoreBody takes the chassis entity to skip the vehicle.
+     *
+     * Parking is the handbrake: a vehicle at rest falls asleep as any body does, but never while `forward` is held or
+     * its engine is above idle. Asleep, it keeps its last `state`, its wheels' spin 0. Any change to `input`, any edit
+     * to a vehicle component (Vehicle, VehicleWheel, VehicleDifferential, VehicleAntiRollBar) and any rebuild wake the
+     * chassis, so pressing the throttle always drives. Stated cost: registering any vehicle stops the physics backend
+     * skipping its update of a world where everything sleeps, so a parked vehicle costs a little every tick.
      */
     struct Vehicle
     {
@@ -346,6 +353,11 @@ namespace Fenrir
      * rotation is the chassis's, so left and right wheels can share a symmetric mesh. The
      * Transform is output only: game code's writes to it are overwritten, and physics never reads a mount point from
      * it. Keep wheel entities unscaled and out of the chassis's hierarchy, and give each a scaled look as a child.
+     *
+     * Between ticks the wheels are interpolated with their chassis, under its RigidBody::interpolate and
+     * PhysicsConfig::interpolate, with no switch of their own: compression, steer and spin are blended between the last
+     * two steps, then posed on the chassis's blended pose, and `Tick` systems see the true pose. A teleported chassis
+     * or a rebuild snaps them. With the chassis not interpolated they are shown at their step poses.
      *
      * Every setting is a live edit, applied on the next tick and waking the chassis. Out-of-range values are corrected
      * with one warning per wheel: negative inertias, frictions, brake torques, travel and widths are treated as 0, the
