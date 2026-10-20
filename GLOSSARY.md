@@ -309,6 +309,14 @@ A link between two wheels' suspensions that resists the chassis leaning in a cor
 How far a wheel can rise from full extension, where it hangs when the chassis is lifted, toward the chassis. A wheel's position is its centre at full extension.
 *Avoid:* suspension length (the backend measures from the top of the suspension instead).
 
+**Compression**
+How far a wheel has risen from full extension at this moment, never more than its suspension travel. Physics reports it for each wheel.
+*Avoid:* suspension length, ride height (the chassis's height, not one wheel's).
+
+**Slip**
+How much a tyre is sliding over the ground rather than rolling. Along the wheel, it is how much faster or slower the tyre spins than the ground passes under it. Across the wheel, it is the angle between where the wheel points and where it is going. A tyre grips best at a little slip and slides beyond that.
+*Avoid:* skid (one range of slip, past the peak), drift.
+
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).

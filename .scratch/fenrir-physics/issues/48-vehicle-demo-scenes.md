@@ -16,3 +16,5 @@ The vehicles spec ships two DemoApp scenes on F6 through `DemoScenes` (examples/
 - **The spike's scene:** whether it becomes the C++ scene.
 - **Smoke runs:** an autopilot for `FENRIR_DEMO_KEYS`, and `FENRIR_DEMO_SCENE`.
 - **Hand checks:** what the engine developer verifies by hand.
+
+From "How does a vehicle step each tick, and what does game code read back?": physics poses and interpolates the wheel entities, so wheel meshes are children of wheel entities with nothing else to do. Readouts (speed, RPM, gear, per-wheel slip and compression) come from `Vehicle::state` and `VehicleWheel::state`.
