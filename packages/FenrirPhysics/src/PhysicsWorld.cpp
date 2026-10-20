@@ -244,7 +244,7 @@ namespace Fenrir
         m_backend.Step(dt, CollisionSteps(dt));
         WriteBack();
         // After the chassis: wheels are posed against its new pose.
-        WriteBackVehicles();
+        WriteBackVehicles(dt);
         MeasureJoints();
         BreakJoints();
         SendEvents(app);
@@ -283,6 +283,14 @@ namespace Fenrir
         }
     }
 
+    Transform PhysicsWorld::Impl::Shown::Between(float fraction) const
+    {
+        Transform world = current;
+        world.pos = previous.pos + (current.pos - previous.pos) * fraction;
+        world.rot = Math::Slerp(previous.rot, current.rot, fraction);
+        return world;
+    }
+
     void PhysicsWorld::Impl::AdvancePoses()
     {
         for (auto& [id, record] : m_bodies)
@@ -313,6 +321,7 @@ namespace Fenrir
         {
             restore(id, record.shown, false);
         }
+        RestoreWheels();
     }
 
     void PhysicsWorld::Impl::Blend(float fraction)
@@ -392,13 +401,16 @@ namespace Fenrir
             Transform world = *body.stepPose;
             if (!body.atStepPose)
             {
-                world.pos = shown.previous.pos + (shown.current.pos - shown.previous.pos) * fraction;
-                world.rot = Math::Slerp(shown.previous.rot, shown.current.rot, fraction);
+                const Transform between = shown.Between(fraction);
+                world.pos = between.pos;
+                world.rot = between.rot;
             }
             SetWorldTransform(body.entity, world);
             shown.shownLocal = body.entity.GetComponent<Transform>();
             shown.blended = true;
         }
+        // After the bodies: wheels are posed on their chassis's blended pose.
+        BlendWheels(fraction);
     }
 
     std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const

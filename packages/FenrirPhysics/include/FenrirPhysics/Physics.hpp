@@ -44,8 +44,8 @@ namespace Fenrir
          * alone. Results are the same either way.
          */
         bool useWorkerThreads = true;
-        /** @brief Whether bodies and characters are interpolated between ticks (RigidBody::interpolate,
-         * CharacterBody::interpolate). Off: every one is shown at its step poses only. */
+        /** @brief Whether bodies, characters and vehicles' wheels are interpolated between ticks
+         * (RigidBody::interpolate, CharacterBody::interpolate). Off: every one is shown at its step poses only. */
         bool interpolate = true;
     };
 

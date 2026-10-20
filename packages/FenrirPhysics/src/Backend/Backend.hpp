@@ -635,7 +635,8 @@ namespace Fenrir::Backend
         /** @brief Replaces a vehicle's anti-roll bars. Never during a step. */
         void SetVehicleAntiRollBars(VehicleId id, std::span<const VehicleAntiRollBarDesc> antiRollBars);
 
-        /** @brief A vehicle and its wheels as the last step (or its making) left them. */
+        /** @brief A vehicle and its wheels as the last step (or its making) left them. A step that leaves its body
+         * asleep stops its wheels, so they read 0 rad/s and keep their spin angle. */
         [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
 
         /** @brief Gives one of a vehicle's wheels, by its wheel index, new settings, patched in place: its spin and
