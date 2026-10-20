@@ -14,3 +14,5 @@ What does the physics scripting extension (`FenrirPhysicsScripting`, contract `F
 - **State:** read-only in C# if written back (as `CharacterState` is), or native queries in the foundation's pattern.
 - **Robustness:** the foundation's no-op-with-warning rules.
 - **What the C# demo scene needs** that tests alone would not prove.
+
+From "Which settings does each vehicle kind expose?": no vehicle component holds an array (curves are shape fields, gears are generated), so the **Arrays** bullet needs no FenrirScripting prerequisite. Two more components to map: `VehicleDifferential` and `VehicleAntiRollBar`, each naming two wheel entities. `VehicleInput` gains `gear`, `clutch`, `leftTrack` and `rightTrack` (track ratios default to 1).

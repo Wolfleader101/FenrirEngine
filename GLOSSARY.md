@@ -290,8 +290,24 @@ How a vehicle is driven. One of:
 *Avoid:* tank (for the kind), vehicle type (for the idea; the code's enum may say type).
 
 **Driver input**
-What game code sets on a vehicle to drive it: how hard to drive forward or back, which way to steer, how hard to brake and to pull the handbrake (for a tracked vehicle, each track's speed instead of steering). It stays as set until game code changes it; physics never writes it.
+What game code sets on a vehicle to drive it: how hard to drive forward or back, which way to steer, how hard to brake and to pull the handbrake (for a tracked vehicle, each track's speed instead of steering), and, with a manual gearbox, which gear and how far the clutch is pressed. It stays as set until game code changes it; physics never writes it.
 *Avoid:* controls, commands.
+
+**Drivetrain**
+Everything that turns driver input into turning wheels: the engine, the gearbox (automatic, or manual with gears game code picks), and the differentials or tracks that share the engine's torque out. Brakes and suspension are not part of it.
+*Avoid:* powertrain, engine (one part of it).
+
+**Differential**
+What shares a vehicle's engine torque between two wheels (or gives one wheel its share), letting them turn at different speeds through a corner. A wheel in no differential is not driven: it only rolls and brakes. A vehicle with no differential at all drives every wheel.
+*Avoid:* diff, axle (an axle is where two wheels sit, not what drives them).
+
+**Anti-roll bar**
+A link between two wheels' suspensions that resists the chassis leaning in a corner by pushing the less compressed side down.
+*Avoid:* sway bar, stabiliser.
+
+**Suspension travel**
+How far a wheel can rise from full extension, where it hangs when the chassis is lifted, toward the chassis. A wheel's position is its centre at full extension.
+*Avoid:* suspension length (the backend measures from the top of the suspension instead).
 
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
