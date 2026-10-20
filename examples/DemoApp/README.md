@@ -20,7 +20,9 @@ keys.
 - **Joints (C#)**, with physics and scripting both on: a breakable bridge, a lift, a spring rope and a limb, built and run entirely
   by a C# script (see "The C# joints scene" below).
 - **Vehicles (C++)**, with physics on: a car driven round a track of bumps and a ramp, with a chase camera, built in C++
-  (`src/VehicleScene.hpp`, whose header describes it; entering the scene logs its keys).
+  (`src/VehicleScene.hpp`, whose header describes it; entering the scene logs its keys). A gamepad drives it too: the first
+  connected one is written each frame onto the active scene's `DemoGamepad` (`src/DemoGamepad.hpp`, shared with C# as
+  `Demo.DemoGamepad`, `scripts/DemoGamepad.cs`), and beyond a 0.15 deadzone its triggers and left stick win over the keys.
 
 | Key or button | Does |
 |---|---|
