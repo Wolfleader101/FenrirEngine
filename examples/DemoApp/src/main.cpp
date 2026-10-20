@@ -43,6 +43,7 @@
 #include "CharacterScene.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
+#include "MotorcycleScene.hpp"
 #include "VehicleScene.hpp"
 #endif
 
@@ -690,6 +691,16 @@ int main(int argc, char* argv[])
         .AddSequentialSystems(Fenrir::SchedulePriority::Update,
                               {[&vehicleScene](Fenrir::App& running) { vehicleScene.Update(running); }});
     demoScenes.Register(VehicleScene::Scene());
+
+    // Motorcycle (C++), the second of the F6 family, made and driven as Vehicles (C++) is, with the same chase camera.
+    MotorcycleScene motorcycleScene(cube, sphere, aabbShader);
+    app.AddSystem(Fenrir::SchedulePriority::PostInit,
+                  [&motorcycleScene](Fenrir::App& running) { motorcycleScene.Init(running); })
+        .AddSequentialSystems(Fenrir::SchedulePriority::Tick,
+                              {[&motorcycleScene](Fenrir::App& running) { motorcycleScene.Tick(running); }})
+        .AddSequentialSystems(Fenrir::SchedulePriority::Update,
+                              {[&motorcycleScene](Fenrir::App& running) { motorcycleScene.Update(running); }});
+    demoScenes.Register(MotorcycleScene::Scene());
 #endif
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.

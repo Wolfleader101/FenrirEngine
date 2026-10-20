@@ -23,6 +23,9 @@ keys.
   (`src/VehicleScene.hpp`, whose header describes it; entering the scene logs its keys). A gamepad drives it too: the first
   connected one is written each frame onto the active scene's `DemoGamepad` (`src/DemoGamepad.hpp`, shared with C# as
   `Demo.DemoGamepad`, `scripts/DemoGamepad.cs`), and beyond a 0.15 deadzone its triggers and left stick win over the keys.
+- **Motorcycle (C++)**, with physics on: Jolt's sample motorcycle on open tarmac, standing at rest and leaning into turns,
+  with the same chase camera, built in C++ (`src/MotorcycleScene.hpp`, whose header describes it; entering the scene logs
+  its keys).
 
 | Key or button | Does |
 |---|---|
@@ -34,7 +37,7 @@ keys.
 | `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
 | `F4` | Steps Default → Joints (C++) → Joints (C#) → Default (physics on; without scripting it switches between Default and Joints (C++)). |
 | `J` | In the Physics (C#) scene: kicks every box and sphere into the air. |
-| `F6` | Switches between Default and Vehicles (C++) (physics on). |
+| `F6` | Steps from Default to Vehicles (C++), then Motorcycle (C++), then back to Default (physics on). |
 
 Physics steps only the active scene, so the scene you switch away from waits, bodies mid-air and all, and carries on from there
 when you switch back. The scripting demo's C# systems also act only on the active scene, and each scene's keys act only while it
@@ -135,7 +138,7 @@ To run one scene by itself, `FENRIR_DEMO_SCENE=<name>` starts in it (by its name
 FENRIR_DEMO_SCENE="Physics (C#)" FENRIR_DEMO_KEYS=1 ./DemoApp.exe
 ```
 
-The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scene is `"Vehicles (C++)"`.
+The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scenes are `"Vehicles (C++)"` and `"Motorcycle (C++)"`.
 
 ### Change the script while the demo runs
 

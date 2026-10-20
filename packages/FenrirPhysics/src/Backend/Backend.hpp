@@ -68,6 +68,19 @@ namespace Fenrir::Backend
         std::uint32_t value = ~0u;
     };
 
+    /** @brief A wheeled vehicle's or a motorcycle's drivetrain: its engine, gearbox and limited-slip ratio. */
+    inline WheeledVehicle DrivetrainOf(const VehicleKind& kind)
+    {
+        if (kind.Is<MotorcycleVehicle>())
+        {
+            const MotorcycleVehicle& motorcycle = kind.As<MotorcycleVehicle>();
+            return WheeledVehicle{.engine = motorcycle.engine,
+                                  .transmission = motorcycle.transmission,
+                                  .limitedSlipRatio = motorcycle.limitedSlipRatio};
+        }
+        return kind.As<WheeledVehicle>();
+    }
+
     /** @brief One wheel of a vehicle, its settings already in range: physics corrects them first. */
     struct VehicleWheelDesc
     {
@@ -608,8 +621,9 @@ namespace Fenrir::Backend
         /**
          * @brief Makes a vehicle on a made dynamic body, waking it: from the next Step it runs inside each collision
          * step, every wheel probing the ground beneath it, filtered as the body is and never finding the body itself or
-         * a trigger. Its wheels start still, its engine at idle and its gearbox in neutral, unless it carries those
-         * over from `desc.carried`. Never during a step.
+         * a trigger. A motorcycle's lean damping is capped privately in each Step, by its chassis's roll inertia and
+         * the collision-step time, so a light bike stays stable. Its wheels start still, its engine at idle and its
+         * gearbox in neutral, unless it carries those over from `desc.carried`. Never during a step.
          */
         [[nodiscard]] VehicleId CreateVehicle(const VehicleDesc& desc);
 
@@ -620,7 +634,8 @@ namespace Fenrir::Backend
         /**
          * @brief Applies a vehicle's kind, already in range, from the next Step: its engine (the current RPM kept in
          * its new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic
-         * shift under way is finished at once) and its limited-slip ratio. Wakes its body. Never during a step.
+         * shift under way is finished at once), its limited-slip ratio and a motorcycle's lean switches. The kind's
+         * type and a motorcycle's lean limit are as the vehicle was made with. Wakes its body. Never during a step.
          */
         void UpdateVehicle(VehicleId id, const VehicleKind& kind);
 
