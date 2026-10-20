@@ -11,7 +11,7 @@ add_executable(FenrirPhysicsTests PublicHeaders.cpp Bodies.cpp Shapes.cpp Worlds
                                   CharacterPushes.cpp CharacterDebugLines.cpp CharacterSlopes.cpp CharacterAmongBodies.cpp
                                   CharacterContacts.cpp Vehicles.cpp VehiclePoses.cpp VehicleSettings.cpp VehicleGearbox.cpp
                                   VehicleDifferentials.cpp VehicleSwitching.cpp VehicleRebuilds.cpp
-                                  VehicleDebugLines.cpp
+                                  VehicleDebugLines.cpp VehicleGround.cpp
                                   CharacterTest.hpp VehicleTest.hpp
                                   PhysicsProbe.hpp)
 target_link_libraries(FenrirPhysicsTests PRIVATE FenrirPhysics Catch2::Catch2WithMain)

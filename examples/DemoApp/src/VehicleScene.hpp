@@ -26,6 +26,13 @@
 // origin, facing north (-Z); ten bumps along the start straight from z = -25 to -43; and a ramp at z = -70 rising to
 // 2 m, then a drop.
 //
+// Grip comes from the ground's PhysicsMaterial, with no surface table: east of the start an ice lane (0.05), where the
+// wheels spin and read "sliding", and a grass lane (0.3), looser than the tarmac. Further east a wall of 20 kg crates
+// the car shoves aside (its chassis dips over them, the stated limit), and beyond the tarmac's east edge a ferry: a
+// kinematic platform game code shuttles at 2 m/s across a gap to a far bank, which a parked car rides through its
+// tyres' grip. A pedestrian, a standing character, waits on the start straight: a car meets it with its chassis and
+// stops, and its wheels never climb it. The autopilot steers round it.
+//
 // The camera is a VehicleCamera: C++ game code that chases the car and writes the scene's DemoCamera, which
 // DemoCameras copies into the app's camera. C frees the camera (WASD flies it, the arrows still drive) and snaps it
 // back.
@@ -41,6 +48,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <iterator>
 #include <numbers>
@@ -59,7 +67,9 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "Material.hpp"
 #include "ModelLibrary.hpp"
@@ -140,7 +150,9 @@ class VehicleScene
                         .familyKey = DemoFamilyKey::vehicles,
                         .keyHelp = "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
                                    "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
-                                   "still drive) and snaps it back. North of the start: ten bumps, then a ramp. L logs "
+                                   "still drive) and snaps it back. North of the start: a pedestrian, ten bumps, then "
+                                   "a ramp. East: an ice lane, a grass lane, a wall of crates and a ferry across a gap "
+                                   "to a far bank. L logs "
                                    "the car's state, P drives the track by itself. M switches the gearbox between "
                                    "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
                                    "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
@@ -155,8 +167,9 @@ class VehicleScene
                         .smokeKeys = {GLFW_KEY_P}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
         scene.smokeKeys.insert(scene.smokeKeys.begin(), 7, GLFW_KEY_F2);
-        // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
-        scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
+        // The autopilot drives a whole lap, every piece and the ferry both ways, while L logs the state, then stops,
+        // and each key is tapped twice.
+        scene.smokeKeys.insert(scene.smokeKeys.end(), 240, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
         for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9,
                               GLFW_KEY_T, GLFW_KEY_8})
@@ -182,6 +195,10 @@ class VehicleScene
         BuildTarmac();
         BuildBumps();
         BuildRamp();
+        BuildLanes();
+        BuildCrates();
+        BuildFerry();
+        BuildPedestrian();
         MakeCar();
         GiveCarDrivetrain();
 
@@ -234,6 +251,9 @@ class VehicleScene
             return;
         }
         ++m_tick;
+        const float dt = static_cast<float>(app.GetTime().tickRate);
+        MoveFerry(dt);
+        HoldPedestrian(app, dt);
         Drive(app);
     }
 
@@ -247,12 +267,25 @@ class VehicleScene
         float direction = 1.0f;
     };
 
+    // Where the ferry waits: by the tarmac, or by the far bank.
+    enum class Dock : std::uint8_t
+    {
+        None,
+        Near,
+        Far
+    };
+
     // A point the autopilot drives through, and how fast it takes the way there.
     struct Waypoint
     {
         Fenrir::Math::Vec3 at;
         float speed = 12.0f; // m/s
         bool manual = false; // Whether the way there is driven in Manual, changing gear by hand.
+        float reach = 6.0f;  // m: the autopilot moves on this close to it.
+        // The ferry's side it waits for before setting off here, braked: none, its near or its far dock.
+        Dock dock = Dock::None;
+        // Whether the way there drives onto the ferry, so it waits for the ferry to have just docked.
+        bool board = false;
     };
 
     // A pad button and the key it presses while held.
@@ -411,6 +444,7 @@ class VehicleScene
         steer -= held(GLFW_KEY_LEFT) || (wasd && held(GLFW_KEY_A)) ? 1.0f : 0.0f;
         float clutch = held(GLFW_KEY_LEFT_SHIFT) || held(GLFW_KEY_RIGHT_SHIFT) ? 1.0f : 0.0f;
         bool manual = m_manual;
+        bool hold = false;
         // The pad wins beyond the deadzone. The left trigger is S's: it brakes, then reverses once stopped.
         const DemoGamepad& pad = m_gamepad.GetComponent<DemoGamepad>();
         throttle = pad.RightTrigger > deadzone ? pad.RightTrigger : throttle;
@@ -418,7 +452,7 @@ class VehicleScene
         steer = std::abs(pad.LeftStick.x) > deadzone ? pad.LeftStick.x : steer;
         if (m_autopilot)
         {
-            Autopilot(app, throttle, back, steer, manual, clutch);
+            Autopilot(app, throttle, back, steer, manual, clutch, hold);
         }
 
         Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
@@ -450,19 +484,33 @@ class VehicleScene
                 m_car.direction = forward > 0.0f ? 1.0f : -1.0f;
             }
         }
-        vehicle.input.forward = forward;
-        vehicle.input.brake = brake;
+        // Waiting for the ferry, braked: on board, it rides the ferry through its tyres' grip.
+        vehicle.input.forward = hold ? 0.0f : forward;
+        vehicle.input.brake = hold ? 1.0f : brake;
     }
 
-    // Steers for the next waypoint of the route, and holds its speed, in the waypoint's gearbox mode.
-    void Autopilot(Fenrir::App& app, float& throttle, float& back, float& steer, bool& manual, float& clutch)
+    // Steers for the next waypoint of the route, and holds its speed, in the waypoint's gearbox mode. Before a
+    // waypoint that waits for the ferry it holds the car braked until the ferry is ready.
+    void Autopilot(Fenrir::App& app, float& throttle, float& back, float& steer, bool& manual, float& clutch,
+                   bool& hold)
     {
         const std::vector<Waypoint>& route = Route();
         const Waypoint& next = route[m_waypoint % route.size()];
+        // Once set off for a waypoint it drives on, though the ferry's window to board closes on the way.
+        if (m_setOff != m_waypoint && !FerryReady(next))
+        {
+            throttle = 0.0f;
+            back = 0.0f;
+            steer = 0.0f;
+            manual = false;
+            hold = true;
+            return;
+        }
+        m_setOff = m_waypoint;
         const Fenrir::Transform at = Fenrir::GetWorldTransform(m_car.chassis);
         Fenrir::Math::Vec3 to = next.at - at.pos;
         to.y = 0.0f;
-        if (Fenrir::Math::Magnitude(to) < reached)
+        if (Fenrir::Math::Magnitude(to) < next.reach)
         {
             ++m_waypoint;
             app.Logger()->Info("Autopilot: waypoint {} reached", m_waypoint % route.size());
@@ -579,12 +627,186 @@ class VehicleScene
                 Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), .speed = 6.0f}};
     }
 
+    // Two lanes on the tarmac east of the start, 6 m wide and 60 m long, north to south: ice (friction 0.05) and grass
+    // (0.3). Each is a thin static slab with its own PhysicsMaterial, so the wheels on it name it as their ground and
+    // grip by it.
+    void BuildLanes()
+    {
+        Static("Ice", Fenrir::Math::Vec3(iceX, 0.01f, -50.0f), Fenrir::Math::Vec3(6.0f, 0.02f, 60.0f),
+               Fenrir::Math::Vec3(0.75f, 0.9f, 1.0f))
+            .AddComponent<Fenrir::PhysicsMaterial>(Fenrir::PhysicsMaterial{.friction = 0.05f});
+        Static("Grass", Fenrir::Math::Vec3(grassX, 0.01f, -50.0f), Fenrir::Math::Vec3(6.0f, 0.02f, 60.0f),
+               Fenrir::Math::Vec3(0.3f, 0.6f, 0.2f))
+            .AddComponent<Fenrir::PhysicsMaterial>(Fenrir::PhysicsMaterial{.friction = 0.3f});
+    }
+
+    // Round to the south end of the ice and north up it, as fast as on tarmac: the wheels spin, "sliding".
+    static std::vector<Waypoint> IceLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(20.0f, 0.0f, 10.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(iceX, 0.0f, -12.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(iceX, 0.0f, -88.0f), .speed = 14.0f}};
+    }
+
+    // Across to the grass's north end and south down it.
+    static std::vector<Waypoint> GrassLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(grassX, 0.0f, -92.0f), .speed = 6.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(grassX, 0.0f, -15.0f), .speed = 14.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(grassX, 0.0f, 5.0f), .speed = 8.0f}};
+    }
+
+    // A wall of 20 kg crates, 0.6 m on a side, eight wide and three high, across a lane north at x = 70.
+    void BuildCrates()
+    {
+        for (int row = 0; row < 3; ++row)
+        {
+            for (int column = 0; column < 8; ++column)
+            {
+                const Fenrir::Math::Vec3 at(cratesX - 2.1f + 0.6f * static_cast<float>(column),
+                                            0.3f + 0.6f * static_cast<float>(row), -50.0f);
+                Fenrir::Entity crate =
+                    Look("Crate", at, Fenrir::Math::Vec3(0.6f), Fenrir::Math::Vec3(0.7f, 0.5f, 0.25f));
+                crate.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = 20.0f});
+                crate.AddComponent<Fenrir::Collider>();
+            }
+        }
+    }
+
+    // North through the crates at 10 m/s.
+    static std::vector<Waypoint> CratesLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(cratesX, 0.0f, -20.0f), .speed = 8.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(cratesX, 0.0f, -75.0f), .speed = 10.0f}};
+    }
+
+    // Past the tarmac's east edge (x = 100), a 24 m gap to a far bank, with a floor 6 m down to catch a car that
+    // misses; across it the ferry, a 10 m by 8 m kinematic platform flush with the tarmac. It waits 12 s at each
+    // side and crosses in 7 s at 2 m/s.
+    void BuildFerry()
+    {
+        Static("Far bank", Fenrir::Math::Vec3(139.0f, -0.5f, ferryZ), Fenrir::Math::Vec3(30.0f, 1.0f, 50.0f),
+               Fenrir::Math::Vec3(0.35f));
+        Static("Gap bottom", Fenrir::Math::Vec3(112.0f, -6.5f, ferryZ), Fenrir::Math::Vec3(24.0f, 1.0f, 60.0f),
+               Fenrir::Math::Vec3(0.2f, 0.25f, 0.4f));
+        m_ferry = Look("Ferry", FerryCentre(0.0f), Fenrir::Math::Vec3(10.0f, 0.4f, 8.0f),
+                       Fenrir::Math::Vec3(0.8f, 0.35f, 0.3f));
+        m_ferry.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.motionType = Fenrir::MotionType::Kinematic});
+        m_ferry.AddComponent<Fenrir::Collider>();
+    }
+
+    // The ferry's way east, in metres from its near dock, at each second of its cycle: waits, crosses, waits, back.
+    struct Stop
+    {
+        float second;
+        float along;
+    };
+    static constexpr std::array<Stop, 5> ferryPath = {Stop{0.0f, 0.0f}, Stop{12.0f, 0.0f}, Stop{19.0f, 14.0f},
+                                                      Stop{31.0f, 14.0f}, Stop{38.0f, 0.0f}};
+
+    static Fenrir::Math::Vec3 FerryCentre(float seconds)
+    {
+        const float into = std::fmod(seconds, ferryPath.back().second);
+        std::size_t i = 1;
+        while (ferryPath[i].second < into)
+        {
+            ++i;
+        }
+        const Stop& from = ferryPath[i - 1];
+        const Stop& to = ferryPath[i];
+        const float along = from.along + (to.along - from.along) * (into - from.second) / (to.second - from.second);
+        return Fenrir::Math::Vec3(105.0f + along, -0.2f, ferryZ);
+    }
+
+    // Game code moving the ferry: its Transform written each tick, so physics moves it kinematically.
+    void MoveFerry(float dt)
+    {
+        m_ferrySeconds += dt;
+        m_ferry.GetComponent<Fenrir::Transform>().pos = FerryCentre(m_ferrySeconds);
+    }
+
+    // Whether the autopilot may set off for `waypoint`: the ferry it waits for is at that dock, and to drive aboard
+    // it has only just docked, so there is time to get on.
+    [[nodiscard]] bool FerryReady(const Waypoint& waypoint) const
+    {
+        if (waypoint.dock == Dock::None)
+        {
+            return true;
+        }
+        const float into = std::fmod(m_ferrySeconds, ferryPath.back().second);
+        const Stop& docked = waypoint.dock == Dock::Near ? ferryPath[0] : ferryPath[2];
+        const float waited = into - docked.second;
+        return waited >= 0.0f && waited < (waypoint.board ? 2.0f : ferryPath[1].second - ferryPath[0].second);
+    }
+
+    // To the near dock, onto the ferry, across parked on it, off onto the far bank and round, then back the same way
+    // and home.
+    static std::vector<Waypoint> FerryLeg()
+    {
+        return {Waypoint{.at = Fenrir::Math::Vec3(80.0f, 0.0f, ferryZ), .speed = 6.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(92.0f, 0.0f, ferryZ), .speed = 3.0f, .reach = 3.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(105.0f, 0.0f, ferryZ),
+                         .speed = 3.0f,
+                         .reach = 1.5f,
+                         .dock = Dock::Near,
+                         .board = true},
+                Waypoint{.at = Fenrir::Math::Vec3(131.0f, 0.0f, ferryZ), .speed = 3.0f, .dock = Dock::Far},
+                Waypoint{.at = Fenrir::Math::Vec3(146.0f, 0.0f, ferryZ + 12.0f), .speed = 5.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(148.0f, 0.0f, ferryZ - 12.0f), .speed = 5.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(132.0f, 0.0f, ferryZ), .speed = 3.0f, .reach = 3.0f},
+                Waypoint{.at = Fenrir::Math::Vec3(119.0f, 0.0f, ferryZ),
+                         .speed = 3.0f,
+                         .reach = 1.5f,
+                         .dock = Dock::Far,
+                         .board = true},
+                Waypoint{.at = Fenrir::Math::Vec3(93.0f, 0.0f, ferryZ), .speed = 3.0f, .dock = Dock::Near},
+                Waypoint{.at = Fenrir::Math::Vec3(60.0f, 0.0f, 15.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 15.0f)},
+                Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, 0.0f), .speed = 6.0f}};
+    }
+
+    // A pedestrian standing on the start straight, 10 m north of the start: a capsule with a CharacterBody, its look a
+    // child with no collider.
+    void BuildPedestrian()
+    {
+        m_pedestrian = m_entities->CreateEntity();
+        m_pedestrian.GetComponent<Fenrir::Name>().Set("Pedestrian");
+        m_pedestrian.GetComponent<Fenrir::Transform>().pos = pedestrianFeet + Fenrir::Math::Vec3(0.0f, 0.8f, 0.0f);
+        m_pedestrian.AddComponent<Fenrir::Collider>(
+            Fenrir::Collider{Fenrir::CapsuleShape{.halfHeight = 0.5f, .radius = 0.3f}});
+        m_pedestrian.AddComponent<Fenrir::CharacterBody>();
+        m_pedestrian.AddChild(Look("Pedestrian look", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.6f, 1.6f, 0.6f),
+                                   Fenrir::Math::Vec3(0.95f, 0.85f, 0.3f)));
+    }
+
+    // Game code standing the pedestrian still each tick: no walk, gravity added, so what a push wrote back into its
+    // velocity is gone by the next move.
+    void HoldPedestrian(Fenrir::App& app, float dt)
+    {
+        // The scene's world is made by its first step, after the first Tick.
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        Fenrir::CharacterBody& body = m_pedestrian.GetComponent<Fenrir::CharacterBody>();
+        body.velocity = Fenrir::Math::Vec3(0.0f, body.velocity.y + world->Gravity().y * dt, 0.0f);
+    }
+
+    // Off the start pad to the west of the pedestrian and past it, before the bumps.
+    static std::vector<Waypoint> PedestrianLeg()
+    {
+        return {Waypoint{.at = pedestrianFeet + Fenrir::Math::Vec3(-3.5f, 0.0f, 4.0f), .speed = 5.0f, .reach = 2.0f},
+                Waypoint{.at = pedestrianFeet + Fenrir::Math::Vec3(-3.5f, 0.0f, -4.0f), .speed = 5.0f, .reach = 2.0f}};
+    }
+
     // The route: each piece's leg in turn, over and over.
     static const std::vector<Waypoint>& Route()
     {
         static const std::vector<Waypoint> route = [] {
             std::vector<Waypoint> legs;
-            for (const std::vector<Waypoint>& leg : {BumpsLeg(), RampLeg(), GearboxLeg()})
+            for (const std::vector<Waypoint>& leg :
+                 {PedestrianLeg(), BumpsLeg(), RampLeg(), GearboxLeg(), IceLeg(), GrassLeg(), CratesLeg(), FerryLeg()})
             {
                 legs.insert(legs.end(), leg.begin(), leg.end());
             }
@@ -793,13 +1015,17 @@ class VehicleScene
             {
                 continue;
             }
-            const Fenrir::VehicleWheelState& wheel = m_car.wheels[i].GetComponent<Fenrir::VehicleWheel>().state;
+            const Fenrir::VehicleWheel& settings = m_car.wheels[i].GetComponent<Fenrir::VehicleWheel>();
+            const Fenrir::VehicleWheelState& wheel = settings.state;
             if (wheel.onGround)
             {
-                std::snprintf(text.data(), text.size(), "Wheel %zu: %s, compression %.3f m, slip %.2f / %.1f°", i,
+                // Past the tyre's slideSlip either way, it has lost its grip.
+                const bool sliding = std::abs(wheel.longitudinalSlip) > settings.longitudinal.slideSlip ||
+                                     std::abs(wheel.lateralSlip) > settings.lateral.slideSlip;
+                std::snprintf(text.data(), text.size(), "Wheel %zu: %s, compression %.3f m, slip %.2f / %.1f°%s", i,
                               NameOf(wheel.groundCollider).c_str(), static_cast<double>(wheel.compression),
                               static_cast<double>(wheel.longitudinalSlip),
-                              static_cast<double>(wheel.lateralSlip / degrees));
+                              static_cast<double>(wheel.lateralSlip / degrees), sliding ? ", sliding" : "");
             }
             else
             {
@@ -837,13 +1063,17 @@ class VehicleScene
 
     static constexpr float degrees = std::numbers::pi_v<float> / 180.0f;
     static constexpr float stoppedSpeed = 0.5f; // m/s: below it, S reverses rather than brakes.
-    static constexpr float reached = 6.0f;      // m: the autopilot moves on this close to a waypoint.
     static constexpr long shiftTicks = 30;      // The autopilot's least time between shifts by hand.
     static constexpr long clutchTicks = 10;     // How long it holds the clutch for each.
     static constexpr float deadzone = 0.15f;    // A pad's trigger or stick axis this close to rest leaves the keys be.
     static constexpr std::size_t rearLeft = 2;  // The wheel 8 destroys and remakes, in wheel order.
     inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f); // The car's place on the pad.
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+    static constexpr float iceX = 40.0f;    // The ice lane's middle.
+    static constexpr float grassX = 52.0f;  // The grass lane's middle.
+    static constexpr float cratesX = 70.0f; // The middle of the crates' lane.
+    static constexpr float ferryZ = -30.0f; // The line the ferry crosses on.
+    inline static const Fenrir::Math::Vec3 pedestrianFeet = Fenrir::Math::Vec3(0.0f, 0.0f, -10.0f);
 
     const Model* m_cube;
     const Model* m_sphere;
@@ -852,6 +1082,9 @@ class VehicleScene
     Driven m_car;
     Fenrir::Entity m_rearDifferential;
     Fenrir::Entity m_rearBar;
+    Fenrir::Entity m_ferry;
+    Fenrir::Entity m_pedestrian;
+    float m_ferrySeconds = 0.0f; // How long the ferry has run, while the scene is active.
     Fenrir::Entity m_camera;
     Fenrir::Entity m_gamepad;
     VehicleCamera m_followCamera;
@@ -863,6 +1096,7 @@ class VehicleScene
     bool m_softSprings = false;
     bool m_bigWheels = false;
     std::size_t m_waypoint = 0;
+    std::size_t m_setOff = 0; // The waypoint the autopilot last set off for: it holds for the ferry only before.
     long m_tick = 0;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
 };
