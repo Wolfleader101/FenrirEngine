@@ -10,10 +10,17 @@
 
 **Blocked by:** 01 (Vehicle tracer bullet); 04 (Differentials and anti-roll bars).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests`: a chassis teleport keeps RPM and spin and snaps wheel poses; adding a wheel mid-drive keeps RPM, gear and the surviving wheels' spin, the new wheel starting still; a chassis whose collider is swapped in one drain carries over the same way.
-- [ ] A chassis scale change moves wheel positions with no rebuild (RPM and spin untouched) and wakes the chassis.
-- [ ] A destroyed wheel rebuilds the vehicle; a rear differential with one dead wheel drives the other with one warning; an anti-roll bar with one dead wheel is inert; a differential with no wheels left lets its vehicle fall back to all-wheel drive.
-- [ ] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs with no errors, in Debug and Release, 8's warning the only one.
+- [x] `FenrirPhysicsTests`: a chassis teleport keeps RPM and spin and snaps wheel poses; adding a wheel mid-drive keeps RPM, gear and the surviving wheels' spin, the new wheel starting still; a chassis whose collider is swapped in one drain carries over the same way.
+- [x] A chassis scale change moves wheel positions with no rebuild (RPM and spin untouched) and wakes the chassis.
+- [x] A destroyed wheel rebuilds the vehicle; a rear differential with one dead wheel drives the other with one warning; an anti-roll bar with one dead wheel is inert; a differential with no wheels left lets its vehicle fall back to all-wheel drive.
+- [x] `FENRIR_DEMO_SCENE="Vehicles (C++)"` with `FENRIR_DEMO_KEYS=1` runs with no errors, in Debug and Release, 8's warning the only one.
 - [ ] 8 gives one warning and the car stays rear-wheel drive on its one rear wheel; 8 again restores it; T respawns the car (checked by hand).
+
+**Resolved by:** PR #PRNUM (branch claude/vibrant-morse-e72253), into dotnet-scripting. The proof is `FenrirPhysicsTests`' `[vehicles][rebuilds]` cases (`Tests/VehicleRebuilds.cpp`) and the `FENRIR_DEMO_SCENE="Vehicles (C++)" FENRIR_DEMO_KEYS=1` smoke run, which taps T and 8 twice each; the last box (watching the car by hand) is left for a person. Choices the ticket left open:
+- A teleport needed no new code: the backend vehicle is untouched by the body teleport, so its engine and wheels carry on, and wheels are posed each tick on the chassis's step pose, so they snap. The tests prove both.
+- The carry-over is read when the backend vehicle is dropped for a rebuild (`DropVehicle(record, true)` in `src/Vehicles.cpp`: a wheel-set change in the drain, the chassis's body rebuilt, or a changed wheel list or body in step 2) and kept on the record by wheel entity; the next `CreateVehicle` takes it as `VehicleDesc::carried` (engine RPM, gear, clutch, and each wheel's angular velocity and spin angle). Dropping for disabled, inactive or wheel-less forgets it, so those still start fresh. The gear is kept within the gear count.
+- Rebuild tests drive the car with a differential on each pair of wheels at 0.25 throttle: a rear-wheel-drive car at that throttle slips and grips its rear tyres on alternate ticks, so one tick's spin is not a fair compare. A wheel added on the roof, in no differential, shows the new wheel starting still.
+- A dead name is a handle whose entity is gone, or an entity that lost its VehicleWheel after the link had seen it as a wheel (`VehicleLinkRecord::wheels`); a never-wheel entity is still a wrong name, inactive. Each dead name warns once, until it is renamed or comes back.
+- The DemoApp's 8 also clears the rear anti-roll bar's name to the destroyed wheel (game code tidying a bar that is inert with one wheel anyway), so the rear differential's dead-name warning is 8's only one. The remade wheel copies the rear-right wheel's settings mirrored, so 1 and 2 still apply. T also zeroes the chassis's velocity, as a respawn.

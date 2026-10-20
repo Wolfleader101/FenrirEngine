@@ -13,6 +13,11 @@
 // are live edits: 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height
 // as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
 //
+// T respawns the car at the start, a Transform write: its engine and wheels keep turning, and the wheels go with it at
+// once. 8 destroys the car's rear-left wheel entity, a rebuild that keeps the engine, gear and other wheels' spin; the
+// rear differential, left naming the dead wheel, warns once and drives the rear-right wheel alone. 8 again remakes the
+// wheel and names it in the differential, another rebuild, and the car is rear-wheel drive on both again.
+//
 // M switches the car's gearbox between Automatic and Manual. In Manual, game code changes gear: E and Q shift up and
 // down (down past neutral is reverse), W is the pedal in the gear's direction, S brakes, and Shift holds the clutch.
 //
@@ -37,6 +42,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdio>
+#include <iterator>
 #include <numbers>
 #include <set>
 #include <string>
@@ -140,16 +146,18 @@ class VehicleScene
                                    "reverse), W drives in that gear, S brakes, and Shift holds the clutch. 1 softens "
                                    "the springs, 2 fits big wheels, 7 limits the tilt to 60 degrees (each again to "
                                    "undo). 4 switches the car off (a plain box) and on; 9 makes its chassis kinematic "
-                                   "(the car inactive, with a warning) and back. F6 goes on. A gamepad drives too: the "
-                                   "right trigger drives, the left trigger brakes and then reverses, the left stick "
-                                   "steers, A pulls the handbrake, the right stick looks round the car; X is M, the "
-                                   "bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 (left), and "
-                                   "Start 9.",
+                                   "(the car inactive, with a warning) and back. T respawns the car at the start; 8 "
+                                   "destroys its rear-left wheel (a warning) and remakes it. F6 goes on. A gamepad "
+                                   "drives too: the right trigger drives, the left trigger brakes and then reverses, "
+                                   "the left stick steers, A pulls the handbrake, the right stick looks round the car; "
+                                   "X is M, the bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 "
+                                   "(left), and Start 9.",
                         .smokeKeys = {GLFW_KEY_P}};
         // The autopilot drives every piece while L logs the state, then stops, and each key is tapped twice.
         scene.smokeKeys.insert(scene.smokeKeys.end(), 70, GLFW_KEY_L);
         scene.smokeKeys.push_back(GLFW_KEY_P);
-        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9})
+        for (const int key : {GLFW_KEY_C, GLFW_KEY_SPACE, GLFW_KEY_1, GLFW_KEY_2, GLFW_KEY_4, GLFW_KEY_7, GLFW_KEY_9,
+                              GLFW_KEY_T, GLFW_KEY_8})
         {
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
@@ -312,6 +320,14 @@ class VehicleScene
         {
             ToggleKinematic(app);
         }
+        else if (key == GLFW_KEY_T)
+        {
+            Respawn(app);
+        }
+        else if (key == GLFW_KEY_8)
+        {
+            ToggleRearLeftWheel(app);
+        }
         else if (key == GLFW_KEY_M)
         {
             m_manual = !m_manual;
@@ -339,7 +355,7 @@ class VehicleScene
         if (key == GLFW_KEY_1)
         {
             m_softSprings = !m_softSprings;
-            for (Fenrir::Entity& wheel : m_car.wheels)
+            for (const Fenrir::Entity& wheel : LiveWheels())
             {
                 wheel.GetComponent<Fenrir::VehicleWheel>().suspension.spring =
                     m_softSprings ? Fenrir::JointSpring{.frequency = 1.15f, .damping = 0.4f}
@@ -352,7 +368,7 @@ class VehicleScene
         {
             m_bigWheels = !m_bigWheels;
             const float radius = m_bigWheels ? 0.45f : 0.3f;
-            for (Fenrir::Entity& entity : m_car.wheels)
+            for (const Fenrir::Entity& entity : LiveWheels())
             {
                 Fenrir::VehicleWheel& wheel = entity.GetComponent<Fenrir::VehicleWheel>();
                 wheel.radius = radius;
@@ -580,7 +596,7 @@ class VehicleScene
     // A 1500 kg car 4 m long on the start pad, its front wheels steering, every other setting the default.
     void MakeCar()
     {
-        const Fenrir::Math::Vec3 at(0.0f, 1.0f, 0.0f);
+        const Fenrir::Math::Vec3 at = start;
         m_car.chassis =
             Chassis("Car", at, Fenrir::Math::Vec3(0.9f, 0.25f, 2.0f), 1500.0f, Fenrir::Math::Vec3(0.85f, 0.15f, 0.1f));
         m_car.chassis.AddComponent<Fenrir::Vehicle>();
@@ -618,14 +634,75 @@ class VehicleScene
                                      : "9: the chassis is dynamic: the car starts again at idle in neutral");
     }
 
+    // T: the car back on the start pad, facing north and still. A Transform write is a teleport: the engine's speed and
+    // the wheels' spin carry on, and physics poses the wheels on the chassis at once.
+    void Respawn(Fenrir::App& app)
+    {
+        Fenrir::Transform& at = m_car.chassis.GetComponent<Fenrir::Transform>();
+        at.pos = start;
+        at.rot = identity;
+        Fenrir::RigidBody& body = m_car.chassis.GetComponent<Fenrir::RigidBody>();
+        body.linearVelocity = Fenrir::Math::Vec3(0.0f);
+        body.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        m_waypoint = 0;
+        app.Logger()->Info("T: the car is back at the start, its engine and wheels still turning");
+    }
+
+    // 8: the car's rear-left wheel entity destroyed, look and all: the vehicle is rebuilt without it, keeping its
+    // engine speed, gear and the other wheels' spin. The rear differential is left naming it, to show a dead name: it
+    // warns once and drives the rear-right wheel alone, so the car stays rear-wheel drive. The rear anti-roll bar,
+    // inert with one wheel anyway, is tidied by game code. Again: a new wheel, named in both, another rebuild.
+    void ToggleRearLeftWheel(Fenrir::App& app)
+    {
+        Fenrir::Entity& wheel = m_car.wheels[rearLeft];
+        Fenrir::VehicleDifferential& differential = m_rearDifferential.GetComponent<Fenrir::VehicleDifferential>();
+        Fenrir::VehicleAntiRollBar& bar = m_rearBar.GetComponent<Fenrir::VehicleAntiRollBar>();
+        if (wheel.IsValid())
+        {
+            DestroyTree(wheel);
+            bar.leftWheel = Fenrir::Entity();
+            app.Logger()->Info("8: the rear-left wheel is gone: the rear differential drives the rear-right alone");
+            return;
+        }
+        // The rear-right wheel mirrored, so it has whatever 1 and 2 have made of the others.
+        Fenrir::VehicleWheel settings = m_car.wheels[rearLeft + 1].GetComponent<Fenrir::VehicleWheel>();
+        settings.position.x = -settings.position.x;
+        settings.state = Fenrir::VehicleWheelState{};
+        wheel = Wheel(settings, Fenrir::GetWorldTransform(m_car.chassis).pos);
+        differential.leftWheel = wheel;
+        bar.leftWheel = wheel;
+        app.Logger()->Info("8: the rear-left wheel is back, driven again");
+    }
+
+    // The car's wheel entities that are alive: 8 destroys one.
+    [[nodiscard]] std::vector<Fenrir::Entity> LiveWheels() const
+    {
+        std::vector<Fenrir::Entity> wheels;
+        std::ranges::copy_if(m_car.wheels, std::back_inserter(wheels),
+                             [](const Fenrir::Entity& wheel) { return wheel.IsValid(); });
+        return wheels;
+    }
+
+    // An entity and everything beneath it destroyed, children first.
+    void DestroyTree(const Fenrir::Entity& entity)
+    {
+        std::vector<Fenrir::Entity> children;
+        entity.ForEachChild([&children](const Fenrir::Entity& child) { children.push_back(child); });
+        for (const Fenrir::Entity& child : children)
+        {
+            DestroyTree(child);
+        }
+        m_entities->DestroyEntity(entity);
+    }
+
     // The car's rear-wheel drive and anti-roll bars: a VehicleDifferential naming its rear wheels replaces the
     // all-wheel-drive default, and a VehicleAntiRollBar across each pair of wheels keeps it level in corners. Each is
     // an entity of its own, naming two wheel entities.
     void GiveCarDrivetrain()
     {
-        Fenrir::Entity differential = m_entities->CreateEntity();
-        differential.GetComponent<Fenrir::Name>().Set("Car rear differential");
-        differential.AddComponent<Fenrir::VehicleDifferential>(
+        m_rearDifferential = m_entities->CreateEntity();
+        m_rearDifferential.GetComponent<Fenrir::Name>().Set("Car rear differential");
+        m_rearDifferential.AddComponent<Fenrir::VehicleDifferential>(
             Fenrir::VehicleDifferential{.leftWheel = m_car.wheels[2], .rightWheel = m_car.wheels[3]});
         for (const std::size_t left : {0u, 2u})
         {
@@ -633,6 +710,7 @@ class VehicleScene
             bar.GetComponent<Fenrir::Name>().Set(left == 0 ? "Car front anti-roll bar" : "Car rear anti-roll bar");
             bar.AddComponent<Fenrir::VehicleAntiRollBar>(
                 Fenrir::VehicleAntiRollBar{.leftWheel = m_car.wheels[left], .rightWheel = m_car.wheels[left + 1]});
+            m_rearBar = bar;
         }
     }
 
@@ -709,6 +787,10 @@ class VehicleScene
         m_car.chassis.GetComponent<Fenrir::Name>().Set(text.data());
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
+            if (!m_car.wheels[i].IsValid())
+            {
+                continue;
+            }
             const Fenrir::VehicleWheelState& wheel = m_car.wheels[i].GetComponent<Fenrir::VehicleWheel>().state;
             if (wheel.onGround)
             {
@@ -734,6 +816,11 @@ class VehicleScene
                            m_tick, s.forwardSpeed, s.engineRpm, s.gear, s.clutch, s.shifting, s.wheelsOnGround);
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
+            if (!m_car.wheels[i].IsValid())
+            {
+                app.Logger()->Info("  wheel {}: destroyed", i);
+                continue;
+            }
             const Fenrir::VehicleWheelState& w = m_car.wheels[i].GetComponent<Fenrir::VehicleWheel>().state;
             app.Logger()->Info("  wheel {}: on ground {}, body {}, collider {}, contact ({:.2f}, {:.2f}, {:.2f}), "
                                "normal ({:.2f}, {:.2f}, {:.2f}), ground velocity ({:.2f}, {:.2f}, {:.2f}), compression "
@@ -752,6 +839,8 @@ class VehicleScene
     static constexpr long shiftTicks = 30;      // The autopilot's least time between shifts by hand.
     static constexpr long clutchTicks = 10;     // How long it holds the clutch for each.
     static constexpr float deadzone = 0.15f;    // A pad's trigger or stick axis this close to rest leaves the keys be.
+    static constexpr std::size_t rearLeft = 2;  // The wheel 8 destroys and remakes, in wheel order.
+    inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f); // The car's place on the pad.
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
 
     const Model* m_cube;
@@ -759,6 +848,8 @@ class VehicleScene
     const Shader* m_flatShader;
     Fenrir::EntityList* m_entities = nullptr;
     Driven m_car;
+    Fenrir::Entity m_rearDifferential;
+    Fenrir::Entity m_rearBar;
     Fenrir::Entity m_camera;
     Fenrir::Entity m_gamepad;
     VehicleCamera m_followCamera;
