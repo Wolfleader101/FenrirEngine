@@ -15,6 +15,7 @@
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 
 namespace Fenrir
 {
@@ -57,6 +58,68 @@ namespace Fenrir::Backend
         /** @brief Where the constraint comes in the solve: lower first. Distinct for each joint, so the solve order
          * depends only on which joints exist, not on the order they were made and removed in. */
         std::uint32_t priority = 0;
+    };
+
+    /** @brief A vehicle in one World. Valid until the vehicle is destroyed. */
+    struct VehicleId
+    {
+        std::uint32_t value = ~0u;
+    };
+
+    /** @brief One wheel of a vehicle, its settings already in range: physics corrects them first. */
+    struct VehicleWheelDesc
+    {
+        /** @brief Relative to the body's origin, in the body's axes and world units (the chassis's world scale already
+         * applied): the wheel's centre at full extension. */
+        Math::Vec3 position = Math::Vec3(0.0f);
+        /** @brief Its settings; `vehicle`, `position` and `state` are ignored. */
+        VehicleWheel settings;
+    };
+
+    /**
+     * @brief Everything needed to make a vehicle on a made dynamic body. Chassis-local +Y is up and -Z is forward. Its
+     * kind's settings are already in range.
+     */
+    struct VehicleDesc
+    {
+        BodyId body;
+        VehicleKind kind;
+        /** @brief In wheel order. */
+        std::vector<VehicleWheelDesc> wheels;
+        /** @brief Where the vehicle comes in the solve: lower first, as JointDesc::priority. */
+        std::uint32_t priority = 0;
+    };
+
+    /** @brief One wheel as the last collision step left it. */
+    struct VehicleWheelRead
+    {
+        bool onGround = false;
+        /** @brief On ground only: the ground body's entity and its collider's, ~0u otherwise. */
+        std::uint32_t groundEntity = ~0u;
+        std::uint32_t groundCollider = ~0u;
+        Math::Vec3 contactPoint = Math::Vec3(0.0f);
+        Math::Vec3 contactNormal = Math::Vec3(0.0f);
+        Math::Vec3 groundVelocity = Math::Vec3(0.0f);
+        /** @brief Metres risen from full extension, within the wheel's travel. */
+        float compression = 0.0f;
+        float suspensionForce = 0.0f;
+        float longitudinalSlip = 0.0f;
+        /** @brief Radians. */
+        float lateralSlip = 0.0f;
+        /** @brief rad/s, + rolls forward. */
+        float angularVelocity = 0.0f;
+        /** @brief Radians, + right. */
+        float steerAngle = 0.0f;
+        /** @brief How far the wheel has turned about its axle, + forward, in radians, wrapped to one turn. */
+        float spinAngle = 0.0f;
+    };
+
+    /** @brief A vehicle and its wheels after the last step. */
+    struct VehicleRead
+    {
+        VehicleState state;
+        /** @brief In wheel order. */
+        std::vector<VehicleWheelRead> wheels;
     };
 
     /** @brief A character in one World. Valid until the character is destroyed. */
@@ -413,8 +476,8 @@ namespace Fenrir::Backend
          */
         void CreateBodies(std::span<const BodyDesc> bodies, std::span<BodyId> ids);
 
-        /** @brief Removes and destroys the bodies in one batch. Every joint's constraint naming one of them must be
-         * destroyed first. */
+        /** @brief Removes and destroys the bodies in one batch. Every joint's constraint naming one of them, and every
+         * vehicle on one, must be destroyed first. */
         void DestroyBodies(std::span<const BodyId> ids);
 
         /** @brief Makes and adds a joint's constraint between two made bodies (or a body and the world), waking them.
@@ -483,6 +546,24 @@ namespace Fenrir::Backend
          * during a step.
          */
         bool ReshapeCharacter(CharacterId id, const CollisionShape& shape, const Math::Vec3& scale, bool keepLowest);
+
+        /**
+         * @brief Makes a vehicle on a made dynamic body, waking it: from the next Step it runs inside each collision
+         * step, every wheel probing the ground beneath it, filtered as the body is and never finding the body itself or
+         * a trigger. Its wheels start still, its engine at idle and its gearbox in neutral. Never during a step.
+         */
+        [[nodiscard]] VehicleId CreateVehicle(const VehicleDesc& desc);
+
+        /** @brief Removes and destroys a vehicle, waking its body. Before its body is destroyed. Never during a step.
+         */
+        void DestroyVehicle(VehicleId id);
+
+        /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call. Wakes its
+         * body if `wake`. */
+        void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
+
+        /** @brief A vehicle and its wheels as the last step (or its making) left them. */
+        [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

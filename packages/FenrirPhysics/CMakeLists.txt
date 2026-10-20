@@ -12,6 +12,7 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Physics.hpp
     include/FenrirPhysics/PhysicsWorld.hpp
     include/FenrirPhysics/Queries.hpp
+    include/FenrirPhysics/Vehicles.hpp
 
     src/BodyComponents.hpp
     src/Characters.cpp
@@ -26,6 +27,7 @@ add_library(FenrirPhysics STATIC
     src/PhysicsWorld.cpp
     src/Queries.cpp
     src/Same.hpp
+    src/Vehicles.cpp
     src/WorldImpl.hpp
 
     src/Backend/Backend.hpp
