@@ -3180,7 +3180,7 @@ namespace Fenrir::Backend
             double total = 0.0;
             for (const VehicleDifferentialDesc& differential : differentials)
             {
-                total += differential.torqueShare;
+                total += static_cast<double>(differential.torqueShare);
             }
             out.clear();
             float shared = 0.0f;
@@ -3194,8 +3194,8 @@ namespace Fenrir::Backend
                 made.mLeftRightSplit = differential.leftRightSplit;
                 made.mLimitedSlipRatio = differential.limitedSlipRatio;
                 // All shares 0: shared equally. The last takes what is left, so the shares sum to 1 exactly.
-                const double share =
-                    total > 0.0 ? differential.torqueShare / total : 1.0 / static_cast<double>(differentials.size());
+                const double share = total > 0.0 ? static_cast<double>(differential.torqueShare) / total
+                                                 : 1.0 / static_cast<double>(differentials.size());
                 made.mEngineTorqueRatio =
                     i + 1 == differentials.size() ? std::max(1.0f - shared, 0.0f) : static_cast<float>(share);
                 shared += made.mEngineTorqueRatio;
