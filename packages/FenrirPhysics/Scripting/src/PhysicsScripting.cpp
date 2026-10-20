@@ -138,7 +138,7 @@ struct Iris::StructMapping<Fenrir::Detail::CollisionShapeLayout>
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD_AS(Layout, type, "_type"), IRIS_FIELD_AS(Layout, box, "_box"),
                            IRIS_FIELD_AS(Layout, sphere, "_sphere"), IRIS_FIELD_AS(Layout, capsule, "_capsule"),
-                           IRIS_FIELD_AS(Layout, hull, "_hull"), IRIS_FIELD_AS(Layout, mesh, "_mesh"));
+                           IRIS_FIELD_AS(Layout, hull, "_convexHull"), IRIS_FIELD_AS(Layout, mesh, "_mesh"));
 };
 
 template <>

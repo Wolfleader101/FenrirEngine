@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Fenrir.Scripting;
 
@@ -79,90 +78,14 @@ public struct MeshShape
 /// <see cref="CollisionMesh"/> holds a 64-bit id). Assigning a kind changes it; each kind's view reads or edits it in place
 /// and throws <see cref="InvalidOperationException"/> if the shape is another kind. New, it is a unit box.
 /// </summary>
+[TaggedUnion(Noun = "shape")]
 [StructLayout(LayoutKind.Explicit)]
-public struct CollisionShape
+public partial struct CollisionShape
 {
     [FieldOffset(0)] private ShapeType _type;
     [FieldOffset(8)] private BoxShape _box;
     [FieldOffset(8)] private SphereShape _sphere;
     [FieldOffset(8)] private CapsuleShape _capsule;
-    [FieldOffset(8)] private ConvexHullShape _hull;
+    [FieldOffset(8)] private ConvexHullShape _convexHull;
     [FieldOffset(8)] private MeshShape _mesh;
-
-    public CollisionShape()
-    {
-        _type = ShapeType.Box;
-        _box = new BoxShape();
-    }
-
-    public readonly ShapeType Type => _type;
-
-    [UnscopedRef]
-    public ref BoxShape Box
-    {
-        get
-        {
-            Expect(ShapeType.Box);
-            return ref _box;
-        }
-    }
-
-    [UnscopedRef]
-    public ref SphereShape Sphere
-    {
-        get
-        {
-            Expect(ShapeType.Sphere);
-            return ref _sphere;
-        }
-    }
-
-    [UnscopedRef]
-    public ref CapsuleShape Capsule
-    {
-        get
-        {
-            Expect(ShapeType.Capsule);
-            return ref _capsule;
-        }
-    }
-
-    [UnscopedRef]
-    public ref ConvexHullShape ConvexHull
-    {
-        get
-        {
-            Expect(ShapeType.ConvexHull);
-            return ref _hull;
-        }
-    }
-
-    [UnscopedRef]
-    public ref MeshShape Mesh
-    {
-        get
-        {
-            Expect(ShapeType.Mesh);
-            return ref _mesh;
-        }
-    }
-
-    public static implicit operator CollisionShape(BoxShape box) => new() { _type = ShapeType.Box, _box = box };
-
-    public static implicit operator CollisionShape(SphereShape sphere) =>
-        new() { _type = ShapeType.Sphere, _sphere = sphere };
-
-    public static implicit operator CollisionShape(CapsuleShape capsule) =>
-        new() { _type = ShapeType.Capsule, _capsule = capsule };
-
-    public static implicit operator CollisionShape(ConvexHullShape hull) =>
-        new() { _type = ShapeType.ConvexHull, _hull = hull };
-
-    public static implicit operator CollisionShape(MeshShape mesh) => new() { _type = ShapeType.Mesh, _mesh = mesh };
-
-    private readonly void Expect(ShapeType wanted)
-    {
-        if (_type != wanted)
-            throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
-    }
 }
