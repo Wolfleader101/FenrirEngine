@@ -1422,6 +1422,24 @@ namespace
         }
     }
 
+    // The [TaggedUnion] generator's message calls the union by its noun, or by its type's name when it has none.
+    void AGeneratedTaggedUnionsMessageNamesItsNounOrItsType()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
+        const auto withNoun = CallIn<std::optional<std::string>>(ShapeProbeType, scripting, "WrongKindMessage");
+        {
+            INFO("The message of a union with Noun = \"shape\" was: " + withNoun.value_or("(no exception)"));
+            REQUIRE(withNoun == std::optional<std::string>{"The shape is a Sphere, not a Box."});
+        }
+        const auto withoutNoun =
+            CallIn<std::optional<std::string>>(ShapeProbeType, scripting, "WrongKindMessageWithoutNoun");
+        {
+            INFO("The message of the union Solid, with no noun, was: " + withoutNoun.value_or("(no exception)"));
+            REQUIRE(withoutNoun == std::optional<std::string>{"The Solid is a Sphere, not a Box."});
+        }
+    }
+
     // Installs the fixture with a component whose C# mirror is wrong, and checks the load fails naming the component
     // and the field (and, for an offset, where each side puts it).
     void ExpectTheMirrorRefused(const ComponentRegistration& registration, const std::string& field,
@@ -4429,6 +4447,11 @@ TEST_CASE("a tagged union round-trips through a C# system", "[scripting]")
 TEST_CASE("reading a tagged union's view for the wrong kind throws", "[scripting]")
 {
     ReadingATaggedUnionViewForTheWrongKindThrows();
+}
+
+TEST_CASE("a generated tagged union's message names its noun, or its type without one", "[scripting]")
+{
+    AGeneratedTaggedUnionsMessageNamesItsNounOrItsType();
 }
 
 TEST_CASE("a tagged-union mirror with a wrong offset or name is refused at load", "[scripting]")

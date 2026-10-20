@@ -1,12 +1,11 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using Fenrir.Scripting;
 
 namespace Fenrir.ScriptFixture;
 
-// The C# mirror of a native component holding a tagged union (the test's TestNative::Collider), written by hand in the
-// pattern FenrirScripting's README describes: a private tag, each kind at the union's offset, a checked view per kind and
-// implicit conversions from each kind.
+// The C# mirror of a native component holding a tagged union (the test's TestNative::Collider). The [TaggedUnion]
+// generator writes its members: the type, a checked view per kind, implicit conversions from each kind and the
+// constructor.
 public enum ShapeType
 {
     Box,
@@ -23,46 +22,23 @@ public struct SphereShape
     public float Radius;
 }
 
+[TaggedUnion(Noun = "shape")]
 [StructLayout(LayoutKind.Explicit)]
-public struct Shape
+public partial struct Shape
 {
     [FieldOffset(0)] private ShapeType _type;
     [FieldOffset(4)] private BoxShape _box;
     [FieldOffset(4)] private SphereShape _sphere;
+}
 
-    public readonly ShapeType Type => _type;
-
-    // A view of the shape as a box, which it must be. It is a reference into the shape, so writes through it land in the
-    // component's storage.
-    [UnscopedRef]
-    public ref BoxShape Box
-    {
-        get
-        {
-            Expect(ShapeType.Box);
-            return ref _box;
-        }
-    }
-
-    [UnscopedRef]
-    public ref SphereShape Sphere
-    {
-        get
-        {
-            Expect(ShapeType.Sphere);
-            return ref _sphere;
-        }
-    }
-
-    public static implicit operator Shape(BoxShape box) => new() { _type = ShapeType.Box, _box = box };
-
-    public static implicit operator Shape(SphereShape sphere) => new() { _type = ShapeType.Sphere, _sphere = sphere };
-
-    private readonly void Expect(ShapeType wanted)
-    {
-        if (_type != wanted)
-            throw new InvalidOperationException($"The shape is a {_type}, not a {wanted}.");
-    }
+// The same union with no noun, so its wrong-view message names it by its type. Only C# uses it.
+[TaggedUnion]
+[StructLayout(LayoutKind.Explicit)]
+public partial struct Solid
+{
+    [FieldOffset(0)] private ShapeType _type;
+    [FieldOffset(4)] private BoxShape _box;
+    [FieldOffset(4)] private SphereShape _sphere;
 }
 
 [NativeComponent("Test.Collider")]
@@ -122,6 +98,21 @@ public static class ShapeProbe
         try
         {
             _ = shape.Box.HalfExtents.X;
+            return null;
+        }
+        catch (InvalidOperationException exception)
+        {
+            return exception.Message;
+        }
+    }
+
+    // The same for a union with no noun.
+    public static string? WrongKindMessageWithoutNoun()
+    {
+        Solid solid = new SphereShape { Radius = 1 };
+        try
+        {
+            _ = solid.Box.HalfExtents.X;
             return null;
         }
         catch (InvalidOperationException exception)
