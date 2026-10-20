@@ -422,7 +422,7 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints and characters include
     REQUIRE(world->DebugDrawCategories() == DebugDraw::Characters);
 
     REQUIRE(test.Call<bool>(WorldType, "DrawAll"));
-    INFO("C#'s All is C++'s All: every category, joints and characters included");
+    INFO("C#'s All is C++'s All: every category, joints, characters and vehicles included");
     REQUIRE(world->DebugDrawCategories() == DebugDraw::All);
 }
 

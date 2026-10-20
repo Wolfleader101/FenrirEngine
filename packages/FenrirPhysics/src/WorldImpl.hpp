@@ -280,6 +280,11 @@ namespace Fenrir
         /** @brief Patches a made vehicle's edited wheels, probe and tilt limit into its backend vehicle; true if
          * anything changed. */
         bool SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale);
+        /** @brief A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised up its
+         * steering axis by its compression, turned by its camber and toe, steered about its steering axis, then spun
+         * about its axle, X. */
+        [[nodiscard]] static Transform WheelPose(const Backend::VehicleWheelDesc& wheel,
+                                                 const Backend::VehicleWheelRead& read);
         /** @brief Writes each of the vehicle's wheel entities' world position and rotation from `read`, against the
          * chassis pose `chassis`, parents before children. */
         void PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis);
@@ -311,6 +316,7 @@ namespace Fenrir
         void DrawColliders(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
         void DrawJoints();
         void DrawCharacters(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
+        void DrawVehicles();
         void DrawPart(const Part& part, const Transform& body, std::uint32_t colour,
                       std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
 
