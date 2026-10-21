@@ -1,7 +1,7 @@
 # How are skeleton instances spawned, owned and read?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 24
 
 ## Question
