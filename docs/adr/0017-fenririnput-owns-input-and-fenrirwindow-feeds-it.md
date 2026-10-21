@@ -9,7 +9,7 @@ Keyboard, mouse and gamepad input reaches the engine through FenrirWindow's wind
 ## The split
 
 - **FenrirInput holds the types, the state and the events.** It defines the device-neutral types: `Key` (a key code, which follows the keyboard layout), `Scancode` (a physical key position), modifiers, `MouseButton`, gamepad buttons and axes. It also defines the polled resources (`Keyboard`, `Mouse`, `Gamepads`) and the input events. Nothing in it names GLFW, SDL or the OS.
-- **Input comes in through a public input feed.** FenrirWindow pumps its library at the start of `PreUpdate` and passes each input it gets to the feed, translated into FenrirInput's types. FenrirInput then updates the resources and sends the events, still in `PreUpdate`, so every later phase of the frame sees that frame's input.
+- **Input comes in through a public input feed.** FenrirWindow pumps its library at the start of `PreUpdate` and passes each input it gets to the feed, translated into FenrirInput's types. FenrirInput then updates the resources and sends the events, still in `PreUpdate`, so every later phase of the frame sees that frame's input. Input routers (ADR-0027) see each input first and may consume it before it reaches the resources and events.
 - **FenrirInput installs alone.** `FenrirInput::Install(App&)` works without a window. A test or a dedicated server then gets only the input that code feeds in through the same feed, so tests can script key presses. `FenrirWindow::Install` installs FenrirInput if it isn't installed already.
 - **Cursor modes stay on FenrirWindow.** Normal, hidden, and captured with relative motion are window properties. FenrirInput only reports the motion.
 

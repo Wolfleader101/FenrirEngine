@@ -13,7 +13,7 @@ FenrirRenderer draws with OpenGL today, but D3D, Vulkan or Metal must be able to
 - **Commands are recorded, then submitted.** Renderer code records through a per-pass encoder into a `CommandList` that FenrirRenderer owns, holding plain-struct commands; it never draws on the device directly. Resources are created and destroyed through virtual calls, and one virtual `Submit` hands a list to the backend, which replays it. Recording needs no backend, so it may happen on any thread, and tests and sorting can read a list without a GPU.
 - **Handles are typed, generational and owned by the device.** `BufferHandle`, `TextureHandle`, `PipelineHandle` and the rest are an index plus a generation, so stale use is caught without reference counts. Destruction is deferred by frame index until no frame in flight can use the object; GL needs no delay, but the hook is there for the explicit APIs.
 - **The graphics device is private.** Its headers are not installed. Libraries stay hidden at compile level as ADR-0010 asks: only `src/Backend/OpenGL/` includes GL or its loader, and they link `PRIVATE`.
-- **A UI library depends on nothing in Fenrir.** Glue adapts its draw data to a public overlay interface of FenrirRenderer, not to the graphics device. That interface must let a UI bring its own shaders and vertex layouts (an SDF UI needs them), not only textured triangles.
+- **A UI library depends on nothing in Fenrir.** Glue adapts its draw data to a public overlay interface of FenrirRenderer, not to the graphics device. That interface must let a UI bring its own shaders and vertex layouts (an SDF UI needs them), not only textured triangles. ADR-0027 decides it: plain 2D draw lists from FenrirDraw2D, drawn into a 2D target.
 
 ## What we refuse, accept and contain
 
