@@ -15,7 +15,7 @@ Which language are FenrirRenderer's shaders (and users' shaders) written in, and
 
 ## Answer
 
-ADR: `docs/adr/0017-fenrirrenderer-shaders-are-glsl-compiled-to-spir-v-at-build-time.md`, which also amends ADR-0016's OpenGL floor from 4.5 to 4.6. Glossary: Shader container, Shader variant, FenrirShaderCompiler.
+ADR: `docs/adr/0018-fenrirrenderer-shaders-are-glsl-compiled-to-spir-v-at-build-time.md`, which also amends ADR-0016's OpenGL floor from 4.5 to 4.6. Glossary: Shader container, Shader variant, FenrirShaderCompiler.
 
 - **Goal:** swapping OpenGL for Vulkan or D3D12 later must not touch shaders, materials or the renderer, so SPIR-V is the one compiled form of every shader from the start.
 - **GL floor 4.6**, for SPIR-V ingestion (`glSpecializeShader`). Ubuntu 24.04's llvmpipe is 4.5, so headless GL tests in CI need a newer Mesa (ticket 20).
