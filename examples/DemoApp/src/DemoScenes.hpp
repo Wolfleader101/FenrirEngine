@@ -7,8 +7,10 @@
 // only while they are active, so a key pressed in one scene does nothing in another.
 //
 // For running a scene without a keyboard: FENRIR_DEMO_SCENE=<name> starts in that scene, and with FENRIR_DEMO_KEYS=1
-// the switcher presses each scene's registered keys after it becomes active, two seconds in and then one a second. They
-// are sent as the window sends them, as KeyboardKeyEvents, so C++ and C# readers both see them.
+// the switcher presses each scene's registered keys after it becomes active, two seconds in and then one a second, and
+// stops the app three seconds after the last. They are sent as the window sends them, as KeyboardKeyEvents, so C++ and
+// C# readers both see them. The seconds are simulation time (frame deltas), so a run sped up with FENRIR_DEMO_FAST
+// presses them sooner. scripts/demo-smoke.sh runs every physics scene this way at once.
 //
 // DemoApp code, not engine code: the engine knows scenes, not feature families.
 
@@ -155,22 +157,34 @@ class DemoScenes
         app.Logger()->Info("Scene: {}. {}{}{}", m_active, m_homeKeyHelp, scenes, scenes.empty() ? "" : ".");
     }
 
-    // Two seconds after entry, to let the scene settle, then one key a second.
+    // Two seconds after entry, to let the scene settle, then one key a second. Three seconds after the last, for its
+    // effects to log, the app stops, so a smoke run ends by itself.
     void PressSmokeKeys(Fenrir::App& app)
     {
         const DemoScene* scene = m_smokeRun ? Find(m_active) : nullptr;
-        if (scene == nullptr || m_smokeKeysPressed >= scene->smokeKeys.size())
+        if (scene == nullptr)
         {
             return;
         }
         // A long frame counts as a short one: the first frames' deltas include loading, which is not settling.
         m_secondsActive += std::min(app.GetTime().deltaTime, 0.1);
+        const std::size_t keyCount = scene->smokeKeys.size();
+        if (m_smokeKeysPressed >= keyCount)
+        {
+            if (m_secondsActive >= 2.0 + static_cast<double>(keyCount) + 3.0)
+            {
+                app.Logger()->Info("FENRIR_DEMO_KEYS: pressed all {} keys in {}; stopping.", keyCount, scene->name);
+                app.Stop();
+            }
+            return;
+        }
         if (m_secondsActive < 2.0 + static_cast<double>(m_smokeKeysPressed))
         {
             return;
         }
         const int key = scene->smokeKeys[m_smokeKeysPressed++];
-        app.Logger()->Info("FENRIR_DEMO_KEYS: pressing key {} in {}.", key, scene->name);
+        app.Logger()->Info("FENRIR_DEMO_KEYS: pressing key {} ({}/{}) in {}.", key, m_smokeKeysPressed, keyCount,
+                           scene->name);
         app.SendEvent(KeyboardKeyEvent{key, 0, 0, InputState::Pressed, 0});
         app.SendEvent(KeyboardKeyEvent{key, 0, 0, InputState::Released, 0});
     }
