@@ -18,3 +18,5 @@
 - [x] `PhysicsWorld::Impl` has no `ComponentWatch` member and no `ForEachWith` scan.
 - [x] `FenrirPhysicsTests`, `FenrirECSTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
 - [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+
+**Resolved by:** PR #72 (branch claude/tracked-component-set), into claude/physics-world-split-spec. `TrackedComponents` is in `packages/FenrirECS/include/FenrirECS/TrackedComponents.hpp` with its `[tracked]` cases in `Tests/TrackedComponentSets.cpp`. It keeps an entity by its last recorded change, which the watch contract makes the same as "alive and has the type now" and which stays safe once the set outlives its list. Physics drains each tracked set once per entity in entity order, where it used to handle every change in recorded order; the joint and vehicle drops already did nothing after the first. `clang-x64-debug` passes 81/81 tests, and the nine smoke runs were clean.
