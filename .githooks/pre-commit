@@ -2,7 +2,8 @@
 # Refuses a commit whose staged C++ in packages/ is not clang-format clean, or that stages a local ticket
 # (.scratch/*/issues/) with a malformed Status or Blocked by line: the checks CI runs on pull requests.
 # Enable once per clone: git config core.hooksPath .githooks
-# CI uses clang-format 13; a much newer local clang-format can disagree about a few constructs.
+# CI uses clang-format 19, the version that ships with Visual Studio; another major version can disagree about a
+# few constructs.
 
 staged=$(git diff --cached --name-only --diff-filter=ACMR)
 status=0
