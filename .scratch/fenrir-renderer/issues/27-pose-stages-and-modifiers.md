@@ -26,3 +26,7 @@ ADR: `docs/adr/0033-pose-stages-run-as-fenrirskeletons-pose-pipeline-and-modifie
 - **Finalisation and cost:** linear per instance; clean, unedited instances skip Prepare and Finalise; skeleton entity moves touch only world queries and attachments; the palette is lazy, main-thread `GetPalette` cached by pose generation; per-instance parallelism allowed, not promised.
 - **Later (listed):** fixed-tick animation with simulation pose against render pose (two-pose interpolation only a start); IK as a modifier, later free to query scene or physics through its own integration layer; ragdoll bodies interpolated in `AfterTicks` feeding a per-frame modifier, tick-based evaluation if gameplay needs authoritative bones.
 - **Graduated:** no new tickets; notes appended to tickets 28, 29, 31, 32 and 33.
+
+## Comments
+
+- From ticket 30 (ADR-0035): FenrirSkeleton gains `PoseGeneration(entity)`, a `u64` that finalisation advances when the finalised pose changes or the instance is rebuilt, drawn from one counter shared by `SkeletonPoses` so an instance recreated under a recycled entity never repeats a generation; moving the skeleton entity's `Transform` does not advance it. The palette is built lazily for the current generation and cached with the generation it was computed for; reading it never changes the generation, and skeletons nothing skins never build one. The renderer deduplicates its per-frame upload by `(scene, skeleton entity, PoseGeneration)`.
