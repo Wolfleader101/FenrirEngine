@@ -19,6 +19,16 @@ Window::~Window()
     glfwDestroyWindow(m_window);
 }
 
+void Window::SetHidden(bool hidden)
+{
+    m_hidden = hidden;
+}
+
+void Window::SetWaitForVsync(bool wait)
+{
+    m_waitForVsync = wait;
+}
+
 void Window::PreInit(Fenrir::App& app)
 {
     m_appPtr = &app;
@@ -30,6 +40,10 @@ void Window::PreInit(Fenrir::App& app)
     glfwWindowHint(GLFW_OPENGL_PROFILE,
                    GLFW_OPENGL_CORE_PROFILE); // core profile only, no fixed pipeline functionality
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // MacOS
+    if (m_hidden)
+    {
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+    }
 
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
@@ -48,7 +62,10 @@ void Window::PreInit(Fenrir::App& app)
         break;
     case WindowType::MaximizedWindow:
         m_window = glfwCreateWindow(m_width, m_height, m_title.c_str(), NULL, NULL);
-        glfwMaximizeWindow(m_window);
+        if (!m_hidden) // Maximizing shows the window.
+        {
+            glfwMaximizeWindow(m_window);
+        }
         break;
     }
 
@@ -77,6 +94,10 @@ void Window::PreInit(Fenrir::App& app)
     // 0: do not wait for vsync (may be overridden by driver/driver settings)
     // 1: wait for 1st vsync (may be overridden by driver/driver settings)
     // glfwSwapInterval(0);
+    if (!m_waitForVsync)
+    {
+        glfwSwapInterval(0);
+    }
 
     // cursor mode
     // glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);

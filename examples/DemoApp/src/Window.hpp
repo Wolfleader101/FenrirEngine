@@ -31,6 +31,13 @@ class Window
 
     ~Window();
 
+    /** @brief Before PreInit. A hidden window is made but never shown: the demo renders as usual, to nothing on
+     * screen. */
+    void SetHidden(bool hidden);
+
+    /** @brief Before PreInit. False, buffer swaps do not wait for vsync; true (the default), the driver decides. */
+    void SetWaitForVsync(bool wait);
+
     void PreInit(Fenrir::App& app);
 
     void OnKeyPress(const KeyboardKeyEvent& event);
@@ -52,6 +59,8 @@ class Window
     int m_width = 0;
     int m_height = 0;
     WindowType m_type;
+    bool m_hidden = false;
+    bool m_waitForVsync = true;
     Fenrir::EventReader<WindowCloseEvent> m_closeReader;
     Fenrir::EventReader<KeyboardKeyEvent> m_keyReader;
 };

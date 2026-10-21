@@ -478,6 +478,11 @@ namespace Fenrir
         void Stop();
 
         /**
+         * @brief True until Stop is called. Code that drives the app with RunFrame loops while it is, as Run does.
+         */
+        [[nodiscard]] bool IsRunning() const;
+
+        /**
          * @brief Send an event to the event queue. From a system added with AddSystems (run in parallel), the event is
          * held until the system's batch has run, then sent in the order the systems were registered.
          *
