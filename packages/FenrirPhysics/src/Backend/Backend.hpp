@@ -68,9 +68,16 @@ namespace Fenrir::Backend
         std::uint32_t value = ~0u;
     };
 
-    /** @brief A wheeled vehicle's or a motorcycle's drivetrain: its engine, gearbox and limited-slip ratio. */
+    /**
+     * @brief A wheeled vehicle's or a motorcycle's drivetrain: its engine, gearbox and limited-slip ratio. A trailer's
+     * is the defaults in Manual, held in neutral, so nothing drives its wheels.
+     */
     inline WheeledVehicle DrivetrainOf(const VehicleKind& kind)
     {
+        if (kind.Is<TrailerVehicle>())
+        {
+            return WheeledVehicle{.transmission = {.mode = TransmissionMode::Manual}};
+        }
         if (kind.Is<MotorcycleVehicle>())
         {
             const MotorcycleVehicle& motorcycle = kind.As<MotorcycleVehicle>();
