@@ -1,7 +1,7 @@
 # Spike: a lit mesh, a camera, a skybox and debug lines through the proposed seam
 
 Type: prototype
-Status: open
+Status: claimed
 Blocked by: 08, 11, 12, 13, 14
 
 ## Question
