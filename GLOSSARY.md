@@ -384,6 +384,14 @@ A part of the renderer core that adds render passes to each frame's render graph
 One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
 *Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
 
+**MeshRenderer**
+The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
+*Avoid:* renderable, model (FenrirAssets' asset), mesh instance.
+
+**Fallback material**
+The built-in flat magenta unlit material a `MeshRenderer` draws with when its material is empty or stale, so the mistake shows on screen.
+*Avoid:* error material, default material (a default suggests it is meant to be used).
+
 ## FenrirEngine assets
 
 **FenrirAssets**

@@ -38,6 +38,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - [How is a frame built and submitted?](issues/13-how-a-frame-is-built.md): ADR-0019; three layers (ECS facade, a renderer core with no ECS dependency, the private graphics device); a new `Render` phase after `PostUpdate` on the main thread reads the active scene into a plain-data draw list with 64-bit sort keys; a render graph compiled each frame, ordered by render stage then dependencies, with culling and pooled transients, designed as if explicit (aliasing, async compute, parallel recording, a render thread listed as waiting); foundation passes Opaque, Background, sorted Transparent, Debug, Output, Overlay into linear RGBA16F scene targets.
 - [How are the renderer and window packages tested?](issues/20-how-the-renderer-is-tested.md): no ADR; OpenGL floor raised to 4.6 core (ADR-0016 amended, as ADR-0018 also requires); most tests on the null backend through the public interface and a `RendererProbe` (draw lists, handle lifetimes, deferred destruction), a smaller GL suite reading back small offscreen targets with analytic per-pixel probes and tolerances, no golden images yet; GL debug errors fail tests; the context is made the app's way (ticket 11), under `xvfb-run` if it needs a display; GL tests in Linux CI on llvmpipe 4.6 (newest Ubuntu runner, else a newer-Mesa PPA), skipped elsewhere without 4.6; input tested by feeding neutral window events, FenrirWindow thinly; demo apps get smoke runs on null and on llvmpipe.
 - [How are meshes, textures, shaders, skeletons and clips loaded and owned?](issues/15-how-assets-are-loaded-and-owned.md): ADR-0021; a new FenrirAssets package owns plain CPU-side asset data (meshes, images, materials, skeletons, clips, shader containers, models with labelled sub-assets), no GPU code, depended on by renderer and animation; `AssetHandle<T>` is a plain generational id, each load owned by the app or a scene, freed when its last owner ends or on `Unload`, deduplicated by path; synchronous, main thread only, failures as diagnostics, stale handles skipped; assimp and stb_image behind a private compile-time importer seam; procedural meshes through `Add`/`Replace`; the renderer uploads in its own prepare step keyed by handle and revision, CPU copy kept; one asset root in `AssetsConfig`.
+- [How is rendering modelled in the ECS?](issues/14-rendering-in-the-ecs.md): ADR-0023; one `MeshRenderer` (mesh, material, `visible`) per drawn mesh, several materials as child entities, as Bevy and Unity DOTS do; empty or stale meshes skipped, missing materials drawn with a magenta fallback; read directly from the active scene each `Render` with `GetWorldMatrix` per item; no renderer scene resource, GPU resources keyed by asset handle and revision; `Renderer::Install` owns core and device after assets and the window; `GetWorldBounds` and `Stats` read back; `SpawnModel` in the renderer facade.
 
 ## Not yet specified
 
@@ -46,7 +47,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - **Post-processing:** HDR and tonemapping, bloom, anti-aliasing; depends on how the frame's passes and render targets are decided.
 - **Dynamic meshes:** meshes whose vertices change every frame (soft bodies, procedural geometry), with normals recomputed and stable indices and UVs; see `notes.md`.
 - **Richer animation:** state machines or graphs, IK, root motion, morph targets.
-- **Instancing and culling at scale.**
+- **Instancing and culling at scale**, and a per-frame memo of ancestor world matrices if `GetWorldMatrix` per item shows in a profile (ADR-0023).
 - **A render thread:** rendering a frame behind on its own thread, consuming the draw list as a snapshot (ADR-0019); with parallel recording, once the frame is CPU-bound.
 - **Particles.**
 - **Live redraw while a window is dragged or resized** on Windows, where the event pump blocks (SDL3's exposed event from an event watch); the first version freezes.
@@ -54,6 +55,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - **Shader hot reload:** development builds run `FenrirShaderCompiler` as a child process on a changed file and reload its shader container (ADR-0018); with or after the foundation.
 - **Golden-image tests:** whole-frame comparison with a tolerance metric, for the first feature family that analytic pixel probes cannot pin (shadows, post-processing); see ticket 20.
 - **More asset loading:** `LoadAsync` with load states, a public loader registry for game-defined formats, a cgltf path for glTF if assimp's skins or clips prove loose, KTX2 and compressed textures, and a per-asset flag that drops the CPU copy after upload (ADR-0021).
+- **Inherited visibility:** hiding a spawned hierarchy as one; `MeshRenderer::visible` hides only its own entity (ADR-0023).
 
 ## Out of scope
 
