@@ -14,11 +14,13 @@ Standing notes, not a spec: what the rest of the engine has found it needs from 
 
 - FenrirPhysics produces `DebugLine { from, to, colour }` spans per world, regenerated after each step; the DemoApp uploads and draws them every frame in one `GL_LINES` pass.
 - A renderer should take a span of coloured lines (and later perhaps points) per frame, drawn over the scene, without the caller owning GL buffers.
+- Settled by ADR-0025: physics draws into FenrirDebugDraw instead of handing out a span.
 
 ### Live text (DemoApp, worked around)
 
 - There is no text overlay. The demo scenes show live values (joint angles and loads, a bob phase) by writing them into an entity's `Name`, read in the editor's Scene Hierarchy.
 - A renderer, or a debug UI layer above it, should draw short text in screen space and at world positions, from C++ and C#.
+- Settled by ADR-0025: screen text, keyed on-screen messages and world text through FenrirDebugDraw.
 
 ### Ragdolls (FenrirPhysics, waiting)
 

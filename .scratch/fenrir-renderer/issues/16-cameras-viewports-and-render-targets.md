@@ -12,3 +12,4 @@ How does game code say what is drawn from where, and into what?
 - Several cameras: split screen, picture in picture, a camera drawing into a texture (which an editor's scene view would need).
 - Viewports, resolution, aspect ratio and resizing.
 - Screen-to-world rays for picking, and where that helper lives.
+- Which windows show a scene's debug screen text and on-screen messages when several windows show views of it (ADR-0025 draws them in each such window's overlay).
