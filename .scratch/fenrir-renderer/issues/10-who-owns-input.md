@@ -1,7 +1,7 @@
 # Who owns input: FenrirWindow or a FenrirInput package?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 03
 
 ## Question
