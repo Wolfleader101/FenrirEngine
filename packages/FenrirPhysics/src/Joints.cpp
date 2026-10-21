@@ -1,22 +1,23 @@
 // Joints (ADR-0013): FrameFromWorld, and a physics world's joints, kept in step with the Joint components. Knows the
 // ECS, not Jolt: it talks to Backend::World.
 
-#include "FenrirPhysics/Joints.hpp"
+#include "Joints.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <numbers>
 #include <set>
 #include <span>
 #include <string>
 
+#include "DebugCanvas.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "PhysicsState.hpp"
 #include "Same.hpp"
 #include "WarnOnce.hpp"
-#include "WorldImpl.hpp"
 
 namespace Fenrir
 {
@@ -99,6 +100,10 @@ namespace Fenrir
                    Fenrir::Same(a.breakForce, b.breakForce) && Fenrir::Same(a.breakTorque, b.breakTorque) &&
                    SameLiveSettings(a.kind, b.kind);
         }
+
+        // The length of a joint frame's axes: frameA's long, frameB's short, so both show where they coincide.
+        constexpr float jointAxisA = 0.5f;
+        constexpr float jointAxisB = 0.25f;
 
         // Only an empty entity is the world: a destroyed one is not.
         bool IsWorld(const Entity& body)
@@ -316,8 +321,18 @@ namespace Fenrir
         }
         return JointFrames{LocalTo(bodyA, anchor), toWorld ? anchor : LocalTo(bodyB, anchor)};
     }
+} // namespace Fenrir
 
-    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::JointBodyOf(const Entity& body) const
+namespace Fenrir::Detail
+{
+    Joints::Joints(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
+                   const Poses& poses)
+        : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_bodies(&bodies), m_poses(&poses),
+          m_jointEntities(entities, ComponentType::Native<Joint>())
+    {
+    }
+
+    const Bodies::Record* Joints::BodyOf(const Entity& body) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!body.IsValid() || body != m_entities->HandleOf(body.GetId()))
@@ -325,7 +340,7 @@ namespace Fenrir
             return nullptr;
         }
         // Keyed by the body's own entity, so a compound body's child collider names no body.
-        const Record* record = BodyView().RecordOf(body.GetId());
+        const Bodies::Record* record = m_bodies->RecordOf(body.GetId());
         if (record == nullptr || !record->Active() || record->isTrigger)
         {
             return nullptr;
@@ -333,7 +348,7 @@ namespace Fenrir
         return record;
     }
 
-    std::string PhysicsWorld::Impl::WhyInactive(const Joint& joint) const
+    std::string Joints::WhyInactive(const Joint& joint) const
     {
         if (IsWorld(joint.bodyA))
         {
@@ -352,7 +367,7 @@ namespace Fenrir
             {
                 return std::string(name) + " is in another scene";
             }
-            if (Detail::IsCharacterCollider(body))
+            if (IsCharacterCollider(body))
             {
                 return std::string(name) + " (entity " + std::to_string(body.GetId()) +
                        ") is a character body, which a joint cannot join";
@@ -362,10 +377,10 @@ namespace Fenrir
                    "could make";
         };
         // The side whose body is missing: bodyA's if both are.
-        return JointBodyOf(joint.bodyA) != nullptr ? why(joint.bodyB, "bodyB") : why(joint.bodyA, "bodyA");
+        return BodyOf(joint.bodyA) != nullptr ? why(joint.bodyB, "bodyB") : why(joint.bodyA, "bodyA");
     }
 
-    void PhysicsWorld::Impl::DrainJoints()
+    void Joints::Drain()
     {
         for (const std::uint32_t entity : m_jointEntities.Drain())
         {
@@ -378,7 +393,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::RemoveJointsOf(std::span<const Backend::BodyId> bodies)
+    void Joints::DropOn(std::span<const Backend::BodyId> bodies)
     {
         for (const Backend::BodyId body : bodies)
         {
@@ -396,9 +411,9 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc)
+    void Joints::MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc)
     {
-        record.id = m_backend.CreateJoint(desc);
+        record.id = m_backend->CreateJoint(desc);
         record.bodyA = desc.bodyA;
         record.bodyB = desc.bodyB;
         m_jointsOfBody[desc.bodyA.value].insert(entity);
@@ -408,13 +423,13 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::DropConstraint(std::uint32_t entity, JointRecord& record)
+    void Joints::DropConstraint(std::uint32_t entity, JointRecord& record)
     {
         if (!record.HasConstraint())
         {
             return;
         }
-        m_backend.DestroyJoint(record.id);
+        m_backend->DestroyJoint(record.id);
         record.id = Backend::JointId{};
         for (const Backend::BodyId body : {record.bodyA, record.bodyB})
         {
@@ -426,7 +441,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::SyncJoints(float dt)
+    void Joints::Sync(float dt)
     {
         // A spring faster than half the tick rate cannot be stepped.
         const float maxFrequency = 0.5f / dt;
@@ -435,9 +450,9 @@ namespace Fenrir
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
             JointRecord& record = m_joints[entity];
 
-            const Record* a = JointBodyOf(joint.bodyA);
+            const Bodies::Record* a = BodyOf(joint.bodyA);
             const bool toWorld = IsWorld(joint.bodyB);
-            const Record* b = toWorld ? nullptr : JointBodyOf(joint.bodyB);
+            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && (b == nullptr || b == a)))
             {
                 // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
@@ -483,9 +498,61 @@ namespace Fenrir
             else if (!SameLive(joint, record.applied))
             {
                 const Joint corrected = Corrector(entity, record.warned, *m_logger, maxFrequency).Corrected(joint);
-                m_backend.UpdateJoint(record.id, corrected.kind, joint.enabled, joint.collideConnected);
+                m_backend->UpdateJoint(record.id, corrected.kind, joint.enabled, joint.collideConnected);
                 record.applied = joint;
             }
         }
     }
-} // namespace Fenrir
+
+    void Joints::Draw(DebugCanvas& canvas) const
+    {
+        // Every kind draws the same two frames. Shapes of a kind's own (limit arcs, cones) would go here, by kind.
+        const auto frame = [&canvas](const JointFrame& local, const Transform* body, const Math::Vec3& scale,
+                                     float length, std::array<std::uint32_t, 3> colours) {
+            // A frame's position follows its body's scale and its rotation does not, as the constraint was made; the
+            // world end's frame is already in world space.
+            const Math::Vec3 position =
+                body == nullptr ? local.position : body->pos + body->rot * (local.position * scale);
+            const Math::Quat rotation = body == nullptr ? local.rotation : body->rot * local.rotation;
+            const std::array<Math::Vec3, 3> axes = {xAxis, yAxis, zAxis};
+            for (std::size_t i = 0; i < axes.size(); ++i)
+            {
+                canvas.Writer(position, rotation, colours[i])(Math::Vec3(0.0f), length * axes[i]);
+            }
+        };
+        for (const auto& [entity, record] : m_joints)
+        {
+            const Joint& joint = record.applied;
+            if (!record.HasConstraint())
+            {
+                // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
+                constexpr std::array<std::uint32_t, 3> grey = {DebugColour::InactiveJoint, DebugColour::InactiveJoint,
+                                                               DebugColour::InactiveJoint};
+                if (const Bodies::Record* a = BodyOf(joint.bodyA))
+                {
+                    frame(joint.frameA, &a->world, a->world.scale, jointAxisA, grey);
+                }
+                if (const Bodies::Record* b = BodyOf(joint.bodyB))
+                {
+                    frame(joint.frameB, &b->world, b->world.scale, jointAxisB, grey);
+                }
+                continue;
+            }
+            const Bodies::Record* a = BodyOf(joint.bodyA);
+            const bool toWorld = joint.bodyB == Entity();
+            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            if (a == nullptr || (!toWorld && b == nullptr))
+            {
+                continue; // not expected: Sync drops a constraint before its bodies go
+            }
+            // A disabled joint, broken or switched off by game code, is dimmed.
+            const auto colour = [&joint](std::uint32_t full) {
+                return joint.enabled ? full : DebugColour::Dimmed(full);
+            };
+            frame(joint.frameA, &a->world, record.scaleA, jointAxisA,
+                  {colour(DebugColour::JointAX), colour(DebugColour::JointAY), colour(DebugColour::JointAZ)});
+            frame(joint.frameB, toWorld ? nullptr : &b->world, record.scaleB, jointAxisB,
+                  {colour(DebugColour::JointBX), colour(DebugColour::JointBY), colour(DebugColour::JointBZ)});
+        }
+    }
+} // namespace Fenrir::Detail

@@ -74,8 +74,7 @@ namespace Fenrir
                              Backend::CollisionMeshes& meshes, ILogger& logger)
         : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger), m_poses(entities),
           m_bodies(entities, logger, m_backend, m_poses), m_contacts(entities, m_backend, m_bodies),
-          m_jointEntities(entities, ComponentType::Native<Joint>()),
-          m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
+          m_joints(entities, logger, m_backend, m_bodies, m_poses), m_characters(entities, logger, m_backend, m_poses),
           m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
           m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
           m_differentialEntities(entities, ComponentType::Native<VehicleDifferential>()),
@@ -101,39 +100,45 @@ namespace Fenrir
         // Drain and rebuild. A joint's constraint and a vehicle go before their bodies, and characters go before the
         // bodies' batch and are made after it, so the bodies come in a reproducible order.
         const Detail::Bodies::Rebuild rebuild = m_bodies.Plan();
-        DrainJoints();
+        m_joints.Drain();
         DrainVehicles();
-        RemoveJointsOf(rebuild.destroyed);
+        m_joints.DropOn(rebuild.destroyed);
         RemoveVehiclesOf(rebuild.destroyed);
-        DropCharacters(rebuild.changed);
+        m_characters.Drop(rebuild.changed);
         m_bodies.Apply(rebuild);
-        MakeCharacters();
+        m_characters.Make();
 
         // Edits. After the bodies': a body's scale decides whether its joints are recreated, and a vehicle is made
         // after its body and its body's joints.
         m_bodies.PushEdits(dt);
-        PushCharacterEdits();
-        SyncJoints(dt);
+        m_characters.PushEdits();
+        m_joints.Sync(dt);
         SyncVehicles();
         m_bodies.ApplyPushes();
 
         // Moves: before the step, so a character's pushes act in it and it moves against the bodies the step will
         // move.
-        MoveCharacters(dt);
+        m_characters.Move(dt);
 
         m_backend.Step(dt, CollisionSteps(dt));
 
-        // Write-back. After the chassis: wheels are posed against its new pose.
-        WriteBack();
+        // Write-back: bodies and characters through Poses, parents first. After the chassis: wheels are posed against
+        // its new pose.
+        m_bodies.HandPoses();
+        m_characters.HandPoses();
+        m_poses.WriteBack();
+        m_bodies.ReadBack();
+        m_characters.ReadBack();
+        m_characters.ResetIdle();
         WriteBackVehicles(dt);
 
         // Joints after the step.
-        MeasureJoints();
-        BreakJoints();
+        m_joints.Measure();
+        m_joints.Break();
 
         // Events, then the shown poses and the debug lines.
-        m_contacts.Send(app, CharacterMoveContacts());
-        SendBroken(app);
+        m_contacts.Send(app, m_characters.MoveContacts());
+        m_joints.SendBroken(app);
         m_poses.Advance();
         DrawDebugLines();
     }
@@ -151,22 +156,8 @@ namespace Fenrir
         BlendWheels(fraction);
     }
 
-    void PhysicsWorld::Impl::WriteBack()
-    {
-        m_bodies.HandPoses();
-        HandCharacterPoses();
-        m_poses.WriteBack();
-        m_bodies.ReadBack();
-        for (auto& [id, record] : m_characters)
-        {
-            Entity entity = m_entities->GetEntity(id);
-            ReadBackCharacter(entity, record);
-        }
-        ResetIdleCharacters();
-    }
-
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
     {
-        m_contacts.ForEachContact(entity, CharacterMoveContactsOf(entity), func);
+        m_contacts.ForEachContact(entity, m_characters.MoveContactsOf(entity), func);
     }
 } // namespace Fenrir

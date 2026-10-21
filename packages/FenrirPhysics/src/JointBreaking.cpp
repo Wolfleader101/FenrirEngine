@@ -6,13 +6,12 @@
 
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Events.hpp"
-#include "FenrirPhysics/Joints.hpp"
+#include "Joints.hpp"
 #include "SortAndSend.hpp"
-#include "WorldImpl.hpp"
 
-namespace Fenrir
+namespace Fenrir::Detail
 {
-    void PhysicsWorld::Impl::BreakJoints()
+    void Joints::Break()
     {
         for (auto& [entity, record] : m_joints)
         {
@@ -21,7 +20,7 @@ namespace Fenrir
             {
                 continue;
             }
-            // Negative thresholds are treated as 0, as SyncJoints warns; infinity never breaks.
+            // Negative thresholds are treated as 0, as Sync warns; infinity never breaks.
             const float breakForce = std::max(applied.breakForce, 0.0f);
             const float breakTorque = std::max(applied.breakTorque, 0.0f);
             const bool finite = breakForce < std::numeric_limits<float>::infinity() ||
@@ -37,7 +36,7 @@ namespace Fenrir
                 continue;
             }
 
-            m_backend.DisableJoint(record.id);
+            m_backend->DisableJoint(record.id);
             // Into the record as well as the component, so the next diff does not take it for a game edit.
             applied.enabled = false;
             m_entities->GetEntity(entity).GetComponent<Joint>().enabled = false;
@@ -48,9 +47,9 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::SendBroken(App& app)
+    void Joints::SendBroken(App& app)
     {
-        Detail::SortAndSend(app, m_broken, [](const JointBroken& event) { return event.joint.GetId(); });
+        SortAndSend(app, m_broken, [](const JointBroken& event) { return event.joint.GetId(); });
         m_broken.clear();
     }
-} // namespace Fenrir
+} // namespace Fenrir::Detail

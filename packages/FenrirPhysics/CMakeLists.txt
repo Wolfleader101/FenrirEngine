@@ -18,6 +18,7 @@ add_library(FenrirPhysics STATIC
     src/Bodies.hpp
     src/BodyComponents.hpp
     src/Characters.cpp
+    src/Characters.hpp
     src/CollisionLayers.cpp
     src/Contacts.cpp
     src/Contacts.hpp
@@ -27,6 +28,7 @@ add_library(FenrirPhysics STATIC
     src/FilterOf.hpp
     src/Hierarchy.hpp
     src/Joints.cpp
+    src/Joints.hpp
     src/JointBreaking.cpp
     src/JointState.cpp
     src/LayerNames.hpp
