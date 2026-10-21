@@ -764,7 +764,7 @@ namespace Fenrir::Detail
         {
             return "it has no RigidBody";
         }
-        const Bodies::Record* body = m_bodies->RecordOf(chassis);
+        const Bodies::Body* body = m_bodies->BodyOf(chassis);
         if (body == nullptr || !body->Active())
         {
             return "its RigidBody has no collider physics could make";
@@ -781,9 +781,9 @@ namespace Fenrir::Detail
         return {};
     }
 
-    const Bodies::Record* Vehicles::ChassisBodyOf(std::uint32_t chassis) const
+    const Bodies::Body* Vehicles::ChassisBodyOf(std::uint32_t chassis) const
     {
-        return WhyNoChassis(chassis).empty() ? m_bodies->RecordOf(chassis) : nullptr;
+        return WhyNoChassis(chassis).empty() ? m_bodies->BodyOf(chassis) : nullptr;
     }
 
     std::string Vehicles::WhyNoWheel(std::uint32_t wheel) const
@@ -875,7 +875,7 @@ namespace Fenrir::Detail
             VehicleRecord& record = m_vehicles[chassis];
             Entity entity = m_entities->GetEntity(chassis);
             const Vehicle& vehicle = entity.GetComponent<Vehicle>();
-            const Bodies::Record* body = ChassisBodyOf(chassis);
+            const Bodies::Body* body = ChassisBodyOf(chassis);
             const std::vector<std::uint32_t>& wheels = wheelsOf[chassis];
             if (!vehicle.enabled || body == nullptr || wheels.empty())
             {
@@ -1110,7 +1110,7 @@ namespace Fenrir::Detail
             // its wheels between steps. Otherwise they stay at their step poses.
             const std::optional<Transform> at = m_poses->BlendedPose(chassis, fraction);
             if (!record.Made() || record.current.size() != record.wheels.size() ||
-                m_bodies->RecordOf(chassis) == nullptr || !at)
+                m_bodies->BodyOf(chassis) == nullptr || !at)
             {
                 continue;
             }
