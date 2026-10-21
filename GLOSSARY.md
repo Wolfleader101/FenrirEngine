@@ -343,3 +343,21 @@ FenrirRenderer's private adapter for one graphics API, or the null backend, whic
 **Graphics device**
 The thin, private interface every graphics backend implements: GPU resources, passes and the commands recorded into them. The rest of FenrirRenderer draws only through it.
 *Avoid:* RHI, GPU layer, render API.
+
+## FenrirEngine input
+
+**Key code**
+Which key was pressed as the keyboard layout names it: the key that types Z on an AZERTY keyboard is `Key::W` on QWERTY and `Key::Z` on AZERTY. Use it for shortcuts named by letter.
+*Avoid:* keycode, virtual key, key (alone, when the difference matters).
+
+**Scancode**
+Where a key sits on the keyboard, whatever the layout: the same physical key on every layout. Use it for movement keys placed by position, such as WASD.
+*Avoid:* physical key, raw key.
+
+**Input feed**
+FenrirInput's public entry point, through which raw input comes in during `PreUpdate`: FenrirWindow passes on what its windowing library delivers, and tests or headless apps feed input by hand (ADR-0017).
+*Avoid:* input backend, input driver.
+
+**Input edge**
+A press or release since the reader last looked: "just pressed" or "just released". Read from `PreTick`, `Tick` or `PostTick`, the edges are those since the last tick; from any other phase, those since the last frame. So each press reaches each phase once.
+*Avoid:* trigger, down/up (they mean held or not held).

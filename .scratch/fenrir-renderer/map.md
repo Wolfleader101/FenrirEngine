@@ -33,6 +33,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - [How do other engines put a seam over graphics APIs?](issues/01-how-other-engines-seam-graphics-apis.md): most put a thin explicit-API-shaped seam (pipelines, binding groups, passes, command lists) right over the API, often with a higher layer above; only sokol selects purely at compile time, the rest at runtime with coarse crossings; GL is dropped (NVRHI, SDL3 GPU, O3DE), emulated under the explicit model (Diligent, wgpu, sokol, Filament), or kept out of the thin seam (Godot, bgfx); handles range from bare indices to generational ids and ref counts, destruction deferred by frame or fence; every library but SDL3 GPU has a native escape hatch; null backends test bookkeeping, golden images test pixels.
 - [Where does the graphics seam go, and is the backend picked at compile time or at runtime?](issues/08-where-the-graphics-seam-goes.md): ADR-0016; a public renderer over a private graphics device shaped like the explicit APIs, OpenGL 4.5 and an always-built null backend chosen at runtime in `RendererConfig`; commands recorded through per-pass encoders into a plain-data `CommandList` and replayed on `Submit`; typed generational handles, destruction deferred by frame; no escape hatch or tuning settings; UI libraries reach the renderer only through a public overlay that takes their own shaders and vertex layouts.
 - [Which library sits behind FenrirWindow, GLFW or SDL3?](issues/09-glfw-or-sdl.md): ADR-0020; SDL3 3.4.x, static and `PRIVATE`, for IME, rumble, sensors, touch and pen that GLFW lacks; video, events, input, gamepad, haptic, hidapi and sensor built, audio, GPU, 2D render, camera, dialogs, tray, process and `SDL_main` off; OpenGL calls stay on the main thread (SDL3's rule), so a render thread waits for an explicit-API backend; switch if a GL render thread or SDL3's build cost forces it.
+- [Who owns input: FenrirWindow or a FenrirInput package?](issues/10-who-owns-input.md): ADR-0017. FenrirInput, linking no library, owns input types, app-wide `Keyboard`/`Mouse`/`Gamepads` resources and input events; FenrirWindow feeds it through a public input feed in `PreUpdate`, and tests feed it the same way with no window. Polled state and `EventReader` events, both. Just-pressed edges follow the reading phase (since the last tick in `PreTick`/`Tick`/`PostTick`, since the last frame elsewhere). Events name their window, and mouse units are logical window coordinates. First version: keys (key code and scancode), text, mouse, cursor modes (FenrirWindow's) and gamepads. C# gets the same through an extension.
 
 ## Not yet specified
 
@@ -44,6 +45,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - **Instancing and culling at scale.**
 - **Particles.**
 - **Live redraw while a window is dragged or resized** on Windows, where the event pump blocks (SDL3's exposed event from an event watch); the first version freezes.
+- **More input devices:** rumble, IME composition, touch and pen (SDL3 only, per ticket 03); join FenrirInput's types and feed when wanted.
 
 ## Out of scope
 
