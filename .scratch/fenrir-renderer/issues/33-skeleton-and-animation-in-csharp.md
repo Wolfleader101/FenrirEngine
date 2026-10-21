@@ -17,3 +17,5 @@ Each package extends scripting through its own extension, built only when script
 ## Comments
 
 - From ticket 26 (ADR-0031): `SkeletonPose` is a blittable `{ AssetHandle<SkeletonData> }` C# can mirror; the arrays live in `SkeletonPoses` and cross by span-filling functions, valid only within the current system.
+
+- From ticket 30 (ADR-0035): `SkinnedMesh { Entity skeleton; }` is a blittable component beside `MeshRenderer` that C# mirrors; its documentation says prominently that a skinned mesh is drawn with the skeleton entity's world matrix and its own `Transform` is ignored. `PoseGeneration` may be worth exposing for C# caches.

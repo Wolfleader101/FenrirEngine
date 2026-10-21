@@ -573,8 +573,20 @@ Something that changes a skeleton's pose after animation, in order: IK, procedur
 *Avoid:* override (the first modifier's kind, not the general term), post-process, constraint (physics's sense).
 
 **Skinning palette**
-One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it.
+One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it, built lazily for the current pose generation. The renderer uploads it as rows of 3×4 affine matrices (ADR-0035).
 *Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
+
+**Pose generation**
+A number FenrirSkeleton advances whenever a skeleton instance's final pose changes or the instance is rebuilt, never repeated within a scene; moving the skeleton entity does not advance it. Caches of a pose (the palette, the renderer's upload) are keyed by it (ADR-0035).
+*Avoid:* pose revision (an asset's revision is another thing), frame number, dirty flag.
+
+**Skinned mesh**
+A mesh whose vertices carry bone weights and are stored in skeleton bind space, drawn on an entity with a `SkinnedMesh` naming its skeleton entity. It is drawn with the skeleton entity's world matrix; its own entity's `Transform` is never applied (ADR-0035).
+*Avoid:* skin (glTF's grouping of joints), skeletal mesh (Unreal's asset).
+
+**Bind signature**
+A deterministic hash of a skeleton's bones, parents, engine names and inverse binds. A skinned mesh records the signature it was baked against, and the renderer skips a mesh paired with a skeleton whose signature differs (ADR-0035).
+*Avoid:* skeleton hash, skeleton id, compatibility key.
 
 **Bone attachment**
 `BoneAttachment`: a component that places its entity at a bone of a skeleton entity, plus an offset. Finalisation owns the entity's resulting `Transform`.
