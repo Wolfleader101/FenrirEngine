@@ -28,6 +28,7 @@ Standing notes, not a spec: what the rest of the engine has found it needs from 
 - An **animation system** to blend between an animated pose and the ragdoll's simulated pose (going limp, powered ragdolls driving joint motors towards the animation).
 - **Skinned-mesh rendering**: vertices weighted to bones, drawn from the current bone transforms each frame (typically on the GPU from a bone-matrix buffer).
 - Physics would write bone transforms as plain data; the renderer and animation system read them.
+- Settled by ADR-0028: skeletons are bone arrays in FenrirSkeleton's `SkeletonPose`; ragdoll glue writes body poses in as a weighted pose modifier and reads the base pose for powered ragdolls; the renderer skins from FenrirSkeleton's palette; the bone-to-body mapping belongs to the physics map's ragdoll spec.
 
 ### Soft bodies (FenrirPhysics, waiting)
 
