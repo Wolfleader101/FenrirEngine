@@ -4,7 +4,7 @@ status: accepted
 
 # Freeze the Iris public API at 0.2, and grow it only by addition
 
-After the stabilisation review (`.scratch/dotnet-scripting/review-18.md`), the public headers in `packages/Iris/Native/include/Iris` are frozen as the surface FenrirEngine and other C++ projects build on. The package version is 0.2.0, and its CMake compatibility is `SameMajorVersion`, so `find_package(Iris 0.2)` accepts any later 0.x. (The switch from `SameMinorVersion` also means an old `find_package(Iris 0.1)` accepts 0.2, although 0.2 broke 0.1. No consumer outside this repository exists yet, so this is harmless.)
+After the stabilisation review (`.scratch/dotnet-scripting/review-18.md`, removed once built; commit 6210be2 is the last to hold it), the public headers in `packages/Iris/Native/include/Iris` are frozen as the surface FenrirEngine and other C++ projects build on. The package version is 0.2.0, and its CMake compatibility is `SameMajorVersion`, so `find_package(Iris 0.2)` accepts any later 0.x. (The switch from `SameMinorVersion` also means an old `find_package(Iris 0.1)` accepts 0.2, although 0.2 broke 0.1. No consumer outside this repository exists yet, so this is harmless.)
 
 From now on:
 

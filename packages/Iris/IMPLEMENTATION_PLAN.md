@@ -10,7 +10,7 @@ Learning is part of the purpose. Explain decisions and lifetime contracts so the
 
 ## Roadmap
 
-The work is tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `issues/NN-*.md`). Each ticket lists what blocks it; work the frontier (tickets whose blockers are all done).
+The work was tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus `issues/NN-*.md`), removed once built; commit 6210be2 is the last to hold the spec and review notes.
 
 - **Phase A, review and prefactor (01–05):**
   - 01: review and scope decision (done; see `review-01.md`)
