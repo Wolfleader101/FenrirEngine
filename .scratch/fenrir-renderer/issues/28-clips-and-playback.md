@@ -1,7 +1,7 @@
 # How are clips played?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 26
 
 ## Question
