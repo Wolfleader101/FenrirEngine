@@ -1,7 +1,7 @@
 # How are cameras, viewports and render targets modelled?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 14
 
 ## Question
