@@ -609,3 +609,13 @@ What a router says it is doing with input in a window: the pointer is over it, i
 **Control owner**
 Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
 *Avoid:* device owner (ownership is per control), grab.
+
+## FenrirEngine demo apps
+
+**Demo app**
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+*Avoid:* DemoApp (the legacy single app, deleted once the demo apps replace it), sample, example (alone).
+
+**Demo scaffold**
+What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
+*Avoid:* demo framework, demo base, harness.
