@@ -13,3 +13,7 @@ Each feature area gets its own demo app on the shared scaffold (ticket 23). What
 - C++ and C# scenes, as the other demo apps have.
 - Smoke runs on the null backend and llvmpipe, and a headless run with no renderer that checks bone positions.
 - A hand-check list.
+
+## Comments
+
+- From ticket 28 (ADR-0034): show `Animator` playback (speed, reverse, `Loop`/`Once`, pause, seek), clip events, and the per-frame event budget on a short clip at high speed.

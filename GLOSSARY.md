@@ -537,7 +537,7 @@ How much one bone moves one vertex of a skinned mesh; each vertex has at most fo
 *Avoid:* joint weight, influence (alone), skin weight.
 
 **Clip**
-An asset of keyed bone transforms over time in seconds, naming its bones by name so it plays on any skeleton whose bone names match.
+An asset of keyed bone transforms over time in seconds, plus timed clip events. It binds to skeletons from its own file by source identity and to others by bone name, so it plays on any skeleton whose bone names match (ADR-0031). Playback runs from 0 to its last key's time, its duration.
 *Avoid:* animation (alone), take, sequence, action (Blender's).
 
 **Skeleton entity**
@@ -603,6 +603,18 @@ One matrix per bone (model-space × inverse bind) that skinned vertices are move
 **Bone attachment**
 `BoneAttachment`: a component that places its entity at a bone of a skeleton entity, plus an offset. Finalisation owns the entity's resulting `Transform`.
 *Avoid:* socket, mount point, parent bone.
+
+**Animator**
+`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034).
+*Avoid:* animation player, animation component, FenrirAnimation (the package).
+
+**Playback cursor**
+Where an `Animator`'s clip is, in seconds, owned by FenrirAnimation: it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, which crosses no events.
+*Avoid:* playhead, animation time, clip time (a key's authored time).
+
+**Animation event**
+`AnimationEvent`: the ECS event sent when a playback cursor crosses one of its clip's timed events, identified by the event's index and the clip's revision. Delivery is best-effort per frame: at most a budget per skeleton per frame, the rest counted as dropped.
+*Avoid:* notify (Unreal's), animation callback, marker.
 
 ## FenrirEngine input
 

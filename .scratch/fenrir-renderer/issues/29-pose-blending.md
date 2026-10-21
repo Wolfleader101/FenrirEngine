@@ -17,3 +17,7 @@ How much blending does the first animation spec have, and how does it fit ADR-00
 ## Comments
 
 - From ticket 27 (ADR-0033): a modifier is `Skeleton::AddModifier(name, order, fn)` writing `Target`s (local/model/world, channel mask, weight) through `PoseEdit`, composed sequentially in `Modify`; layers and masks may be base-pose blending inside `Animate` or modifiers on this interface.
+
+## Comments
+
+- From ticket 28 (ADR-0034): `Animator` on the skeleton entity is game-owned configuration for one clip (clip, speed, loop, playing), with playback state in FenrirAnimation's private `Animators`; this ticket decides how it grows to crossfades, layers and several clips (slots, layer components or entities), keeping time out of components and explicit seeking.
