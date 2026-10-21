@@ -17,3 +17,4 @@ Each package extends scripting through its own extension, built only when script
 ## Comments
 
 - From ticket 26 (ADR-0031): `SkeletonPose` is a blittable `{ AssetHandle<SkeletonData> }` C# can mirror; the arrays live in `SkeletonPoses` and cross by span-filling functions, valid only within the current system.
+- From ticket 28 (ADR-0034): C# mirrors the blittable `Animator`; `Animation::Seek` and `Animation::Playback` cross as native functions; `AnimationEvent`, `ClipFinished` and `AnimationEventsDropped` are plain C++ events read through event readers.

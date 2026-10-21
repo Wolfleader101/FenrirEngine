@@ -13,3 +13,7 @@ How much blending does the first animation spec have, and how does it fit ADR-00
 - Whether layers and masks belong to FenrirAnimation's base pose or become pose modifiers (ADR-0028 lists layers and masks among modifiers to come).
 - Whether a blend tree or graph (blend spaces, state machines) is in this spec or stays in *Richer animation*.
 - Weights that sum below one: fall back to the rest pose, as ozz does, or normalise.
+
+## Comments
+
+- From ticket 28 (ADR-0034): `Animator` on the skeleton entity is game-owned configuration for one clip (clip, speed, loop, playing), with playback state in FenrirAnimation's private `Animators`; this ticket decides how it grows to crossfades, layers and several clips (slots, layer components or entities), keeping time out of components and explicit seeking.
