@@ -1,7 +1,7 @@
 # How do the new libraries join the build?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 09, 12, 15
 
 ## Question
