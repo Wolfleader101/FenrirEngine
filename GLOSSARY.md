@@ -399,34 +399,45 @@ The window FenrirWindow creates first and the foundation renderer draws to; clos
 **MeshRenderer**
 The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
 *Avoid:* renderable, model (FenrirAssets' asset), mesh instance.
+
 **Fallback material**
 The built-in flat magenta unlit material a `MeshRenderer` draws with when its material is empty or stale, so the mistake shows on screen.
 *Avoid:* error material, default material (a default suggests it is meant to be used).
+
 **Material**
 A shared `MaterialData` asset saying how a mesh is drawn: a shader, a blend mode, whether it is double-sided, and its material parameters. Many entities name one material by its asset handle (ADR-0024).
 *Avoid:* material instance (there are no per-entity overrides), shader (a material names one), effect.
+
 **Material parameter**
 One named value in a material, set by name from C++ or C#: a scalar, vector, colour or texture with its sampler. The shader's material set gives each name its place.
 *Avoid:* uniform, property.
+
 **Blend mode**
 How a material's pixels combine with what is behind them: `Opaque`, `Masked` (alpha cutoff), `AlphaBlend` or `Additive`. It picks the render stage and whether depth is written.
 *Avoid:* alpha mode (glTF's term, mapped onto it), render queue.
+
 **Material set**
 Binding set 2 of every material shader: its `MaterialParams` block and textures. Unlike the frame, view and draw sets, its layout is read from the shader container's build-time reflection.
 *Avoid:* descriptor set (Vulkan's), material block (only the uniform block in it).
+
 ## FenrirEngine debug drawing
+
 **FenrirDebugDraw**
 The engine's debug-drawing package: the shapes and text game code and other packages ask to see, kept per scene as plain data with no GPU code. FenrirRenderer draws them; FenrirPhysics is one of the packages that draws into it (ADR-0025).
 *Avoid:* gizmos (Bevy's name; an editor's gizmos are handles you drag), debug renderer, line batcher.
+
 **Debug draw item**
 One shape or piece of text in a scene's debug drawing, kept for its duration: once, some seconds, or until cleared.
 *Avoid:* debug line (one kind of item), primitive, gizmo.
+
 **Debug group**
 A named set of debug draw items that is shown, hidden or cleared together, such as physics's.
 *Avoid:* category (physics's categories choose what it generates), layer, channel.
+
 **On-screen message**
 Debug text stacked in a corner of the window, newest first, which a later message with the same key replaces.
 *Avoid:* log (FenrirLogger's), toast, notification.
+
 ## FenrirEngine assets
 
 **FenrirAssets**

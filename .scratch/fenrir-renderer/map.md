@@ -62,7 +62,6 @@ A set of specs, one feature directory each (`.scratch/fenrir-renderer-<name>/spe
 - **Several windows:** the renderer drawing to more than one window (the editor), with one shared GL context made current per window; FenrirWindow's API is already keyed by `WindowId` (ADR-0022).
 - **Inherited visibility:** hiding a spawned hierarchy as one; `MeshRenderer::visible` hides only its own entity (ADR-0023).
 - **Richer materials:** per-entity material overrides, a surface-function model for user shaders, and physical light units with exposure (ADR-0024); with the lighting and post-processing families.
-
 - **More debug drawing:** drawing a loaded mesh asset (`Mesh(AssetHandle<Mesh>)`, which ties FenrirDebugDraw to FenrirAssets), loaded fonts, and durations in game time once the engine has a pause or time scale (ADR-0025).
 
 ## Out of scope
