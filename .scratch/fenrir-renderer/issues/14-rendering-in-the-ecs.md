@@ -1,7 +1,7 @@
 # How is rendering modelled in the ECS?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 13
 
 ## Question
