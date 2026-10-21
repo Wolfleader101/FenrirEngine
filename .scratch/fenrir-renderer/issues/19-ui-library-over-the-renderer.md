@@ -1,7 +1,7 @@
 # What does the renderer offer a UI library drawn over it?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 10, 11
 
 ## Question
