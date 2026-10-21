@@ -1,7 +1,7 @@
 # How is a frame built and submitted?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 05, 08
 
 ## Question
