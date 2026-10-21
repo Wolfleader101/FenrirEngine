@@ -1,7 +1,7 @@
 # Who owns the graphics context and the swapchain or surface?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 08, 09
 
 ## Question
