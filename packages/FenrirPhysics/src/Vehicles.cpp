@@ -1,7 +1,7 @@
 // A physics world's vehicles (ADR-0015): each a backend vehicle on its chassis's body, removed with the joints before
-// bodies go, made and given its driver input after the joints in PostTick step 2, run inside the step by the backend,
-// and written back after the bodies in step 5, its wheel entities posed for drawing. Knows the ECS, not Jolt: it talks
-// to Backend::World.
+// bodies go, made and given its driver input after the joints in PostTick's edits, run inside the step by the backend,
+// and written back after the bodies in its write-back, its wheel entities posed for drawing. Knows the ECS, not Jolt:
+// it talks to Backend::World.
 
 #include <algorithm>
 #include <cmath>
@@ -21,29 +21,15 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "Hierarchy.hpp"
 #include "Same.hpp"
+#include "WarnOnce.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
 {
     namespace
     {
-        Entity ParentOf(const Entity& entity)
-        {
-            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
-        }
-
-        // How many ancestors the entity has: wheels are posed parents before children.
-        int DepthOf(const Entity& entity)
-        {
-            int depth = 0;
-            for (Entity at = ParentOf(entity); at.IsValid(); at = ParentOf(at))
-            {
-                ++depth;
-            }
-            return depth;
-        }
-
         bool Same(const JointSpring& a, const JointSpring& b)
         {
             return Fenrir::Same(a.frequency, b.frequency) && Fenrir::Same(a.damping, b.damping);
@@ -235,12 +221,8 @@ namespace Fenrir
           private:
             void Warn(WheelProblem problem, const char* message)
             {
-                if ((*m_warned & problem) != 0)
-                {
-                    return;
-                }
-                *m_warned |= problem;
-                m_logger->Warn("The VehicleWheel on entity " + std::to_string(m_entity) + ": " + message);
+                Detail::WarnOnce(*m_warned, problem, *m_logger,
+                                 "The VehicleWheel on entity " + std::to_string(m_entity) + ": " + message);
             }
 
             void NotNegative(float& value, WheelProblem problem, const char* message)
@@ -506,7 +488,7 @@ namespace Fenrir
             }
         }
         // A differential or anti-roll bar removed, or removed and added again, is new: it is warned about afresh. Its
-        // edits and relinks are diffed in step 2.
+        // edits and relinks are diffed in the edits.
         const auto link = [](TrackedComponents& tracked, std::map<std::uint32_t, VehicleLinkRecord>& records) {
             for (const std::uint32_t entity : tracked.Drain())
             {
@@ -624,11 +606,8 @@ namespace Fenrir
         };
         const auto warn = [this](const char* type, std::uint32_t entity, VehicleLinkRecord& record, LinkProblem problem,
                                  const char* message) {
-            if ((record.warned & problem) == 0)
-            {
-                record.warned |= problem;
-                m_logger->Warn(std::string("The ") + type + " on entity " + std::to_string(entity) + ": " + message);
-            }
+            Detail::WarnOnce(record.warned, problem, *m_logger,
+                             std::string("The ") + type + " on entity " + std::to_string(entity) + ": " + message);
         };
 
         std::map<std::uint32_t, VehicleLinks> links;
@@ -703,7 +682,7 @@ namespace Fenrir
                     return body.value == record.body.value;
                 }))
             {
-                // Rebuilt in this drain, it carries over; gone for good, it is inactive in step 2, which forgets it.
+                // Rebuilt in this drain, it carries over; gone for good, it is inactive in the edits, which forget it.
                 DropVehicle(record, true);
             }
         }
@@ -747,26 +726,26 @@ namespace Fenrir
         {
             return "it has no RigidBody";
         }
-        const auto it = m_bodies.find(chassis);
-        if (it == m_bodies.end() || !it->second.Active())
+        const Record* body = BodyView().RecordOf(chassis);
+        if (body == nullptr || !body->Active())
         {
             return "its RigidBody has no collider physics could make";
         }
-        if (it->second.isTrigger)
+        if (body->isTrigger)
         {
             return "its collider is a trigger, which gives its RigidBody no solid collider";
         }
-        if (it->second.motion.motionType != MotionType::Dynamic)
+        if (body->motion.motionType != MotionType::Dynamic)
         {
-            return it->second.motion.motionType == MotionType::Kinematic ? "its RigidBody is kinematic"
-                                                                         : "its RigidBody is static";
+            return body->motion.motionType == MotionType::Kinematic ? "its RigidBody is kinematic"
+                                                                    : "its RigidBody is static";
         }
         return {};
     }
 
     const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::ChassisBodyOf(std::uint32_t chassis) const
     {
-        return WhyNoChassis(chassis).empty() ? &m_bodies.at(chassis) : nullptr;
+        return WhyNoChassis(chassis).empty() ? BodyView().RecordOf(chassis) : nullptr;
     }
 
     std::string PhysicsWorld::Impl::WhyNoWheel(std::uint32_t wheel) const
@@ -862,8 +841,8 @@ namespace Fenrir
             const std::vector<std::uint32_t>& wheels = wheelsOf[chassis];
             if (!vehicle.enabled || body == nullptr || wheels.empty())
             {
-                // Disabled, inactive, or with nothing to drive it: a plain rigid body, if any, its state reset in step
-                // 5. Enabled and valid again, it is built fresh: the record holds nothing to carry over.
+                // Disabled, inactive, or with nothing to drive it: a plain rigid body, if any, its state reset in the
+                // write-back. Enabled and valid again, it is built fresh: the record holds nothing to carry over.
                 DropVehicle(record, false);
                 continue;
             }
@@ -997,7 +976,7 @@ namespace Fenrir
         std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
         for (std::size_t i = 0; i < record.wheels.size(); ++i)
         {
-            order.emplace_back(DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
+            order.emplace_back(Detail::DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
         }
         std::ranges::sort(order);
         for (const auto& [depth, id, i] : order)
@@ -1054,7 +1033,7 @@ namespace Fenrir
                 posed.insert(record.wheels[i]);
             }
             // After the chassis's write-back, against its step pose.
-            const Record& body = m_bodies.at(chassis);
+            const Record& body = *BodyView().RecordOf(chassis);
             PoseWheels(record, read, body.world);
             AdvanceWheels(record, read, dt, body.shown.snap);
         }
@@ -1105,9 +1084,9 @@ namespace Fenrir
         {
             // Shown as its chassis is: only a chassis Blend blended (interpolated, and not held by game code) carries
             // its wheels between steps. Otherwise they stay at their step poses.
-            const auto body = m_bodies.find(chassis);
-            if (!record.Made() || record.current.size() != record.wheels.size() || body == m_bodies.end() ||
-                !body->second.shown.blended || !m_entities->HasEntity(chassis))
+            const Record* body = BodyView().RecordOf(chassis);
+            if (!record.Made() || record.current.size() != record.wheels.size() || body == nullptr ||
+                !body->shown.blended || !m_entities->HasEntity(chassis))
             {
                 continue;
             }
@@ -1122,7 +1101,7 @@ namespace Fenrir
             {
                 continue;
             }
-            const Transform at = body->second.shown.Between(fraction);
+            const Transform at = body->shown.Between(fraction);
             // Every true local Transform is saved before any is overwritten.
             record.trueLocals.clear();
             for (const std::uint32_t id : record.wheels)
@@ -1134,7 +1113,7 @@ namespace Fenrir
             std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
             for (std::size_t i = 0; i < record.wheels.size(); ++i)
             {
-                order.emplace_back(DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
+                order.emplace_back(Detail::DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
             }
             std::ranges::sort(order);
             for (const auto& [depth, id, i] : order)

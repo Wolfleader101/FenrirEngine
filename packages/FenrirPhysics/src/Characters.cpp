@@ -1,5 +1,5 @@
-// A physics world's character bodies (ADR-0014): made and destroyed with the bodies' batch, moved in PostTick step 3b
-// and written back in step 5. Knows the ECS, not Jolt: it talks to Backend::World.
+// A physics world's character bodies (ADR-0014): made and destroyed with the bodies' batch, moved in PostTick's moves
+// stage and written back in its write-back. Knows the ECS, not Jolt: it talks to Backend::World.
 
 #include <cstdint>
 #include <set>
@@ -11,6 +11,7 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "FilterOf.hpp"
 #include "Same.hpp"
 #include "WorldImpl.hpp"
 
@@ -18,11 +19,6 @@ namespace Fenrir
 {
     namespace
     {
-        Entity ParentOf(const Entity& entity)
-        {
-            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
-        }
-
         // Why the character body on `entity` cannot have a backend character now (it is inactive), or empty if it can.
         std::string WhyNoCharacter(const Entity& entity, Backend::World& backend)
         {
@@ -54,11 +50,6 @@ namespace Fenrir
             return entity.HasComponent<PhysicsMaterial>() ? entity.GetComponent<PhysicsMaterial>() : PhysicsMaterial{};
         }
 
-        CollisionFilter FilterOf(const Entity& entity)
-        {
-            return entity.HasComponent<CollisionFilter>() ? entity.GetComponent<CollisionFilter>() : CollisionFilter{};
-        }
-
         // Whether the character body on `entity` should have a backend character now: enabled, and not inactive.
         bool ShouldBeCharacter(const Entity& entity, Backend::World& backend)
         {
@@ -66,38 +57,11 @@ namespace Fenrir
         }
     } // namespace
 
-    bool PhysicsWorld::Impl::IsCharacterChild(std::uint32_t collider) const
-    {
-        const Entity entity = m_entities->GetEntity(collider);
-        // A trigger is its own body beneath anything.
-        if (entity.HasComponent<RigidBody>() || entity.HasComponent<Trigger>() || IsCharacterCollider(collider))
-        {
-            return false;
-        }
-        // The nearest ancestor that is a body host or a character decides: a RigidBody's compound, or no body at all.
-        for (Entity above = ParentOf(entity); above.IsValid(); above = ParentOf(above))
-        {
-            if (IsCharacterCollider(above.GetId()))
-            {
-                return true;
-            }
-            if (above.HasComponent<RigidBody>() && !above.HasComponent<Trigger>())
-            {
-                return false;
-            }
-        }
-        return false;
-    }
-
-    bool PhysicsWorld::Impl::IsCharacterCollider(std::uint32_t entity) const
-    {
-        const Entity collider = m_entities->GetEntity(entity);
-        // Beside a RigidBody the RigidBody works instead, and the Collider is its.
-        return collider.HasComponent<CharacterBody>() && !collider.HasComponent<RigidBody>();
-    }
-
     void PhysicsWorld::Impl::DropCharacters(const std::set<std::uint32_t>& changed)
     {
+        // What came or went is in `changed`, from Bodies' own CharacterBody set: draining brings this set's entities up
+        // to date for MakeCharacters and the write-back.
+        static_cast<void>(m_characterEntities.Drain());
         std::vector<Backend::CharacterId> destroyed;
         for (auto it = m_characters.begin(); it != m_characters.end();)
         {
@@ -141,7 +105,7 @@ namespace Fenrir
             descs.push_back(Backend::CharacterDesc{.shape = entity.GetComponent<Collider>().shape,
                                                    .scale = world.scale,
                                                    .material = MaterialOf(entity),
-                                                   .filter = FilterOf(entity),
+                                                   .filter = Detail::FilterOf(entity),
                                                    .position = world.pos,
                                                    .rotation = world.rot,
                                                    .entity = id});
@@ -175,7 +139,7 @@ namespace Fenrir
                 m_backend.SetCharacterMaterial(record.id, material);
                 record.material = material;
             }
-            const CollisionFilter filter = FilterOf(entity);
+            const CollisionFilter filter = Detail::FilterOf(entity);
             if (!Same(filter, record.filter))
             {
                 m_backend.SetCharacterFilter(record.id, filter);

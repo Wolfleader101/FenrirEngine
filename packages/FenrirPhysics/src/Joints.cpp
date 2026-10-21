@@ -15,6 +15,7 @@
 #include "FenrirLogger/ILogger.hpp"
 #include "PhysicsState.hpp"
 #include "Same.hpp"
+#include "WarnOnce.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
@@ -175,12 +176,8 @@ namespace Fenrir
           private:
             void Warn(Problem problem, const char* message)
             {
-                if ((*m_warned & problem) != 0)
-                {
-                    return;
-                }
-                *m_warned |= problem;
-                m_logger->Warn("The Joint on entity " + std::to_string(m_entity) + ": " + message);
+                Detail::WarnOnce(*m_warned, problem, *m_logger,
+                                 "The Joint on entity " + std::to_string(m_entity) + ": " + message);
             }
 
             void NotNegative(float& value, Problem problem, const char* message)
@@ -328,12 +325,12 @@ namespace Fenrir
             return nullptr;
         }
         // Keyed by the body's own entity, so a compound body's child collider names no body.
-        const auto it = m_bodies.find(body.GetId());
-        if (it == m_bodies.end() || !it->second.Active() || it->second.isTrigger)
+        const Record* record = BodyView().RecordOf(body.GetId());
+        if (record == nullptr || !record->Active() || record->isTrigger)
         {
             return nullptr;
         }
-        return &it->second;
+        return record;
     }
 
     std::string PhysicsWorld::Impl::WhyInactive(const Joint& joint) const
@@ -355,7 +352,7 @@ namespace Fenrir
             {
                 return std::string(name) + " is in another scene";
             }
-            if (IsCharacterCollider(body.GetId()))
+            if (Detail::IsCharacterCollider(body))
             {
                 return std::string(name) + " (entity " + std::to_string(body.GetId()) +
                        ") is a character body, which a joint cannot join";
