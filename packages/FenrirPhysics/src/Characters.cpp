@@ -118,8 +118,8 @@ namespace Fenrir
     {
         std::vector<std::uint32_t> entities;
         std::vector<Backend::CharacterDesc> descs;
-        std::erase_if(m_inactiveCharacters, [this](std::uint32_t id) { return !m_characterEntities.contains(id); });
-        for (std::uint32_t id : m_characterEntities)
+        std::erase_if(m_inactiveCharacters, [this](std::uint32_t id) { return !m_characterEntities.Contains(id); });
+        for (std::uint32_t id : m_characterEntities.Entities())
         {
             const Entity entity = m_entities->GetEntity(id);
             const std::string why = WhyNoCharacter(entity, m_backend);
@@ -244,7 +244,7 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::ResetIdleCharacters()
     {
-        for (std::uint32_t id : m_characterEntities)
+        for (std::uint32_t id : m_characterEntities.Entities())
         {
             if (!m_characters.contains(id))
             {

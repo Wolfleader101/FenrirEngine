@@ -15,8 +15,8 @@
 #include <vector>
 
 #include "Backend/Backend.hpp"
-#include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Events.hpp"
@@ -380,14 +380,10 @@ namespace Fenrir
         EntityList* m_entities;
         ILogger* m_logger;
         Backend::World m_backend;
-        ComponentWatch m_rigidBodies;
-        ComponentWatch m_colliders;
-        ComponentWatch m_triggers;
-        ComponentWatch m_jointWatch;
-
-        // The entities with each component now, as the watches have reported them.
-        std::set<std::uint32_t> m_rigidBodyEntities;
-        std::set<std::uint32_t> m_colliderEntities;
+        // The entities with each component, as of the last SyncBodies. Of the triggers only what came or went is read.
+        TrackedComponents m_rigidBodyEntities;
+        TrackedComponents m_colliderEntities;
+        TrackedComponents m_triggerEntities;
 
         // RigidBodies with no collider: inactive in physics. Each is warned about once, when it becomes one.
         std::set<std::uint32_t> m_empty;
@@ -420,9 +416,9 @@ namespace Fenrir
             bool inactive = false;
         };
 
-        // The entities with a Joint now, as the watch has reported them, and their records, by joint entity: joints
-        // are made, diffed and solved in that order.
-        std::set<std::uint32_t> m_jointEntities;
+        // The entities with a Joint, as of the last DrainJoints, and their records, by joint entity: joints are made,
+        // diffed and solved in that order.
+        TrackedComponents m_jointEntities;
         std::map<std::uint32_t, JointRecord> m_joints;
         // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
@@ -448,10 +444,9 @@ namespace Fenrir
             // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
             bool shapeBlocked = false;
         };
-        ComponentWatch m_characterWatch;
-        // The entities with a CharacterBody now, as the watch has reported them, and their records, by entity:
-        // characters are made and moved in that order.
-        std::set<std::uint32_t> m_characterEntities;
+        // The entities with a CharacterBody, as of the last SyncBodies, and their records, by entity: characters are
+        // made and moved in that order.
+        TrackedComponents m_characterEntities;
         std::map<std::uint32_t, CharacterRecord> m_characters;
         // CharacterBodies that cannot be characters now (beside a RigidBody, with no Collider, or with a shape a
         // character cannot use), and solid colliders beneath a character: each is warned about once, when it becomes
@@ -516,11 +511,9 @@ namespace Fenrir
             bool blended = false;
             std::vector<std::pair<Entity, Transform>> trueLocals;
         };
-        ComponentWatch m_vehicleWatch;
-        ComponentWatch m_wheelWatch;
-        // The entities with a Vehicle, and with a VehicleWheel, now, as the watches have reported them.
-        std::set<std::uint32_t> m_vehicleEntities;
-        std::set<std::uint32_t> m_wheelEntities;
+        // The entities with a Vehicle, and with a VehicleWheel, as of the last DrainVehicles.
+        TrackedComponents m_vehicleEntities;
+        TrackedComponents m_wheelEntities;
         std::map<std::uint32_t, VehicleRecord> m_vehicles;
         // Vehicles and wheels that are inactive now: each is warned about once, when it becomes so.
         std::set<std::uint32_t> m_inactiveVehicles;
@@ -536,8 +529,9 @@ namespace Fenrir
             std::set<std::uint32_t> wheels;
             std::set<std::uint32_t> dead;
         };
-        ComponentWatch m_differentialWatch;
-        ComponentWatch m_antiRollBarWatch;
+        // The records are kept for the entities in their tracked sets.
+        TrackedComponents m_differentialEntities;
+        TrackedComponents m_antiRollBarEntities;
         std::map<std::uint32_t, VehicleLinkRecord> m_differentials;
         std::map<std::uint32_t, VehicleLinkRecord> m_antiRollBars;
         // The kinds of out-of-range value each wheel entity has been warned about, so each is warned about once.

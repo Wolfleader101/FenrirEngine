@@ -195,33 +195,24 @@ namespace Fenrir
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
         : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
-          m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
-          m_colliders(entities.Watch(ComponentType::Native<Collider>())),
-          m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
-          m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
-          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>())),
-          m_vehicleWatch(entities.Watch(ComponentType::Native<Vehicle>())),
-          m_wheelWatch(entities.Watch(ComponentType::Native<VehicleWheel>())),
-          m_differentialWatch(entities.Watch(ComponentType::Native<VehicleDifferential>())),
-          m_antiRollBarWatch(entities.Watch(ComponentType::Native<VehicleAntiRollBar>()))
+          m_rigidBodyEntities(entities, ComponentType::Native<RigidBody>()),
+          m_colliderEntities(entities, ComponentType::Native<Collider>()),
+          m_triggerEntities(entities, ComponentType::Native<Trigger>()),
+          m_jointEntities(entities, ComponentType::Native<Joint>()),
+          m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
+          m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
+          m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
+          m_differentialEntities(entities, ComponentType::Native<VehicleDifferential>()),
+          m_antiRollBarEntities(entities, ComponentType::Native<VehicleAntiRollBar>())
     {
-        // A watch records only what happens after it is made: the components already there are found once, here.
-        const ComponentType colliders[] = {ComponentType::Native<Collider>()};
-        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
-        const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
-        entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
-        const ComponentType joints[] = {ComponentType::Native<Joint>()};
-        entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
-        const ComponentType characters[] = {ComponentType::Native<CharacterBody>()};
-        entities.ForEachWith(characters, [this](std::uint32_t entity) { m_characterEntities.insert(entity); });
-        const ComponentType vehicles[] = {ComponentType::Native<Vehicle>()};
-        entities.ForEachWith(vehicles, [this](std::uint32_t entity) { m_vehicleEntities.insert(entity); });
-        const ComponentType wheels[] = {ComponentType::Native<VehicleWheel>()};
-        entities.ForEachWith(wheels, [this](std::uint32_t entity) { m_wheelEntities.insert(entity); });
-        const ComponentType differentials[] = {ComponentType::Native<VehicleDifferential>()};
-        entities.ForEachWith(differentials, [this](std::uint32_t entity) { m_differentials.try_emplace(entity); });
-        const ComponentType antiRollBars[] = {ComponentType::Native<VehicleAntiRollBar>()};
-        entities.ForEachWith(antiRollBars, [this](std::uint32_t entity) { m_antiRollBars.try_emplace(entity); });
+        for (const std::uint32_t entity : m_differentialEntities.Entities())
+        {
+            m_differentials.try_emplace(entity);
+        }
+        for (const std::uint32_t entity : m_antiRollBarEntities.Entities())
+        {
+            m_antiRollBars.try_emplace(entity);
+        }
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -535,38 +526,27 @@ namespace Fenrir
         // Only each entity's net effect matters: an entity whose components came or went has its body rebuilt from
         // what it has now (added then removed: no body; removed then added: a new body).
         std::set<std::uint32_t> changed;
-        const auto track = [this, &changed](ComponentWatch& watch, std::set<std::uint32_t>& tracked, auto has) {
-            for (const ComponentChange& change : watch.Drain())
+        const auto track = [&changed](TrackedComponents& tracked) {
+            for (const std::uint32_t entity : tracked.Drain())
             {
-                changed.insert(change.entity);
-                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
-                {
-                    tracked.insert(change.entity);
-                }
-                else
-                {
-                    tracked.erase(change.entity);
-                }
+                changed.insert(entity);
             }
         };
-        track(m_rigidBodies, m_rigidBodyEntities, [](const Entity& e) { return e.HasComponent<RigidBody>(); });
-        track(m_colliders, m_colliderEntities, [](const Entity& e) { return e.HasComponent<Collider>(); });
+        track(m_rigidBodyEntities);
+        track(m_colliderEntities);
         // Becoming or ceasing to be a character body changes whether the entity's collider is a body of its own.
-        track(m_characterWatch, m_characterEntities, [](const Entity& e) { return e.HasComponent<CharacterBody>(); });
+        track(m_characterEntities);
         // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs, and which body it
         // is part of.
-        for (const ComponentChange& change : m_triggers.Drain())
-        {
-            changed.insert(change.entity);
-        }
+        track(m_triggerEntities);
         DrainJoints();
         DrainVehicles();
 
         // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
         // worked out every tick).
         std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
-        std::erase_if(m_characterChildren, [this](std::uint32_t id) { return !m_colliderEntities.contains(id); });
-        for (std::uint32_t collider : m_colliderEntities)
+        std::erase_if(m_characterChildren, [this](std::uint32_t id) { return !m_colliderEntities.Contains(id); });
+        for (std::uint32_t collider : m_colliderEntities.Entities())
         {
             if (IsCharacterCollider(collider))
             {
@@ -585,7 +565,7 @@ namespace Fenrir
             }
         }
 
-        for (std::uint32_t rigidBody : m_rigidBodyEntities)
+        for (std::uint32_t rigidBody : m_rigidBodyEntities.Entities())
         {
             if (assembly.contains(rigidBody))
             {
@@ -598,7 +578,7 @@ namespace Fenrir
                                "one");
             }
         }
-        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.contains(entity); });
+        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.Contains(entity); });
 
         // Rebuilt: bodies whose entity or colliders changed, whose set of colliders changed, or whose colliders'
         // shapes became usable or unusable (a collision mesh released, or a shape changed to one that can be made).
