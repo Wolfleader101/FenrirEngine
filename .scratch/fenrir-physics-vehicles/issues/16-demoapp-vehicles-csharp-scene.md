@@ -13,9 +13,17 @@
 
 **Blocked by:** 14 (DemoApp gamepad driving); 15 (Vehicles in C#).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FENRIR_DEMO_SCENE="Vehicles (C#)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
+- [x] `FENRIR_DEMO_SCENE="Vehicles (C#)"` with `FENRIR_DEMO_KEYS=1` runs the autopilot and keys with no errors, in Debug and Release.
 - [ ] F6 steps Default → Vehicles (C++) → Vehicles (C#) → Default, logging each scene's key help; without scripting F6 toggles Default ⇄ Vehicles (C++) (checked by hand).
 - [ ] C# builds the scene with no warning; the car drives and its trailer brakes with it; M and E/Q shift by hand; the readouts match the C++ format and the grass shows in the wheel's readout (checked by hand).
 - [ ] V toggles the debug lines; K and R work as in C++; U turns the trailer into a wheeled car that pushes, and U again turns it back; the pad drives as in C++ (checked by hand).
+
+**Resolved by:** PR #67 (branch claude/vehicles-csharp-scene), stacked on ticket 15's PR #65 (branch claude/vehicles-in-csharp). The proof is the `FENRIR_DEMO_SCENE="Vehicles (C#)" FENRIR_DEMO_KEYS=1` smoke run, clean in Debug and Release: the autopilot laps the track (the wheels read "Grass" on the patch), then 40 L presses, P, each key twice and K, R and T. The by-hand boxes are left for a person. Findings and choices:
+- **F6 order:** the motorcycle and tank have C++ scenes of their own, so Vehicles (C#) is registered last in the family: Default → Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#) → Default. Left for the user to confirm.
+- **Looks are entities of their own,** moved onto their targets every frame, because C# cannot parent (Relationship is read-only), as Character (C#)'s look is.
+- **R and K follow the spec's recipe** in C# (ticket 12 was not merged): flipped after 2 s with no wheel down and the chassis's up more than 60° from world up; R is an upright Transform write lifted 1 m with velocities zeroed, the trailer put back behind; K is an upward and a roll impulse.
+- **P off parks the car** (brake 1 until a drive key or the pad): let go in neutral, it rolled off the tarmac.
+- **F2 now sets the app's debug-line mode on F2 and on a scene switch only** (`PhysicsDemo::DebugLines`), so V's `SetDebugDraw` from C# is not undone the next frame.
+- The hitch's frames are the hitch's offset from each unturned, unscaled body, so the scene builds in one pass.
