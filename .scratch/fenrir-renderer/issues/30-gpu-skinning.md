@@ -1,7 +1,7 @@
 # How does the renderer skin meshes?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 26
 
 ## Question
