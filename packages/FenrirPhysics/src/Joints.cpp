@@ -15,10 +15,10 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
+#include "OutOfRange.hpp"
 #include "PhysicsState.hpp"
 #include "Poses.hpp"
 #include "Same.hpp"
-#include "WarnOnce.hpp"
 
 namespace Fenrir
 {
@@ -149,16 +149,18 @@ namespace Fenrir
         {
           public:
             Corrector(std::uint32_t entity, std::uint32_t& warned, ILogger& logger, float maxFrequency)
-                : m_entity(entity), m_warned(&warned), m_logger(&logger), m_maxFrequency(maxFrequency)
+                : m_check("Joint", entity, warned, logger, Detail::OutOfRange::Lifetime::PerComponent),
+                  m_maxFrequency(maxFrequency)
             {
             }
 
             [[nodiscard]] Joint Corrected(const Joint& joint)
             {
                 Joint corrected = joint;
-                NotNegative(corrected.breakForce, NegativeBreakThreshold, "a negative break threshold is treated as 0");
-                NotNegative(corrected.breakTorque, NegativeBreakThreshold,
-                            "a negative break threshold is treated as 0");
+                m_check.NotNegative(corrected.breakForce, NegativeBreakThreshold,
+                                    "a negative break threshold is treated as 0");
+                m_check.NotNegative(corrected.breakTorque, NegativeBreakThreshold,
+                                    "a negative break threshold is treated as 0");
                 switch (corrected.kind.Type())
                 {
                 case JointType::Distance:
@@ -180,29 +182,14 @@ namespace Fenrir
             }
 
           private:
-            void Warn(Problem problem, const char* message)
-            {
-                Detail::WarnOnce(*m_warned, problem, *m_logger,
-                                 "The Joint on entity " + std::to_string(m_entity) + ": " + message);
-            }
-
-            void NotNegative(float& value, Problem problem, const char* message)
-            {
-                if (value < 0.0f)
-                {
-                    value = 0.0f;
-                    Warn(problem, message);
-                }
-            }
-
             void Correct(JointSpring& spring)
             {
-                NotNegative(spring.frequency, NegativeFrequency, "a negative spring frequency is treated as 0");
-                NotNegative(spring.damping, NegativeDamping, "a negative damping ratio is treated as 0");
+                m_check.NotNegative(spring.frequency, NegativeFrequency, "a negative spring frequency is treated as 0");
+                m_check.NotNegative(spring.damping, NegativeDamping, "a negative damping ratio is treated as 0");
                 if (spring.frequency > m_maxFrequency)
                 {
                     spring.frequency = m_maxFrequency;
-                    Warn(FrequencyTooHigh, "a spring frequency above half the tick rate is lowered to it");
+                    m_check.Warn(FrequencyTooHigh, "a spring frequency above half the tick rate is lowered to it");
                 }
             }
 
@@ -217,22 +204,12 @@ namespace Fenrir
                 const float low = std::min({min, max, 0.0f});
                 max = std::max({min, max, 0.0f});
                 min = low;
-                Warn(problem, message);
-            }
-
-            // Moves `value` into [low, high], warning if it was outside.
-            void Within(float& value, float low, float high, Problem problem, const char* message)
-            {
-                if (value < low || value > high)
-                {
-                    value = std::clamp(value, low, high);
-                    Warn(problem, message);
-                }
+                m_check.Warn(problem, message);
             }
 
             void WithinHalfTurn(float& angle, Problem problem, const char* message)
             {
-                Within(angle, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, problem, message);
+                m_check.Within(angle, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, problem, message);
             }
 
             // A hinge's or a slider's limits, and the motor they hold. A hinge's limits lie within a half turn.
@@ -251,7 +228,7 @@ namespace Fenrir
                                    "lowered to it");
                 }
                 Correct(motor.spring);
-                NotNegative(motor.maxForce, NegativeForce, "a negative motor force is treated as 0");
+                m_check.NotNegative(motor.maxForce, NegativeForce, "a negative motor force is treated as 0");
                 // Silently: a target beyond a limit is where a motor drives a door shut against its frame.
                 if (limits.enabled)
                 {
@@ -262,32 +239,33 @@ namespace Fenrir
             void Correct(DistanceJoint& distance)
             {
                 Correct(distance.spring);
-                NotNegative(distance.minDistance, NegativeMinDistance, "a negative minimum distance is raised to 0");
+                m_check.NotNegative(distance.minDistance, NegativeMinDistance,
+                                    "a negative minimum distance is raised to 0");
                 if (distance.maxDistance < distance.minDistance)
                 {
                     distance.maxDistance = distance.minDistance;
-                    Warn(MaxBelowMinDistance, "a maximum distance below the minimum is raised to it");
+                    m_check.Warn(MaxBelowMinDistance, "a maximum distance below the minimum is raised to it");
                 }
             }
 
             void Correct(HingeJoint& hinge)
             {
                 Correct(hinge.limits, hinge.motor, true);
-                NotNegative(hinge.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(hinge.friction, NegativeFriction, "a negative friction is treated as 0");
             }
 
             void Correct(SliderJoint& slider)
             {
                 Correct(slider.limits, slider.motor, false);
-                NotNegative(slider.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(slider.friction, NegativeFriction, "a negative friction is treated as 0");
             }
 
             void Correct(SwingTwistJoint& swingTwist)
             {
                 for (float* cone : {&swingTwist.swingYLimit, &swingTwist.swingZLimit})
                 {
-                    Within(*cone, 0.0f, std::numbers::pi_v<float>, ConeOutOfRange,
-                           "a swing limit outside 0 to a half turn is moved into it");
+                    m_check.Within(*cone, 0.0f, std::numbers::pi_v<float>, ConeOutOfRange,
+                                   "a swing limit outside 0 to a half turn is moved into it");
                 }
                 WithinHalfTurn(swingTwist.twistMin, TwistBeyondHalfTurn,
                                "twist limits beyond a half turn are "
@@ -297,14 +275,13 @@ namespace Fenrir
                                "lowered to it");
                 HoldRestPose(swingTwist.twistMin, swingTwist.twistMax, TwistExcludesRestPose,
                              "a twist range excluding the rest pose is widened to take it in");
-                NotNegative(swingTwist.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(swingTwist.friction, NegativeFriction, "a negative friction is treated as 0");
                 Correct(swingTwist.motor.spring);
-                NotNegative(swingTwist.motor.maxTorque, NegativeForce, "a negative motor torque is treated as 0");
+                m_check.NotNegative(swingTwist.motor.maxTorque, NegativeForce,
+                                    "a negative motor torque is treated as 0");
             }
 
-            std::uint32_t m_entity;
-            std::uint32_t* m_warned;
-            ILogger* m_logger;
+            Detail::OutOfRange m_check;
             float m_maxFrequency;
         };
     } // namespace
@@ -329,7 +306,11 @@ namespace Fenrir::Detail
     Joints::Joints(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
                    const Poses& poses)
         : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_bodies(&bodies), m_poses(&poses),
-          m_jointEntities(entities, ComponentType::Native<Joint>())
+          m_jointEntities(entities, ComponentType::Native<Joint>()),
+          m_inactive(logger, [](std::uint32_t entity, const std::string& why) {
+              return "The Joint on entity " + std::to_string(entity) + " is inactive: " + why +
+                     ". It does nothing until both its bodies are body entities of its scene.";
+          })
     {
     }
 
@@ -391,6 +372,7 @@ namespace Fenrir::Detail
                 DropConstraint(entity, it->second);
                 m_joints.erase(it);
             }
+            m_inactive.Forget(entity);
         }
     }
 
@@ -458,18 +440,12 @@ namespace Fenrir::Detail
             {
                 // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
                 // wakes the body left.
-                if (!record.inactive)
-                {
-                    m_logger->Warn("The Joint on entity " + std::to_string(entity) +
-                                   " is inactive: " + WhyInactive(joint) +
-                                   ". It does nothing until both its bodies are body entities of its scene.");
-                    record.inactive = true;
-                }
+                m_inactive.Report(entity, WhyInactive(joint));
                 DropConstraint(entity, record);
                 record.applied = joint;
                 continue;
             }
-            record.inactive = false;
+            m_inactive.Report(entity, {});
 
             const Math::Vec3 scaleA = m_poses->Baseline(joint.bodyA.GetId()).scale;
             const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : m_poses->Baseline(joint.bodyB.GetId()).scale;

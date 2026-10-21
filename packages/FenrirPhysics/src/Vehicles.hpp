@@ -19,6 +19,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
+#include "InactiveTracker.hpp"
 
 namespace Fenrir
 {
@@ -127,11 +128,10 @@ namespace Fenrir::Detail
             bool snap = true;
         };
 
-        // What physics knows of a VehicleDifferential or VehicleAntiRollBar, by its entity: whether it is inactive,
-        // warned about each time it becomes so, and the kinds of out-of-range value already warned about, each once.
+        // What physics knows of a VehicleDifferential or VehicleAntiRollBar, by its entity: the kinds of out-of-range
+        // value already warned about, each once.
         struct VehicleLinkRecord
         {
-            bool inactive = false;
             std::uint32_t warned = 0;
             // The entities it names that have been wheels while named, so one that loses its VehicleWheel is a dead
             // name rather than a wrong one; and its dead names, each warned about once.
@@ -189,14 +189,17 @@ namespace Fenrir::Detail
         TrackedComponents m_vehicleEntities;
         TrackedComponents m_wheelEntities;
         std::map<std::uint32_t, VehicleRecord> m_vehicles;
-        // Vehicles and wheels that are inactive now: each is warned about once, when it becomes so.
-        std::set<std::uint32_t> m_inactiveVehicles;
-        std::set<std::uint32_t> m_inactiveWheels;
+        // Inactive vehicles and wheels.
+        InactiveTracker m_inactiveVehicles;
+        InactiveTracker m_inactiveWheels;
         // The records are kept for the entities in their tracked sets.
         TrackedComponents m_differentialEntities;
         TrackedComponents m_antiRollBarEntities;
         std::map<std::uint32_t, VehicleLinkRecord> m_differentials;
         std::map<std::uint32_t, VehicleLinkRecord> m_antiRollBars;
+        // Inactive differentials and anti-roll bars: those naming wheels of no one vehicle.
+        InactiveTracker m_inactiveDifferentials;
+        InactiveTracker m_inactiveAntiRollBars;
         // The kinds of out-of-range value each wheel entity has been warned about, so each is warned about once.
         std::map<std::uint32_t, std::uint32_t> m_wheelWarnings;
     };
