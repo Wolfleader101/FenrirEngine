@@ -1,7 +1,7 @@
 # How do animated and simulated poses meet?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 27
 
 ## Question
