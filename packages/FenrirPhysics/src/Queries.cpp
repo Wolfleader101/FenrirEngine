@@ -342,17 +342,17 @@ namespace Fenrir
 
     bool PhysicsWorld::IsSleeping(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->BodyView().FindBody(entity);
-        return record != nullptr && record->Active() && m_impl->m_backend.IsSleeping(record->id);
+        const Impl::Body* body = m_impl->BodyView().FindBody(entity);
+        return body != nullptr && body->Active() && m_impl->m_backend.IsSleeping(body->id);
     }
 
     std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->BodyView().FindBody(entity);
-        if (record == nullptr || !record->Active())
+        const Impl::Body* body = m_impl->BodyView().FindBody(entity);
+        if (body == nullptr || !body->Active())
         {
             return std::nullopt; // no body, or an inactive one
         }
-        return m_impl->m_backend.Bounds(record->id);
+        return m_impl->m_backend.Bounds(body->id);
     }
 } // namespace Fenrir

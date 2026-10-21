@@ -40,9 +40,9 @@ namespace Fenrir::Detail
 
     bool Joints::IsAwake(const Entity& body) const
     {
-        const Bodies::Record* record = m_bodies->RecordOf(body.GetId());
-        return record != nullptr && record->Active() && record->motion.motionType != MotionType::Static &&
-               !m_backend->IsSleeping(record->id);
+        const Bodies::Body* found = m_bodies->BodyOf(body.GetId());
+        return found != nullptr && found->Active() && found->motion.motionType != MotionType::Static &&
+               !m_backend->IsSleeping(found->id);
     }
 
     void Joints::Measure()
@@ -74,8 +74,7 @@ namespace Fenrir::Detail
             return JointState{};
         }
         const JointRecord& record = it->second;
-        const Bodies::Record* a = m_bodies->RecordOf(record.applied.bodyA.GetId());
-        if (a == nullptr)
+        if (m_bodies->BodyOf(record.applied.bodyA.GetId()) == nullptr)
         {
             return JointState{};
         }
@@ -83,17 +82,16 @@ namespace Fenrir::Detail
         // From the bodies' poses after the last step, never their interpolated Transforms.
         const JointFrame frameA =
             InWorld(JointFrame{record.applied.frameA.position * record.scaleA, record.applied.frameA.rotation},
-                    m_poses->BodyShown(record.applied.bodyA.GetId()).current);
+                    m_poses->StepPose(record.applied.bodyA.GetId()));
         JointFrame frameB = record.applied.frameB;
         if (record.applied.bodyB != Entity())
         {
-            const Bodies::Record* b = m_bodies->RecordOf(record.applied.bodyB.GetId());
-            if (b == nullptr)
+            if (m_bodies->BodyOf(record.applied.bodyB.GetId()) == nullptr)
             {
                 return JointState{};
             }
             frameB = InWorld(JointFrame{record.applied.frameB.position * record.scaleB, record.applied.frameB.rotation},
-                             m_poses->BodyShown(record.applied.bodyB.GetId()).current);
+                             m_poses->StepPose(record.applied.bodyB.GetId()));
         }
         const Math::Quat toA = Math::Conjugate(frameA.rotation);
 

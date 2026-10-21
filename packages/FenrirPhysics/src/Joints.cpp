@@ -16,6 +16,7 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "PhysicsState.hpp"
+#include "Poses.hpp"
 #include "Same.hpp"
 #include "WarnOnce.hpp"
 
@@ -332,7 +333,7 @@ namespace Fenrir::Detail
     {
     }
 
-    const Bodies::Record* Joints::BodyOf(const Entity& body) const
+    const Bodies::Body* Joints::BodyOf(const Entity& body) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!body.IsValid() || body != m_entities->HandleOf(body.GetId()))
@@ -340,12 +341,12 @@ namespace Fenrir::Detail
             return nullptr;
         }
         // Keyed by the body's own entity, so a compound body's child collider names no body.
-        const Bodies::Record* record = m_bodies->RecordOf(body.GetId());
-        if (record == nullptr || !record->Active() || record->isTrigger)
+        const Bodies::Body* found = m_bodies->BodyOf(body.GetId());
+        if (found == nullptr || !found->Active() || found->isTrigger)
         {
             return nullptr;
         }
-        return record;
+        return found;
     }
 
     std::string Joints::WhyInactive(const Joint& joint) const
@@ -450,9 +451,9 @@ namespace Fenrir::Detail
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
             JointRecord& record = m_joints[entity];
 
-            const Bodies::Record* a = BodyOf(joint.bodyA);
+            const Bodies::Body* a = BodyOf(joint.bodyA);
             const bool toWorld = IsWorld(joint.bodyB);
-            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && (b == nullptr || b == a)))
             {
                 // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
@@ -470,8 +471,8 @@ namespace Fenrir::Detail
             }
             record.inactive = false;
 
-            const Math::Vec3 scaleA = a->world.scale;
-            const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : b->world.scale;
+            const Math::Vec3 scaleA = m_poses->Baseline(joint.bodyA.GetId()).scale;
+            const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : m_poses->Baseline(joint.bodyB.GetId()).scale;
             // A frame's place on its body follows the body's scale, so a scale change moves it, as a frame edit does.
             const bool recreate = !record.HasConstraint() || joint.kind.Type() != record.applied.kind.Type() ||
                                   joint.bodyA != record.applied.bodyA || joint.bodyB != record.applied.bodyB ||
@@ -528,19 +529,21 @@ namespace Fenrir::Detail
                 // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
                 constexpr std::array<std::uint32_t, 3> grey = {DebugColour::InactiveJoint, DebugColour::InactiveJoint,
                                                                DebugColour::InactiveJoint};
-                if (const Bodies::Record* a = BodyOf(joint.bodyA))
+                if (BodyOf(joint.bodyA) != nullptr)
                 {
-                    frame(joint.frameA, &a->world, a->world.scale, jointAxisA, grey);
+                    const Transform& a = m_poses->Baseline(joint.bodyA.GetId());
+                    frame(joint.frameA, &a, a.scale, jointAxisA, grey);
                 }
-                if (const Bodies::Record* b = BodyOf(joint.bodyB))
+                if (BodyOf(joint.bodyB) != nullptr)
                 {
-                    frame(joint.frameB, &b->world, b->world.scale, jointAxisB, grey);
+                    const Transform& b = m_poses->Baseline(joint.bodyB.GetId());
+                    frame(joint.frameB, &b, b.scale, jointAxisB, grey);
                 }
                 continue;
             }
-            const Bodies::Record* a = BodyOf(joint.bodyA);
+            const Bodies::Body* a = BodyOf(joint.bodyA);
             const bool toWorld = joint.bodyB == Entity();
-            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && b == nullptr))
             {
                 continue; // not expected: Sync drops a constraint before its bodies go
@@ -549,9 +552,9 @@ namespace Fenrir::Detail
             const auto colour = [&joint](std::uint32_t full) {
                 return joint.enabled ? full : DebugColour::Dimmed(full);
             };
-            frame(joint.frameA, &a->world, record.scaleA, jointAxisA,
+            frame(joint.frameA, &m_poses->Baseline(joint.bodyA.GetId()), record.scaleA, jointAxisA,
                   {colour(DebugColour::JointAX), colour(DebugColour::JointAY), colour(DebugColour::JointAZ)});
-            frame(joint.frameB, toWorld ? nullptr : &b->world, record.scaleB, jointAxisB,
+            frame(joint.frameB, toWorld ? nullptr : &m_poses->Baseline(joint.bodyB.GetId()), record.scaleB, jointAxisB,
                   {colour(DebugColour::JointBX), colour(DebugColour::JointBY), colour(DebugColour::JointBZ)});
         }
     }

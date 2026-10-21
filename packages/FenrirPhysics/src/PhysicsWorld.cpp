@@ -111,15 +111,13 @@ namespace Fenrir
 
         m_backend.Step(dt, CollisionSteps(dt));
 
-        // Write-back: bodies and characters through Poses, parents first. After the chassis: wheels are posed against
-        // its new pose.
+        // Write-back: bodies, characters and wheels through Poses, parents first, each wheel after its chassis and
+        // against its new pose.
         m_bodies.HandPoses();
         m_characters.HandPoses();
-        m_poses.WriteBack();
-        m_bodies.ReadBack();
-        m_characters.ReadBack();
-        m_characters.ResetIdle();
         m_vehicles.WriteBack(dt);
+        m_poses.WriteBack();
+        m_characters.ResetIdle();
 
         // Joints after the step.
         m_joints.Measure();
@@ -135,14 +133,13 @@ namespace Fenrir
     void PhysicsWorld::Impl::Restore()
     {
         m_poses.Restore();
-        m_vehicles.RestoreWheels();
     }
 
     void PhysicsWorld::Impl::Blend(float fraction)
     {
-        m_poses.Blend(fraction);
-        // After the bodies: wheels are posed on their chassis's blended pose.
+        // Wheels are handed first, on their chassis's blended pose, for Poses to write after the bodies.
         m_vehicles.BlendWheels(fraction);
+        m_poses.Blend(fraction);
     }
 
     void PhysicsWorld::SetDebugDraw(DebugDraw categories)

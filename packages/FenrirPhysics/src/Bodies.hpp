@@ -2,9 +2,9 @@
 
 // A physics world's bodies, at the bottom of the world: which colliders make which body, the body records the diff
 // compares the components against, rebuilding and editing the backend bodies, the pushes game code queues, and writing
-// dynamic bodies' velocities back, handing their poses to Poses. The other features read the bodies through its const
-// members, and it reads none of theirs. Knows the ECS, not Jolt: it talks to Backend::World. Private to the
-// FenrirPhysics package.
+// dynamic bodies' velocities back, handing their poses to Poses. The records are its own: the other features see a body
+// through its const members, as a Body, and its pose through Poses; it reads none of theirs. Knows the ECS, not Jolt:
+// it talks to Backend::World. Private to the FenrirPhysics package.
 
 #include <cstdint>
 #include <map>
@@ -38,39 +38,18 @@ namespace Fenrir::Detail
     class Bodies
     {
       public:
-        // One collider of a body, as physics last applied it: its shape, and its pose in the body (relative to the
-        // body's pose, in world units; scale is its entity's world scale). A part whose shape cannot be made (its
-        // collision mesh was released) is left out of the body's backend shape until its shape changes.
-        struct Part
+        /** @brief What the other features see of a body, made or inactive: its backend id, its motion and whether it is
+         * a trigger. Its world transform is Poses' baseline. */
+        struct Body
         {
-            std::uint32_t entity;
-            CollisionShape shape;
-            Transform pose;
-            bool usable;
-            // A CollisionFilter on a collider that is not on the body's own entity: ignored, with a warning.
-            bool filtered;
-        };
-
-        // What physics last applied to a body, or wrote back from it: the diff compares the components against it. A
-        // body none of whose colliders can be made (their collision meshes were released), or that the world was too
-        // full to make, keeps a record with no backend body: it is inactive, skipped by every step, until its
-        // components or its colliders' shapes change.
-        struct Record
-        {
+            /** @brief Whether the body was made in the backend: an inactive one has no backend body. */
             [[nodiscard]] bool Active() const
             {
                 return id.value != Backend::BodyId{}.value;
             }
 
             Backend::BodyId id;
-            bool canMove;
             Backend::Motion motion;
-            std::vector<Part> parts;
-            PhysicsMaterial material;
-            CollisionFilter filter;
-            Transform world;
-            Math::Vec3 linearVelocity;
-            Math::Vec3 angularVelocity;
             // A trigger: a kinematic body following its entity, whatever RigidBody the entity has.
             bool isTrigger = false;
         };
@@ -116,13 +95,9 @@ namespace Fenrir::Detail
         /** @brief Applies the queued pushes, in the order game code made them, to the bodies that have one. */
         void ApplyPushes();
 
-        /** @brief Write-back, after the step: hands each body's step pose to Poses, and writes each dynamic body's
-         * velocity back to its entity. */
+        /** @brief Write-back, after the step: hands each body's step pose to Poses, which writes them, and writes
+         * each dynamic body's velocity back to its entity. */
         void HandPoses();
-
-        /** @brief Write-back, after Poses wrote the poses: each dynamic body's world transform, as the diff compares
-         * against. */
-        void ReadBack();
 
         /** @brief Draws each made body's colliders. */
         void DrawColliders(DebugCanvas& canvas) const;
@@ -132,25 +107,19 @@ namespace Fenrir::Detail
 
         // What the other features read.
 
-        /** @brief The records, by the body's entity (its RigidBody's, or a static collider's own), in entity order. */
-        [[nodiscard]] const std::map<std::uint32_t, Record>& Records() const
-        {
-            return m_bodies;
-        }
-
-        /** @brief The record of the body whose entity is `entity`, made or inactive; null if it has none. A compound
-         * body's child collider has none. */
-        [[nodiscard]] const Record* RecordOf(std::uint32_t entity) const;
+        /** @brief The body whose entity is `entity`, made or inactive; null if it has none. A compound body's child
+         * collider has none. */
+        [[nodiscard]] const Body* BodyOf(std::uint32_t entity) const;
 
         /**
          * @brief The body `entity` has or belongs to: its own (a RigidBody's, or a static collider's), or, for a
          * collider of a compound body, that body. Null for an entity with neither component, or whose body is not made.
          */
-        [[nodiscard]] const Record* FindBody(std::uint32_t entity) const;
+        [[nodiscard]] const Body* FindBody(std::uint32_t entity) const;
 
         /** @brief As FindBody for its id, but null for a handle to an entity no longer alive, whose id may since name a
          * newer entity. */
-        [[nodiscard]] const Record* FindBody(const Entity& entity) const;
+        [[nodiscard]] const Body* FindBody(const Entity& entity) const;
 
         /**
          * @brief The entity of the body `entity` stands for: for an entity with a RigidBody or Collider, the body it
@@ -163,6 +132,33 @@ namespace Fenrir::Detail
         [[nodiscard]] std::uint32_t AttachedBodyOf(std::uint32_t trigger) const;
 
       private:
+        // One collider of a body, as physics last applied it: its shape, and its pose in the body (relative to the
+        // body's pose, in world units; scale is its entity's world scale). A part whose shape cannot be made (its
+        // collision mesh was released) is left out of the body's backend shape until its shape changes.
+        struct Part
+        {
+            std::uint32_t entity;
+            CollisionShape shape;
+            Transform pose;
+            bool usable;
+            // A CollisionFilter on a collider that is not on the body's own entity: ignored, with a warning.
+            bool filtered;
+        };
+
+        // What physics last applied to a body, or wrote back from it: the diff compares the components against it (its
+        // world transform against Poses' baseline). A body none of whose colliders can be made (their collision meshes
+        // were released), or that the world was too full to make, keeps a record with no backend body: it is inactive,
+        // skipped by every step, until its components or its colliders' shapes change.
+        struct Record : Body
+        {
+            bool canMove;
+            std::vector<Part> parts;
+            PhysicsMaterial material;
+            CollisionFilter filter;
+            Math::Vec3 linearVelocity;
+            Math::Vec3 angularVelocity;
+        };
+
         /**
          * @brief The entity whose body the collider on `entity` belongs to: the nearest of it and its ancestors with a
          * RigidBody, or the collider's own entity (a static body) if none has one.

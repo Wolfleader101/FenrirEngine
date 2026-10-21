@@ -96,7 +96,7 @@ namespace Fenrir::Detail
         };
 
         /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
-        [[nodiscard]] const Bodies::Record* BodyOf(const Entity& body) const;
+        [[nodiscard]] const Bodies::Body* BodyOf(const Entity& body) const;
         /** @brief Why `joint` names no pair of made body entities of this world, for its warning on going inactive. */
         [[nodiscard]] std::string WhyInactive(const Joint& joint) const;
         /** @brief Makes the constraint `desc` describes for the joint on `entity`, indexed under its bodies. */

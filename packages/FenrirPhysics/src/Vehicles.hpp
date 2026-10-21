@@ -1,10 +1,10 @@
 #pragma once
 
 // A physics world's vehicles (ADR-0015): each a backend vehicle on its chassis's body, removed before its body goes,
-// made after the joints in the edits, run inside the step by the backend, and written back after the bodies, its wheel
-// entities posed and shown between ticks blended in the chassis's axes. Reads the chassis through Bodies' const members
-// and its step poses through Poses. Knows the ECS, not Jolt: it talks to Backend::World. Private to the FenrirPhysics
-// package.
+// made after the joints in the edits, run inside the step by the backend, and written back with the bodies: its wheel
+// entities' poses, and their poses between ticks blended in the chassis's axes, are handed to Poses, which writes them.
+// Reads the chassis through Bodies' const members and Poses. Knows the ECS, not Jolt: it talks to Backend::World.
+// Private to the FenrirPhysics package.
 
 #include <cstdint>
 #include <map>
@@ -12,13 +12,11 @@
 #include <set>
 #include <span>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "Backend/Backend.hpp"
 #include "Bodies.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
-#include "FenrirECS/Entity.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 
@@ -37,9 +35,8 @@ namespace Fenrir::Detail
     {
       public:
         /** @brief The vehicles of `entities`, including those already there, made in `backend` on the bodies of
-         * `bodies`, whose step poses `poses` keeps. */
-        Vehicles(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
-                 const Poses& poses);
+         * `bodies`, whose poses, and their wheels', `poses` keeps and writes. */
+        Vehicles(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies, Poses& poses);
 
         /** @brief Drains the Vehicle, VehicleWheel, VehicleDifferential and VehicleAntiRollBar tracked sets, after the
          * bodies' plan: a vehicle whose Vehicle or one of whose wheels came or went since the last tick loses its
@@ -55,17 +52,14 @@ namespace Fenrir::Detail
          * change. */
         void Sync();
 
-        /** @brief Write-back, after the bodies, for a step of `dt` seconds: each vehicle's state, its wheels' states
-         * and their poses, and how its wheels are shown between ticks; the states of those with no backend vehicle
-         * reset. A sleeping vehicle keeps the state it fell asleep with, its wheels' spin 0. */
+        /** @brief Write-back, before Poses writes, for a step of `dt` seconds: each vehicle's state, its wheels'
+         * states, their poses handed to Poses, and how its wheels are shown between ticks; the states of those with no
+         * backend vehicle reset. A sleeping vehicle keeps the state it fell asleep with, its wheels' spin 0. */
         void WriteBack(float dt);
 
-        /** @brief Part of Blend, after the bodies: poses the wheels of each vehicle whose chassis Blend blended,
-         * `fraction` of the way between their last two steps in the chassis's axes, on the chassis's blended pose. */
+        /** @brief Before Poses' Blend: hands Poses the wheels of each vehicle whose chassis Blend blends, `fraction` of
+         * the way between their last two steps in the chassis's axes, on the chassis's blended pose. */
         void BlendWheels(float fraction);
-
-        /** @brief Part of Restore: puts back the true pose of each wheel BlendWheels wrote. */
-        void RestoreWheels();
 
         /** @brief Debug lines: each made vehicle's wheels, their suspension, and their contact points coloured by
          * grip. */
@@ -131,10 +125,6 @@ namespace Fenrir::Detail
             std::vector<WheelShown> previous;
             std::vector<WheelShown> current;
             bool snap = true;
-            // Whether BlendWheels wrote the wheel entities' Transforms, and each wheel entity's true local Transform
-            // it replaced.
-            bool blended = false;
-            std::vector<std::pair<Entity, Transform>> trueLocals;
         };
 
         // What physics knows of a VehicleDifferential or VehicleAntiRollBar, by its entity: whether it is inactive,
@@ -162,7 +152,7 @@ namespace Fenrir::Detail
         /** @brief Warns once about each Vehicle and each VehicleWheel that has gone inactive since the last tick. */
         void WarnAboutInactiveVehicles();
         /** @brief The made dynamic body of the chassis on `chassis`, if it can be a vehicle's; null otherwise. */
-        [[nodiscard]] const Bodies::Record* ChassisBodyOf(std::uint32_t chassis) const;
+        [[nodiscard]] const Bodies::Body* ChassisBodyOf(std::uint32_t chassis) const;
         /** @brief Each vehicle's wheel entities that can be its wheels, in entity order, by chassis entity. */
         [[nodiscard]] std::map<std::uint32_t, std::vector<std::uint32_t>> WheelsByVehicle() const;
         /** @brief The backend's wheel for the wheel on `entity`, its settings corrected (each kind of out-of-range
@@ -177,9 +167,9 @@ namespace Fenrir::Detail
          * about its axle, X. */
         [[nodiscard]] static Transform WheelPose(const Backend::VehicleWheelDesc& wheel,
                                                  const Backend::VehicleWheelRead& read);
-        /** @brief Writes each of the vehicle's wheel entities' world position and rotation from `read`, against the
-         * chassis pose `chassis`, parents before children. */
-        void PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis);
+        /** @brief Hands Poses the pose of each wheel entity of the vehicle on `chassis` from `read`, in the chassis's
+         * axes, for Poses to write against the chassis's step pose. */
+        void HandWheels(std::uint32_t chassis, const VehicleRecord& record, const Backend::VehicleRead& read);
         /** @brief After a step of `dt` seconds left the vehicle's wheels as `read`: their last two steps for
          * BlendWheels, the spin unwrapped. A new vehicle, or one whose chassis was `teleported`, snaps. */
         void AdvanceWheels(VehicleRecord& record, const Backend::VehicleRead& read, float dt, bool teleported);
@@ -193,7 +183,7 @@ namespace Fenrir::Detail
         ILogger* m_logger;
         Backend::World* m_backend;
         const Bodies* m_bodies;
-        const Poses* m_poses;
+        Poses* m_poses;
 
         // The entities with a Vehicle, and with a VehicleWheel, as of the last Drain.
         TrackedComponents m_vehicleEntities;
