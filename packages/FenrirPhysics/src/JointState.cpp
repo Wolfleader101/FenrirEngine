@@ -38,9 +38,9 @@ namespace Fenrir
 
     bool PhysicsWorld::Impl::IsAwake(const Entity& body) const
     {
-        const auto it = m_bodies.find(body.GetId());
-        return it != m_bodies.end() && it->second.Active() && it->second.motion.motionType != MotionType::Static &&
-               !m_backend.IsSleeping(it->second.id);
+        const Record* record = BodyView().RecordOf(body.GetId());
+        return record != nullptr && record->Active() && record->motion.motionType != MotionType::Static &&
+               !m_backend.IsSleeping(record->id);
     }
 
     void PhysicsWorld::Impl::MeasureJoints()
@@ -72,8 +72,8 @@ namespace Fenrir
             return JointState{};
         }
         const JointRecord& record = it->second;
-        const auto a = m_bodies.find(record.applied.bodyA.GetId());
-        if (a == m_bodies.end())
+        const Record* a = BodyView().RecordOf(record.applied.bodyA.GetId());
+        if (a == nullptr)
         {
             return JointState{};
         }
@@ -81,17 +81,17 @@ namespace Fenrir
         // From the bodies' poses after the last step, never their interpolated Transforms.
         const JointFrame frameA =
             InWorld(JointFrame{record.applied.frameA.position * record.scaleA, record.applied.frameA.rotation},
-                    a->second.shown.current);
+                    a->shown.current);
         JointFrame frameB = record.applied.frameB;
         if (record.applied.bodyB != Entity())
         {
-            const auto b = m_bodies.find(record.applied.bodyB.GetId());
-            if (b == m_bodies.end())
+            const Record* b = BodyView().RecordOf(record.applied.bodyB.GetId());
+            if (b == nullptr)
             {
                 return JointState{};
             }
             frameB = InWorld(JointFrame{record.applied.frameB.position * record.scaleB, record.applied.frameB.rotation},
-                             b->second.shown.current);
+                             b->shown.current);
         }
         const Math::Quat toA = Math::Conjugate(frameA.rotation);
 

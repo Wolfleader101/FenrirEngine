@@ -14,10 +14,12 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (new `Bodies`, `DebugCanvas` and helper headers; `WorldImpl.hpp`, `PhysicsWorld.cpp`, `Queries.cpp`, `DebugLines.cpp`, `Joints.cpp`, `JointState.cpp`, `Characters.cpp`, `Vehicles.cpp`), `packages/FenrirPhysics/CMakeLists.txt`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] No module but the world calls `RemoveJointsOf`, `RemoveVehiclesOf`, `DrainJoints`, `DrainVehicles`, `DropCharacters` or `MakeCharacters`; Bodies' code reads no joint, character or vehicle record.
-- [ ] Joints, Vehicles and the queries read bodies only through Bodies' const view.
-- [ ] One definition each of `ParentOf`, `DepthOf` and `FilterOf` in `packages/FenrirPhysics/src/`.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+- [x] No module but the world calls `RemoveJointsOf`, `RemoveVehiclesOf`, `DrainJoints`, `DrainVehicles`, `DropCharacters` or `MakeCharacters`; Bodies' code reads no joint, character or vehicle record.
+- [x] Joints, Vehicles and the queries read bodies only through Bodies' const view.
+- [x] One definition each of `ParentOf`, `DepthOf` and `FilterOf` in `packages/FenrirPhysics/src/`.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+
+**Resolved by:** PR #73 (branch claude/physics-world-split-02), into claude/physics-world-split-spec. Bodies is `src/Bodies.hpp`/`.cpp` in `Fenrir::Detail`. The world reaches it through `BodyView()` (const) for joints, vehicles, contacts and the queries, and through `PoseRecords()` for `Restore`, `Blend` and advancing the shown poses until Poses owns `Shown` (now `src/Shown.hpp`). Bodies draws with two calls, `DrawColliders` and `DrawMotion` (velocities and bounds), because the colliders come first and velocities and bounds last, so the line order is unchanged. The world's own `CharacterBody` set is drained at the top of `DropCharacters`; its touched entities arrive in `changed` from Bodies' set. The joint and vehicle drains moved from inside `SyncBodies` to just after `Plan`. Neither reads body records or logs, so the order of backend calls and warnings is the same. The helpers are `Hierarchy.hpp` (`ParentOf`, `DepthOf`, `IsBodyHost`), `FilterOf.hpp` and `WarnOnce.hpp`. `clang-x64-debug` passes 81/81 tests, and the nine smoke runs pressed all their keys with no errors.

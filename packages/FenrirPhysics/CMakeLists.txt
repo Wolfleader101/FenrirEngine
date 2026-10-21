@@ -14,10 +14,16 @@ add_library(FenrirPhysics STATIC
     include/FenrirPhysics/Queries.hpp
     include/FenrirPhysics/Vehicles.hpp
 
+    src/Bodies.cpp
+    src/Bodies.hpp
     src/BodyComponents.hpp
     src/Characters.cpp
     src/CollisionLayers.cpp
+    src/DebugCanvas.cpp
+    src/DebugCanvas.hpp
     src/DebugLines.cpp
+    src/FilterOf.hpp
+    src/Hierarchy.hpp
     src/Joints.cpp
     src/JointBreaking.cpp
     src/JointState.cpp
@@ -27,7 +33,9 @@ add_library(FenrirPhysics STATIC
     src/PhysicsWorld.cpp
     src/Queries.cpp
     src/Same.hpp
+    src/Shown.hpp
     src/Vehicles.cpp
+    src/WarnOnce.hpp
     src/WorldImpl.hpp
 
     src/Backend/Backend.hpp

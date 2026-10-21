@@ -195,7 +195,8 @@ namespace Fenrir
 
     Backend::QueryFilter PhysicsWorld::Impl::ToBackend(const QueryFilter& filter) const
     {
-        const std::uint32_t ignored = filter.ignoreBody.IsValid() ? ResolveBody(filter.ignoreBody.GetId()) : ~0u;
+        const std::uint32_t ignored =
+            filter.ignoreBody.IsValid() ? BodyView().ResolveBody(filter.ignoreBody.GetId()) : ~0u;
         return Backend::QueryFilter{filter.mask, filter.layers, ignored, filter.hitTriggers};
     }
 
@@ -341,13 +342,13 @@ namespace Fenrir
 
     bool PhysicsWorld::IsSleeping(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(entity);
+        const Impl::Record* record = m_impl->BodyView().FindBody(entity);
         return record != nullptr && record->Active() && m_impl->m_backend.IsSleeping(record->id);
     }
 
     std::optional<Math::AABB> PhysicsWorld::Bounds(const Entity& entity) const
     {
-        const Impl::Record* record = m_impl->FindBody(entity);
+        const Impl::Record* record = m_impl->BodyView().FindBody(entity);
         if (record == nullptr || !record->Active())
         {
             return std::nullopt; // no body, or an inactive one
