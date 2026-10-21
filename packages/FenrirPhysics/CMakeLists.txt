@@ -24,7 +24,6 @@ add_library(FenrirPhysics STATIC
     src/Contacts.hpp
     src/DebugCanvas.cpp
     src/DebugCanvas.hpp
-    src/DebugLines.cpp
     src/FilterOf.hpp
     src/Hierarchy.hpp
     src/Joints.cpp
@@ -41,6 +40,7 @@ add_library(FenrirPhysics STATIC
     src/Same.hpp
     src/SortAndSend.hpp
     src/Vehicles.cpp
+    src/Vehicles.hpp
     src/WarnOnce.hpp
     src/WorldImpl.hpp
 
