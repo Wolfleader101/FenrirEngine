@@ -21,3 +21,5 @@ Each package extends scripting through its own extension, built only when script
 - From ticket 28 (ADR-0034): C# mirrors the blittable `Animator`; `Animation::Seek` and `Animation::Playback` cross as native functions; `AnimationEvent`, `ClipFinished` and `AnimationEventsDropped` are plain C++ events read through event readers.
 
 - From ticket 30 (ADR-0035): `SkinnedMesh { Entity skeleton; }` is a blittable component beside `MeshRenderer` that C# mirrors; its documentation says prominently that a skinned mesh is drawn with the skeleton entity's world matrix and its own `Transform` is ignored. `PoseGeneration` may be worth exposing for C# caches.
+
+- From ticket 29 (ADR-0036): C# mirrors the blittable `AnimationLayer` and `Animator`'s new `fadeSeconds` and `fadeCurve`, with the `LayerMode`, `AdditiveReference` and `FadeCurve` enums; `BoneMask` is a FenrirAssets asset built by name and subtree, which C# creates and edits as it does materials; `Seek` and `Playback` take a layer entity too, `Playback` gains `fading` and `fadeProgress`, and `AnimationEvent` and `ClipFinished` gain `layer`.

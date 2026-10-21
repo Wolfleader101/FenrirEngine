@@ -148,4 +148,5 @@ Playback and event tests run headless, on procedural clips and skeletons. They c
 ## Consequences
 
 - Ticket 29 extends `Animator` past one clip, ticket 33 gives C# `Animator`, `Seek`, `Playback` and the events, and ticket 34's demo shows events and the budget.
+- *Amended by ADR-0036:* a skeleton plays more than one clip through `AnimationLayer` entities and crossfades on `Animator` and layers; `AnimationEvent` and `ClipFinished` gain `layer`; the event budget is shared by a skeleton's layers in chronological order; `Playback` gains `fading` and `fadeProgress`.
 - Not yet specified: node animation of entity transforms, ping-pong looping, root-motion extraction, importer-sourced clip events, a global time scale, and fixed-tick animation for guaranteed events.

@@ -617,7 +617,7 @@ A deterministic hash of a skeleton's bones, parents, engine names and inverse bi
 *Avoid:* socket, mount point, parent bone.
 
 **Animator**
-`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034).
+`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
 *Avoid:* animation player, animation component, FenrirAnimation (the package).
 
 **Playback cursor**
@@ -627,6 +627,26 @@ Where an `Animator`'s clip is, in seconds, owned by FenrirAnimation: it advances
 **Animation event**
 `AnimationEvent`: the ECS event sent when a playback cursor crosses one of its clip's timed events, identified by the event's index and the clip's revision. Delivery is best-effort per frame: at most a budget per skeleton per frame, the rest counted as dropped.
 *Avoid:* notify (Unreal's), animation callback, marker.
+
+**Animation layer**
+`AnimationLayer`: a plain component on its own entity that plays a clip onto a named skeleton entity over the layers below it, with a weight, an optional bone mask and a mode (override or additive). The skeleton's `Animator` is the base layer beneath them all; layers compose in order into the base pose (ADR-0036).
+*Avoid:* animation track, slot, blend node.
+
+**Crossfade**
+A layer's fade from its outgoing clip (or a snapshot of an interrupted fade) to its new clip over the layer's `fadeSeconds`, started by changing its clip; both clips keep their own playback cursors meanwhile.
+*Avoid:* transition (a state machine's), blend (the general operation).
+
+**Bone mask**
+`BoneMask`: a shared asset of per-bone weights, listed by engine bone name for a single bone or a subtree, that limits a layer to part of a skeleton; resolved per skeleton by name.
+*Avoid:* avatar mask (Unity's), bone filter, blend mask.
+
+**Additive layer**
+An animation layer whose clip adds its difference from a reference pose onto the pose beneath, scaled by the layer's weight, instead of replacing it.
+*Avoid:* additive clip (the clip is ordinary; the layer is additive), delta animation.
+
+**Reference pose**
+The complete local pose an additive layer's deltas are measured from: its clip at time 0 by default, or the skeleton's rest pose.
+*Avoid:* base pose (FenrirSkeleton's, another thing), bind pose, zero pose.
 
 ## FenrirEngine input
 
