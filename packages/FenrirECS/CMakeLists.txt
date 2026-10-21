@@ -15,6 +15,9 @@ add_library(FenrirECS STATIC
     include/FenrirECS/ComponentWatch.hpp
     src/ComponentWatch.cpp
 
+    include/FenrirECS/TrackedComponents.hpp
+    src/TrackedComponents.cpp
+
     include/FenrirECS/DynamicComponent.hpp
     src/DynamicComponent.cpp
     src/ByteStorage.hpp

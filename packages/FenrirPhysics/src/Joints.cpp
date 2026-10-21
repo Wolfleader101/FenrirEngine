@@ -370,21 +370,13 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::DrainJoints()
     {
-        for (const ComponentChange& change : m_jointWatch.Drain())
+        for (const std::uint32_t entity : m_jointEntities.Drain())
         {
             // Removed, or removed and added again: rebuilt from what the entity has now, as a body is.
-            if (const auto it = m_joints.find(change.entity); it != m_joints.end())
+            if (const auto it = m_joints.find(entity); it != m_joints.end())
             {
-                DropConstraint(change.entity, it->second);
+                DropConstraint(entity, it->second);
                 m_joints.erase(it);
-            }
-            if (m_entities->HasEntity(change.entity) && m_entities->GetEntity(change.entity).HasComponent<Joint>())
-            {
-                m_jointEntities.insert(change.entity);
-            }
-            else
-            {
-                m_jointEntities.erase(change.entity);
             }
         }
     }
@@ -441,7 +433,7 @@ namespace Fenrir
     {
         // A spring faster than half the tick rate cannot be stepped.
         const float maxFrequency = 0.5f / dt;
-        for (const std::uint32_t entity : m_jointEntities)
+        for (const std::uint32_t entity : m_jointEntities.Entities())
         {
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
             JointRecord& record = m_joints[entity];

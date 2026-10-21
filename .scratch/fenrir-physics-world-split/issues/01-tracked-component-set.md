@@ -12,9 +12,11 @@
 
 **Touches:** `packages/FenrirECS/` (a new header and source, `CMakeLists.txt`, `Tests/`), `packages/FenrirPhysics/src/` (`WorldImpl.hpp`, `PhysicsWorld.cpp`, `Joints.cpp`, `Vehicles.cpp`), `docs/adr/0011-physics-components-are-plain-data-physics-diffs.md`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirECSTests` cases for `TrackedComponents`: the initial scan; each touched entity once and in entity order; a removal and re-add, and a replace, counting as touched; the live set after adds, removes, entity destruction and clearing; a dynamic component type; two independent sets on one type; a set outliving its list.
-- [ ] `PhysicsWorld::Impl` has no `ComponentWatch` member and no `ForEachWith` scan.
-- [ ] `FenrirPhysicsTests`, `FenrirECSTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+- [x] `FenrirECSTests` cases for `TrackedComponents`: the initial scan; each touched entity once and in entity order; a removal and re-add, and a replace, counting as touched; the live set after adds, removes, entity destruction and clearing; a dynamic component type; two independent sets on one type; a set outliving its list.
+- [x] `PhysicsWorld::Impl` has no `ComponentWatch` member and no `ForEachWith` scan.
+- [x] `FenrirPhysicsTests`, `FenrirECSTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+
+**Resolved by:** PR #72 (branch claude/tracked-component-set), into claude/physics-world-split-spec. `TrackedComponents` is in `packages/FenrirECS/include/FenrirECS/TrackedComponents.hpp` with its `[tracked]` cases in `Tests/TrackedComponentSets.cpp`. It keeps an entity by its last recorded change, which the watch contract makes the same as "alive and has the type now" and which stays safe once the set outlives its list. Physics drains each tracked set once per entity in entity order, where it used to handle every change in recorded order; the joint and vehicle drops already did nothing after the first. `clang-x64-debug` passes 81/81 tests, and the nine smoke runs were clean.

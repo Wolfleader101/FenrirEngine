@@ -482,60 +482,43 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::DrainVehicles()
     {
-        const auto track = [this](ComponentWatch& watch, std::set<std::uint32_t>& tracked, auto has, auto changed) {
-            for (const ComponentChange& change : watch.Drain())
-            {
-                changed(change.entity);
-                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
-                {
-                    tracked.insert(change.entity);
-                }
-                else
-                {
-                    tracked.erase(change.entity);
-                }
-            }
-        };
         // A Vehicle removed, or removed and added again, loses its backend vehicle: it is made again from what the
         // entity has now.
-        track(
-            m_vehicleWatch, m_vehicleEntities, [](const Entity& e) { return e.HasComponent<Vehicle>(); },
-            [this](std::uint32_t entity) {
-                if (const auto it = m_vehicles.find(entity); it != m_vehicles.end())
-                {
-                    DropVehicle(it->second, false);
-                    m_vehicles.erase(it);
-                }
-            });
+        for (const std::uint32_t entity : m_vehicleEntities.Drain())
+        {
+            if (const auto it = m_vehicles.find(entity); it != m_vehicles.end())
+            {
+                DropVehicle(it->second, false);
+                m_vehicles.erase(it);
+            }
+        }
         // A wheel that came or went, even one that came back, changes its vehicle's wheel set (a rebuild, carrying
         // over), and is warned about afresh.
-        track(
-            m_wheelWatch, m_wheelEntities, [](const Entity& e) { return e.HasComponent<VehicleWheel>(); },
-            [this](std::uint32_t entity) {
-                m_wheelWarnings.erase(entity);
-                for (auto& [chassis, record] : m_vehicles)
+        for (const std::uint32_t entity : m_wheelEntities.Drain())
+        {
+            m_wheelWarnings.erase(entity);
+            for (auto& [chassis, record] : m_vehicles)
+            {
+                if (std::ranges::find(record.wheels, entity) != record.wheels.end())
                 {
-                    if (std::ranges::find(record.wheels, entity) != record.wheels.end())
-                    {
-                        DropVehicle(record, true);
-                    }
+                    DropVehicle(record, true);
                 }
-            });
+            }
+        }
         // A differential or anti-roll bar removed, or removed and added again, is new: it is warned about afresh. Its
         // edits and relinks are diffed in step 2.
-        const auto link = [this](ComponentWatch& watch, std::map<std::uint32_t, VehicleLinkRecord>& records, auto has) {
-            for (const ComponentChange& change : watch.Drain())
+        const auto link = [](TrackedComponents& tracked, std::map<std::uint32_t, VehicleLinkRecord>& records) {
+            for (const std::uint32_t entity : tracked.Drain())
             {
-                records.erase(change.entity);
-                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
+                records.erase(entity);
+                if (tracked.Contains(entity))
                 {
-                    records.try_emplace(change.entity);
+                    records.try_emplace(entity);
                 }
             }
         };
-        link(m_differentialWatch, m_differentials,
-             [](const Entity& e) { return e.HasComponent<VehicleDifferential>(); });
-        link(m_antiRollBarWatch, m_antiRollBars, [](const Entity& e) { return e.HasComponent<VehicleAntiRollBar>(); });
+        link(m_differentialEntities, m_differentials);
+        link(m_antiRollBarEntities, m_antiRollBars);
     }
 
     std::map<std::uint32_t, PhysicsWorld::Impl::VehicleLinks> PhysicsWorld::Impl::LinksByVehicle(
@@ -804,7 +787,7 @@ namespace Fenrir
         {
             return "it is on its vehicle's chassis entity";
         }
-        if (!m_vehicleEntities.contains(chassis.GetId()))
+        if (!m_vehicleEntities.Contains(chassis.GetId()))
         {
             return named + " has no Vehicle";
         }
@@ -823,7 +806,7 @@ namespace Fenrir
     std::map<std::uint32_t, std::vector<std::uint32_t>> PhysicsWorld::Impl::WheelsByVehicle() const
     {
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheels;
-        for (const std::uint32_t id : m_wheelEntities)
+        for (const std::uint32_t id : m_wheelEntities.Entities())
         {
             if (WhyNoWheel(id).empty())
             {
@@ -854,10 +837,12 @@ namespace Fenrir
             }
         };
         warn(
-            m_vehicleEntities, m_inactiveVehicles, [this](std::uint32_t id) { return WhyNoChassis(id); }, "Vehicle",
+            m_vehicleEntities.Entities(), m_inactiveVehicles, [this](std::uint32_t id) { return WhyNoChassis(id); },
+            "Vehicle",
             "It is built fresh once its entity has a dynamic RigidBody with a solid collider and no CharacterBody.");
         warn(
-            m_wheelEntities, m_inactiveWheels, [this](std::uint32_t id) { return WhyNoWheel(id); }, "VehicleWheel",
+            m_wheelEntities.Entities(), m_inactiveWheels, [this](std::uint32_t id) { return WhyNoWheel(id); },
+            "VehicleWheel",
             "It is left out of its vehicle until it names another entity of its scene with a Vehicle and shares its "
             "entity with no RigidBody, CharacterBody or Collider.");
     }
@@ -868,7 +853,7 @@ namespace Fenrir
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheelsOf = WheelsByVehicle();
         std::map<std::uint32_t, VehicleLinks> linksOf = LinksByVehicle(wheelsOf);
         // In chassis entity order, so vehicles are made, and so solved, in a reproducible order.
-        for (const std::uint32_t chassis : m_vehicleEntities)
+        for (const std::uint32_t chassis : m_vehicleEntities.Entities())
         {
             VehicleRecord& record = m_vehicles[chassis];
             Entity entity = m_entities->GetEntity(chassis);
@@ -1074,7 +1059,7 @@ namespace Fenrir
             AdvanceWheels(record, read, dt, body.shown.snap);
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
-        for (const std::uint32_t wheel : m_wheelEntities)
+        for (const std::uint32_t wheel : m_wheelEntities.Entities())
         {
             if (!posed.contains(wheel))
             {
