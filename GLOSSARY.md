@@ -155,6 +155,10 @@ Informal: user C# code in general. Not the name of any type or concept.
 
 ## FenrirEngine core
 
+**Colour**
+`Fenrir::Colour`: a colour as linear red, green, blue and alpha, however it was written (an sRGB hex value is converted when it is made).
+*Avoid:* color (spelling), packed colour, RGBA (alone).
+
 **World transform**
 Where an entity is in the scene, as opposed to its `Transform`, which is relative to its parent. Always computed from the entity's ancestors, never stored. Its scale is approximate when a parent's non-uniform scale meets a child's rotation (the exact form is the world matrix).
 *Avoid:* global transform, absolute transform.
@@ -410,6 +414,19 @@ How a material's pixels combine with what is behind them: `Opaque`, `Masked` (al
 **Material set**
 Binding set 2 of every material shader: its `MaterialParams` block and textures. Unlike the frame, view and draw sets, its layout is read from the shader container's build-time reflection.
 *Avoid:* descriptor set (Vulkan's), material block (only the uniform block in it).
+## FenrirEngine debug drawing
+**FenrirDebugDraw**
+The engine's debug-drawing package: the shapes and text game code and other packages ask to see, kept per scene as plain data with no GPU code. FenrirRenderer draws them; FenrirPhysics is one of the packages that draws into it (ADR-0025).
+*Avoid:* gizmos (Bevy's name; an editor's gizmos are handles you drag), debug renderer, line batcher.
+**Debug draw item**
+One shape or piece of text in a scene's debug drawing, kept for its duration: once, some seconds, or until cleared.
+*Avoid:* debug line (one kind of item), primitive, gizmo.
+**Debug group**
+A named set of debug draw items that is shown, hidden or cleared together, such as physics's.
+*Avoid:* category (physics's categories choose what it generates), layer, channel.
+**On-screen message**
+Debug text stacked in a corner of the window, newest first, which a later message with the same key replaces.
+*Avoid:* log (FenrirLogger's), toast, notification.
 ## FenrirEngine assets
 
 **FenrirAssets**
