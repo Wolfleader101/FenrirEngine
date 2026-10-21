@@ -12,11 +12,18 @@
 
 **Blocked by:** 02 (Engine and gearbox); 03 (Wheel settings, probe and tilt limit); 04 (Differentials and anti-roll bars); 07 (Motorcycles); 08 (Tracked vehicles); 09 (Trailers and towing); 13 (Vehicles debug lines); the `[TaggedUnion]` generator, built: `.scratch/fenrir-scripting-tagged-union/issues/02-tagged-union-tracer-bullet.md` and `03-tagged-union-diagnostics.md`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `PhysicsScriptingTests` with a `Vehicles.cs` fixture: the four components validate against their native layouts; each `new` equals C++'s `{}`, including `new VehicleKind()`, the empty links and `MaxTilt = π`.
-- [ ] A C# system builds a chassis and four wheel entities linked in that same system; after playback `Input.Forward = 1` raises `State.ForwardSpeed`; `VehicleWheel.State.OnGround` is true and `GroundBody` names the floor.
-- [ ] `Kind.Wheeled.Transmission.Mode = Manual` then `Input.Gear = 2` shows in `State.Gear`; assigning a new kind (wheeled to trailer) reaches physics; the wrong view throws `InvalidOperationException`.
-- [ ] A `VehicleDifferential` built from C# drives only its wheels; `DebugDraw.Vehicles` equals the C++ bit.
-- [ ] Compile-fail cases: writing `Vehicle.State` or `VehicleWheel.State`, or a field of either, through `Ref<T>` does not compile.
-- [ ] Disabled and inactive vehicles read reset `State`; nothing throws.
+- [x] `PhysicsScriptingTests` with a `Vehicles.cs` fixture: the four components validate against their native layouts; each `new` equals C++'s `{}`, including `new VehicleKind()`, the empty links and `MaxTilt = π`.
+- [x] A C# system builds a chassis and four wheel entities linked in that same system; after playback `Input.Forward = 1` raises `State.ForwardSpeed`; `VehicleWheel.State.OnGround` is true and `GroundBody` names the floor.
+- [x] `Kind.Wheeled.Transmission.Mode = Manual` then `Input.Gear = 2` shows in `State.Gear`; assigning a new kind (wheeled to trailer) reaches physics; the wrong view throws `InvalidOperationException`.
+- [x] A `VehicleDifferential` built from C# drives only its wheels; `DebugDraw.Vehicles` equals the C++ bit.
+- [x] Compile-fail cases: writing `Vehicle.State` or `VehicleWheel.State`, or a field of either, through `Ref<T>` does not compile.
+- [x] Disabled and inactive vehicles read reset `State`; nothing throws.
+
+**Resolved by:** PR #65 (branch claude/vehicles-in-csharp), into `dotnet-scripting`; ticket 16's PR is stacked on it. The proof is `FenrirPhysicsScriptingTests`' `[vehicles]` cases (fixture `Tests/Fixture/Vehicles.cs`), `C#'s debug-draw categories match C++'s` and the five `PhysicsCompile-VehicleState*`/`WheelState*` cases. Findings and choices:
+- **`DebugDraw.Vehicles` is in `Queries.cs`,** where the C# `DebugDraw` enum lives, not `PhysicsWorld.cs`. `All` now names it.
+- **The mirror check:** the four components are checked as scripts load, as the others are; one test swaps in a drifted `Vehicle` mapping and the load fails naming `'Kind'`.
+- **"Assigning a new kind reaches physics"** is shown by a car turned into a trailer under full throttle: C++ reads `TrailerVehicle`, and the state reads 0 RPM, gear 0 and no motion. The wrong view's message is "The vehicle is a Trailer, not a Wheeled."
+- **The differential test** puts the car on a stand, as the C++ differential test does, so the driven rear wheels spin up and the undriven front ones stay still.
+- **Inactive** is a chassis made kinematic from C#. `default(Vehicle)` reads a new state and warns nothing; `default(VehicleWheel)` warns once as inactive.
