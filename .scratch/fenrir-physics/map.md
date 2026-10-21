@@ -21,6 +21,7 @@ A set of specs, one feature directory each (`.scratch/fenrir-physics-<name>/spec
 - **Conventions:** meters, Y-up, right-handed (matching glm and the DemoApp camera); single-precision floats, like the rest of the engine.
 - **Existing hooks:** `App::Run` runs `SchedulePriority::Tick` in a fixed-step accumulator loop (`Time::tickRate`), built for systems like physics. `Transform` is local to its parent through `Relationship` (`FenrirECS/Entity.hpp`); the physics backend simulates in world space.
 - Skills: grilling tickets call `grilling` and `domain-modeling`; seam and module-shape questions also use `codebase-design`. Research tickets call `research` and put their findings on a `research/<name>` branch.
+- **Built specs are removed.** The foundation, joints, character and vehicles specs and their tickets (`.scratch/fenrir-physics-<name>/`), and the `[TaggedUnion]` generator's tickets (`.scratch/fenrir-scripting-tagged-union/`), were deleted once built; links to them below and in the tickets are historical, and commit 6210be2 is the last to hold them. The code, ADRs and `GLOSSARY.md` are the current record.
 - Plan, don't do: tickets produce decisions, not code (the spike in "Spike: a box dropping onto a plane through the proposed seam" is throwaway).
 
 ## Decisions so far
