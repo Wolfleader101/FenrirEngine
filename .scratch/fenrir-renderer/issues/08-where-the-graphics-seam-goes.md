@@ -20,7 +20,7 @@ Consult `codebase-design` for the seam.
 
 ADR: `docs/adr/0016-fenrirrenderer-picks-its-graphics-backend-at-runtime-behind-a-private-graphics-device.md`. Glossary: Graphics API, Graphics backend, Graphics device.
 
-- **Altitude:** two layers. The public FenrirRenderer (components, meshes, materials, cameras) over a private, thin graphics device shaped like the explicit APIs (buffers, textures, samplers, pipelines, binding groups, passes); OpenGL 4.5 (DSA, immutable storage, clip control, samplers, separate programs) emulates it; barriers stay in the backend.
+- **Altitude:** two layers. The public FenrirRenderer (components, meshes, materials, cameras) over a private, thin graphics device shaped like the explicit APIs (buffers, textures, samplers, pipelines, binding groups, passes); OpenGL 4.6 core (DSA, immutable storage, clip control, samplers, separate programs; SPIR-V and `gl_DrawID` core) emulates it, amended from 4.5 by ADR-0018 (while resolving tickets 12 and 20); barriers stay in the backend.
 - **Selection:** at runtime, through an abstract device. `RendererConfig` names `OpenGL` (default) or `Null`; the null backend is always built, needs no window or context, and serves tests and headless apps. A backend that cannot start fails `Install` with a diagnostic, never falling back to null. GL and its loader stay in `src/Backend/OpenGL/`, linked `PRIVATE`.
 - **Commands:** recorded through per-pass encoders into a FenrirRenderer-owned `CommandList` of plain structs, replayed by the backend on one virtual `Submit`; resource creation and destruction are virtual calls. Recording needs no GPU thread.
 - **Handles:** typed index plus generation, owned by the device; destruction deferred by frame index.
