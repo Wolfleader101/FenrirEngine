@@ -569,8 +569,24 @@ A skeleton's local bone transforms after every pose modifier; finalisation deriv
 *Avoid:* output pose, blended pose.
 
 **Pose modifier**
-Something that changes a skeleton's pose after animation, in order: IK, procedural posing, ragdoll blending, gameplay adjustments. It aims in local, model or world space, and finalisation resolves it into local transforms.
+Code that changes a skeleton's pose after animation, in order: IK, procedural posing, ragdoll blending, gameplay adjustments. It runs in the `Modify` pose stage and writes pose targets through a pose edit, each resolved into the final pose at once, so later modifiers see earlier ones' results (ADR-0033).
 *Avoid:* override (the first modifier's kind, not the general term), post-process, constraint (physics's sense).
+
+**Pose target**
+`Target`: one write a pose modifier makes to a bone: a transform in local, model or world space, a mask of translation, rotation and scale, and a weight. It is met when written, not held against later moves of the bone's ancestors.
+*Avoid:* goal, effector (IK's), constraint.
+
+**Pose edit**
+`PoseEdit`: a pose modifier's only access to one skeleton instance's final pose while it is built: reads of the base, local and model-space pose and writes of pose targets. Valid only during the modifier call that opened it.
+*Avoid:* pose handle, pose context.
+
+**Pose pipeline**
+FenrirSkeleton's ordered pose work each frame, on the active scene: reconcile, `Animate`, prepare, `Modify`, finalise, attach, `Late`. Its order does not depend on which packages are installed first (ADR-0033).
+*Avoid:* animation update, pose graph.
+
+**Pose stage**
+One of the pose pipeline's public steps that others add work to, `Animate`, `Modify` or `Late`, each hosted in an app phase (all in `PostUpdate` for now) and ordered within by an order number.
+*Avoid:* phase (FenrirApp's), render stage (the renderer's), pass.
 
 **Skinning palette**
 One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it.

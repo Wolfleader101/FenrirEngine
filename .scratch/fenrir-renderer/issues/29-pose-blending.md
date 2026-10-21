@@ -13,3 +13,7 @@ How much blending does the first animation spec have, and how does it fit ADR-00
 - Whether layers and masks belong to FenrirAnimation's base pose or become pose modifiers (ADR-0028 lists layers and masks among modifiers to come).
 - Whether a blend tree or graph (blend spaces, state machines) is in this spec or stays in *Richer animation*.
 - Weights that sum below one: fall back to the rest pose, as ozz does, or normalise.
+
+## Comments
+
+- From ticket 27 (ADR-0033): a modifier is `Skeleton::AddModifier(name, order, fn)` writing `Target`s (local/model/world, channel mask, weight) through `PoseEdit`, composed sequentially in `Modify`; layers and masks may be base-pose blending inside `Animate` or modifiers on this interface.
