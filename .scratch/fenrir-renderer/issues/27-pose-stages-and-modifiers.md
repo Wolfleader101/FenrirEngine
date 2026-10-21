@@ -1,7 +1,7 @@
 # What are the pose stages, and how do pose modifiers plug in?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 26
 
 ## Question
