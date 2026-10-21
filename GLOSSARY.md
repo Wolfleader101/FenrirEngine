@@ -384,6 +384,14 @@ A part of the renderer core that adds render passes to each frame's render graph
 One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
 *Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
 
+**Graphics surface**
+What a window offers a graphics backend to draw into and present: the OpenGL context today, later a Vulkan surface, an `HWND` or a Metal layer. FenrirWindow creates it on the renderer's request; the backend owns what is built on it, such as a swapchain (ADR-0022).
+*Avoid:* swapchain (the backend's, built on a surface), context (alone), canvas.
+
+**Main window**
+The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
+*Avoid:* primary window, root window.
+
 ## FenrirEngine assets
 
 **FenrirAssets**
