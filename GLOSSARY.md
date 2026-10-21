@@ -413,8 +413,16 @@ A shared `MaterialData` asset saying how a mesh is drawn: a shader, a blend mode
 *Avoid:* material instance (there are no per-entity overrides), shader (a material names one), effect.
 
 **Material parameter**
-One named value in a material, set by name from C++ or C#: a scalar, vector, colour or texture with its sampler. The shader's material set gives each name its place.
+One named value in a material, set by name from C++ or C#: a scalar, vector, colour or texture with its sampler. The shader's material set gives each name its place. Its effective value is the material's parameter override, else the shader's parameter default.
 *Avoid:* uniform, property.
+
+**Parameter default**
+The value a material parameter takes when the material does not set it: what the shader declares with `#pragma fenrir default`, else zero (for a texture: white). The shader compiler checks it and stores it in the shader container's reflection (ADR-0024).
+*Avoid:* GLSL default (GLSL block members have none), initial value.
+
+**Parameter override**
+A value a material sets for one of its parameters, overriding the shader's parameter default. A material stores only its overrides, and `Reset` removes one. It is not a per-entity override, which would override a material and does not exist yet.
+*Avoid:* set value, local value.
 
 **Blend mode**
 How a material's pixels combine with what is behind them: `Opaque`, `Masked` (alpha cutoff), `AlphaBlend` or `Additive`. It picks the render stage and whether depth is written.
