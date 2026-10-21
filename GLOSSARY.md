@@ -495,7 +495,7 @@ The entity that carries a skeleton instance's `SkeletonPose`. Skinned meshes and
 *Avoid:* rig entity, armature, root bone (a bone, not an entity).
 
 **Skeleton pose**
-`SkeletonPose`: one skeleton instance's mutable pose, as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. The skeleton asset it instances, `SkeletonData`, never changes.
+`SkeletonPose`: one skeleton instance's mutable pose, as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. Model space is relative to the skeleton entity, never including its `Transform`; a bone's world matrix is the skeleton entity's world matrix times its model matrix. The skeleton asset it instances, `SkeletonData`, never changes.
 *Avoid:* skeleton instance (alone), rig state.
 
 **Base pose**

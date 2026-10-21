@@ -33,6 +33,17 @@ Seven parts, each with one job:
 - **The first implementation has one modifier:** a weighted per-bone override, enough for a ragdoll going limp or blending back. It is an initial implementation, not the contract for all pose modification; ordered modifiers (layers and masks, IK, procedural, ragdoll, gameplay) replace or generalise it as those features arrive.
 - **Clips name bones by name**, resolved to indices once per clip and skeleton and cached, so a clip plays on any skeleton whose bone names match.
 
+## Coordinate spaces
+
+The skeleton's pose is not part of the ECS transform hierarchy, and the two meet at one place only: the skeleton entity's world matrix.
+
+- **Local:** a bone relative to its parent bone; the root bone relative to the skeleton entity.
+- **Model space:** a bone relative to the skeleton entity, `M_model[i] = M_model[parent(i)] × M_local[i]`, the root bone's being its local. `SkeletonPose` stores these; they never include the skeleton entity's own `Transform` or its ancestors.
+- **World:** `GetBoneWorldMatrix(skeletonEntity, bone) = GetWorldMatrix(skeletonEntity) × M_model[bone]`. FenrirSkeleton provides it as the one defined way to combine the two; readers do not combine them by hand.
+- **Skinning:** `M_skin[i] = M_model[i] × M_inverseBind[i]`, which maps a vertex from the mesh's bind space to skeleton model space. The renderer draws a skinned mesh with the skeleton entity's world matrix, not the mesh entity's, so a skinned mesh's own `Transform` does not move it (as glTF specifies).
+- **One bind space per skeleton, made by the importer.** Imported files may bind meshes in their own node's space, or put non-identity transforms on mesh nodes (common in FBX). The importer bakes any mesh-to-skeleton bind transform into the inverse binds, or into the mesh's vertices, so that at run time the two formulas above hold for every mesh on a skeleton with no extra matrix.
+- **Modifier targets** given in world space are taken into model space through the inverse of the skeleton entity's world matrix, and from model space into local space through the parent bone's model-space matrix.
+
 ## Order in the frame
 
 - **Explicit pose stages, hosted in `PostUpdate` for now.** FenrirSkeleton defines the order: animation writes the base pose, modifiers run, finalisation runs last. The first implementation runs all three once per frame in `PostUpdate`, after game code in `Update` and physics interpolation in `AfterTicks`, before `Render`. Gameplay in tick phases sees the previous frame's final pose.
@@ -42,12 +53,12 @@ Seven parts, each with one job:
 
 - **A skinned mesh's entity references the skeleton entity.** The renderer reads that skeleton's finalised palette in `Render`, uploads it and skins in the vertex shader under ADR-0024's `SKINNED` variant, with four bone weights per vertex (ADR-0021's importer limit).
 - **One logical palette per skeleton instance**, shared by every mesh skinned to it. How many physical uploads that becomes, and the buffers, caching and synchronisation behind it, are the renderer's and not promised.
-- **Bone indices and inverse binds agree.** The importer maps every skinned mesh's bone indices onto its skeleton's order, and the inverse binds the palette uses are the skeleton's, so a mesh and its skeleton cannot disagree.
+- **Bone indices and inverse binds agree.** The importer maps every skinned mesh's bone indices onto its skeleton's order, and the inverse binds the palette uses are the skeleton's, in the skeleton's one bind space (see *Coordinate spaces*), so a mesh and its skeleton cannot disagree.
 
 ## Spawning, attachments and the editor
 
 - **Bones are not entities.** FenrirAssets' facade gains `SpawnNodes(scene, AssetHandle<Model>, parent)`, which spawns the model's non-bone nodes as entities with `Name`, `Transform` and parent links, preserving the hierarchy (attachment points and other transforms included), and returns the root. FenrirSkeleton adds a `SkeletonPose` to each skeleton's owning entity. FenrirRenderer's `SpawnModel` is built on `SpawnNodes` and adds the skeletons, `MeshRenderer`s and skin references (amending ADR-0023). A headless app calls `SpawnNodes` and FenrirSkeleton without the renderer.
-- **Bone attachments are components.** A `BoneAttachment` on an entity names a skeleton entity, a bone by name (resolved to an index and cached) and an offset, the user-editable attachment transform. Finalisation computes where the entity goes and owns its resulting `Transform`, converting the bone's model-space transform into the entity's local transform under its ECS parent. Hand-written values in that `Transform` are overwritten.
+- **Bone attachments are components.** A `BoneAttachment` on an entity names a skeleton entity, a bone by name (resolved to an index and cached) and an offset, the user-editable attachment transform. Finalisation computes where the entity goes, `GetBoneWorldMatrix(skeleton, bone) × offset`, and owns its resulting `Transform`, converting that into the entity's local transform under its ECS parent (which reduces to `M_model[bone] × offset` when the parent is the skeleton entity). Hand-written values in that `Transform` are overwritten.
 - **The editor sees bones without entities.** `SkeletonPose` and `SkeletonData` are enough for an editor to show bones as virtual hierarchy entries and edit their local transforms. The editor itself is out of this map's scope.
 
 ## Physics
@@ -63,6 +74,7 @@ Seven parts, each with one job:
 - **The pose in FenrirAssets' facade, or in FenrirECS beside `Transform`.** Rejected: the first puts runtime state in the package of plain asset data; the second cannot hold an `AssetHandle<SkeletonData>` without making the core depend on FenrirAssets.
 - **ozz-animation behind a private seam.** Deferred: it leaks SoA math, a fixed bone order capped at 1024, its own format and ratio-based time, and brings no playback state, GPU skinning or ragdoll support. It or ACL can come in privately if clip memory or sampling speed shows in a profile.
 - **One universal override slot.** Rejected as the long-term contract: layers, IK and ragdolls compose in order. The first implementation keeps one weighted override and says so.
+- **Designing the animation graph and the ragdoll system now.** Rejected: this decision fixes only the skeleton representation, the base/final pose boundary and the coordinate spaces. Graphs, IK and ragdoll behaviour are designed when they are built, on top of those.
 
 ## Consequences
 
