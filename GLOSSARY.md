@@ -384,6 +384,22 @@ A part of the renderer core that adds render passes to each frame's render graph
 One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
 *Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
 
+**Material**
+A shared `MaterialData` asset saying how a mesh is drawn: a shader, a blend mode, whether it is double-sided, and its material parameters. Many entities name one material by its asset handle (ADR-0024).
+*Avoid:* material instance (there are no per-entity overrides), shader (a material names one), effect.
+
+**Material parameter**
+One named value in a material, set by name from C++ or C#: a scalar, vector, colour or texture with its sampler. The shader's material set gives each name its place.
+*Avoid:* uniform, property.
+
+**Blend mode**
+How a material's pixels combine with what is behind them: `Opaque`, `Masked` (alpha cutoff), `AlphaBlend` or `Additive`. It picks the render stage and whether depth is written.
+*Avoid:* alpha mode (glTF's term, mapped onto it), render queue.
+
+**Material set**
+Binding set 2 of every material shader: its `MaterialParams` block and textures. Unlike the frame, view and draw sets, its layout is read from the shader container's build-time reflection.
+*Avoid:* descriptor set (Vulkan's), material block (only the uniform block in it).
+
 ## FenrirEngine assets
 
 **FenrirAssets**
