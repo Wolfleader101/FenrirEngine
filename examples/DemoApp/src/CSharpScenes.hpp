@@ -7,6 +7,7 @@
 //   Physics (C#)   F3, built by scripts/Physics/Playground.cs.
 //   Joints (C#)    F4, after Joints (C++), built by scripts/Physics/Joints.cs.
 //   Character (C#) F5, after Character (C++), built by scripts/Physics/Character.cs.
+//   Vehicles (C#)  F6, after the C++ vehicle scenes, built by scripts/Physics/Vehicles.cs.
 
 #if defined(FENRIR_PHYSICS) && defined(FENRIR_SCRIPTING)
 
@@ -25,10 +26,12 @@ namespace CSharpScenes
     inline constexpr std::int32_t physicsId = 1;   // Playground.SceneId
     inline constexpr std::int32_t jointsId = 2;    // JointsScene.SceneId
     inline constexpr std::int32_t characterId = 3; // CharacterScene.SceneId
+    inline constexpr std::int32_t vehiclesId = 4;  // VehiclesScene.SceneId
 
     inline constexpr const char* physicsName = "Physics (C#)";
     inline constexpr const char* jointsName = "Joints (C#)";
     inline constexpr const char* characterName = "Character (C#)";
+    inline constexpr const char* vehiclesName = "Vehicles (C#)";
 
     /** @brief Makes the scene `name` and its one entity, marked for the C# system that builds scene `id`. The scene
      * stays inactive until the switcher steps to it. */
@@ -109,6 +112,48 @@ namespace CSharpScenes
             scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
         }
         scene.smokeKeys.insert(scene.smokeKeys.end(), {keyF, keyK, keyL, keyT});
+        return scene;
+    }
+    /** @brief Vehicles (C#), as the switcher steps to it: F6 from the last C++ vehicle scene, and on to Default.
+     * Register it after the C++ vehicle scenes. */
+    inline DemoScene Vehicles()
+    {
+        // GLFW's key codes, without GLFW's header (it must follow glad's).
+        constexpr int keySpace = 32;
+        constexpr int keyC = 67;
+        constexpr int keyE = 69;
+        constexpr int keyK = 75;
+        constexpr int keyL = 76;
+        constexpr int keyM = 77;
+        constexpr int keyP = 80;
+        constexpr int keyQ = 81;
+        constexpr int keyR = 82;
+        constexpr int keyT = 84;
+        constexpr int keyU = 85;
+        constexpr int keyV = 86;
+        constexpr int keyLeftShift = 340;
+        DemoScene scene{
+            .name = vehiclesName,
+            .familyKey = DemoFamilyKey::vehicles,
+            .keyHelp = "A car towing a trailer, both built and driven by C#, on a track of its own: five bumps "
+                       "and a ramp to the north, a grass patch on the way back south. W or Up drives, S or Down "
+                       "brakes and then reverses once stopped, A/D or Left/Right steer, Space pulls the handbrake, "
+                       "Shift holds the clutch, C frees the camera (WASD flies it, the arrows still drive) and "
+                       "snaps it back. M switches the gearbox between Automatic and Manual through the kind's "
+                       "view; in Manual E/Q shift up and down. V turns the vehicles' debug lines on and off, U "
+                       "turns the trailer into a wheeled car that pushes and back. K kicks the car over, R rights "
+                       "it, T puts it back at the start. L logs the car's state, P drives the track by itself. A "
+                       "gamepad drives too, as in the C++ scenes. F6 goes on.",
+            .smokeKeys = {keyP}};
+        // The autopilot drives a lap while L logs the state, then stops; each key is tapped twice (E and Q in
+        // Manual), and K, R and T end it.
+        scene.smokeKeys.insert(scene.smokeKeys.end(), 40, keyL);
+        scene.smokeKeys.push_back(keyP);
+        for (const int key : {keyC, keySpace, keyLeftShift, keyV, keyU, keyL})
+        {
+            scene.smokeKeys.insert(scene.smokeKeys.end(), {key, key});
+        }
+        scene.smokeKeys.insert(scene.smokeKeys.end(), {keyM, keyE, keyE, keyQ, keyQ, keyM, keyK, keyR, keyT});
         return scene;
     }
 } // namespace CSharpScenes

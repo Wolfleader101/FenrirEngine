@@ -29,6 +29,9 @@ keys.
 - **Tank (C++)**, with physics on: a 4000 kg tank on two tracks of nine wheels each, on open tarmac with a row of crates,
   pivoting on the spot when stopped, with the same chase camera, built in C++ (`src/TankScene.hpp`, whose header describes
   it; entering the scene logs its keys).
+- **Vehicles (C#)**, with physics and scripting both on: a car towing a trailer on a small track of bumps, a ramp and a
+  grass patch, built and driven entirely by a C# script (`scripts/Physics/Vehicles.cs`, whose header lists its keys), with
+  its own C# chase camera.
 
 | Key or button | Does |
 |---|---|
@@ -40,7 +43,7 @@ keys.
 | `R`, `Space` | The scripting demo: reverse the backpacks' spin, make sparks (below). |
 | `F4` | Steps Default → Joints (C++) → Joints (C#) → Default (physics on; without scripting it switches between Default and Joints (C++)). |
 | `J` | In the Physics (C#) scene: kicks every box and sphere into the air. |
-| `F6` | Steps from Default to Vehicles (C++), then Motorcycle (C++), then Tank (C++), then back to Default (physics on). |
+| `F6` | Steps from Default to Vehicles (C++), then Motorcycle (C++), then Tank (C++), then Vehicles (C#), then back to Default (physics on; without scripting it skips Vehicles (C#)). |
 
 Physics steps only the active scene, so the scene you switch away from waits, bodies mid-air and all, and carries on from there
 when you switch back. The scripting demo's C# systems also act only on the active scene, and each scene's keys act only while it
@@ -141,7 +144,7 @@ To run one scene by itself, `FENRIR_DEMO_SCENE=<name>` starts in it (by its name
 FENRIR_DEMO_SCENE="Physics (C#)" FENRIR_DEMO_KEYS=1 ./DemoApp.exe
 ```
 
-The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scenes are `"Vehicles (C++)"`, `"Motorcycle (C++)"` and `"Tank (C++)"`.
+The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scenes are `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"` and `"Vehicles (C#)"`.
 
 ### Change the script while the demo runs
 
