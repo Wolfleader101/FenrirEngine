@@ -21,3 +21,5 @@ Each package extends scripting through its own extension, built only when script
 - From ticket 28 (ADR-0034): C# mirrors the blittable `Animator`; `Animation::Seek` and `Animation::Playback` cross as native functions; `AnimationEvent`, `ClipFinished` and `AnimationEventsDropped` are plain C++ events read through event readers.
 
 - From ticket 30 (ADR-0035): `SkinnedMesh { Entity skeleton; }` is a blittable component beside `MeshRenderer` that C# mirrors; its documentation says prominently that a skinned mesh is drawn with the skeleton entity's world matrix and its own `Transform` is ignored. `PoseGeneration` may be worth exposing for C# caches.
+
+- From ticket 34: AnimationDemo has two C# twins on this extension: *Playback (C#)* (clip control, seeking, playback-state queries, clip events) and *Bone attachments (C#)* (creating and editing attachment components, querying bone transforms, observing attachment resolution states). Blending gets a C# twin only if this ticket exposes blending.

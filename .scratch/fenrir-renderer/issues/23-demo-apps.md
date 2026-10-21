@@ -36,3 +36,7 @@ No ADR (the split and the scaffold are cheap to reverse) and no new tickets: the
 - **The ImGui editor is not ported:** it is deleted with the legacy DemoApp, with ImGuizmo and v8; a future editor is its own app on its own map, free to use the scaffold. imgui joins as a submodule under `examples/DemoScaffold/libs` by ticket 21's rule.
 - **Order in the foundation spec:** the scaffold and an empty RendererDemo come in one of the first tickets, once a lit mesh draws; each later foundation ticket (materials, cameras, sky, debug draw, overlay, scripting extension) adds its RendererDemo scene and hand checks as part of done; ScriptingDemo and PhysicsDemo are ported in their own tickets near the end.
 - **Deleting `examples/DemoApp`:** the foundation spec's last ticket, once the three apps have a counterpart for every legacy scene and pass their smoke runs; with it go `FenrirCamera`, `examples/DemoApp/libs`, the `FENRIR_BUILD_LEGACY_DEMOAPP` option, and the README's "before opening a PR" smoke-run line, rewritten to name the new apps.
+
+## Comments
+
+- From ticket 34: skip and fallback diagnostics, the magenta missing-material fallback (ADR-0023) included, log as warnings, once each, and `FENRIR_DEMO_SMOKE` fails only on errors and GL debug errors, so RendererDemo's fallback hand checks smoke cleanly; errors are for failures of the engine's own contract (internal renderer failures, invalid GPU buffer access, failed shader compilation).

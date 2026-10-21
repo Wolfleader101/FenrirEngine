@@ -59,3 +59,5 @@ ADR: `docs/adr/0035-skinned-meshes-name-their-skeleton-through-skinnedmesh-and-r
 ## Comments
 
 - From ticket 26 (ADR-0031): the importer guarantees one bind space (`v_world = W(owner) × M_model × B × v`), remapped bone indices and baked vertices; skinned draws of a skeleton whose `PoseState` is not `Ready` are skipped; normals under blended skinning matrices with non-uniform scale need the shader's own handling and a test.
+
+- From ticket 34: the skip diagnostics (no `SkinnedMesh`, unavailable skeleton, failed count or bind-signature check, shader without `SKINNED`) log as warnings, once each, so AnimationDemo's Skin diagnostics scene passes its smoke run. `Stats` gains `paletteBytesUploaded` (bytes copied into the frame's palette buffer, not capacity), `distinctPalettesWritten` (after `PoseGeneration` dedupe) and `skinnedDraws`, reset each frame across all views; one upload per unchanged generation however many meshes or cameras draw it.
