@@ -420,6 +420,22 @@ How a material's pixels combine with what is behind them: `Opaque`, `Masked` (al
 Binding set 2 of every material shader: its `MaterialParams` block and textures. Unlike the frame, view and draw sets, its layout is read from the shader container's build-time reflection.
 *Avoid:* descriptor set (Vulkan's), material block (only the uniform block in it).
 
+**Camera**
+The component that makes a view: its entity's world transform is where it looks from, plus a projection, an order, a viewport, a render target and a background. Every enabled camera in the active scene draws (ADR-0026).
+*Avoid:* active camera (there is none; every enabled camera draws), view (what a camera makes each frame), eye.
+
+**Viewport**
+The rectangle of its render target a view draws into, given as fractions of the target from its top-left corner.
+*Avoid:* view (the drawing itself), screen rect, scissor.
+
+**Render target**
+Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
+*Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
+
+**Sky**
+The scene resource saying what is drawn behind everything: a solid colour or a skybox. A camera uses it, or overrides it with a colour.
+*Avoid:* environment, clear colour (one of its forms), skydome.
+
 ## FenrirEngine debug drawing
 
 **FenrirDebugDraw**
