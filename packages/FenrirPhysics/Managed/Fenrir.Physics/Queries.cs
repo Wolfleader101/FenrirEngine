@@ -143,6 +143,9 @@ public enum DebugDraw : uint
     /// <summary>Each active character's shape in use (the crouched one while a stand-up is blocked), its ground
     /// normal coloured by ground state, and its moved velocity.</summary>
     Characters = 1u << 5,
-    /// <summary>Every category, C++'s vehicle wheels (1u &lt;&lt; 6) included.</summary>
-    All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | 1u << 6,
+    /// <summary>Each wheel of each active, enabled vehicle: its suspension, the wheel with one spoke, and its contact
+    /// coloured by grip (gripping, past its tyre's peak slip, or past its slide slip).</summary>
+    Vehicles = 1u << 6,
+    /// <summary>Every category.</summary>
+    All = Colliders | Contacts | Velocities | Bounds | Joints | Characters | Vehicles,
 }

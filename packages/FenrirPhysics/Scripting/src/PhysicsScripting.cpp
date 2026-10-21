@@ -23,6 +23,7 @@
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
@@ -431,6 +432,337 @@ struct Iris::StructMapping<Fenrir::Detail::CharacterBodyLayout>
         IRIS_FIELD_AS(Layout, pushForce, "PushForce"), IRIS_FIELD_AS(Layout, mass, "Mass"),
         IRIS_FIELD_AS(Layout, stopOnSlope, "StopOnSlope"), IRIS_FIELD_AS(Layout, interpolate, "Interpolate"),
         IRIS_FIELD_AS(Layout, enabled, "Enabled"), IRIS_FIELD_AS(Layout, state, "State"));
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::VehicleProbe>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleProbe";
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::TransmissionMode>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.TransmissionMode";
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::VehicleType>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleType";
+};
+
+template <>
+struct Iris::EnumMapping<Fenrir::VehicleTrackSide>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleTrackSide";
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleInput>
+{
+    using Input = Fenrir::VehicleInput;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleInput";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Input, forward, "Forward"), IRIS_FIELD_AS(Input, steer, "Steer"),
+                           IRIS_FIELD_AS(Input, brake, "Brake"), IRIS_FIELD_AS(Input, handbrake, "Handbrake"),
+                           IRIS_FIELD_AS(Input, leftTrack, "LeftTrack"), IRIS_FIELD_AS(Input, rightTrack, "RightTrack"),
+                           IRIS_FIELD_AS(Input, gear, "Gear"), IRIS_FIELD_AS(Input, clutch, "Clutch"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleSuspension>
+{
+    using Suspension = Fenrir::VehicleSuspension;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleSuspension";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Suspension, travel, "Travel"), IRIS_FIELD_AS(Suspension, spring, "Spring"),
+                           IRIS_FIELD_AS(Suspension, preload, "Preload"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleTyre>
+{
+    using Tyre = Fenrir::VehicleTyre;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleTyre";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Tyre, peakSlip, "PeakSlip"), IRIS_FIELD_AS(Tyre, peakFriction, "PeakFriction"),
+        IRIS_FIELD_AS(Tyre, slideSlip, "SlideSlip"), IRIS_FIELD_AS(Tyre, slideFriction, "SlideFriction"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleEngine>
+{
+    using Engine = Fenrir::VehicleEngine;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleEngine";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Engine, maxTorque, "MaxTorque"), IRIS_FIELD_AS(Engine, minRpm, "MinRpm"),
+        IRIS_FIELD_AS(Engine, maxRpm, "MaxRpm"), IRIS_FIELD_AS(Engine, peakTorqueRpm, "PeakTorqueRpm"),
+        IRIS_FIELD_AS(Engine, torqueAtMinRpm, "TorqueAtMinRpm"),
+        IRIS_FIELD_AS(Engine, torqueAtMaxRpm, "TorqueAtMaxRpm"), IRIS_FIELD_AS(Engine, inertia, "Inertia"),
+        IRIS_FIELD_AS(Engine, angularDamping, "AngularDamping"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleTransmission>
+{
+    using Transmission = Fenrir::VehicleTransmission;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleTransmission";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Transmission, mode, "Mode"), IRIS_FIELD_AS(Transmission, gearCount, "GearCount"),
+        IRIS_FIELD_AS(Transmission, firstGear, "FirstGear"), IRIS_FIELD_AS(Transmission, topGear, "TopGear"),
+        IRIS_FIELD_AS(Transmission, reverseGear, "ReverseGear"), IRIS_FIELD_AS(Transmission, shiftUpRpm, "ShiftUpRpm"),
+        IRIS_FIELD_AS(Transmission, shiftDownRpm, "ShiftDownRpm"),
+        IRIS_FIELD_AS(Transmission, switchTime, "SwitchTime"),
+        IRIS_FIELD_AS(Transmission, clutchReleaseTime, "ClutchReleaseTime"),
+        IRIS_FIELD_AS(Transmission, switchLatency, "SwitchLatency"),
+        IRIS_FIELD_AS(Transmission, clutchStrength, "ClutchStrength"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::WheeledVehicle>
+{
+    using Kind = Fenrir::WheeledVehicle;
+    static constexpr std::string_view typeName = "Fenrir.Physics.WheeledVehicle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Kind, engine, "Engine"), IRIS_FIELD_AS(Kind, transmission, "Transmission"),
+                           IRIS_FIELD_AS(Kind, limitedSlipRatio, "LimitedSlipRatio"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::MotorcycleLean>
+{
+    using Lean = Fenrir::MotorcycleLean;
+    static constexpr std::string_view typeName = "Fenrir.Physics.MotorcycleLean";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Lean, enabled, "Enabled"), IRIS_FIELD_AS(Lean, maxAngle, "MaxAngle"),
+                           IRIS_FIELD_AS(Lean, limitSteering, "LimitSteering"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::MotorcycleVehicle>
+{
+    using Kind = Fenrir::MotorcycleVehicle;
+    static constexpr std::string_view typeName = "Fenrir.Physics.MotorcycleVehicle";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Kind, engine, "Engine"), IRIS_FIELD_AS(Kind, transmission, "Transmission"),
+        IRIS_FIELD_AS(Kind, limitedSlipRatio, "LimitedSlipRatio"), IRIS_FIELD_AS(Kind, lean, "Lean"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleTrack>
+{
+    using Track = Fenrir::VehicleTrack;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleTrack";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Track, inertia, "Inertia"), IRIS_FIELD_AS(Track, angularDamping, "AngularDamping"),
+        IRIS_FIELD_AS(Track, maxBrakeTorque, "MaxBrakeTorque"),
+        IRIS_FIELD_AS(Track, differentialRatio, "DifferentialRatio"),
+        IRIS_FIELD_AS(Track, longitudinalFriction, "LongitudinalFriction"),
+        IRIS_FIELD_AS(Track, lateralFriction, "LateralFriction"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::TrackedVehicle>
+{
+    using Kind = Fenrir::TrackedVehicle;
+    static constexpr std::string_view typeName = "Fenrir.Physics.TrackedVehicle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Kind, engine, "Engine"), IRIS_FIELD_AS(Kind, transmission, "Transmission"),
+                           IRIS_FIELD_AS(Kind, left, "Left"), IRIS_FIELD_AS(Kind, right, "Right"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::VehicleState>
+{
+    using State = Fenrir::VehicleState;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleState";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(State, forwardSpeed, "ForwardSpeed"), IRIS_FIELD_AS(State, engineRpm, "EngineRpm"),
+        IRIS_FIELD_AS(State, gear, "Gear"), IRIS_FIELD_AS(State, clutch, "Clutch"),
+        IRIS_FIELD_AS(State, shifting, "Shifting"), IRIS_FIELD_AS(State, wheelsOnGround, "WheelsOnGround"),
+        IRIS_FIELD_AS(State, leanAngle, "LeanAngle"), IRIS_FIELD_AS(State, leftTrackSpeed, "LeftTrackSpeed"),
+        IRIS_FIELD_AS(State, rightTrackSpeed, "RightTrackSpeed"));
+};
+
+namespace Fenrir::Detail
+{
+    // TrailerVehicle is empty, which Iris cannot map, so this stands in for it, as for FixedJoint.
+    struct TrailerVehicleLayout
+    {
+        std::uint8_t unused;
+    };
+    static_assert(sizeof(TrailerVehicleLayout) == sizeof(TrailerVehicle) &&
+                      alignof(TrailerVehicleLayout) == alignof(TrailerVehicle),
+                  "TrailerVehicle changed shape: update TrailerVehicleLayout and the C# TrailerVehicle.");
+
+    // VehicleKind keeps its tag and union private, and the wheel components hold Entities, so these stand in for them,
+    // as for JointKind and Joint: the same members in the same order, each Entity as the link the engine stores.
+    // MakeComponent checks the size and alignment; the scripting tests read and write real vehicles through them.
+    struct VehicleKindLayout
+    {
+        VehicleType type = VehicleType::Wheeled;
+        union {
+            WheeledVehicle wheeled{};
+            MotorcycleVehicle motorcycle;
+            TrackedVehicle tracked;
+            TrailerVehicleLayout trailer;
+        };
+    };
+    static_assert(sizeof(VehicleKindLayout) == sizeof(VehicleKind) &&
+                      alignof(VehicleKindLayout) == alignof(VehicleKind),
+                  "VehicleKind changed shape: update VehicleKindLayout and the C# VehicleKind.");
+
+    struct VehicleLayout
+    {
+        VehicleKindLayout kind;
+        VehicleInput input;
+        VehicleProbe probe;
+        float maxTilt;
+        bool enabled;
+        VehicleState state;
+    };
+
+    struct VehicleWheelStateLayout
+    {
+        bool onGround;
+        EntityLinkView groundBody;
+        EntityLinkView groundCollider;
+        Math::Vec3 contactPoint;
+        Math::Vec3 contactNormal;
+        Math::Vec3 groundVelocity;
+        float compression;
+        float suspensionForce;
+        float longitudinalSlip;
+        float lateralSlip;
+        float angularVelocity;
+        float steerAngle;
+    };
+    static_assert(sizeof(VehicleWheelStateLayout) == sizeof(VehicleWheelState) &&
+                      alignof(VehicleWheelStateLayout) == alignof(VehicleWheelState),
+                  "VehicleWheelState changed shape: update VehicleWheelStateLayout and the C# VehicleWheelState.");
+
+    struct VehicleWheelLayout
+    {
+        EntityLinkView vehicle;
+        Math::Vec3 position;
+        VehicleTrackSide track;
+        float radius;
+        float width;
+        float inertia;
+        float angularDamping;
+        float caster;
+        float camber;
+        float toe;
+        VehicleSuspension suspension;
+        float maxSteerAngle;
+        float maxBrakeTorque;
+        float maxHandbrakeTorque;
+        VehicleTyre longitudinal;
+        VehicleTyre lateral;
+        VehicleWheelStateLayout state;
+    };
+
+    struct VehicleDifferentialLayout
+    {
+        EntityLinkView leftWheel;
+        EntityLinkView rightWheel;
+        float ratio;
+        float leftRightSplit;
+        float limitedSlipRatio;
+        float torqueShare;
+    };
+
+    struct VehicleAntiRollBarLayout
+    {
+        EntityLinkView leftWheel;
+        EntityLinkView rightWheel;
+        float stiffness;
+    };
+} // namespace Fenrir::Detail
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::TrailerVehicleLayout>
+{
+    static constexpr std::string_view typeName = "Fenrir.Physics.TrailerVehicle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Fenrir::Detail::TrailerVehicleLayout, unused, "_unused"));
+};
+
+// The tag and every kind, in declaration order, each kind at the union's offset (the C# explicit layout mirrors it).
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleKindLayout>
+{
+    using Layout = Fenrir::Detail::VehicleKindLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleKind";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, type, "_type"), IRIS_FIELD_AS(Layout, wheeled, "_wheeled"),
+                           IRIS_FIELD_AS(Layout, motorcycle, "_motorcycle"), IRIS_FIELD_AS(Layout, tracked, "_tracked"),
+                           IRIS_FIELD_AS(Layout, trailer, "_trailer"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleLayout>
+{
+    using Layout = Fenrir::Detail::VehicleLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.Vehicle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Layout, kind, "Kind"), IRIS_FIELD_AS(Layout, input, "Input"),
+                           IRIS_FIELD_AS(Layout, probe, "Probe"), IRIS_FIELD_AS(Layout, maxTilt, "MaxTilt"),
+                           IRIS_FIELD_AS(Layout, enabled, "Enabled"), IRIS_FIELD_AS(Layout, state, "State"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleWheelStateLayout>
+{
+    using Layout = Fenrir::Detail::VehicleWheelStateLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleWheelState";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, onGround, "OnGround"), IRIS_FIELD_AS(Layout, groundBody, "GroundBody"),
+        IRIS_FIELD_AS(Layout, groundCollider, "GroundCollider"), IRIS_FIELD_AS(Layout, contactPoint, "ContactPoint"),
+        IRIS_FIELD_AS(Layout, contactNormal, "ContactNormal"), IRIS_FIELD_AS(Layout, groundVelocity, "GroundVelocity"),
+        IRIS_FIELD_AS(Layout, compression, "Compression"), IRIS_FIELD_AS(Layout, suspensionForce, "SuspensionForce"),
+        IRIS_FIELD_AS(Layout, longitudinalSlip, "LongitudinalSlip"), IRIS_FIELD_AS(Layout, lateralSlip, "LateralSlip"),
+        IRIS_FIELD_AS(Layout, angularVelocity, "AngularVelocity"), IRIS_FIELD_AS(Layout, steerAngle, "SteerAngle"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleWheelLayout>
+{
+    using Layout = Fenrir::Detail::VehicleWheelLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleWheel";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, vehicle, "Vehicle"), IRIS_FIELD_AS(Layout, position, "Position"),
+        IRIS_FIELD_AS(Layout, track, "Track"), IRIS_FIELD_AS(Layout, radius, "Radius"),
+        IRIS_FIELD_AS(Layout, width, "Width"), IRIS_FIELD_AS(Layout, inertia, "Inertia"),
+        IRIS_FIELD_AS(Layout, angularDamping, "AngularDamping"), IRIS_FIELD_AS(Layout, caster, "Caster"),
+        IRIS_FIELD_AS(Layout, camber, "Camber"), IRIS_FIELD_AS(Layout, toe, "Toe"),
+        IRIS_FIELD_AS(Layout, suspension, "Suspension"), IRIS_FIELD_AS(Layout, maxSteerAngle, "MaxSteerAngle"),
+        IRIS_FIELD_AS(Layout, maxBrakeTorque, "MaxBrakeTorque"),
+        IRIS_FIELD_AS(Layout, maxHandbrakeTorque, "MaxHandbrakeTorque"),
+        IRIS_FIELD_AS(Layout, longitudinal, "Longitudinal"), IRIS_FIELD_AS(Layout, lateral, "Lateral"),
+        IRIS_FIELD_AS(Layout, state, "State"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleDifferentialLayout>
+{
+    using Layout = Fenrir::Detail::VehicleDifferentialLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleDifferential";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD_AS(Layout, leftWheel, "LeftWheel"), IRIS_FIELD_AS(Layout, rightWheel, "RightWheel"),
+        IRIS_FIELD_AS(Layout, ratio, "Ratio"), IRIS_FIELD_AS(Layout, leftRightSplit, "LeftRightSplit"),
+        IRIS_FIELD_AS(Layout, limitedSlipRatio, "LimitedSlipRatio"), IRIS_FIELD_AS(Layout, torqueShare, "TorqueShare"));
+};
+
+template <>
+struct Iris::StructMapping<Fenrir::Detail::VehicleAntiRollBarLayout>
+{
+    using Layout = Fenrir::Detail::VehicleAntiRollBarLayout;
+    static constexpr std::string_view typeName = "Fenrir.Physics.VehicleAntiRollBar";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Layout, leftWheel, "LeftWheel"),
+                                                      IRIS_FIELD_AS(Layout, rightWheel, "RightWheel"),
+                                                      IRIS_FIELD_AS(Layout, stiffness, "Stiffness"));
 };
 
 namespace Fenrir::Detail
@@ -1078,6 +1410,10 @@ namespace Fenrir
             MakeComponent<ContactEvents>("Fenrir.Physics.ContactEvents"),
             MakeComponent<Joint, Detail::JointLayout>("Fenrir.Physics.Joint"),
             MakeComponent<CharacterBody, Detail::CharacterBodyLayout>("Fenrir.Physics.CharacterBody"),
+            MakeComponent<Vehicle, Detail::VehicleLayout>("Fenrir.Physics.Vehicle"),
+            MakeComponent<VehicleWheel, Detail::VehicleWheelLayout>("Fenrir.Physics.VehicleWheel"),
+            MakeComponent<VehicleDifferential, Detail::VehicleDifferentialLayout>("Fenrir.Physics.VehicleDifferential"),
+            MakeComponent<VehicleAntiRollBar, Detail::VehicleAntiRollBarLayout>("Fenrir.Physics.VehicleAntiRollBar"),
         };
         extension.events = {
             MakeEvent<ContactBegin, Detail::ContactBeginLayout>("Fenrir.Physics.ContactBegin"),
