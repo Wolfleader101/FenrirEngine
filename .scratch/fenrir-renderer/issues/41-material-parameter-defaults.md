@@ -1,7 +1,7 @@
 # Where do a material parameter's defaults come from?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 25
 
 ## Question
