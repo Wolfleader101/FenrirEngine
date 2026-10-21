@@ -1,7 +1,7 @@
 # How are the demo apps split, and what does each show?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 14, 16
 
 ## Question
