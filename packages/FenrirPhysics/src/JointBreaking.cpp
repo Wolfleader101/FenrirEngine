@@ -7,6 +7,7 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "SortAndSend.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
@@ -45,5 +46,11 @@ namespace Fenrir
             m_broken.push_back(
                 JointBroken{m_entities->HandleOf(entity), applied.bodyA, applied.bodyB, load.force, load.torque});
         }
+    }
+
+    void PhysicsWorld::Impl::SendBroken(App& app)
+    {
+        Detail::SortAndSend(app, m_broken, [](const JointBroken& event) { return event.joint.GetId(); });
+        m_broken.clear();
     }
 } // namespace Fenrir

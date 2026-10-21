@@ -12,8 +12,10 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (new `Contacts`; `WorldImpl.hpp`, `PhysicsWorld.cpp`, `Characters.cpp`, `JointBreaking.cpp`, `DebugLines.cpp`), `packages/FenrirPhysics/CMakeLists.txt`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The reported contacts, overlaps and character touches are members of Contacts only.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] Smoke runs (`FENRIR_DEMO_KEYS=1`) with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`.
+- [x] The reported contacts, overlaps and character touches are members of Contacts only.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`.
+
+**Resolved by:** PR #PRNUM (branch claude/physics-world-split-04-contacts), into claude/physics-world-split-spec. Contacts is `src/Contacts.hpp`/`.cpp` in `Fenrir::Detail`, holding the reported contacts, overlaps and character touches, `ContactKey`, `OverlapKey`, `Oriented` and `ReportsContacts`. It reads the backend and Bodies (`AttachedBodyOf`, `ResolveBody`) through const references. Until Characters is a module (ticket 05), the characters' end-of-move contacts reach it as arguments from the world: `Step` passes `Send` each character's contacts in entity order (`CharacterMoveContacts`), and `ForEachContact` passes the asked entity's (`CharacterMoveContactsOf`, null for an entity with no backend character). Both are in `Characters.cpp`, so ticket 05 moves them into Characters as its read-only view. `JointBroken` is sent by `SendBroken` in `JointBreaking.cpp`, right after `Send`; both sort through `src/SortAndSend.hpp`. `Contacts::Draw` draws the contact lines, in the same place among the categories. `clang-x64-debug` passes 81/81 tests, and `scripts/demo-smoke.sh` passed all nine physics scenes.

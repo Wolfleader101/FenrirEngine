@@ -1,7 +1,7 @@
 // A physics world's debug lines, made after each step from FenrirPhysics's own records (shape, step pose, motion type,
 // trigger flag) and what it asks the backend privately (contacts, bounds, sleep, velocity, the edges of a cooked hull
-// or mesh, each vehicle's wheels), drawn on the world's DebugCanvas. The bodies draw their own; the joints, characters,
-// vehicles and contacts are drawn here.
+// or mesh, each vehicle's wheels), drawn on the world's DebugCanvas. The bodies and the contacts draw their own; the
+// joints, characters and vehicles are drawn here.
 
 #include <array>
 #include <cmath>
@@ -85,23 +85,11 @@ namespace Fenrir
         }
         if (Includes(m_debugDraw, DebugDraw::Contacts))
         {
-            DrawContacts();
+            m_contacts.Draw(m_canvas);
         }
         m_bodies.DrawMotion(m_canvas, Includes(m_debugDraw, DebugDraw::Velocities),
                             Includes(m_debugDraw, DebugDraw::Bounds));
         m_canvas.End();
-    }
-
-    void PhysicsWorld::Impl::DrawContacts()
-    {
-        for (const Backend::Touch& touch : m_backend.Touches())
-        {
-            if (touch.isTrigger1 || touch.isTrigger2)
-            {
-                continue; // an overlap, not a contact
-            }
-            m_canvas.ContactPoint(touch.point, touch.normal, DebugColour::Contact);
-        }
     }
 
     void PhysicsWorld::Impl::DrawCharacters()

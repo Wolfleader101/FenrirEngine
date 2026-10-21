@@ -15,6 +15,7 @@
 
 #include "Backend/Backend.hpp"
 #include "Bodies.hpp"
+#include "Contacts.hpp"
 #include "DebugCanvas.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
@@ -92,37 +93,12 @@ namespace Fenrir
 
         using Record = Detail::Bodies::Record;
 
-        /** @brief What the features not yet in modules of their own (joints, vehicles, contacts) and the queries read
-         * of the bodies. */
+        /** @brief What the features not yet in modules of their own (joints, vehicles) and the queries read of the
+         * bodies. */
         [[nodiscard]] const Detail::Bodies& BodyView() const
         {
             return m_bodies;
         }
-
-        // A contact reported by a ContactBegin and not yet ended, A and B ordered as in the event.
-        struct ContactKey
-        {
-            std::uint32_t bodyA;
-            std::uint32_t bodyB;
-            std::uint32_t colliderA;
-            std::uint32_t colliderB;
-
-            auto operator<=>(const ContactKey&) const = default;
-        };
-
-        /** @brief A contact's key, A and B in entity order so the order does not depend on the backend's body ids, and
-         * the touch turned to match: its normal from A to B. */
-        [[nodiscard]] static std::pair<ContactKey, Backend::Touch> Oriented(const Backend::Touch& touch);
-
-        // An overlap reported by a TriggerEnter and not yet exited.
-        struct OverlapKey
-        {
-            std::uint32_t trigger;
-            std::uint32_t otherBody;
-            std::uint32_t otherCollider;
-
-            auto operator<=>(const OverlapKey&) const = default;
-        };
 
         // Joints (Joints.cpp). Their constraints always go before their bodies and come after them.
 
@@ -147,9 +123,12 @@ namespace Fenrir
          * while it is disabled (JointState.cpp). */
         void MeasureJoints();
         /** @brief After MeasureJoints, in joint entity order: disables each enabled joint measured this step whose load
-         * is over a finite threshold, in the backend, its Joint and its record, and queues a JointBroken for SendEvents
+         * is over a finite threshold, in the backend, its Joint and its record, and queues a JointBroken for SendBroken
          * (JointBreaking.cpp). */
         void BreakJoints();
+        /** @brief Events, right after the contact and trigger events: sends the JointBroken of each joint the step
+         * broke to `app`, in joint entity order (JointBreaking.cpp). */
+        void SendBroken(App& app);
         /** @brief Whether `body` names a made body that moves and is awake. */
         [[nodiscard]] bool IsAwake(const Entity& body) const;
         /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
@@ -188,6 +167,11 @@ namespace Fenrir
         /** @brief Write-back, for each CharacterBody with no backend character (disabled or inactive): its state reset
          * to the defaults, and nothing else written. */
         void ResetIdleCharacters();
+        /** @brief Each character's contacts at the end of its last move, in character entity order, for Contacts. */
+        [[nodiscard]] std::vector<std::span<const Backend::Touch>> CharacterMoveContacts() const;
+        /** @brief The contacts at the end of the last move of the character on `entity`; null if it has no backend
+         * character. */
+        [[nodiscard]] const std::vector<Backend::Touch>* CharacterMoveContactsOf(const Entity& entity) const;
 
         // Vehicles (Vehicles.cpp): each a backend vehicle on its chassis's body, removed before its body goes, made
         // after the joints in the edits, and written back after the bodies in the write-back.
@@ -264,19 +248,12 @@ namespace Fenrir
          * children, their velocities and the characters' states, then the state of each character with no backend
          * character reset. */
         void WriteBack();
-        void SendEvents(App& app);
-        /** @brief Events, before the events are sorted: brings m_characterTouches up to date from each character's
-         * end-of-move contacts and its body's step contacts, adding the begins and ends of the pairs reported. */
-        void TrackCharacterContacts(std::vector<ContactBegin>& begins, std::vector<ContactEnd>& ends);
 
         // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
         void DrawDebugLines();
         void DrawJoints();
         void DrawCharacters();
         void DrawVehicles();
-        void DrawContacts();
-
-        [[nodiscard]] bool ReportsContacts(std::uint32_t body) const;
 
         /** @brief The backend's form of a query's filter: its ignored body resolved as ResolveBody does, and a handle
          * to an entity no longer alive ignoring nothing. */
@@ -287,6 +264,7 @@ namespace Fenrir
         Backend::World m_backend;
         Detail::Poses m_poses;
         Detail::Bodies m_bodies;
+        Detail::Contacts m_contacts;
 
         // What physics last applied for a joint: the diff compares the Joint against it. A joint naming no made body
         // entity has no constraint.
@@ -318,7 +296,7 @@ namespace Fenrir
         std::map<std::uint32_t, JointRecord> m_joints;
         // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
-        // The joints the last step broke, sent with its contact and trigger events.
+        // The joints the last step broke, sent right after its contact and trigger events.
         std::vector<JointBroken> m_broken;
 
         // What physics knows of a character body: its backend character, where its last move left it, and the shape and
@@ -429,13 +407,6 @@ namespace Fenrir
         std::map<std::uint32_t, VehicleLinkRecord> m_antiRollBars;
         // The kinds of out-of-range value each wheel entity has been warned about, so each is warned about once.
         std::map<std::uint32_t, std::uint32_t> m_wheelWarnings;
-
-        // What game code has been told is touching, so every begin and enter gets its end and exit.
-        std::set<ContactKey> m_reportedContacts;
-        // The pairs with a character touching after the last step, whether reported or not, oriented as their key:
-        // touching while either the character's last move or its body's step finds them.
-        std::map<ContactKey, Backend::Touch> m_characterTouches;
-        std::set<OverlapKey> m_reportedOverlaps;
 
         // The debug lines switched on, and those the last step made.
         DebugDraw m_debugDraw = DebugDraw::None;
