@@ -1,7 +1,7 @@
 # How are poses blended?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 27, 28
 
 ## Question
