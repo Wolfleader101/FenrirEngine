@@ -1,7 +1,7 @@
 # How are the renderer and window packages tested?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 08
 
 ## Question
