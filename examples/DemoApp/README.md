@@ -139,13 +139,33 @@ FENRIR_DEMO_AUTOPLAY=1 ./DemoApp.exe
 
 To run one scene by itself, `FENRIR_DEMO_SCENE=<name>` starts in it (by its name, such as `"Physics (C#)"`), and with
 `FENRIR_DEMO_KEYS=1` the scene switcher presses that scene's keys, two seconds after it becomes active and then one a second, as
-`KeyboardKeyEvent`s, so C++ and C# both read them:
+`KeyboardKeyEvent`s, so C++ and C# both read them. Each press logs `FENRIR_DEMO_KEYS: pressing key <code> (<i>/<n>) in <scene>.`,
+and three seconds after the last the demo logs `pressed all <n> keys` and closes itself, with exit code 0:
 
 ```bash
 FENRIR_DEMO_SCENE="Physics (C#)" FENRIR_DEMO_KEYS=1 ./DemoApp.exe
 ```
 
-The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, and the vehicles scenes are `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"` and `"Vehicles (C#)"`.
+The joints scenes are `"Joints (C++)"` and `"Joints (C#)"`, the character scenes `"Character (C++)"` and `"Character (C#)"`, and the vehicles scenes are `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"` and `"Vehicles (C#)"`.
+
+Two more variables make a run quicker and keep it off the screen. `FENRIR_DEMO_FAST=<n>` (1 to 4) runs `n` ticks every frame,
+whatever the frame's real length, and stops waiting for vsync: simulation time moves exactly as it would in real time, but as
+fast as the demo can render, and it renders one tick in `n`. `FENRIR_DEMO_HIDDEN=1` creates the window without ever showing it,
+so the demo still renders, but to nothing on screen.
+
+To smoke-run every physics scene, run them all at once from the repository root:
+
+```bash
+scripts/demo-smoke.sh out/build/clang-x64-debug
+```
+
+It starts one DemoApp per scene with `FENRIR_DEMO_FAST=4` and `FENRIR_DEMO_HIDDEN=1`, waits for each to close, and prints a `PASS`
+or `FAIL` line per scene: its exit code, the keys it pressed out of its count, and its error, exception, fatal or assert lines. In
+`clang-x64-debug` all nine take about a minute and a half, which is the time of `"Vehicles (C++)"`, and the script exits with 1 if
+any scene failed. Name scenes after the build directory to run only those
+(`scripts/demo-smoke.sh out/build/clang-x64-debug "Joints (C++)" "Joints (C#)"`). Set `FENRIR_DEMO_FAST=0` to run them in real
+time, or `FENRIR_DEMO_HIDDEN=0` to watch them. Each log is kept in `<build dir>/demo-smoke/`, and a scene still running after
+`FENRIR_SMOKE_TIMEOUT` seconds (900 by default) is killed and fails.
 
 ### Change the script while the demo runs
 
