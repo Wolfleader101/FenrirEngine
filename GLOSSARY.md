@@ -392,6 +392,12 @@ What a window offers a graphics backend to draw into and present: the OpenGL con
 The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
 *Avoid:* primary window, root window.
 
+**MeshRenderer**
+The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
+*Avoid:* renderable, model (FenrirAssets' asset), mesh instance.
+**Fallback material**
+The built-in flat magenta unlit material a `MeshRenderer` draws with when its material is empty or stale, so the mistake shows on screen.
+*Avoid:* error material, default material (a default suggests it is meant to be used).
 ## FenrirEngine assets
 
 **FenrirAssets**
