@@ -1,7 +1,7 @@
 # Where does animation live: its own package or inside the renderer?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 07, 14
 
 ## Question
