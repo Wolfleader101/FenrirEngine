@@ -15,11 +15,6 @@ FenrirAnimation samples clips into a skeleton's base pose (ADR-0028). What does 
 - Events in clips and gameplay synchronisation: how an event reaches game code (an ECS event, read once per reader as ADR-0012), events crossed by a loop or a large step.
 - Root motion: in this spec or deferred.
 
-## Comments
-
-- From ticket 26 (ADR-0031): each clip channel keeps its target's source node identity and engine name; a clip binds to its own file's skeletons by identity and to others by engine name, with diagnostics for missing or ambiguous matches; channels on ordinary (non-bone) nodes are kept, and how they drive entities is this ticket's.
-- From ticket 27 (ADR-0033): FenrirAnimation adds its sampler to FenrirSkeleton's public `Animate` stage with an order constant; it writes only the base pose. Its clocks advance only by the frame delta of an `Animate` run on their scene, so an inactive scene's playback pauses and resumes with no catch-up. Playback commands are written by game code before the pipeline (`Update` or earlier).
-
 ## Answer
 
 ADR: `docs/adr/0034-clips-play-through-a-game-owned-animator-and-fenriranimation-owns-playback-time-and-events.md`. Glossary: Animator, Playback cursor, Animation event; Clip revised.
@@ -34,3 +29,8 @@ ADR: `docs/adr/0034-clips-play-through-a-game-owned-animator-and-fenriranimation
 - **Root motion:** deferred; the root bone is sampled like any other, so baked locomotion moves the skeleton relative to its entity.
 - **Tests:** the interval table (forward from 0, across a wrap, reverse across 0, seek, pause, zero duration, 100 laps against the budget), seek and clip-change precedence, completion resets, glTF sampling formulas and hemisphere flips, clip loss and recovery, revision changes and binding diagnostics.
 - **Graduated:** nothing new; comments on tickets 29, 33 and 34; *Richer animation* gains node animation, ping-pong, importer-sourced clip events and fixed-tick animation for guaranteed events.
+
+## Comments
+
+- From ticket 26 (ADR-0031): each clip channel keeps its target's source node identity and engine name; a clip binds to its own file's skeletons by identity and to others by engine name, with diagnostics for missing or ambiguous matches; channels on ordinary (non-bone) nodes are kept, and how they drive entities is this ticket's.
+- From ticket 27 (ADR-0033): FenrirAnimation adds its sampler to FenrirSkeleton's public `Animate` stage with an order constant; it writes only the base pose. Its clocks advance only by the frame delta of an `Animate` run on their scene, so an inactive scene's playback pauses and resumes with no catch-up. Playback commands are written by game code before the pipeline (`Update` or earlier).

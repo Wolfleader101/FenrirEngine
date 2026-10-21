@@ -18,6 +18,4 @@ Each feature area gets its own demo app on the shared scaffold (ticket 23). What
 
 - From ticket 28 (ADR-0034): show `Animator` playback (speed, reverse, `Loop`/`Once`, pause, seek), clip events, and the per-frame event budget on a short clip at high speed.
 
-## Comments
-
 - From ticket 30 (ADR-0035): a skinned mesh without `SkinnedMesh` is skipped, not drawn rigid; a bind-pose preview through the owner is a candidate debug view for this demo (on the map's Not yet specified, not required). The skip diagnostics (no `SkinnedMesh`, unavailable skeleton, failed bind signature, shader without `SKINNED`) are worth a hand-check scene.
