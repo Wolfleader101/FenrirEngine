@@ -19,7 +19,7 @@ namespace Fenrir
     struct VehicleInput
     {
         /** @brief [-1, 1]: how hard to drive, negative in reverse (Automatic). In Manual a pedal, [0, 1], the gear
-         * setting the direction; a negative value is taken as 0. */
+         * setting the direction; a negative value is taken as 0. Trailers ignore it. */
         float forward = 0.0f;
         /** @brief [-1, 1], + right. Tracked vehicles ignore it. */
         float steer = 0.0f;
@@ -176,18 +176,30 @@ namespace Fenrir
         MotorcycleLean lean = {};
     };
 
+    /**
+     * @brief A trailer, wagon or hand cart: a vehicle with no engine and no gearbox, towed by an ordinary Joint. It
+     * reads VehicleInput's `brake`, `handbrake` and `steer` (for a steered dolly) and ignores `forward`, `gear` and
+     * `clutch`, and every VehicleDifferential: its wheels only roll, brake and steer. Its `state` engine and gear
+     * fields stay 0.
+     */
+    struct TrailerVehicle
+    {
+    };
+
     /** @brief Which kind of vehicle a VehicleKind holds. */
     enum class VehicleType : std::uint8_t
     {
         Wheeled,
-        Motorcycle
+        Motorcycle,
+        Trailer
     };
 
     /**
      * @brief A vehicle kind: exactly one kind of vehicle and its drivetrain, by value, as JointKind holds a joint.
      *
      * Assign a kind to change it (`vehicle.kind = MotorcycleVehicle{}`): a private rebuild that keeps the engine speed,
-     * the gear and the wheels' spin. Read or edit its settings through the checked view
+     * the gear and the wheels' spin. A trailer has no engine or gear to keep, so one turned into another kind starts
+     * at idle in neutral, its wheels still spinning. Read or edit its settings through the checked view
      * (`vehicle.kind.As<WheeledVehicle>()`). Reading it as a kind it does not hold asserts.
      */
     class VehicleKind
@@ -208,13 +220,18 @@ namespace Fenrir
         {
         }
 
+        /** @brief A trailer. Implicit, so one can be assigned where a kind is wanted. */
+        VehicleKind(TrailerVehicle trailer) : m_type(VehicleType::Trailer), m_trailer(trailer)
+        {
+        }
+
         /** @brief The kind of vehicle held. */
         [[nodiscard]] VehicleType Type() const
         {
             return m_type;
         }
 
-        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle or MotorcycleVehicle). */
+        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle, MotorcycleVehicle or TrailerVehicle). */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -245,11 +262,15 @@ namespace Fenrir
             {
                 return VehicleType::Wheeled;
             }
+            else if constexpr (std::is_same_v<T, MotorcycleVehicle>)
+            {
+                return VehicleType::Motorcycle;
+            }
             else
             {
-                static_assert(std::is_same_v<T, MotorcycleVehicle>, "VehicleKind holds WheeledVehicle or "
-                                                                    "MotorcycleVehicle");
-                return VehicleType::Motorcycle;
+                static_assert(std::is_same_v<T, TrailerVehicle>, "VehicleKind holds WheeledVehicle, "
+                                                                 "MotorcycleVehicle or TrailerVehicle");
+                return VehicleType::Trailer;
             }
         }
 
@@ -260,9 +281,13 @@ namespace Fenrir
             {
                 return self.m_wheeled;
             }
-            else
+            else if constexpr (TypeOf<T>() == VehicleType::Motorcycle)
             {
                 return self.m_motorcycle;
+            }
+            else
+            {
+                return self.m_trailer;
             }
         }
 
@@ -270,6 +295,7 @@ namespace Fenrir
         union {
             WheeledVehicle m_wheeled;
             MotorcycleVehicle m_motorcycle;
+            TrailerVehicle m_trailer;
         };
     };
 
@@ -340,6 +366,13 @@ namespace Fenrir
      * to a vehicle component (Vehicle, VehicleWheel, VehicleDifferential, VehicleAntiRollBar) and any rebuild wake the
      * chassis, so pressing the throttle always drives. Stated cost: registering any vehicle stops the physics backend
      * skipping its update of a world where everything sleeps, so a parked vehicle costs a little every tick.
+     *
+     * Towing is an ordinary Joint: a trailer is any dynamic body, usually a TrailerVehicle, joined to the chassis,
+     * usually by a `ball` at the hitch. With the default `collideConnected = false` the hitch does not fight the
+     * chassis, and the joint links the two so they sleep and wake together. A wheeled vehicle given no input also
+     * tows, staying in neutral. Trailer brakes are game code's: copy the tractor's `brake` and `handbrake` into the
+     * trailer's `input` each tick; nothing links them. Stated limit: a trailer much heavier than its tractor jitters at
+     * the hitch.
      */
     struct Vehicle
     {

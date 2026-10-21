@@ -94,6 +94,54 @@ namespace PhysicsTest
         return bike;
     }
 
+    inline constexpr float trailerMass = 300.0f;
+    inline constexpr float dollySteer = 0.5f;
+
+    /** The spike's trailer: a 300 kg unscaled box chassis 2 m long, a TrailerVehicle, with no handbrake. With `dolly`
+     * it has two axles, its front wheels steering, and stands by itself: front left, front right, rear left, rear
+     * right. Without, it has one axle at its middle (left, right), to be hitched. */
+    inline Car AddTrailer(Fenrir::EntityList& entities, const Fenrir::Math::Vec3& at, bool dolly)
+    {
+        Car trailer;
+        trailer.chassis = Place(entities, at);
+        trailer.chassis.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = trailerMass});
+        trailer.chassis.AddComponent<Fenrir::Collider>(
+            Fenrir::Collider{Fenrir::BoxShape{Fenrir::Math::Vec3(0.8f, 0.3f, 1.0f)}});
+        trailer.chassis.AddComponent<Fenrir::Vehicle>(Fenrir::Vehicle{.kind = Fenrir::TrailerVehicle{}});
+        const std::vector<float> axles = dolly ? std::vector<float>{-0.7f, 0.7f} : std::vector<float>{0.0f};
+        for (const float z : axles)
+        {
+            for (const float x : {-0.85f, 0.85f})
+            {
+                const Fenrir::Math::Vec3 position(x, -0.45f, z);
+                Fenrir::Entity wheel = Place(entities, at + position);
+                wheel.AddComponent<Fenrir::VehicleWheel>(
+                    Fenrir::VehicleWheel{.vehicle = trailer.chassis,
+                                         .position = position,
+                                         .maxSteerAngle = z < 0.0f ? dollySteer : 0.0f,
+                                         .maxHandbrakeTorque = 0.0f});
+                trailer.wheels.push_back(wheel);
+            }
+        }
+        return trailer;
+    }
+
+    /** `trailer` behind `car`, both unturned, joined by a BallJoint on its own entity at the car's rear: the spike's
+     * hitch, 0.3 m behind the car's chassis. Returns the joint's entity. */
+    inline Fenrir::Entity Hitch(Fenrir::EntityList& entities, const Car& car, const Car& trailer)
+    {
+        const Fenrir::Math::Vec3 hitch = PositionOf(car.chassis) + Fenrir::Math::Vec3(0.0f, -0.1f, 2.3f);
+        const Fenrir::JointFrames frames =
+            Fenrir::FrameFromWorld(car.chassis, trailer.chassis, Fenrir::JointFrame{.position = hitch});
+        Fenrir::Entity joint = entities.CreateEntity();
+        joint.AddComponent<Fenrir::Joint>(Fenrir::Joint{.bodyA = car.chassis,
+                                                        .bodyB = trailer.chassis,
+                                                        .frameA = frames.frameA,
+                                                        .frameB = frames.frameB,
+                                                        .kind = Fenrir::BallJoint{}});
+        return joint;
+    }
+
     /** A static floor of `friction` whose top is at y = 0, `size` across. */
     inline Fenrir::Entity AddFloor(Fenrir::EntityList& entities, float friction = 0.5f, float size = 2000.0f)
     {

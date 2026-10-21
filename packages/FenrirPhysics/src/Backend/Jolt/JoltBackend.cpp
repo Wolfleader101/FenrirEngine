@@ -3337,7 +3337,13 @@ namespace Fenrir::Backend
         }
         Fill(controller->mEngine, wheeled.engine);
         Fill(controller->mTransmission, wheeled.transmission);
-        Fill(controller->mDifferentials, desc.differentials, desc.wheels.size());
+        // A trailer is the wheeled controller in neutral, ignoring game code's differentials. Jolt asserts on a
+        // controller with no differential driving a wheel, so it keeps the default ones, which neutral leaves undriven:
+        // Jolt's clutch carries nothing at a gear ratio of 0.
+        Fill(controller->mDifferentials,
+             desc.kind.Is<TrailerVehicle>() ? std::span<const VehicleDifferentialDesc>()
+                                            : std::span<const VehicleDifferentialDesc>(desc.differentials),
+             desc.wheels.size());
         controller->mDifferentialLimitedSlipRatio = wheeled.limitedSlipRatio;
         settings.mController = controller;
 
@@ -3356,9 +3362,13 @@ namespace Fenrir::Backend
         }
         if (desc.carried)
         {
-            auto& made = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
-            made.GetEngine().SetCurrentRPM(desc.carried->engineRpm);
-            made.GetTransmission().Set(desc.carried->gear, 1.0f - desc.carried->clutch);
+            // A trailer has no engine or gear to carry: it stays at idle in neutral.
+            if (!desc.kind.Is<TrailerVehicle>())
+            {
+                auto& made = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+                made.GetEngine().SetCurrentRPM(desc.carried->engineRpm);
+                made.GetTransmission().Set(desc.carried->gear, 1.0f - desc.carried->clutch);
+            }
             for (std::size_t i = 0; i < desc.carried->wheels.size(); ++i)
             {
                 JPH::Wheel& wheel = *slot.constraint->GetWheel(static_cast<JPH::uint>(i));
@@ -3445,6 +3455,11 @@ namespace Fenrir::Backend
     void World::SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials)
     {
         const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
+        // A trailer ignores them: it keeps the default ones, undriven in neutral.
+        if (slot.type == VehicleType::Trailer)
+        {
+            return;
+        }
         auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
         Fill(controller.GetDifferentials(), differentials, slot.constraint->GetWheels().size());
     }
@@ -3474,11 +3489,15 @@ namespace Fenrir::Backend
                 read.state.leanAngle = -std::asin(std::clamp(right.Dot(constraint.GetWorldUp()), -1.0f, 1.0f));
             }
         }
-        const auto& controller = static_cast<const JPH::WheeledVehicleController&>(*constraint.GetController());
-        read.state.engineRpm = controller.GetEngine().GetCurrentRPM();
-        read.state.gear = controller.GetTransmission().GetCurrentGear();
-        read.state.clutch = 1.0f - controller.GetTransmission().GetClutchFriction();
-        read.state.shifting = controller.GetTransmission().IsSwitchingGear();
+        // A trailer's idling engine and neutral gearbox are the backend's, not its: its fields stay 0.
+        if (slot.type != VehicleType::Trailer)
+        {
+            const auto& controller = static_cast<const JPH::WheeledVehicleController&>(*constraint.GetController());
+            read.state.engineRpm = controller.GetEngine().GetCurrentRPM();
+            read.state.gear = controller.GetTransmission().GetCurrentGear();
+            read.state.clutch = 1.0f - controller.GetTransmission().GetClutchFriction();
+            read.state.shifting = controller.GetTransmission().IsSwitchingGear();
+        }
 
         for (const JPH::Wheel* each : constraint.GetWheels())
         {

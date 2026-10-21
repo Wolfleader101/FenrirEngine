@@ -85,12 +85,19 @@ namespace Fenrir
             const VehicleTransmission transmission = Backend::DrivetrainOf(kind).transmission;
             const bool manual = transmission.mode == TransmissionMode::Manual;
             VehicleInput clamped = input;
-            clamped.forward = std::clamp(input.forward, manual ? 0.0f : -1.0f, 1.0f);
+            // A trailer has no engine or gearbox to drive.
+            if (kind.Is<TrailerVehicle>())
+            {
+                clamped.forward = 0.0f;
+                clamped.gear = 0;
+                clamped.clutch = 0.0f;
+            }
+            clamped.forward = std::clamp(clamped.forward, manual ? 0.0f : -1.0f, 1.0f);
             clamped.steer = std::clamp(input.steer, -1.0f, 1.0f);
             clamped.brake = std::clamp(input.brake, 0.0f, 1.0f);
             clamped.handbrake = std::clamp(input.handbrake, 0.0f, 1.0f);
-            clamped.gear = std::clamp(input.gear, -1, transmission.gearCount);
-            clamped.clutch = std::clamp(input.clutch, 0.0f, 1.0f);
+            clamped.gear = std::clamp(clamped.gear, -1, transmission.gearCount);
+            clamped.clutch = std::clamp(clamped.clutch, 0.0f, 1.0f);
             return clamped;
         }
 
@@ -368,7 +375,7 @@ namespace Fenrir
                 // Silently, as the tilt limit is: the backend takes its tangent.
                 motorcycle.lean.maxAngle = std::clamp(motorcycle.lean.maxAngle, 0.0f, maxAngle);
             }
-            else
+            else if (corrected.Is<WheeledVehicle>())
             {
                 correct(corrected.As<WheeledVehicle>());
             }
