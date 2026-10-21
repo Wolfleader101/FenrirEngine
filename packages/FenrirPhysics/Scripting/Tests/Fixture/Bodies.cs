@@ -177,6 +177,8 @@ public static class World
 
     public static bool DrawCharacters() => PhysicsWorld.SetDebugDraw(DebugDraw.Characters);
 
+    public static bool DrawVehicles() => PhysicsWorld.SetDebugDraw(DebugDraw.Vehicles);
+
     public static bool DrawAll() => PhysicsWorld.SetDebugDraw(DebugDraw.All);
 
     // A 20 by 20 square at y = 0, its two triangles facing up, cooked from C# spans.

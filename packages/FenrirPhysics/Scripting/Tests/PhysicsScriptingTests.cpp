@@ -33,6 +33,7 @@
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
@@ -405,7 +406,7 @@ TEST_CASE("C# chooses the debug lines a world draws", "[physics][scripting]")
     REQUIRE_FALSE(world->DebugLines().empty());
 }
 
-TEST_CASE("C#'s debug-draw categories match C++'s, joints and characters included", "[physics][scripting]")
+TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicles included", "[physics][scripting]")
 {
     PhysicsScriptingApp test;
     AddStaticBox(test, Math::Vec3(0.0f, 0.0f, 0.0f));
@@ -420,6 +421,10 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints and characters include
     REQUIRE(test.Call<bool>(WorldType, "DrawCharacters"));
     INFO("C#'s Characters is C++'s Characters");
     REQUIRE(world->DebugDrawCategories() == DebugDraw::Characters);
+
+    REQUIRE(test.Call<bool>(WorldType, "DrawVehicles"));
+    INFO("C#'s Vehicles is C++'s Vehicles");
+    REQUIRE(world->DebugDrawCategories() == DebugDraw::Vehicles);
 
     REQUIRE(test.Call<bool>(WorldType, "DrawAll"));
     INFO("C#'s All is C++'s All: every category, joints, characters and vehicles included");
@@ -1916,5 +1921,438 @@ TEST_CASE("Disabled, inactive and default(CharacterBody) characters read the def
         REQUIRE(test.Call<bool>(CharactersType, "StateIsNew", zeroed));
         REQUIRE(test.Entities().GetEntity(zeroed).GetComponent<Transform>().pos.y == 5.0f);
         REQUIRE(WarningsAbout(test, "The CharacterBody of entity " + std::to_string(zeroed)) == 0);
+    }
+}
+
+namespace
+{
+    constexpr const char* VehiclesType = "Fenrir.PhysicsScriptFixture.Vehicles";
+
+    template <typename T>
+    const T& VehicleComponentOn(PhysicsScriptingApp& test, std::uint32_t entity)
+    {
+        Entity holder = test.Entities().GetEntity(entity);
+        INFO("The vehicle component C# added did not reach the entity");
+        REQUIRE(holder.HasComponent<T>());
+        return holder.GetComponent<T>();
+    }
+
+    bool Same(const VehicleInput& a, const VehicleInput& b)
+    {
+        return a.forward == b.forward && a.steer == b.steer && a.brake == b.brake && a.handbrake == b.handbrake &&
+               a.leftTrack == b.leftTrack && a.rightTrack == b.rightTrack && a.gear == b.gear && a.clutch == b.clutch;
+    }
+
+    bool Same(const VehicleEngine& a, const VehicleEngine& b)
+    {
+        return a.maxTorque == b.maxTorque && a.minRpm == b.minRpm && a.maxRpm == b.maxRpm &&
+               a.peakTorqueRpm == b.peakTorqueRpm && a.torqueAtMinRpm == b.torqueAtMinRpm &&
+               a.torqueAtMaxRpm == b.torqueAtMaxRpm && a.inertia == b.inertia && a.angularDamping == b.angularDamping;
+    }
+
+    bool Same(const VehicleTransmission& a, const VehicleTransmission& b)
+    {
+        return a.mode == b.mode && a.gearCount == b.gearCount && a.firstGear == b.firstGear && a.topGear == b.topGear &&
+               a.reverseGear == b.reverseGear && a.shiftUpRpm == b.shiftUpRpm && a.shiftDownRpm == b.shiftDownRpm &&
+               a.switchTime == b.switchTime && a.clutchReleaseTime == b.clutchReleaseTime &&
+               a.switchLatency == b.switchLatency && a.clutchStrength == b.clutchStrength;
+    }
+
+    bool Same(const VehicleTrack& a, const VehicleTrack& b)
+    {
+        return a.inertia == b.inertia && a.angularDamping == b.angularDamping && a.maxBrakeTorque == b.maxBrakeTorque &&
+               a.differentialRatio == b.differentialRatio && a.longitudinalFriction == b.longitudinalFriction &&
+               a.lateralFriction == b.lateralFriction;
+    }
+
+    bool Same(const VehicleTyre& a, const VehicleTyre& b)
+    {
+        return a.peakSlip == b.peakSlip && a.peakFriction == b.peakFriction && a.slideSlip == b.slideSlip &&
+               a.slideFriction == b.slideFriction;
+    }
+
+    // Whether two kinds are the same kind with the same settings.
+    bool Same(const VehicleKind& a, const VehicleKind& b)
+    {
+        if (a.Type() != b.Type())
+        {
+            return false;
+        }
+        switch (a.Type())
+        {
+        case VehicleType::Wheeled: {
+            const auto& x = a.As<WheeledVehicle>();
+            const auto& y = b.As<WheeledVehicle>();
+            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
+                   x.limitedSlipRatio == y.limitedSlipRatio;
+        }
+        case VehicleType::Motorcycle: {
+            const auto& x = a.As<MotorcycleVehicle>();
+            const auto& y = b.As<MotorcycleVehicle>();
+            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
+                   x.limitedSlipRatio == y.limitedSlipRatio && x.lean.enabled == y.lean.enabled &&
+                   x.lean.maxAngle == y.lean.maxAngle && x.lean.limitSteering == y.lean.limitSteering;
+        }
+        case VehicleType::Tracked: {
+            const auto& x = a.As<TrackedVehicle>();
+            const auto& y = b.As<TrackedVehicle>();
+            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) && Same(x.left, y.left) &&
+                   Same(x.right, y.right);
+        }
+        case VehicleType::Trailer:
+            return true;
+        }
+        return false;
+    }
+
+    // Whether `state` is VehicleState{}, field by field.
+    bool IsNew(const VehicleState& state)
+    {
+        const VehicleState fresh{};
+        return state.forwardSpeed == fresh.forwardSpeed && state.engineRpm == fresh.engineRpm &&
+               state.gear == fresh.gear && state.clutch == fresh.clutch && state.shifting == fresh.shifting &&
+               state.wheelsOnGround == fresh.wheelsOnGround && state.leanAngle == fresh.leanAngle &&
+               state.leftTrackSpeed == fresh.leftTrackSpeed && state.rightTrackSpeed == fresh.rightTrackSpeed;
+    }
+
+    // Whether `state` is VehicleWheelState{}, field by field.
+    bool IsNew(const VehicleWheelState& state)
+    {
+        const VehicleWheelState fresh{};
+        return state.onGround == fresh.onGround && state.groundBody == fresh.groundBody &&
+               state.groundCollider == fresh.groundCollider && state.contactPoint == fresh.contactPoint &&
+               state.contactNormal == fresh.contactNormal && state.groundVelocity == fresh.groundVelocity &&
+               state.compression == fresh.compression && state.suspensionForce == fresh.suspensionForce &&
+               state.longitudinalSlip == fresh.longitudinalSlip && state.lateralSlip == fresh.lateralSlip &&
+               state.angularVelocity == fresh.angularVelocity && state.steerAngle == fresh.steerAngle;
+    }
+
+    // A static floor 200 m across whose top is at y = 0.
+    std::uint32_t AddFloor(PhysicsScriptingApp& test)
+    {
+        const std::uint32_t floor = test.Place(Math::Vec3(0.0f, -0.5f, 0.0f));
+        test.Entities().GetEntity(floor).AddComponent<Collider>(Collider{BoxShape{Math::Vec3(100.0f, 0.5f, 100.0f)}});
+        return floor;
+    }
+} // namespace
+
+TEST_CASE("A new Vehicle from C# has C++'s defaults, for its own kind and every kind's new",
+          "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    const std::pair<int, VehicleKind> kinds[] = {
+        {-1, VehicleKind()},   {0, WheeledVehicle{}}, {1, MotorcycleVehicle{}},
+        {2, TrackedVehicle{}}, {3, TrailerVehicle{}},
+    };
+    for (const auto& [number, kind] : kinds)
+    {
+        const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
+        test.Call<void>(VehiclesType, "AddNewVehicle", entity, number);
+        test.ApplyChanges();
+
+        const Vehicle& vehicle = VehicleComponentOn<Vehicle>(test, entity);
+        const Vehicle expected{};
+        INFO("For C# kind number " << number << " (-1 is the Vehicle's own new kind, a wheeled one)");
+        {
+            INFO("The kind and every setting should be C++'s new one of that kind");
+            REQUIRE(Same(vehicle.kind, kind));
+        }
+        {
+            INFO("New, the input, probe, tilt limit (pi) and switch should be C++'s");
+            REQUIRE(Same(vehicle.input, expected.input));
+            REQUIRE(vehicle.probe == VehicleProbe::Cylinder);
+            REQUIRE(vehicle.maxTilt == std::numbers::pi_v<float>);
+            REQUIRE(vehicle.enabled);
+        }
+        {
+            INFO("New, the state should be VehicleState{}");
+            REQUIRE(IsNew(vehicle.state));
+        }
+    }
+}
+
+TEST_CASE("A new VehicleWheel, VehicleDifferential and VehicleAntiRollBar from C# have C++'s defaults, links empty",
+          "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t wheelEntity = test.Place(Math::Vec3(0.0f));
+    const std::uint32_t differentialEntity = test.Place(Math::Vec3(0.0f));
+    const std::uint32_t barEntity = test.Place(Math::Vec3(0.0f));
+    test.Call<void>(VehiclesType, "AddNewWheel", wheelEntity);
+    test.Call<void>(VehiclesType, "AddNewDifferential", differentialEntity);
+    test.Call<void>(VehiclesType, "AddNewAntiRollBar", barEntity);
+    test.ApplyChanges();
+
+    {
+        const VehicleWheel& wheel = VehicleComponentOn<VehicleWheel>(test, wheelEntity);
+        const VehicleWheel expected{};
+        INFO("New, the wheel should name no vehicle and have every C++ setting");
+        REQUIRE(wheel.vehicle == Entity());
+        REQUIRE(wheel.position == expected.position);
+        REQUIRE(wheel.track == expected.track);
+        REQUIRE(wheel.radius == expected.radius);
+        REQUIRE(wheel.width == expected.width);
+        REQUIRE(wheel.inertia == expected.inertia);
+        REQUIRE(wheel.angularDamping == expected.angularDamping);
+        REQUIRE(wheel.caster == expected.caster);
+        REQUIRE(wheel.camber == expected.camber);
+        REQUIRE(wheel.toe == expected.toe);
+        REQUIRE(wheel.suspension.travel == expected.suspension.travel);
+        REQUIRE(Same(wheel.suspension.spring, expected.suspension.spring));
+        REQUIRE(wheel.suspension.preload == expected.suspension.preload);
+        REQUIRE(wheel.maxSteerAngle == expected.maxSteerAngle);
+        REQUIRE(wheel.maxBrakeTorque == expected.maxBrakeTorque);
+        REQUIRE(wheel.maxHandbrakeTorque == expected.maxHandbrakeTorque);
+        REQUIRE(Same(wheel.longitudinal, expected.longitudinal));
+        REQUIRE(Same(wheel.lateral, expected.lateral));
+        INFO("New, its state should be VehicleWheelState{}, both ground links empty Entities");
+        REQUIRE(wheel.state.groundBody == Entity());
+        REQUIRE(wheel.state.groundCollider == Entity());
+        REQUIRE(IsNew(wheel.state));
+    }
+    {
+        const VehicleDifferential& differential = VehicleComponentOn<VehicleDifferential>(test, differentialEntity);
+        const VehicleDifferential expected{};
+        INFO("New, the differential should name no wheels and have C++'s settings");
+        REQUIRE(differential.leftWheel == Entity());
+        REQUIRE(differential.rightWheel == Entity());
+        REQUIRE(differential.ratio == expected.ratio);
+        REQUIRE(differential.leftRightSplit == expected.leftRightSplit);
+        REQUIRE(differential.limitedSlipRatio == expected.limitedSlipRatio);
+        REQUIRE(differential.torqueShare == expected.torqueShare);
+    }
+    {
+        const VehicleAntiRollBar& bar = VehicleComponentOn<VehicleAntiRollBar>(test, barEntity);
+        INFO("New, the anti-roll bar should name no wheels, at C++'s stiffness");
+        REQUIRE(bar.leftWheel == Entity());
+        REQUIRE(bar.rightWheel == Entity());
+        REQUIRE(bar.stiffness == VehicleAntiRollBar{}.stiffness);
+    }
+}
+
+namespace
+{
+    // Vehicle as a native side that drifted from the C# mirror would map it: its kind is raw bytes (and so are the
+    // structs whose mappings are the extension's own, as for the drifted Joint's frames).
+    struct DriftedVehicle
+    {
+        alignas(VehicleKind) std::uint8_t kind[sizeof(VehicleKind)];
+        alignas(VehicleInput) std::uint8_t input[sizeof(VehicleInput)];
+        std::uint8_t probe;
+        float maxTilt;
+        bool enabled;
+        alignas(VehicleState) std::uint8_t state[sizeof(VehicleState)];
+    };
+    static_assert(sizeof(DriftedVehicle) == sizeof(Vehicle) && alignof(DriftedVehicle) == alignof(Vehicle));
+} // namespace
+
+template <>
+struct Iris::StructMapping<DriftedVehicle>
+{
+    using Drifted = DriftedVehicle;
+    static constexpr std::string_view typeName = "Fenrir.Physics.Vehicle";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD_AS(Drifted, kind, "Kind"), IRIS_FIELD_AS(Drifted, input, "Input"),
+                           IRIS_FIELD_AS(Drifted, probe, "Probe"), IRIS_FIELD_AS(Drifted, maxTilt, "MaxTilt"),
+                           IRIS_FIELD_AS(Drifted, enabled, "Enabled"), IRIS_FIELD_AS(Drifted, state, "State"));
+};
+
+TEST_CASE("The four vehicle mirrors are shared with C#, and a drifted Vehicle fails the load naming the field",
+          "[physics][scripting][vehicles]")
+{
+    Testing::HeadlessApp headless;
+    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
+    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    std::vector<ComponentRegistration>& components = config.extensions[0].components;
+    for (const std::string_view name : {"Fenrir.Physics.Vehicle", "Fenrir.Physics.VehicleWheel",
+                                        "Fenrir.Physics.VehicleDifferential", "Fenrir.Physics.VehicleAntiRollBar"})
+    {
+        INFO("Physics's extension should share " << name << " with C#");
+        REQUIRE(std::ranges::any_of(components,
+                                    [name](const ComponentRegistration& component) { return component.name == name; }));
+    }
+    const auto vehicle = std::ranges::find_if(
+        components, [](const ComponentRegistration& component) { return component.name == "Fenrir.Physics.Vehicle"; });
+    *vehicle = MakeComponent<Vehicle, DriftedVehicle>("Fenrir.Physics.Vehicle");
+
+    Scripting scripting = Scripting::Install(headless.Get(), config);
+
+    {
+        INFO("A Vehicle mirror that disagrees with the native layout left scripts loaded");
+        REQUIRE_FALSE(scripting.HasScripts());
+    }
+    {
+        INFO("The failed load did not name the component and the field");
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.Vehicle"));
+        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Kind'"));
+    }
+}
+
+TEST_CASE("A C# system builds a car and its four linked wheels in one call, and Input.Forward drives it",
+          "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    const std::uint32_t floor = AddFloor(test);
+    const auto car = test.Call<std::uint32_t>(VehiclesType, "BuildCar", 0.0f, 1.0f, 0.0f, false);
+    test.ApplyChanges();
+    test.Run(60);
+
+    for (int index = 0; index < 4; ++index)
+    {
+        const auto wheel = test.Call<std::uint32_t>(VehiclesType, "Wheel", index);
+        INFO("Wheel " << index << ", linked from C#, should stand on the floor, read in place from C#");
+        REQUIRE(test.Call<bool>(VehiclesType, "OnGround", wheel));
+        REQUIRE(test.Call<std::uint32_t>(VehiclesType, "GroundBody", wheel) == floor);
+        REQUIRE(test.Call<std::uint32_t>(VehiclesType, "GroundCollider", wheel) == floor);
+    }
+    REQUIRE(test.Call<int>(VehiclesType, "WheelsOnGround", car) == 4);
+    {
+        const float resting = test.Call<float>(VehiclesType, "ForwardSpeed", car);
+        INFO("At rest, the car should not be moving, but reads " << resting << " m/s");
+        REQUIRE(std::abs(resting) < 0.1f);
+    }
+
+    test.Call<void>(VehiclesType, "SetForward", car, 1.0f);
+    test.Run(120);
+
+    const float speed = test.Call<float>(VehiclesType, "ForwardSpeed", car);
+    INFO("Two seconds of full throttle written through Input.Forward should drive the car forward, but it reads "
+         << speed << " m/s");
+    REQUIRE(speed > 5.0f);
+    {
+        const VehicleState& state = VehicleComponentOn<Vehicle>(test, car).state;
+        INFO("C++ should read the state C# read");
+        REQUIRE(state.forwardSpeed == speed);
+        REQUIRE(state.engineRpm == test.Call<float>(VehiclesType, "EngineRpm", car));
+        REQUIRE(state.engineRpm > 0.0f);
+    }
+    REQUIRE(WarningsAbout(test, "inactive") == 0);
+}
+
+TEST_CASE("C# swaps a car to Manual through its wheeled view and picks a gear, then assigns it a trailer kind",
+          "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    AddFloor(test);
+    const auto car = test.Call<std::uint32_t>(VehiclesType, "BuildCar", 0.0f, 1.0f, 0.0f, false);
+    test.ApplyChanges();
+    test.Run(30);
+
+    test.Call<void>(VehiclesType, "ShiftManual", car, 2);
+    {
+        const Vehicle& vehicle = VehicleComponentOn<Vehicle>(test, car);
+        INFO("The Manual mode C# wrote through the view did not land in the component");
+        REQUIRE(vehicle.kind.As<WheeledVehicle>().transmission.mode == TransmissionMode::Manual);
+        REQUIRE(vehicle.input.gear == 2);
+    }
+    test.Run(1);
+    {
+        INFO("In Manual the state echoes the gear C# chose, from the tick it is set");
+        REQUIRE(test.Call<int>(VehiclesType, "Gear", car) == 2);
+    }
+
+    test.Call<void>(VehiclesType, "SetForward", car, 1.0f);
+    test.Call<void>(VehiclesType, "MakeTrailer", car);
+    {
+        INFO("The trailer kind C# assigned did not replace the wheeled one");
+        REQUIRE(VehicleComponentOn<Vehicle>(test, car).kind.Is<TrailerVehicle>());
+        REQUIRE(test.Call<int>(VehiclesType, "KindType", car) == static_cast<int>(VehicleType::Trailer));
+    }
+    test.Run(60);
+    {
+        INFO("Physics should have rebuilt it as a trailer: no engine or gear, and the throttle moves it nowhere");
+        REQUIRE(test.Call<float>(VehiclesType, "EngineRpm", car) == 0.0f);
+        REQUIRE(test.Call<int>(VehiclesType, "Gear", car) == 0);
+        REQUIRE(std::abs(test.Call<float>(VehiclesType, "ForwardSpeed", car)) < 0.1f);
+    }
+    {
+        const auto message = test.Call<std::optional<std::string>>(VehiclesType, "WheeledViewMessage", car);
+        INFO("Reading a trailer as a wheeled vehicle from C# should throw, naming both kinds");
+        REQUIRE(message.has_value());
+        REQUIRE(*message == "The vehicle is a Trailer, not a Wheeled.");
+    }
+}
+
+TEST_CASE("A rear VehicleDifferential built from C# drives only its two wheels", "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    // A stand under the chassis, so every wheel is in the air: a driven wheel spins up, an undriven one stays still.
+    const std::uint32_t stand = test.Place(Math::Vec3(0.0f, 0.5f, 0.0f));
+    test.Entities().GetEntity(stand).AddComponent<Collider>(Collider{BoxShape{Math::Vec3(0.5f, 0.5f, 1.0f)}});
+    const auto car = test.Call<std::uint32_t>(VehiclesType, "BuildCar", 0.0f, 1.3f, 0.0f, true);
+    test.ApplyChanges();
+    test.Call<void>(VehiclesType, "SetForward", car, 0.5f);
+    test.Run(60);
+
+    for (int index = 0; index < 4; ++index)
+    {
+        const auto wheel = test.Call<std::uint32_t>(VehiclesType, "Wheel", index);
+        const float spin = test.Call<float>(VehiclesType, "Spin", wheel);
+        if (index < 2)
+        {
+            INFO("Front wheel " << index << ", in no differential, should stay still, but spins at " << spin);
+            REQUIRE(std::abs(spin) < 1e-3f);
+        }
+        else
+        {
+            INFO("Rear wheel " << index << ", in the differential C# built, should spin up, but spins at " << spin);
+            REQUIRE(spin > 1.0f);
+        }
+    }
+    REQUIRE(WarningsAbout(test, "inactive") == 0);
+}
+
+TEST_CASE("Disabled, inactive and default(...) vehicles read reset State from C#, and nothing throws",
+          "[physics][scripting][vehicles]")
+{
+    PhysicsScriptingApp test;
+    AddFloor(test);
+    const auto disabled = test.Call<std::uint32_t>(VehiclesType, "BuildCar", -5.0f, 1.0f, 0.0f, false);
+    const auto disabledWheel = test.Call<std::uint32_t>(VehiclesType, "Wheel", 0);
+    const auto inactive = test.Call<std::uint32_t>(VehiclesType, "BuildCar", 5.0f, 1.0f, 0.0f, false);
+    const auto inactiveWheel = test.Call<std::uint32_t>(VehiclesType, "Wheel", 0);
+    test.ApplyChanges();
+    test.Run(60);
+    {
+        INFO("Both cars should be standing on their wheels first, so their states are not the defaults");
+        REQUIRE_FALSE(test.Call<bool>(VehiclesType, "StateIsNew", disabled));
+        REQUIRE_FALSE(test.Call<bool>(VehiclesType, "WheelStateIsNew", disabledWheel));
+        REQUIRE_FALSE(test.Call<bool>(VehiclesType, "StateIsNew", inactive));
+    }
+
+    test.Call<void>(VehiclesType, "Disable", disabled);
+    // A kinematic chassis makes the vehicle inactive.
+    test.Call<void>(VehiclesType, "MakeKinematic", inactive);
+    const std::uint32_t zeroed = test.Place(Math::Vec3(0.0f, 5.0f, 10.0f));
+    test.Entities().GetEntity(zeroed).AddComponent<RigidBody>();
+    test.Entities().GetEntity(zeroed).AddComponent<Collider>();
+    test.Call<void>(VehiclesType, "AddDefaultVehicle", zeroed);
+    const std::uint32_t zeroedWheel = test.Place(Math::Vec3(0.0f, 5.0f, -10.0f));
+    test.Call<void>(VehiclesType, "AddDefaultWheel", zeroedWheel);
+    test.ApplyChanges();
+    test.Run(5);
+
+    {
+        INFO("A disabled vehicle's state and its wheels' should read as new in C#");
+        REQUIRE(test.Call<bool>(VehiclesType, "StateIsNew", disabled));
+        REQUIRE(test.Call<bool>(VehiclesType, "WheelStateIsNew", disabledWheel));
+        REQUIRE(IsNew(VehicleComponentOn<Vehicle>(test, disabled).state));
+    }
+    {
+        INFO("An inactive vehicle's state and its wheels' should read as new too, with physics's one warning");
+        REQUIRE(test.Call<bool>(VehiclesType, "StateIsNew", inactive));
+        REQUIRE(test.Call<bool>(VehiclesType, "WheelStateIsNew", inactiveWheel));
+        REQUIRE(WarningsAbout(test, "The Vehicle on entity " + std::to_string(inactive) + " is inactive") == 1);
+    }
+    {
+        INFO("default(Vehicle) is a disabled vehicle: its state reads as new, and nothing warns about it");
+        REQUIRE(test.Call<bool>(VehiclesType, "StateIsNew", zeroed));
+        REQUIRE_FALSE(VehicleComponentOn<Vehicle>(test, zeroed).enabled);
+        REQUIRE(WarningsAbout(test, "The Vehicle on entity " + std::to_string(zeroed)) == 0);
+    }
+    {
+        INFO("default(VehicleWheel) names entity 0 with no scene: an inactive wheel, its state new, with one warning");
+        REQUIRE(test.Call<bool>(VehiclesType, "WheelStateIsNew", zeroedWheel));
+        REQUIRE(WarningsAbout(test, "The VehicleWheel on entity " + std::to_string(zeroedWheel) + " is inactive") == 1);
     }
 }
