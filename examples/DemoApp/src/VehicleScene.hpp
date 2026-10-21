@@ -43,6 +43,18 @@
 // autopilot parks halfway up for a few seconds. Between ticks the wheels are drawn with the chassis, blended as it is:
 // 5 switches the chassis's interpolation off and on, and off, the wheels still move with it, at its step poses.
 //
+// A driver sits in the car, following the Vehicle docs' recipe for getting in and out, with no seat component: a
+// capsule character, disabled so nothing sees it, parented under the chassis at a seat, where it rides at the chassis's
+// interpolated pose. F gets out: the driver is unparented, placed beside the driver's door, cleared of the car with
+// Depenetrate and enabled again, and walks with a small copy of the character scene's steering, the chase camera
+// following it. F within 3 m of the car gets back in. The car is the scene's only driven vehicle: while nobody drives
+// it, it holds the handbrake, which the trailer copies. On foot T teleports the driver back beside the start pad.
+//
+// Flipped vehicles are game code's too: the car or the trailer reads "flipped" once it has had no wheel on the ground
+// for 2 s with its up more than 60 degrees from world up. K kicks the car over with a roll impulse; R rights it, a
+// Transform write upright on its heading, lifted 1 m, its velocities zeroed, the trailer behind it. With 7's tilt
+// limit on, K cannot roll it past 60 degrees: it stays propped on two wheels.
+//
 // The camera is a VehicleCamera: C++ game code that chases the car and writes the scene's DemoCamera, which
 // DemoCameras copies into the app's camera. C frees the camera (WASD flies it, the arrows still drive) and snaps it
 // back.
@@ -81,6 +93,7 @@
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "Material.hpp"
 #include "ModelLibrary.hpp"
@@ -100,6 +113,24 @@ class VehicleCamera
     void Toggle()
     {
         m_following = !m_following;
+    }
+
+    /** @brief Degrees about world up the camera looks along, as DemoCamera::Yaw, with what the stick has turned. */
+    [[nodiscard]] float Yaw() const
+    {
+        return m_yaw + m_orbit.x;
+    }
+
+    /** @brief A target facing the way the camera looks, so that following it, the camera keeps its heading. */
+    [[nodiscard]] Fenrir::Math::Quat Ahead() const
+    {
+        return Fenrir::Math::AngleAxis(-(m_yaw + 90.0f) * degrees, Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+    }
+
+    /** @brief Turns the camera by `by` degrees about world up, + to the right. */
+    void Turn(float by)
+    {
+        m_yaw += by;
     }
 
     /**
@@ -177,7 +208,10 @@ class VehicleScene
                             "drives too: the right trigger drives, the left trigger brakes and then reverses, "
                             "the left stick steers, A pulls the handbrake, the right stick looks round the car; "
                             "X is M, the bumpers Q/E, B the clutch, the D-pad 1 (up), 2 (right), 7 (down) and 4 "
-                            "(left), and Start 9.",
+                            "(left), and Start 9. F gets out of the car and, within 3 m of it, back in; on foot "
+                            "WASD walks (relative to the camera), Shift runs, Space jumps, Q/E turn the camera, T "
+                            "teleports the driver beside the start and P gets back in to drive the track. K kicks "
+                            "the car over (\"flipped\" after 2 s upside down), R rights it. Y is F and Back R.",
                         .smokeKeys = {GLFW_KEY_P}};
         // F2 steps the app's debug lines from off to "vehicles" first, so the run draws every wheel throughout.
         scene.smokeKeys.insert(scene.smokeKeys.begin(), 7, GLFW_KEY_F2);
@@ -193,6 +227,8 @@ class VehicleScene
         // Manual, up two gears, down one, the clutch, and back to Automatic.
         scene.smokeKeys.insert(scene.smokeKeys.end(), {GLFW_KEY_M, GLFW_KEY_E, GLFW_KEY_E, GLFW_KEY_Q,
                                                        GLFW_KEY_LEFT_SHIFT, GLFW_KEY_L, GLFW_KEY_M});
+        // Over and righted, then out, back in, and respawned.
+        scene.smokeKeys.insert(scene.smokeKeys.end(), {GLFW_KEY_K, GLFW_KEY_R, GLFW_KEY_F, GLFW_KEY_F, GLFW_KEY_T});
         scene.smokeKeys.push_back(GLFW_KEY_L);
         return scene;
     }
@@ -217,6 +253,7 @@ class VehicleScene
         MakeCar();
         GiveCarDrivetrain();
         MakeTrailer();
+        MakeDriver();
 
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Vehicle camera");
@@ -253,9 +290,18 @@ class VehicleScene
             return;
         }
         PressPadKeys(app);
-        m_followCamera.Update(m_camera.GetComponent<DemoCamera>(), Fenrir::GetWorldTransform(m_car.chassis),
-                              Beyond(m_gamepad.GetComponent<DemoGamepad>().RightStick),
-                              static_cast<float>(app.GetTime().deltaTime));
+        const float dt = static_cast<float>(app.GetTime().deltaTime);
+        Fenrir::Transform target = Fenrir::GetWorldTransform(m_car.chassis);
+        if (!m_seated)
+        {
+            // On foot it keeps its heading behind the driver, Q and E turning it.
+            const auto held = [this](int key) { return m_held.contains(key) || m_padHeld.contains(key); };
+            m_followCamera.Turn(((held(GLFW_KEY_E) ? 1.0f : 0.0f) - (held(GLFW_KEY_Q) ? 1.0f : 0.0f)) * turnSpeed * dt);
+            target.pos = Fenrir::GetWorldTransform(m_driver).pos;
+            target.rot = m_followCamera.Ahead();
+        }
+        m_followCamera.Update(m_camera.GetComponent<DemoCamera>(), target,
+                              Beyond(m_gamepad.GetComponent<DemoGamepad>().RightStick), dt);
         ShowReadings();
     }
 
@@ -270,8 +316,11 @@ class VehicleScene
         const float dt = static_cast<float>(app.GetTime().tickRate);
         MoveFerry(dt);
         HoldPedestrian(app, dt);
+        Walk(app, dt);
         Drive(app);
         CopyTrailerBrakes();
+        WatchFlipped(app, m_car, "The car", dt);
+        WatchFlipped(app, m_trailer, "The trailer", dt);
     }
 
   private:
@@ -282,6 +331,8 @@ class VehicleScene
         std::vector<Fenrir::Entity> wheels;
         // The way the keys last drove it: S brakes while it goes forward, then reverses.
         float direction = 1.0f;
+        // Seconds it has had no wheel on the ground with its up more than 60 degrees from world up.
+        float overturned = 0.0f;
     };
 
     // Where the ferry waits: by the tarmac, or by the far bank.
@@ -313,8 +364,8 @@ class VehicleScene
         int key;
     };
 
-    // The spec's buttons, then the scene's other keys on the buttons it leaves free. A key no ticket handles yet does
-    // nothing, so Y (F: get out and in) and Back (R: right the vehicle) work once their keys do.
+    // The spec's buttons, then the scene's other keys on the buttons it leaves free: Y is F (get out and in) and Back
+    // is R (right the car).
     static constexpr std::array<PadKey, 12> padKeys = {
         PadKey{GLFW_GAMEPAD_BUTTON_A, GLFW_KEY_SPACE},        PadKey{GLFW_GAMEPAD_BUTTON_LEFT_BUMPER, GLFW_KEY_Q},
         PadKey{GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER, GLFW_KEY_E}, PadKey{GLFW_GAMEPAD_BUTTON_Y, GLFW_KEY_F},
@@ -363,6 +414,12 @@ class VehicleScene
         {
             m_autopilot = !m_autopilot;
             m_waypoint = 0;
+            // It drives with the driver aboard: on foot, the driver gets back in first, wherever the car is.
+            if (m_autopilot && !m_seated)
+            {
+                Seat();
+                app.Logger()->Info("P: the driver gets back in");
+            }
             app.Logger()->Info(m_autopilot ? "P: autopilot: driving the track" : "P: autopilot off");
         }
         else if (key == GLFW_KEY_4)
@@ -379,7 +436,30 @@ class VehicleScene
         }
         else if (key == GLFW_KEY_T)
         {
-            Respawn(app);
+            if (m_seated)
+            {
+                Respawn(app);
+            }
+            else
+            {
+                TeleportDriver(app);
+            }
+        }
+        else if (key == GLFW_KEY_F)
+        {
+            ToggleSeated(app);
+        }
+        else if (key == GLFW_KEY_SPACE && !m_seated)
+        {
+            m_jump = true;
+        }
+        else if (key == GLFW_KEY_K)
+        {
+            Kick(app);
+        }
+        else if (key == GLFW_KEY_R)
+        {
+            Right(app);
         }
         else if (key == GLFW_KEY_8)
         {
@@ -394,7 +474,7 @@ class VehicleScene
             app.Logger()->Info(m_manual ? "M: Manual gearbox: E/Q shift, Shift holds the clutch"
                                         : "M: Automatic gearbox");
         }
-        else if ((key == GLFW_KEY_E || key == GLFW_KEY_Q) && m_manual)
+        else if ((key == GLFW_KEY_E || key == GLFW_KEY_Q) && m_manual && m_seated)
         {
             Shift(key == GLFW_KEY_E ? 1 : -1);
             app.Logger()->Info("{}: gear {}", key == GLFW_KEY_E ? "E" : "Q",
@@ -457,6 +537,17 @@ class VehicleScene
     // the camera's, so only the arrows drive.
     void Drive(Fenrir::App& app)
     {
+        if (!m_seated)
+        {
+            // Nobody drives it: parked on the handbrake, which the trailer copies.
+            Fenrir::Vehicle& vehicle = m_car.chassis.GetComponent<Fenrir::Vehicle>();
+            vehicle.input.forward = 0.0f;
+            vehicle.input.steer = 0.0f;
+            vehicle.input.brake = 0.0f;
+            vehicle.input.clutch = 0.0f;
+            vehicle.input.handbrake = 1.0f;
+            return;
+        }
         const bool wasd = m_followCamera.Following();
         const auto held = [this](int key) { return m_held.contains(key) || m_padHeld.contains(key); };
         float throttle = held(GLFW_KEY_UP) || (wasd && held(GLFW_KEY_W)) ? 1.0f : 0.0f;
@@ -904,8 +995,7 @@ class VehicleScene
     void MakeCar()
     {
         const Fenrir::Math::Vec3 at = start;
-        m_car.chassis =
-            Chassis("Car", at, Fenrir::Math::Vec3(0.9f, 0.25f, 2.0f), 1500.0f, Fenrir::Math::Vec3(0.85f, 0.15f, 0.1f));
+        m_car.chassis = Chassis("Car", at, carHalf, 1500.0f, Fenrir::Math::Vec3(0.85f, 0.15f, 0.1f));
         m_car.chassis.AddComponent<Fenrir::Vehicle>();
         for (const float z : {-1.4f, 1.4f})
         {
@@ -957,6 +1047,216 @@ class VehicleScene
         Fenrir::VehicleInput& trailer = m_trailer.chassis.GetComponent<Fenrir::Vehicle>().input;
         trailer.brake = car.brake;
         trailer.handbrake = car.handbrake;
+    }
+
+    // Getting in and out, and walking.
+
+    // The driver: a capsule with a CharacterBody, its look a child with no collider, seated in the car to start with.
+    void MakeDriver()
+    {
+        m_driver = m_entities->CreateEntity();
+        m_driver.GetComponent<Fenrir::Name>().Set("Driver");
+        m_driver.AddComponent<Fenrir::Collider>(Fenrir::Collider{driverShape});
+        m_driver.AddComponent<Fenrir::CharacterBody>();
+        m_driver.AddChild(Look("Driver look", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.6f, 1.6f, 0.6f),
+                               Fenrir::Math::Vec3(0.3f, 0.75f, 0.95f)));
+        Seat();
+    }
+
+    // The driver disabled, so bodies, queries, triggers and the wheels' probes never see it, then parented under the
+    // chassis at the seat. Physics never poses a disabled character, so it rides at the chassis's interpolated pose.
+    void Seat()
+    {
+        Fenrir::CharacterBody& body = m_driver.GetComponent<Fenrir::CharacterBody>();
+        body.enabled = false;
+        body.velocity = Fenrir::Math::Vec3(0.0f);
+        m_car.chassis.AddChild(m_driver);
+        m_driver.GetComponent<Fenrir::Transform>() = Fenrir::Transform(seat, identity, Fenrir::Math::Vec3(1.0f));
+        m_seated = true;
+    }
+
+    // F: out of the car beside the driver's door, or, on foot within 3 m of it, back in.
+    void ToggleSeated(Fenrir::App& app)
+    {
+        if (m_seated)
+        {
+            const Fenrir::Transform car = Fenrir::GetWorldTransform(m_car.chassis);
+            m_car.chassis.RemoveChild(m_driver);
+            PlaceDriver(app, car.pos + car.rot * door);
+            if (m_autopilot)
+            {
+                m_autopilot = false;
+                app.Logger()->Info("F: autopilot off: nobody is driving");
+            }
+            app.Logger()->Info("F: the driver gets out beside the door; the car holds its handbrake");
+            return;
+        }
+        const float away = DistanceToCar();
+        if (away > reachCar)
+        {
+            app.Logger()->Info("F: the car is {:.1f} m away: get within {:.0f} m to get in", away, reachCar);
+            return;
+        }
+        Seat();
+        app.Logger()->Info("F: the driver gets in and drives the car");
+    }
+
+    // On foot, T: the driver back beside the start pad, west of it, wherever the car is.
+    void TeleportDriver(Fenrir::App& app)
+    {
+        PlaceDriver(app, start + Fenrir::Math::Vec3(-4.0f, 0.0f, 0.0f));
+        app.Logger()->Info("T: the driver is back beside the start");
+    }
+
+    // The driver, unparented, put upright at `at` (its centre), cleared of the car and anything else with Depenetrate,
+    // still, and enabled again. A Transform write is a teleport: it finds its ground there that tick.
+    void PlaceDriver(Fenrir::App& app, const Fenrir::Math::Vec3& at)
+    {
+        Fenrir::Transform pose(at, identity, Fenrir::Math::Vec3(1.0f));
+        // The query skips the driver, which an on-foot teleport finds where it stood. The scene's world is made by its
+        // first step, so before that it goes where it is put.
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world != nullptr)
+        {
+            pose.pos += world->Depenetrate(driverShape, pose, Fenrir::QueryFilter{.ignoreBody = m_driver});
+        }
+        m_driver.GetComponent<Fenrir::Transform>() = pose;
+        Fenrir::CharacterBody& body = m_driver.GetComponent<Fenrir::CharacterBody>();
+        body.velocity = Fenrir::Math::Vec3(0.0f);
+        body.enabled = true;
+        m_seated = false;
+    }
+
+    // Metres from the driver's centre to the car's chassis box, 0 inside it.
+    [[nodiscard]] float DistanceToCar() const
+    {
+        const Fenrir::Transform car = Fenrir::GetWorldTransform(m_car.chassis);
+        const Fenrir::Math::Vec3 local =
+            Fenrir::Math::Conjugate(car.rot) * (Fenrir::GetWorldTransform(m_driver).pos - car.pos);
+        const Fenrir::Math::Vec3 outside(std::max(std::abs(local.x) - carHalf.x, 0.0f),
+                                         std::max(std::abs(local.y) - carHalf.y, 0.0f),
+                                         std::max(std::abs(local.z) - carHalf.z, 0.0f));
+        return Fenrir::Math::Magnitude(outside);
+    }
+
+    // On foot, a small copy of the character scene's steering: the walk is steered from the velocity physics wrote
+    // back by at most `acceleration`, gravity is added, and Space jumps only from walkable ground. No crouch.
+    void Walk(Fenrir::App& app, float dt)
+    {
+        const Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (m_seated || world == nullptr)
+        {
+            m_jump = false;
+            return;
+        }
+        Fenrir::CharacterBody& body = m_driver.GetComponent<Fenrir::CharacterBody>();
+        const Fenrir::Math::Vec3 walk = WalkInput();
+        Fenrir::Math::Vec3 horizontal(body.velocity.x, 0.0f, body.velocity.z);
+        const Fenrir::Math::Vec3 change = walk - horizontal;
+        const float most = acceleration * dt;
+        const float length = Fenrir::Math::Magnitude(change);
+        horizontal += length > most ? change * (most / length) : change;
+        body.velocity.x = horizontal.x;
+        body.velocity.z = horizontal.z;
+        body.velocity.y += world->Gravity().y * dt;
+        if (m_jump && body.state.ground == Fenrir::GroundState::OnGround)
+        {
+            body.velocity.y = jumpSpeed;
+        }
+        m_jump = false;
+    }
+
+    // The walk the keys or the pad's left stick ask for, relative to the camera: WASD (or the arrows, while the camera
+    // is free) and Shift to run.
+    [[nodiscard]] Fenrir::Math::Vec3 WalkInput() const
+    {
+        const bool wasd = m_followCamera.Following();
+        const auto held = [this](int key) { return m_held.contains(key) || m_padHeld.contains(key); };
+        float forward = 0.0f;
+        float right = 0.0f;
+        forward += held(GLFW_KEY_UP) || (wasd && held(GLFW_KEY_W)) ? 1.0f : 0.0f;
+        forward -= held(GLFW_KEY_DOWN) || (wasd && held(GLFW_KEY_S)) ? 1.0f : 0.0f;
+        right += held(GLFW_KEY_RIGHT) || (wasd && held(GLFW_KEY_D)) ? 1.0f : 0.0f;
+        right -= held(GLFW_KEY_LEFT) || (wasd && held(GLFW_KEY_A)) ? 1.0f : 0.0f;
+        // The pad wins beyond the deadzone; its stick's +Y is down.
+        const Fenrir::Math::Vec2 stick = Beyond(m_gamepad.GetComponent<DemoGamepad>().LeftStick);
+        if (stick.x != 0.0f || stick.y != 0.0f)
+        {
+            forward = -stick.y;
+            right = stick.x;
+        }
+        if (forward == 0.0f && right == 0.0f)
+        {
+            return Fenrir::Math::Vec3(0.0f);
+        }
+        const float yaw = m_followCamera.Yaw() * degrees;
+        const Fenrir::Math::Vec3 ahead(std::cos(yaw), 0.0f, std::sin(yaw));
+        const Fenrir::Math::Vec3 side(-ahead.z, 0.0f, ahead.x);
+        Fenrir::Math::Vec3 walk = ahead * forward + side * right;
+        // A stick pushed part way walks slower; full, or on keys, at the walking speed.
+        const float push = Fenrir::Math::Magnitude(walk);
+        walk = push > 1.0f ? walk / push : walk;
+        return walk * (held(GLFW_KEY_LEFT_SHIFT) || held(GLFW_KEY_RIGHT_SHIFT) ? runSpeed : walkSpeed);
+    }
+
+    // Flipped vehicles.
+
+    // Each tick: how long `vehicle` has had no wheel down with its up more than 60 degrees from world up, logging once
+    // when that reaches 2 s and it reads "flipped".
+    static void WatchFlipped(Fenrir::App& app, Driven& vehicle, const char* label, float dt)
+    {
+        const bool was = Flipped(vehicle);
+        const Fenrir::Math::Vec3 up =
+            Fenrir::GetWorldTransform(vehicle.chassis).rot * Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f);
+        const bool over =
+            vehicle.chassis.GetComponent<Fenrir::Vehicle>().state.wheelsOnGround == 0 && up.y < std::cos(flipAngle);
+        vehicle.overturned = over ? vehicle.overturned + dt : 0.0f;
+        if (!was && Flipped(vehicle))
+        {
+            app.Logger()->Info("{} is flipped: R rights it", label);
+        }
+    }
+
+    static bool Flipped(const Driven& vehicle)
+    {
+        return vehicle.overturned >= flippedSeconds;
+    }
+
+    // K: the car kicked over, a roll impulse about its forward axis with a little lift, enough to land it on its roof.
+    // With 7's tilt limit on it rolls no further than 60 degrees, held there on two wheels until R rights it.
+    void Kick(Fenrir::App& app)
+    {
+        Fenrir::PhysicsWorld* world = Fenrir::PhysicsWorld::Of(app.GetActiveScene());
+        if (world == nullptr)
+        {
+            return;
+        }
+        const Fenrir::Math::Quat rot = Fenrir::GetWorldTransform(m_car.chassis).rot;
+        world->AddAngularImpulse(m_car.chassis, rot * Fenrir::Math::Vec3(0.0f, 0.0f, -kickRoll));
+        world->AddImpulse(m_car.chassis, Fenrir::Math::Vec3(0.0f, kickLift, 0.0f));
+        app.Logger()->Info("K: the car is kicked over");
+    }
+
+    // R: the car righted, game code's recipe in the Vehicle docs: a Transform write upright on its heading, lifted 1 m,
+    // its velocities zeroed. The trailer goes with it, upright behind it, still hitched.
+    void Right(Fenrir::App& app)
+    {
+        Fenrir::Transform& at = m_car.chassis.GetComponent<Fenrir::Transform>();
+        const Fenrir::Math::Vec3 ahead = at.rot * Fenrir::Math::Vec3(0.0f, 0.0f, -1.0f);
+        const Fenrir::Math::Quat upright =
+            Fenrir::Math::AngleAxis(std::atan2(-ahead.x, -ahead.z), Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f));
+        at.pos += Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f);
+        at.rot = upright;
+        Fenrir::RigidBody& body = m_car.chassis.GetComponent<Fenrir::RigidBody>();
+        body.linearVelocity = Fenrir::Math::Vec3(0.0f);
+        body.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        Fenrir::Transform& trailerAt = m_trailer.chassis.GetComponent<Fenrir::Transform>();
+        trailerAt.pos = at.pos + upright * trailerOffset;
+        trailerAt.rot = upright;
+        Fenrir::RigidBody& trailerBody = m_trailer.chassis.GetComponent<Fenrir::RigidBody>();
+        trailerBody.linearVelocity = Fenrir::Math::Vec3(0.0f);
+        trailerBody.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        app.Logger()->Info("R: the car is righted, 1 m up, its trailer behind it");
     }
 
     // 4: the car switched off, a plain box rolling on its chassis with its wheels left behind, and on again, built
@@ -1145,14 +1445,16 @@ class VehicleScene
     {
         const Fenrir::VehicleState& state = m_car.chassis.GetComponent<Fenrir::Vehicle>().state;
         std::array<char, 256> text{};
-        std::snprintf(text.data(), text.size(), "Car: %.0f km/h, %.0f RPM, gear %d%s, clutch %.2f, %d on ground",
+        std::snprintf(text.data(), text.size(), "Car: %.0f km/h, %.0f RPM, gear %d%s, clutch %.2f, %d on ground%s%s",
                       static_cast<double>(state.forwardSpeed * 3.6f), static_cast<double>(state.engineRpm), state.gear,
-                      state.shifting ? ", shifting" : "", static_cast<double>(state.clutch), state.wheelsOnGround);
+                      state.shifting ? ", shifting" : "", static_cast<double>(state.clutch), state.wheelsOnGround,
+                      Flipped(m_car) ? ", flipped" : "", m_seated ? "" : ", nobody driving");
         m_car.chassis.GetComponent<Fenrir::Name>().Set(text.data());
         // A trailer has no engine or gearbox to show.
         const Fenrir::VehicleState& trailer = m_trailer.chassis.GetComponent<Fenrir::Vehicle>().state;
-        std::snprintf(text.data(), text.size(), "Trailer: %.0f km/h, %d on ground",
-                      static_cast<double>(trailer.forwardSpeed * 3.6f), trailer.wheelsOnGround);
+        std::snprintf(text.data(), text.size(), "Trailer: %.0f km/h, %d on ground%s",
+                      static_cast<double>(trailer.forwardSpeed * 3.6f), trailer.wheelsOnGround,
+                      Flipped(m_trailer) ? ", flipped" : "");
         m_trailer.chassis.GetComponent<Fenrir::Name>().Set(text.data());
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
@@ -1191,6 +1493,10 @@ class VehicleScene
         app.Logger()->Info("  trailer {:.2f} m/s, {} wheels on ground, brake {:.2f}, handbrake {:.2f}",
                            trailer.state.forwardSpeed, trailer.state.wheelsOnGround, trailer.input.brake,
                            trailer.input.handbrake);
+        const Fenrir::Math::Vec3 driver = Fenrir::GetWorldTransform(m_driver).pos;
+        app.Logger()->Info("  car flipped {}, trailer flipped {}; driver {} at ({:.2f}, {:.2f}, {:.2f})",
+                           Flipped(m_car), Flipped(m_trailer), m_seated ? "seated" : "on foot", driver.x, driver.y,
+                           driver.z);
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
             if (!m_car.wheels[i].IsValid())
@@ -1231,6 +1537,25 @@ class VehicleScene
     static constexpr float slopeLength = 12.0f;    // m, along each ramp.
     static constexpr float platformLength = 10.0f; // m, across the top.
     inline static const Fenrir::Math::Vec3 pedestrianFeet = Fenrir::Math::Vec3(0.0f, 0.0f, -10.0f);
+    // The car's chassis box's half extents.
+    inline static const Fenrir::Math::Vec3 carHalf = Fenrir::Math::Vec3(0.9f, 0.25f, 2.0f);
+    // The driver's capsule, 1.6 m tall; the seat, chassis-local, on the left behind the front axle, head and shoulders
+    // out of the roof; and the place beside the driver's door it gets out to, its centre at the chassis's height.
+    inline static const Fenrir::CollisionShape driverShape = Fenrir::CapsuleShape{.halfHeight = 0.5f, .radius = 0.3f};
+    inline static const Fenrir::Math::Vec3 seat = Fenrir::Math::Vec3(-0.45f, 0.45f, -0.2f);
+    inline static const Fenrir::Math::Vec3 door = Fenrir::Math::Vec3(-1.4f, 0.0f, -0.2f);
+    static constexpr float reachCar = 3.0f; // m: F gets in this close to the car's chassis.
+    // On foot, as the character scene walks.
+    static constexpr float walkSpeed = 4.0f;
+    static constexpr float runSpeed = 8.0f;
+    static constexpr float acceleration = 30.0f; // m/s², the most the walk changes the velocity by.
+    static constexpr float jumpSpeed = 5.0f;
+    static constexpr float turnSpeed = 90.0f; // Degrees per second Q and E turn the camera on foot.
+    // Flipped: no wheel on the ground for this long, with the up this far from world up.
+    static constexpr float flippedSeconds = 2.0f;
+    static constexpr float flipAngle = 60.0f * degrees;
+    static constexpr float kickRoll = 2400.0f; // N m s about the car's forward axis: K's kick.
+    static constexpr float kickLift = 4500.0f; // N s up, with it.
 
     const Model* m_cube;
     const Model* m_sphere;
@@ -1242,6 +1567,9 @@ class VehicleScene
     Fenrir::Entity m_rearBar;
     Fenrir::Entity m_ferry;
     Fenrir::Entity m_pedestrian;
+    Fenrir::Entity m_driver;
+    bool m_seated = false;       // Whether the driver is in the car, so the keys drive it rather than walk.
+    bool m_jump = false;         // Space on foot, until the next tick.
     float m_ferrySeconds = 0.0f; // How long the ferry has run, while the scene is active.
     Fenrir::Entity m_camera;
     Fenrir::Entity m_gamepad;
