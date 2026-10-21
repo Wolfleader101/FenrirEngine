@@ -1,7 +1,7 @@
 # What are materials, and how do they bind shaders and parameters?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 12, 15
 
 ## Question
