@@ -1,7 +1,7 @@
 # Which shader language do we write, and how is it compiled for each backend?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 04, 08
 
 ## Question
