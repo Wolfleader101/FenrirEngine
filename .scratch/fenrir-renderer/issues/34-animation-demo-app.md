@@ -1,7 +1,7 @@
 # What does the animation demo app show?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 23, 28, 30
 
 ## Question
