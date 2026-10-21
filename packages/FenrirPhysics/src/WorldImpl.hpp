@@ -15,17 +15,17 @@
 
 #include "Backend/Backend.hpp"
 #include "Bodies.hpp"
+#include "Characters.hpp"
 #include "Contacts.hpp"
 #include "DebugCanvas.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
-#include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/Events.hpp"
-#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "Joints.hpp"
 #include "Poses.hpp"
 
 namespace Fenrir
@@ -93,85 +93,11 @@ namespace Fenrir
 
         using Record = Detail::Bodies::Record;
 
-        /** @brief What the features not yet in modules of their own (joints, vehicles) and the queries read of the
-         * bodies. */
+        /** @brief What the feature not yet in a module of its own (vehicles) and the queries read of the bodies. */
         [[nodiscard]] const Detail::Bodies& BodyView() const
         {
             return m_bodies;
         }
-
-        // Joints (Joints.cpp). Their constraints always go before their bodies and come after them.
-
-        /** @brief Drains the Joint tracked set, after the bodies' plan: a joint removed (or removed and added again)
-         * since the last tick loses its constraint, and one added and removed again comes to nothing. */
-        void DrainJoints();
-        /** @brief Removes the constraints of the joints naming any of `bodies`, which are about to be destroyed. */
-        void RemoveJointsOf(std::span<const Backend::BodyId> bodies);
-        /** @brief After the bodies' edits: makes, recreates or updates each joint's constraint, in joint entity order,
-         * with its settings corrected into range for a step of `dt` seconds. */
-        void SyncJoints(float dt);
-        /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
-        [[nodiscard]] const Record* JointBodyOf(const Entity& body) const;
-        /** @brief Why `joint` names no pair of made body entities of this world, for its warning on going inactive. */
-        [[nodiscard]] std::string WhyInactive(const Joint& joint) const;
-        struct JointRecord;
-        /** @brief Makes the constraint `desc` describes for the joint on `entity`, indexed under its bodies. */
-        void MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc);
-        /** @brief Removes the joint's constraint, if it has one, and its place in the index. */
-        void DropConstraint(std::uint32_t entity, JointRecord& record);
-        /** @brief After the step: each joint's load, kept from the last step either of its bodies was awake for, and 0
-         * while it is disabled (JointState.cpp). */
-        void MeasureJoints();
-        /** @brief After MeasureJoints, in joint entity order: disables each enabled joint measured this step whose load
-         * is over a finite threshold, in the backend, its Joint and its record, and queues a JointBroken for SendBroken
-         * (JointBreaking.cpp). */
-        void BreakJoints();
-        /** @brief Events, right after the contact and trigger events: sends the JointBroken of each joint the step
-         * broke to `app`, in joint entity order (JointBreaking.cpp). */
-        void SendBroken(App& app);
-        /** @brief Whether `body` names a made body that moves and is awake. */
-        [[nodiscard]] bool IsAwake(const Entity& body) const;
-        /** @brief PhysicsWorld::GetJointState: from each record's load and its bodies' poses after the last step. */
-        [[nodiscard]] JointState StateOf(const Entity& joint) const;
-
-        // Character bodies (Characters.cpp): each a backend character, made after the bodies' batch and destroyed
-        // before it.
-
-        /** @brief Brings the CharacterBody tracked set up to date, then destroys the backend characters of the
-         * entities in `changed`, whose body components came or went since the last tick (they are made again from what
-         * the entity has now), and of those disabled or gone inactive. */
-        void DropCharacters(const std::set<std::uint32_t>& changed);
-        /** @brief Warns once about each CharacterBody that has gone inactive, then makes, in one batch in entity order,
-         * the backend character of each enabled one that can have one and has none. */
-        void MakeCharacters();
-        /** @brief Edits, after the bodies', in entity order: its entity's PhysicsMaterial and CollisionFilter
-         * given to its body if they changed; a character whose world position differs from physics's copy is
-         * teleported there (a moved parent included), and one whose world rotation alone differs is turned. Neither
-         * sweeps. */
-        void PushCharacterEdits();
-        /** @brief Moves, before the step: applies each character's shape edit if it fits, then moves it by its
-         * velocity over `dt` seconds, one at a time in entity order, keeping each move's result for WriteBack. */
-        void MoveCharacters(float dt);
-        struct CharacterRecord;
-        /** @brief Moves, for one character before its move: gives it its Collider's shape and world scale if they
-         * changed and fit, keeping the feet in place on the ground and the head in the air; otherwise marks it
-         * blocked, keeping the shape it has. */
-        void ApplyShape(const Entity& entity, CharacterRecord& record);
-        /** @brief Write-back, before Poses writes the poses: hands each character's position from its last move to
-         * Poses. */
-        void HandCharacterPoses();
-        /** @brief Write-back, after Poses wrote the poses, for one character: its trimmed velocity and state, from its
-         * last move, whether its Collider's shape or scale is still waiting to fit, and the world transform the diff
-         * compares against. */
-        void ReadBackCharacter(Entity& entity, CharacterRecord& record);
-        /** @brief Write-back, for each CharacterBody with no backend character (disabled or inactive): its state reset
-         * to the defaults, and nothing else written. */
-        void ResetIdleCharacters();
-        /** @brief Each character's contacts at the end of its last move, in character entity order, for Contacts. */
-        [[nodiscard]] std::vector<std::span<const Backend::Touch>> CharacterMoveContacts() const;
-        /** @brief The contacts at the end of the last move of the character on `entity`; null if it has no backend
-         * character. */
-        [[nodiscard]] const std::vector<Backend::Touch>* CharacterMoveContactsOf(const Entity& entity) const;
 
         // Vehicles (Vehicles.cpp): each a backend vehicle on its chassis's body, removed before its body goes, made
         // after the joints in the edits, and written back after the bodies in the write-back.
@@ -244,15 +170,8 @@ namespace Fenrir
         [[nodiscard]] std::map<std::uint32_t, VehicleLinks> LinksByVehicle(
             const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf);
 
-        /** @brief After the step: dynamic bodies' and characters' poses written back through Poses, parents before
-         * children, their velocities and the characters' states, then the state of each character with no backend
-         * character reset. */
-        void WriteBack();
-
         // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
         void DrawDebugLines();
-        void DrawJoints();
-        void DrawCharacters();
         void DrawVehicles();
 
         /** @brief The backend's form of a query's filter: its ignored body resolved as ResolveBody does, and a handle
@@ -265,65 +184,8 @@ namespace Fenrir
         Detail::Poses m_poses;
         Detail::Bodies m_bodies;
         Detail::Contacts m_contacts;
-
-        // What physics last applied for a joint: the diff compares the Joint against it. A joint naming no made body
-        // entity has no constraint.
-        struct JointRecord
-        {
-            [[nodiscard]] bool HasConstraint() const
-            {
-                return id.value != Backend::JointId{}.value;
-            }
-
-            Backend::JointId id;
-            Joint applied;
-            // The bodies' world scales and backend bodies the constraint was made with.
-            Math::Vec3 scaleA = Math::Vec3(1.0f);
-            Math::Vec3 scaleB = Math::Vec3(1.0f);
-            Backend::BodyId bodyA;
-            Backend::BodyId bodyB;
-            // The kinds of out-of-range value already warned about, so each is warned about once per joint.
-            std::uint32_t warned = 0;
-            // What the constraint applied to bodyB in the last step its bodies were awake for.
-            Backend::JointLoad load;
-            // Inactive: it names no pair of made body entities. Warned about each time it becomes so.
-            bool inactive = false;
-        };
-
-        // The entities with a Joint, as of the last DrainJoints, and their records, by joint entity: joints are made,
-        // diffed and solved in that order.
-        TrackedComponents m_jointEntities;
-        std::map<std::uint32_t, JointRecord> m_joints;
-        // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
-        std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
-        // The joints the last step broke, sent right after its contact and trigger events.
-        std::vector<JointBroken> m_broken;
-
-        // What physics knows of a character body: its backend character, where its last move left it, and the shape and
-        // world scale it has, which the diff compares the Collider and Transform against. None for one disabled, or
-        // inactive (beside a RigidBody, with no Collider, or with a shape a character cannot use).
-        struct CharacterRecord
-        {
-            Backend::CharacterId id;
-            Backend::CharacterMoved moved;
-            // Its world transform as physics last applied it or wrote it back: a position differing from it is a
-            // teleport, and a rotation differing from it a turn.
-            Transform world;
-            CollisionShape shape;
-            Math::Vec3 scale = Math::Vec3(1.0f);
-            // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.
-            PhysicsMaterial material;
-            CollisionFilter filter;
-            // The Collider's shape or scale does not fit yet: the character keeps `shape` and tries again each move.
-            bool shapeBlocked = false;
-        };
-        // The entities with a CharacterBody, as of the last DropCharacters, and their records, by entity: characters
-        // are made and moved in that order.
-        TrackedComponents m_characterEntities;
-        std::map<std::uint32_t, CharacterRecord> m_characters;
-        // CharacterBodies that cannot be characters now (beside a RigidBody, with no Collider, or with a shape a
-        // character cannot use): each is warned about once, when it becomes one.
-        std::set<std::uint32_t> m_inactiveCharacters;
+        Detail::Joints m_joints;
+        Detail::Characters m_characters;
 
         // What physics knows of a vehicle, by chassis entity: its backend vehicle, the body and wheel entities it was
         // made with, and the driver input and kind last given to it. None while it is disabled or inactive, or has no

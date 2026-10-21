@@ -4,11 +4,13 @@
 #include <cmath>
 #include <numbers>
 
-#include "FenrirPhysics/Joints.hpp"
+#include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
+#include "Joints.hpp"
+#include "Poses.hpp"
 #include "WorldImpl.hpp"
 
-namespace Fenrir
+namespace Fenrir::Detail
 {
     namespace
     {
@@ -36,14 +38,14 @@ namespace Fenrir
         }
     } // namespace
 
-    bool PhysicsWorld::Impl::IsAwake(const Entity& body) const
+    bool Joints::IsAwake(const Entity& body) const
     {
-        const Record* record = BodyView().RecordOf(body.GetId());
+        const Bodies::Record* record = m_bodies->RecordOf(body.GetId());
         return record != nullptr && record->Active() && record->motion.motionType != MotionType::Static &&
-               !m_backend.IsSleeping(record->id);
+               !m_backend->IsSleeping(record->id);
     }
 
-    void PhysicsWorld::Impl::MeasureJoints()
+    void Joints::Measure()
     {
         for (auto& [entity, record] : m_joints)
         {
@@ -54,12 +56,12 @@ namespace Fenrir
             // A sleeping pair is not solved: it keeps the load it had when it fell asleep.
             else if (IsAwake(record.applied.bodyA) || IsAwake(record.applied.bodyB))
             {
-                record.load = m_backend.Load(record.id);
+                record.load = m_backend->Load(record.id);
             }
         }
     }
 
-    JointState PhysicsWorld::Impl::StateOf(const Entity& joint) const
+    JointState Joints::StateOf(const Entity& joint) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!joint.IsValid() || joint != m_entities->HandleOf(joint.GetId()))
@@ -72,7 +74,7 @@ namespace Fenrir
             return JointState{};
         }
         const JointRecord& record = it->second;
-        const Record* a = BodyView().RecordOf(record.applied.bodyA.GetId());
+        const Bodies::Record* a = m_bodies->RecordOf(record.applied.bodyA.GetId());
         if (a == nullptr)
         {
             return JointState{};
@@ -81,17 +83,17 @@ namespace Fenrir
         // From the bodies' poses after the last step, never their interpolated Transforms.
         const JointFrame frameA =
             InWorld(JointFrame{record.applied.frameA.position * record.scaleA, record.applied.frameA.rotation},
-                    m_poses.BodyShown(record.applied.bodyA.GetId()).current);
+                    m_poses->BodyShown(record.applied.bodyA.GetId()).current);
         JointFrame frameB = record.applied.frameB;
         if (record.applied.bodyB != Entity())
         {
-            const Record* b = BodyView().RecordOf(record.applied.bodyB.GetId());
+            const Bodies::Record* b = m_bodies->RecordOf(record.applied.bodyB.GetId());
             if (b == nullptr)
             {
                 return JointState{};
             }
             frameB = InWorld(JointFrame{record.applied.frameB.position * record.scaleB, record.applied.frameB.rotation},
-                             m_poses.BodyShown(record.applied.bodyB.GetId()).current);
+                             m_poses->BodyShown(record.applied.bodyB.GetId()).current);
         }
         const Math::Quat toA = Math::Conjugate(frameA.rotation);
 
@@ -117,9 +119,12 @@ namespace Fenrir
         }
         return state;
     }
+} // namespace Fenrir::Detail
 
+namespace Fenrir
+{
     JointState PhysicsWorld::GetJointState(const Entity& joint) const
     {
-        return m_impl->StateOf(joint);
+        return m_impl->m_joints.StateOf(joint);
     }
 } // namespace Fenrir
