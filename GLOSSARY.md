@@ -344,6 +344,18 @@ FenrirRenderer's private adapter for one graphics API, or the null backend, whic
 The thin, private interface every graphics backend implements: GPU resources, passes and the commands recorded into them. The rest of FenrirRenderer draws only through it.
 *Avoid:* RHI, GPU layer, render API.
 
+**Shader container**
+The one versioned file `FenrirShaderCompiler` writes per shader program: each stage's compiled output per graphics backend (SPIR-V for OpenGL today), every variant, and the reflection debug builds check layouts against. FenrirRenderer's own shaders are embedded as containers; users' are loaded as assets.
+*Avoid:* shader binary, shader cache, effect.
+
+**Shader variant**
+One combination of a shader program's `#define` keys (lit or unlit, later skinned), compiled offline into its shader container.
+*Avoid:* permutation, specialisation (specialisation constants are a different mechanism, not used yet).
+
+**FenrirShaderCompiler**
+FenrirRenderer's build-time executable that compiles GLSL to SPIR-V and writes shader containers, run by the CMake function `fenrir_add_shaders`. It is never linked into the engine.
+*Avoid:* shaderc (a Google library), glslc.
+
 ## FenrirEngine input
 
 **Key code**
