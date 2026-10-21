@@ -13,3 +13,7 @@ Each package extends scripting through its own extension, built only when script
 - Playing, crossfading and layering clips; reading playback state; receiving clip events.
 - How variable-length pose arrays cross the boundary (spans over native memory, as other extensions do or not).
 - Which of this follows the renderer's scripting extension's choices (ticket 22).
+
+## Comments
+
+- From ticket 26 (ADR-0031): `SkeletonPose` is a blittable `{ AssetHandle<SkeletonData> }` C# can mirror; the arrays live in `SkeletonPoses` and cross by span-filling functions, valid only within the current system.

@@ -499,7 +499,7 @@ The directory relative asset paths resolve against, set in `AssetsConfig`; by de
 *Avoid:* content directory, mount, virtual file system.
 
 **Model**
-The asset a model file loads as: its node tree, pointing at its meshes, materials and skeleton, and its clips.
+The asset a model file loads as: its whole node tree, bones included, pointing at its meshes, materials and skeletons, and its clips.
 *Avoid:* scene (FenrirScene's), prefab.
 
 **Sub-asset**
@@ -533,12 +533,32 @@ The entity that carries a skeleton instance's `SkeletonPose`. Skinned meshes and
 *Avoid:* rig entity, armature, root bone (a bone, not an entity).
 
 **Skeleton pose**
-`SkeletonPose`: one skeleton instance's mutable pose, as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. Model space is relative to the skeleton entity, never including its `Transform`; a bone's world matrix is the skeleton entity's world matrix times its model matrix. The skeleton asset it instances, `SkeletonData`, never changes.
+`SkeletonPose`: the plain component naming one skeleton instance, whose mutable pose FenrirSkeleton holds as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. Model space is relative to the skeleton entity, never including its `Transform`; a bone's world matrix is the skeleton entity's world matrix times its model matrix. The skeleton asset it instances, `SkeletonData`, never changes (ADR-0031).
 *Avoid:* skeleton instance (alone), rig state.
+
+**Synthetic owner**
+A node the importer adds to a model so that each skeleton has its own skeleton entity when several would otherwise share one node.
+*Avoid:* dummy node, helper node (FBX's).
+
+**Ordinary node**
+A model node that is not a bone; it is spawned as an entity, and follows a bone through a bone attachment when it sits below one.
+*Avoid:* non-bone (as a noun), empty.
+
+**Rest pose**
+A skeleton's local bone transforms as the file authored them; a new instance starts in it. It need not match the bind pose.
+*Avoid:* default pose, T-pose, bind pose.
+
+**Bind pose**
+The pose a skeleton's meshes were skinned in, given by its inverse binds; at it, every skinning palette matrix is the identity.
+*Avoid:* rest pose, reference pose.
+
+**Skeleton bind space**
+The space skinned vertices are stored in: the skeleton entity's model space with the skeleton in its bind pose. Every importer normalises into it (ADR-0031).
+*Avoid:* mesh space (a mesh node's own), bind-shape space.
 
 **Base pose**
 A skeleton's local bone transforms as animation produced them, before any pose modifier. Powered ragdolls drive towards it.
-*Avoid:* animated pose (ambiguous once modifiers exist), rest pose (the skeleton's bind-time pose), bind pose.
+*Avoid:* animated pose (ambiguous once modifiers exist), rest pose, bind pose.
 
 **Final pose**
 A skeleton's local bone transforms after every pose modifier; finalisation derives model-space matrices and the skinning palette from it.

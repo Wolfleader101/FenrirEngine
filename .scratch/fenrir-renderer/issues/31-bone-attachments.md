@@ -13,3 +13,7 @@ A `BoneAttachment` names a skeleton entity, a bone by name and an offset, and fi
 - Ordering: attachments placed in finalisation, after modifiers; attachments on attachments.
 - Failure cases: a bone name that does not resolve, the skeleton entity despawned, the attached entity despawned, the skeleton asset reloaded with different bones; logging once, as stale handles are.
 - Sockets: whether named attachment points beyond bones (non-bone nodes kept by `SpawnNodes`) need anything more.
+
+## Comments
+
+- From ticket 26 (ADR-0031): `SpawnSkeletons` gives every ordinary node below a bone a `BoneAttachment` to its nearest ancestor bone, offset its rest transform relative to it, after `Ensure`; while its skeleton is `Unavailable` an attachment keeps its last transform but must expose that it is unresolved, and re-resolves on recovery before its next update.

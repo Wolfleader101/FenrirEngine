@@ -16,3 +16,7 @@ FenrirRenderer skins a mesh from its skeleton's finalised palette in the vertex 
 - Keeping importer and skeleton consistent: mesh bone indices mapped onto the skeleton's order and inverse binds taken from the skeleton; how a mismatch is caught.
 - A compute-skinning path (needed when several passes draw one skinned mesh, such as shadows): listed or designed.
 - Tests on the null backend (the palette in the draw list) and on GL (a skinned quad read back).
+
+## Comments
+
+- From ticket 26 (ADR-0031): the importer guarantees one bind space (`v_world = W(owner) × M_model × B × v`), remapped bone indices and baked vertices; skinned draws of a skeleton whose `PoseState` is not `Ready` are skipped; normals under blended skinning matrices with non-uniform scale need the shader's own handling and a test.

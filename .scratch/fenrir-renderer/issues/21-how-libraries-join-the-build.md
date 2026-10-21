@@ -49,3 +49,7 @@ No ADR: as with Jolt, every line here is cheap to change, and the hard-to-revers
   - The old DemoApp moves behind `FENRIR_BUILD_LEGACY_DEMOAPP` (`OFF`). `examples/DemoApp/libs` is left as it is (hand-copied, not submodules), with one guard: it skips its own `add_subdirectory(assimp)` when an `assimp` target already exists. No submodules are added for libraries that are about to be deleted; both go when the demo apps replace it.
 - **Libraries not yet chosen join by the same rule** (a submodule under the package that links it, overrides local to its `libs/`, `SYSTEM` and `PRIVATE`), each named by its own ticket: an animation library if ticket 24 picks one, a font rasteriser for debug text (ticket 18), SPIRV-Cross once a second backend exists.
 - **Consequences for the spec:** the README's options table gains the two options and the legacy one; CI's `FENRIR_CMAKE_OPTIONS` turns on assets, renderer and examples; Linux CI installs the X11 and Wayland development packages SDL3's video needs.
+
+## Comments
+
+- Amended by ADR-0031 (ticket 26): cgltf and ufbx replace assimp as FenrirAssets' model importers, each a pinned submodule under `packages/FenrirAssets/libs/` by this ticket's rule.

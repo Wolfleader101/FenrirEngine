@@ -14,3 +14,7 @@ FenrirAnimation samples clips into a skeleton's base pose (ADR-0028). What does 
 - Playback state: time, speed, looping, clamping, pausing; what time it advances by (frame delta in `PostUpdate`).
 - Events in clips and gameplay synchronisation: how an event reaches game code (an ECS event, read once per reader as ADR-0012), events crossed by a loop or a large step.
 - Root motion: in this spec or deferred.
+
+## Comments
+
+- From ticket 26 (ADR-0031): each clip channel keeps its target's source node identity and engine name; a clip binds to its own file's skeletons by identity and to others by engine name, with diagnostics for missing or ambiguous matches; channels on ordinary (non-bone) nodes are kept, and how they drive entities is this ticket's.
