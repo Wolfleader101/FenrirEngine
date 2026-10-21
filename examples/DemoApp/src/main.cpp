@@ -363,11 +363,13 @@ class PhysicsDemo
     // a moving body's model, drawn at its interpolated pose, may trail its lines by up to a step.
     void DebugLines(Fenrir::App& app)
     {
+        bool stepped = false;
         for (const KeyboardKeyEvent& event : m_keys.Read(app))
         {
             if (event.key == GLFW_KEY_F2 && event.state == InputState::Pressed)
             {
                 m_debugMode = (m_debugMode + 1) % debugModes.size();
+                stepped = true;
                 app.Logger()->Info(std::string("Physics debug lines: ") + debugModes[m_debugMode].name);
             }
         }
@@ -378,10 +380,12 @@ class PhysicsDemo
             return;
         }
         // The mode is the app's, but each scene's world keeps its own categories: a world that has just become active
-        // may still have the mode it had when it was last shown, or none.
-        if (world->DebugDrawCategories() != debugModes[m_debugMode].categories)
+        // may still have the mode it had when it was last shown, or none. It is set on F2 and on a switch only, so
+        // what a scene's own code sets (the Vehicles (C#) scene's V) lasts until then.
+        if (stepped || world != m_debugWorld)
         {
             world->SetDebugDraw(debugModes[m_debugMode].categories);
+            m_debugWorld = world;
         }
 
         m_lineVertices.clear();
@@ -497,6 +501,7 @@ class PhysicsDemo
     double m_time = 0.0;
     Fenrir::EventReader<KeyboardKeyEvent> m_keys;
     std::size_t m_debugMode = 0;
+    const Fenrir::PhysicsWorld* m_debugWorld = nullptr; // The world the mode was last set on.
     std::vector<LineVertex> m_lineVertices;
 };
 
@@ -711,6 +716,14 @@ int main(int argc, char* argv[])
         .AddSequentialSystems(Fenrir::SchedulePriority::Update,
                               {[&tankScene](Fenrir::App& running) { tankScene.Update(running); }});
     demoScenes.Register(TankScene::Scene());
+#ifdef FENRIR_SCRIPTING
+    // Vehicles (C#), the last of the F6 family, built and run by C# (scripts/Physics/Vehicles.cs), with its own C#
+    // chase camera writing the DemoCamera it makes.
+    app.AddSystem(Fenrir::SchedulePriority::PostInit, [](Fenrir::App& running) {
+        CSharpScenes::Create(running, CSharpScenes::vehiclesName, CSharpScenes::vehiclesId);
+    });
+    demoScenes.Register(CSharpScenes::Vehicles());
+#endif
 #endif
 
     // After the free-fly camera controller and the C# Update systems: a scene's DemoCamera, while active, wins.
