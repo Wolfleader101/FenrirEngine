@@ -1,7 +1,7 @@
 # Where does the graphics seam go, and is the backend picked at compile time or at runtime?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 01, 02
 
 ## Question
