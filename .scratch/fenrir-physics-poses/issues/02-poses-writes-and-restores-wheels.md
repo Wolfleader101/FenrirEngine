@@ -14,9 +14,11 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (`Poses.*`, `Vehicles.*`, `PhysicsWorld.cpp`, `WorldImpl.hpp`).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Vehicles calls no `SetWorldTransform` and reads nothing of Poses but the chassis's blended pose and whether it snapped.
-- [ ] `Vehicles::RestoreWheels` no longer exists.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] `scripts/demo-smoke.sh` passes all nine physics scenes.
+- [x] Vehicles calls no `SetWorldTransform` and reads nothing of Poses but the chassis's blended pose and whether it snapped.
+- [x] `Vehicles::RestoreWheels` no longer exists.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] `scripts/demo-smoke.sh` passes all nine physics scenes.
+
+**Resolved by:** PR #PRNUM (branch claude/physics-poses-wheels), into claude/physics-poses-spec. Vehicles hands each wheel's pose to Poses in the chassis's axes (`Poses::HandWheel`), before the one `Poses::WriteBack`, which writes the bodies and characters, then the wheels against the chassis's read-back step pose, vehicle by vehicle in chassis entity order, parents first, scale left game code's. A new vehicle's wheels, posed at once in the edits as before, go through the same hand and `WriteBack`. At blend time `Vehicles::BlendWheels` still blends compression, steer and unwrapped spin as numbers and hands each wheel's world pose (`Poses::HandBlendedWheel`); it now runs before `Poses::Blend`, which writes the wheels after the bodies, each vehicle's true locals saved before any is written, and `Poses::Restore` puts them back. So the world's `Blend` still calls Vehicles, first rather than after Poses, and its `Restore` no longer does. `Poses::BlendedPose` answers whether `Blend` blends the chassis this frame (interpolated, not held by game code) rather than reading a `blended` flag, so it folds in Vehicles' second `interpolate` check; `Poses::Snaps` answers `AdvanceWheels`. Wheels keep no entry in Poses' map: being output only they hold nothing from one step to the next, so Poses keeps only their handed poses and their true locals until `Restore`, by chassis. Vehicles still reads `Poses::Baseline` for the chassis's scale and its debug lines, as the spec has it. `clang-x64-debug` passes 81/81 tests unedited, and `scripts/demo-smoke.sh` passed all nine physics scenes.

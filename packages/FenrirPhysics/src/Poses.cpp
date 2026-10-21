@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <set>
 #include <tuple>
+#include <utility>
+#include <vector>
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -14,6 +16,28 @@
 
 namespace Fenrir::Detail
 {
+    namespace
+    {
+        // Writes a wheel's world position and rotation; its scale stays game code's.
+        void PoseWheel(Entity wheel, const Math::Vec3& pos, const Math::Quat& rot)
+        {
+            Transform world = GetWorldTransform(wheel);
+            world.pos = pos;
+            world.rot = rot;
+            SetWorldTransform(wheel, world);
+        }
+
+        // A vehicle's wheels, parents before children: a wheel's local Transform is written against its parent's world
+        // transform.
+        template <typename Wheels>
+        void SortWheels(Wheels& wheels)
+        {
+            std::ranges::sort(wheels, [](const auto& a, const auto& b) {
+                return std::tie(a.depth, a.entity) < std::tie(b.depth, b.entity);
+            });
+        }
+    } // namespace
+
     void Poses::Shown::Advance(const Transform& world)
     {
         previous = snap ? world : current;
@@ -102,6 +126,11 @@ namespace Fenrir::Detail
         m_pending.push_back(Pending{DepthOf(m_entities->GetEntity(entity)), entity, kind == Kind::Character, world});
     }
 
+    void Poses::HandWheel(std::uint32_t wheel, std::uint32_t chassis, const Transform& pose)
+    {
+        m_pendingWheels[chassis].push_back(HandedWheel{DepthOf(m_entities->GetEntity(wheel)), wheel, pose});
+    }
+
     void Poses::WriteBack()
     {
         // Parents before children: a body's or character's local Transform is written against its parent's world
@@ -130,6 +159,19 @@ namespace Fenrir::Detail
             entry.baseline = GetWorldTransform(entity);
         }
         m_pending.clear();
+
+        // After the bodies: a wheel is written against its chassis's step pose, read back above.
+        for (auto& [chassis, wheels] : m_pendingWheels)
+        {
+            const Transform& at = m_entries.at(chassis).baseline;
+            SortWheels(wheels);
+            for (const HandedWheel& wheel : wheels)
+            {
+                PoseWheel(m_entities->GetEntity(wheel.entity), at.pos + at.rot * wheel.pose.pos,
+                          at.rot * wheel.pose.rot);
+            }
+        }
+        m_pendingWheels.clear();
     }
 
     const Transform& Poses::Baseline(std::uint32_t entity) const
@@ -153,11 +195,16 @@ namespace Fenrir::Detail
     std::optional<Transform> Poses::BlendedPose(std::uint32_t entity, float fraction) const
     {
         const auto it = m_entries.find(entity);
-        if (it == m_entries.end() || !it->second.shown.blended)
+        if (it == m_entries.end() || !Interpolated(it->first, it->second).value_or(false))
         {
             return std::nullopt;
         }
         return it->second.shown.Between(fraction);
+    }
+
+    void Poses::HandBlendedWheel(std::uint32_t wheel, std::uint32_t chassis, const Transform& world)
+    {
+        m_blendingWheels[chassis].push_back(HandedWheel{DepthOf(m_entities->GetEntity(wheel)), wheel, world});
     }
 
     void Poses::Advance()
@@ -180,6 +227,37 @@ namespace Fenrir::Detail
             }
             shown.blended = false;
         }
+        // A wheel's Transform is output only: whatever game code wrote since goes, as the next step would overwrite it.
+        // A wheel entity destroyed since is skipped, though its id may name a newer entity.
+        for (const auto& [chassis, wheels] : m_blendedWheels)
+        {
+            for (const auto& [wheel, local] : wheels)
+            {
+                if (wheel.IsValid())
+                {
+                    wheel.GetComponent<Transform>() = local;
+                }
+            }
+        }
+        m_blendedWheels.clear();
+    }
+
+    std::optional<bool> Poses::Interpolated(std::uint32_t id, const Entry& entry) const
+    {
+        if (entry.kind == Kind::Still || entry.shown.heldByGame || !m_entities->HasEntity(id))
+        {
+            return std::nullopt; // an inactive collider has no simulated pose to show
+        }
+        const Entity entity = m_entities->GetEntity(id);
+        if (entry.kind == Kind::Character)
+        {
+            return entity.GetComponent<CharacterBody>().interpolate;
+        }
+        if (!entity.HasComponent<RigidBody>() || !entity.HasComponent<Transform>())
+        {
+            return std::nullopt;
+        }
+        return entity.GetComponent<RigidBody>().interpolate;
     }
 
     void Poses::Blend(float fraction)
@@ -198,25 +276,13 @@ namespace Fenrir::Detail
         std::set<std::uint32_t> interpolated;
         for (auto& [id, entry] : m_entries)
         {
-            if (entry.kind == Kind::Still || entry.shown.heldByGame || !m_entities->HasEntity(id))
-            {
-                continue; // an inactive collider has no simulated pose to show
-            }
-            const Entity entity = m_entities->GetEntity(id);
-            bool interpolate = false;
-            if (entry.kind == Kind::Character)
-            {
-                interpolate = entity.GetComponent<CharacterBody>().interpolate;
-            }
-            else if (!entity.HasComponent<RigidBody>() || !entity.HasComponent<Transform>())
+            const std::optional<bool> interpolate = Interpolated(id, entry);
+            if (!interpolate)
             {
                 continue;
             }
-            else
-            {
-                interpolate = entity.GetComponent<RigidBody>().interpolate;
-            }
-            if (interpolate)
+            const Entity entity = m_entities->GetEntity(id);
+            if (*interpolate)
             {
                 interpolated.insert(id);
                 blended.push_back(Blended{DepthOf(entity), entity, &entry.baseline, &entry.shown, false});
@@ -262,5 +328,24 @@ namespace Fenrir::Detail
             shown.shownLocal = body.entity.GetComponent<Transform>();
             shown.blended = true;
         }
+
+        // After the bodies: each wheel is posed on its chassis's blended pose. Every true local Transform of a
+        // vehicle's wheels is saved before any is overwritten.
+        for (auto& [chassis, wheels] : m_blendingWheels)
+        {
+            SortWheels(wheels);
+            std::vector<std::pair<Entity, Transform>>& trueLocals = m_blendedWheels[chassis];
+            trueLocals.clear();
+            for (const HandedWheel& wheel : wheels)
+            {
+                const Entity entity = m_entities->GetEntity(wheel.entity);
+                trueLocals.emplace_back(entity, entity.GetComponent<Transform>());
+            }
+            for (const HandedWheel& wheel : wheels)
+            {
+                PoseWheel(m_entities->GetEntity(wheel.entity), wheel.pose.pos, wheel.pose.rot);
+            }
+        }
+        m_blendingWheels.clear();
     }
 } // namespace Fenrir::Detail

@@ -1,7 +1,7 @@
 // A physics world's vehicles (ADR-0015): each a backend vehicle on its chassis's body, removed with the joints before
 // bodies go, made and given its driver input after the joints in PostTick's edits, run inside the step by the backend,
-// and written back after the bodies in its write-back, its wheel entities posed for drawing and blended between ticks,
-// and its debug lines. Knows the ECS, not Jolt: it talks to Backend::World.
+// and written back with the bodies in its write-back, its wheel entities' poses handed to Poses for drawing and blended
+// between ticks, and its debug lines. Knows the ECS, not Jolt: it talks to Backend::World.
 
 #include "Vehicles.hpp"
 
@@ -14,7 +14,6 @@
 #include <set>
 #include <span>
 #include <string>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -22,9 +21,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
-#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
-#include "Hierarchy.hpp"
 #include "Poses.hpp"
 #include "Same.hpp"
 #include "WarnOnce.hpp"
@@ -475,7 +472,7 @@ namespace Fenrir
 namespace Fenrir::Detail
 {
     Vehicles::Vehicles(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
-                       const Poses& poses)
+                       Poses& poses)
         : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_bodies(&bodies), m_poses(&poses),
           m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
           m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
@@ -934,7 +931,9 @@ namespace Fenrir::Detail
                 record.maxTilt = vehicle.maxTilt;
                 record.kind = vehicle.kind;
                 record.applied = desc.kind;
-                PoseWheels(record, m_backend->ReadVehicle(record.id), m_poses->Baseline(chassis));
+                // Posed at once, against the chassis as the edits left it.
+                HandWheels(chassis, record, m_backend->ReadVehicle(record.id));
+                m_poses->WriteBack();
                 wake = true;
             }
             else
@@ -1010,24 +1009,11 @@ namespace Fenrir::Detail
         return changed;
     }
 
-    void Vehicles::PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis)
+    void Vehicles::HandWheels(std::uint32_t chassis, const VehicleRecord& record, const Backend::VehicleRead& read)
     {
-        // Parents before children: a wheel's local Transform is written against its parent's world transform.
-        std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
         for (std::size_t i = 0; i < record.wheels.size(); ++i)
         {
-            order.emplace_back(Detail::DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
-        }
-        std::ranges::sort(order);
-        for (const auto& [depth, id, i] : order)
-        {
-            Entity wheel = m_entities->GetEntity(id);
-            const Transform local = WheelPose(record.given[i], read.wheels[i]);
-            // The scale stays game code's.
-            Transform world = GetWorldTransform(wheel);
-            world.pos = chassis.pos + chassis.rot * local.pos;
-            world.rot = chassis.rot * local.rot;
-            SetWorldTransform(wheel, world);
+            m_poses->HandWheel(record.wheels[i], chassis, WheelPose(record.given[i], read.wheels[i]));
         }
     }
 
@@ -1072,8 +1058,8 @@ namespace Fenrir::Detail
                                       .steerAngle = wheel.steerAngle};
                 posed.insert(record.wheels[i]);
             }
-            // After the chassis's write-back, against its step pose.
-            PoseWheels(record, read, m_poses->Baseline(chassis));
+            // Poses writes them after the chassis, against its step pose.
+            HandWheels(chassis, record, read);
             AdvanceWheels(record, read, dt, m_poses->Snaps(chassis));
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
@@ -1120,16 +1106,11 @@ namespace Fenrir::Detail
     {
         for (auto& [chassis, record] : m_vehicles)
         {
-            // Shown as its chassis is: only a chassis Blend blended (interpolated, and not held by game code) carries
+            // Shown as its chassis is: only a chassis Blend blends (interpolated, and not held by game code) carries
             // its wheels between steps. Otherwise they stay at their step poses.
             const std::optional<Transform> at = m_poses->BlendedPose(chassis, fraction);
             if (!record.Made() || record.current.size() != record.wheels.size() ||
-                m_bodies->RecordOf(chassis) == nullptr || !at || !m_entities->HasEntity(chassis))
-            {
-                continue;
-            }
-            const Entity entity = m_entities->GetEntity(chassis);
-            if (!entity.HasComponent<RigidBody>() || !entity.GetComponent<RigidBody>().interpolate)
+                m_bodies->RecordOf(chassis) == nullptr || !at)
             {
                 continue;
             }
@@ -1139,21 +1120,7 @@ namespace Fenrir::Detail
             {
                 continue;
             }
-            // Every true local Transform is saved before any is overwritten.
-            record.trueLocals.clear();
-            for (const std::uint32_t id : record.wheels)
-            {
-                const Entity wheel = m_entities->GetEntity(id);
-                record.trueLocals.emplace_back(wheel, wheel.GetComponent<Transform>());
-            }
-            // Parents before children, as PoseWheels does.
-            std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
             for (std::size_t i = 0; i < record.wheels.size(); ++i)
-            {
-                order.emplace_back(Detail::DepthOf(m_entities->GetEntity(record.wheels[i])), record.wheels[i], i);
-            }
-            std::ranges::sort(order);
-            for (const auto& [depth, id, i] : order)
             {
                 const VehicleRecord::WheelShown& from = record.previous[i];
                 const VehicleRecord::WheelShown& to = record.current[i];
@@ -1162,35 +1129,11 @@ namespace Fenrir::Detail
                 between.steerAngle = from.steer + (to.steer - from.steer) * fraction;
                 between.spinAngle = from.spin + (to.spin - from.spin) * fraction;
                 const Transform local = WheelPose(record.given[i], between);
-                Entity wheel = m_entities->GetEntity(id);
-                // The scale stays game code's.
-                Transform world = GetWorldTransform(wheel);
+                Transform world = *at;
                 world.pos = at->pos + at->rot * local.pos;
                 world.rot = at->rot * local.rot;
-                SetWorldTransform(wheel, world);
+                m_poses->HandBlendedWheel(record.wheels[i], chassis, world);
             }
-            record.blended = true;
-        }
-    }
-
-    void Vehicles::RestoreWheels()
-    {
-        // A wheel's Transform is output only: whatever game code wrote since goes, as the next step would overwrite it.
-        for (auto& [chassis, record] : m_vehicles)
-        {
-            if (!record.blended)
-            {
-                continue;
-            }
-            // A wheel entity destroyed since is skipped, though its id may name a newer entity.
-            for (const auto& [wheel, local] : record.trueLocals)
-            {
-                if (wheel.IsValid())
-                {
-                    wheel.GetComponent<Transform>() = local;
-                }
-            }
-            record.blended = false;
         }
     }
 
