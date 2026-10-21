@@ -356,6 +356,34 @@ One combination of a shader program's `#define` keys (lit or unlit, later skinne
 FenrirRenderer's build-time executable that compiles GLSL to SPIR-V and writes shader containers, run by the CMake function `fenrir_add_shaders`. It is never linked into the engine.
 *Avoid:* shaderc (a Google library), glslc.
 
+**Renderer core**
+The middle of FenrirRenderer's three layers: meshes, materials, the draw list, the render graph and its render features, over the graphics device. It knows nothing of the app, scenes or entities; the ECS facade above it reads the scene for it.
+*Avoid:* render engine, render backend.
+
+**Draw list**
+The plain-data list of what a frame draws, rebuilt each frame from the active scene: one item per draw, with its mesh, material, world matrix and sort key.
+*Avoid:* render queue, render world (a copy of the scene kept in sync, which FenrirRenderer does not have).
+
+**Render graph**
+The passes of one frame and the GPU resources they use, built and compiled every frame: ordered by render stage and dependencies, unused passes culled, transient targets pooled.
+*Avoid:* frame graph, render pipeline.
+
+**Render pass**
+One step of the render graph: the resources it uses and how, a render stage, and a function that records its commands.
+*Avoid:* pass (alone, when a graphics device pass could be meant), render node.
+
+**Render stage**
+Where in the frame a render pass runs, from a fixed list: `Shadow`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay`.
+*Avoid:* phase (a *phase* is FenrirApp's, such as `Render`), layer, queue.
+
+**Render feature**
+A part of the renderer core that adds render passes to each frame's render graph, such as the background or debug drawing.
+*Avoid:* plugin, render module.
+
+**View**
+One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
+*Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
+
 ## FenrirEngine input
 
 **Key code**
