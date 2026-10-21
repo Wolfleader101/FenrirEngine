@@ -384,6 +384,36 @@ A part of the renderer core that adds render passes to each frame's render graph
 One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
 *Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
 
+## FenrirEngine assets
+
+**FenrirAssets**
+The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
+*Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
+
+**Asset**
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container or model, loaded from a file or added from code.
+*Avoid:* resource (Iris and physics use it otherwise), file.
+
+**Asset handle**
+`AssetHandle<T>`: a typed index plus generation naming an asset. Plain data that keeps nothing alive; once its asset is freed, the generation no longer matches and users skip it.
+*Avoid:* reference, pointer, asset id.
+
+**Asset owner**
+The app or a scene, named when an asset is loaded or added. An asset is freed when its last owner ends, or when it is unloaded explicitly.
+*Avoid:* reference count, scope.
+
+**Asset root**
+The directory relative asset paths resolve against, set in `AssetsConfig`; by default `assets/` beside the executable.
+*Avoid:* content directory, mount, virtual file system.
+
+**Model**
+The asset a model file loads as: its node tree, pointing at its meshes, materials and skeleton, and its clips.
+*Avoid:* scene (FenrirScene's), prefab.
+
+**Sub-asset**
+An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
+*Avoid:* sub-resource, embedded asset.
+
 ## FenrirEngine input
 
 **Key code**
