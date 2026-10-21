@@ -15,7 +15,7 @@ How does FenrirRenderer turn the active scene into a frame?
 
 ## Answer
 
-ADR: `docs/adr/0017-fenrirrenderer-builds-each-frame-as-a-render-graph-on-the-main-thread.md`. Glossary: Renderer core, Draw list, Render graph, Render pass, Render stage, Render feature, View.
+ADR: `docs/adr/0019-fenrirrenderer-builds-each-frame-as-a-render-graph-on-the-main-thread.md`. Glossary: Renderer core, Draw list, Render graph, Render pass, Render stage, Render feature, View.
 
 - **Three layers:** ECS facade → renderer core (own CMake target, no FenrirApp, ECS or Scene dependency, headers not installed, tested with the null backend and no `App`) → private graphics device.
 - **When:** a new once-per-frame `Render` phase after `PostUpdate`, before the event queues swap, so it sees `AfterTicks`' interpolated poses and everything C# wrote. Window events are pumped first in `PreUpdate`; present is the last step of `Render`.
