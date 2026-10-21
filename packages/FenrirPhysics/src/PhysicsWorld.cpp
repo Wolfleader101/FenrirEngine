@@ -116,8 +116,6 @@ namespace Fenrir
         m_bodies.HandPoses();
         m_characters.HandPoses();
         m_poses.WriteBack();
-        m_bodies.ReadBack();
-        m_characters.ReadBack();
         m_characters.ResetIdle();
         m_vehicles.WriteBack(dt);
 

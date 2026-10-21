@@ -51,7 +51,8 @@ namespace Fenrir::Detail
             bool filtered;
         };
 
-        // What physics last applied to a body, or wrote back from it: the diff compares the components against it. A
+        // What physics last applied to a body, or wrote back from it: the diff compares the components against it (its
+        // world transform against Poses' baseline). A
         // body none of whose colliders can be made (their collision meshes were released), or that the world was too
         // full to make, keeps a record with no backend body: it is inactive, skipped by every step, until its
         // components or its colliders' shapes change.
@@ -68,7 +69,6 @@ namespace Fenrir::Detail
             std::vector<Part> parts;
             PhysicsMaterial material;
             CollisionFilter filter;
-            Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
             // A trigger: a kinematic body following its entity, whatever RigidBody the entity has.
@@ -116,13 +116,9 @@ namespace Fenrir::Detail
         /** @brief Applies the queued pushes, in the order game code made them, to the bodies that have one. */
         void ApplyPushes();
 
-        /** @brief Write-back, after the step: hands each body's step pose to Poses, and writes each dynamic body's
-         * velocity back to its entity. */
+        /** @brief Write-back, after the step: hands each body's step pose to Poses, which writes them, and writes
+         * each dynamic body's velocity back to its entity. */
         void HandPoses();
-
-        /** @brief Write-back, after Poses wrote the poses: each dynamic body's world transform, as the diff compares
-         * against. */
-        void ReadBack();
 
         /** @brief Draws each made body's colliders. */
         void DrawColliders(DebugCanvas& canvas) const;

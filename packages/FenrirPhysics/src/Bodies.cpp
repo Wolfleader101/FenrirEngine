@@ -96,6 +96,17 @@ namespace Fenrir::Detail
             return entity.HasComponent<Trigger>() && entity.HasComponent<Collider>();
         }
 
+        // How Poses takes a made body of a motion type: a dynamic one is written back, a kinematic one followed, and a
+        // static one still.
+        Poses::Kind PoseKindOf(MotionType motionType)
+        {
+            if (motionType == MotionType::Dynamic)
+            {
+                return Poses::Kind::Written;
+            }
+            return motionType == MotionType::Kinematic ? Poses::Kind::Followed : Poses::Kind::Still;
+        }
+
         // The nearest of `from` and its ancestors that hosts a compound body, or none.
         Entity NearestBodyHost(const Entity& from)
         {
@@ -351,7 +362,7 @@ namespace Fenrir::Detail
                 continue;
             }
             rebuild.destroyed.push_back(record.id);
-            m_poses->ForgetBody(body);
+            m_poses->Forget(body);
             it = m_bodies.erase(it);
         }
         return rebuild;
@@ -387,10 +398,11 @@ namespace Fenrir::Detail
                 desc.angularVelocity = rigidBody->angularVelocity;
             }
             desc.entity = id;
-            const auto made = m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion,
-                                                          std::move(parts), desc.material, desc.filter, world,
-                                                          desc.linearVelocity, desc.angularVelocity});
+            const auto made =
+                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, std::move(parts),
+                                            desc.material, desc.filter, desc.linearVelocity, desc.angularVelocity});
             made.first->second.isTrigger = isTrigger;
+            m_poses->Made(id, world);
             if (desc.parts.empty())
             {
                 continue; // inactive: none of its colliders can be made
@@ -462,20 +474,19 @@ namespace Fenrir::Detail
                 record.filter = filter;
             }
 
+            const Poses::Edit edit = m_poses->Push(id, PoseKindOf(motion.motionType), world);
             if (motion.motionType == MotionType::Kinematic)
             {
                 // Every step, even unmoved: otherwise the body keeps its last velocity and drifts.
                 m_backend->MoveKinematic(record.id, world.pos, world.rot, dt);
             }
-            else if (!Same(world.pos, record.world.pos) || !Same(world.rot, record.world.rot))
+            else if (edit != Poses::Edit::None)
             {
                 // Its joints keep the impulses they carried last step: the backend pulls them back together by
                 // position, so they still hold the same load, and starting them from nothing would overshoot it and
                 // could break them.
                 m_backend->Teleport(record.id, world.pos, world.rot);
-                m_poses->SnapBody(id);
             }
-            record.world = world;
 
             if (rigidBody != nullptr && motion.motionType == MotionType::Dynamic &&
                 (pushVelocity || !Same(rigidBody->linearVelocity, record.linearVelocity) ||
@@ -514,35 +525,23 @@ namespace Fenrir::Detail
     {
         for (auto& [id, record] : m_bodies)
         {
+            Transform world = m_poses->Baseline(id);
             if (record.motion.motionType != MotionType::Dynamic || !record.Active())
             {
                 // Not written back: shown between ticks where game code put it, unless it cannot move or is inactive.
-                const bool still = !record.Active() || record.motion.motionType == MotionType::Static;
-                m_poses->HandBody(id, record.world, still ? Poses::BodyPose::Still : Poses::BodyPose::Followed);
+                m_poses->Hand(id, record.Active() ? PoseKindOf(record.motion.motionType) : Poses::Kind::Still, world);
                 continue;
             }
             const Backend::BodyState state = m_backend->GetState(record.id);
-            Transform world = record.world;
             world.pos = state.position;
             world.rot = state.rotation;
-            m_poses->HandBody(id, world, Poses::BodyPose::Written);
+            m_poses->Hand(id, Poses::Kind::Written, world);
 
             RigidBody& rigidBody = m_entities->GetEntity(id).GetComponent<RigidBody>();
             rigidBody.linearVelocity = state.linearVelocity;
             rigidBody.angularVelocity = state.angularVelocity;
             record.linearVelocity = state.linearVelocity;
             record.angularVelocity = state.angularVelocity;
-        }
-    }
-
-    void Bodies::ReadBack()
-    {
-        for (auto& [id, record] : m_bodies)
-        {
-            if (record.motion.motionType == MotionType::Dynamic && record.Active())
-            {
-                record.world = m_poses->BodyStepPose(id);
-            }
         }
     }
 
@@ -561,7 +560,7 @@ namespace Fenrir::Detail
             {
                 if (part.usable)
                 {
-                    canvas.Collider(part.shape, part.pose, record.world, colour);
+                    canvas.Collider(part.shape, part.pose, m_poses->Baseline(id), colour);
                 }
             }
         }
@@ -580,7 +579,8 @@ namespace Fenrir::Detail
                 const Math::Vec3 velocity = m_backend->GetState(record.id).linearVelocity;
                 if (velocity != Math::Vec3(0.0f))
                 {
-                    canvas.Line(record.world.pos, record.world.pos + velocitySeconds * velocity, DebugColour::Velocity);
+                    const Math::Vec3& at = m_poses->Baseline(id).pos;
+                    canvas.Line(at, at + velocitySeconds * velocity, DebugColour::Velocity);
                 }
             }
             if (bounds)
