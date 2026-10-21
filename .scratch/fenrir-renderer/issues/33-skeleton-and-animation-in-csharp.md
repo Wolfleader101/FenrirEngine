@@ -1,0 +1,15 @@
+# What does C# get from FenrirSkeleton and FenrirAnimation?
+
+Type: grilling
+Status: open
+Blocked by: 22, 28, 29
+
+## Question
+
+Each package extends scripting through its own extension, built only when scripting is on (ADR-0009). What do FenrirSkeleton's and FenrirAnimation's extensions give C#?
+
+- Reading bone poses (base, final, model space, world matrices) and bone lookup by name, without copying whole arrays each call.
+- Writing modifier targets and weights (ADR-0028), and bone attachments.
+- Playing, crossfading and layering clips; reading playback state; receiving clip events.
+- How variable-length pose arrays cross the boundary (spans over native memory, as other extensions do or not).
+- Which of this follows the renderer's scripting extension's choices (ticket 22).

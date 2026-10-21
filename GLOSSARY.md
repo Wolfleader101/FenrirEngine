@@ -506,6 +506,56 @@ The asset a model file loads as: its node tree, pointing at its meshes, material
 An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
 *Avoid:* sub-resource, embedded asset.
 
+## FenrirEngine animation
+
+**FenrirSkeleton**
+The engine's skeleton package: each skeleton's runtime pose, bone lookup, pose modifiers, finalisation and bone attachments. It works without animation, and FenrirRenderer reads it without knowing FenrirAnimation (ADR-0028).
+*Avoid:* rig, armature (Blender's).
+
+**FenrirAnimation**
+The engine's animation package: plays and blends clips into a skeleton's base pose. It has no GPU code and needs no renderer (ADR-0028).
+*Avoid:* animator (as the package's name), animation system.
+
+**Bone**
+One node of a skeleton, named by its stable index in the skeleton's parents-first order and found by name. Bones are entries in arrays, not entities.
+*Avoid:* joint (a *joint* is a physics constraint between two bodies), node (a model's), socket.
+
+**Bone weight**
+How much one bone moves one vertex of a skinned mesh; each vertex has at most four.
+*Avoid:* joint weight, influence (alone), skin weight.
+
+**Clip**
+An asset of keyed bone transforms over time in seconds, naming its bones by name so it plays on any skeleton whose bone names match.
+*Avoid:* animation (alone), take, sequence, action (Blender's).
+
+**Skeleton entity**
+The entity that carries a skeleton instance's `SkeletonPose`. Skinned meshes and bone attachments name it.
+*Avoid:* rig entity, armature, root bone (a bone, not an entity).
+
+**Skeleton pose**
+`SkeletonPose`: one skeleton instance's mutable pose, as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. Model space is relative to the skeleton entity, never including its `Transform`; a bone's world matrix is the skeleton entity's world matrix times its model matrix. The skeleton asset it instances, `SkeletonData`, never changes.
+*Avoid:* skeleton instance (alone), rig state.
+
+**Base pose**
+A skeleton's local bone transforms as animation produced them, before any pose modifier. Powered ragdolls drive towards it.
+*Avoid:* animated pose (ambiguous once modifiers exist), rest pose (the skeleton's bind-time pose), bind pose.
+
+**Final pose**
+A skeleton's local bone transforms after every pose modifier; finalisation derives model-space matrices and the skinning palette from it.
+*Avoid:* output pose, blended pose.
+
+**Pose modifier**
+Something that changes a skeleton's pose after animation, in order: IK, procedural posing, ragdoll blending, gameplay adjustments. It aims in local, model or world space, and finalisation resolves it into local transforms.
+*Avoid:* override (the first modifier's kind, not the general term), post-process, constraint (physics's sense).
+
+**Skinning palette**
+One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it.
+*Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
+
+**Bone attachment**
+`BoneAttachment`: a component that places its entity at a bone of a skeleton entity, plus an offset. Finalisation owns the entity's resulting `Transform`.
+*Avoid:* socket, mount point, parent bone.
+
 ## FenrirEngine input
 
 **Key code**
