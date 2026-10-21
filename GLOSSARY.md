@@ -102,6 +102,10 @@ Plain data attached to an entity, with no behaviour. A *native component* is a C
 A record, kept for whoever asked, of every time one component type was added to or removed from entities in one scene, in order, until it is drained. It reports adds and removes only, never edits.
 *Avoid:* observer, listener, callback (a watch is read later, not called at the time).
 
+**Tracked component set**
+The entities in one scene that have one component type, as of its last drain, in entity order, kept from a component watch and a scan of what was there when it was made. Each drain also names the entities whose component came or went since the one before, each once, even if it came back. It holds no data of its own about them.
+*Avoid:* query (a query is matched each time it runs), cache.
+
 **Component type**
 A value naming one kind of component, native or C#, that the ECS's runtime operations and queries take (`ComponentType` in FenrirECS). Code that knows a component only at run time, such as scripting or an editor, holds one instead of a C++ type. It carries no name.
 *Avoid:* selector, registration (a registration is scripting's record of what C# sees).
