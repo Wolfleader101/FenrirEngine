@@ -2,7 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
+#include <span>
 #include <utility>
 
 #include "FenrirApp/App.hpp"
@@ -72,22 +72,11 @@ namespace Fenrir
 
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
-        : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger), m_poses(entities),
+        : m_entities(&entities), m_backend(settings, meshes, logger), m_poses(entities),
           m_bodies(entities, logger, m_backend, m_poses), m_contacts(entities, m_backend, m_bodies),
           m_joints(entities, logger, m_backend, m_bodies, m_poses), m_characters(entities, logger, m_backend, m_poses),
-          m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
-          m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
-          m_differentialEntities(entities, ComponentType::Native<VehicleDifferential>()),
-          m_antiRollBarEntities(entities, ComponentType::Native<VehicleAntiRollBar>()), m_canvas(m_backend)
+          m_vehicles(entities, logger, m_backend, m_bodies, m_poses), m_canvas(m_backend)
     {
-        for (const std::uint32_t entity : m_differentialEntities.Entities())
-        {
-            m_differentials.try_emplace(entity);
-        }
-        for (const std::uint32_t entity : m_antiRollBarEntities.Entities())
-        {
-            m_antiRollBars.try_emplace(entity);
-        }
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -101,9 +90,9 @@ namespace Fenrir
         // bodies' batch and are made after it, so the bodies come in a reproducible order.
         const Detail::Bodies::Rebuild rebuild = m_bodies.Plan();
         m_joints.Drain();
-        DrainVehicles();
+        m_vehicles.Drain();
         m_joints.DropOn(rebuild.destroyed);
-        RemoveVehiclesOf(rebuild.destroyed);
+        m_vehicles.DropOn(rebuild.destroyed);
         m_characters.Drop(rebuild.changed);
         m_bodies.Apply(rebuild);
         m_characters.Make();
@@ -113,7 +102,7 @@ namespace Fenrir
         m_bodies.PushEdits(dt);
         m_characters.PushEdits();
         m_joints.Sync(dt);
-        SyncVehicles();
+        m_vehicles.Sync();
         m_bodies.ApplyPushes();
 
         // Moves: before the step, so a character's pushes act in it and it moves against the bodies the step will
@@ -130,7 +119,7 @@ namespace Fenrir
         m_bodies.ReadBack();
         m_characters.ReadBack();
         m_characters.ResetIdle();
-        WriteBackVehicles(dt);
+        m_vehicles.WriteBack(dt);
 
         // Joints after the step.
         m_joints.Measure();
@@ -146,14 +135,62 @@ namespace Fenrir
     void PhysicsWorld::Impl::Restore()
     {
         m_poses.Restore();
-        RestoreWheels();
+        m_vehicles.RestoreWheels();
     }
 
     void PhysicsWorld::Impl::Blend(float fraction)
     {
         m_poses.Blend(fraction);
         // After the bodies: wheels are posed on their chassis's blended pose.
-        BlendWheels(fraction);
+        m_vehicles.BlendWheels(fraction);
+    }
+
+    void PhysicsWorld::SetDebugDraw(DebugDraw categories)
+    {
+        m_impl->m_debugDraw = categories;
+    }
+
+    DebugDraw PhysicsWorld::DebugDrawCategories() const
+    {
+        return m_impl->m_debugDraw;
+    }
+
+    std::span<const DebugLine> PhysicsWorld::DebugLines() const
+    {
+        return m_impl->m_canvas.Lines();
+    }
+
+    void PhysicsWorld::Impl::DrawDebugLines()
+    {
+        if (m_debugDraw == DebugDraw::None)
+        {
+            m_canvas.Clear();
+            return;
+        }
+        m_canvas.Begin();
+        if (Includes(m_debugDraw, DebugDraw::Colliders))
+        {
+            m_bodies.DrawColliders(m_canvas);
+        }
+        if (Includes(m_debugDraw, DebugDraw::Joints))
+        {
+            m_joints.Draw(m_canvas);
+        }
+        if (Includes(m_debugDraw, DebugDraw::Characters))
+        {
+            m_characters.Draw(m_canvas);
+        }
+        if (Includes(m_debugDraw, DebugDraw::Vehicles))
+        {
+            m_vehicles.Draw(m_canvas);
+        }
+        if (Includes(m_debugDraw, DebugDraw::Contacts))
+        {
+            m_contacts.Draw(m_canvas);
+        }
+        m_bodies.DrawMotion(m_canvas, Includes(m_debugDraw, DebugDraw::Velocities),
+                            Includes(m_debugDraw, DebugDraw::Bounds));
+        m_canvas.End();
     }
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const

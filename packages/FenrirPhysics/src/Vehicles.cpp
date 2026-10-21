@@ -1,7 +1,9 @@
 // A physics world's vehicles (ADR-0015): each a backend vehicle on its chassis's body, removed with the joints before
 // bodies go, made and given its driver input after the joints in PostTick's edits, run inside the step by the backend,
-// and written back after the bodies in its write-back, its wheel entities posed for drawing. Knows the ECS, not Jolt:
-// it talks to Backend::World.
+// and written back after the bodies in its write-back, its wheel entities posed for drawing and blended between ticks,
+// and its debug lines. Knows the ECS, not Jolt: it talks to Backend::World.
+
+#include "Vehicles.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,15 +18,16 @@
 #include <utility>
 #include <vector>
 
+#include "DebugCanvas.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "Hierarchy.hpp"
+#include "Poses.hpp"
 #include "Same.hpp"
 #include "WarnOnce.hpp"
-#include "WorldImpl.hpp"
 
 namespace Fenrir
 {
@@ -448,10 +451,48 @@ namespace Fenrir
         // Just above 0: the least gearbox-to-wheel ratio a differential can have.
         constexpr float minDifferentialRatio = 1e-3f;
 
-    } // namespace
+        // Half the size of the cross-tick at a vehicle wheel's centre on its suspension.
+        constexpr float suspensionTick = 0.08f;
 
-    Transform PhysicsWorld::Impl::WheelPose(const Backend::VehicleWheelDesc& wheel,
-                                            const Backend::VehicleWheelRead& read)
+        // A wheel's contact colour: the worse of its two slips against its tyres'.
+        std::uint32_t GripColour(const VehicleWheel& settings, const Backend::VehicleWheelRead& read)
+        {
+            const float along = std::abs(read.longitudinalSlip);
+            const float across = std::abs(read.lateralSlip);
+            if (along > settings.longitudinal.slideSlip || across > settings.lateral.slideSlip)
+            {
+                return DebugColour::PastSlideSlip;
+            }
+            if (along > settings.longitudinal.peakSlip || across > settings.lateral.peakSlip)
+            {
+                return DebugColour::PastPeakSlip;
+            }
+            return DebugColour::Gripping;
+        }
+    } // namespace
+} // namespace Fenrir
+
+namespace Fenrir::Detail
+{
+    Vehicles::Vehicles(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
+                       const Poses& poses)
+        : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_bodies(&bodies), m_poses(&poses),
+          m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
+          m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
+          m_differentialEntities(entities, ComponentType::Native<VehicleDifferential>()),
+          m_antiRollBarEntities(entities, ComponentType::Native<VehicleAntiRollBar>())
+    {
+        for (const std::uint32_t entity : m_differentialEntities.Entities())
+        {
+            m_differentials.try_emplace(entity);
+        }
+        for (const std::uint32_t entity : m_antiRollBarEntities.Entities())
+        {
+            m_antiRollBars.try_emplace(entity);
+        }
+    }
+
+    Transform Vehicles::WheelPose(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
     {
         // Rolling forward turns the wheel's top towards -Z.
         const Math::Quat steer = Math::AngleAxis(-read.steerAngle, wheel.steeringAxis);
@@ -462,7 +503,7 @@ namespace Fenrir
         return pose;
     }
 
-    void PhysicsWorld::Impl::DrainVehicles()
+    void Vehicles::Drain()
     {
         // A Vehicle removed, or removed and added again, loses its backend vehicle: it is made again from what the
         // entity has now.
@@ -503,7 +544,7 @@ namespace Fenrir
         link(m_antiRollBarEntities, m_antiRollBars);
     }
 
-    std::map<std::uint32_t, PhysicsWorld::Impl::VehicleLinks> PhysicsWorld::Impl::LinksByVehicle(
+    std::map<std::uint32_t, Vehicles::VehicleLinks> Vehicles::LinksByVehicle(
         const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf)
     {
         // The vehicle a differential or anti-roll bar's wheels belong to, and their wheel indices, -1 for none. A name
@@ -674,7 +715,7 @@ namespace Fenrir
         return links;
     }
 
-    void PhysicsWorld::Impl::RemoveVehiclesOf(std::span<const Backend::BodyId> bodies)
+    void Vehicles::DropOn(std::span<const Backend::BodyId> bodies)
     {
         for (auto& [chassis, record] : m_vehicles)
         {
@@ -688,14 +729,14 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::DropVehicle(VehicleRecord& record, bool carryOver)
+    void Vehicles::DropVehicle(VehicleRecord& record, bool carryOver)
     {
         std::optional<VehicleRecord::Carry> carry = carryOver ? record.carry : std::nullopt;
         if (record.Made())
         {
             if (carryOver)
             {
-                const Backend::VehicleRead read = m_backend.ReadVehicle(record.id);
+                const Backend::VehicleRead read = m_backend->ReadVehicle(record.id);
                 carry = VehicleRecord::Carry{.engineRpm = read.state.engineRpm,
                                              .gear = read.state.gear,
                                              .clutch = read.state.clutch,
@@ -706,7 +747,7 @@ namespace Fenrir
                         .angularVelocity = read.wheels[i].angularVelocity, .spinAngle = read.wheels[i].spinAngle};
                 }
             }
-            m_backend.DestroyVehicle(record.id);
+            m_backend->DestroyVehicle(record.id);
         }
         // What was warned about stays warned about: a rebuild is no reason to warn again.
         const std::uint32_t warned = record.warned;
@@ -715,7 +756,7 @@ namespace Fenrir
         record.carry = std::move(carry);
     }
 
-    std::string PhysicsWorld::Impl::WhyNoChassis(std::uint32_t chassis) const
+    std::string Vehicles::WhyNoChassis(std::uint32_t chassis) const
     {
         const Entity entity = m_entities->GetEntity(chassis);
         if (entity.HasComponent<CharacterBody>())
@@ -726,7 +767,7 @@ namespace Fenrir
         {
             return "it has no RigidBody";
         }
-        const Record* body = BodyView().RecordOf(chassis);
+        const Bodies::Record* body = m_bodies->RecordOf(chassis);
         if (body == nullptr || !body->Active())
         {
             return "its RigidBody has no collider physics could make";
@@ -743,12 +784,12 @@ namespace Fenrir
         return {};
     }
 
-    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::ChassisBodyOf(std::uint32_t chassis) const
+    const Bodies::Record* Vehicles::ChassisBodyOf(std::uint32_t chassis) const
     {
-        return WhyNoChassis(chassis).empty() ? BodyView().RecordOf(chassis) : nullptr;
+        return WhyNoChassis(chassis).empty() ? m_bodies->RecordOf(chassis) : nullptr;
     }
 
-    std::string PhysicsWorld::Impl::WhyNoWheel(std::uint32_t wheel) const
+    std::string Vehicles::WhyNoWheel(std::uint32_t wheel) const
     {
         const Entity entity = m_entities->GetEntity(wheel);
         const Entity& chassis = entity.GetComponent<VehicleWheel>().vehicle;
@@ -782,7 +823,7 @@ namespace Fenrir
         return {};
     }
 
-    std::map<std::uint32_t, std::vector<std::uint32_t>> PhysicsWorld::Impl::WheelsByVehicle() const
+    std::map<std::uint32_t, std::vector<std::uint32_t>> Vehicles::WheelsByVehicle() const
     {
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheels;
         for (const std::uint32_t id : m_wheelEntities.Entities())
@@ -796,7 +837,7 @@ namespace Fenrir
         return wheels;
     }
 
-    void PhysicsWorld::Impl::WarnAboutInactiveVehicles()
+    void Vehicles::WarnAboutInactiveVehicles()
     {
         const auto warn = [this](const std::set<std::uint32_t>& entities, std::set<std::uint32_t>& inactive, auto why,
                                  const std::string& component, const std::string& until) {
@@ -826,7 +867,7 @@ namespace Fenrir
             "entity with no RigidBody, CharacterBody or Collider.");
     }
 
-    void PhysicsWorld::Impl::SyncVehicles()
+    void Vehicles::Sync()
     {
         WarnAboutInactiveVehicles();
         std::map<std::uint32_t, std::vector<std::uint32_t>> wheelsOf = WheelsByVehicle();
@@ -837,7 +878,7 @@ namespace Fenrir
             VehicleRecord& record = m_vehicles[chassis];
             Entity entity = m_entities->GetEntity(chassis);
             const Vehicle& vehicle = entity.GetComponent<Vehicle>();
-            const Record* body = ChassisBodyOf(chassis);
+            const Bodies::Record* body = ChassisBodyOf(chassis);
             const std::vector<std::uint32_t>& wheels = wheelsOf[chassis];
             if (!vehicle.enabled || body == nullptr || wheels.empty())
             {
@@ -884,7 +925,7 @@ namespace Fenrir
                     }
                     record.carry.reset();
                 }
-                record.id = m_backend.CreateVehicle(desc);
+                record.id = m_backend->CreateVehicle(desc);
                 record.body = body->id;
                 record.wheels = wheels;
                 record.links = links;
@@ -893,7 +934,7 @@ namespace Fenrir
                 record.maxTilt = vehicle.maxTilt;
                 record.kind = vehicle.kind;
                 record.applied = desc.kind;
-                PoseWheels(record, m_backend.ReadVehicle(record.id), body->world);
+                PoseWheels(record, m_backend->ReadVehicle(record.id), body->world);
                 wake = true;
             }
             else
@@ -903,7 +944,7 @@ namespace Fenrir
                     // A live edit: the engine, the gearbox, the limited-slip ratio, a motorcycle's lean switches and a
                     // tracked vehicle's tracks, from the next step.
                     record.applied = InRange(vehicle.kind, chassis, record.warned, *m_logger);
-                    m_backend.UpdateVehicle(record.id, record.applied);
+                    m_backend->UpdateVehicle(record.id, record.applied);
                     record.kind = vehicle.kind;
                     wake = true;
                 }
@@ -913,32 +954,32 @@ namespace Fenrir
             // Differential and anti-roll-bar edits and relinks, live.
             if (!Same(links.differentials, record.links.differentials))
             {
-                m_backend.SetVehicleDifferentials(record.id, links.differentials);
+                m_backend->SetVehicleDifferentials(record.id, links.differentials);
                 record.links.differentials = links.differentials;
                 wake = true;
             }
             if (!Same(links.antiRollBars, record.links.antiRollBars))
             {
-                m_backend.SetVehicleAntiRollBars(record.id, links.antiRollBars);
+                m_backend->SetVehicleAntiRollBars(record.id, links.antiRollBars);
                 record.links.antiRollBars = links.antiRollBars;
                 wake = true;
             }
 
             // Any change wakes it, even one its ranges clamp away.
             wake = wake || !Same(vehicle.input, record.input);
-            m_backend.SetVehicleInput(record.id, Clamped(vehicle.input, record.applied), wake);
+            m_backend->SetVehicleInput(record.id, Clamped(vehicle.input, record.applied), wake);
             record.input = vehicle.input;
         }
     }
 
-    Backend::VehicleWheelDesc PhysicsWorld::Impl::WheelDesc(std::uint32_t entity, const VehicleWheel& wheel,
-                                                            const Math::Vec3& scale)
+    Backend::VehicleWheelDesc Vehicles::WheelDesc(std::uint32_t entity, const VehicleWheel& wheel,
+                                                  const Math::Vec3& scale)
     {
         const VehicleWheel corrected = WheelCorrector(entity, m_wheelWarnings[entity], *m_logger).Corrected(wheel);
         return DescOf(corrected, wheel.position * scale);
     }
 
-    bool PhysicsWorld::Impl::SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale)
+    bool Vehicles::SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale)
     {
         bool changed = false;
         for (std::size_t i = 0; i < record.wheels.size(); ++i)
@@ -950,27 +991,26 @@ namespace Fenrir
                 continue;
             }
             record.given[i] = WheelDesc(record.wheels[i], wheel, scale);
-            m_backend.UpdateVehicleWheel(record.id, i, record.given[i]);
+            m_backend->UpdateVehicleWheel(record.id, i, record.given[i]);
             record.appliedWheels[i] = wheel;
             changed = true;
         }
         if (vehicle.probe != record.probe)
         {
-            m_backend.SetVehicleProbe(record.id, vehicle.probe);
+            m_backend->SetVehicleProbe(record.id, vehicle.probe);
             record.probe = vehicle.probe;
             changed = true;
         }
         if (!Fenrir::Same(vehicle.maxTilt, record.maxTilt))
         {
-            m_backend.SetVehicleMaxTilt(record.id, TiltOf(vehicle));
+            m_backend->SetVehicleMaxTilt(record.id, TiltOf(vehicle));
             record.maxTilt = vehicle.maxTilt;
             changed = true;
         }
         return changed;
     }
 
-    void PhysicsWorld::Impl::PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read,
-                                        const Transform& chassis)
+    void Vehicles::PoseWheels(const VehicleRecord& record, const Backend::VehicleRead& read, const Transform& chassis)
     {
         // Parents before children: a wheel's local Transform is written against its parent's world transform.
         std::vector<std::tuple<int, std::uint32_t, std::size_t>> order;
@@ -991,7 +1031,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::WriteBackVehicles(float dt)
+    void Vehicles::WriteBack(float dt)
     {
         const auto handle = [this](std::uint32_t id) { return id == ~0u ? Entity() : m_entities->HandleOf(id); };
         std::set<std::uint32_t> posed;
@@ -1004,15 +1044,15 @@ namespace Fenrir
                 continue;
             }
             // Asleep, it keeps what the step it fell asleep left: the backend stopped its wheels then.
-            if (!m_backend.IsSleeping(record.body))
+            if (!m_backend->IsSleeping(record.body))
             {
                 record.parked.reset();
             }
             else if (!record.parked)
             {
-                record.parked = m_backend.ReadVehicle(record.id);
+                record.parked = m_backend->ReadVehicle(record.id);
             }
-            const Backend::VehicleRead read = record.parked ? *record.parked : m_backend.ReadVehicle(record.id);
+            const Backend::VehicleRead read = record.parked ? *record.parked : m_backend->ReadVehicle(record.id);
             vehicle.state = read.state;
             for (std::size_t i = 0; i < record.wheels.size(); ++i)
             {
@@ -1033,9 +1073,9 @@ namespace Fenrir
                 posed.insert(record.wheels[i]);
             }
             // After the chassis's write-back, against its step pose.
-            const Record& body = *BodyView().RecordOf(chassis);
+            const Bodies::Record& body = *m_bodies->RecordOf(chassis);
             PoseWheels(record, read, body.world);
-            AdvanceWheels(record, read, dt, m_poses.BodyShown(chassis).snap);
+            AdvanceWheels(record, read, dt, m_poses->BodyShown(chassis).snap);
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
         for (const std::uint32_t wheel : m_wheelEntities.Entities())
@@ -1047,8 +1087,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::AdvanceWheels(VehicleRecord& record, const Backend::VehicleRead& read, float dt,
-                                           bool teleported)
+    void Vehicles::AdvanceWheels(VehicleRecord& record, const Backend::VehicleRead& read, float dt, bool teleported)
     {
         const bool snap = record.snap || teleported || record.current.size() != read.wheels.size();
         constexpr float turn = 2.0f * std::numbers::pi_v<float>;
@@ -1078,15 +1117,15 @@ namespace Fenrir
         record.snap = false;
     }
 
-    void PhysicsWorld::Impl::BlendWheels(float fraction)
+    void Vehicles::BlendWheels(float fraction)
     {
         for (auto& [chassis, record] : m_vehicles)
         {
             // Shown as its chassis is: only a chassis Blend blended (interpolated, and not held by game code) carries
             // its wheels between steps. Otherwise they stay at their step poses.
-            const Record* body = BodyView().RecordOf(chassis);
+            const Bodies::Record* body = m_bodies->RecordOf(chassis);
             if (!record.Made() || record.current.size() != record.wheels.size() || body == nullptr ||
-                !m_poses.BodyShown(chassis).blended || !m_entities->HasEntity(chassis))
+                !m_poses->BodyShown(chassis).blended || !m_entities->HasEntity(chassis))
             {
                 continue;
             }
@@ -1101,7 +1140,7 @@ namespace Fenrir
             {
                 continue;
             }
-            const Transform at = m_poses.BodyShown(chassis).Between(fraction);
+            const Transform at = m_poses->BodyShown(chassis).Between(fraction);
             // Every true local Transform is saved before any is overwritten.
             record.trueLocals.clear();
             for (const std::uint32_t id : record.wheels)
@@ -1136,7 +1175,7 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::RestoreWheels()
+    void Vehicles::RestoreWheels()
     {
         // A wheel's Transform is output only: whatever game code wrote since goes, as the next step would overwrite it.
         for (auto& [chassis, record] : m_vehicles)
@@ -1156,4 +1195,46 @@ namespace Fenrir
             record.blended = false;
         }
     }
-} // namespace Fenrir
+
+    void Vehicles::Draw(DebugCanvas& canvas) const
+    {
+        // Only vehicles with a backend vehicle: disabled and inactive ones have none, and draw nothing.
+        for (const auto& [chassis, record] : m_vehicles)
+        {
+            if (!record.Made())
+            {
+                continue;
+            }
+            const Transform& body = m_bodies->RecordOf(chassis)->world;
+            const Backend::VehicleRead read = m_backend->ReadVehicle(record.id);
+            for (std::size_t i = 0; i < record.given.size(); ++i)
+            {
+                const Backend::VehicleWheelDesc& given = record.given[i];
+                const Backend::VehicleWheelRead& wheel = read.wheels[i];
+                const Transform pose = WheelPose(given, wheel);
+
+                // The suspension in the chassis's axes: from the top of its travel down to full extension, with a
+                // cross-tick across it at the wheel's centre, in the axes of the wheel's mount.
+                const LineWriter suspension = canvas.Writer(body.pos, body.rot, DebugColour::Suspension);
+                suspension(given.position + given.steeringAxis * given.settings.suspension.travel, given.position);
+                for (const Math::Vec3& axis : {xAxis, zAxis})
+                {
+                    const Math::Vec3 across = suspensionTick * (given.rest * axis);
+                    suspension(pose.pos - across, pose.pos + across);
+                }
+
+                // The wheel in its own plane, Y and Z about its axle X, with a spoke up its Y.
+                const LineWriter rim =
+                    canvas.Writer(body.pos + body.rot * pose.pos, body.rot * pose.rot, DebugColour::Wheel);
+                const float radius = given.settings.radius;
+                rim.Arc(Math::Vec3(0.0f), yAxis, zAxis, radius, 0.0f, 2.0f * pi, circleSegments);
+                rim(Math::Vec3(0.0f), radius * yAxis);
+
+                if (wheel.onGround)
+                {
+                    canvas.ContactPoint(wheel.contactPoint, wheel.contactNormal, GripColour(given.settings, wheel));
+                }
+            }
+        }
+    }
+} // namespace Fenrir::Detail
