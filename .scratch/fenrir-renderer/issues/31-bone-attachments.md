@@ -17,3 +17,4 @@ A `BoneAttachment` names a skeleton entity, a bone by name and an offset, and fi
 ## Comments
 
 - From ticket 26 (ADR-0031): `SpawnSkeletons` gives every ordinary node below a bone a `BoneAttachment` to its nearest ancestor bone, offset its rest transform relative to it, after `Ensure`; while its skeleton is `Unavailable` an attachment keeps its last transform but must expose that it is unresolved, and re-resolves on recovery before its next update.
+- From ticket 27 (ADR-0033): attachments are placed in the pipeline's internal Attach step, after Finalise and before the public `Late` stage, every frame (a skeleton entity move changes no model matrix but does move attachments).

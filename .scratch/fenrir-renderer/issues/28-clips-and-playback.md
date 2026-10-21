@@ -18,3 +18,4 @@ FenrirAnimation samples clips into a skeleton's base pose (ADR-0028). What does 
 ## Comments
 
 - From ticket 26 (ADR-0031): each clip channel keeps its target's source node identity and engine name; a clip binds to its own file's skeletons by identity and to others by engine name, with diagnostics for missing or ambiguous matches; channels on ordinary (non-bone) nodes are kept, and how they drive entities is this ticket's.
+- From ticket 27 (ADR-0033): FenrirAnimation adds its sampler to FenrirSkeleton's public `Animate` stage with an order constant; it writes only the base pose. Its clocks advance only by the frame delta of an `Animate` run on their scene, so an inactive scene's playback pauses and resumes with no catch-up. Playback commands are written by game code before the pipeline (`Update` or earlier).

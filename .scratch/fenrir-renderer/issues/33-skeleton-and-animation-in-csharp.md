@@ -17,3 +17,4 @@ Each package extends scripting through its own extension, built only when script
 ## Comments
 
 - From ticket 26 (ADR-0031): `SkeletonPose` is a blittable `{ AssetHandle<SkeletonData> }` C# can mirror; the arrays live in `SkeletonPoses` and cross by span-filling functions, valid only within the current system.
+- From ticket 27 (ADR-0033): the pose pipeline's public stages are `Animate`, `Modify` and `Late`, ordered by an `int` within each; how a C# system or modifier joins a stage, and how `PoseEdit` (valid only during one modifier call) and `SetOverride` cross to C#, are this ticket's.
