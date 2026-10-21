@@ -13,10 +13,15 @@
 // are live edits: 1 softens the springs and 2 fits bigger wheels (their looks rescaled), each changing the ride height
 // as the car drives, and 7 limits the chassis's tilt to 60 degrees; each key again undoes it.
 //
-// T respawns the car at the start, a Transform write: its engine and wheels keep turning, and the wheels go with it at
-// once. 8 destroys the car's rear-left wheel entity, a rebuild that keeps the engine, gear and other wheels' spin; the
-// rear differential, left naming the dead wheel, warns once and drives the rear-right wheel alone. 8 again remakes the
-// wheel and names it in the differential, another rebuild, and the car is rear-wheel drive on both again.
+// The car tows a 300 kg trailer: a TrailerVehicle, with no engine, on one axle, joined to the car's tow hitch by an
+// ordinary ball Joint on an entity of its own. Nothing links their brakes: game code copies the car's `brake` and
+// `handbrake` into the trailer's input every tick. Its name shows only its speed and wheels on ground.
+//
+// T respawns the car and its trailer at the start, a Transform write: its engine and wheels keep turning, and the
+// wheels go with it at once. 8 destroys the car's rear-left wheel entity, a rebuild that keeps the engine, gear and
+// other wheels' spin; the rear differential, left naming the dead wheel, warns once and drives the rear-right wheel
+// alone. 8 again remakes the wheel and names it in the differential, another rebuild, and the car is rear-wheel drive
+// on both again.
 //
 // M switches the car's gearbox between Automatic and Manual. In Manual, game code changes gear: E and Q shift up and
 // down (down past neutral is reverse), W is the pedal in the gear's direction, S brakes, and Shift holds the clutch.
@@ -74,6 +79,7 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/Joints.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "Material.hpp"
@@ -156,8 +162,9 @@ class VehicleScene
                         .keyHelp =
                             "W or Up drives, S or Down brakes and then reverses once stopped, A/D or Left/Right "
                             "steer, Space pulls the handbrake, C frees the camera (WASD flies it, the arrows "
-                            "still drive) and snaps it back. North of the start: a pedestrian, ten bumps, then "
-                            "a ramp. East: an ice lane, a grass lane, a wall of crates and a ferry across a gap "
+                            "still drive) and snaps it back. The car tows a trailer, which brakes with it. North "
+                            "of the start: a pedestrian, ten bumps, then a ramp. East: an ice lane, a grass lane, a "
+                            "wall of crates and a ferry across a gap "
                             "to a far bank, and west a 15 degree parking slope. L logs "
                             "the car's state, P drives the track by itself. M switches the gearbox between "
                             "Automatic and Manual; in Manual E/Q shift up and down (down past neutral is "
@@ -209,6 +216,7 @@ class VehicleScene
         BuildSlope();
         MakeCar();
         GiveCarDrivetrain();
+        MakeTrailer();
 
         m_camera = m_entities->CreateEntity();
         m_camera.GetComponent<Fenrir::Name>().Set("Vehicle camera");
@@ -263,6 +271,7 @@ class VehicleScene
         MoveFerry(dt);
         HoldPedestrian(app, dt);
         Drive(app);
+        CopyTrailerBrakes();
     }
 
   private:
@@ -636,7 +645,7 @@ class VehicleScene
             Fenrir::Math::AngleAxis(rise, Fenrir::Math::Vec3(1.0f, 0.0f, 0.0f));
     }
 
-    // Over the ramp and off its end, round to the east and back to the start.
+    // Over the ramp and off its end, the trailer behind, round to the east and back to the start.
     static std::vector<Waypoint> RampLeg()
     {
         return {Waypoint{.at = Fenrir::Math::Vec3(0.0f, 0.0f, -60.0f), .speed = 14.0f},
@@ -910,6 +919,46 @@ class VehicleScene
         }
     }
 
+    // The trailer: a 300 kg TrailerVehicle 2 m long behind the car, on one axle at its middle, its look a chassis with
+    // a tongue to the car's tow hitch. The hitch is a ball Joint on its own entity, naming the car and the trailer:
+    // with `collideConnected` false the two never fight, and they sleep and wake together.
+    void MakeTrailer()
+    {
+        const Fenrir::Math::Vec3 at = start + trailerOffset;
+        m_trailer.chassis =
+            Chassis("Trailer", at, Fenrir::Math::Vec3(0.8f, 0.3f, 1.0f), 300.0f, Fenrir::Math::Vec3(0.3f, 0.35f, 0.8f));
+        m_trailer.chassis.AddComponent<Fenrir::Vehicle>(Fenrir::Vehicle{.kind = Fenrir::TrailerVehicle{}});
+        for (const float x : {-0.85f, 0.85f})
+        {
+            m_trailer.wheels.push_back(Wheel(
+                Fenrir::VehicleWheel{.vehicle = m_trailer.chassis, .position = Fenrir::Math::Vec3(x, -0.45f, 0.0f)},
+                at));
+        }
+        Fenrir::Entity tongue =
+            Look("Tongue", Fenrir::Math::Vec3(0.0f), Fenrir::Math::Vec3(0.1f, 0.1f, 1.3f), Fenrir::Math::Vec3(0.2f));
+        m_trailer.chassis.AddChild(tongue);
+        tongue.GetComponent<Fenrir::Transform>().pos = Fenrir::Math::Vec3(0.0f, -0.1f, -1.6f);
+
+        const Fenrir::JointFrames frames =
+            Fenrir::FrameFromWorld(m_car.chassis, m_trailer.chassis, Fenrir::JointFrame{.position = start + hitch});
+        Fenrir::Entity joint = m_entities->CreateEntity();
+        joint.GetComponent<Fenrir::Name>().Set("Hitch");
+        joint.AddComponent<Fenrir::Joint>(Fenrir::Joint{.bodyA = m_car.chassis,
+                                                        .bodyB = m_trailer.chassis,
+                                                        .frameA = frames.frameA,
+                                                        .frameB = frames.frameB,
+                                                        .kind = Fenrir::BallJoint{}});
+    }
+
+    // Trailer brakes are game code's: the car's brake and handbrake, copied each tick.
+    void CopyTrailerBrakes()
+    {
+        const Fenrir::VehicleInput& car = m_car.chassis.GetComponent<Fenrir::Vehicle>().input;
+        Fenrir::VehicleInput& trailer = m_trailer.chassis.GetComponent<Fenrir::Vehicle>().input;
+        trailer.brake = car.brake;
+        trailer.handbrake = car.handbrake;
+    }
+
     // 4: the car switched off, a plain box rolling on its chassis with its wheels left behind, and on again, built
     // fresh.
     void ToggleEnabled(Fenrir::App& app)
@@ -952,8 +1001,15 @@ class VehicleScene
         Fenrir::RigidBody& body = m_car.chassis.GetComponent<Fenrir::RigidBody>();
         body.linearVelocity = Fenrir::Math::Vec3(0.0f);
         body.angularVelocity = Fenrir::Math::Vec3(0.0f);
+        // The trailer with it, still hitched: the hitch's frames are where they were on each body.
+        Fenrir::Transform& trailerAt = m_trailer.chassis.GetComponent<Fenrir::Transform>();
+        trailerAt.pos = start + trailerOffset;
+        trailerAt.rot = identity;
+        Fenrir::RigidBody& trailerBody = m_trailer.chassis.GetComponent<Fenrir::RigidBody>();
+        trailerBody.linearVelocity = Fenrir::Math::Vec3(0.0f);
+        trailerBody.angularVelocity = Fenrir::Math::Vec3(0.0f);
         m_waypoint = 0;
-        app.Logger()->Info("T: the car is back at the start, its engine and wheels still turning");
+        app.Logger()->Info("T: the car and its trailer are back at the start, its engine and wheels still turning");
     }
 
     // 8: the car's rear-left wheel entity destroyed, look and all: the vehicle is rebuilt without it, keeping its
@@ -1093,6 +1149,11 @@ class VehicleScene
                       static_cast<double>(state.forwardSpeed * 3.6f), static_cast<double>(state.engineRpm), state.gear,
                       state.shifting ? ", shifting" : "", static_cast<double>(state.clutch), state.wheelsOnGround);
         m_car.chassis.GetComponent<Fenrir::Name>().Set(text.data());
+        // A trailer has no engine or gearbox to show.
+        const Fenrir::VehicleState& trailer = m_trailer.chassis.GetComponent<Fenrir::Vehicle>().state;
+        std::snprintf(text.data(), text.size(), "Trailer: %.0f km/h, %d on ground",
+                      static_cast<double>(trailer.forwardSpeed * 3.6f), trailer.wheelsOnGround);
+        m_trailer.chassis.GetComponent<Fenrir::Name>().Set(text.data());
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
             if (!m_car.wheels[i].IsValid())
@@ -1126,6 +1187,10 @@ class VehicleScene
         app.Logger()->Info("L (tick {}): car {:.2f} m/s, {:.0f} RPM, gear {}, clutch {:.2f}, shifting {}, {} wheels on "
                            "ground",
                            m_tick, s.forwardSpeed, s.engineRpm, s.gear, s.clutch, s.shifting, s.wheelsOnGround);
+        const Fenrir::Vehicle& trailer = m_trailer.chassis.GetComponent<Fenrir::Vehicle>();
+        app.Logger()->Info("  trailer {:.2f} m/s, {} wheels on ground, brake {:.2f}, handbrake {:.2f}",
+                           trailer.state.forwardSpeed, trailer.state.wheelsOnGround, trailer.input.brake,
+                           trailer.input.handbrake);
         for (std::size_t i = 0; i < m_car.wheels.size(); ++i)
         {
             if (!m_car.wheels[i].IsValid())
@@ -1153,6 +1218,9 @@ class VehicleScene
     static constexpr std::size_t rearLeft = 2;  // The wheel 8 destroys and remakes, in wheel order.
     inline static const Fenrir::Math::Vec3 start = Fenrir::Math::Vec3(0.0f, 1.0f, 0.0f); // The car's place on the pad.
     inline static const Fenrir::Math::Quat identity = Fenrir::Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+    // The car's tow hitch, 0.3 m behind its chassis, and the trailer's place behind it, both from the car's place.
+    inline static const Fenrir::Math::Vec3 hitch = Fenrir::Math::Vec3(0.0f, -0.1f, 2.3f);
+    inline static const Fenrir::Math::Vec3 trailerOffset = Fenrir::Math::Vec3(0.0f, 0.0f, 2.3f + 1.9f);
     static constexpr float iceX = 40.0f;    // The ice lane's middle.
     static constexpr float grassX = 52.0f;  // The grass lane's middle.
     static constexpr float cratesX = 70.0f; // The middle of the crates' lane.
@@ -1169,6 +1237,7 @@ class VehicleScene
     const Shader* m_flatShader;
     Fenrir::EntityList* m_entities = nullptr;
     Driven m_car;
+    Driven m_trailer;
     Fenrir::Entity m_rearDifferential;
     Fenrir::Entity m_rearBar;
     Fenrir::Entity m_ferry;
