@@ -1,7 +1,7 @@
 # How do bone attachments behave?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 27
 
 ## Question
