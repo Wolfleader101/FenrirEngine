@@ -432,6 +432,17 @@ namespace Fenrir
      * tows, staying in neutral. Trailer brakes are game code's: copy the tractor's `brake` and `handbrake` into the
      * trailer's `input` each tick; nothing links them. Stated limit: a trailer much heavier than its tractor jitters at
      * the hitch.
+     *
+     * Getting in and out is game code's: there is no seat component. To get in, set the character's
+     * CharacterBody::enabled to false, which hides it from bodies, queries, triggers and the wheels' probes, then
+     * parent its entity under the chassis (or a seat child of it) at a seat-local Transform. A disabled character is
+     * never posed by physics and never part of the chassis's compound (ADR-0014), so it rides along at the chassis's
+     * interpolated pose. To get out, unparent it and write its world pose beside the door, clear it of the chassis and
+     * anything else with PhysicsWorld::Depenetrate (or move it there with MoveCast), then enable it again.
+     *
+     * Flipped and stuck vehicles are game code's too: there is no helper. Notice `state.wheelsOnGround == 0` with the
+     * chassis's up turned well away from world up for a while, then right it with a Transform write (upright, a little
+     * higher, its velocities zeroed) or a torque. A `maxTilt` of about 60° stops rollovers altogether.
      */
     struct Vehicle
     {
