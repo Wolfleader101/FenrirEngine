@@ -1,7 +1,7 @@
 # Which library sits behind FenrirWindow, GLFW or SDL3?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 03
 
 ## Question
