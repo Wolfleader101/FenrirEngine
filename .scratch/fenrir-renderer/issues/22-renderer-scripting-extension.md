@@ -1,7 +1,7 @@
 # What does the renderer's scripting extension give C#?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 14, 16, 17, 18
 
 ## Question
