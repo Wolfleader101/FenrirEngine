@@ -12,6 +12,7 @@
 #include "FenrirLogger/ILogger.hpp"
 #include "FilterOf.hpp"
 #include "Hierarchy.hpp"
+#include "Poses.hpp"
 #include "Same.hpp"
 
 namespace Fenrir::Detail
@@ -137,8 +138,8 @@ namespace Fenrir::Detail
         return false;
     }
 
-    Bodies::Bodies(EntityList& entities, ILogger& logger, Backend::World& backend)
-        : m_entities(&entities), m_logger(&logger), m_backend(&backend),
+    Bodies::Bodies(EntityList& entities, ILogger& logger, Backend::World& backend, Poses& poses)
+        : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_poses(&poses),
           m_rigidBodyEntities(entities, ComponentType::Native<RigidBody>()),
           m_colliderEntities(entities, ComponentType::Native<Collider>()),
           m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
@@ -350,6 +351,7 @@ namespace Fenrir::Detail
                 continue;
             }
             rebuild.destroyed.push_back(record.id);
+            m_poses->ForgetBody(body);
             it = m_bodies.erase(it);
         }
         return rebuild;
@@ -471,7 +473,7 @@ namespace Fenrir::Detail
                 // position, so they still hold the same load, and starting them from nothing would overshoot it and
                 // could break them.
                 m_backend->Teleport(record.id, world.pos, world.rot);
-                record.shown.snap = true;
+                m_poses->SnapBody(id);
             }
             record.world = world;
 
@@ -508,24 +510,40 @@ namespace Fenrir::Detail
         m_pushes.clear();
     }
 
-    void Bodies::WriteBack(std::uint32_t id)
+    void Bodies::HandPoses()
     {
-        Entity entity = m_entities->GetEntity(id);
-        Record& record = m_bodies.at(id);
-        const Backend::BodyState state = m_backend->GetState(record.id);
+        for (auto& [id, record] : m_bodies)
+        {
+            if (record.motion.motionType != MotionType::Dynamic || !record.Active())
+            {
+                // Not written back: shown between ticks where game code put it, unless it cannot move or is inactive.
+                const bool still = !record.Active() || record.motion.motionType == MotionType::Static;
+                m_poses->HandBody(id, record.world, still ? Poses::BodyPose::Still : Poses::BodyPose::Followed);
+                continue;
+            }
+            const Backend::BodyState state = m_backend->GetState(record.id);
+            Transform world = record.world;
+            world.pos = state.position;
+            world.rot = state.rotation;
+            m_poses->HandBody(id, world, Poses::BodyPose::Written);
 
-        Transform world = record.world;
-        world.pos = state.position;
-        world.rot = state.rotation;
-        SetWorldTransform(entity, world);
-        // Read back the way the diff reads, so rounding through a parent is not taken for a game edit.
-        record.world = GetWorldTransform(entity);
+            RigidBody& rigidBody = m_entities->GetEntity(id).GetComponent<RigidBody>();
+            rigidBody.linearVelocity = state.linearVelocity;
+            rigidBody.angularVelocity = state.angularVelocity;
+            record.linearVelocity = state.linearVelocity;
+            record.angularVelocity = state.angularVelocity;
+        }
+    }
 
-        RigidBody& rigidBody = entity.GetComponent<RigidBody>();
-        rigidBody.linearVelocity = state.linearVelocity;
-        rigidBody.angularVelocity = state.angularVelocity;
-        record.linearVelocity = state.linearVelocity;
-        record.angularVelocity = state.angularVelocity;
+    void Bodies::ReadBack()
+    {
+        for (auto& [id, record] : m_bodies)
+        {
+            if (record.motion.motionType == MotionType::Dynamic && record.Active())
+            {
+                record.world = m_poses->BodyStepPose(id);
+            }
+        }
     }
 
     void Bodies::DrawColliders(DebugCanvas& canvas) const
