@@ -454,6 +454,28 @@ A named set of debug draw items that is shown, hidden or cleared together, such 
 Debug text stacked in a corner of the window, newest first, which a later message with the same key replaces.
 *Avoid:* log (FenrirLogger's), toast, notification.
 
+## FenrirEngine 2D drawing
+
+**FenrirDraw2D**
+The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and a future painter produce it; FenrirRenderer draws it (ADR-0027).
+*Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
+
+**2D draw list**
+`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
+*Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
+
+**2D pipeline description**
+A plain value saying how a 2D draw list's triangles are drawn: shader, vertex layout, index type, blend mode, input colour space and blend space. The renderer makes and caches a device pipeline from it.
+*Avoid:* material (a 3D asset), pipeline handle (the device's).
+
+**2D target**
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay is the only one built; an image target and a world-space target are planned.
+*Avoid:* render target (a camera's image), canvas, layer.
+
+**Overlay layer**
+The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
+*Avoid:* z-order, render stage (`Overlay` is the stage they all draw in), sort key.
+
 ## FenrirEngine assets
 
 **FenrirAssets**
@@ -501,3 +523,15 @@ FenrirInput's public entry point, through which raw input comes in during `PreUp
 **Input edge**
 A press or release since the reader last looked: "just pressed" or "just released". Read from `PreTick`, `Tick` or `PostTick`, the edges are those since the last tick; from any other phase, those since the last frame. So each press reaches each phase once.
 *Avoid:* trigger, down/up (they mean held or not held).
+
+**Input router**
+A callback registered on FenrirInput with a priority, such as a UI, that sees each input event before game code and may consume it. Consumed input never reaches the `Keyboard`, `Mouse` or `Gamepads` resources or game event readers (ADR-0027).
+*Avoid:* input handler, input layer, listener.
+
+**Input claim**
+What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
+*Avoid:* capture flag, want-capture (ImGui's), focus (alone).
+
+**Control owner**
+Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
+*Avoid:* device owner (ownership is per control), grab.
