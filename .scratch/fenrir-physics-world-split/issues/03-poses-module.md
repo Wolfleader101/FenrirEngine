@@ -13,9 +13,10 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (new `Poses`; `WorldImpl.hpp`, `PhysicsWorld.cpp`, `Bodies.*`, `Characters.cpp`, `Vehicles.cpp`, `JointState.cpp`), `packages/FenrirPhysics/CMakeLists.txt`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `Shown` is declared in Poses only; no body or character record holds one.
-- [ ] Bodies and character code call no `SetWorldTransform` for a step pose; Poses does.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+- [x] `Shown` is declared in Poses only; no body or character record holds one.
+- [x] Bodies and character code call no `SetWorldTransform` for a step pose; Poses does.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+**Resolved by:** PR #75 (branch claude/physics-world-split-03-poses), into claude/physics-world-split-spec. Poses is `src/Poses.hpp`/`.cpp` in `Fenrir::Detail`, and `Shown` is nested in it. Poses reads neither Bodies nor the character records, which keeps dependencies one way. Instead, each step every body hands it its step pose with a `BodyPose` (Written for a dynamic body, Followed for a kinematic body or trigger, Still for a static or inactive one), and every character hands it its position. `Poses::WriteBack` writes them parents first and reads each written pose back, and Bodies (`ReadBack`) and the characters copy that into their records for the diff. Poses keeps the step pose that Advance, Restore and Blend used to read from `record.world`; nothing changes the records between the write-back and the next Step, so the values are the same. Records call `ForgetBody`/`ForgetCharacter` when they go, and a teleport calls `SnapBody`/`SnapCharacter`. `BodyShown` gives Vehicles and JointState a body's `Shown`, or a fresh one if it has no entry yet, as a new record had. The only change in order is that bodies' backend `GetState` reads run in entity order instead of depth order; they are side-effect-free. `clang-x64-debug` passes 81/81 tests, and `scripts/demo-smoke.sh` passed all nine physics scenes.

@@ -31,9 +31,10 @@ add_library(FenrirPhysics STATIC
     src/Physics.cpp
     src/PhysicsState.hpp
     src/PhysicsWorld.cpp
+    src/Poses.cpp
+    src/Poses.hpp
     src/Queries.cpp
     src/Same.hpp
-    src/Shown.hpp
     src/Vehicles.cpp
     src/WarnOnce.hpp
     src/WorldImpl.hpp

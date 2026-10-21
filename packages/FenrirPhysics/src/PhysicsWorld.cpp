@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <set>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -11,12 +10,9 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
-#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Hierarchy.hpp"
-#include "Same.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
@@ -89,8 +85,8 @@ namespace Fenrir
 
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
-        : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
-          m_bodies(entities, logger, m_backend), m_jointEntities(entities, ComponentType::Native<Joint>()),
+        : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger), m_poses(entities),
+          m_bodies(entities, logger, m_backend, m_poses), m_jointEntities(entities, ComponentType::Native<Joint>()),
           m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
           m_vehicleEntities(entities, ComponentType::Native<Vehicle>()),
           m_wheelEntities(entities, ComponentType::Native<VehicleWheel>()),
@@ -149,197 +145,33 @@ namespace Fenrir
 
         // Events, then the shown poses and the debug lines.
         SendEvents(app);
-        AdvancePoses();
+        m_poses.Advance();
         DrawDebugLines();
-    }
-
-    void Detail::Shown::Advance(const Transform& world)
-    {
-        previous = snap ? world : current;
-        current = world;
-        snap = false;
-        heldByGame = false;
-    }
-
-    void Detail::Shown::Restore(Transform& local, bool turnIsTeleport)
-    {
-        const bool moved = !Same(local.pos, shownLocal.pos);
-        const bool turned = !Same(local.rot, shownLocal.rot) || !Same(local.scale, shownLocal.scale);
-        // Game code moved or turned it during Update: what it changed stays, and the rest goes back to the true pose,
-        // so a turn alone does not leave it at its blended position.
-        if (!moved)
-        {
-            local.pos = trueLocal.pos;
-        }
-        if (!turned)
-        {
-            local.rot = trueLocal.rot;
-            local.scale = trueLocal.scale;
-        }
-        if (moved || turned)
-        {
-            heldByGame = true;
-            // Nothing blends across a jump.
-            snap = snap || moved || turnIsTeleport;
-        }
-    }
-
-    Transform Detail::Shown::Between(float fraction) const
-    {
-        Transform world = current;
-        world.pos = previous.pos + (current.pos - previous.pos) * fraction;
-        world.rot = Math::Slerp(previous.rot, current.rot, fraction);
-        return world;
-    }
-
-    void PhysicsWorld::Impl::AdvancePoses()
-    {
-        for (auto& [id, record] : m_bodies.PoseRecords())
-        {
-            record.shown.Advance(record.world);
-        }
-        for (auto& [id, record] : m_characters)
-        {
-            record.shown.Advance(record.world);
-        }
     }
 
     void PhysicsWorld::Impl::Restore()
     {
-        const auto restore = [this](std::uint32_t id, Shown& shown, bool turnIsTeleport) {
-            if (shown.blended && m_entities->HasEntity(id))
-            {
-                shown.Restore(m_entities->GetEntity(id).GetComponent<Transform>(), turnIsTeleport);
-            }
-            shown.blended = false;
-        };
-        for (auto& [id, record] : m_bodies.PoseRecords())
-        {
-            restore(id, record.shown, true);
-        }
-        // A character's turn is not a teleport.
-        for (auto& [id, record] : m_characters)
-        {
-            restore(id, record.shown, false);
-        }
+        m_poses.Restore();
         RestoreWheels();
     }
 
     void PhysicsWorld::Impl::Blend(float fraction)
     {
-        struct Blended
-        {
-            int depth;
-            Entity entity;
-            const Transform* stepPose;
-            Shown* shown;
-            // Shown at its step pose: one that is not interpolated, written only because an ancestor is.
-            bool atStepPose;
-        };
-        std::vector<Blended> blended;
-        std::vector<Blended> carried;
-        std::set<std::uint32_t> interpolated;
-        const auto add = [&](std::uint32_t id, const Transform& stepPose, Shown& shown, bool interpolate) {
-            Entity entity = m_entities->GetEntity(id);
-            if (interpolate)
-            {
-                interpolated.insert(id);
-                blended.push_back(Blended{Detail::DepthOf(entity), entity, &stepPose, &shown, false});
-            }
-            else
-            {
-                carried.push_back(Blended{Detail::DepthOf(entity), entity, &stepPose, &shown, true});
-            }
-        };
-        for (auto& [id, record] : m_bodies.PoseRecords())
-        {
-            if (!record.Active() || record.motion.motionType == MotionType::Static || record.shown.heldByGame ||
-                !m_entities->HasEntity(id))
-            {
-                continue; // an inactive collider has no simulated pose to show
-            }
-            const Entity entity = m_entities->GetEntity(id);
-            if (!entity.HasComponent<RigidBody>() || !entity.HasComponent<Transform>())
-            {
-                continue;
-            }
-            add(id, record.world, record.shown, entity.GetComponent<RigidBody>().interpolate);
-        }
-        for (auto& [id, record] : m_characters)
-        {
-            if (record.shown.heldByGame || !m_entities->HasEntity(id))
-            {
-                continue;
-            }
-            add(id, record.world, record.shown, m_entities->GetEntity(id).GetComponent<CharacterBody>().interpolate);
-        }
-        // One that is not interpolated is still moved by an interpolated ancestor's blend, through its local
-        // Transform: it is written back at its own step pose, so it is shown where it is.
-        for (const Blended& body : carried)
-        {
-            for (Entity above = Detail::ParentOf(body.entity); above.IsValid(); above = Detail::ParentOf(above))
-            {
-                if (interpolated.contains(above.GetId()))
-                {
-                    blended.push_back(body);
-                    break;
-                }
-            }
-        }
-        // Parents before children, so each child's world pose is set against its parent's blended one.
-        std::stable_sort(blended.begin(), blended.end(),
-                         [](const Blended& a, const Blended& b) { return a.depth < b.depth; });
-
-        // Every true local Transform is saved before any is overwritten.
-        for (const Blended& body : blended)
-        {
-            body.shown->trueLocal = body.entity.GetComponent<Transform>();
-        }
-        for (const Blended& body : blended)
-        {
-            Shown& shown = *body.shown;
-            Transform world = *body.stepPose;
-            if (!body.atStepPose)
-            {
-                const Transform between = shown.Between(fraction);
-                world.pos = between.pos;
-                world.rot = between.rot;
-            }
-            SetWorldTransform(body.entity, world);
-            shown.shownLocal = body.entity.GetComponent<Transform>();
-            shown.blended = true;
-        }
+        m_poses.Blend(fraction);
         // After the bodies: wheels are posed on their chassis's blended pose.
         BlendWheels(fraction);
     }
 
     void PhysicsWorld::Impl::WriteBack()
     {
-        // Parents before children: a body's or character's local Transform is written against its parent's world
-        // transform, so a parent written after it would move it again.
-        std::vector<std::tuple<int, std::uint32_t, bool>> order;
-        for (const auto& [id, record] : m_bodies.Records())
+        m_bodies.HandPoses();
+        HandCharacterPoses();
+        m_poses.WriteBack();
+        m_bodies.ReadBack();
+        for (auto& [id, record] : m_characters)
         {
-            if (record.motion.motionType == MotionType::Dynamic && record.Active())
-            {
-                order.emplace_back(Detail::DepthOf(m_entities->GetEntity(id)), id, false);
-            }
-        }
-        for (const auto& [id, record] : m_characters)
-        {
-            order.emplace_back(Detail::DepthOf(m_entities->GetEntity(id)), id, true);
-        }
-        std::ranges::sort(order);
-
-        for (const auto& [depth, id, isCharacter] : order)
-        {
-            if (isCharacter)
-            {
-                Entity entity = m_entities->GetEntity(id);
-                WriteBackCharacter(entity, m_characters.at(id));
-                continue;
-            }
-            m_bodies.WriteBack(id);
+            Entity entity = m_entities->GetEntity(id);
+            ReadBackCharacter(entity, record);
         }
         ResetIdleCharacters();
     }

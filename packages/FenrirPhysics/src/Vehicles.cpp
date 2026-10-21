@@ -1035,7 +1035,7 @@ namespace Fenrir
             // After the chassis's write-back, against its step pose.
             const Record& body = *BodyView().RecordOf(chassis);
             PoseWheels(record, read, body.world);
-            AdvanceWheels(record, read, dt, body.shown.snap);
+            AdvanceWheels(record, read, dt, m_poses.BodyShown(chassis).snap);
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
         for (const std::uint32_t wheel : m_wheelEntities.Entities())
@@ -1086,7 +1086,7 @@ namespace Fenrir
             // its wheels between steps. Otherwise they stay at their step poses.
             const Record* body = BodyView().RecordOf(chassis);
             if (!record.Made() || record.current.size() != record.wheels.size() || body == nullptr ||
-                !body->shown.blended || !m_entities->HasEntity(chassis))
+                !m_poses.BodyShown(chassis).blended || !m_entities->HasEntity(chassis))
             {
                 continue;
             }
@@ -1101,7 +1101,7 @@ namespace Fenrir
             {
                 continue;
             }
-            const Transform at = body->shown.Between(fraction);
+            const Transform at = m_poses.BodyShown(chassis).Between(fraction);
             // Every true local Transform is saved before any is overwritten.
             record.trueLocals.clear();
             for (const std::uint32_t id : record.wheels)

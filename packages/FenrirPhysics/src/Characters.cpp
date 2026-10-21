@@ -73,6 +73,7 @@ namespace Fenrir
                 continue;
             }
             destroyed.push_back(it->second.id);
+            m_poses.ForgetCharacter(it->first);
             it = m_characters.erase(it);
         }
         m_backend.DestroyCharacters(destroyed);
@@ -152,7 +153,7 @@ namespace Fenrir
                 // Its contacts and ground are found again where it now is, so this tick's move starts from there.
                 m_backend.TeleportCharacter(record.id, world.pos, world.rot);
                 record.moved.carriedVelocity = Math::Vec3(0.0f);
-                record.shown.snap = true;
+                m_poses.SnapCharacter(id);
             }
             else if (!Same(world.rot, record.world.rot))
             {
@@ -218,19 +219,18 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::WriteBackCharacter(Entity& entity, CharacterRecord& record)
+    void PhysicsWorld::Impl::HandCharacterPoses()
     {
-        // Only the position: the rotation and scale stay game code's, bit for bit, not recomputed through a parent.
+        for (const auto& [id, record] : m_characters)
+        {
+            m_poses.HandCharacter(id, record.moved.position);
+        }
+    }
+
+    void PhysicsWorld::Impl::ReadBackCharacter(Entity& entity, CharacterRecord& record)
+    {
         const Backend::CharacterMoved& moved = record.moved;
-        Transform world = GetWorldTransform(entity);
-        world.pos = moved.position;
-        Transform& local = entity.GetComponent<Transform>();
-        const Transform kept = local;
-        SetWorldTransform(entity, world);
-        local.rot = kept.rot;
-        local.scale = kept.scale;
-        // Read back the way the diff reads, so rounding through a parent is not taken for a teleport.
-        record.world = GetWorldTransform(entity);
+        record.world = m_poses.CharacterStepPose(entity.GetId());
 
         const auto handle = [this](std::uint32_t id) { return id == ~0u ? Entity() : m_entities->HandleOf(id); };
         CharacterBody& body = entity.GetComponent<CharacterBody>();

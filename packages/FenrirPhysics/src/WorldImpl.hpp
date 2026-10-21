@@ -25,7 +25,7 @@
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Shown.hpp"
+#include "Poses.hpp"
 
 namespace Fenrir
 {
@@ -91,7 +91,6 @@ namespace Fenrir
         friend class PhysicsWorld;
 
         using Record = Detail::Bodies::Record;
-        using Shown = Detail::Shown;
 
         /** @brief What the features not yet in modules of their own (joints, vehicles, contacts) and the queries read
          * of the bodies. */
@@ -179,9 +178,13 @@ namespace Fenrir
          * changed and fit, keeping the feet in place on the ground and the head in the air; otherwise marks it
          * blocked, keeping the shape it has. */
         void ApplyShape(const Entity& entity, CharacterRecord& record);
-        /** @brief Write-back, for one character: its position, trimmed velocity and state, from its last move, whether
-         * its Collider's shape or scale is still waiting to fit, and the world transform the diff compares against. */
-        void WriteBackCharacter(Entity& entity, CharacterRecord& record);
+        /** @brief Write-back, before Poses writes the poses: hands each character's position from its last move to
+         * Poses. */
+        void HandCharacterPoses();
+        /** @brief Write-back, after Poses wrote the poses, for one character: its trimmed velocity and state, from its
+         * last move, whether its Collider's shape or scale is still waiting to fit, and the world transform the diff
+         * compares against. */
+        void ReadBackCharacter(Entity& entity, CharacterRecord& record);
         /** @brief Write-back, for each CharacterBody with no backend character (disabled or inactive): its state reset
          * to the defaults, and nothing else written. */
         void ResetIdleCharacters();
@@ -257,10 +260,10 @@ namespace Fenrir
         [[nodiscard]] std::map<std::uint32_t, VehicleLinks> LinksByVehicle(
             const std::map<std::uint32_t, std::vector<std::uint32_t>>& wheelsOf);
 
-        /** @brief After the step: dynamic bodies' and characters' poses written back, parents before children, then
-         * the state of each character with no backend character reset. */
+        /** @brief After the step: dynamic bodies' and characters' poses written back through Poses, parents before
+         * children, their velocities and the characters' states, then the state of each character with no backend
+         * character reset. */
         void WriteBack();
-        void AdvancePoses();
         void SendEvents(App& app);
         /** @brief Events, before the events are sorted: brings m_characterTouches up to date from each character's
          * end-of-move contacts and its body's step contacts, adding the begins and ends of the pairs reported. */
@@ -282,6 +285,7 @@ namespace Fenrir
         EntityList* m_entities;
         ILogger* m_logger;
         Backend::World m_backend;
+        Detail::Poses m_poses;
         Detail::Bodies m_bodies;
 
         // What physics last applied for a joint: the diff compares the Joint against it. A joint naming no made body
@@ -327,7 +331,6 @@ namespace Fenrir
             // Its world transform as physics last applied it or wrote it back: a position differing from it is a
             // teleport, and a rotation differing from it a turn.
             Transform world;
-            Shown shown{};
             CollisionShape shape;
             Math::Vec3 scale = Math::Vec3(1.0f);
             // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.

@@ -2,8 +2,9 @@
 
 // A physics world's bodies, at the bottom of the world: which colliders make which body, the body records the diff
 // compares the components against, rebuilding and editing the backend bodies, the pushes game code queues, and writing
-// dynamic bodies back. The other features read the bodies through its const members, and it reads none of theirs.
-// Knows the ECS, not Jolt: it talks to Backend::World. Private to the FenrirPhysics package.
+// dynamic bodies' velocities back, handing their poses to Poses. The other features read the bodies through its const
+// members, and it reads none of theirs. Knows the ECS, not Jolt: it talks to Backend::World. Private to the
+// FenrirPhysics package.
 
 #include <cstdint>
 #include <map>
@@ -15,7 +16,6 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
-#include "Shown.hpp"
 
 namespace Fenrir
 {
@@ -26,6 +26,7 @@ namespace Fenrir
 namespace Fenrir::Detail
 {
     class DebugCanvas;
+    class Poses;
 
     /** @brief Whether the Collider on `entity` is a character body's shape, and so makes no body of its own. */
     [[nodiscard]] bool IsCharacterCollider(const Entity& entity);
@@ -70,8 +71,6 @@ namespace Fenrir::Detail
             Transform world;
             Math::Vec3 linearVelocity;
             Math::Vec3 angularVelocity;
-
-            Shown shown{};
             // A trigger: a kinematic body following its entity, whatever RigidBody the entity has.
             bool isTrigger = false;
         };
@@ -89,8 +88,9 @@ namespace Fenrir::Detail
          * AddAngularImpulse. */
         using Pusher = void (Backend::World::*)(Backend::BodyId, const Math::Vec3&);
 
-        /** @brief The bodies of `entities`, including the colliders already there, made in `backend`. */
-        Bodies(EntityList& entities, ILogger& logger, Backend::World& backend);
+        /** @brief The bodies of `entities`, including the colliders already there, made in `backend`, their poses
+         * written and shown through `poses`. */
+        Bodies(EntityList& entities, ILogger& logger, Backend::World& backend, Poses& poses);
 
         /**
          * @brief The first half of a rebuild: drains the body components' tracked sets, works out which colliders make
@@ -116,8 +116,13 @@ namespace Fenrir::Detail
         /** @brief Applies the queued pushes, in the order game code made them, to the bodies that have one. */
         void ApplyPushes();
 
-        /** @brief After the step: the dynamic body of `id` writes its pose and velocity back to its entity. */
-        void WriteBack(std::uint32_t id);
+        /** @brief Write-back, after the step: hands each body's step pose to Poses, and writes each dynamic body's
+         * velocity back to its entity. */
+        void HandPoses();
+
+        /** @brief Write-back, after Poses wrote the poses: each dynamic body's world transform, as the diff compares
+         * against. */
+        void ReadBack();
 
         /** @brief Draws each made body's colliders. */
         void DrawColliders(DebugCanvas& canvas) const;
@@ -157,13 +162,6 @@ namespace Fenrir::Detail
          * character, else the trigger itself. */
         [[nodiscard]] std::uint32_t AttachedBodyOf(std::uint32_t trigger) const;
 
-        /** @brief The records, for the pose code on the world (Restore, Blend and advancing the shown poses) until
-         * Poses owns how bodies are shown. */
-        [[nodiscard]] std::map<std::uint32_t, Record>& PoseRecords()
-        {
-            return m_bodies;
-        }
-
       private:
         /**
          * @brief The entity whose body the collider on `entity` belongs to: the nearest of it and its ancestors with a
@@ -184,6 +182,7 @@ namespace Fenrir::Detail
         EntityList* m_entities;
         ILogger* m_logger;
         Backend::World* m_backend;
+        Poses* m_poses;
         // The entities with each component, as of the last Plan. Of the character bodies and the triggers only what
         // came or went is read.
         TrackedComponents m_rigidBodyEntities;
