@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cstdlib>
 #include <string>
 #include <unordered_set>
 
@@ -642,6 +644,16 @@ int main(int argc, char* argv[])
 
     Fenrir::Camera camera;
     Window window(projectSettings.name + " v" + projectSettings.version);
+    // For smoke runs (examples/DemoApp/README.md): FENRIR_DEMO_FAST=<n> runs n ticks a frame however long the frame
+    // takes, without waiting for vsync, so the demo goes as fast as it can render and renders one tick in n. n is at
+    // most one short of the most ticks a frame runs, so a tick carried over by rounding never meets that cap.
+    // FENRIR_DEMO_HIDDEN=1 never shows the window.
+    const char* fast = std::getenv("FENRIR_DEMO_FAST");
+    const int ticksPerFrame =
+        fast == nullptr ? 0 : std::clamp(std::atoi(fast), 0, app.GetTime().maxTicksPerFrame - 1); // 0: real time.
+    const char* hidden = std::getenv("FENRIR_DEMO_HIDDEN");
+    window.SetWaitForVsync(ticksPerFrame == 0);
+    window.SetHidden(hidden != nullptr && std::string(hidden) == "1");
 
     CameraController cameraController(camera, 0.1f, 3.0f);
 
@@ -764,6 +776,18 @@ int main(int argc, char* argv[])
                                BIND_WINDOW_SYSTEM_FN(Window::PostUpdate, window)})
         .AddSequentialSystems(Fenrir::SchedulePriority::Exit,
                               {BIND_EDITOR_FN(Editor::Exit, editor), BIND_WINDOW_SYSTEM_FN(Window::Exit, window),
-                               BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)})
-        .Run();
+                               BIND_GL_RENDERER_FN(GLRenderer::Exit, glRenderer)});
+
+    if (ticksPerFrame == 0)
+    {
+        app.Run();
+        return 0;
+    }
+    // Whole ticks a frame, so simulation time moves as it would in real time at 60 ticks a second, only faster.
+    while (app.IsRunning())
+    {
+        app.RunFrame(app.GetTime().tickRate * ticksPerFrame);
+    }
+    app.RunExit();
+    return 0;
 }

@@ -42,6 +42,11 @@ namespace Fenrir
         m_running = false;
     }
 
+    bool App::IsRunning() const
+    {
+        return m_running;
+    }
+
     void App::UpdateEvents()
     {
         if (!m_tickedSinceSwap)

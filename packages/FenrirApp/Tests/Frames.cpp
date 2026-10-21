@@ -139,6 +139,28 @@ TEST_CASE("Run runs the init phases, then frames until stopped, then Exit", "[ap
                                                "PreUpdate", "Update", "PostUpdate", "Exit"});
 }
 
+TEST_CASE("IsRunning is true until a system stops the app, so a RunFrame loop can end", "[app][frames]")
+{
+    App app(Silent());
+    int frames = 0;
+    app.AddSequentialSystems(SchedulePriority::PostUpdate, {[&](App& running) {
+                                 if (++frames == 3)
+                                 {
+                                     running.Stop();
+                                 }
+                             }});
+
+    INFO("a new app was not running");
+    REQUIRE(app.IsRunning());
+    while (app.IsRunning())
+    {
+        app.RunFrame(sixtieth);
+    }
+
+    INFO("the loop did not end on the frame that stopped the app");
+    REQUIRE(frames == 3);
+}
+
 TEST_CASE("RunExit runs the Exit phase for an app driven by RunFrame", "[app][frames]")
 {
     App app(Silent());
