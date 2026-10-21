@@ -82,7 +82,7 @@ namespace Fenrir
         // The queries, in Queries.cpp, read the bodies and the backend.
         friend class PhysicsWorld;
 
-        using Record = Detail::Bodies::Record;
+        using Body = Detail::Bodies::Body;
 
         /** @brief What the queries read of the bodies. */
         [[nodiscard]] const Detail::Bodies& BodyView() const

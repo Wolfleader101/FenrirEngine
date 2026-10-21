@@ -152,7 +152,7 @@ namespace Fenrir::Detail
         /** @brief Warns once about each Vehicle and each VehicleWheel that has gone inactive since the last tick. */
         void WarnAboutInactiveVehicles();
         /** @brief The made dynamic body of the chassis on `chassis`, if it can be a vehicle's; null otherwise. */
-        [[nodiscard]] const Bodies::Record* ChassisBodyOf(std::uint32_t chassis) const;
+        [[nodiscard]] const Bodies::Body* ChassisBodyOf(std::uint32_t chassis) const;
         /** @brief Each vehicle's wheel entities that can be its wheels, in entity order, by chassis entity. */
         [[nodiscard]] std::map<std::uint32_t, std::vector<std::uint32_t>> WheelsByVehicle() const;
         /** @brief The backend's wheel for the wheel on `entity`, its settings corrected (each kind of out-of-range

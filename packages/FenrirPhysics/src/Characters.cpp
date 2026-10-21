@@ -69,8 +69,9 @@ namespace Fenrir::Detail
 
     void Characters::Drop(const std::set<std::uint32_t>& changed)
     {
-        // What came or went is in `changed`, from Bodies' own CharacterBody set: draining brings this set's entities up
-        // to date for Make and the write-back.
+        // Drained only to bring this set's live entities up to date for Make and the write-back. The touched entities
+        // acted on come from Bodies' `changed`, drained from its own CharacterBody set, which also covers Collider and
+        // RigidBody.
         static_cast<void>(m_characterEntities.Drain());
         std::vector<Backend::CharacterId> destroyed;
         for (auto it = m_characters.begin(); it != m_characters.end();)

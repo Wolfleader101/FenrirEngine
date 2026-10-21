@@ -195,23 +195,23 @@ namespace Fenrir::Detail
         return trigger;
     }
 
-    const Bodies::Record* Bodies::RecordOf(std::uint32_t entity) const
+    const Bodies::Body* Bodies::BodyOf(std::uint32_t entity) const
     {
         const auto it = m_bodies.find(entity);
         return it == m_bodies.end() ? nullptr : &it->second;
     }
 
-    const Bodies::Record* Bodies::FindBody(std::uint32_t entity) const
+    const Bodies::Body* Bodies::FindBody(std::uint32_t entity) const
     {
         if (m_entities->HasEntity(entity) && !HasBodyComponent(m_entities->GetEntity(entity)))
         {
             return nullptr;
         }
         // A destroyed entity's body, if it had one, lasts until the next step.
-        return RecordOf(ResolveBody(entity));
+        return BodyOf(ResolveBody(entity));
     }
 
-    const Bodies::Record* Bodies::FindBody(const Entity& entity) const
+    const Bodies::Body* Bodies::FindBody(const Entity& entity) const
     {
         return entity.IsValid() ? FindBody(entity.GetId()) : nullptr;
     }
@@ -398,10 +398,13 @@ namespace Fenrir::Detail
                 desc.angularVelocity = rigidBody->angularVelocity;
             }
             desc.entity = id;
-            const auto made =
-                m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion, std::move(parts),
-                                            desc.material, desc.filter, desc.linearVelocity, desc.angularVelocity});
-            made.first->second.isTrigger = isTrigger;
+            m_bodies.emplace(id, Record{{Backend::BodyId{}, desc.motion, isTrigger},
+                                        desc.canMove,
+                                        std::move(parts),
+                                        desc.material,
+                                        desc.filter,
+                                        desc.linearVelocity,
+                                        desc.angularVelocity});
             m_poses->Made(id, world);
             if (desc.parts.empty())
             {
@@ -511,12 +514,12 @@ namespace Fenrir::Detail
     {
         for (const Push& push : m_pushes)
         {
-            const Record* record = FindBody(push.entity);
-            if (record == nullptr || !record->Active())
+            const Body* body = FindBody(push.entity);
+            if (body == nullptr || !body->Active())
             {
                 continue; // no body: nothing to push
             }
-            (m_backend->*push.pusher)(record->id, push.amount);
+            (m_backend->*push.pusher)(body->id, push.amount);
         }
         m_pushes.clear();
     }

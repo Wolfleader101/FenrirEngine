@@ -333,7 +333,7 @@ namespace Fenrir::Detail
     {
     }
 
-    const Bodies::Record* Joints::BodyOf(const Entity& body) const
+    const Bodies::Body* Joints::BodyOf(const Entity& body) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!body.IsValid() || body != m_entities->HandleOf(body.GetId()))
@@ -341,12 +341,12 @@ namespace Fenrir::Detail
             return nullptr;
         }
         // Keyed by the body's own entity, so a compound body's child collider names no body.
-        const Bodies::Record* record = m_bodies->RecordOf(body.GetId());
-        if (record == nullptr || !record->Active() || record->isTrigger)
+        const Bodies::Body* found = m_bodies->BodyOf(body.GetId());
+        if (found == nullptr || !found->Active() || found->isTrigger)
         {
             return nullptr;
         }
-        return record;
+        return found;
     }
 
     std::string Joints::WhyInactive(const Joint& joint) const
@@ -451,9 +451,9 @@ namespace Fenrir::Detail
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
             JointRecord& record = m_joints[entity];
 
-            const Bodies::Record* a = BodyOf(joint.bodyA);
+            const Bodies::Body* a = BodyOf(joint.bodyA);
             const bool toWorld = IsWorld(joint.bodyB);
-            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && (b == nullptr || b == a)))
             {
                 // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
@@ -541,9 +541,9 @@ namespace Fenrir::Detail
                 }
                 continue;
             }
-            const Bodies::Record* a = BodyOf(joint.bodyA);
+            const Bodies::Body* a = BodyOf(joint.bodyA);
             const bool toWorld = joint.bodyB == Entity();
-            const Bodies::Record* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && b == nullptr))
             {
                 continue; // not expected: Sync drops a constraint before its bodies go
