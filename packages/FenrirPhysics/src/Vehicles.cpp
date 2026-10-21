@@ -96,6 +96,8 @@ namespace Fenrir
             clamped.steer = std::clamp(input.steer, -1.0f, 1.0f);
             clamped.brake = std::clamp(input.brake, 0.0f, 1.0f);
             clamped.handbrake = std::clamp(input.handbrake, 0.0f, 1.0f);
+            clamped.leftTrack = std::clamp(input.leftTrack, -1.0f, 1.0f);
+            clamped.rightTrack = std::clamp(input.rightTrack, -1.0f, 1.0f);
             clamped.gear = std::clamp(clamped.gear, -1, transmission.gearCount);
             clamped.clutch = std::clamp(clamped.clutch, 0.0f, 1.0f);
             return clamped;
@@ -127,6 +129,15 @@ namespace Fenrir
                     !Fenrir::Same(a.As<MotorcycleVehicle>().lean.maxAngle, b.As<MotorcycleVehicle>().lean.maxAngle));
         }
 
+        bool Same(const VehicleTrack& a, const VehicleTrack& b)
+        {
+            return Fenrir::Same(a.inertia, b.inertia) && Fenrir::Same(a.angularDamping, b.angularDamping) &&
+                   Fenrir::Same(a.maxBrakeTorque, b.maxBrakeTorque) &&
+                   Fenrir::Same(a.differentialRatio, b.differentialRatio) &&
+                   Fenrir::Same(a.longitudinalFriction, b.longitudinalFriction) &&
+                   Fenrir::Same(a.lateralFriction, b.lateralFriction);
+        }
+
         // Whether two kinds that do not rebuild (Rebuilds) have the same settings: a difference is a live edit.
         bool Same(const VehicleKind& a, const VehicleKind& b)
         {
@@ -136,8 +147,11 @@ namespace Fenrir
                 !a.Is<MotorcycleVehicle>() ||
                 (a.As<MotorcycleVehicle>().lean.enabled == b.As<MotorcycleVehicle>().lean.enabled &&
                  a.As<MotorcycleVehicle>().lean.limitSteering == b.As<MotorcycleVehicle>().lean.limitSteering);
+            const bool sameTracks =
+                !a.Is<TrackedVehicle>() || (Same(a.As<TrackedVehicle>().left, b.As<TrackedVehicle>().left) &&
+                                            Same(a.As<TrackedVehicle>().right, b.As<TrackedVehicle>().right));
             return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
-                   Fenrir::Same(x.limitedSlipRatio, y.limitedSlipRatio) && sameLean;
+                   Fenrir::Same(x.limitedSlipRatio, y.limitedSlipRatio) && sameLean && sameTracks;
         }
 
         // Just below a quarter turn: the most a wheel steers or leans.
@@ -280,6 +294,7 @@ namespace Fenrir
             ShiftDownNotBelowShiftUp = 1u << 5,
             NoGears = 1u << 6,
             LimitedSlipAtMostOne = 1u << 7,
+            NegativeTrackValue = 1u << 8,
         };
 
         constexpr std::pair<KindProblem, const char*> kindProblems[] = {
@@ -291,6 +306,7 @@ namespace Fenrir
             {ShiftDownNotBelowShiftUp, "a shift-down RPM at or above the shift-up RPM is lowered below it"},
             {NoGears, "a gear count below 1 is raised to 1"},
             {LimitedSlipAtMostOne, "a limited-slip ratio at or below 1 is raised to just above it"},
+            {NegativeTrackValue, "a negative track inertia, brake torque or friction is treated as 0"},
         };
 
         // An engine and gearbox corrected into the ranges the backend can use, adding to `found` each kind of
@@ -353,6 +369,27 @@ namespace Fenrir
             transmission.clutchStrength = std::max(transmission.clutchStrength, 1e-3f);
         }
 
+        // The least inertia and differential ratio a track can have: the backend divides by both.
+        constexpr float minTrackInertia = 1e-3f;
+        constexpr float minTrackRatio = 1e-3f;
+
+        // A track corrected into the ranges the backend can use, adding to `found` each kind of out-of-range value.
+        void Correct(VehicleTrack& track, std::uint32_t& found)
+        {
+            for (float* value :
+                 {&track.inertia, &track.maxBrakeTorque, &track.longitudinalFriction, &track.lateralFriction})
+            {
+                if (*value < 0.0f)
+                {
+                    *value = 0.0f;
+                    found |= NegativeTrackValue;
+                }
+            }
+            track.inertia = std::max(track.inertia, minTrackInertia);
+            track.angularDamping = std::max(track.angularDamping, 0.0f);
+            track.differentialRatio = std::max(track.differentialRatio, minTrackRatio);
+        }
+
         // The kind corrected into the ranges the backend can use. The kinds of out-of-range value it held that
         // `warned` does not have are warned about, and `warned` becomes those it holds now, so a valid value clears
         // its warning.
@@ -374,6 +411,13 @@ namespace Fenrir
                 correct(motorcycle);
                 // Silently, as the tilt limit is: the backend takes its tangent.
                 motorcycle.lean.maxAngle = std::clamp(motorcycle.lean.maxAngle, 0.0f, maxAngle);
+            }
+            else if (corrected.Is<TrackedVehicle>())
+            {
+                TrackedVehicle& tracked = corrected.As<TrackedVehicle>();
+                Correct(tracked.engine, tracked.transmission, found);
+                Correct(tracked.left, found);
+                Correct(tracked.right, found);
             }
             else if (corrected.Is<WheeledVehicle>())
             {
@@ -892,8 +936,8 @@ namespace Fenrir
             {
                 if (!Same(vehicle.kind, record.kind))
                 {
-                    // A live edit: the engine, the gearbox, the limited-slip ratio and a motorcycle's lean switches,
-                    // from the next step.
+                    // A live edit: the engine, the gearbox, the limited-slip ratio, a motorcycle's lean switches and a
+                    // tracked vehicle's tracks, from the next step.
                     record.applied = InRange(vehicle.kind, chassis, record.warned, *m_logger);
                     m_backend.UpdateVehicle(record.id, record.applied);
                     record.kind = vehicle.kind;
