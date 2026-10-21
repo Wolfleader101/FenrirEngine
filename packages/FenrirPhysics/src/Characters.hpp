@@ -45,9 +45,8 @@ namespace Fenrir::Detail
         void Make();
 
         /** @brief Edits, after the bodies', in entity order: its entity's PhysicsMaterial and CollisionFilter
-         * given to its body if they changed; a character whose world position differs from physics's copy is
-         * teleported there (a moved parent included), and one whose world rotation alone differs is turned. Neither
-         * sweeps. */
+         * given to its body if they changed; a character Poses finds moved since physics last put it somewhere is
+         * teleported there (a moved parent included), and one it finds turned is turned. Neither sweeps. */
         void PushEdits();
 
         /** @brief Moves, before the step: applies each character's shape edit if it fits, then moves it by its
@@ -55,13 +54,9 @@ namespace Fenrir::Detail
         void Move(float dt);
 
         /** @brief Write-back, before Poses writes the poses: hands each character's position from its last move to
-         * Poses. */
+         * Poses, and writes its trimmed velocity and state, from that move, and whether its Collider's shape or scale
+         * is still waiting to fit. */
         void HandPoses();
-
-        /** @brief Write-back, after Poses wrote the poses: each character's trimmed velocity and state, from its last
-         * move, whether its Collider's shape or scale is still waiting to fit, and the world transform the diff
-         * compares against. */
-        void ReadBack();
 
         /** @brief Write-back, for each CharacterBody with no backend character (disabled or inactive): its state reset
          * to the defaults, and nothing else written. */
@@ -80,15 +75,13 @@ namespace Fenrir::Detail
 
       private:
         // What physics knows of a character body: its backend character, where its last move left it, and the shape and
-        // world scale it has, which the diff compares the Collider and Transform against. None for one disabled, or
-        // inactive (beside a RigidBody, with no Collider, or with a shape a character cannot use).
+        // world scale it has, which the diff compares the Collider and Transform against (its world transform against
+        // Poses' baseline). None for one disabled, or inactive (beside a RigidBody, with no Collider, or with a shape a
+        // character cannot use).
         struct CharacterRecord
         {
             Backend::CharacterId id;
             Backend::CharacterMoved moved;
-            // Its world transform as physics last applied it or wrote it back: a position differing from it is a
-            // teleport, and a rotation differing from it a turn.
-            Transform world;
             CollisionShape shape;
             Math::Vec3 scale = Math::Vec3(1.0f);
             // Its entity's PhysicsMaterial and CollisionFilter as last applied to its body.

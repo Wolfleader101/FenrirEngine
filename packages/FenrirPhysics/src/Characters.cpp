@@ -83,7 +83,7 @@ namespace Fenrir::Detail
                 continue;
             }
             destroyed.push_back(it->second.id);
-            m_poses->ForgetCharacter(it->first);
+            m_poses->Forget(it->first);
             it = m_characters.erase(it);
         }
         m_backend->DestroyCharacters(destroyed);
@@ -127,14 +127,13 @@ namespace Fenrir::Detail
         {
             if (ids[i].value != Backend::CharacterId{}.value)
             {
-                m_characters.emplace(entities[i],
-                                     CharacterRecord{.id = ids[i],
-                                                     .moved = Backend::CharacterMoved{},
-                                                     .world = GetWorldTransform(m_entities->GetEntity(entities[i])),
-                                                     .shape = descs[i].shape,
-                                                     .scale = descs[i].scale,
-                                                     .material = descs[i].material,
-                                                     .filter = descs[i].filter});
+                m_characters.emplace(entities[i], CharacterRecord{.id = ids[i],
+                                                                  .moved = Backend::CharacterMoved{},
+                                                                  .shape = descs[i].shape,
+                                                                  .scale = descs[i].scale,
+                                                                  .material = descs[i].material,
+                                                                  .filter = descs[i].filter});
+                m_poses->Made(entities[i], GetWorldTransform(m_entities->GetEntity(entities[i])));
             }
         }
     }
@@ -158,19 +157,18 @@ namespace Fenrir::Detail
             }
 
             const Transform world = GetWorldTransform(entity);
-            if (!Same(world.pos, record.world.pos))
+            const Poses::Edit edit = m_poses->Push(id, Poses::Kind::Character, world);
+            if (edit == Poses::Edit::Moved)
             {
                 // Its contacts and ground are found again where it now is, so this tick's move starts from there.
                 m_backend->TeleportCharacter(record.id, world.pos, world.rot);
                 record.moved.carriedVelocity = Math::Vec3(0.0f);
-                m_poses->SnapCharacter(id);
             }
-            else if (!Same(world.rot, record.world.rot))
+            else if (edit == Poses::Edit::Turned)
             {
                 // Not a teleport: the next move pushes the turned shape out of anything it now overlaps.
                 m_backend->TurnCharacter(record.id, world.rot);
             }
-            record.world = world;
         }
     }
 
@@ -229,14 +227,6 @@ namespace Fenrir::Detail
         }
     }
 
-    void Characters::HandPoses()
-    {
-        for (const auto& [id, record] : m_characters)
-        {
-            m_poses->HandCharacter(id, record.moved.position);
-        }
-    }
-
     std::vector<std::span<const Backend::Touch>> Characters::MoveContacts() const
     {
         std::vector<std::span<const Backend::Touch>> moves;
@@ -254,13 +244,15 @@ namespace Fenrir::Detail
         return character == m_characters.end() ? nullptr : &character->second.moved.contacts;
     }
 
-    void Characters::ReadBack()
+    void Characters::HandPoses()
     {
         const auto handle = [this](std::uint32_t id) { return id == ~0u ? Entity() : m_entities->HandleOf(id); };
         for (auto& [id, record] : m_characters)
         {
             const Backend::CharacterMoved& moved = record.moved;
-            record.world = m_poses->CharacterStepPose(id);
+            Transform world;
+            world.pos = moved.position;
+            m_poses->Hand(id, Poses::Kind::Character, world);
 
             CharacterBody& body = m_entities->GetEntity(id).GetComponent<CharacterBody>();
             body.velocity = moved.velocity;
@@ -286,7 +278,7 @@ namespace Fenrir::Detail
         {
             // The shape it has, not the Collider's: while a shape edit waits, that is the one bodies and queries see.
             canvas.Collider(record.shape, Transform(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), record.scale),
-                            record.world, DebugColour::Character);
+                            m_poses->Baseline(id), DebugColour::Character);
 
             const Backend::CharacterMoved& moved = record.moved;
             if (moved.ground == GroundState::OnGround || moved.ground == GroundState::OnSteepGround)
@@ -297,8 +289,8 @@ namespace Fenrir::Detail
             }
             if (moved.movedVelocity != Math::Vec3(0.0f))
             {
-                canvas.Line(record.world.pos, record.world.pos + velocitySeconds * moved.movedVelocity,
-                            DebugColour::Velocity);
+                const Math::Vec3& at = m_poses->Baseline(id).pos;
+                canvas.Line(at, at + velocitySeconds * moved.movedVelocity, DebugColour::Velocity);
             }
         }
     }

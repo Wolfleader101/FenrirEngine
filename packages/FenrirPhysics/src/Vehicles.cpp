@@ -907,7 +907,7 @@ namespace Fenrir::Detail
                 for (const std::uint32_t wheel : wheels)
                 {
                     const VehicleWheel& settings = m_entities->GetEntity(wheel).GetComponent<VehicleWheel>();
-                    desc.wheels.push_back(WheelDesc(wheel, settings, body->world.scale));
+                    desc.wheels.push_back(WheelDesc(wheel, settings, m_poses->Baseline(chassis).scale));
                     record.appliedWheels.push_back(settings);
                 }
                 if (record.carry)
@@ -934,7 +934,7 @@ namespace Fenrir::Detail
                 record.maxTilt = vehicle.maxTilt;
                 record.kind = vehicle.kind;
                 record.applied = desc.kind;
-                PoseWheels(record, m_backend->ReadVehicle(record.id), body->world);
+                PoseWheels(record, m_backend->ReadVehicle(record.id), m_poses->Baseline(chassis));
                 wake = true;
             }
             else
@@ -949,7 +949,7 @@ namespace Fenrir::Detail
                     wake = true;
                 }
                 // The wheels, the probe and the tilt limit.
-                wake = SyncVehicleSettings(record, vehicle, body->world.scale) || wake;
+                wake = SyncVehicleSettings(record, vehicle, m_poses->Baseline(chassis).scale) || wake;
             }
             // Differential and anti-roll-bar edits and relinks, live.
             if (!Same(links.differentials, record.links.differentials))
@@ -1073,9 +1073,8 @@ namespace Fenrir::Detail
                 posed.insert(record.wheels[i]);
             }
             // After the chassis's write-back, against its step pose.
-            const Bodies::Record& body = *m_bodies->RecordOf(chassis);
-            PoseWheels(record, read, body.world);
-            AdvanceWheels(record, read, dt, m_poses->BodyShown(chassis).snap);
+            PoseWheels(record, read, m_poses->Baseline(chassis));
+            AdvanceWheels(record, read, dt, m_poses->Snaps(chassis));
         }
         // A wheel of no made vehicle: its state reset, and its Transform left where it was.
         for (const std::uint32_t wheel : m_wheelEntities.Entities())
@@ -1123,9 +1122,9 @@ namespace Fenrir::Detail
         {
             // Shown as its chassis is: only a chassis Blend blended (interpolated, and not held by game code) carries
             // its wheels between steps. Otherwise they stay at their step poses.
-            const Bodies::Record* body = m_bodies->RecordOf(chassis);
-            if (!record.Made() || record.current.size() != record.wheels.size() || body == nullptr ||
-                !m_poses->BodyShown(chassis).blended || !m_entities->HasEntity(chassis))
+            const std::optional<Transform> at = m_poses->BlendedPose(chassis, fraction);
+            if (!record.Made() || record.current.size() != record.wheels.size() ||
+                m_bodies->RecordOf(chassis) == nullptr || !at || !m_entities->HasEntity(chassis))
             {
                 continue;
             }
@@ -1140,7 +1139,6 @@ namespace Fenrir::Detail
             {
                 continue;
             }
-            const Transform at = m_poses->BodyShown(chassis).Between(fraction);
             // Every true local Transform is saved before any is overwritten.
             record.trueLocals.clear();
             for (const std::uint32_t id : record.wheels)
@@ -1167,8 +1165,8 @@ namespace Fenrir::Detail
                 Entity wheel = m_entities->GetEntity(id);
                 // The scale stays game code's.
                 Transform world = GetWorldTransform(wheel);
-                world.pos = at.pos + at.rot * local.pos;
-                world.rot = at.rot * local.rot;
+                world.pos = at->pos + at->rot * local.pos;
+                world.rot = at->rot * local.rot;
                 SetWorldTransform(wheel, world);
             }
             record.blended = true;
@@ -1205,7 +1203,7 @@ namespace Fenrir::Detail
             {
                 continue;
             }
-            const Transform& body = m_bodies->RecordOf(chassis)->world;
+            const Transform& body = m_poses->Baseline(chassis);
             const Backend::VehicleRead read = m_backend->ReadVehicle(record.id);
             for (std::size_t i = 0; i < record.given.size(); ++i)
             {
