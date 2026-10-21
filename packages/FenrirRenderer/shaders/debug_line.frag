@@ -1,0 +1,8 @@
+#version 460
+layout(location = 0) in vec4 vColour;
+layout(location = 0) out vec4 outColour;
+
+void main()
+{
+    outColour = vColour;
+}

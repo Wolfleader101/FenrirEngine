@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
+option(FENRIR_ENABLE_RENDERER_SPIKE "SPIKE: FenrirInput, FenrirWindow (SDL3), FenrirAssets, FenrirDebugDraw, FenrirRenderer and examples/RendererSpike" ON)
 option(FENRIR_BUILD_EXAMPLES "Build the DemoApp (needs its third-party libraries in examples/DemoApp/libs, which are not submodules)" ON)
 
 # One CTest run for every package that has tests.
@@ -61,6 +62,15 @@ endif()
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)
+endif()
+
+if(FENRIR_ENABLE_RENDERER_SPIKE)
+    add_subdirectory(packages/FenrirInput)
+    add_subdirectory(packages/FenrirWindow)
+    add_subdirectory(packages/FenrirAssets)
+    add_subdirectory(packages/FenrirDebugDraw)
+    add_subdirectory(packages/FenrirRenderer)
+    add_subdirectory(examples/RendererSpike)
 endif()
 
 if(FENRIR_BUILD_EXAMPLES)

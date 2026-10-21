@@ -549,7 +549,45 @@ namespace Fenrir
             }
         }
 
+        /**
+         * @brief SPIKE: the app's resource of type `T` (process-wide state a package keeps, one value per type), or
+         * null. ADR-0017 and ADR-0021 assume app-wide resources; FenrirApp had none. Same shape as Scene's.
+         */
+        template <typename T>
+        [[nodiscard]] T* GetResource()
+        {
+            const auto it = m_resources.find(std::type_index(typeid(T)));
+            return it == m_resources.end() ? nullptr : static_cast<T*>(it->second.get());
+        }
+
+        /** @brief SPIKE: constructs the app's resource of type `T`, replacing any it had. */
+        template <typename T, typename... Args>
+        T& AddResource(Args&&... args)
+        {
+            ResourcePtr resource(new T(std::forward<Args>(args)...), &DestroyResource<T>);
+            T& added = *static_cast<T*>(resource.get());
+            m_resources.insert_or_assign(std::type_index(typeid(T)), std::move(resource));
+            return added;
+        }
+
+        /** @brief SPIKE: destroys the app's resource of type `T`, if any. */
+        template <typename T>
+        void RemoveResource()
+        {
+            m_resources.erase(std::type_index(typeid(T)));
+        }
+
       private:
+        using ResourcePtr = std::unique_ptr<void, void (*)(void*)>;
+
+        template <typename T>
+        static void DestroyResource(void* resource)
+        {
+            delete static_cast<T*>(resource);
+        }
+
+        std::unordered_map<std::type_index, ResourcePtr> m_resources;
+
         Time m_time;
         Scheduler m_scheduler;
         std::unique_ptr<ILogger> m_logger;

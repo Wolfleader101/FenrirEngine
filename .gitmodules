@@ -13,3 +13,12 @@
 [submodule "packages/FenrirPhysics/libs/JoltPhysics"]
 	path = packages/FenrirPhysics/libs/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics
+[submodule "packages/FenrirWindow/libs/SDL"]
+	path = packages/FenrirWindow/libs/SDL
+	url = https://github.com/libsdl-org/SDL
+[submodule "packages/FenrirRenderer/ShaderCompiler/libs/glslang"]
+	path = packages/FenrirRenderer/ShaderCompiler/libs/glslang
+	url = https://github.com/KhronosGroup/glslang
+[submodule "packages/FenrirRenderer/ShaderCompiler/libs/SPIRV-Reflect"]
+	path = packages/FenrirRenderer/ShaderCompiler/libs/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect

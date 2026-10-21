@@ -41,6 +41,8 @@ namespace Fenrir
         AfterTicks,
         Update,
         PostUpdate,
+        /** @brief SPIKE: once per frame after PostUpdate, on the main thread (ADR-0019). Reads scene state only. */
+        Render,
         // CreateScene,
         // LastUpdate,
         Exit
