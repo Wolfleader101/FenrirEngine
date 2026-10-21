@@ -1,7 +1,7 @@
 # How are debug lines and text drawn?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 13
 
 ## Question
