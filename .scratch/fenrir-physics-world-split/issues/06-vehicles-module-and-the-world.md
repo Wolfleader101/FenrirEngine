@@ -12,9 +12,11 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (new `Vehicles.hpp`; `WorldImpl.hpp`, `PhysicsWorld.cpp`, `Vehicles.cpp`, `DebugLines.cpp` removed, `DebugCanvas.*`, `Contacts.*`), `packages/FenrirPhysics/CMakeLists.txt`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `WorldImpl.hpp` declares no vehicle, wheel or link record, set or method, and no `ComponentWatch` or tracked set.
-- [ ] `src/DebugLines.cpp` no longer exists.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+- [x] `WorldImpl.hpp` declares no vehicle, wheel or link record, set or method, and no `ComponentWatch` or tracked set.
+- [x] `src/DebugLines.cpp` no longer exists.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] Smoke runs (`FENRIR_DEMO_KEYS=1`) of every physics scene with no errors: `"Physics (C#)"`, `"Joints (C++)"`, `"Joints (C#)"`, `"Character (C++)"`, `"Character (C#)"`, `"Vehicles (C++)"`, `"Motorcycle (C++)"`, `"Tank (C++)"`, `"Vehicles (C#)"`.
+
+**Resolved by:** PR #78 (branch claude/physics-world-split-06), into claude/physics-world-split-spec. Vehicles is `src/Vehicles.hpp` in `Fenrir::Detail`, with `Vehicles.cpp` kept as its file. It owns the four vehicle tracked sets (made in the same order as before), `VehicleRecord`, `VehicleLinkRecord` and the wheel warnings, and `Step` calls its `Drain`, `DropOn`, `Sync` and `WriteBack`; `Restore` and `Blend` call its `RestoreWheels` and `BlendWheels`. It reads the chassis through Bodies' `RecordOf` and its `Shown` through `Poses::BodyShown`, both const, and its seven backend calls are unchanged. `DebugLines.cpp` is gone: `Vehicles::Draw` replaces `DrawVehicles` (with `GripColour` beside it), and the category switch (`DrawDebugLines`) and `PhysicsWorld`'s three debug-line methods moved to `PhysicsWorld.cpp`, the categories called in the same order. `WorldImpl.hpp` now holds the backend, the six modules, the canvas and the categories switched on, `Step`/`Restore`/`Blend`, and what the public methods and queries read (`BodyView`, `ToBackend`, the `EntityList`); its unused `ILogger` member went with the vehicles. `clang-x64-debug` passes 81/81 tests, and `scripts/demo-smoke.sh` passed all nine physics scenes.
