@@ -1,0 +1,28 @@
+name: Ticket headers
+
+# Checks every local ticket's Status and Blocked by lines (scripts/check_tickets.py), the same check the pre-commit hook runs.
+
+on:
+  pull_request:
+    paths:
+      - ".scratch/**"
+      - "scripts/check_tickets.py"
+  push:
+    branches:
+      - dotnet-scripting
+      - main
+    paths:
+      - ".scratch/**"
+      - "scripts/check_tickets.py"
+
+jobs:
+  tickets:
+    name: Ticket headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check ticket headers
+        run: python scripts/check_tickets.py

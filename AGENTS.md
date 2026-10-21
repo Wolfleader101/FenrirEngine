@@ -14,7 +14,7 @@ Single-context: one `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agen
 
 ## Build and test
 
-Commands, options and submodules: the "Building and testing" section of `README.md`. Once per clone, `git config core.hooksPath .githooks` turns on the clang-format pre-commit hook.
+Commands, options and submodules: the "Building and testing" section of `README.md`. Once per clone, `git config core.hooksPath .githooks` turns on the pre-commit hook (clang-format, and ticket headers in `.scratch`).
 
 ## Standards
 

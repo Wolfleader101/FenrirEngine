@@ -16,6 +16,10 @@ ctest --test-dir out/build/clang-x64-debug
 
 CI (`.github/workflows/build-and-test.yml`) runs these steps without the DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`.
 
+Before opening a PR, build and test `clang-x64-debug`, and run the DemoApp smoke run of each scene the change touches
+(`FENRIR_DEMO_SCENE` with `FENRIR_DEMO_KEYS=1`, see `examples/DemoApp/README.md`). CI checks the other presets on the PR;
+build one locally only to chase a failure CI reports there.
+
 | Option | Default | Effect |
 | --- | --- | --- |
 | `FENRIR_ENABLE_SCRIPTING` | `OFF` | Adds Iris and the C# scripting package (needs the .NET SDK). With it off, nothing looks for .NET. |

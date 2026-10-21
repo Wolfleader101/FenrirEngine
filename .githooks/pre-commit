@@ -1,18 +1,32 @@
 #!/bin/sh
-# Refuses a commit whose staged C++ in packages/ is not clang-format clean: the check CI runs on pull requests.
+# Refuses a commit whose staged C++ in packages/ is not clang-format clean, or that stages a local ticket
+# (.scratch/*/issues/) with a malformed Status or Blocked by line: the checks CI runs on pull requests.
 # Enable once per clone: git config core.hooksPath .githooks
 # CI uses clang-format 13; a much newer local clang-format can disagree about a few constructs.
 
-files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^packages/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$' | grep -v '/libs/')
-[ -z "$files" ] && exit 0
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+status=0
 
-if ! command -v clang-format >/dev/null 2>&1; then
-    echo "pre-commit: clang-format is not on PATH, so formatting was not checked." >&2
-    exit 0
+files=$(echo "$staged" | grep -E '^packages/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$' | grep -v '/libs/')
+if [ -n "$files" ]; then
+    if ! command -v clang-format >/dev/null 2>&1; then
+        echo "pre-commit: clang-format is not on PATH, so formatting was not checked." >&2
+    elif ! report=$(echo "$files" | xargs clang-format --dry-run --Werror 2>&1); then
+        echo "$report" >&2
+        echo "pre-commit: the files above are not clang-format clean. Run 'clang-format -i' on them and 'git add' them again." >&2
+        status=1
+    fi
 fi
 
-if ! report=$(echo "$files" | xargs clang-format --dry-run --Werror 2>&1); then
-    echo "$report" >&2
-    echo "pre-commit: the files above are not clang-format clean. Run 'clang-format -i' on them and 'git add' them again." >&2
-    exit 1
+# The ticket check reads the working tree, which holds what was staged unless a file was edited again after 'git add'.
+if echo "$staged" | grep -qE '^\.scratch/[^/]+/issues/'; then
+    python=$(command -v python3 || command -v python)
+    if [ -z "$python" ]; then
+        echo "pre-commit: Python is not on PATH, so the ticket headers were not checked." >&2
+    elif ! "$python" scripts/check_tickets.py; then
+        echo "pre-commit: fix the ticket headers above (docs/agents/issue-tracker.md) and 'git add' them again." >&2
+        status=1
+    fi
 fi
+
+exit $status
