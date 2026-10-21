@@ -329,3 +329,17 @@ How much a tyre is sliding over the ground rather than rolling. Along the wheel,
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
+
+## FenrirEngine rendering
+
+**Graphics API**
+An interface a GPU driver offers: OpenGL, Vulkan, D3D12, Metal.
+*Avoid:* backend (a graphics backend is FenrirRenderer's code for one), renderer.
+
+**Graphics backend**
+FenrirRenderer's private adapter for one graphics API, or the null backend, which draws nothing. One is chosen when the renderer is installed, and nothing outside FenrirRenderer names it.
+*Avoid:* renderer, RHI, driver.
+
+**Graphics device**
+The thin, private interface every graphics backend implements: GPU resources, passes and the commands recorded into them. The rest of FenrirRenderer draws only through it.
+*Avoid:* RHI, GPU layer, render API.
