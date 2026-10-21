@@ -26,11 +26,13 @@ add_library(FenrirPhysics STATIC
     src/DebugCanvas.hpp
     src/FilterOf.hpp
     src/Hierarchy.hpp
+    src/InactiveTracker.hpp
     src/Joints.cpp
     src/Joints.hpp
     src/JointBreaking.cpp
     src/JointState.cpp
     src/LayerNames.hpp
+    src/OutOfRange.hpp
     src/Physics.cpp
     src/PhysicsState.hpp
     src/PhysicsWorld.cpp
@@ -41,6 +43,8 @@ add_library(FenrirPhysics STATIC
     src/SortAndSend.hpp
     src/Vehicles.cpp
     src/Vehicles.hpp
+    src/VehicleSettings.cpp
+    src/VehicleSettings.hpp
     src/WarnOnce.hpp
     src/WorldImpl.hpp
 

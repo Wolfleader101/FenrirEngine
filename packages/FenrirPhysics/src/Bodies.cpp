@@ -154,7 +154,16 @@ namespace Fenrir::Detail
           m_rigidBodyEntities(entities, ComponentType::Native<RigidBody>()),
           m_colliderEntities(entities, ComponentType::Native<Collider>()),
           m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
-          m_triggerEntities(entities, ComponentType::Native<Trigger>())
+          m_triggerEntities(entities, ComponentType::Native<Trigger>()),
+          m_empty(logger,
+                  [](std::uint32_t entity, const std::string& why) {
+                      return "The RigidBody of entity " + std::to_string(entity) + " " + why +
+                             "; it is inactive in physics until it has one";
+                  }),
+          m_characterChildren(logger, [](std::uint32_t entity, const std::string& why) {
+              return "The collider of entity " + std::to_string(entity) + " " + why +
+                     "; it makes no body until it has a RigidBody of its own or is moved from beneath the character";
+          })
     {
     }
 
@@ -302,41 +311,30 @@ namespace Fenrir::Detail
         // worked out every tick).
         std::map<std::uint32_t, std::vector<std::uint32_t>>& assembly = m_toMake;
         assembly.clear();
-        std::erase_if(m_characterChildren, [this](std::uint32_t id) { return !m_colliderEntities.Contains(id); });
+        m_characterChildren.Keep(m_colliderEntities.Entities());
         for (std::uint32_t collider : m_colliderEntities.Entities())
         {
             const Entity entity = m_entities->GetEntity(collider);
+            // A character's own collider is neither: whether it was beneath a character stays as it was.
             if (IsCharacterCollider(entity))
             {
                 continue;
             }
-            if (!IsCharacterChild(entity))
+            const bool beneath = IsCharacterChild(entity);
+            m_characterChildren.Report(collider,
+                                       beneath ? "is beneath a character body, which has no compound shape" : "");
+            if (!beneath)
             {
-                m_characterChildren.erase(collider);
                 assembly[BodyEntityOf(collider)].push_back(collider);
-            }
-            else if (m_characterChildren.insert(collider).second)
-            {
-                m_logger->Warn("The collider of entity " + std::to_string(collider) +
-                               " is beneath a character body, which has no compound shape; it makes no body until it "
-                               "has a RigidBody of its own or is moved from beneath the character");
             }
         }
 
+        m_empty.Keep(m_rigidBodyEntities.Entities());
         for (std::uint32_t rigidBody : m_rigidBodyEntities.Entities())
         {
-            if (assembly.contains(rigidBody))
-            {
-                m_empty.erase(rigidBody);
-            }
-            else if (m_empty.insert(rigidBody).second)
-            {
-                m_logger->Warn("The RigidBody of entity " + std::to_string(rigidBody) +
-                               " has no collider on its entity or beneath it; it is inactive in physics until it has "
-                               "one");
-            }
+            m_empty.Report(rigidBody,
+                           assembly.contains(rigidBody) ? "" : "has no collider on its entity or beneath it");
         }
-        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.Contains(entity); });
 
         // Rebuilt: bodies whose entity or colliders changed, whose set of colliders changed, or whose colliders'
         // shapes became usable or unusable (a collision mesh released, or a shape changed to one that can be made).

@@ -17,6 +17,7 @@
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "InactiveTracker.hpp"
 
 namespace Fenrir
 {
@@ -91,8 +92,6 @@ namespace Fenrir::Detail
             std::uint32_t warned = 0;
             // What the constraint applied to bodyB in the last step its bodies were awake for.
             Backend::JointLoad load;
-            // Inactive: it names no pair of made body entities. Warned about each time it becomes so.
-            bool inactive = false;
         };
 
         /** @brief The body `body` names, if it is a made body entity of this world; null otherwise. */
@@ -116,6 +115,8 @@ namespace Fenrir::Detail
         // diffed and solved in that order.
         TrackedComponents m_jointEntities;
         std::map<std::uint32_t, JointRecord> m_joints;
+        // Inactive joints: those naming no pair of made body entities.
+        InactiveTracker m_inactive;
         // The joint entities whose constraints join each backend body, by its BodyId: removed before the body is.
         std::map<std::uint32_t, std::set<std::uint32_t>> m_jointsOfBody;
         // The joints the last step broke, sent right after its contact and trigger events.

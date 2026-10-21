@@ -16,6 +16,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "InactiveTracker.hpp"
 
 namespace Fenrir
 {
@@ -186,10 +187,10 @@ namespace Fenrir::Detail
         TrackedComponents m_characterEntities;
         TrackedComponents m_triggerEntities;
 
-        // RigidBodies with no collider: inactive in physics. Each is warned about once, when it becomes one.
-        std::set<std::uint32_t> m_empty;
-        // Solid colliders beneath a character: each is warned about once, when it becomes one.
-        std::set<std::uint32_t> m_characterChildren;
+        // RigidBodies with no collider: inactive in physics.
+        InactiveTracker m_empty;
+        // Solid colliders beneath a character: they make no body.
+        InactiveTracker m_characterChildren;
 
         // By the body's entity (its RigidBody's, or a static collider's own), so bodies are made, diffed and written
         // back in a reproducible order (ADR-0011).
