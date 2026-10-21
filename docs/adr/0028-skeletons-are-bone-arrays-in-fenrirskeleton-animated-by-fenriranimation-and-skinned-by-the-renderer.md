@@ -32,6 +32,7 @@ Seven parts, each with one job:
 - **Modifiers supply targets in local, model or world space** through FenrirSkeleton's interface (an IK solver aims in model or world space; a ragdoll produces world-space body transforms). Finalisation resolves them into final local transforms, in order.
 - **The first implementation has one modifier:** a weighted per-bone override, enough for a ragdoll going limp or blending back. It is an initial implementation, not the contract for all pose modification; ordered modifiers (layers and masks, IK, procedural, ragdoll, gameplay) replace or generalise it as those features arrive.
 - *Amended by ADR-0033:* modifiers resolve their own targets in order through `PoseEdit` in the `Modify` pose stage; finalisation computes the model matrices left and places attachments, and the palette is computed lazily on read.
+- *Refined by ADR-0037:* a bone attachment's parent may be any entity; its bone index is cached outside the component; attachments are placed in dependency order, report an `AttachmentState`, and detach through `Skeleton::Detach`.
 - *Amended by ADR-0031:* `SkeletonPose` is a plain component naming the instance; its arrays live in FenrirSkeleton's `SkeletonPoses` scene resource. Clips bind to skeletons from their own file by source node identity, and to others by name.
 - **Clips name bones by name**, resolved to indices once per clip and skeleton and cached, so a clip plays on any skeleton whose bone names match.
 

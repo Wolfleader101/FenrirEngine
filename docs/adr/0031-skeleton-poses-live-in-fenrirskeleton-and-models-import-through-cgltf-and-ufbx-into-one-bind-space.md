@@ -36,6 +36,7 @@ ADR-0028 made skeletons bone arrays in a `SkeletonPose` component and left how i
 - **`SkeletonData` per bone** holds:
   - the source name;
   - a unique **engine name**, which is the source name, suffixed `#2`, `#3`… only on duplicates, with a diagnostic;
+    *Refined by ADR-0037:* a source name over 255 UTF-8 bytes is shortened at a character boundary and suffixed to stay unique, with a diagnostic; the source name and identity are kept.
   - the model node index;
   - the parent index (lower than the bone's own index, or −1 for a root; several roots are allowed);
   - the **rest** local TRS (the pose as authored);

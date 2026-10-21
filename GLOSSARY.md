@@ -613,8 +613,12 @@ A deterministic hash of a skeleton's bones, parents, engine names and inverse bi
 *Avoid:* skeleton hash, skeleton id, compatibility key.
 
 **Bone attachment**
-`BoneAttachment`: a component that places its entity at a bone of a skeleton entity, plus an offset. Finalisation owns the entity's resulting `Transform`.
+`BoneAttachment`: a component that places its entity at a bone of a skeleton entity, by the bone's name, plus an offset. While it is present, FenrirSkeleton owns the entity's `Transform`: the object is moved through the offset, and its parent may be any entity. A named attachment point is an ordinary node that already has one (ADR-0037).
 *Avoid:* socket, mount point, parent bone.
+
+**Attachment state**
+Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable. An attachment that is not placed keeps its last `Transform` (ADR-0037).
+*Avoid:* attachment status, resolved flag.
 
 **Animator**
 `Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034).
