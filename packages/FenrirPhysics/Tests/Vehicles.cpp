@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstring>
 #include <numbers>
 #include <string>
@@ -436,11 +437,13 @@ TEST_CASE("Adding and removing a wheel rebuilds the vehicle with its new wheel s
 
 namespace
 {
-    // When the car turns, once into the bumps.
+    // When the vehicles turn, once into the bumps.
     constexpr int turnAt = 480;
+    // Poses recorded each tick: the car's chassis first, then its four wheels, then the motorcycle's and the tank's.
+    constexpr std::size_t posesPerTick = (1 + 4) + (1 + 2) + (1 + 2 * tankWheelsASide);
 
-    // A car over bumps and into a turn: the chassis's and every wheel's world pose after each tick, the chassis's
-    // first of each five.
+    // A car, a motorcycle and a tank side by side over bumps, past a row of crates and into a turn: each chassis's
+    // and every wheel's world pose after each tick.
     std::vector<Transform> DriveRecorded(const PhysicsConfig& config)
     {
         PhysicsApp test(config);
@@ -449,22 +452,41 @@ namespace
         {
             Entity bump = Place(test.Entities(), Math::Vec3(0.0f, 0.0f, -10.0f - 3.0f * static_cast<float>(i)));
             bump.GetComponent<Transform>().rot = Math::AngleAxis(0.785f, Math::Vec3(1.0f, 0.0f, 0.0f));
-            bump.AddComponent<Collider>(Collider{BoxShape{Math::Vec3(3.0f, 0.1f, 0.1f)}});
+            bump.AddComponent<Collider>(Collider{BoxShape{Math::Vec3(12.0f, 0.1f, 0.1f)}});
         }
-        Car car = AddCar(test.Entities(), Math::Vec3(0.0f, 1.0f, 0.0f));
+        for (int i = 0; i < 12; ++i)
+        {
+            Entity crate = Place(test.Entities(), Math::Vec3(-11.0f + 2.0f * static_cast<float>(i), 0.3f, -45.0f));
+            crate.AddComponent<RigidBody>(RigidBody{.mass = 20.0f});
+            crate.AddComponent<Collider>(Collider{BoxShape{Math::Vec3(0.3f)}});
+        }
+        const std::vector<Car> vehicles = {AddCar(test.Entities(), Math::Vec3(0.0f, 1.0f, 0.0f)),
+                                           AddMotorcycle(test.Entities(), Math::Vec3(-6.0f, 1.0f, 0.0f)),
+                                           AddTank(test.Entities(), Math::Vec3(7.0f, 1.5f, 0.0f))};
         // At part throttle: flat out, the bumps throw the car about, so where it gets to differs between platforms.
-        Drive(test.app, car.chassis, [](int index, Vehicle& vehicle) {
+        Drive(test.app, vehicles[0].chassis, [](int index, Vehicle& vehicle) {
             vehicle.input.forward = 0.6f;
             vehicle.input.steer = index > turnAt ? 0.6f : 0.0f;
+        });
+        Drive(test.app, vehicles[1].chassis, [](int index, Vehicle& vehicle) {
+            vehicle.input.forward = 0.4f;
+            vehicle.input.steer = index > turnAt ? -0.3f : 0.0f;
+        });
+        Drive(test.app, vehicles[2].chassis, [](int index, Vehicle& vehicle) {
+            vehicle.input.forward = 0.6f;
+            vehicle.input.rightTrack = index > turnAt ? 0.6f : 1.0f;
         });
         std::vector<Transform> poses;
         for (int i = 0; i < 600; ++i)
         {
             test.app.RunFrame(tick);
-            poses.push_back(GetWorldTransform(car.chassis));
-            for (const Entity& wheel : car.wheels)
+            for (const Car& vehicle : vehicles)
             {
-                poses.push_back(GetWorldTransform(wheel));
+                poses.push_back(GetWorldTransform(vehicle.chassis));
+                for (const Entity& wheel : vehicle.wheels)
+                {
+                    poses.push_back(GetWorldTransform(wheel));
+                }
             }
         }
         return poses;
@@ -479,15 +501,19 @@ namespace
     }
 } // namespace
 
-TEST_CASE("Two drives of a car over bumps are bit-identical over 600 ticks, threaded or not", "[physics][vehicles]")
+TEST_CASE("Two drives of a car, a motorcycle and a tank over bumps and crates are bit-identical over 600 ticks, "
+          "threaded or not",
+          "[physics][vehicles]")
 {
     PhysicsConfig threaded = StepPosesOnly();
     PhysicsConfig single = StepPosesOnly();
     single.useWorkerThreads = false;
     const std::vector<Transform> first = DriveRecorded(threaded);
+    INFO("the spike's 16 200 poses");
+    REQUIRE(first.size() == 600 * posesPerTick);
 
     // The bumps run from z = -10 to -37.
-    const float beforeTurning = first[5 * turnAt].pos.z;
+    const float beforeTurning = first[posesPerTick * turnAt].pos.z;
     INFO("the car was well into the bumps before it turned (it was at z = " << beforeTurning << ")");
     REQUIRE(beforeTurning < -20.0f);
     INFO("a second threaded run gives every chassis and wheel pose, bit for bit");

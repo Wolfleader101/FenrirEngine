@@ -177,6 +177,48 @@ namespace Fenrir
     };
 
     /**
+     * @brief One track of a tracked vehicle: the wheels whose VehicleWheel::track names its side, turning together.
+     * Every field is a live edit.
+     *
+     * Grip on each surface: `longitudinalFriction` and `lateralFriction` combine with the ground's
+     * PhysicsMaterial::friction as a tyre's curve does, as the geometric mean `sqrt(track * ground)`.
+     */
+    struct VehicleTrack
+    {
+        /** @brief kg m²: the track's and its wheels' inertia, as seen on its driven wheel. Kept above 0. */
+        float inertia = 10.0f;
+        float angularDamping = 0.5f;
+        /** @brief Newton metres at full `brake`. */
+        float maxBrakeTorque = 15000.0f;
+        /** @brief The gearbox's turns per turn of the track's driven wheel. Kept above 0. */
+        float differentialRatio = 6.0f;
+        float longitudinalFriction = 4.0f;
+        float lateralFriction = 2.0f;
+    };
+
+    /**
+     * @brief A tracked vehicle (a tank): two tracks, `left` and `right`, each driven at its own speed ratio, so it
+     * steers by VehicleInput::leftTrack and `rightTrack` and pivots on the spot when they are opposite. Game code turns
+     * steering into track ratios. It ignores `steer`, `handbrake` and differentials, and its wheels' tyre, brake, steer
+     * and inertia fields: its tracks hold its grip, brakes and inertia. Its tracked wheels have no slip.
+     *
+     * Each track's driven wheel is its rearmost wheel (the largest chassis-local z), whose radius turns the track's
+     * spin into its speed; a track with no wheels does nothing.
+     */
+    struct TrackedVehicle
+    {
+        VehicleEngine engine = {.minRpm = 500.0f, .maxRpm = 4000.0f, .peakTorqueRpm = 3000.0f};
+        VehicleTransmission transmission = {.gearCount = 4,
+                                            .firstGear = 4.0f,
+                                            .topGear = 1.0f,
+                                            .reverseGear = 4.0f,
+                                            .shiftUpRpm = 3500.0f,
+                                            .shiftDownRpm = 1000.0f};
+        VehicleTrack left = {};
+        VehicleTrack right = {};
+    };
+
+    /**
      * @brief A trailer, wagon or hand cart: a vehicle with no engine and no gearbox, towed by an ordinary Joint. It
      * reads VehicleInput's `brake`, `handbrake` and `steer` (for a steered dolly) and ignores `forward`, `gear` and
      * `clutch`, and every VehicleDifferential: its wheels only roll, brake and steer. Its `state` engine and gear
@@ -191,6 +233,7 @@ namespace Fenrir
     {
         Wheeled,
         Motorcycle,
+        Tracked,
         Trailer
     };
 
@@ -220,6 +263,11 @@ namespace Fenrir
         {
         }
 
+        /** @brief A tracked vehicle. Implicit, so one can be assigned where a kind is wanted. */
+        VehicleKind(TrackedVehicle tracked) : m_type(VehicleType::Tracked), m_tracked(tracked)
+        {
+        }
+
         /** @brief A trailer. Implicit, so one can be assigned where a kind is wanted. */
         VehicleKind(TrailerVehicle trailer) : m_type(VehicleType::Trailer), m_trailer(trailer)
         {
@@ -231,7 +279,8 @@ namespace Fenrir
             return m_type;
         }
 
-        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle, MotorcycleVehicle or TrailerVehicle). */
+        /** @brief Whether the vehicle is of kind `T` (WheeledVehicle, MotorcycleVehicle, TrackedVehicle or
+         * TrailerVehicle). */
         template <typename T>
         [[nodiscard]] bool Is() const
         {
@@ -266,10 +315,15 @@ namespace Fenrir
             {
                 return VehicleType::Motorcycle;
             }
+            else if constexpr (std::is_same_v<T, TrackedVehicle>)
+            {
+                return VehicleType::Tracked;
+            }
             else
             {
                 static_assert(std::is_same_v<T, TrailerVehicle>, "VehicleKind holds WheeledVehicle, "
-                                                                 "MotorcycleVehicle or TrailerVehicle");
+                                                                 "MotorcycleVehicle, TrackedVehicle or "
+                                                                 "TrailerVehicle");
                 return VehicleType::Trailer;
             }
         }
@@ -285,6 +339,10 @@ namespace Fenrir
             {
                 return self.m_motorcycle;
             }
+            else if constexpr (TypeOf<T>() == VehicleType::Tracked)
+            {
+                return self.m_tracked;
+            }
             else
             {
                 return self.m_trailer;
@@ -295,6 +353,7 @@ namespace Fenrir
         union {
             WheeledVehicle m_wheeled;
             MotorcycleVehicle m_motorcycle;
+            TrackedVehicle m_tracked;
             TrailerVehicle m_trailer;
         };
     };

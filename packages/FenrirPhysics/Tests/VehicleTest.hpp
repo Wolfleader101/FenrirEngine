@@ -142,6 +142,39 @@ namespace PhysicsTest
         return joint;
     }
 
+    inline constexpr float tankMass = 4000.0f;
+    inline constexpr int tankWheelsASide = 9;
+
+    /** The spike's tank: a 4000 kg unscaled box chassis 6.4 m long, the default TrackedVehicle, and nine wheels a
+     * side, left then right, each side front to back, the end ones rigid and higher. */
+    inline Car AddTank(Fenrir::EntityList& entities, const Fenrir::Math::Vec3& at,
+                       const Fenrir::Math::Quat& rotation = identity)
+    {
+        Car tank;
+        tank.chassis = Place(entities, at);
+        tank.chassis.GetComponent<Fenrir::Transform>().rot = rotation;
+        tank.chassis.AddComponent<Fenrir::RigidBody>(Fenrir::RigidBody{.mass = tankMass});
+        tank.chassis.AddComponent<Fenrir::Collider>(
+            Fenrir::Collider{Fenrir::BoxShape{Fenrir::Math::Vec3(1.7f, 0.5f, 3.2f)}});
+        tank.chassis.AddComponent<Fenrir::Vehicle>(Fenrir::Vehicle{.kind = Fenrir::TrackedVehicle{}});
+        for (const float x : {-1.7f, 1.7f})
+        {
+            for (int i = 0; i < tankWheelsASide; ++i)
+            {
+                const bool end = i == 0 || i == tankWheelsASide - 1;
+                const Fenrir::Math::Vec3 position(x, end ? -0.6f : -0.8f, -2.8f + 0.7f * static_cast<float>(i));
+                Fenrir::Entity wheel = Place(entities, at + rotation * position);
+                wheel.AddComponent<Fenrir::VehicleWheel>(Fenrir::VehicleWheel{
+                    .vehicle = tank.chassis,
+                    .position = position,
+                    .track = x < 0.0f ? Fenrir::VehicleTrackSide::Left : Fenrir::VehicleTrackSide::Right,
+                    .suspension = {.travel = end ? 0.0f : 0.2f, .spring = {.frequency = 1.0f, .damping = 0.5f}}});
+                tank.wheels.push_back(wheel);
+            }
+        }
+        return tank;
+    }
+
     /** A static floor of `friction` whose top is at y = 0, `size` across. */
     inline Fenrir::Entity AddFloor(Fenrir::EntityList& entities, float friction = 0.5f, float size = 2000.0f)
     {

@@ -69,8 +69,8 @@ namespace Fenrir::Backend
     };
 
     /**
-     * @brief A wheeled vehicle's or a motorcycle's drivetrain: its engine, gearbox and limited-slip ratio. A trailer's
-     * is the defaults in Manual, held in neutral, so nothing drives its wheels.
+     * @brief A vehicle's drivetrain: its engine, gearbox and limited-slip ratio (a tracked vehicle's limited-slip ratio
+     * is the default, unused). A trailer's is the defaults in Manual, held in neutral, so nothing drives its wheels.
      */
     inline WheeledVehicle DrivetrainOf(const VehicleKind& kind)
     {
@@ -84,6 +84,11 @@ namespace Fenrir::Backend
             return WheeledVehicle{.engine = motorcycle.engine,
                                   .transmission = motorcycle.transmission,
                                   .limitedSlipRatio = motorcycle.limitedSlipRatio};
+        }
+        if (kind.Is<TrackedVehicle>())
+        {
+            const TrackedVehicle& tracked = kind.As<TrackedVehicle>();
+            return WheeledVehicle{.engine = tracked.engine, .transmission = tracked.transmission};
         }
         return kind.As<WheeledVehicle>();
     }
@@ -641,17 +646,19 @@ namespace Fenrir::Backend
         /**
          * @brief Applies a vehicle's kind, already in range, from the next Step: its engine (the current RPM kept in
          * its new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic
-         * shift under way is finished at once), its limited-slip ratio and a motorcycle's lean switches. The kind's
-         * type and a motorcycle's lean limit are as the vehicle was made with. Wakes its body. Never during a step.
+         * shift under way is finished at once), its limited-slip ratio, a motorcycle's lean switches and a tracked
+         * vehicle's tracks. The kind's type and a motorcycle's lean limit are as the vehicle was made with. Wakes its
+         * body. Never during a step.
          */
         void UpdateVehicle(VehicleId id, const VehicleKind& kind);
 
         /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call: in Manual its
-         * gear and clutch too, at once. Wakes its body if `wake`. */
+         * gear and clutch too, at once. A tracked vehicle takes `forward`, its track ratios (a ratio of 0 replaced by a
+         * tiny one) and `brake`. Wakes its body if `wake`. */
         void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
 
         /** @brief Replaces a vehicle's differentials, as VehicleDesc::differentials: none drives every wheel equally.
-         * Never during a step. */
+         * A tracked vehicle ignores them. Never during a step. */
         void SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials);
 
         /** @brief Replaces a vehicle's anti-roll bars. Never during a step. */
@@ -662,7 +669,8 @@ namespace Fenrir::Backend
         [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
 
         /** @brief Gives one of a vehicle's wheels, by its wheel index, new settings, patched in place: its spin and
-         * suspension carry on from where they are. Wakes nothing. Never during a step. */
+         * suspension carry on from where they are. A tracked vehicle's wheel may change track, and its tracks' driven
+         * wheels follow. Wakes nothing. Never during a step. */
         void UpdateVehicleWheel(VehicleId id, std::size_t wheel, const VehicleWheelDesc& desc);
 
         /** @brief How a vehicle's wheels find the ground from the next step. Wakes nothing. Never during a step. */
