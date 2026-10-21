@@ -19,6 +19,8 @@ add_library(FenrirPhysics STATIC
     src/BodyComponents.hpp
     src/Characters.cpp
     src/CollisionLayers.cpp
+    src/Contacts.cpp
+    src/Contacts.hpp
     src/DebugCanvas.cpp
     src/DebugCanvas.hpp
     src/DebugLines.cpp
@@ -35,6 +37,7 @@ add_library(FenrirPhysics STATIC
     src/Poses.hpp
     src/Queries.cpp
     src/Same.hpp
+    src/SortAndSend.hpp
     src/Vehicles.cpp
     src/WarnOnce.hpp
     src/WorldImpl.hpp

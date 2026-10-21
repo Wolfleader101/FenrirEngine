@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <set>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -225,6 +226,23 @@ namespace Fenrir
         {
             m_poses.HandCharacter(id, record.moved.position);
         }
+    }
+
+    std::vector<std::span<const Backend::Touch>> PhysicsWorld::Impl::CharacterMoveContacts() const
+    {
+        std::vector<std::span<const Backend::Touch>> moves;
+        moves.reserve(m_characters.size());
+        for (const auto& [id, record] : m_characters)
+        {
+            moves.emplace_back(record.moved.contacts);
+        }
+        return moves;
+    }
+
+    const std::vector<Backend::Touch>* PhysicsWorld::Impl::CharacterMoveContactsOf(const Entity& entity) const
+    {
+        const auto character = m_characters.find(entity.GetId());
+        return character == m_characters.end() ? nullptr : &character->second.moved.contacts;
     }
 
     void PhysicsWorld::Impl::ReadBackCharacter(Entity& entity, CharacterRecord& record)
