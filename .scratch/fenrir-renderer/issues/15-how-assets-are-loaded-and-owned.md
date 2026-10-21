@@ -1,7 +1,7 @@
 # How are meshes, textures, shaders, skeletons and clips loaded and owned?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 06, 08
 
 ## Question
