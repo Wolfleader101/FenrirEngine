@@ -37,6 +37,7 @@ The rule throughout is that a wrong configuration is visible and skipped, never 
 - **FenrirSkeleton stays GPU-free.** It provides:
   - **`PoseGeneration(entity)`:** a `u64` that finalisation advances when the finalised pose changes or the instance is rebuilt. It is drawn from a counter shared by the whole `SkeletonPoses` resource, so an instance recreated under a recycled entity id never repeats an earlier generation. Moving the skeleton entity's `Transform` does not advance it.
   - **The palette:** built lazily for the current generation and cached with the generation it was computed for. Reading it never changes the generation. Skeletons nothing skins never build one.
+- *Amended by ADR-0041:* the renderer reads `PoseState`, `PoseGeneration`, the palette and model matrices through FenrirAssets' `SkinningSource`, which FenrirSkeleton registers, and never links FenrirSkeleton. With no source registered, skinned draws are skipped with one warning.
 
 ## Formats
 

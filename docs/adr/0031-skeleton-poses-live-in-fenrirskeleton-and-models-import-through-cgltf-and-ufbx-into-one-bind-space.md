@@ -108,7 +108,7 @@ Per format:
   - adds `SkeletonPose` only to owners whose skeleton loaded;
   - calls `Ensure` on each;
   - only then adds the `BoneAttachment`s for ordinary nodes below bones.
-- **Wrappers.** `Skeleton::SpawnModel(scene, model, parent)` wraps both for headless apps. The renderer's `SpawnModel` calls both and then adds `MeshRenderer`s and skin references (ADR-0023, as amended by ADR-0028).
+- **Wrappers.** `Skeleton::SpawnModel(scene, model, parent)` wraps both for headless apps. The renderer's `SpawnModel` calls both and then adds `MeshRenderer`s and skin references (ADR-0023, as amended by ADR-0028). *Amended by ADR-0041:* the renderer calls `SpawnSkeletons` through the skinning source, and skips it when none is registered.
 
 ## Clip channels
 

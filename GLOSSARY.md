@@ -525,7 +525,7 @@ An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
 ## FenrirEngine animation
 
 **FenrirSkeleton**
-The engine's skeleton package: each skeleton's runtime pose, bone lookup, pose modifiers, finalisation and bone attachments. It works without animation, and FenrirRenderer reads it without knowing FenrirAnimation (ADR-0028).
+The engine's skeleton package: each skeleton's runtime pose, bone lookup, pose modifiers, finalisation and bone attachments. It works without animation. FenrirRenderer reads it only through the skinning source, knowing neither it nor FenrirAnimation (ADR-0028, ADR-0041).
 *Avoid:* rig, armature (Blender's).
 
 **FenrirAnimation**
@@ -603,6 +603,10 @@ One of the pose pipeline's public steps that others add work to, `Animate`, `Mod
 **Skinning palette**
 One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it, built lazily for the current pose generation. The renderer uploads it as rows of 3×4 affine matrices (ADR-0035).
 *Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
+
+**Skinning source**
+`SkinningSource`: the interface, declared in FenrirAssets, through which the renderer reads a skeleton instance's state, pose generation, skinning palette and model matrices, and spawns a model's skeletons. FenrirSkeleton registers its implementation at install; with none registered, rigid meshes still draw and skinned draws are skipped (ADR-0041).
+*Avoid:* skeleton service, pose provider, animation backend.
 
 **Pose generation**
 A number FenrirSkeleton advances whenever a skeleton instance's final pose changes or the instance is rebuilt, never repeated within a scene; moving the skeleton entity does not advance it. Caches of a pose (the palette, the renderer's upload) are keyed by it (ADR-0035).

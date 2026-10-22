@@ -23,6 +23,7 @@ Seven parts, each with one job:
 - **FenrirSkeleton** is a new package depending on FenrirAssets, FenrirECS, FenrirScene, FenrirApp and FenrirMath. It owns `SkeletonPose`, bone lookup by name, `GetBoneWorldMatrix`, pose modifiers' entry points, finalisation and bone attachments. A skeleton works without FenrirAnimation: posed by code, by a ragdoll or by an editor.
 - **FenrirAnimation** is a new package depending on FenrirSkeleton and FenrirAssets. It owns clip playback and blending and writes only the base pose. It has no GPU code and links no library; its runtime is written on glm, not ozz-animation.
 - **FenrirRenderer** depends on FenrirSkeleton, never on FenrirAnimation. Neither FenrirSkeleton nor FenrirAnimation depends on FenrirRenderer or FenrirPhysics, and FenrirPhysics depends on none of them.
+- *Amended by ADR-0041:* FenrirRenderer does not link or require FenrirSkeleton; it reaches live poses through a `SkinningSource` interface in FenrirAssets, which FenrirSkeleton registers at install.
 - **No renderer needed.** A server or a headless test spawns skeletal models, animates them and reads bone positions (hit boxes, attachments) with FenrirRenderer absent, and the packages are tested that way.
 
 ## Poses
