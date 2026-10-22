@@ -41,26 +41,38 @@ SDL's text input follows the input routers' `textInput` claims (ADR-0027). In ea
 
 ## Windows and events
 
-Windows are keyed by FenrirInput's `WindowId`. The foundation makes only the main window, `Window::MainWindow()`, but the API is shaped for several. `Exists`, `LogicalSize`, `PixelSize`, `ContentScale` and `IsMinimised` read a window as of this frame's `PreUpdate`.
+Windows are keyed by FenrirInput's `WindowId`. The foundation makes only the main window, `Window::MainWindow()`, but the API is shaped for several. `Exists`, `LogicalSize`, `PixelSize`, `ContentScale`, `IsMinimised` and `IsFocused` read a window as of this frame's `PreUpdate`.
 
 Events, read through `EventReader<T>` (ADR-0012), each name their window:
 
 - `WindowResizedEvent`: the logical size, pixel size or content scale changed. It carries the new values.
 - `WindowFocusEvent` (FenrirInput's): the window gained or lost the input focus. FenrirWindow feeds focus to the input feed, so `Keyboard::FocusedWindow` agrees.
-- `WindowCloseRequestedEvent`: the close button, or a quit signal (Ctrl+C) as the main window's close. With `stopOnMainWindowClose`, closing the main window also calls `App::Stop`. Without it, game code decides, for example to ask "save before quitting?".
+- `WindowCloseRequestedEvent`: the close button, `RequestClose(app, window)`, or a quit signal (Ctrl+C) as the main window's close. With `stopOnMainWindowClose`, closing the main window also calls `App::Stop`. Without it, game code decides, for example to ask "save before quitting?".
 
 ## Services
 
-- `SetCursorMode(app, window, mode)`: `Normal`, `Hidden`, or `Captured` (hidden, held in the window, with raw relative motion for mouse look).
+- `SetCursorMode(app, window, mode)`: `Normal`, `Hidden`, or `Captured` (hidden, held in the window, with raw relative motion for mouse look). `GetCursorMode` reads it back.
 - `SetCursorShape(app, window, shape)`: `Arrow`, `Text`, the four resize shapes, `Hand`, `NotAllowed`, or `Hidden`.
 - `ClipboardText(app)` and `SetClipboardText(app, text)`: the system clipboard, as UTF-8.
 - `SetTitle(app, window, title)`.
+- `RequestClose(app, window)`: does what the window's close button does (the event, and `App::Stop` for the main window with `stopOnMainWindowClose`). False for a window not made.
 
 A title, cursor mode or cursor shape set before the window is made is applied when it is made.
 
 ## The graphics surface
 
 The renderer's adapter makes and uses each window's graphics surface through static functions keyed by `WindowId`, with neutral types only (ADR-0022): `RequestSurface` (API, debug context, backbuffer description; for OpenGL, a 4.6 core context), `ReleaseSurface`, `HasSurface`, `GetProcAddress` (a `void*`), `MakeCurrent`, `Present`, `SetSwapInterval` (0 off, 1 vsync, -1 adaptive) and `PixelSize`. A surface must be requested before the first frame: a window made without one cannot gain one. `Present` on a hidden window does nothing.
+
+## Scripting
+
+With `FENRIR_ENABLE_SCRIPTING` on as well, the `FenrirWindowScripting` library gives C# the window (ADR-0029): add `Fenrir::Window::ScriptingExtension()` to `ScriptingConfig::extensions`, after `Fenrir::Input::ScriptingExtension()`, whose `Fenrir.Input` contract the window's uses (for `WindowId` and `WindowFocusEvent`). Call `fenrir_deploy_window_scripting(<target>)` beside `fenrir_deploy_scripting` and `fenrir_deploy_input_scripting`. The `Fenrir.Window` contract (`Managed/Fenrir.Window`) has:
+
+- `Window.Main`, and by `WindowId`: `Exists`, `Size`, `PixelSize` (as `WindowSize`), `ContentScale`, `IsMinimised`, `IsFocused`;
+- `GetCursorMode` and `SetCursorMode`, `SetCursorShape`, `SetTitle`, `RequestClose`;
+- `GetClipboard(Span<char>)`, which fills the span and returns the text's whole length in chars, and `SetClipboard`;
+- `WindowResizedEvent` and `WindowCloseRequestedEvent` as native events; focus changes are `Fenrir.Input.WindowFocusEvent`.
+
+The extension needs no `Window` owner, so scripts always load. With no window (no `Window` installed, or the window not made yet) or an id that names none, every function does nothing and returns `false`, zero, an empty size or text, or `CursorMode.Normal`; the clipboard needs the main window. A debug build warns once per native call site. Inside a `Fenrir.*` namespace, `Window` names the `Fenrir.Window` namespace, so write `Fenrir.Window.Window` there. `FenrirWindowScriptingTests` runs as `FenrirWindowScripting` (no window) and `FenrirWindowScripting-Display` (a hidden window; skipped without a display).
 
 ## Accepted for now
 

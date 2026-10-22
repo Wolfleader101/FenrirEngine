@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Window</AssemblyName>
+    <RootNamespace>Fenrir.Window</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirWindow's scripting contract (ADR-0029): the window's types and events, and the Window class over the native
+       functions FenrirWindowScripting gives C#. Built against the scripting SDK (for IEvent and the generators) and the
+       Fenrir.Input contract (for WindowId and the focus event); CMake passes -p:FenrirScriptingSdk=<the SDK folder>/ and
+       -p:FenrirInputContractDir=<the folder holding Fenrir.Input.dll>/. The host shares it with every script load, after
+       Fenrir.Input. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirInputContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the input contract comes from its source project. -->
+  <ItemGroup Condition="'$(FenrirInputContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

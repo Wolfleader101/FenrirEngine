@@ -82,6 +82,15 @@ if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirScripting)
 endif()
 
+# Each package's scripting extension builds against the scripting SDK, so comes after FenrirScripting. Input's needs only
+# scripting (FenrirInput is always built); Window's builds with the renderer, and after Input's, whose contract it uses.
+if(FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirInput/Scripting)
+endif()
+if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirWindow/Scripting)
+endif()
+
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)

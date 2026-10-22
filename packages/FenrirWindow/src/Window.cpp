@@ -223,6 +223,17 @@ namespace Fenrir
             return true;
         }
 
+        // What a close request for `window` does, from its close button or Window::RequestClose: the event, and with
+        // stopOnMainWindowClose the app stopped when it is the main window.
+        void CloseRequested(App& app, const WindowState& state, WindowId window)
+        {
+            app.SendEvent(WindowCloseRequestedEvent{window});
+            if (window == Window::MainWindow() && state.config.stopOnMainWindowClose)
+            {
+                app.Stop();
+            }
+        }
+
         void SleepSeconds(double seconds)
         {
             if (seconds > 0.0)
@@ -262,21 +273,13 @@ namespace Fenrir
                 case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
                     if (const WindowRecord* window = state.FindSdl(event.window.windowID))
                     {
-                        app.SendEvent(WindowCloseRequestedEvent{window->id});
-                        if (window->id == Window::MainWindow() && state.config.stopOnMainWindowClose)
-                        {
-                            app.Stop();
-                        }
+                        CloseRequested(app, state, window->id);
                     }
                     break;
                 case SDL_EVENT_QUIT:
                     // Only a signal (Ctrl+C) sends it, since closing the last window does not (Install's hint): it is
                     // the main window's close request.
-                    app.SendEvent(WindowCloseRequestedEvent{Window::MainWindow()});
-                    if (state.config.stopOnMainWindowClose)
-                    {
-                        app.Stop();
-                    }
+                    CloseRequested(app, state, Window::MainWindow());
                     break;
                 default:
                     break;
@@ -406,6 +409,12 @@ namespace Fenrir
         return made != nullptr && made->minimised;
     }
 
+    bool Window::IsFocused(App& app, WindowId window)
+    {
+        const WindowRecord* made = FindMade(app, window);
+        return made != nullptr && made->focused;
+    }
+
     bool Window::SetTitle(App& app, WindowId window, std::string_view title)
     {
         WindowRecord* record = FindWindow(app, window);
@@ -426,6 +435,12 @@ namespace Fenrir
         }
         record->cursorMode = mode;
         return record->sdl == nullptr || ApplyCursor(*Detail::FindWindowState(app), *record);
+    }
+
+    CursorMode Window::GetCursorMode(App& app, WindowId window)
+    {
+        const WindowRecord* record = FindWindow(app, window);
+        return record == nullptr ? CursorMode::Normal : record->cursorMode;
     }
 
     bool Window::SetCursorShape(App& app, WindowId window, CursorShape shape)
@@ -454,6 +469,16 @@ namespace Fenrir
     bool Window::SetClipboardText(App& app, std::string_view text)
     {
         return Detail::FindWindowState(app) != nullptr && SDL_SetClipboardText(std::string(text).c_str());
+    }
+
+    bool Window::RequestClose(App& app, WindowId window)
+    {
+        if (FindMade(app, window) == nullptr)
+        {
+            return false;
+        }
+        CloseRequested(app, *Detail::FindWindowState(app), window);
+        return true;
     }
 
     bool Window::RequestSurface(App& app, WindowId window, const SurfaceRequest& request, std::string& error)

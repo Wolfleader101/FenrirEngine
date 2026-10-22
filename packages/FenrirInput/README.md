@@ -73,6 +73,17 @@ Fenrir::InputRouterId panel = Fenrir::Input::AddInputRouter(app, 100, std::make_
 
 **IME composition** is reserved, not built. It will slot in as: a composition event (the preedit string with its cursor and selection) added to the feed and to `RoutedInput`; the committed text as the existing `TextEvent`; the IME's candidate window placed from the `textInput` claim's caret, which FenrirWindow already passes to SDL; and the composition cancelled when the window's focus or the claim goes.
 
+## Scripting
+
+With `FENRIR_ENABLE_SCRIPTING` on, the `FenrirInputScripting` library gives C# input (ADR-0029): add `Fenrir::Input::ScriptingExtension()` to `ScriptingConfig::extensions` and call `fenrir_deploy_input_scripting(<target>)` beside `fenrir_deploy_scripting`. The `Fenrir.Input` contract (`Managed/Fenrir.Input`) has:
+
+- the types mirrored with C++'s values and underlying types: `Key`, `Scancode`, `KeyModifiers`, `MouseButton`, `GamepadButton`, `GamepadAxis`, and `WindowId` and `GamepadId` (one `uint` each; `Fenrir.Window` uses this `WindowId`);
+- `Keyboard`, `Mouse` and `Gamepads` as static facades whose every answer comes from C++, so the input edges follow the reading phase exactly as in C++: a C# `Tick` system reads the edges since the last tick, any other C# code those since the last frame. `Gamepads.Connected(Span<GamepadId>)` fills the span and returns how many pads are connected;
+- every input event as a native event read through `EventReader<T>`, sharing its queue with C++ readers (`TextEvent.Codepoint` is a `uint`);
+- `InputClaims` as a read-only resource, `Resources.GetReadOnly<InputClaims>()`: `For(window)`, `Gamepad`, and up to `InputClaims.MaxWindows` (8) windows. C# reads a plain-data copy of the C++ resource, refreshed each time C# gets it. Routers stay C++.
+
+The extension needs no `Input` owner, so scripts always load. With no input installed, every function does nothing and returns `false` or zero (and `InputClaims` is absent); so do the gamepad functions for a pad that is not connected. A debug build warns once per native call site. `FenrirInputScriptingTests` checks C# against C++ through FenrirScripting's harness.
+
 ## Not here yet
 
 Input mapping (actions and bindings), rumble, IME composition, touch and pen are out of scope.
