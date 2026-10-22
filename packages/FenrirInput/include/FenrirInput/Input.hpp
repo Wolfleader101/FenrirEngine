@@ -11,6 +11,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirInputScripting defines Input::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -77,6 +79,22 @@ namespace Fenrir
 
         /** @brief Publishes whether `router` claims the gamepads, app-wide, for UI navigation. Cancels nothing. */
         static void SetGamepadClaim(App& app, InputRouterId router, bool claimed);
+
+        /**
+         * @brief What input gives C# (ADR-0029): the `Fenrir.Input` contract, with the native functions behind its
+         * `Keyboard`, `Mouse` and `Gamepads` facades, every input event, and InputClaims as a read-only resource. Add
+         * it to ScriptingConfig::extensions; FenrirWindow's extension needs it too, before it.
+         *
+         * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
+         * input installed there, they do nothing and return false or zero, as do the gamepad functions for a pad that
+         * is not connected. In debug builds each such case is warned about once per process for each place in
+         * FenrirInputScripting's native code that notices it, not once per C# call site.
+         *
+         * Defined by the FenrirInputScripting library, not FenrirInput (which never links FenrirScripting), so it
+         * exists only in a build with scripting on. Include "FenrirInputScripting/InputScripting.hpp" and link
+         * FenrirInputScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         Input(Input&& other) noexcept;
         Input& operator=(Input&& other) noexcept;

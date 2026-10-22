@@ -576,7 +576,8 @@ without scripts, if a C# field has no native function, if their signatures diffe
 `Tests/ExtensionScript`) is a complete example of every part, and FenrirPhysics's is a real one:
 `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics never links FenrirScripting),
 its contract `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this package's harness in
-`packages/FenrirPhysics/Scripting/Tests`.
+`packages/FenrirPhysics/Scripting/Tests`. FenrirInput's and FenrirWindow's are static (`Input::ScriptingExtension()`,
+`Window::ScriptingExtension()`): they need no installed package, and the window's contract builds on input's.
 
 ### Native resources
 

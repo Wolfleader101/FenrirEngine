@@ -61,3 +61,22 @@ TEST_CASE("Every cursor mode and shape can be set on a hidden window", "[window]
     INFO("no diagnostic was logged");
     REQUIRE(test.errors->empty());
 }
+
+TEST_CASE("A window's cursor mode reads back as it was last set", "[window][services][display]")
+{
+    WindowTestApp test;
+    test.RequireDisplay();
+    const Fenrir::WindowId main = Window::MainWindow();
+    INFO("the cursor starts in the normal mode");
+    REQUIRE(Window::GetCursorMode(test.app, main) == CursorMode::Normal);
+    test.app.RunFrame(oneTick);
+
+    for (const CursorMode mode : {CursorMode::Captured, CursorMode::Hidden, CursorMode::Normal})
+    {
+        REQUIRE(Window::SetCursorMode(test.app, main, mode));
+        INFO("cursor mode " << static_cast<int>(mode) << " reads back as set");
+        REQUIRE(Window::GetCursorMode(test.app, main) == mode);
+    }
+    INFO("a window that does not exist reads as normal");
+    REQUIRE(Window::GetCursorMode(test.app, Fenrir::WindowId{99}) == CursorMode::Normal);
+}

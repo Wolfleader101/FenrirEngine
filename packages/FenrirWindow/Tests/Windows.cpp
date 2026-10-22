@@ -99,3 +99,42 @@ TEST_CASE("Without stopOnMainWindowClose, closing the main window leaves the app
     INFO("the app keeps running");
     REQUIRE(test.app.IsRunning());
 }
+
+TEST_CASE("Requesting the main window's close acts as its close button", "[window][display]")
+{
+    WindowTestApp test;
+    test.RequireDisplay();
+    {
+        INFO("a window not made yet cannot be asked to close");
+        REQUIRE_FALSE(Window::RequestClose(test.app, Window::MainWindow()));
+    }
+    test.app.RunFrame(oneTick);
+    Fenrir::EventReader<Fenrir::WindowCloseRequestedEvent> reader;
+
+    {
+        INFO("the made main window takes the request");
+        REQUIRE(Window::RequestClose(test.app, Window::MainWindow()));
+    }
+    const auto events = ReadAll(reader, test.app);
+    INFO("a close-requested event names the main window");
+    REQUIRE(events.size() == 1);
+    REQUIRE(events[0].window == Window::MainWindow());
+    INFO("with stopOnMainWindowClose the app is stopped, and the window stays");
+    REQUIRE_FALSE(test.app.IsRunning());
+    REQUIRE(Window::Exists(test.app, Window::MainWindow()));
+    INFO("a window that does not exist cannot be asked to close");
+    REQUIRE_FALSE(Window::RequestClose(test.app, Fenrir::WindowId{99}));
+}
+
+TEST_CASE("A hidden window that was never shown does not have the input focus", "[window][display]")
+{
+    WindowTestApp test;
+    test.RequireDisplay();
+    INFO("no window has the focus before it is made");
+    REQUIRE_FALSE(Window::IsFocused(test.app, Window::MainWindow()));
+    test.app.RunFrame(oneTick);
+    INFO("a hidden window does not take the focus");
+    REQUIRE_FALSE(Window::IsFocused(test.app, Window::MainWindow()));
+    INFO("nor does a window that does not exist");
+    REQUIRE_FALSE(Window::IsFocused(test.app, Fenrir::WindowId{99}));
+}

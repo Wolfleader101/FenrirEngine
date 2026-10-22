@@ -11,10 +11,10 @@
 
 **Touches:** `packages/FenrirInput/Managed/`, `packages/FenrirInput/Scripting/`, `packages/FenrirWindow/Managed/`, `packages/FenrirWindow/Scripting/`, `CMakeLists.txt`, `FenrirScripting.sln`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Extension tests (scripting harness, input feed): a key fed before a frame reads as `Keyboard.JustPressed` in a C# `Update` system that frame and in a C# tick system at the next tick, matching C++ per phase; the key event arrives once in a C# `EventReader`.
-- [ ] Mouse, gamepad and `InputClaims` read from C# match C++.
-- [ ] Each enum mirror and `WindowId` match C++'s values and layout.
-- [ ] With no window installed, every `Fenrir.Window` call no-ops with the documented returns and one debug warning per call site; a hidden-window test reads `Size` and round-trips the clipboard (skipped without a display).
-- [ ] Builds with scripting off (no extension targets) and with the renderer off (no `Fenrir.Window`).
+- [x] Extension tests (scripting harness, input feed): a key fed before a frame reads as `Keyboard.JustPressed` in a C# `Update` system that frame and in a C# tick system at the next tick, matching C++ per phase; the key event arrives once in a C# `EventReader`.
+- [x] Mouse, gamepad and `InputClaims` read from C# match C++.
+- [x] Each enum mirror and `WindowId` match C++'s values and layout.
+- [x] With no window installed, every `Fenrir.Window` call no-ops with the documented returns and one debug warning per call site; a hidden-window test reads `Size` and round-trips the clipboard (skipped without a display).
+- [x] Builds with scripting off (no extension targets) and with the renderer off (no `Fenrir.Window`).

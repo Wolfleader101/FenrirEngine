@@ -11,6 +11,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirWindowScripting defines Window::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -76,11 +78,15 @@ namespace Fenrir
         [[nodiscard]] static float ContentScale(App& app, WindowId window);
         /** @brief Whether `window` is minimised, as of this frame's PreUpdate: nothing should be drawn to it. */
         [[nodiscard]] static bool IsMinimised(App& app, WindowId window);
+        /** @brief Whether `window` has the input focus, as of this frame's PreUpdate; false before it exists. */
+        [[nodiscard]] static bool IsFocused(App& app, WindowId window);
 
         /** @brief Sets `window`'s title (or the title it will be made with). False if SDL refuses. */
         static bool SetTitle(App& app, WindowId window, std::string_view title);
         /** @brief Sets how the cursor behaves over `window`. False if SDL refuses. */
         static bool SetCursorMode(App& app, WindowId window, CursorMode mode);
+        /** @brief How the cursor behaves over `window`, as last set; Normal for a window FenrirWindow does not keep. */
+        [[nodiscard]] static CursorMode GetCursorMode(App& app, WindowId window);
         /** @brief Sets the cursor shown over `window`. False if SDL refuses. */
         static bool SetCursorShape(App& app, WindowId window, CursorShape shape);
 
@@ -88,6 +94,30 @@ namespace Fenrir
         [[nodiscard]] static std::string ClipboardText(App& app);
         /** @brief Puts `text` on the system clipboard. False if SDL refuses. */
         static bool SetClipboardText(App& app, std::string_view text);
+
+        /**
+         * @brief Asks for `window` to close, as its close button does: sends WindowCloseRequestedEvent, and for the
+         * main window with WindowConfig::stopOnMainWindowClose stops the app. The window itself stays until teardown.
+         * False, doing nothing, if `window` has not been made.
+         */
+        static bool RequestClose(App& app, WindowId window);
+
+        /**
+         * @brief What the window gives C# (ADR-0029): the `Fenrir.Window` contract, with the native functions behind
+         * its `Window` class (sizes, focus, cursor, clipboard, title, close) and the resized and close-requested
+         * events. Add it to ScriptingConfig::extensions after Input::ScriptingExtension(), whose contract it uses (its
+         * WindowId and focus event).
+         *
+         * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
+         * Window, or for a window that has not been made, they do nothing and return false, zero or empty. In debug
+         * builds each such case is warned about once per process for each place in FenrirWindowScripting's native code
+         * that notices it, not once per C# call site.
+         *
+         * Defined by the FenrirWindowScripting library, not FenrirWindow (which never links FenrirScripting), so it
+         * exists only in a build with the renderer and scripting on. Include
+         * "FenrirWindowScripting/WindowScripting.hpp" and link FenrirWindowScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         // The graphics surface (ADR-0022): the renderer's adapter makes, uses and releases it through these. Neutral
         // types only, so neither SDL nor a graphics API's headers reach the renderer.
