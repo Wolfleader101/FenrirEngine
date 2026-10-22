@@ -8,6 +8,7 @@
 #include "FenrirTime/Time.hpp"
 
 #include <algorithm>
+#include <cassert>
 #include <cstddef>
 #include <cstring>
 #include <iterator>
@@ -392,6 +393,13 @@ namespace Fenrir
      * This class is responsible for running the update loop and managing the scheduler
      * It is also responsible for setup of all of the modular engine systems passed in, and handling all events
      *
+     * **Packages.** An engine package is turned on with `X::Install(App&, XConfig)`, which adds its systems and returns
+     * a move-only owner the app keeps, destroyed before the App. State the package keeps for the whole app (input
+     * devices, the asset store, a window's state) is an app resource (AddResource), and state it keeps per scene is a
+     * scene resource; the owner holds the App and reaches its state through it, so the owner can be moved. When a
+     * package cannot start, `Install` logs one diagnostic saying why and returns an owner whose `IsValid()` is false:
+     * it has added no systems and its calls do nothing, so the app keeps running without that package. FenrirPhysics
+     * and FenrirScripting predate this and keep their own shapes (`Scripting::IsRunning`).
      */
     class App
     {
@@ -419,7 +427,7 @@ namespace Fenrir
         }
 
         /**
-         * @brief Add systems to the scheduler that run in parallel
+         * @brief Add systems to the scheduler that run in parallel, on worker threads (see AddSystem)
          *
          * @param priority the priority of the systems
          * @param systems the system functions
@@ -428,7 +436,8 @@ namespace Fenrir
         App& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         /**
-         * @brief Add systems to the scheduler that run sequentially
+         * @brief Add systems to the scheduler that run sequentially, on the thread that runs the app (see
+         * AddSequentialSystem)
          *
          * @param priority the priority of the systems
          * @param systems the system functions
@@ -437,13 +446,89 @@ namespace Fenrir
         App& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         /**
-         * @brief Add a system to the scheduler
+         * @brief Add a system to the scheduler that runs in parallel with the phase's other parallel systems, on a
+         * worker thread. Not for systems that touch SDL or the GPU, which must run on the main thread: add those with
+         * AddSequentialSystem. (The init phases run only systems added this way, one after another on the app's
+         * thread.)
          *
          * @param priority the priority of the system
          * @param system the system function
          * @return App& the app
          */
         App& AddSystem(SchedulePriority priority, SystemFunc system);
+
+        /**
+         * @brief Add a system to the scheduler that runs after the phase's parallel systems, one after another in the
+         * order added, on the thread that runs the app (Run or RunFrame's caller): the main thread. Systems that touch
+         * SDL or the GPU (a window's event pump, input dispatch, which may reach SDL through input routers) and every
+         * Render system must be added this way.
+         *
+         * @param priority the priority of the system
+         * @param system the system function
+         * @return App& the app
+         */
+        App& AddSequentialSystem(SchedulePriority priority, SystemFunc system);
+
+        /**
+         * @brief The app's resource of type `T`: state a package keeps for the whole app, one value per type. The app
+         * must have one (TryGetResource asks).
+         */
+        template <typename T>
+        [[nodiscard]] T& GetResource()
+        {
+            T* resource = TryGetResource<T>();
+            assert(resource != nullptr && "App::GetResource: the app has no resource of this type");
+            return *resource;
+        }
+
+        /** @copydoc GetResource */
+        template <typename T>
+        [[nodiscard]] const T& GetResource() const
+        {
+            const T* resource = TryGetResource<T>();
+            assert(resource != nullptr && "App::GetResource: the app has no resource of this type");
+            return *resource;
+        }
+
+        /**
+         * @brief The app's resource of type `T`, or null if it has none. The pointer stays valid until the resource is
+         * replaced or removed, or the App ends.
+         */
+        template <typename T>
+        [[nodiscard]] T* TryGetResource()
+        {
+            const auto it = m_resources.find(std::type_index(typeid(T)));
+            return it == m_resources.end() ? nullptr : static_cast<T*>(it->second.get());
+        }
+
+        /** @copydoc TryGetResource */
+        template <typename T>
+        [[nodiscard]] const T* TryGetResource() const
+        {
+            const auto it = m_resources.find(std::type_index(typeid(T)));
+            return it == m_resources.end() ? nullptr : static_cast<const T*>(it->second.get());
+        }
+
+        /**
+         * @brief Constructs the app's resource of type `T` from `args`, replacing (and destroying) any it already had.
+         * The new resource is constructed before the old one is destroyed. It is destroyed when the App ends, before
+         * its scenes. Add and remove resources outside parallel systems; any system may get them.
+         */
+        template <typename T, typename... Args>
+        T& AddResource(Args&&... args)
+        {
+            ResourcePtr resource(new T(std::forward<Args>(args)...), &DestroyResource<T>);
+            T& added = *static_cast<T*>(resource.get());
+            m_resources.insert_or_assign(std::type_index(typeid(T)), std::move(resource));
+            return added;
+        }
+
+        /** @brief Destroys the app's resource of type `T`. Does nothing if the app has none. */
+        template <typename T>
+        void RemoveResource()
+        {
+            m_resources.erase(std::type_index(typeid(T)));
+        }
 
         /**
          * @brief Get the Logger object
@@ -573,6 +658,18 @@ namespace Fenrir
         // below).
         std::unordered_map<std::string, IEventQueue*> m_namedEventQueues;
         std::unordered_map<std::string, std::unique_ptr<IEventQueue>> m_byteEventQueues;
+
+        // The deleter is chosen where the type is known, so the app stores resources of any type without knowing it.
+        using ResourcePtr = std::unique_ptr<void, void (*)(void*)>;
+
+        template <typename T>
+        static void DestroyResource(void* resource)
+        {
+            delete static_cast<T*>(resource);
+        }
+
+        // Declared last so resources, which may refer to the app's scenes, queues, workers and logger, end first.
+        std::unordered_map<std::type_index, ResourcePtr> m_resources;
 
         bool BindEventName(std::string name, IEventQueue* queue);
 

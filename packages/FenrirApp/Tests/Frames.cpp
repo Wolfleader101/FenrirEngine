@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -186,6 +188,7 @@ namespace
             {SchedulePriority::PreTick, "PreTick"},     {SchedulePriority::Tick, "Tick"},
             {SchedulePriority::PostTick, "PostTick"},   {SchedulePriority::AfterTicks, "AfterTicks"},
             {SchedulePriority::Update, "Update"},       {SchedulePriority::PostUpdate, "PostUpdate"},
+            {SchedulePriority::Render, "Render"},
         };
         for (const auto& [priority, name] : framePhases)
         {
@@ -204,7 +207,8 @@ TEST_CASE("A frame with no tick still runs BeforeTicks and AfterTicks once, and 
     app.RunFrame(0.5 * sixtieth);
 
     INFO("a frame with no tick did not run BeforeTicks and AfterTicks once each with no tick phase between");
-    REQUIRE(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "AfterTicks", "Update", "PostUpdate"});
+    REQUIRE(phases ==
+            std::vector<std::string>{"PreUpdate", "BeforeTicks", "AfterTicks", "Update", "PostUpdate", "Render"});
 }
 
 TEST_CASE("A frame with three ticks runs PreTick, Tick and PostTick together three times, between BeforeTicks and "
@@ -221,7 +225,150 @@ TEST_CASE("A frame with three ticks runs PreTick, Tick and PostTick together thr
     INFO("three ticks did not each run PreTick, Tick and PostTick together, between BeforeTicks and AfterTicks");
     REQUIRE(phases == std::vector<std::string>{"PreUpdate", "BeforeTicks", "PreTick", "Tick", "PostTick", "PreTick",
                                                "Tick", "PostTick", "PreTick", "Tick", "PostTick", "AfterTicks",
-                                               "Update", "PostUpdate"});
+                                               "Update", "PostUpdate", "Render"});
+}
+
+TEST_CASE("Render runs once per frame, after PostUpdate, however many ticks the frame runs", "[app][frames][render]")
+{
+    App app(Silent());
+    std::vector<std::string> phases;
+    RecordFramePhases(app, phases);
+    const auto rendersIn = [&](double deltaTime) {
+        phases.clear();
+        app.RunFrame(deltaTime);
+        return std::count(phases.begin(), phases.end(), "Render");
+    };
+
+    INFO("a frame with no tick did not run Render exactly once");
+    REQUIRE(rendersIn(0.5 * sixtieth) == 1);
+    INFO("a frame with one tick did not run Render exactly once");
+    REQUIRE(rendersIn(sixtieth) == 1);
+    INFO("a frame with three ticks did not run Render exactly once");
+    REQUIRE(rendersIn(3.5 * sixtieth) == 1);
+    INFO("Render was not the last phase of the frame");
+    REQUIRE(phases.back() == "Render");
+}
+
+TEST_CASE("A Render system reads an event sent in PostUpdate that frame", "[app][frames][render]")
+{
+    struct Drawn
+    {
+        int frame = 0;
+    };
+    App app(Silent());
+    int frame = 0;
+    app.AddSequentialSystems(SchedulePriority::PostUpdate,
+                             {[&](App& running) { running.SendEvent(Drawn{.frame = ++frame}); }});
+    std::vector<int> read;
+    Fenrir::EventReader<Drawn> reader;
+    app.AddSequentialSystems(SchedulePriority::Render, {[&](App& running) {
+                                 for (const Drawn& drawn : reader.Read(running))
+                                 {
+                                     read.push_back(drawn.frame);
+                                 }
+                             }});
+
+    app.RunFrame(sixtieth);
+    app.RunFrame(0.5 * sixtieth);
+
+    INFO("Render did not read each frame's PostUpdate event in that frame");
+    REQUIRE(read == std::vector<int>{1, 2});
+}
+
+TEST_CASE("Render runs before the event queues swap, so it still reads events the previous frame sent",
+          "[app][frames][render]")
+{
+    struct Sent
+    {
+        int value = 0;
+    };
+    App app(Silent());
+    int frame = 0;
+    app.AddSequentialSystems(SchedulePriority::PreUpdate, {[&](App& running) {
+                                 if (++frame == 1)
+                                 {
+                                     running.SendEvent(Sent{.value = 7});
+                                 }
+                             }});
+    // The reader first reads in the second frame. Both frames tick, so the queues swap at the end of each: an event
+    // from the first frame is dropped by the second frame's swap, and is still there only if Render runs before it.
+    std::vector<int> read;
+    std::size_t missed = 0;
+    Fenrir::EventReader<Sent> reader;
+    app.AddSequentialSystems(SchedulePriority::Render, {[&](App& running) {
+                                 if (frame == 2)
+                                 {
+                                     const Fenrir::EventRange<Sent> events = reader.Read(running);
+                                     missed = events.Missed();
+                                     for (const Sent& sent : events)
+                                     {
+                                         read.push_back(sent.value);
+                                     }
+                                 }
+                             }});
+
+    app.RunFrame(sixtieth);
+    app.RunFrame(sixtieth);
+
+    INFO("Render in the second frame did not read the first frame's event: the queues swapped before Render");
+    REQUIRE(read == std::vector<int>{7});
+    INFO("Render in the second frame reported missed events");
+    REQUIRE(missed == 0);
+}
+
+TEST_CASE("Render sees the pose AfterTicks interpolated that frame", "[app][frames][render]")
+{
+    // Stands in for physics: AfterTicks writes how far the frame is between two ticks, as an interpolated pose would.
+    struct Pose
+    {
+        double fraction = -1.0;
+    };
+    App app(Silent());
+    app.AddResource<Pose>();
+    app.AddSequentialSystems(SchedulePriority::AfterTicks, {[](App& running) {
+                                 const Fenrir::Time& time = running.GetTime();
+                                 running.GetResource<Pose>().fraction = time.accumulator / time.tickRate;
+                             }});
+    std::vector<double> drawn;
+    app.AddSequentialSystems(SchedulePriority::Render,
+                             {[&](App& running) { drawn.push_back(running.GetResource<Pose>().fraction); }});
+
+    app.RunFrame(0.5 * sixtieth);
+    app.RunFrame(0.25 * sixtieth);
+    app.RunFrame(0.5 * sixtieth);
+
+    const std::vector<double> expected{0.5, 0.75, 0.25};
+    INFO("Render did not run once in each of the three frames");
+    REQUIRE(drawn.size() == expected.size());
+    for (std::size_t index = 0; index < expected.size(); ++index)
+    {
+        INFO("Render in frame " << index + 1 << " saw " << drawn[index] << ", not that frame's fraction "
+                                << expected[index]);
+        REQUIRE(std::abs(drawn[index] - expected[index]) < 1e-9);
+    }
+}
+
+TEST_CASE("Sequential systems run on the thread that runs the App, and parallel systems on its workers",
+          "[app][frames][threads]")
+{
+    App app(Silent(), 2);
+    std::thread::id sequentialUpdate;
+    std::thread::id sequentialRender;
+    std::thread::id parallel;
+    app.AddSequentialSystem(SchedulePriority::Update, [&](App&) { sequentialUpdate = std::this_thread::get_id(); });
+    app.AddSequentialSystems(SchedulePriority::Render, {[&](App&) { sequentialRender = std::this_thread::get_id(); }});
+    app.AddSystem(SchedulePriority::Update, [&](App&) { parallel = std::this_thread::get_id(); });
+
+    app.RunFrame(sixtieth);
+
+    const std::thread::id main = std::this_thread::get_id();
+    INFO("a sequential Update system did not run on the thread that called RunFrame");
+    REQUIRE(sequentialUpdate == main);
+    INFO("a sequential Render system did not run on the thread that called RunFrame");
+    REQUIRE(sequentialRender == main);
+    INFO("a parallel system ran on the thread that called RunFrame rather than on a worker");
+    REQUIRE(parallel != std::thread::id());
+    REQUIRE(parallel != main);
 }
 
 TEST_CASE("A frame owing more ticks than the cap runs the cap, drops the rest and warns once", "[app][frames]")

@@ -175,6 +175,10 @@ Where an entity is in the scene, as opposed to its `Transform`, which is relativ
 State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
 
+**App resource**
+State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
+*Avoid:* singleton, global, app-wide state (informal).
+
 ## FenrirEngine physics
 
 **FenrirPhysics**
