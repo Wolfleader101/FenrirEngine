@@ -14,10 +14,10 @@
 
 **Touches:** `packages/FenrirInput/`, `CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirInputTests` (Catch2, through `App::RunFrame` and the feed): held, just pressed and just released read from `Update` and from `Tick`; a frame with zero ticks keeps the tick edges for the next tick; a frame with two ticks shows the edge only in the first; a tap between ticks reads as pressed and released with held false; repeats do not re-press.
-- [ ] Key code and scancode are tracked separately; modifiers are reported; text events carry codepoints and the window.
-- [ ] Mouse position, motion and scroll are in the documented units; gamepads connect and disconnect (hot plug) and read buttons and axes per pad.
-- [ ] Every fed input arrives once per `EventReader<T>`, in order, and a second reader sees it too.
-- [ ] Clang and MSVC x64 debug and release presets build with no new warnings.
+- [x] `FenrirInputTests` (Catch2, through `App::RunFrame` and the feed): held, just pressed and just released read from `Update` and from `Tick`; a frame with zero ticks keeps the tick edges for the next tick; a frame with two ticks shows the edge only in the first; a tap between ticks reads as pressed and released with held false; repeats do not re-press.
+- [x] Key code and scancode are tracked separately; modifiers are reported; text events carry codepoints and the window.
+- [x] Mouse position, motion and scroll are in the documented units; gamepads connect and disconnect (hot plug) and read buttons and axes per pad.
+- [x] Every fed input arrives once per `EventReader<T>`, in order, and a second reader sees it too.
+- [x] Clang and MSVC x64 debug and release presets build with no new warnings.

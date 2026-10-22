@@ -49,6 +49,7 @@ add_subdirectory(packages/FenrirScene)
 
 add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
+add_subdirectory(packages/FenrirInput)
 
 if(FENRIR_ENABLE_PHYSICS)
     add_subdirectory(packages/FenrirPhysics)
