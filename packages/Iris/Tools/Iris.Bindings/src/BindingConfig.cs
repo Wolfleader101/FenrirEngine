@@ -3,8 +3,11 @@ using Tomlyn.Model;
 
 namespace Iris.Bindings;
 
-/// <summary>The C# type that stands for a bound type, and the components its constructor takes, in order.</summary>
-internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor);
+/// <summary>
+/// The C# type that stands for a bound type, the components its constructor takes, in order, and the C# expression of
+/// its own default (C++'s <c>T{}</c>) when that is not all zero bytes.
+/// </summary>
+internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default);
 
 /// <summary>Where the C# mirrors go, and the names of the SDK types they use.</summary>
 internal sealed record CSharpConfig(
@@ -18,7 +21,8 @@ internal sealed record CSharpConfig(
     string EventInterface,
     string TaggedUnionAttribute,
     string PointerType,
-    bool ReadOnlyEvents);
+    bool ReadOnlyEvents,
+    IReadOnlySet<string> ReadOnlyStructs);
 
 /// <summary>Where the Iris mappings go, and the headers they include.</summary>
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
@@ -60,7 +64,8 @@ internal sealed record BindingConfig(
     TestsConfig? Tests,
     IReadOnlyDictionary<string, BoundType> BoundTypes,
     IReadOnlyDictionary<string, string> Names,
-    IReadOnlyDictionary<string, string> Nouns)
+    IReadOnlyDictionary<string, string> Nouns,
+    IReadOnlySet<string> Exclude)
 {
     public const string Extension = ".binding.toml";
 
@@ -85,11 +90,11 @@ internal sealed record BindingConfig(
         }
 
         var reader = new Reader(path);
-        reader.Keys(table, "", "namespace", "csharp", "cpp", "registration", "tests", "bound-types", "names", "nouns");
+        reader.Keys(table, "", "namespace", "exclude", "csharp", "cpp", "registration", "tests", "bound-types", "names", "nouns");
         var csharp = reader.Table(table, "csharp");
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
-                    "pointer-type", "readonly-events");
+                    "pointer-type", "readonly-events", "readonly-structs");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes");
 
@@ -129,9 +134,10 @@ internal sealed record BindingConfig(
                         $"{path}: bound type '{name}' is a table: {{ type = \"<C# type>\", constructor = [...] }}");
                 }
 
-                reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor");
+                reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor", "default");
                 boundTypes.Add(name, new BoundType(reader.String(bound, "type"),
-                                                   bound.ContainsKey("constructor") ? reader.Strings(bound, "constructor") : null));
+                                                   bound.ContainsKey("constructor") ? reader.Strings(bound, "constructor") : null,
+                                                   bound.ContainsKey("default") ? reader.String(bound, "default") : null));
             }
         }
 
@@ -144,9 +150,11 @@ internal sealed record BindingConfig(
                              reader.String(csharp, "event-attribute"), reader.String(csharp, "event-interface"),
                              reader.String(csharp, "tagged-union-attribute"),
                              csharp.ContainsKey("pointer-type") ? reader.String(csharp, "pointer-type") : "ulong",
-                             csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events")),
+                             csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events"),
+                             reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
-            boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"));
+            boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
+            reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
     }
 
     private sealed class Reader(string path)

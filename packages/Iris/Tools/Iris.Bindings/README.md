@@ -38,6 +38,7 @@ uses every key.
 
 ```toml
 namespace = "My.Physics"               # The C# namespace of the mirrors, and of every registered name.
+exclude = ["My::RawHit"]               # Optional: described types this binding leaves out (it binds them in another form).
 
 [csharp]
 contract = "../Managed/My.Physics"     # The contract project: its hand-written parts are checked (below).
@@ -51,6 +52,7 @@ event-interface = "IEvent"
 tagged-union-attribute = "TaggedUnion"
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
+readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
 
 [cpp]
 mappings = "src/Generated/MyPhysicsMappings.hpp"
@@ -79,6 +81,7 @@ tags = "[physics][bindings]"
 [bound-types]                          # The C# type of each bound type, and optionally its constructor's components.
 "Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
 "Math::Quat" = { type = "Quaternion" }  # No constructor: defaults set the components by name, new() { X = 0, ... }.
+"My::Handle" = { type = "Handle", default = "Handle.None" }  # Its own default (T{}), when that is not zero bytes.
 
 [names]                                # Exceptions to the PascalCase rule: Type::member, or a bare member name.
 "My::ConvexHullShape::hull" = "Hull"
@@ -95,6 +98,10 @@ tags = "[physics][bindings]"
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them). |
 | `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`. |
+
+A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
+carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
+itself and binds from that description.
 | `[tests] cpp` and `csharp` | A Catch2 case per component, event and shared struct, and the C# class with one `T()` method returning `new T()` for each. |
 
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type`. A field's or
@@ -105,8 +112,13 @@ its struct's name, so that fails until `[names]` renames one.
 initialiser from its recorded default: `= 1;`, `= 0.05f;`, `= float.PositiveInfinity;`, `= Motion.Simulated;`,
 `= new();` for a nested struct or bound type with its own defaults, `= new() { Stiffness = 4 };` when the C++ initialiser
 sets some of a nested struct's members, and for a bound type `= new(0.5f, 0.5f, 0.5f);` through its configured
-constructor or `= new() { X = 0, ..., W = 1 };` by component. Every struct has an explicit `public T() {}`, so
-`new T()` runs the initialisers. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
+constructor (an integral component as the integer it is), `= new() { X = 0, ..., W = 1 };` by component, or its
+configured `default` for its own default. A struct with any default that is not all zero bytes has an explicit
+`public T() {}`, so `new T()` runs the initialisers; one whose defaults are all zero (a bound type's own default counts
+as zero unless it has a `default`) has bare fields and no constructor, since `default` already holds them, so mirroring
+it adds no member C# did not have. A read-only mirror (an event under `readonly-events`, or a struct in
+`readonly-structs`) is a `readonly struct` of `readonly` fields, always with the constructor, and a field holding a
+read-only struct is `readonly` too. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
 interface, an event the event attribute and interface. An array is an `[InlineArray(N)]` struct nested in its mirror
 (`SamplesArray Samples`), filled by the constructor, since C# cannot initialise one. A pointer is `pointer-type` at its
 offset, an empty struct an empty struct.
@@ -137,7 +149,8 @@ again; `[nouns]` sets a tagged union's noun.
 Everything the tool cannot bind fails the run with a message naming the type and field, and nothing is written: an
 unknown key in the configuration, a description for another target, a bound type with no `[bound-types]` entry, two
 types with one C# name, a tagged union whose default kind is not tag 0 or whose kind is not a struct, a default of a form
-the description does not record, a field named as its struct, and a hand-written field.
+the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
+description describes or one that a type it binds holds, and a `readonly-structs` entry that is not a described struct.
 
 ## Tests
 

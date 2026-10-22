@@ -6,16 +6,16 @@ using Fenrir.Scripting;
 namespace Fixture.Bindings;
 
 /// <summary>The std::numeric_limits and std::numbers defaults.</summary>
-public partial struct Limits
+public readonly partial struct Limits
 {
-    public float Infinity = float.PositiveInfinity;
-    public float Largest = 3.4028235E+38f;
-    public float Lowest = -3.4028235E+38f;
-    public double DoubleInfinity = double.PositiveInfinity;
-    public int MaxInt = 2147483647;
-    public ulong MaxUnsigned = 18446744073709551615;
+    public readonly float Infinity = float.PositiveInfinity;
+    public readonly float Largest = 3.4028235E+38f;
+    public readonly float Lowest = -3.4028235E+38f;
+    public readonly double DoubleInfinity = double.PositiveInfinity;
+    public readonly int MaxInt = 2147483647;
+    public readonly ulong MaxUnsigned = 18446744073709551615;
     /// <summary>A std::numbers constant, with operators applied.</summary>
-    public float QuarterTurn = -1.5707964f;
+    public readonly float QuarterTurn = -1.5707964f;
 
     public Limits()
     {

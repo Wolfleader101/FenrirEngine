@@ -28,7 +28,7 @@ public partial struct Body : IComponent
     public Spring Tuned = new() { Stiffness = 4 };
     public Handle Owner = new();
     public Numbers Numbers = new();
-    public Limits Limits = new();
+    public readonly Limits Limits = new();
     public Marker Marker = new();
     public SamplesArray Samples;
     public ModesArray Modes;

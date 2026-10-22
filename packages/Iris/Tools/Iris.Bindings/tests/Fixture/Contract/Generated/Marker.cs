@@ -8,7 +8,4 @@ namespace Fixture.Bindings;
 /// <summary>Holds nothing: an empty struct is one byte.</summary>
 public partial struct Marker
 {
-    public Marker()
-    {
-    }
 }
