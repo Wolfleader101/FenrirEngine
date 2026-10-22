@@ -20,7 +20,9 @@ replaces; 1.0 re-freezes. Only Windows has been tested so far; see
 | `Examples/Hosting` | A small example program, plus an example component, its private dependency and a contracts assembly. |
 | `Examples/Consumer` | A standalone project that uses an installed Iris through `find_package(Iris)`. |
 | `Tests` | Native and managed checks, run through CTest. |
-| `cmake` | Host pack discovery, the bridge build, `iris_deploy` and the package config. |
+| `Tools/Iris.Bindings` | The binding generator: C# mirrors, mappings, registration lists and a defaults test from an API description ([README](Tools/Iris.Bindings/README.md)). |
+| `docs` | [The API description](docs/api-description.md), the input format the binding generator accepts. |
+| `cmake` | Host pack discovery, the bridge build, `iris_deploy`, `iris_generate_binding` and the package config. |
 
 ## Requirements and build
 
@@ -44,6 +46,7 @@ ctest --test-dir out/build/iris -C Debug --output-on-failure
 | `IRIS_DOTNET_NATIVE_DIR` | empty | Use this exact host pack `native` directory instead of discovering one. |
 | `IRIS_DOTNET_TARGET_RID` | empty | Override the target runtime identifier, for example `linux-musl-x64`. |
 | `IRIS_DOTNET_EXECUTABLE` | found on `PATH` | The `dotnet` used for pack discovery and managed builds. |
+| `IRIS_GENERATE_BINDINGS_TARGET` | `iris-generate-bindings` | The target, not built by default, that `iris_generate_binding()` adds each binding to. |
 
 In FenrirEngine, `FENRIR_ENABLE_SCRIPTING` decides whether the root build adds Iris at all; with it
 off, nothing looks for .NET.
@@ -406,6 +409,15 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
 - Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
   argument, return or member, since the library tests for it at compile time.
 
+### Bindings generated from a description
+
+Mappings need not be written by hand. [`Tools/Iris.Bindings`](Tools/Iris.Bindings/README.md) reads API descriptions
+([the format](docs/api-description.md)), written from a C++ package's headers, and a binding's configuration, and
+generates the C# mirror of each shared struct, tagged union and enum, a `StructMapping` per type built with
+`Iris::Field<T>` (so private members need no stand-in), the registration lists of the extension that shares them, and a
+Catch2 test that C#'s `new T()` holds C++'s `T{}` defaults field by field. `iris_generate_binding()` adds a binding to a
+target the ordinary build never runs.
+
 ### Arrays
 
 `Array<T>` owns a one-dimensional managed array `T[]`, for `T` a primitive, a mapped struct or `std::string`.
@@ -733,6 +745,8 @@ collection.
 | `Numbering-native` | The numbers the native side gives to value kinds, snapshot type kinds, visibilities, statuses, log levels and unload states, against the one table both sides share (`Tests/numbering.txt`). The managed side reads the same table in the "numbering" group of `ManagedContracts`. |
 | `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host: discovery, objects, strings, structs, arrays, an internal call, the log sink) against it. |
 | `UnsupportedTypeDoesNotCompile` | A signature with an unsupported C++ type fails to compile with Iris's own message. |
+| `IrisBindingsTests` | The binding generator against its fixture: the committed outputs byte for byte, its diagnostics, and the generated C# compiled against stand-ins for the scripting SDK (and the SDK itself, when it is beside Iris). |
+| `BindingDefaults` | The fixture's generated defaults test, run: each registered type's C# `new T()` against C++'s `T{}`, field by field through the generated mappings. |
 
 Each check program runs named cases and reports every failure. The fixture bridge
 (`Tests/FixtureBridge`) is driven by method name (`Scenario:<name>`, `Select:<mode>`, `Counter:<name>`) through the same `FindMethod` and `Invoke`.
@@ -761,6 +775,9 @@ Each release lists every public change and what it replaces, as ADR-0006 (amende
   or `ulong`. It replaces hand-written stand-in structs that put a 64-bit integer where the pointer is.
 - **Added zero-field structs**: `Iris::StructFields()` with no arguments maps an empty struct. A managed struct with
   no fields used to be refused ("has no fields"); this replaces a private placeholder field added to make it map.
+- **Added the binding generator** (`Tools/Iris.Bindings`, `iris_generate_binding()` in `cmake/IrisBindings.cmake`): C#
+  mirrors, mappings, registration lists and a defaults test generated from an API description. It replaces writing
+  each of those by hand; the public headers do not change.
 
 ## References
 

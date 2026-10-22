@@ -1,0 +1,616 @@
+{
+  "package": "Fixture",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fixture::Handle",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 8,
+      "doc": "A bound type that is not plain data: described by layout only."
+    },
+    {
+      "name": "Fixture::Limits",
+      "category": "struct",
+      "role": "nested",
+      "size": 48,
+      "alignment": 8,
+      "doc": "The std::numeric_limits and std::numbers defaults.",
+      "fields": [
+        {
+          "name": "infinity",
+          "offset": 0,
+          "kind": "f32",
+          "default": "inf"
+        },
+        {
+          "name": "largest",
+          "offset": 4,
+          "kind": "f32",
+          "default": 3.4028235E+38
+        },
+        {
+          "name": "lowest",
+          "offset": 8,
+          "kind": "f32",
+          "default": -3.4028235E+38
+        },
+        {
+          "name": "wideInfinity",
+          "offset": 16,
+          "kind": "f64",
+          "default": "inf"
+        },
+        {
+          "name": "maxInt",
+          "offset": 24,
+          "kind": "i32",
+          "default": 2147483647
+        },
+        {
+          "name": "maxUnsigned",
+          "offset": 32,
+          "kind": "u64",
+          "default": 18446744073709551615
+        },
+        {
+          "name": "quarterTurn",
+          "offset": 40,
+          "kind": "f32",
+          "default": -1.5707964,
+          "doc": "A std::numbers constant, with operators applied."
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Marker",
+      "category": "struct",
+      "role": "nested",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Holds nothing: an empty struct is one byte.",
+      "fields": []
+    },
+    {
+      "name": "Fixture::Motion",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a body moves.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Still",
+          "value": 0,
+          "doc": "Never moves."
+        },
+        {
+          "name": "Driven",
+          "value": 1,
+          "doc": "Moved by game code."
+        },
+        {
+          "name": "Simulated",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Offset",
+      "category": "enum",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A signed enum with explicit values.",
+      "underlying": "i32",
+      "values": [
+        {
+          "name": "Back",
+          "value": -2
+        },
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Far",
+          "value": 1073741824
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Numbers",
+      "category": "struct",
+      "role": "nested",
+      "size": 72,
+      "alignment": 8,
+      "doc": "Every number kind, each with a literal default.\n\nA second paragraph, which is kept apart from the first.",
+      "fields": [
+        {
+          "name": "i8",
+          "offset": 0,
+          "kind": "i8",
+          "default": -8
+        },
+        {
+          "name": "u8",
+          "offset": 1,
+          "kind": "u8",
+          "default": 200
+        },
+        {
+          "name": "i16",
+          "offset": 2,
+          "kind": "i16",
+          "default": -16
+        },
+        {
+          "name": "u16",
+          "offset": 4,
+          "kind": "u16",
+          "default": 65535
+        },
+        {
+          "name": "i32",
+          "offset": 8,
+          "kind": "i32",
+          "default": -32
+        },
+        {
+          "name": "u32",
+          "offset": 12,
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "All bits set, written `~0u`."
+        },
+        {
+          "name": "i64",
+          "offset": 16,
+          "kind": "i64",
+          "default": -64
+        },
+        {
+          "name": "u64",
+          "offset": 24,
+          "kind": "u64",
+          "default": 18446744073709551615
+        },
+        {
+          "name": "f32",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0.05
+        },
+        {
+          "name": "f64",
+          "offset": 40,
+          "kind": "f64",
+          "default": 0.1
+        },
+        {
+          "name": "flag",
+          "offset": 48,
+          "kind": "bool",
+          "default": true
+        },
+        {
+          "name": "letter",
+          "offset": 50,
+          "kind": "char16",
+          "default": 65
+        },
+        {
+          "name": "whole",
+          "offset": 52,
+          "kind": "f32",
+          "default": 1,
+          "doc": "An integer literal for a float."
+        },
+        {
+          "name": "shifted",
+          "offset": 56,
+          "kind": "u32",
+          "default": 8
+        },
+        {
+          "name": "zero",
+          "offset": 60,
+          "kind": "f32",
+          "default": 0
+        },
+        {
+          "name": "offset",
+          "offset": 64,
+          "kind": "enum",
+          "type": "Fixture::Offset",
+          "default": "Back"
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Quat",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A bound type whose constructor takes its components in another order than it stores them, under parameter names with a leading underscore, and stores them in an anonymous struct inside an anonymous union."
+    },
+    {
+      "name": "Fixture::Spring",
+      "category": "struct",
+      "role": "nested",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A nested struct with defaults of its own.",
+      "fields": [
+        {
+          "name": "stiffness",
+          "offset": 0,
+          "kind": "f32",
+          "default": 2
+        },
+        {
+          "name": "damping",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A bound type built like a maths library's vector: each component in an anonymous union of names."
+    },
+    {
+      "name": "Fixture::Body",
+      "category": "struct",
+      "role": "component",
+      "size": 280,
+      "alignment": 8,
+      "doc": "A component using each kind of field: enums, bound types, nested structs, arrays and pointers. Its doc comment is wrapped over three lines.",
+      "fields": [
+        {
+          "name": "motion",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fixture::Motion",
+          "default": "Simulated"
+        },
+        {
+          "name": "mass",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Kilograms."
+        },
+        {
+          "name": "velocity",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fixture::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "One argument sets every component."
+        },
+        {
+          "name": "offset",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fixture::Vec3",
+          "default": {
+            "x": 1,
+            "y": 2,
+            "z": 3
+          }
+        },
+        {
+          "name": "rotation",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fixture::Quat",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "doc": "The arguments are matched to the components by name."
+        },
+        {
+          "name": "spring",
+          "offset": 48,
+          "kind": "struct",
+          "type": "Fixture::Spring",
+          "default": {}
+        },
+        {
+          "name": "braced",
+          "offset": 56,
+          "kind": "struct",
+          "type": "Fixture::Spring",
+          "default": {}
+        },
+        {
+          "name": "plain",
+          "offset": 64,
+          "kind": "struct",
+          "type": "Fixture::Spring",
+          "default": {}
+        },
+        {
+          "name": "tuned",
+          "offset": 72,
+          "kind": "struct",
+          "type": "Fixture::Spring",
+          "default": {
+            "stiffness": 4
+          },
+          "doc": "Sets one member; the other keeps the nested struct's own default."
+        },
+        {
+          "name": "owner",
+          "offset": 80,
+          "kind": "struct",
+          "type": "Fixture::Handle",
+          "default": {}
+        },
+        {
+          "name": "numbers",
+          "offset": 96,
+          "kind": "struct",
+          "type": "Fixture::Numbers",
+          "default": {}
+        },
+        {
+          "name": "limits",
+          "offset": 168,
+          "kind": "struct",
+          "type": "Fixture::Limits",
+          "default": {}
+        },
+        {
+          "name": "marker",
+          "offset": 216,
+          "kind": "struct",
+          "type": "Fixture::Marker",
+          "default": {}
+        },
+        {
+          "name": "samples",
+          "offset": 220,
+          "kind": "array",
+          "elementKind": "f32",
+          "length": 4,
+          "default": [
+            1,
+            2,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "modes",
+          "offset": 236,
+          "kind": "array",
+          "elementKind": "enum",
+          "elementType": "Fixture::Motion",
+          "length": 2,
+          "default": [
+            "Driven",
+            "Still"
+          ]
+        },
+        {
+          "name": "springs",
+          "offset": 240,
+          "kind": "array",
+          "elementKind": "struct",
+          "elementType": "Fixture::Spring",
+          "length": 2,
+          "default": [
+            {},
+            {}
+          ]
+        },
+        {
+          "name": "zeros",
+          "offset": 256,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 3,
+          "default": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "name": "userData",
+          "offset": 264,
+          "kind": "pointer",
+          "default": null
+        },
+        {
+          "name": "next",
+          "offset": 272,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
+    },
+    {
+      "name": "Fixture::BoxShape",
+      "category": "struct",
+      "role": "nested",
+      "size": 12,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "halfExtents",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fixture::Vec3",
+          "default": {
+            "x": 0.5,
+            "y": 0.5,
+            "z": 0.5
+          }
+        }
+      ]
+    },
+    {
+      "name": "Fixture::ShapeType",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which kind of shape a Shape holds.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Box",
+          "value": 0
+        },
+        {
+          "name": "Sphere",
+          "value": 1
+        }
+      ]
+    },
+    {
+      "name": "Fixture::SphereShape",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "radius",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Shape",
+      "category": "tagged-union",
+      "role": "nested",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A tagged union: one enum tag followed by one anonymous union.",
+      "tag": {
+        "name": "m_type",
+        "offset": 0,
+        "kind": "enum",
+        "type": "Fixture::ShapeType",
+        "default": "Box"
+      },
+      "unionOffset": 4,
+      "kinds": [
+        {
+          "name": "m_box",
+          "tag": "Box",
+          "kind": "struct",
+          "type": "Fixture::BoxShape",
+          "doc": "Held when the tag is Box."
+        },
+        {
+          "name": "m_sphere",
+          "tag": "Sphere",
+          "kind": "struct",
+          "type": "Fixture::SphereShape"
+        }
+      ],
+      "defaultKind": "m_box"
+    },
+    {
+      "name": "Fixture::Collider",
+      "category": "struct",
+      "role": "component",
+      "size": 20,
+      "alignment": 4,
+      "doc": "A component holding a tagged union.",
+      "fields": [
+        {
+          "name": "shape",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fixture::Shape",
+          "default": {}
+        },
+        {
+          "name": "solid",
+          "offset": 16,
+          "kind": "bool",
+          "default": true
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Hit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 32,
+      "alignment": 8,
+      "doc": "A shared struct: plain data a native function fills through a pointer.",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fixture::Handle",
+          "default": {}
+        },
+        {
+          "name": "point",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fixture::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          }
+        },
+        {
+          "name": "distance",
+          "offset": 28,
+          "kind": "f32",
+          "default": "inf"
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Touched",
+      "category": "struct",
+      "role": "event",
+      "size": 32,
+      "alignment": 8,
+      "doc": "An event between two handles.",
+      "fields": [
+        {
+          "name": "first",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fixture::Handle",
+          "default": {}
+        },
+        {
+          "name": "second",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fixture::Handle",
+          "default": {}
+        }
+      ]
+    }
+  ]
+}
