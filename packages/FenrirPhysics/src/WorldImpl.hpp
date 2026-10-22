@@ -99,6 +99,8 @@ namespace Fenrir
         [[nodiscard]] Backend::QueryFilter ToBackend(const QueryFilter& filter) const;
 
         EntityList* m_entities;
+        // The owner's collision meshes, shared by every world; PhysicsWorld::CreateCollisionMesh reaches them here.
+        Backend::CollisionMeshes* m_meshes;
         Backend::World m_backend;
         Detail::Poses m_poses;
         Detail::Bodies m_bodies;

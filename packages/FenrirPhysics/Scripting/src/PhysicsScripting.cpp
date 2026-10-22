@@ -14,7 +14,6 @@
 #include <tuple>
 #include <vector>
 
-#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Characters.hpp"
@@ -28,7 +27,6 @@
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
 #include "JointStateMapping.hpp"
-#include "PhysicsState.hpp"
 #include "QueryMirrors.hpp"
 
 // How the physics components and events look to C#: each mapping is checked against its mirror in the Fenrir.Physics
@@ -871,68 +869,76 @@ namespace Fenrir
 {
     namespace
     {
-        // The owner whose extension was made last. Native functions are plain functions, so this is how the collision
-        // mesh functions reach the owner's meshes. Weak: an owner destroyed while scripting runs is simply gone.
-        std::mutex ownerMutex;
-        std::weak_ptr<Detail::PhysicsState> scriptedOwner;
-
-        // A warning logged once for each place in this file that notices a call doing nothing, in debug builds only.
-        void WarnOnce(const CallContext& context, const std::string& message,
-                      std::source_location where = std::source_location::current())
+        // The extension's state, which every native is given: what they share, made by PhysicsScriptingExtension and
+        // kept by the Scripting given the extension.
+        struct PhysicsScripting
         {
+            // A warning logged once for each place in this file that notices a call doing nothing, in debug builds
+            // only.
+            void WarnOnce(const CallContext& context, const std::string& message,
+                          std::source_location where = std::source_location::current())
+            {
 #ifndef NDEBUG
-            // Keyed by the message too: one call site can notice more than one reason (no world, then no body).
-            static std::mutex mutex;
-            static std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
+                // Keyed by the message too: one call site can notice more than one reason (no world, then no body).
                 {
-                    return;
+                    const std::lock_guard<std::mutex> lock(mutex);
+                    if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
+                    {
+                        return;
+                    }
                 }
-            }
-            context.GetApp().Logger()->Warn("[physics scripting] {} (warned once)", message);
+                context.GetApp().Logger()->Warn("[physics scripting] {} (warned once)", message);
 #else
-            (void)context;
-            (void)message;
-            (void)where;
+                (void)context;
+                (void)message;
+                (void)where;
 #endif
-        }
-
-        // The active scene's physics world, or null (warning once for the caller's call site).
-        PhysicsWorld* WorldFor(const CallContext& context, std::string_view function,
-                               std::source_location where = std::source_location::current())
-        {
-            PhysicsWorld* world = PhysicsWorld::Of(context.GetApp().GetActiveScene());
-            if (world == nullptr)
-            {
-                WarnOnce(context,
-                         std::string(function) + ": the active scene has no physics world yet, so it does nothing",
-                         where);
             }
-            return world;
-        }
 
-        // Whether `entity` is alive with a body (a RigidBody, or a Collider standing for its body); warns once if not.
-        bool HasBody(const CallContext& context, std::uint32_t entity, std::string_view function,
-                     std::source_location where = std::source_location::current())
-        {
-            EntityList& entities = context.Entities();
-            if (entities.HasEntity(entity) && HasBodyComponent(entities.GetEntity(entity)))
+            // The active scene's physics world, or null (warning once for the caller's call site).
+            PhysicsWorld* WorldOf(const CallContext& context, std::string_view function,
+                                  std::source_location where = std::source_location::current())
             {
-                return true;
+                PhysicsWorld* world = PhysicsWorld::Of(context.GetApp().GetActiveScene());
+                if (world == nullptr)
+                {
+                    WarnOnce(context,
+                             std::string(function) + ": the active scene has no physics world yet, so it does nothing",
+                             where);
+                }
+                return world;
             }
-            WarnOnce(context, std::string(function) + ": the entity has no body, so it does nothing", where);
-            return false;
-        }
+
+            // Whether `entity` is alive with a body (a RigidBody, or a Collider standing for its body, a character's
+            // included); warns once if not.
+            bool HasBody(const CallContext& context, std::uint32_t entity, std::string_view function,
+                         std::source_location where = std::source_location::current())
+            {
+                EntityList& entities = context.Entities();
+                if (entities.HasEntity(entity))
+                {
+                    const Entity body = entities.GetEntity(entity);
+                    if (body.HasComponent<RigidBody>() || body.HasComponent<Collider>())
+                    {
+                        return true;
+                    }
+                }
+                WarnOnce(context, std::string(function) + ": the entity has no body, so it does nothing", where);
+                return false;
+            }
+
+            // The calls warned about, by where and why. Natives may run on several threads at once.
+            std::mutex mutex;
+            std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        };
 
         // A force-like function: queues `apply` on the entity's body in the active scene's world.
         template <void (PhysicsWorld::*Apply)(const Entity&, const Math::Vec3&)>
-        bool Push(const CallContext& context, std::uint32_t entity, const Math::Vec3* amount, std::string_view function,
-                  std::source_location where = std::source_location::current())
+        bool Push(const CallContext& context, PhysicsScripting& physics, std::uint32_t entity, const Math::Vec3* amount,
+                  std::string_view function, std::source_location where = std::source_location::current())
         {
-            PhysicsWorld* world = WorldFor(context, function, where);
-            if (world == nullptr || !HasBody(context, entity, function, where) || amount == nullptr)
+            PhysicsWorld* world = physics.WorldOf(context, function, where);
+            if (world == nullptr || !physics.HasBody(context, entity, function, where) || amount == nullptr)
             {
                 return false;
             }
@@ -940,24 +946,28 @@ namespace Fenrir
             return true;
         }
 
-        bool AddForce(const CallContext& context, std::uint32_t entity, const Math::Vec3* force)
+        bool AddForce(const CallContext& context, PhysicsScripting& physics, std::uint32_t entity,
+                      const Math::Vec3* force)
         {
-            return Push<&PhysicsWorld::AddForce>(context, entity, force, "AddForce");
+            return Push<&PhysicsWorld::AddForce>(context, physics, entity, force, "AddForce");
         }
 
-        bool AddImpulse(const CallContext& context, std::uint32_t entity, const Math::Vec3* impulse)
+        bool AddImpulse(const CallContext& context, PhysicsScripting& physics, std::uint32_t entity,
+                        const Math::Vec3* impulse)
         {
-            return Push<&PhysicsWorld::AddImpulse>(context, entity, impulse, "AddImpulse");
+            return Push<&PhysicsWorld::AddImpulse>(context, physics, entity, impulse, "AddImpulse");
         }
 
-        bool AddTorque(const CallContext& context, std::uint32_t entity, const Math::Vec3* torque)
+        bool AddTorque(const CallContext& context, PhysicsScripting& physics, std::uint32_t entity,
+                       const Math::Vec3* torque)
         {
-            return Push<&PhysicsWorld::AddTorque>(context, entity, torque, "AddTorque");
+            return Push<&PhysicsWorld::AddTorque>(context, physics, entity, torque, "AddTorque");
         }
 
-        bool AddAngularImpulse(const CallContext& context, std::uint32_t entity, const Math::Vec3* impulse)
+        bool AddAngularImpulse(const CallContext& context, PhysicsScripting& physics, std::uint32_t entity,
+                               const Math::Vec3* impulse)
         {
-            return Push<&PhysicsWorld::AddAngularImpulse>(context, entity, impulse, "AddAngularImpulse");
+            return Push<&PhysicsWorld::AddAngularImpulse>(context, physics, entity, impulse, "AddAngularImpulse");
         }
 
         using Detail::ScriptMoveCastHit;
@@ -1012,11 +1022,16 @@ namespace Fenrir
             return std::vector<Hit>(static_cast<std::size_t>(std::max(capacity, 0)));
         }
 
-        bool Raycast(const CallContext& context, const Math::Vec3* origin, const Math::Vec3* direction,
-                     float maxDistance, const ScriptQueryFilter* filter, ScriptHit* hit)
+        bool Raycast(const CallContext& context, PhysicsScripting& physics, const Math::Vec3* origin,
+                     const Math::Vec3* direction, float maxDistance, const ScriptQueryFilter* filter, ScriptHit* hit)
         {
-            PhysicsWorld* world = WorldFor(context, "Raycast");
-            if (world == nullptr || origin == nullptr || direction == nullptr || hit == nullptr)
+            if (hit == nullptr)
+            {
+                return false;
+            }
+            *hit = ScriptHit{};
+            PhysicsWorld* world = physics.WorldOf(context, "Raycast");
+            if (world == nullptr || origin == nullptr || direction == nullptr)
             {
                 return false;
             }
@@ -1030,11 +1045,11 @@ namespace Fenrir
             return true;
         }
 
-        std::int32_t RaycastAll(const CallContext& context, const Math::Vec3* origin, const Math::Vec3* direction,
-                                float maxDistance, const ScriptQueryFilter* filter, ScriptHit* hits,
-                                std::int32_t capacity)
+        std::int32_t RaycastAll(const CallContext& context, PhysicsScripting& physics, const Math::Vec3* origin,
+                                const Math::Vec3* direction, float maxDistance, const ScriptQueryFilter* filter,
+                                ScriptHit* hits, std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "RaycastAll");
+            PhysicsWorld* world = physics.WorldOf(context, "RaycastAll");
             if (world == nullptr || origin == nullptr || direction == nullptr || hits == nullptr)
             {
                 return 0;
@@ -1059,11 +1074,17 @@ namespace Fenrir
             return ScriptOverlapHit{.body = hit.body.GetId(), .collider = hit.collider.GetId()};
         }
 
-        bool ShapeCast(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                       const Math::Vec3* direction, float maxDistance, const ScriptQueryFilter* filter, ScriptHit* hit)
+        bool ShapeCast(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                       const Transform* pose, const Math::Vec3* direction, float maxDistance,
+                       const ScriptQueryFilter* filter, ScriptHit* hit)
         {
-            PhysicsWorld* world = WorldFor(context, "ShapeCast");
-            if (world == nullptr || shape == nullptr || pose == nullptr || direction == nullptr || hit == nullptr)
+            if (hit == nullptr)
+            {
+                return false;
+            }
+            *hit = ScriptHit{};
+            PhysicsWorld* world = physics.WorldOf(context, "ShapeCast");
+            if (world == nullptr || shape == nullptr || pose == nullptr || direction == nullptr)
             {
                 return false;
             }
@@ -1077,11 +1098,11 @@ namespace Fenrir
             return true;
         }
 
-        std::int32_t ShapeCastAll(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                                  const Math::Vec3* direction, float maxDistance, const ScriptQueryFilter* filter,
-                                  ScriptHit* hits, std::int32_t capacity)
+        std::int32_t ShapeCastAll(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                                  const Transform* pose, const Math::Vec3* direction, float maxDistance,
+                                  const ScriptQueryFilter* filter, ScriptHit* hits, std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "ShapeCastAll");
+            PhysicsWorld* world = physics.WorldOf(context, "ShapeCastAll");
             if (world == nullptr || shape == nullptr || pose == nullptr || direction == nullptr || hits == nullptr)
             {
                 return 0;
@@ -1094,11 +1115,17 @@ namespace Fenrir
             return static_cast<std::int32_t>(count);
         }
 
-        bool MoveCast(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                      const Math::Vec3* motion, const ScriptQueryFilter* filter, ScriptMoveCastHit* hit)
+        bool MoveCast(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                      const Transform* pose, const Math::Vec3* motion, const ScriptQueryFilter* filter,
+                      ScriptMoveCastHit* hit)
         {
-            PhysicsWorld* world = WorldFor(context, "MoveCast");
-            if (world == nullptr || shape == nullptr || pose == nullptr || motion == nullptr || hit == nullptr)
+            if (hit == nullptr)
+            {
+                return false;
+            }
+            *hit = ScriptMoveCastHit{};
+            PhysicsWorld* world = physics.WorldOf(context, "MoveCast");
+            if (world == nullptr || shape == nullptr || pose == nullptr || motion == nullptr)
             {
                 return false;
             }
@@ -1115,10 +1142,11 @@ namespace Fenrir
             return true;
         }
 
-        std::int32_t Overlap(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                             const ScriptQueryFilter* filter, ScriptOverlapHit* hits, std::int32_t capacity)
+        std::int32_t Overlap(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                             const Transform* pose, const ScriptQueryFilter* filter, ScriptOverlapHit* hits,
+                             std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "Overlap");
+            PhysicsWorld* world = physics.WorldOf(context, "Overlap");
             if (world == nullptr || shape == nullptr || pose == nullptr || hits == nullptr)
             {
                 return 0;
@@ -1129,10 +1157,11 @@ namespace Fenrir
             return static_cast<std::int32_t>(count);
         }
 
-        std::int32_t Penetrations(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                                  const ScriptQueryFilter* filter, ScriptPenetrationHit* hits, std::int32_t capacity)
+        std::int32_t Penetrations(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                                  const Transform* pose, const ScriptQueryFilter* filter, ScriptPenetrationHit* hits,
+                                  std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "Penetrations");
+            PhysicsWorld* world = physics.WorldOf(context, "Penetrations");
             if (world == nullptr || shape == nullptr || pose == nullptr || hits == nullptr)
             {
                 return 0;
@@ -1150,15 +1179,15 @@ namespace Fenrir
             return static_cast<std::int32_t>(count);
         }
 
-        bool Depenetrate(const CallContext& context, const CollisionShape* shape, const Transform* pose,
-                         const ScriptQueryFilter* filter, Math::Vec3* offset)
+        bool Depenetrate(const CallContext& context, PhysicsScripting& physics, const CollisionShape* shape,
+                         const Transform* pose, const ScriptQueryFilter* filter, Math::Vec3* offset)
         {
             if (offset == nullptr)
             {
                 return false;
             }
             *offset = Math::Vec3(0.0f);
-            PhysicsWorld* world = WorldFor(context, "Depenetrate");
+            PhysicsWorld* world = physics.WorldOf(context, "Depenetrate");
             if (world == nullptr || shape == nullptr || pose == nullptr)
             {
                 return false;
@@ -1167,10 +1196,10 @@ namespace Fenrir
             return true;
         }
 
-        std::int32_t OverlapPoint(const CallContext& context, const Math::Vec3* point, const ScriptQueryFilter* filter,
-                                  ScriptOverlapHit* hits, std::int32_t capacity)
+        std::int32_t OverlapPoint(const CallContext& context, PhysicsScripting& physics, const Math::Vec3* point,
+                                  const ScriptQueryFilter* filter, ScriptOverlapHit* hits, std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "OverlapPoint");
+            PhysicsWorld* world = physics.WorldOf(context, "OverlapPoint");
             if (world == nullptr || point == nullptr || hits == nullptr)
             {
                 return 0;
@@ -1199,11 +1228,11 @@ namespace Fenrir
         };
         static_assert(sizeof(ScriptAabb) == 24, "Keep ScriptAabb as the C# Aabb lays it out.");
 
-        std::int32_t ContactsOf(const CallContext& context, std::uint32_t body, ScriptContact* contacts,
-                                std::int32_t capacity)
+        std::int32_t ContactsOf(const CallContext& context, PhysicsScripting& physics, std::uint32_t body,
+                                ScriptContact* contacts, std::int32_t capacity)
         {
-            PhysicsWorld* world = WorldFor(context, "ContactsOf");
-            if (world == nullptr || !HasBody(context, body, "ContactsOf") || contacts == nullptr)
+            PhysicsWorld* world = physics.WorldOf(context, "ContactsOf");
+            if (world == nullptr || !physics.HasBody(context, body, "ContactsOf") || contacts == nullptr)
             {
                 return 0;
             }
@@ -1222,20 +1251,25 @@ namespace Fenrir
             return count;
         }
 
-        bool IsSleeping(const CallContext& context, std::uint32_t body)
+        bool IsSleeping(const CallContext& context, PhysicsScripting& physics, std::uint32_t body)
         {
-            PhysicsWorld* world = WorldFor(context, "IsSleeping");
-            if (world == nullptr || !HasBody(context, body, "IsSleeping"))
+            PhysicsWorld* world = physics.WorldOf(context, "IsSleeping");
+            if (world == nullptr || !physics.HasBody(context, body, "IsSleeping"))
             {
                 return false;
             }
             return world->IsSleeping(context.Entities().HandleOf(body));
         }
 
-        bool Bounds(const CallContext& context, std::uint32_t body, ScriptAabb* bounds)
+        bool Bounds(const CallContext& context, PhysicsScripting& physics, std::uint32_t body, ScriptAabb* bounds)
         {
-            PhysicsWorld* world = WorldFor(context, "Bounds");
-            if (world == nullptr || !HasBody(context, body, "Bounds") || bounds == nullptr)
+            if (bounds == nullptr)
+            {
+                return false;
+            }
+            *bounds = ScriptAabb{};
+            PhysicsWorld* world = physics.WorldOf(context, "Bounds");
+            if (world == nullptr || !physics.HasBody(context, body, "Bounds"))
             {
                 return false;
             }
@@ -1248,10 +1282,15 @@ namespace Fenrir
             return true;
         }
 
-        bool Gravity(const CallContext& context, Math::Vec3* gravity)
+        bool Gravity(const CallContext& context, PhysicsScripting& physics, Math::Vec3* gravity)
         {
-            PhysicsWorld* world = WorldFor(context, "Gravity");
-            if (world == nullptr || gravity == nullptr)
+            if (gravity == nullptr)
+            {
+                return false;
+            }
+            *gravity = Math::Vec3(0.0f);
+            PhysicsWorld* world = physics.WorldOf(context, "Gravity");
+            if (world == nullptr)
             {
                 return false;
             }
@@ -1259,9 +1298,9 @@ namespace Fenrir
             return true;
         }
 
-        bool SetGravity(const CallContext& context, const Math::Vec3* gravity)
+        bool SetGravity(const CallContext& context, PhysicsScripting& physics, const Math::Vec3* gravity)
         {
-            PhysicsWorld* world = WorldFor(context, "SetGravity");
+            PhysicsWorld* world = physics.WorldOf(context, "SetGravity");
             if (world == nullptr || gravity == nullptr)
             {
                 return false;
@@ -1270,9 +1309,9 @@ namespace Fenrir
             return true;
         }
 
-        bool SetDebugDraw(const CallContext& context, std::uint32_t categories)
+        bool SetDebugDraw(const CallContext& context, PhysicsScripting& physics, std::uint32_t categories)
         {
-            PhysicsWorld* world = WorldFor(context, "SetDebugDraw");
+            PhysicsWorld* world = physics.WorldOf(context, "SetDebugDraw");
             if (world == nullptr)
             {
                 return false;
@@ -1281,77 +1320,72 @@ namespace Fenrir
             return true;
         }
 
-        // The owner whose extension the running scripts were given, if it is alive and serves this App; warns once if
-        // not.
-        std::shared_ptr<Detail::PhysicsState> OwnerFor(const CallContext& context, std::string_view function,
-                                                       std::source_location where = std::source_location::current())
+        std::uint64_t CreateMesh(const CallContext& context, PhysicsScripting& physics, const Math::Vec3* vertices,
+                                 std::int32_t vertexCount, const std::uint32_t* indices, std::int32_t indexCount)
         {
-            std::shared_ptr<Detail::PhysicsState> owner;
-            {
-                const std::lock_guard<std::mutex> lock(ownerMutex);
-                owner = scriptedOwner.lock();
-            }
-            if (owner == nullptr || owner->app != &context.GetApp())
-            {
-                WarnOnce(context, std::string(function) + ": the Physics owner is gone, so it does nothing", where);
-                return nullptr;
-            }
-            return owner;
-        }
-
-        std::uint64_t CreateMesh(const CallContext& context, const Math::Vec3* vertices, std::int32_t vertexCount,
-                                 const std::uint32_t* indices, std::int32_t indexCount)
-        {
-            const std::shared_ptr<Detail::PhysicsState> owner = OwnerFor(context, "CreateCollisionMesh");
-            if (owner == nullptr || (vertices == nullptr && vertexCount > 0) || (indices == nullptr && indexCount > 0))
+            PhysicsWorld* world = physics.WorldOf(context, "CreateCollisionMesh");
+            if (world == nullptr || (vertices == nullptr && vertexCount > 0) || (indices == nullptr && indexCount > 0))
             {
                 return 0;
             }
-            // The owner's meshes say why they refuse empty or broken data.
+            // The owner's meshes, which the world reaches, say why they refuse empty or broken data.
             const std::span<const Math::Vec3> vertexSpan(vertices, static_cast<std::size_t>(std::max(vertexCount, 0)));
             const std::span<const std::uint32_t> indexSpan(indices, static_cast<std::size_t>(std::max(indexCount, 0)));
-            return owner->meshes.Create(vertexSpan, indexSpan).id;
+            return world->CreateCollisionMesh(vertexSpan, indexSpan).id;
         }
 
-        bool ReleaseMesh(const CallContext& context, std::uint64_t mesh)
+        bool ReleaseMesh(const CallContext& context, PhysicsScripting& physics, std::uint64_t mesh)
         {
-            const std::shared_ptr<Detail::PhysicsState> owner = OwnerFor(context, "ReleaseCollisionMesh");
-            if (owner == nullptr)
+            PhysicsWorld* world = physics.WorldOf(context, "ReleaseCollisionMesh");
+            if (world == nullptr)
             {
                 return false;
             }
             // Releasing a mesh that is not alive warns there, every time, as it does in C++.
-            return owner->meshes.Release(CollisionMesh{mesh});
+            return world->ReleaseCollisionMesh(CollisionMesh{mesh});
         }
 
         static_assert(sizeof(JointFrames) == 2 * sizeof(JointFrame),
                       "Keep JointFrames as the C# JointFrames lays it out.");
 
-        // C++'s FrameFromWorld, which warns about a body that is not alive itself; the empty value is the empty Entity,
-        // the world, and any other value names an entity of the active scene, alive or not.
-        void FrameFromWorldNative(const CallContext& context, std::uint32_t bodyA, std::uint32_t bodyB,
-                                  const JointFrame* anchor, JointFrames* frames)
+        // C++'s FrameFromWorld, once the bodies it needs are alive (C++'s gives identity frames without a word, having
+        // no app to warn through); identity frames, warning once, if not. The empty value is the empty Entity, the
+        // world, as bodyB; any other value names an entity of the active scene. Needs no physics world.
+        void FrameFromWorldNative(const CallContext& context, PhysicsScripting& physics, std::uint32_t bodyA,
+                                  std::uint32_t bodyB, const JointFrame* anchor, JointFrames* frames)
         {
-            if (anchor == nullptr || frames == nullptr)
+            if (frames == nullptr)
             {
                 return;
             }
-            const auto entityOf = [&](std::uint32_t value) {
-                return value == Entity::Null ? Entity() : context.Entities().HandleOf(value);
-            };
-            *frames = FrameFromWorld(entityOf(bodyA), entityOf(bodyB), *anchor);
+            *frames = JointFrames{};
+            if (anchor == nullptr)
+            {
+                return;
+            }
+            EntityList& entities = context.Entities();
+            const bool aliveA = entities.HasEntity(bodyA);
+            if (!aliveA || (bodyB != Entity::Null && !entities.HasEntity(bodyB)))
+            {
+                physics.WarnOnce(context, std::string("FrameFromWorld: ") + (aliveA ? "bodyB" : "bodyA") +
+                                              " is not alive, so it gives identity frames");
+                return;
+            }
+            *frames = FrameFromWorld(entities.HandleOf(bodyA),
+                                     bodyB == Entity::Null ? Entity() : entities.HandleOf(bodyB), *anchor);
         }
 
         // The world's reading of the joint, or the zeroed state (warning once) with no world or no Joint. An inactive
         // or unstepped joint reads zeroed from the world itself, which already warns about an inactive one.
-        void GetJointState(const CallContext& context, std::uint32_t joint, JointState* state)
+        void GetJointState(const CallContext& context, PhysicsScripting& physics, std::uint32_t joint,
+                           JointState* state)
         {
             if (state == nullptr)
             {
                 return;
             }
             *state = JointState{};
-            PhysicsWorld* world = WorldFor(context, "GetJointState");
+            PhysicsWorld* world = physics.WorldOf(context, "GetJointState");
             if (world == nullptr)
             {
                 return;
@@ -1359,22 +1393,19 @@ namespace Fenrir
             EntityList& entities = context.Entities();
             if (!entities.HasEntity(joint) || !entities.GetEntity(joint).HasComponent<Joint>())
             {
-                WarnOnce(context, "GetJointState: the entity has no Joint, so it reads zeroed");
+                physics.WarnOnce(context, "GetJointState: the entity has no Joint, so it reads zeroed");
                 return;
             }
             *state = world->GetJointState(entities.HandleOf(joint));
         }
     } // namespace
 
-    Fenrir::ScriptingExtension Physics::ScriptingExtension() const
+    ScriptingExtension PhysicsScriptingExtension()
     {
-        {
-            const std::lock_guard<std::mutex> lock(ownerMutex);
-            scriptedOwner = m_state;
-        }
         const std::string prefix = "Fenrir.Physics.PhysicsNative.";
-        Fenrir::ScriptingExtension extension;
+        ScriptingExtension extension;
         extension.name = "FenrirPhysics";
+        extension.SetState(std::make_shared<PhysicsScripting>());
         extension.sharedAssemblies = {"Fenrir.Physics.dll"};
         extension.functions = {
             NativeFunction::Make<&AddForce>(prefix + "AddForce"),

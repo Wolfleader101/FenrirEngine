@@ -1,6 +1,8 @@
 # FenrirPhysics's scripting extension (ADR-0009): the Fenrir.Physics C# contract and the FenrirPhysicsScripting library
-# holding the native functions behind it. A library of its own so FenrirPhysics never links FenrirScripting. The root
-# build adds this directory only when FENRIR_ENABLE_PHYSICS and FENRIR_ENABLE_SCRIPTING are both on.
+# holding the native functions behind it. A library of its own so FenrirPhysics never links FenrirScripting. It uses
+# FenrirPhysics's public headers only: its natives reach the active scene's PhysicsWorld, and keep their own state as
+# the extension's state. The root build adds this directory only when FENRIR_ENABLE_PHYSICS and FENRIR_ENABLE_SCRIPTING
+# are both on.
 
 # The contract, built against the scripting SDK with the .NET SDK Iris found. fenrir_deploy_physics_scripting copies it
 # next to an executable, beside the scripting contract, where Scripting::Install finds the extension's relative path.
@@ -22,7 +24,7 @@ add_custom_target(FenrirPhysicsContract ALL DEPENDS "${FENRIR_PHYSICS_CONTRACT_D
 add_dependencies(FenrirPhysicsContract FenrirScriptingContract)
 
 # fenrir_deploy_physics_scripting(<target>): after <target> builds, copy the Fenrir.Physics contract next to it. Call it
-# with fenrir_deploy_scripting(<target>) on an executable that adds Physics::ScriptingExtension() to its scripting config.
+# with fenrir_deploy_scripting(<target>) on an executable that adds PhysicsScriptingExtension() to its scripting config.
 function(fenrir_deploy_physics_scripting target)
     add_custom_target(${target}DeployPhysicsContract
         COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${target}>"
@@ -39,8 +41,6 @@ add_library(FenrirPhysicsScripting STATIC
     src/PhysicsScripting.cpp
 )
 target_include_directories(FenrirPhysicsScripting PUBLIC include)
-# FenrirPhysics's private headers (the owner's state; never Jolt's), because this library is part of the package.
-target_include_directories(FenrirPhysicsScripting PRIVATE ../src)
 target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScripting)
 
 if(FENRIR_BUILD_TESTS)

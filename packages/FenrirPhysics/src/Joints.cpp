@@ -16,7 +16,6 @@
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "OutOfRange.hpp"
-#include "PhysicsState.hpp"
 #include "Poses.hpp"
 #include "Same.hpp"
 
@@ -291,10 +290,6 @@ namespace Fenrir
         const bool toWorld = IsWorld(bodyB);
         if (!bodyA.IsValid() || (!toWorld && !bodyB.IsValid()))
         {
-#ifndef NDEBUG
-            WarnThroughInstalledApp(std::string("FrameFromWorld: ") + (bodyA.IsValid() ? "bodyB" : "bodyA") +
-                                    " is not alive, so it gives identity frames");
-#endif
             return JointFrames{};
         }
         return JointFrames{LocalTo(bodyA, anchor), toWorld ? anchor : LocalTo(bodyB, anchor)};

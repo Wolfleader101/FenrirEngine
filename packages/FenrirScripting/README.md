@@ -576,9 +576,10 @@ without scripts, if a C# field has no native function, if their signatures diffe
 or if a native function takes an extension state its extension does not carry (none, or one of another type: the
 diagnostic names the function and both types).
 The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example, and
-FenrirPhysics's is a real one: `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
-never links FenrirScripting), its contract `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this
-package's harness in `packages/FenrirPhysics/Scripting/Tests`.
+FenrirPhysics's is a real one: `PhysicsScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
+never links FenrirScripting), whose natives take its extension state, its contract
+`packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this package's harness in
+`packages/FenrirPhysics/Scripting/Tests`.
 
 ## Exposing a native function
 

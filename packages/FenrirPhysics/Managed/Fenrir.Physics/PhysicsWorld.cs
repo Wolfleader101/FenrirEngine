@@ -9,11 +9,15 @@ namespace Fenrir.Physics;
 /// </summary>
 /// <remarks>
 /// Nothing here throws. When the active scene has no physics world yet (one is made the first tick it has a body), the
-/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero: with
-/// no world, <see cref="MoveCast"/> returns <c>false</c>, <see cref="Penetrations"/> 0 and <see cref="Depenetrate"/> a
-/// zero offset. In a debug build of the engine a warning is logged once per process for each place in the engine's
-/// native code that noticed (not once per C# call site). Like every native function, none of these makes a structural
-/// change: forces are queued for the next step, and queries and motion tests read the world as the last step left it.
+/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero, and
+/// what it gives back through an <c>out</c> parameter is its default: with no world, <see cref="MoveCast"/> returns
+/// <c>false</c>, <see cref="Penetrations"/> 0 and <see cref="Depenetrate"/> a zero offset. Collision meshes are made and
+/// released through the active scene's world too, so with no world <see cref="CreateCollisionMesh"/> gives the none
+/// handle and <see cref="ReleaseCollisionMesh"/> returns <c>false</c>: make meshes once a scene has a body. In a debug
+/// build of the engine a warning is logged once for each place in the engine's native code that noticed and each
+/// reason (not once per C# call site), for as long as scripting runs. Like every native function, none of these makes a
+/// structural change: forces are queued for the next step, and queries and motion tests read the world as the last
+/// step left it.
 /// <para>
 /// <see cref="GetJointState"/> reads the zeroed state with no physics world or on an entity with no Joint, with that
 /// warning. It also reads zeroed, with no extra warning, for an inactive joint (physics already warns once each time one
