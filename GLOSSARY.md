@@ -604,6 +604,18 @@ One matrix per bone (model-space × inverse bind) that skinned vertices are move
 A number FenrirSkeleton advances whenever a skeleton instance's final pose changes or the instance is rebuilt, never repeated within a scene; moving the skeleton entity does not advance it. Caches of a pose (the palette, the renderer's upload) are keyed by it (ADR-0035).
 *Avoid:* pose revision (an asset's revision is another thing), frame number, dirty flag.
 
+**Pose override**
+`PoseOverride`: FenrirSkeleton's first pose modifier, at `ModifierOrder::Override`: persistent pose targets per bone, set and cleared from outside the pipeline and written each frame in bone order, scaled by override weights (ADR-0033, ADR-0038).
+*Avoid:* modifier (the general term), ragdoll blend.
+
+**Override weight**
+A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
+*Avoid:* blend weight (pose blending's), physics weight, influence.
+
+**Ragdoll glue**
+App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+*Avoid:* ragdoll system, physics animation.
+
 **Skinned mesh**
 A mesh whose vertices carry bone weights and are stored in skeleton bind space, drawn on an entity with a `SkinnedMesh` naming its skeleton entity. It is drawn with the skeleton entity's world matrix; its own entity's `Transform` is never applied (ADR-0035).
 *Avoid:* skin (glTF's grouping of joints), skeletal mesh (Unreal's asset).
