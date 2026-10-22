@@ -16,11 +16,11 @@
 
 **Touches:** `packages/FenrirDebugDraw/`, `CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirDebugDrawTests` (headless, through `App::RunFrame`): tessellated batches for a line, a box, a sphere with a given segment count, an arrow and a solid triangle list match expected vertices, tagged with depth mode and thickness.
-- [ ] Durations per phase: a `Tick` item survives a frame with no tick and is gone after the next tick; with two ticks in a frame it does not double; an `Update` item lasts to the end of that frame's `Render`; seconds expire on frame time; `Forever` lasts until `Clear` or its group's `Clear`.
-- [ ] A hidden group still records and reappears when shown; `Clear(group)` clears only it.
-- [ ] `relativeTo` items follow the entity's world transform and are gone when it is destroyed.
-- [ ] Parallel systems' items merge in registration order; messages replace by key and stack newest first.
-- [ ] Builds in every configuration, including `FENRIR_ENABLE_RENDERER=OFF`.
+- [x] `FenrirDebugDrawTests` (headless, through `App::RunFrame`): tessellated batches for a line, a box, a sphere with a given segment count, an arrow and a solid triangle list match expected vertices, tagged with depth mode and thickness.
+- [x] Durations per phase: a `Tick` item survives a frame with no tick and is gone after the next tick; with two ticks in a frame it does not double; an `Update` item lasts to the end of that frame's `Render`; seconds expire on frame time; `Forever` lasts until `Clear` or its group's `Clear`.
+- [x] A hidden group still records and reappears when shown; `Clear(group)` clears only it.
+- [x] `relativeTo` items follow the entity's world transform and are gone when it is destroyed.
+- [x] Parallel systems' items merge in registration order; messages replace by key and stack newest first.
+- [x] Builds in every configuration, including `FENRIR_ENABLE_RENDERER=OFF`.
