@@ -1,6 +1,10 @@
 #include "Backend/Null/NullDevice.hpp"
 
+#include <algorithm>
+#include <cstddef>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace Fenrir::Graphics
@@ -37,9 +41,12 @@ namespace Fenrir::Graphics
         m_pipelines.Collect(frameIndex, frames, ReleaseNothing);
     }
 
-    BufferHandle NullDevice::CreateBuffer(const BufferDesc&, std::span<const std::byte>, std::string_view)
+    BufferHandle NullDevice::CreateBuffer(const BufferDesc& desc, std::span<const std::byte> initial,
+                                          std::string_view label)
     {
-        return m_buffers.Add({});
+        NullBuffer buffer{std::vector<std::byte>(desc.size), std::string(label)};
+        std::copy_n(initial.begin(), std::min(initial.size(), desc.size), buffer.bytes.begin());
+        return m_buffers.Add(std::move(buffer));
     }
 
     TextureHandle NullDevice::CreateTexture(const TextureDesc&, std::string_view)
@@ -57,20 +64,31 @@ namespace Fenrir::Graphics
         return m_layouts.Add({});
     }
 
-    BindingGroupHandle NullDevice::CreateBindingGroup(const BindingGroupDesc&, std::string_view)
+    BindingGroupHandle NullDevice::CreateBindingGroup(const BindingGroupDesc& desc, std::string_view label)
     {
-        return m_groups.Add({});
+        return m_groups.Add({desc, std::string(label)});
     }
 
-    PipelineResult NullDevice::CreatePipeline(const PipelineDesc&, std::string_view)
+    PipelineResult NullDevice::CreatePipeline(const PipelineDesc&, std::string_view label)
     {
         // Any shader container is accepted: there is nothing to compile it for.
-        return {m_pipelines.Add({}), {}};
+        return {m_pipelines.Add({std::string(label)}), {}};
     }
 
-    bool NullDevice::WriteBuffer(BufferHandle buffer, std::size_t, std::span<const std::byte>)
+    bool NullDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)
     {
-        return m_buffers.IsLive(buffer);
+        NullBuffer* found = m_buffers.Find(buffer);
+        if (found == nullptr)
+        {
+            return false;
+        }
+        // Bytes past the end are dropped, as a real backend would refuse them.
+        if (offset < found->bytes.size())
+        {
+            std::copy_n(bytes.begin(), std::min(bytes.size(), found->bytes.size() - offset),
+                        found->bytes.begin() + static_cast<std::ptrdiff_t>(offset));
+        }
+        return true;
     }
 
     bool NullDevice::WriteTexture(TextureHandle texture, std::uint32_t, std::uint32_t, std::span<const std::byte>)

@@ -1,0 +1,38 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string_view>
+
+namespace Fenrir::Render
+{
+    /** @brief One of the renderer's built-in shader programs, embedded in it as a shader container (ADR-0018). */
+    enum class BuiltinProgram : std::uint8_t
+    {
+        /** @brief `builtin:unlit`: base colour times vertex colour. */
+        Unlit,
+        /** @brief `builtin:lit`: metallic-roughness GGX, one directional light and ambient. */
+        Lit,
+        /** @brief `builtin:fallback`: the fallback material's flat magenta. */
+        Fallback,
+        /** @brief `builtin:background`: the Background pass's clear colour at depth 0. */
+        Background,
+        /** @brief `builtin:output`: the Output pass, SceneColor clamped into the backbuffer. */
+        Output,
+    };
+
+    /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */
+    struct BuiltinShader
+    {
+        BuiltinProgram program = BuiltinProgram::Unlit;
+        std::string_view name;
+        std::span<const std::byte> bytes;
+    };
+
+    /** @brief Every built-in program, in BuiltinProgram's order, for the facade to register in the asset store. */
+    [[nodiscard]] std::span<const BuiltinShader> BuiltinShaders();
+
+    /** @brief One built-in program's embedded container. */
+    [[nodiscard]] const BuiltinShader& GetBuiltinShader(BuiltinProgram program);
+} // namespace Fenrir::Render

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -16,8 +17,9 @@ namespace Fenrir::Graphics
 {
     /**
      * @brief The null backend (ADR-0016): every handle and book a backend keeps, no window, context or GPU, and nothing
-     * drawn. It keeps the CommandLists submitted since the frame began, and every stale handle a submitted command
-     * named, for RendererProbe to read.
+     * drawn. It keeps the CommandLists submitted since the frame began, every stale handle a submitted command named,
+     * each buffer's bytes, each binding group's bindings and the labels of buffers, groups and pipelines, for
+     * RendererProbe to read.
      */
     class NullDevice final : public GraphicsDevice
     {
@@ -65,21 +67,41 @@ namespace Fenrir::Graphics
       private:
         friend struct Fenrir::RendererProbe;
 
-        /** @brief Nothing: the null backend holds no object behind a handle. */
+        /** @brief Nothing: the null backend holds no object behind most handles. */
         struct Nothing
         {
+        };
+
+        /** @brief A buffer's bytes as last written, and its label, for RendererProbe. */
+        struct NullBuffer
+        {
+            std::vector<std::byte> bytes;
+            std::string label;
+        };
+
+        /** @brief What a binding group binds, and its label, for RendererProbe. */
+        struct NullGroup
+        {
+            BindingGroupDesc desc;
+            std::string label;
+        };
+
+        /** @brief A pipeline's label, for RendererProbe. */
+        struct NullPipeline
+        {
+            std::string label;
         };
 
         void CheckLive(bool live, const char* what);
 
         DeviceConfig m_config;
         std::uint64_t m_frameIndex = 0;
-        ResourceTable<BufferHandle, Nothing> m_buffers;
+        ResourceTable<BufferHandle, NullBuffer> m_buffers;
         ResourceTable<TextureHandle, Nothing> m_textures;
         ResourceTable<SamplerHandle, Nothing> m_samplers;
         ResourceTable<BindingGroupLayoutHandle, Nothing> m_layouts;
-        ResourceTable<BindingGroupHandle, Nothing> m_groups;
-        ResourceTable<PipelineHandle, Nothing> m_pipelines;
+        ResourceTable<BindingGroupHandle, NullGroup> m_groups;
+        ResourceTable<PipelineHandle, NullPipeline> m_pipelines;
         TextureHandle m_backbuffer;
         /** @brief What Submit received since the frame began, in order. */
         std::vector<CommandList> m_submitted;

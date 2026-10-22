@@ -22,11 +22,13 @@
 
 **Touches:** `packages/FenrirRenderer/`, `CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirRendererTests` on the null backend through `App::RunFrame` and `RendererProbe`: one `MeshRenderer` and one camera give one draw in `Opaque` with the lit pipeline and the frame, view, material and draw bindings; `visible = false` gives none; a stale mesh is skipped and logged once; an empty material draws with the fallback pipeline, logged once; opaque items sort by pipeline, material, mesh.
-- [ ] Parameter defaults reach the uploaded material block, and an override replaces its member; a `Replace` of the mesh re-uploads it once (revision); unloading it frees the GPU side.
-- [ ] A minimised window submits nothing while the frame index advances; no camera clears to black, logged once.
-- [ ] `GetWorldBounds` and `Stats` report expected values; `Install` with `Null` needs no window, and with `OpenGL` but no window returns an invalid owner whose calls do nothing.
-- [ ] GL pixel probes: an unlit quad's colour; the nearer of two quads wins under reversed-Z; a lit face matches N·L with ambient within tolerance.
+Hand check: run a small app that installs Window, Assets and Renderer (OpenGL) and draws a code-built cube with a `builtin:lit` material, a `Camera` and a `DirectionalLight` whose entity a system rotates each frame: the cube is lit and shaded by GGX, its shading follows the light as it turns, the background is dark grey, resizing the window keeps the cube in proportion with no code, minimising and restoring it needs no code (nothing is drawn while minimised), and no GL error is logged with `debugValidation` on.
+
+- [x] `FenrirRendererTests` on the null backend through `App::RunFrame` and `RendererProbe`: one `MeshRenderer` and one camera give one draw in `Opaque` with the lit pipeline and the frame, view, material and draw bindings; `visible = false` gives none; a stale mesh is skipped and logged once; an empty material draws with the fallback pipeline, logged once; opaque items sort by pipeline, material, mesh.
+- [x] Parameter defaults reach the uploaded material block, and an override replaces its member; a `Replace` of the mesh re-uploads it once (revision); unloading it frees the GPU side.
+- [x] A minimised window submits nothing while the frame index advances; no camera clears to black, logged once.
+- [x] `GetWorldBounds` and `Stats` report expected values; `Install` with `Null` needs no window, and with `OpenGL` but no window returns an invalid owner whose calls do nothing.
+- [x] GL pixel probes: an unlit quad's colour; the nearer of two quads wins under reversed-Z; a lit face matches N·L with ambient within tolerance.
 - [ ] A small C++ test app (or the GL test harness, visibly) shows a lit cube in a window; resizing and minimising need no code (checked by hand).
