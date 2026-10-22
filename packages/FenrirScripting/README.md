@@ -521,6 +521,14 @@ An engine package, or the app, makes itself scriptable with a `ScriptingExtensio
   by the full name of the C# method that calls them;
 - **components and events**: native components (`MakeComponent`, `MakeReadOnlyComponent`) and C++ events (`MakeEvent`),
   registered before the script assembly loads and checked against it as it does;
+- **shared structs**: the plain data its native functions take or return by pointer that is neither a component nor an
+  event (a query filter, a hit), made with `MakeSharedStruct<T>("Namespace.Type")`. Each is checked against its C#
+  mirror when a script assembly loads, as a native component is: a mismatch fails the load naming the struct and field,
+  and the app runs without scripts. The names of every extension's components, events and shared structs together are
+  unique;
+- **extension state**: one object its native functions work on, given with `SetState(std::shared_ptr<State>)` (setting
+  it again replaces it). Scripting keeps it alive until it shuts down. It is the only way a native function reaches its
+  package's state: no process globals;
 - **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
   beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (FenrirPhysics's
   `fenrir_deploy_physics_scripting`, say).
@@ -536,24 +544,37 @@ game.events = {Fenrir::MakeEvent<Explosion>("MyGame.Explosion")};
 config.extensions.push_back(std::move(game));
 ```
 
-A native function's first parameter is the `CallContext`, which gives the App and the active scene's entities. Its other
-parameters and its result are what C# passes and gets: sized numbers, `float`, `double`, `bool`, `char16_t`, pointers,
-and `std::string_view` parameters. It is called only while a Scripting is running. Otherwise C# gets a zero result, or
+A native function's first parameter is the `CallContext`, which gives the App and the active scene's entities, and
+nothing of any extension. A native function that needs its extension state takes it second, as a reference:
+
+- `R F(const CallContext&, Args...)`: a stateless native function;
+- `R F(const CallContext&, State&, Args...)`, where `State` is a class type: it receives the object its extension's
+  `SetState` was given.
+
+Its other parameters and its result are what C# passes and gets: sized numbers, `float`, `double`, `bool`, `char16_t`,
+pointers, and `std::string_view` parameters. It is called only while a Scripting is running. Otherwise C# gets a zero result, or
 the value given as `Make`'s second argument. It may read and write component data, but must not create or destroy
 entities or add or remove components: the calling system holds `Ref<T>`s into the storage.
 
 ```cpp
 float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* context.Entities() ... */ }
+bool Raycast(const Fenrir::CallContext& context, PhysicsScriptState& physics, const Ray* ray, RaycastHit* hit);
 
 Fenrir::ScriptingExtension physics;
 physics.name = "physics";
 physics.sharedAssemblies = {"Fenrir.Physics.dll"};    // beside Fenrir.Scripting.dll
-physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf")};
+physics.SetState(std::make_shared<PhysicsScriptState>());
+physics.functions = {Fenrir::NativeFunction::Make<&HeightOf>("Fenrir.Physics.Queries.HeightOf"),
+                     Fenrir::NativeFunction::Make<&Raycast>("Fenrir.Physics.Queries.Raycast")};
+physics.sharedStructs = {Fenrir::MakeSharedStruct<Ray>("Fenrir.Physics.Ray"),
+                         Fenrir::MakeSharedStruct<RaycastHit>("Fenrir.Physics.RaycastHit")};
 config.extensions.push_back(std::move(physics));
 ```
 
 `Install` registers every extension's native functions before it shares the contracts. It fails, logged and running
-without scripts, if a C# field has no native function, if their signatures differ, or if two extensions declare one name.
+without scripts, if a C# field has no native function, if their signatures differ, if two extensions declare one name,
+or if a native function takes an extension state its extension does not carry (none, or one of another type: the
+diagnostic names the function and both types).
 The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example, and
 FenrirPhysics's is a real one: `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
 never links FenrirScripting), its contract `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this
@@ -608,11 +629,12 @@ engine's components (Transform, Name and Relationship, from `EngineComponents`) 
 other extension's, and the contract is shared before any other. To add a native function, in the order a script sees it:
 
 1. **The C++ function**, in `src/Bindings.cpp`, over the `CallContext` like any native function. The engine's own state
-   (the component registry, the change buffer) comes from the context's internal part. A C++ exception that escapes it is
-   stopped by Iris and logged; scripts get a zero result.
+   (the component registry, the change buffer) is the built-in extension's extension state, the `EngineContext`, which
+   every one of its native functions takes second. A C++ exception that escapes it is stopped by Iris and logged;
+   scripts get a zero result.
 
    ```cpp
-   void Log(const CallContext& context, std::int32_t level, const char* text, std::int32_t length) { /* ... */ }
+   void Log(const CallContext& context, EngineContext&, std::int32_t level, const char* text, std::int32_t length);
    ```
 
 2. **Its entry in `BuiltInExtension`**, named `Fenrir.Scripting.Native.<Method>`. Give a second argument if C# should get

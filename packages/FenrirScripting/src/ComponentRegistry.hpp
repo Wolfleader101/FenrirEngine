@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "FenrirScripting/ComponentRegistry.hpp"
@@ -161,6 +162,24 @@ namespace Fenrir::Detail
             return m_events;
         }
 
+        // Shared structs: native only, with no ids, kept so each load checks them against their C# structs. False (and
+        // nothing added) if the name is empty or a shared struct already has it.
+        bool AddSharedStruct(SharedStructRegistration registration)
+        {
+            if (registration.name.empty() || m_sharedStructNames.contains(registration.name))
+            {
+                return false;
+            }
+            m_sharedStructNames.insert(registration.name);
+            m_sharedStructs.push_back(std::move(registration));
+            return true;
+        }
+
+        [[nodiscard]] const std::vector<SharedStructRegistration>& SharedStructs() const noexcept
+        {
+            return m_sharedStructs;
+        }
+
         // The id registered under a name, or -1.
         [[nodiscard]] std::int32_t Find(std::string_view name) const
         {
@@ -211,6 +230,8 @@ namespace Fenrir::Detail
         std::unordered_map<std::string, std::int32_t> m_ids;
         std::vector<EventRegistration> m_events;
         std::unordered_map<std::string, std::int32_t> m_eventIds;
+        std::vector<SharedStructRegistration> m_sharedStructs;
+        std::unordered_set<std::string> m_sharedStructNames;
     };
 
     /**
