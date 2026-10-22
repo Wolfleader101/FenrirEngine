@@ -1,0 +1,54 @@
+# FenrirPhysics's selection (ADR-0016, tools/describe-api/README.md): the headers to read, relative to this file, and
+# each type the package shares with bindings, with its role. The shapes, joint kinds, vehicle kinds, their tagged unions
+# and enums are described because the types below hold them.
+headers = [
+    "../include/FenrirPhysics/Components.hpp",
+    "../include/FenrirPhysics/Joints.hpp",
+    "../include/FenrirPhysics/Characters.hpp",
+    "../include/FenrirPhysics/Vehicles.hpp",
+    "../include/FenrirPhysics/Events.hpp",
+    "../include/FenrirPhysics/Queries.hpp",
+    "../include/FenrirPhysics/PhysicsWorld.hpp",
+]
+
+[types]
+# The physics extension's components.
+"Fenrir::RigidBody" = "component"
+"Fenrir::Collider" = "component"
+"Fenrir::PhysicsMaterial" = "component"
+"Fenrir::CollisionFilter" = "component"
+"Fenrir::Trigger" = "component"
+"Fenrir::ContactEvents" = "component"
+"Fenrir::Joint" = "component"
+"Fenrir::CharacterBody" = "component"
+"Fenrir::Vehicle" = "component"
+"Fenrir::VehicleWheel" = "component"
+"Fenrir::VehicleDifferential" = "component"
+"Fenrir::VehicleAntiRollBar" = "component"
+
+# Its events.
+"Fenrir::ContactBegin" = "event"
+"Fenrir::ContactEnd" = "event"
+"Fenrir::TriggerEnter" = "event"
+"Fenrir::TriggerExit" = "event"
+"Fenrir::JointBroken" = "event"
+
+# The plain data its natives take or return by pointer.
+"Fenrir::CollisionShape" = "shared-struct"
+"Fenrir::QueryFilter" = "shared-struct"
+"Fenrir::RaycastHit" = "shared-struct"
+"Fenrir::ShapeCastHit" = "shared-struct"
+"Fenrir::MoveCastHit" = "shared-struct"
+"Fenrir::OverlapHit" = "shared-struct"
+"Fenrir::PenetrationHit" = "shared-struct"
+"Fenrir::Contact" = "shared-struct"
+"Fenrir::Math::AABB" = "shared-struct"
+"Fenrir::JointFrame" = "shared-struct"
+"Fenrir::JointFrames" = "shared-struct"
+"Fenrir::JointState" = "shared-struct"
+
+# Types every binding has its own of.
+"Fenrir::Math::Vec3" = "bound-type"
+"Fenrir::Math::Quat" = "bound-type"
+"Fenrir::Transform" = "bound-type"
+"Fenrir::Entity" = "bound-type"

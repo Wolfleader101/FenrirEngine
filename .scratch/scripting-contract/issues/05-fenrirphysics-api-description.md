@@ -11,8 +11,12 @@
 
 **Touches:** `packages/FenrirPhysics/api/`, `packages/FenrirPhysics/CMakeLists.txt`, `packages/FenrirPhysics/include/FenrirPhysics/` (only if a header needs a default the tool can read).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `fenrir-describe-api` produces `FenrirPhysics.api.json` with every component, event and shared struct of the physics extension, three tagged unions (`CollisionShape`, `JointKind`, `VehicleKind`), three empty structs and the bound types; CI's clean-tree check passes.
-- [ ] A hand check, recorded in the PR: each default in the description equals the C++ default initialiser and the C# field initialiser it will replace; each offset equals the `FieldOffset` or `offsetof` used today.
-- [ ] No header changed except for a default expression rewritten into a recordable form, if any; FenrirPhysics tests pass unchanged.
+- [x] `fenrir-describe-api` produces `FenrirPhysics.api.json` with every component, event and shared struct of the physics extension, three tagged unions (`CollisionShape`, `JointKind`, `VehicleKind`), three empty structs and the bound types; CI's clean-tree check passes.
+- [x] A hand check, recorded in the PR: each default in the description equals the C++ default initialiser and the C# field initialiser it will replace; each offset equals the `FieldOffset` or `offsetof` used today.
+- [x] No header changed except for a default expression rewritten into a recordable form, if any; FenrirPhysics tests pass unchanged.
+
+**Resolved by:** branch claude/fenrirphysics-api-description, into claude/physics-vehicles-spec. The selection described on its first run, so no header changed. It selects 12 components, 5 events, 12 shared structs (`CollisionShape` among them, since `ShapeCast`, `MoveCast`, `Overlap`, `Penetrations` and `Depenetrate` take it by pointer, and `Math::AABB`, which C# calls `Aabb`) and 4 bound types. The description holds 74 types: the three tagged unions, the three empty structs (1 byte each) and every nested struct and enum. Evidence: every C# field initialiser equals its recorded default; the C# `FieldOffset`s of the three unions (8, 4, 4) equal `unionOffset`; and 136 temporary `static_assert`s (size, alignment and every `offsetof` of the 20 `Detail::*Layout` stand-ins against the description) compiled, while one deliberately wrong value failed. Points for review:
+- **`Fenrir::Entity` is a bound type, not a struct with a pointer member.** It has private members, so the tool refuses it as a struct. As a bound type it is recorded as 16 bytes, alignment 8, and each binding maps it to its own link type (C#: `EntityLink`). Ticket 09 describes Entity's layout for the built-in extension, where it is FenrirECS's to describe.
+- **The query shared structs differ from today's C# mirrors.** C++'s `QueryFilter`, the hits and `Contact` hold a 16-byte `Entity`. C#'s hold a 4-byte `Entity`, through `QueryMirrors.hpp` and the `Script*` structs in `PhysicsScripting.cpp`, which copy field by field. The description records the C++ types, so their offsets match no `offsetof` used today. Tickets 07 and 08 must choose between generated mirrors that hold `EntityLink`, which changes `Fenrir.Physics`'s public API (against the spec's acceptance), and keeping a hand-written conversion at the native.
