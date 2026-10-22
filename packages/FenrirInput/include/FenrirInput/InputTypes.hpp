@@ -33,21 +33,19 @@ namespace Fenrir
 // The keys a Key and a Scancode can name, in one list so the two enums always name the same keys. Letters, digits
 // and punctuation are named as a US QWERTY keyboard prints them.
 // clang-format off
-#define FENRIR_INPUT_KEYS(X) \
-    X(A) X(B) X(C) X(D) X(E) X(F) X(G) X(H) X(I) X(J) X(K) X(L) X(M) \
-    X(N) X(O) X(P) X(Q) X(R) X(S) X(T) X(U) X(V) X(W) X(X) X(Y) X(Z) \
-    X(Num0) X(Num1) X(Num2) X(Num3) X(Num4) X(Num5) X(Num6) X(Num7) X(Num8) X(Num9) \
-    X(Escape) X(Enter) X(Tab) X(Backspace) X(Space) \
-    X(Minus) X(Equals) X(LeftBracket) X(RightBracket) X(Backslash) X(Semicolon) X(Apostrophe) X(Grave) \
-    X(Comma) X(Period) X(Slash) X(CapsLock) \
-    X(F1) X(F2) X(F3) X(F4) X(F5) X(F6) X(F7) X(F8) X(F9) X(F10) X(F11) X(F12) \
-    X(F13) X(F14) X(F15) X(F16) X(F17) X(F18) X(F19) X(F20) X(F21) X(F22) X(F23) X(F24) \
-    X(PrintScreen) X(ScrollLock) X(Pause) X(Insert) X(Delete) X(Home) X(End) X(PageUp) X(PageDown) \
-    X(Left) X(Right) X(Up) X(Down) \
-    X(NumLock) X(KeypadDivide) X(KeypadMultiply) X(KeypadMinus) X(KeypadPlus) X(KeypadEnter) X(KeypadPeriod) \
-    X(Keypad0) X(Keypad1) X(Keypad2) X(Keypad3) X(Keypad4) X(Keypad5) X(Keypad6) X(Keypad7) X(Keypad8) X(Keypad9) \
-    X(Menu) \
-    X(LeftCtrl) X(LeftShift) X(LeftAlt) X(LeftSuper) X(RightCtrl) X(RightShift) X(RightAlt) X(RightSuper)
+#define FENRIR_INPUT_KEYS(KEY) \
+    KEY(A) KEY(B) KEY(C) KEY(D) KEY(E) KEY(F) KEY(G) KEY(H) KEY(I) KEY(J) KEY(K) KEY(L) KEY(M) KEY(N) KEY(O) KEY(P) \
+    KEY(Q) KEY(R) KEY(S) KEY(T) KEY(U) KEY(V) KEY(W) KEY(X) KEY(Y) KEY(Z) KEY(Num0) KEY(Num1) KEY(Num2) KEY(Num3) \
+    KEY(Num4) KEY(Num5) KEY(Num6) KEY(Num7) KEY(Num8) KEY(Num9) KEY(Escape) KEY(Enter) KEY(Tab) KEY(Backspace) \
+    KEY(Space) KEY(Minus) KEY(Equals) KEY(LeftBracket) KEY(RightBracket) KEY(Backslash) KEY(Semicolon) KEY(Apostrophe) \
+    KEY(Grave) KEY(Comma) KEY(Period) KEY(Slash) KEY(CapsLock) KEY(F1) KEY(F2) KEY(F3) KEY(F4) KEY(F5) KEY(F6) KEY(F7) \
+    KEY(F8) KEY(F9) KEY(F10) KEY(F11) KEY(F12) KEY(F13) KEY(F14) KEY(F15) KEY(F16) KEY(F17) KEY(F18) KEY(F19) KEY(F20) \
+    KEY(F21) KEY(F22) KEY(F23) KEY(F24) KEY(PrintScreen) KEY(ScrollLock) KEY(Pause) KEY(Insert) KEY(Delete) KEY(Home) \
+    KEY(End) KEY(PageUp) KEY(PageDown) KEY(Left) KEY(Right) KEY(Up) KEY(Down) KEY(NumLock) KEY(KeypadDivide) \
+    KEY(KeypadMultiply) KEY(KeypadMinus) KEY(KeypadPlus) KEY(KeypadEnter) KEY(KeypadPeriod) KEY(Keypad0) KEY(Keypad1) \
+    KEY(Keypad2) KEY(Keypad3) KEY(Keypad4) KEY(Keypad5) KEY(Keypad6) KEY(Keypad7) KEY(Keypad8) KEY(Keypad9) KEY(Menu) \
+    KEY(LeftCtrl) KEY(LeftShift) KEY(LeftAlt) KEY(LeftSuper) KEY(RightCtrl) KEY(RightShift) KEY(RightAlt) \
+    KEY(RightSuper)
     // clang-format on
 
 #define FENRIR_INPUT_KEY_ENUMERATOR(name) name,

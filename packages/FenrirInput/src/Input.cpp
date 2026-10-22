@@ -250,10 +250,19 @@ namespace Fenrir
                                 [weak = std::weak_ptr<Detail::InputInstallation>(installation)](App& running) {
                                     if (!weak.expired())
                                     {
-                                        Detail::InputDispatch::Run(running);
+                                        Dispatch(running);
                                     }
                                 });
         return Input(std::move(installation));
+    }
+
+    void Input::Dispatch(App& app)
+    {
+        // The installation removes this resource when its last owner goes, so an app whose input ended does nothing.
+        if (app.TryGetResource<Detail::InstalledInput>() != nullptr)
+        {
+            Detail::InputDispatch::Run(app);
+        }
     }
 
     Input::Input(std::shared_ptr<Detail::InputInstallation> installation) : m_installation(std::move(installation))
