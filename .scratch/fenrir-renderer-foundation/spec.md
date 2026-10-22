@@ -659,7 +659,7 @@ The foundation builds none of this, but must not block it:
   - includes and every variant combination;
   - reflection of set 2;
   - every pragma error, with a build failure, and the default block image at std140 offsets;
-  - the container round-tripping through FenrirRenderer's parser.
+  - the container round-tripping through its reader, `FenrirShaderContainer` (`packages/FenrirAssets/ShaderContainer/`), which FenrirAssets, the tool and the renderer core all link (ticket 06).
 - **Seam 6 (new), FenrirDebugDraw headless.** Cases:
   - tessellated batches for known shapes;
   - durations per phase (a tick-phase item across frames with no tick and with two), seconds, `Forever`, `Clear` and groups;
