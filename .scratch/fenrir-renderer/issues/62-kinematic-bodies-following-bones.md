@@ -1,7 +1,7 @@
 # How do bone-following kinematic bodies get this frame's pose before the physics step?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 31, 32
 
 ## Question
