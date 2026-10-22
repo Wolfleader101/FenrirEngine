@@ -62,7 +62,7 @@ The work was tracked as tickets in `.scratch/dotnet-scripting/` (`spec.md` plus 
 - **Release versus collection.** Explicit release and observed collection are separate concepts. Library operations never force GC.
 - **Wire signatures.** Signatures use explicit calling conventions and fixed-width types, and the native and managed declarations must agree. Ordinary managed exceptions are caught before returning across the boundary; native allocations keep normal C++ exception behaviour.
 - **Threading.** Calls on a host or owner must be externally serialized until a ticket deliberately changes this. Calls on different owners from different threads are designed to work but are untested (README, "Threading").
-- **API stability.** The public headers are frozen at 0.2: changes are additive, and a breaking change needs an ADR (ADR-0006).
+- **API stability.** The public headers were frozen at 0.2 (ADR-0006). As amended, a release before 1.0 may break them, provided the README's change log lists each break with what it replaces; 1.0 re-freezes.
 
 ## Working method for every ticket
 
@@ -81,7 +81,7 @@ Ask for clarification only when a consequential decision can't be settled from t
 
 ## Current state (after ticket 18)
 
-The public API is frozen at version 0.2 (ADR-0006). It has 12 CTests of named cases, all passing on Windows in Debug and Release. The API covers:
+The public API was frozen at version 0.2 (ADR-0006), and 0.3 adds fields by offset, opaque pointer fields and empty structs (README, "Changes"). It has 12 CTests of named cases, all passing on Windows in Debug and Release. The API covers:
 
 - hostfxr discovery, loading and diagnostics, and one bridge per process: the bridge is loaded into the default load context, and one handshake fills a version-21 table of thirty operations
 - collectible components with private dependencies, shared contract assemblies, release, and observed unloading (NotRequested, Pending, Collected)

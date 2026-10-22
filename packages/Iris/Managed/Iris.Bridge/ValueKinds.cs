@@ -38,7 +38,8 @@ internal enum ValueKind : int
     // above it. Elements are read and written by index, or copied in bulk when they are blittable.
     Array = 15,
     StructArray = 16,
-    // Any pointer. Used only in internal call signatures, never as a method or member kind.
+    // Any pointer. Used in internal call signatures, and as an opaque eight-byte struct field (held by a managed
+    // nint, nuint, long or ulong), never as a method or member kind.
     Pointer = 17,
     // A UTF-16 code unit (C# char, C++ char16_t), in the low 16 bits of the slot.
     Char = 18,

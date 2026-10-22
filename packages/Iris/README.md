@@ -5,8 +5,9 @@ components into collectible contexts, call into them, and unload them. It has no
 FenrirEngine, which includes it only when `FENRIR_ENABLE_SCRIPTING` is on. See [ADR-0001](../../docs/adr/0001-own-dotnet-hosting-library-before-engine-integration.md)
 for the scope, [ADR-0003](../../docs/adr/0003-name-the-hosting-library-iris.md) for the name, and [the implementation plan](IMPLEMENTATION_PLAN.md) for the roadmap.
 
-The public API is frozen as of version 0.2 ([ADR-0006](../../docs/adr/0006-freeze-the-iris-public-api.md)): later
-changes add to it, and a breaking change needs its own ADR. Only Windows has been tested so far; see
+The public API was frozen at version 0.2 ([ADR-0006](../../docs/adr/0006-freeze-the-iris-public-api.md)). As amended,
+releases before 1.0 may break the public headers, and each break is listed under [Changes](#changes) with what it
+replaces; 1.0 re-freezes. Only Windows has been tested so far; see
 [Platforms](#platforms). Terms such as *component*, *owner*, *handle* and *release* are defined in the
 [glossary](../../GLOSSARY.md).
 
@@ -72,7 +73,7 @@ cmake --install out/build/iris --config Debug --prefix out/install/iris
 ```
 
 ```cmake
-find_package(Iris 0.2 CONFIG REQUIRED)    # with CMAKE_PREFIX_PATH including the install prefix
+find_package(Iris 0.3 CONFIG REQUIRED)    # with CMAKE_PREFIX_PATH including the install prefix
 target_link_libraries(MyApp PRIVATE Iris::Iris)
 iris_deploy(MyApp)                        # copies nethost and the bridge next to MyApp
 ```
@@ -380,6 +381,17 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
 - **Managed names that differ from the C++ members.** `IRIS_FIELD_AS(Transform, pos, "Position")` lists a field under the
   managed field's name, so a C# struct need not copy the C++ naming. Fields are matched by position and then checked
   by name, so only the name given here has to match.
+- **Fields by type and offset.** `Iris::Field<float>("X", 0)` declares a field by its C++ type, its managed name and
+  its byte offset, without naming the member, so a mapping can cover private members or be generated from a
+  description of the type. It takes every type `IRIS_FIELD` does, and gives the same result (both macros expand to
+  it). The offset is checked against the managed field like any other, so a wrong one fails with the field named.
+- **Opaque pointers.** A struct field of any pointer type (`void*`, `EntityList*`) crosses as eight bytes, unchanged in
+  both directions, and Iris never reads through it. The managed field is `nint`, `nuint`, `long` or `ulong` at the
+  same offset; any other type fails, naming the field. It is a handle managed code carries, not something it can
+  dereference.
+- **Empty structs.** `Iris::StructFields()` maps an empty C++ struct to a managed struct with no instance fields,
+  both one byte. A mapping with no fields fails against a managed struct that has one (naming it), or when the C++
+  struct is not one byte.
 - **The struct may live in a shared assembly.** A mapping's `typeName` is looked up in the component's own assembly
   first, then in the assemblies the host shares with every component (a contract). A host that maps engine types
   (a transform, say) defined once in its shared contract validates them against any component, whether or not that
@@ -735,6 +747,20 @@ Each check program runs named cases and reports every failure. The fixture bridg
 
 Release is verified by running `ctest -C Release` by hand; CMake does not enforce it. There is no CI yet:
 automated runners for all three platforms are future work.
+
+## Changes
+
+Each release lists every public change and what it replaces, as ADR-0006 (amended) requires before 1.0.
+
+### 0.3.0
+
+- **Added `Iris::Field<T>(name, offset)`**, a public way to declare a mapped field by C++ type and byte offset with no
+  member access. `IRIS_FIELD` and `IRIS_FIELD_AS` are unchanged for callers and now expand to it; it replaces
+  `Iris::Detail::MakeField`, which they used to expand to (not API, now gone).
+- **Added the opaque pointer field kind**: a pointer member of a mapped struct maps to a managed `nint`, `nuint`, `long`
+  or `ulong`. It replaces hand-written stand-in structs that put a 64-bit integer where the pointer is.
+- **Added zero-field structs**: `Iris::StructFields()` with no arguments maps an empty struct. A managed struct with
+  no fields used to be refused ("has no fields"); this replaces a private placeholder field added to make it map.
 
 ## References
 

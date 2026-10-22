@@ -12,9 +12,12 @@
 
 **Touches:** `packages/Iris/Native/include/Iris/Method.hpp`, `packages/Iris/Native/src/`, `packages/Iris/Managed/Iris.Bridge/StructMapping.cs`, `packages/Iris/Managed/Iris.Bridge/ValueKinds.cs`, `packages/Iris/Managed/Iris.Bridge/ValueCodec.cs`, `packages/Iris/Tests/`, `packages/Iris/README.md`, `packages/Iris/CMakeLists.txt` (version).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Iris tests: a struct mapped only with `Field<T>(name, offset)` validates against its managed mirror; a wrong offset, name or kind fails with a diagnostic naming the field.
-- [ ] A struct with a `void*` member validates against a managed struct with `ulong` at that offset, and fails against `uint` there; a pointer field's bytes cross unchanged in both directions.
-- [ ] An empty C++ struct validates against an empty C# struct; a zero-field description against a struct with one field fails naming it; a zero-field description whose size is not 1 fails.
-- [ ] The existing Iris tests, FenrirScripting's and FenrirPhysicsScripting's pass unchanged.
+- [x] Iris tests: a struct mapped only with `Field<T>(name, offset)` validates against its managed mirror; a wrong offset, name or kind fails with a diagnostic naming the field.
+- [x] A struct with a `void*` member validates against a managed struct with `ulong` at that offset, and fails against `uint` there; a pointer field's bytes cross unchanged in both directions.
+- [x] An empty C++ struct validates against an empty C# struct; a zero-field description against a struct with one field fails naming it; a zero-field description whose size is not 1 fails.
+- [x] The existing Iris tests, FenrirScripting's and FenrirPhysicsScripting's pass unchanged.
+
+**Resolved by:** branch claude/scripting-contract-01-iris-fields, into claude/physics-vehicles-spec. `Iris::Field<T>(name, offset)` sits beside `StructFields` in `Method.hpp` and takes over the body of `Detail::MakeField`, which is gone; `IRIS_FIELD` and `IRIS_FIELD_AS` expand to it. A pointer `T` gives `ValueKind::Pointer` (the existing 17, until now only for internal calls), with a `static_assert` that it is 8 bytes. On the managed side `StructMapping.cs` accepts a Pointer field held as `nint`, `nuint`, `long` or `ulong` and refuses anything else, naming the field. `nint`/`nuint` fields now count as blittable. A struct with no fields is no longer refused as "has no fields". A description with no field lines is checked before the size, so a managed struct with fields fails naming its first field, and a native size other than 1 fails as such. `ValueCodec` needed no code change: struct copies are already whole-byte copies, so only its comment says so. Iris is 0.3.0; the README gains "Changes" and three bullets under "Blittable structs", and its freeze paragraph and `IMPLEMENTATION_PLAN.md` now follow ADR-0006 as amended. Tests: three `Components` cases (offset-only mapping, opaque pointer, empty structs) and new `StructMappingChecks` cases. `clang-x64-debug` with `IRIS_BUILD_TESTS=ON` passes 94/94, and without it 81/81. Point for review:
+- **`long` and `ulong` match a pointer, but `nint` does not match an `Int64` field.** `nint` maps only as a pointer, so an `int64_t` member still needs a managed `long`.

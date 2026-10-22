@@ -146,6 +146,63 @@ namespace Fixture
         std::int32_t x;
         std::int32_t y;
     };
+    // Mapped only by kind and offset (Iris::Field), so its private members are never named.
+    class OffsetVec3
+    {
+      public:
+        OffsetVec3() = default;
+        OffsetVec3(float x, float y, float z) : x(x), y(y), z(z)
+        {
+        }
+        [[nodiscard]] float Y() const
+        {
+            return y;
+        }
+
+      private:
+        float x = 0;
+        float y = 0;
+        float z = 0;
+    };
+    // Wrong on purpose, each in one field of an offset-only mapping of Vec3: Y's offset, Y's name, Y's kind.
+    struct MisplacedVec3
+    {
+        float a, b, c;
+    };
+    struct MisnamedVec3
+    {
+        float a, b, c;
+    };
+    struct MiskindVec3
+    {
+        float a, b, c;
+    };
+    // An opaque pointer: managed code carries Owner as a ulong and never reads through it.
+    struct Linked
+    {
+        std::uint32_t Value;
+        std::uint32_t Reserved;
+        void* Owner;
+    };
+    // Wrong on purpose: the managed NarrowLinked holds a uint where the pointer is.
+    struct NarrowLinked
+    {
+        std::uint32_t Value;
+        std::uint32_t Reserved;
+        void* Owner;
+    };
+    struct Empty
+    {
+    };
+    // Wrong on purpose: mapped with no fields to the managed Packed, which has two.
+    struct Hollow
+    {
+    };
+    // Wrong on purpose: mapped with no fields, but four bytes.
+    struct Padded
+    {
+        std::int32_t hidden;
+    };
 } // namespace Fixture
 
 template <>
@@ -301,6 +358,68 @@ struct Iris::StructMapping<Fixture::WidePose>
     static constexpr auto fields =
         Iris::StructFields(IRIS_FIELD(Fixture::WidePose, Position), IRIS_FIELD(Fixture::WidePose, Scale),
                            IRIS_FIELD(Fixture::WidePose, Weight), IRIS_FIELD(Fixture::WidePose, Flags));
+};
+
+static_assert(sizeof(Fixture::OffsetVec3) == 12);
+template <>
+struct Iris::StructMapping<Fixture::OffsetVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields =
+        Iris::StructFields(Iris::Field<float>("X", 0), Iris::Field<float>("Y", 4), Iris::Field<float>("Z", 8));
+};
+template <>
+struct Iris::StructMapping<Fixture::MisplacedVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields =
+        Iris::StructFields(Iris::Field<float>("X", 0), Iris::Field<float>("Y", 8), Iris::Field<float>("Z", 4));
+};
+template <>
+struct Iris::StructMapping<Fixture::MisnamedVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields =
+        Iris::StructFields(Iris::Field<float>("X", 0), Iris::Field<float>("W", 4), Iris::Field<float>("Z", 8));
+};
+template <>
+struct Iris::StructMapping<Fixture::MiskindVec3>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Vec3";
+    static constexpr auto fields =
+        Iris::StructFields(Iris::Field<float>("X", 0), Iris::Field<std::int32_t>("Y", 4), Iris::Field<float>("Z", 8));
+};
+template <>
+struct Iris::StructMapping<Fixture::Linked>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Linked";
+    static constexpr auto fields = Iris::StructFields(
+        IRIS_FIELD(Fixture::Linked, Value), IRIS_FIELD(Fixture::Linked, Reserved), IRIS_FIELD(Fixture::Linked, Owner));
+};
+template <>
+struct Iris::StructMapping<Fixture::NarrowLinked>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.NarrowLinked";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(Fixture::NarrowLinked, Value), IRIS_FIELD(Fixture::NarrowLinked, Owner));
+};
+template <>
+struct Iris::StructMapping<Fixture::Empty>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Empty";
+    static constexpr auto fields = Iris::StructFields();
+};
+template <>
+struct Iris::StructMapping<Fixture::Hollow>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Packed";
+    static constexpr auto fields = Iris::StructFields();
+};
+template <>
+struct Iris::StructMapping<Fixture::Padded>
+{
+    static constexpr std::string_view typeName = "Iris.Examples.Component.Empty";
+    static constexpr auto fields = Iris::StructFields();
 };
 
 namespace
@@ -2421,6 +2540,109 @@ namespace
         {
             INFO("A good mapping failed after bad ones");
             REQUIRE(values.FindMethod<Fixture::Label(Fixture::Label)>("Rename").Succeeded());
+        }
+    }
+
+    TEST_CASE("a struct mapped only by kind and offset validates, crosses, and names a field that differs",
+              "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        auto component = Load(*host, checkArguments.component);
+        {
+            INFO("An offset-only mapping of a matching struct was not validated");
+            REQUIRE(component.ValidateStruct<Fixture::OffsetVec3>().Succeeded());
+        }
+        const auto structs = *component.FindType(StructsType).value;
+        const auto add = structs.FindMethod<Fixture::OffsetVec3(Fixture::OffsetVec3, Fixture::OffsetVec3)>("Add");
+        {
+            INFO("An offset-only mapping did not cross as Vec3: " + add.diagnostic);
+            REQUIRE((add.Succeeded() && add.value->Invoke({1, 2, 3}, {10, 20, 30}).value->Y() == 22));
+        }
+        const auto misplaced = component.ValidateStruct<Fixture::MisplacedVec3>();
+        {
+            INFO("A wrong offset did not name the field: " + misplaced.diagnostic);
+            REQUIRE((misplaced.status == CallStatus::InvalidArgument &&
+                     misplaced.diagnostic.find("'Y'") != std::string::npos &&
+                     misplaced.diagnostic.find("offset") != std::string::npos));
+        }
+        const auto misnamed = component.ValidateStruct<Fixture::MisnamedVec3>();
+        {
+            INFO("A wrong name did not name the field: " + misnamed.diagnostic);
+            REQUIRE((misnamed.status == CallStatus::InvalidArgument &&
+                     misnamed.diagnostic.find("'W'") != std::string::npos));
+        }
+        const auto miskind = component.ValidateStruct<Fixture::MiskindVec3>();
+        {
+            INFO("A wrong kind did not name the field: " + miskind.diagnostic);
+            REQUIRE(
+                (miskind.status == CallStatus::InvalidArgument && miskind.diagnostic.find("'Y'") != std::string::npos));
+        }
+    }
+
+    TEST_CASE("an opaque pointer field crosses as its eight bytes, unchanged in both directions", "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        auto component = Load(*host, checkArguments.component);
+        {
+            INFO("A void* field was not validated against a managed ulong");
+            REQUIRE(component.ValidateStruct<Fixture::Linked>().Succeeded());
+        }
+        const auto narrow = component.ValidateStruct<Fixture::NarrowLinked>();
+        {
+            INFO("A void* field matched a managed uint, or the diagnostic did not name it: " + narrow.diagnostic);
+            REQUIRE((narrow.status == CallStatus::InvalidArgument &&
+                     narrow.diagnostic.find("'Owner'") != std::string::npos));
+        }
+
+        const auto structs = *component.FindType(StructsType).value;
+        int target = 0;
+        const Fixture::Linked linked{7, 9, &target};
+        const auto bumped = structs.FindMethod<Fixture::Linked(Fixture::Linked)>("Bump")->Invoke(linked);
+        {
+            INFO("A pointer field did not come back unchanged");
+            REQUIRE((bumped.Succeeded() && bumped.value->Owner == &target && bumped.value->Value == 8 &&
+                     bumped.value->Reserved == 9));
+        }
+        const auto owner = structs.FindMethod<std::uint64_t(Fixture::Linked)>("OwnerOf")->Invoke(linked);
+        {
+            INFO("Managed code did not see the pointer's bytes as its ulong");
+            REQUIRE(owner.value == reinterpret_cast<std::uintptr_t>(&target));
+        }
+        // An address that points nowhere: nothing on either side reads through it.
+        constexpr std::uint64_t Address = 0x1234'5678'9ABC'DEF0;
+        const auto adopted = structs.FindMethod<Fixture::Linked(std::uint64_t)>("Adopt")->Invoke(Address);
+        {
+            INFO("Managed code's ulong did not arrive as the pointer's bytes");
+            REQUIRE((adopted.Succeeded() && reinterpret_cast<std::uintptr_t>(adopted.value->Owner) == Address));
+        }
+    }
+
+    TEST_CASE("an empty struct maps with no fields, and a mapping with no fields is checked against the managed one",
+              "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        auto component = Load(*host, checkArguments.component);
+        {
+            INFO("An empty struct was not validated against an empty managed struct");
+            REQUIRE(component.ValidateStruct<Fixture::Empty>().Succeeded());
+        }
+        const auto structs = *component.FindType(StructsType).value;
+        const auto same = structs.FindMethod<Fixture::Empty(Fixture::Empty)>("Same");
+        {
+            INFO("An empty struct did not cross: " + same.diagnostic);
+            REQUIRE((same.Succeeded() && same.value->Invoke(Fixture::Empty{}).Succeeded()));
+        }
+        const auto hollow = component.ValidateStruct<Fixture::Hollow>();
+        {
+            INFO("A mapping with no fields matched a struct with fields, or did not name one: " + hollow.diagnostic);
+            REQUIRE(
+                (hollow.status == CallStatus::InvalidArgument && hollow.diagnostic.find("'Low'") != std::string::npos));
+        }
+        const auto padded = component.ValidateStruct<Fixture::Padded>();
+        {
+            INFO("A mapping with no fields of a four-byte struct was accepted: " + padded.diagnostic);
+            REQUIRE((padded.status == CallStatus::InvalidArgument &&
+                     padded.diagnostic.find("no fields") != std::string::npos));
         }
     }
 
