@@ -1,0 +1,383 @@
+{
+  "package": "FenrirPhysicsScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::ScriptQueries::EntityValue",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A C# Entity: an entity's 32-bit value alone."
+    },
+    {
+      "name": "Fenrir::ScriptQueries::Contact",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 40,
+      "alignment": 4,
+      "doc": "One contact of a body, as of the last step.",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The body entity (a rigid body or a character body) asked about."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The body's collider touching."
+        },
+        {
+          "name": "otherBody",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The body entity (a rigid body or a character body) it touches."
+        },
+        {
+          "name": "otherCollider",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "That body's collider."
+        },
+        {
+          "name": "point",
+          "offset": 16,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "Where they touch, in world space."
+        },
+        {
+          "name": "normal",
+          "offset": 28,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "World space, unit length, pointing from Body to OtherBody."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::MoveCastHit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "Where a moved shape is blocked (PhysicsWorld.MoveCast).",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the body that blocked the shape."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the collider that blocked it."
+        },
+        {
+          "name": "point",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "Where the shape touches the body, on the shape, in world space."
+        },
+        {
+          "name": "normal",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The body's surface normal where it was touched, pointing towards the shape."
+        },
+        {
+          "name": "distance",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far the shape can travel along the motion and stay clear of the body: the safe distance."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::OverlapHit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A body a shape or point overlaps.",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the body."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the collider."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::PenetrationHit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "A body a shape overlaps, and how to get out of it (PhysicsWorld.Penetrations).",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the body."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the collider."
+        },
+        {
+          "name": "point",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The shape's deepest point inside the collider, in world space."
+        },
+        {
+          "name": "normal",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The unit direction that moves the shape out of the collider along the shortest path."
+        },
+        {
+          "name": "depth",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far along Normal the shape must move to stop overlapping the collider: more than 0."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::QueryFilter",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "Which bodies a query can find. New, it finds every body except triggers.",
+      "fields": [
+        {
+          "name": "mask",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "The collision layers to find, one bit per layer: a body is found if it is in any of them."
+        },
+        {
+          "name": "layers",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0,
+          "doc": "The layers the query is in, one bit per layer: when non-zero, a body is found only if its CollisionFilter mask includes one of them, the rule two bodies collide by. 0 when new, which ignores bodies' masks, so a ray still finds a hitbox that collides with nothing.\n\nTo find what a body would collide with, filter as it does: `new QueryFilter { Mask = cf.Mask, Layers = cf.Layers, IgnoreBody = me }`, with `cf` its CollisionFilter (or a new one)."
+        },
+        {
+          "name": "ignoreBody",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {
+            "value": 4294967295
+          },
+          "doc": "A body never found, such as the one casting the query. None when new."
+        },
+        {
+          "name": "hitTriggers",
+          "offset": 12,
+          "kind": "bool",
+          "default": false,
+          "doc": "Whether triggers are found."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::RaycastHit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "Where a ray hit a body.",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the body hit."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the collider hit."
+        },
+        {
+          "name": "point",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "Where the ray met the surface, in world space."
+        },
+        {
+          "name": "normal",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The surface's normal at Point, pointing out of the body."
+        },
+        {
+          "name": "distance",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far along the ray Point is: 0 for a ray that starts inside a body."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptQueries::ShapeCastHit",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 36,
+      "alignment": 4,
+      "doc": "Where a cast shape hit a body.",
+      "fields": [
+        {
+          "name": "body",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the body hit."
+        },
+        {
+          "name": "collider",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptQueries::EntityValue",
+          "default": {},
+          "doc": "The entity of the collider hit."
+        },
+        {
+          "name": "point",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "Where the cast shape touches the body, on the cast shape, in world space."
+        },
+        {
+          "name": "normal",
+          "offset": 20,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "doc": "The body's surface normal where it was hit, pointing towards the cast shape."
+        },
+        {
+          "name": "distance",
+          "offset": 32,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How far the shape travelled before it touched: 0 for a shape that starts touching."
+        }
+      ]
+    }
+  ]
+}

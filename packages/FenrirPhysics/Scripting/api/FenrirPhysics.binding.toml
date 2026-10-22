@@ -1,0 +1,80 @@
+# FenrirPhysics's C# binding (ADR-0016, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirPhysics.api.json
+# and this binding's own FenrirPhysicsScripting.api.json bound to the Fenrir.Physics contract and this extension. Paths
+# are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they
+# are committed.
+namespace = "Fenrir.Physics"
+
+# FenrirPhysics's query types hold a Fenrir::Entity, which C# holds as a 32-bit Entity: FenrirPhysicsScripting.api.json
+# describes them in that form (src/ScriptQueries.hpp), the natives convert, and these are bound from there instead.
+exclude = [
+    "Fenrir::QueryFilter",
+    "Fenrir::RaycastHit",
+    "Fenrir::ShapeCastHit",
+    "Fenrir::MoveCastHit",
+    "Fenrir::OverlapHit",
+    "Fenrir::PenetrationHit",
+    "Fenrir::Contact",
+]
+
+[csharp]
+contract = "../../Managed/Fenrir.Physics"
+generated = "../../Managed/Fenrir.Physics/Generated"
+usings = ["Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+readonly-events = true
+# Physics writes these back after every move or step: C# reads them in place and cannot write them.
+readonly-structs = ["Fenrir::CharacterState", "Fenrir::VehicleState", "Fenrir::VehicleWheelState"]
+
+[cpp]
+mappings = "../src/Generated/FenrirPhysicsMappings.hpp"
+includes = [
+    "FenrirPhysics/Characters.hpp",
+    "FenrirPhysics/Components.hpp",
+    "FenrirPhysics/Events.hpp",
+    "FenrirPhysics/Joints.hpp",
+    "FenrirPhysics/PhysicsWorld.hpp",
+    "FenrirPhysics/Queries.hpp",
+    "FenrirPhysics/Vehicles.hpp",
+    "BoundMappings.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirPhysicsRegistration.cpp"
+includes = ["FenrirScripting/ComponentRegistry.hpp", "FenrirScripting/ScriptingExtension.hpp"]
+function = "Fenrir::Generated::RegisterPhysics"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+
+[tests]
+cpp = "../Tests/Generated/FenrirPhysicsDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirPhysicsDefaults.cs"
+class = "Fenrir.PhysicsScriptFixture.Defaults"
+includes = ["PhysicsScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "Fenrir::Testing::PhysicsScriptingApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[physics][scripting][bindings]"
+
+[bound-types]
+"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+# glm stores w first; C#'s constructor takes it last.
+"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
+"Fenrir::Transform" = { type = "Transform" }
+# A default Entity names no entity, which C#'s new EntityLink() (all zero) does not say.
+"Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None" }
+"Fenrir::ScriptQueries::EntityValue" = { type = "Entity", constructor = ["value"] }
+
+[names]
+"Fenrir::Math::AABB" = "Aabb"
+
+[nouns]
+"Fenrir::CollisionShape" = "shape"
+"Fenrir::JointKind" = "joint"
+"Fenrir::VehicleKind" = "vehicle"

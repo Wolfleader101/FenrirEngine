@@ -8,7 +8,8 @@
 # next to an executable, beside the scripting contract, where Scripting::Install finds the extension's relative path.
 set(FENRIR_PHYSICS_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-physics/contract" CACHE INTERNAL "Where the Fenrir.Physics contract is built")
 set(fenrir_physics_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.Physics")
-file(GLOB fenrir_physics_contract_sources CONFIGURE_DEPENDS "${fenrir_physics_managed_dir}/*.cs")
+file(GLOB fenrir_physics_contract_sources CONFIGURE_DEPENDS "${fenrir_physics_managed_dir}/*.cs"
+    "${fenrir_physics_managed_dir}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${FENRIR_PHYSICS_CONTRACT_DIR}/Fenrir.Physics.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_physics_managed_dir}/Fenrir.Physics.csproj"
@@ -38,10 +39,27 @@ endfunction()
 
 add_library(FenrirPhysicsScripting STATIC
     include/FenrirPhysicsScripting/PhysicsScripting.hpp
+    src/BoundMappings.hpp
     src/PhysicsScripting.cpp
+    src/ScriptQueries.hpp
+    src/Generated/FenrirPhysicsMappings.hpp
+    src/Generated/FenrirPhysicsRegistration.cpp
 )
-target_include_directories(FenrirPhysicsScripting PUBLIC include)
+target_include_directories(FenrirPhysicsScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScripting)
+
+# The binding (ADR-0016): every physics component, event and shared struct is written once, in its C++ header, and
+# Iris.Bindings generates the rest from the API descriptions and api/FenrirPhysics.binding.toml, all committed:
+#   ../Managed/Fenrir.Physics/Generated/  the C# mirrors, beside which the contract's own .cs files add behaviour only;
+#   src/Generated/                        the Iris mappings and the extension's components, events and sharedStructs;
+#   Tests/Generated/                      the defaults test: C#'s new T() against C++'s T{}, field by field.
+# The query types natives take by pointer are bound in the form C# holds them (src/ScriptQueries.hpp), which this
+# library describes itself, as api/FenrirPhysicsScripting.api.json. After changing a shared type, regenerate both stages:
+#   cmake --build <dir> --target fenrir-describe-api
+#   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api(FenrirPhysicsScripting api/FenrirPhysicsScripting.api.toml)
+iris_generate_binding(FenrirPhysics api/FenrirPhysics.binding.toml ../api/FenrirPhysics.api.json
+    api/FenrirPhysicsScripting.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
