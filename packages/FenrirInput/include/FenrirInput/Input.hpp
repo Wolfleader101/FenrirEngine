@@ -36,6 +36,15 @@ namespace Fenrir
          */
         [[nodiscard]] static Input Install(App& app);
 
+        /**
+         * @brief Dispatches everything fed to `app`'s input feed since the last dispatch: updates the Keyboard, Mouse
+         * and Gamepads and sends each input as its event, in the order fed. Does nothing with nothing pending, or when
+         * the app has no input. FenrirInput's own PreUpdate system calls it; a feeder that runs after that system, such
+         * as FenrirWindow's pump, calls it right after feeding, so its input reaches the game in the same frame
+         * whichever package was installed first. Call it from the thread that runs the App, outside parallel systems.
+         */
+        static void Dispatch(App& app);
+
         Input(Input&& other) noexcept;
         Input& operator=(Input&& other) noexcept;
         Input(const Input&) = delete;

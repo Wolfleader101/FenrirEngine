@@ -19,7 +19,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   # Matches the projects' TargetFramework (net10.0); the repo has no global.json.
   DOTNET_VERSION: 10.0.x
-  FENRIR_CMAKE_OPTIONS: -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_PHYSICS=ON -DFENRIR_ENABLE_ASSETS=ON -DFENRIR_BUILD_TESTS=ON -DFENRIR_BUILD_EXAMPLES=OFF
+  FENRIR_CMAKE_OPTIONS: -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_PHYSICS=ON -DFENRIR_ENABLE_ASSETS=ON -DFENRIR_ENABLE_RENDERER=ON -DFENRIR_BUILD_TESTS=ON -DFENRIR_BUILD_EXAMPLES=OFF
 
 jobs:
   windows:
@@ -93,8 +93,15 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Install Ninja
-        run: sudo apt-get update && sudo apt-get install -y ninja-build
+      # Ninja, and the X11 and Wayland development packages SDL3's video needs (FenrirWindow). With no display on the
+      # runner, FenrirWindow's window tests report skipped.
+      - name: Install Ninja and SDL3's video dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
+            libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgl1-mesa-dev \
+            libdrm-dev libgbm-dev libdbus-1-dev libibus-1.0-dev libudev-dev
 
       - name: Tool versions
         run: |

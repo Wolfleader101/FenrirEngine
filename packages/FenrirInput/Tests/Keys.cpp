@@ -72,3 +72,14 @@ TEST_CASE("The keyboard reports which window has the input focus", "[input][keys
     INFO("after it loses the focus, no window has it");
     REQUIRE_FALSE(test.Keyboard().FocusedWindow().has_value());
 }
+
+TEST_CASE("Every letter from A to Z has a key code and a scancode of its own", "[input][keys]")
+{
+    // The letters' enumerators are in alphabetical order after Unknown, so X sits between W and Y.
+    INFO("Key::X and Scancode::X are named, and follow W");
+    REQUIRE(static_cast<int>(Key::X) == static_cast<int>(Key::W) + 1);
+    REQUIRE(static_cast<int>(Scancode::X) == static_cast<int>(Scancode::W) + 1);
+    INFO("Z is the 26th key after Unknown");
+    REQUIRE(static_cast<int>(Key::Z) == 26);
+    REQUIRE(static_cast<int>(Scancode::Z) == 26);
+}

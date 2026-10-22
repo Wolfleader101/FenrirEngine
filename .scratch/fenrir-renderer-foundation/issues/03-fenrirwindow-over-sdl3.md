@@ -7,7 +7,8 @@
 - **`Window::Install(App&, WindowConfig)`** starts SDL's video subsystem, installs FenrirInput if it is not there yet, and keeps its config, but creates no window. Without a renderer requesting a surface, a plain window with no API flag is made in the first frame's `PreInit`. When SDL's video cannot start it logs and returns an owner with `IsValid() == false` (ticket 01's shape).
 - **`WindowConfig`:** title, logical size, `visible` (default `true`), `stopOnMainWindowClose` (default `true`), `minimisedFrameSleep` (about 7 ms), `unfocusedFrameSleep` (default 0), `textInputByDefault` (default `true`).
 - **One main window** keyed by `WindowId`, the API shaped for several.
-- **Each frame:** pump SDL at the start of `PreUpdate` (sequential), feed FenrirInput, and update each window's logical size, pixel size and content scale. Sleep at the end of `PreUpdate` when nothing can draw (minimised; unfocused when configured).
+- **Each frame:** pump SDL at the start of `PreUpdate` (sequential), feed FenrirInput, call `Input::Dispatch(app)`, and update each window's logical size, pixel size and content scale.
+- **Same-frame input whatever the install order** (settled with the user on 2026-10-22, found while building ticket 02): FenrirInput gains a public `Input::Dispatch(App&)` that processes everything fed since the last call and does nothing when nothing is pending. FenrirInput's own sequential `PreUpdate` system still calls it, and FenrirWindow's pump calls it right after feeding, so input fed by the pump reaches `Keyboard`, `Mouse`, `Gamepads` and game readers in the same frame whether Input or Window was installed first. Routers (ticket 04) still see one `BeginDispatch` per frame, before the frame's first event. Sleep at the end of `PreUpdate` when nothing can draw (minimised; unfocused when configured).
 - **Services:** cursor modes (normal, hidden, captured with relative motion); `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden); clipboard text get and set; `SetTitle`; focus events fed to FenrirInput; SDL text input on per window following `textInputByDefault` (ticket 04 makes it follow `textInput` claims).
 - **Events:** resized, focus changed and close requested, each naming the window. With `stopOnMainWindowClose`, closing the main window calls `App::Stop`; without it, game code handles the event.
 - **Surface functions** on `Window`, statics taking `App&` and keyed by `WindowId`, with neutral types only (`void*` proc addresses, integer handles): request a surface (API, debug context, backbuffer description), get a proc address, make current, present, set the swap interval, read the pixel size. Destroying a window whose surface is still held is a diagnosed error. Windows are destroyed only at teardown.
@@ -16,12 +17,12 @@
 
 **Blocked by:** 02 (FenrirInput: the input feed, Keyboard, Mouse and Gamepads, and input events).
 
-**Touches:** `packages/FenrirWindow/`, `.gitmodules`, `CMakeLists.txt`, `README.md`, `.github/workflows/build-and-test.yml`
+**Touches:** `packages/FenrirWindow/`, `packages/FenrirInput/`, `.gitmodules`, `CMakeLists.txt`, `README.md`, `.github/workflows/build-and-test.yml`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirWindowTests`: a hidden window is created, resized (resize event, new logical and pixel sizes) and closed (close-requested event; `App::Stop` with `stopOnMainWindowClose`, not without); the tests report skipped (CTest `SKIP_RETURN_CODE`) without a display.
-- [ ] Clipboard text round-trips; `SetTitle` and cursor modes do not error on a hidden window.
-- [ ] No public FenrirWindow header names or includes SDL, and SDL's include path reaches no target outside FenrirWindow.
-- [ ] `FENRIR_ENABLE_RENDERER=OFF` configures and builds the engine without FenrirWindow or SDL3; Clang and MSVC x64 debug and release presets build with no warnings from SDL's sources; Linux CI builds it.
-- [ ] A small manual check: a visible window opens, keys and mouse reach `Keyboard`/`Mouse`, a gamepad hot-plugs, minimising sleeps, closing stops the app (checked by hand).
+- [x] `FenrirWindowTests`: a hidden window is created, resized (resize event, new logical and pixel sizes) and closed (close-requested event; `App::Stop` with `stopOnMainWindowClose`, not without); the tests report skipped (CTest `SKIP_RETURN_CODE`) without a display.
+- [x] Clipboard text round-trips; `SetTitle` and cursor modes do not error on a hidden window.
+- [x] No public FenrirWindow header names or includes SDL, and SDL's include path reaches no target outside FenrirWindow.
+- [x] `FENRIR_ENABLE_RENDERER=OFF` configures and builds the engine without FenrirWindow or SDL3; Clang and MSVC x64 debug and release presets build with no warnings from SDL's sources; Linux CI builds it.
+- [x] A small manual check: a visible window opens, keys and mouse reach `Keyboard`/`Mouse`, a gamepad hot-plugs, minimising sleeps, closing stops the app (checked by hand).
