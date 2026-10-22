@@ -593,11 +593,11 @@ Code that changes a skeleton's pose after animation, in order: IK, procedural po
 *Avoid:* pose handle, pose context.
 
 **Pose pipeline**
-FenrirSkeleton's ordered pose work each frame, on the active scene: reconcile, `Animate`, prepare, `Modify`, finalise, attach, `Late`. Its order does not depend on which packages are installed first (ADR-0033).
+FenrirSkeleton's ordered pose work each frame, on the active scene: reconcile, `Animate`, prepare, `Modify`, finalise, attach, `Late`. Its order does not depend on which packages are installed first (ADR-0033). A tick-posed skeleton also runs reconcile, `Animate` and a base finalise in each `PreTick`, and its frame pipeline blends the last two tick poses in place of `Animate` (ADR-0040).
 *Avoid:* animation update, pose graph.
 
 **Pose stage**
-One of the pose pipeline's public steps that others add work to, `Animate`, `Modify` or `Late`, each hosted in an app phase (all in `PostUpdate` for now) and ordered within by an order number.
+One of the pose pipeline's public steps that others add work to, `Animate`, `Modify` or `Late`, each hosted in an app phase (all in `PostUpdate`, and `Animate` also in `PreTick` for tick-posed skeletons, ADR-0040) and ordered within by an order number.
 *Avoid:* phase (FenrirApp's), render stage (the renderer's), pass.
 
 **Skinning palette**
@@ -635,6 +635,18 @@ A deterministic hash of a skeleton's bones, parents, engine names and inverse bi
 **Attachment state**
 Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable. An attachment that is not placed keeps its last `Transform` (ADR-0037).
 *Avoid:* attachment status, resolved flag.
+
+**Pose timing**
+`PoseTiming`, a field of `SkeletonPose`: whether a skeleton's base pose is animated once a frame (`Frame`, the default) or once per fixed tick at tick time (`Tick`, a *tick-posed* skeleton), for bodies that must follow its bones during the physics step (ADR-0040).
+*Avoid:* update mode, animate physics (Unity's), fixed animation.
+
+**Simulation pose**
+A tick-posed skeleton's base pose as the last fixed tick evaluated it, with no pose modifiers: what tick code and the glue moving bone-following bodies read, through `PoseKind::Simulation`. On a frame-posed skeleton it is the render pose (ADR-0040).
+*Avoid:* physics pose, tick pose, fixed pose.
+
+**Render pose**
+A skeleton's final pose for this frame, what is drawn and what attachments follow. On a tick-posed skeleton it is built from the blend of the last two tick poses at physics's interpolation fraction, then modified as usual (ADR-0040).
+*Avoid:* display pose, interpolated pose, visual pose.
 
 **Animator**
 `Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
