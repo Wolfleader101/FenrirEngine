@@ -410,6 +410,49 @@ namespace TestExtension
     {
         return 0;
     }
+
+    // The test extension's native resources: a scene resource, an app resource and a read-only app resource.
+    struct Weather
+    {
+        float Wind = 0.5F;
+        std::int32_t Gusts = 0;
+    };
+
+    struct Settings
+    {
+        std::int32_t Volume = 11;
+    };
+
+    struct Clock
+    {
+        double Seconds = 0.0;
+    };
+
+    // A wrong mapping of the C# Weather: its second field is a float where C# has an int.
+    struct BadWeather
+    {
+        float Wind = 0.0F;
+        float Gusts = 0.0F;
+    };
+
+    // Creates an entity through the change buffer and gives it a Charge in the same call: it is usable at once.
+    static std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level)
+    {
+        const std::uint32_t entity = context.Changes().CreateEntity();
+        (void)context.Changes().AddComponent(entity, Charge{level});
+        return entity;
+    }
+
+    static void Rearrange(const Fenrir::CallContext& context, std::uint32_t kept, std::uint32_t doomed, float wind)
+    {
+        const auto changes = context.Changes();
+        (void)changes.AddComponent(kept, Charge{1});
+        (void)changes.RemoveComponent<Charge>(kept);
+        (void)changes.AddComponent(kept, Charge{3});
+        (void)changes.DestroyEntity(doomed);
+        (void)changes.AddComponent(doomed, Charge{9});
+        changes.InsertSceneResource(Weather{wind, 4});
+    }
 } // namespace TestExtension
 
 template <>
@@ -424,6 +467,36 @@ struct Iris::StructMapping<TestExtension::Ping>
 {
     static constexpr std::string_view typeName = "Fenrir.TestExtension.Ping";
     static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::Ping, Value));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::Weather>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Weather";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(TestExtension::Weather, Wind), IRIS_FIELD(TestExtension::Weather, Gusts));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::Settings>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Settings";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::Settings, Volume));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::Clock>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Clock";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::Clock, Seconds));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::BadWeather>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Weather";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(TestExtension::BadWeather, Wind), IRIS_FIELD(TestExtension::BadWeather, Gusts));
 };
 
 namespace
@@ -3890,9 +3963,16 @@ namespace
             NativeFunction::Make<&TestExtension::HeightOf>("Fenrir.TestExtension.Gadgets.HeightOf"),
             NativeFunction::Make<&TestExtension::Lift>("Fenrir.TestExtension.Gadgets.Lift"),
             NativeFunction::Make<&TestExtension::Label>("Fenrir.TestExtension.Gadgets.Label"),
+            NativeFunction::Make<&TestExtension::SpawnCharged>("Fenrir.TestExtension.Gadgets.SpawnCharged"),
+            NativeFunction::Make<&TestExtension::Rearrange>("Fenrir.TestExtension.Gadgets.Rearrange"),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
+        extension.resources = {
+            MakeSceneResource<TestExtension::Weather>("Fenrir.TestExtension.Weather"),
+            MakeAppResource<TestExtension::Settings>("Fenrir.TestExtension.Settings"),
+            MakeReadOnlyAppResource<TestExtension::Clock>("Fenrir.TestExtension.Clock"),
+        };
         return extension;
     }
 
@@ -4124,6 +4204,292 @@ namespace
             REQUIRE(NativeFunction::BindingNameFor("Run").empty());
             REQUIRE(NativeFunction::BindingNameFor(".Run").empty());
             REQUIRE(NativeFunction::BindingNameFor("Game.").empty());
+        }
+    }
+
+    // Native resources and the change buffer from an extension (ADR-0029), through the test extension.
+
+    void AnExtensionsResourcesAreReadAndWrittenFromCSharpThroughRef()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("The extension's resources did not pass their checks against C#");
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& weather = headless.Get().GetActiveScene().AddResource<TestExtension::Weather>(2.0F, 1);
+        auto& settings = headless.Get().AddResource<TestExtension::Settings>(5);
+        headless.Get().AddResource<TestExtension::Clock>(12.5);
+        {
+            INFO("C# did not read the scene resource's value");
+            REQUIRE(ExtensionCall<float>(scripting, "WeatherWind") == 2.0F);
+        }
+        ExtensionCall<void>(scripting, "SetWeather", 7.0F, std::int32_t{3});
+        {
+            INFO("C#'s writes through Ref<Weather> did not reach the scene resource in place");
+            REQUIRE((weather.Wind == 7.0F && weather.Gusts == 3));
+        }
+        {
+            INFO("C# did not read the app resource's value");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "SettingsVolume") == 5);
+        }
+        ExtensionCall<void>(scripting, "SetVolume", std::int32_t{9});
+        {
+            INFO("C#'s write through Ref<Settings> did not reach the app resource in place");
+            REQUIRE(settings.Volume == 9);
+        }
+        {
+            INFO("C# did not read the read-only app resource through its ReadOnlyRef");
+            REQUIRE(ExtensionCall<double>(scripting, "ClockSeconds") == 12.5);
+        }
+    }
+
+    void AResourceWhoseLayoutDiffersFromItsCSharpStructFailsTheLoad()
+    {
+        HeadlessApp headless;
+        auto extension = TheTestExtension();
+        extension.resources[0] = MakeSceneResource<TestExtension::BadWeather>("Fenrir.TestExtension.Weather");
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({extension}));
+        {
+            INFO("Scripts loaded although a resource's mapping differs from its C# struct");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the resource and say its C# struct does not match");
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error,
+                                               "Resource 'Fenrir.TestExtension.Weather' does not match its C# struct"));
+        }
+    }
+
+    void ADuplicateResourceNameFailsInstallAndNamesTheExtension()
+    {
+        HeadlessApp headless;
+        ScriptingExtension copy;
+        copy.name = "copying extension";
+        copy.resources = {MakeAppResource<TestExtension::Settings>("Fenrir.TestExtension.Weather")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), copy}));
+        {
+            INFO("Scripts ran although two extensions registered one resource name");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the second extension");
+            REQUIRE(headless.Logger().Contains(
+                Testing::LogLevel::Error,
+                "a resource in extension 'copying extension' has an empty or duplicate name"));
+        }
+    }
+
+    void TryGetIsFalseWhenAbsentAndGetLogsAndReturnsAnEmptyRef()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("TryGet said there is a scene resource nobody inserted");
+            REQUIRE(!ExtensionCall<bool>(scripting, "HasWeather"));
+        }
+        {
+            INFO("TryGetReadOnly said there is an app resource nobody inserted");
+            REQUIRE(!ExtensionCall<bool>(scripting, "HasClock"));
+        }
+        {
+            INFO("Get on an absent resource did not return an empty Ref");
+            REQUIRE(ExtensionCall<bool>(scripting, "MissingWeatherIsEmpty"));
+        }
+        {
+            INFO("Get on an absent resource did not log a warning naming it");
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Warn, "no Fenrir.TestExtension.Weather resource"));
+        }
+        headless.Get().GetActiveScene().AddResource<TestExtension::Weather>(1.5F, 0);
+        {
+            INFO("TryGet did not give a view of a resource that is there");
+            REQUIRE(ExtensionCall<float>(scripting, "TryGetWind") == 1.5F);
+        }
+    }
+
+    void ASceneResourceFollowsTheActiveScene()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        App& app = headless.Get();
+        const std::string first = app.GetActiveScene().GetName();
+        auto& firstWeather = app.GetActiveScene().AddResource<TestExtension::Weather>(2.0F, 0);
+        auto& secondWeather = app.CreateScene("second").AddResource<TestExtension::Weather>(9.0F, 0);
+
+        app.ChangeActiveScene("second");
+        {
+            INFO("C# did not read the newly active scene's resource");
+            REQUIRE(ExtensionCall<float>(scripting, "WeatherWind") == 9.0F);
+        }
+        ExtensionCall<void>(scripting, "SetWeather", 4.0F, std::int32_t{0});
+        {
+            INFO("C#'s write did not land in the active scene's resource alone");
+            REQUIRE((secondWeather.Wind == 4.0F && firstWeather.Wind == 2.0F));
+        }
+        app.ChangeActiveScene(first);
+        {
+            INFO("C# did not go back to the first scene's resource");
+            REQUIRE(ExtensionCall<float>(scripting, "WeatherWind") == 2.0F);
+        }
+    }
+
+    void InsertingAndRemovingAResourceFromCSharpTakeEffectAtPlaybackInOrder()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        App& app = headless.Get();
+        Scene& scene = app.GetActiveScene();
+
+        {
+            INFO("An inserted resource was there before playback");
+            REQUIRE(!ExtensionCall<bool>(scripting, "InsertWeather", 3.0F));
+            REQUIRE(scene.GetResource<TestExtension::Weather>() == nullptr);
+        }
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("The insert did not play back with C#'s value");
+            const auto* weather = scene.GetResource<TestExtension::Weather>();
+            REQUIRE((weather != nullptr && weather->Wind == 3.0F && weather->Gusts == 2));
+        }
+        {
+            INFO("A removed resource was gone before playback");
+            REQUIRE(ExtensionCall<bool>(scripting, "RemoveWeather"));
+        }
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("The removal did not play back");
+            REQUIRE(scene.GetResource<TestExtension::Weather>() == nullptr);
+        }
+
+        ExtensionCall<void>(scripting, "RemoveThenInsertWeather", 6.0F);
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("Remove then insert did not leave the inserted resource: they did not play back in order");
+            const auto* weather = scene.GetResource<TestExtension::Weather>();
+            REQUIRE((weather != nullptr && weather->Wind == 6.0F));
+        }
+        ExtensionCall<void>(scripting, "InsertThenRemoveSettings", std::int32_t{4});
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("Insert then remove left an app resource: they did not play back in order");
+            REQUIRE(app.TryGetResource<TestExtension::Settings>() == nullptr);
+        }
+        ExtensionCall<void>(scripting, "InsertDefaultSettings");
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("An insert with no value did not make the C++ default (Volume 11)");
+            const auto* settings = app.TryGetResource<TestExtension::Settings>();
+            REQUIRE((settings != nullptr && settings->Volume == 11));
+        }
+        {
+            INFO("A Ref taken before an insert and a removal was not good until the call returned");
+            REQUIRE(ExtensionCall<float>(scripting, "RefSurvivesInsertAndRemove", 8.0F) == 8.0F);
+        }
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("The insert recorded after the removal is not the resource after playback");
+            const auto* weather = scene.GetResource<TestExtension::Weather>();
+            REQUIRE((weather != nullptr && weather->Wind == 100.0F));
+        }
+    }
+
+    void ResourceLookupFailuresSayWhatWentWrong()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        const auto entity = headless.Get().GetActiveScene().GetEntityList().CreateEntity().GetId();
+        const auto asComponent =
+            ExtensionCall<std::optional<std::string>>(scripting, "TryAddWeatherAsComponent", entity).value_or("");
+        {
+            INFO("Adding a resource to an entity said: " + asComponent);
+            REQUIRE(asComponent.find("is a resource, not a component") != std::string::npos);
+        }
+        const auto unregistered =
+            ExtensionCall<std::optional<std::string>>(scripting, "TryGetUnregistered").value_or("");
+        {
+            INFO("Getting a resource no extension registered said: " + unregistered);
+            REQUIRE(unregistered.find("no resource registered as 'Fenrir.TestExtension.Unregistered'") !=
+                    std::string::npos);
+        }
+        const auto claimed = ExtensionCall<std::optional<std::string>>(scripting, "TryClaimClock").value_or("");
+        {
+            INFO("Claiming a resource with a struct of its own said: " + claimed);
+            REQUIRE(claimed.find("registered for a different C# type") != std::string::npos);
+        }
+    }
+
+    void ANativeFunctionCreatesAnEntityThatIsUsableAtOnce()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const auto& charge = scripting.FindComponent("Fenrir.TestExtension.Charge")->type;
+
+        const auto entity = ExtensionCall<std::uint32_t>(scripting, "SpawnCharged", std::int32_t{5});
+        {
+            INFO("The entity the native function created was not alive when the call returned");
+            REQUIRE(entities.HasEntity(entity));
+        }
+        {
+            INFO("The component the native function added reached the storage before playback");
+            REQUIRE(!entities.Has(charge, entity));
+        }
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("Creating the entity and adding its Charge were not both played back");
+            REQUIRE((summary.applied == 2 && summary.skipped == 0));
+        }
+        {
+            INFO("The created entity did not get its Charge, with the native function's value, at playback");
+            REQUIRE(entities.Has(charge, entity));
+            REQUIRE(static_cast<TestExtension::Charge*>(entities.Get(charge, entity))->Level == 5);
+        }
+        {
+            INFO("The created entity did not get the components every entity has");
+            REQUIRE(entities.GetEntity(entity).HasComponent<Transform>());
+        }
+    }
+
+    void ANativeFunctionsChangesPlayBackInOrderAfterTheCall()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        Scene& scene = headless.Get().GetActiveScene();
+        auto& entities = scene.GetEntityList();
+        const auto& charge = scripting.FindComponent("Fenrir.TestExtension.Charge")->type;
+        const auto kept = entities.CreateEntity().GetId();
+        const auto doomed = entities.CreateEntity().GetId();
+
+        ExtensionCall<void>(scripting, "Rearrange", kept, doomed, 2.5F);
+        {
+            INFO("A change the native function recorded reached the storage before playback");
+            REQUIRE(!entities.Has(charge, kept));
+            REQUIRE(entities.HasEntity(doomed));
+            REQUIRE(scene.GetResource<TestExtension::Weather>() == nullptr);
+        }
+        {
+            INFO("The native function's six changes were not all recorded");
+            REQUIRE(ScriptingProbe::PendingChanges(scripting) == 6);
+        }
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("The add after the destroy was not the one change skipped");
+            REQUIRE((summary.applied == 5 && summary.skipped == 1));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Warn, "skipped a change a native function recorded"));
+        }
+        {
+            INFO("Add, remove, add did not leave the last Charge: they did not play back in order");
+            REQUIRE(entities.Has(charge, kept));
+            REQUIRE(static_cast<TestExtension::Charge*>(entities.Get(charge, kept))->Level == 3);
+        }
+        {
+            INFO("The destroy did not play back");
+            REQUIRE(!entities.HasEntity(doomed));
+        }
+        {
+            INFO("The scene resource the native function inserted did not play back with its value");
+            const auto* weather = scene.GetResource<TestExtension::Weather>();
+            REQUIRE((weather != nullptr && weather->Wind == 2.5F && weather->Gusts == 4));
         }
     }
 
@@ -4572,4 +4938,49 @@ TEST_CASE("a zeroed EntityLink names entity 0 with no scene and reads safely", "
 TEST_CASE("an EntityLink's owner is not readable from C#", "[scripting]")
 {
     AnEntityLinksOwnerIsNotReadableFromCSharp();
+}
+
+TEST_CASE("an extension's resources are read and written from C# through Ref", "[scripting]")
+{
+    AnExtensionsResourcesAreReadAndWrittenFromCSharpThroughRef();
+}
+
+TEST_CASE("a resource whose layout differs from its C# struct fails the load", "[scripting]")
+{
+    AResourceWhoseLayoutDiffersFromItsCSharpStructFailsTheLoad();
+}
+
+TEST_CASE("a duplicate resource name fails install and names the extension", "[scripting]")
+{
+    ADuplicateResourceNameFailsInstallAndNamesTheExtension();
+}
+
+TEST_CASE("TryGet is false when a resource is absent, and Get logs and returns an empty Ref", "[scripting]")
+{
+    TryGetIsFalseWhenAbsentAndGetLogsAndReturnsAnEmptyRef();
+}
+
+TEST_CASE("a scene resource follows the active scene", "[scripting]")
+{
+    ASceneResourceFollowsTheActiveScene();
+}
+
+TEST_CASE("inserting and removing a resource from C# take effect at playback, in order", "[scripting]")
+{
+    InsertingAndRemovingAResourceFromCSharpTakeEffectAtPlaybackInOrder();
+}
+
+TEST_CASE("resource lookup failures say what went wrong", "[scripting]")
+{
+    ResourceLookupFailuresSayWhatWentWrong();
+}
+
+TEST_CASE("a native function creates an entity that is usable at once", "[scripting]")
+{
+    ANativeFunctionCreatesAnEntityThatIsUsableAtOnce();
+}
+
+TEST_CASE("a native function's changes play back in order after the call", "[scripting]")
+{
+    ANativeFunctionsChangesPlayBackInOrderAfterTheCall();
 }

@@ -8,8 +8,8 @@ namespace Fenrir.Scripting;
 // one here, see "Exposing a native function" in the package README.
 //
 // When no Scripting is running a function is not called, and C# gets its "not running" value: -1 from ComponentIdOf,
-// EventIdOf, EventReadAfter, QueryCount and QueryFill, the refusal code -5 from EntityDestroy, ComponentAdd, ComponentRemove and
-// EventSend, uint.MaxValue from EntityCreate, and zero or false from the rest. (C# only runs while one is, so this is
+// EventIdOf, EventReadAfter, QueryCount, QueryFill and ResourceIdOf, the refusal code -5 from EntityDestroy, ComponentAdd,
+// ComponentRemove, EventSend, ResourceInsert and ResourceRemove, uint.MaxValue from EntityCreate, and zero or false from the rest. (C# only runs while one is, so this is
 // the contract, not something a script sees.)
 internal static unsafe partial class Native
 {
@@ -121,4 +121,23 @@ internal static unsafe partial class Native
 
     [NativeFunction]
     public static partial int QueryFill(int* ids, int count, nuint* rows, int capacity);
+
+    // Native resources: scene and app resources an extension registered by name (see Resources).
+    //   ResourceIdOf(name, nameBytes, typeName, typeBytes): like ComponentIdOf, for resources.
+    //   ResourceGet(id): a pointer to the resource in the engine's storage (the active scene's, for a scene resource), or
+    //   null when there is none now. Good until the engine next changes its storage.
+    //   ResourceInsert(id, value), ResourceRemove(id): recorded like any structural change; 0 when recorded, otherwise -5
+    //   scripting is not running, -7 no such resource, -8 the resource is read-only. `value` is the resource's bytes, or
+    //   null for a default one.
+    [NativeFunction]
+    public static partial int ResourceIdOf(byte* name, int nameBytes, byte* typeName, int typeBytes);
+
+    [NativeFunction]
+    public static partial void* ResourceGet(int id);
+
+    [NativeFunction]
+    public static partial int ResourceInsert(int id, void* value);
+
+    [NativeFunction]
+    public static partial int ResourceRemove(int id);
 }

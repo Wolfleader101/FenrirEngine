@@ -2,6 +2,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 
@@ -19,6 +21,7 @@ namespace Fenrir
 
     namespace Detail
     {
+        class ChangeBuffer;
         struct CallContextAccess;
         struct EngineContext;
 
@@ -27,13 +30,98 @@ namespace Fenrir
     } // namespace Detail
 
     /**
-     * @brief What a native function receives first: the App the running Scripting serves, and through it the active
-     * scene's entities. Only scripting makes one, and a native function is only ever called with the one that is
-     * active.
+     * @brief The change buffer, as a native function records into it (from CallContext::Changes): the structural
+     * changes (creating and destroying entities, adding and removing components, inserting and removing resources) that
+     * the engine's own entity functions record for C#, in one ordered list with theirs.
      *
-     * A native function may read and write component data, but must not make structural changes (create or destroy
-     * entities, add or remove components): the C# system that called it holds Ref<T>s into the ECS storage, and a
-     * structural change could move what they point at.
+     * Nothing here touches the storage when it is called. A created entity is alive at once, so its id can be returned
+     * to C# and given components in the same call; everything else plays back, in the order it was recorded, when the
+     * native code that called the script gets control back (after the calling C# system). A change naming an entity
+     * that an earlier change destroyed is skipped with a warning. Entities and scene resources are the active scene's.
+     */
+    class ChangeBuffer
+    {
+      public:
+        /**
+         * @brief A new entity in the active scene, alive and usable at once (with no components yet): record changes on
+         * it, or hand its id to C#. It gets its Transform, Name and Relationship at playback, before later changes.
+         */
+        [[nodiscard]] std::uint32_t CreateEntity() const;
+
+        /** @brief Destroys `entity` at playback. False, recording nothing, if it is not alive now. */
+        bool DestroyEntity(std::uint32_t entity) const;
+
+        /**
+         * @brief Gives `entity` `value` as its `T` at playback, replacing the one it has. False, recording nothing, if
+         * the entity is not alive now.
+         */
+        template <typename T>
+        bool AddComponent(std::uint32_t entity, T value = T{}) const
+        {
+            return RecordOn(entity, [value](Entity& target) { target.AddComponent<T>(value); });
+        }
+
+        /** @brief Takes `T` off `entity` at playback. False, recording nothing, if the entity is not alive now. */
+        template <typename T>
+        bool RemoveComponent(std::uint32_t entity) const
+        {
+            return RecordOn(entity, [](Entity& target) { target.RemoveComponent<T>(); });
+        }
+
+        /** @brief Makes `value` the active scene's `T` at playback (Scene::AddResource), replacing the one it has. */
+        template <typename T>
+        void InsertSceneResource(T value = T{}) const
+        {
+            Record([value](App& app) { app.GetActiveScene().AddResource<T>(value); });
+        }
+
+        /** @brief Removes the active scene's `T` at playback. */
+        template <typename T>
+        void RemoveSceneResource() const
+        {
+            Record([](App& app) { app.GetActiveScene().RemoveResource<T>(); });
+        }
+
+        /** @brief Makes `value` the App's `T` at playback (App::AddResource), replacing the one it has. */
+        template <typename T>
+        void InsertAppResource(T value = T{}) const
+        {
+            Record([value](App& app) { app.AddResource<T>(value); });
+        }
+
+        /** @brief Removes the App's `T` at playback. */
+        template <typename T>
+        void RemoveAppResource() const
+        {
+            Record([](App& app) { app.RemoveResource<T>(); });
+        }
+
+      private:
+        friend class CallContext;
+        ChangeBuffer(App& app, Detail::ChangeBuffer& changes) noexcept : m_app(&app), m_changes(&changes)
+        {
+        }
+
+        // Records `change` for the entity `entity` of the active scene, unless it is not alive now. At playback it is
+        // skipped if the entity has died since.
+        bool RecordOn(std::uint32_t entity, std::function<void(Entity&)> change) const;
+
+        // Records `change` to run at playback, in order with every other change.
+        void Record(std::function<void(App&)> change) const;
+
+        App* m_app;
+        Detail::ChangeBuffer* m_changes;
+    };
+
+    /**
+     * @brief What a native function receives first: the App the running Scripting serves, through it the active scene's
+     * entities, and the change buffer. Only scripting makes one, and a native function is only ever called with the one
+     * that is active.
+     *
+     * A native function may read and write component and resource data, but makes structural changes (creating or
+     * destroying entities, adding or removing components, inserting or removing resources) only by recording them in
+     * Changes(): the C# system that called it holds Ref<T>s into the engine's storage, and a structural change could
+     * move what they point at.
      */
     class CallContext
     {
@@ -44,11 +132,14 @@ namespace Fenrir
             return *m_app;
         }
 
-        /** @brief The active scene's entities, as they are now. */
+        /** @brief The active scene's entities, as they are now. Read and write data; never change them structurally. */
         [[nodiscard]] EntityList& Entities() const
         {
             return m_app->GetActiveScene().GetEntityList();
         }
+
+        /** @brief The change buffer, where structural changes are recorded to play back after the calling system. */
+        [[nodiscard]] ChangeBuffer Changes() const noexcept;
 
       private:
         friend struct Detail::CallContextAccess;
@@ -194,9 +285,9 @@ namespace Fenrir
     };
 
     /**
-     * @brief What one engine package, or the app, gives scripting: its native functions, its components and events, and
-     * the shared assemblies that are its C# contract. Passed to Scripting::Install in ScriptingConfig::extensions;
-     * scripting knows nothing of the package beyond this.
+     * @brief What one engine package, or the app, gives scripting: its native functions, its components, resources and
+     * events, and the shared assemblies that are its C# contract. Passed to Scripting::Install in
+     * ScriptingConfig::extensions; scripting knows nothing of the package beyond this.
      */
     struct ScriptingExtension
     {
@@ -225,5 +316,11 @@ namespace Fenrir
          * C# defines need nothing here.
          */
         std::vector<EventRegistration> events;
+
+        /**
+         * @brief Native resources it exposes to C# (see MakeSceneResource and MakeAppResource), registered and checked
+         * as `components` are. Their names must be unique across every extension.
+         */
+        std::vector<ResourceRegistration> resources;
     };
 } // namespace Fenrir

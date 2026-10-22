@@ -12,10 +12,10 @@
 
 **Touches:** `packages/FenrirScripting/`, `docs/adr/0009-engine-packages-extend-scripting-through-extensions.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scripting harness tests: a test extension's scene and app resources are registered, read and written from C# through `Ref<T>`, and a read-only one rejects writes at compile time (a compile-fail fixture); a layout mismatch fails the load with a diagnostic.
-- [ ] `TryGet` is false when absent; `Get` on an absent resource logs and returns an empty ref; a scene resource follows the active scene.
-- [ ] Insert and remove from C# take effect after the system, in order.
-- [ ] A test extension's native function creates an entity that is usable at once in the same call (a component added to it, its id returned), and destroys, adds and removes play back in order after the call.
-- [ ] Existing scripting and physics scripting tests still pass; ADR-0009 and the README are amended.
+- [x] Scripting harness tests: a test extension's scene and app resources are registered, read and written from C# through `Ref<T>`, and a read-only one rejects writes at compile time (a compile-fail fixture); a layout mismatch fails the load with a diagnostic.
+- [x] `TryGet` is false when absent; `Get` on an absent resource logs and returns an empty ref; a scene resource follows the active scene.
+- [x] Insert and remove from C# take effect after the system, in order.
+- [x] A test extension's native function creates an entity that is usable at once in the same call (a component added to it, its id returned), and destroys, adds and removes play back in order after the call.
+- [x] Existing scripting and physics scripting tests still pass; ADR-0009 and the README are amended.

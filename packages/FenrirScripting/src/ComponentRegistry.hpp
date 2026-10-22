@@ -161,6 +161,47 @@ namespace Fenrir::Detail
             return m_events;
         }
 
+        // Resources: a third table with its own ids, under the same generation. Only extensions register them, so a
+        // reload never changes it.
+
+        // The id of a resource by name for the C# type that claims it: the id, -1 if no resource has the name, -3 if
+        // the name belongs to a resource of a different C# type.
+        [[nodiscard]] std::int32_t ResolveResource(std::string_view name, std::string_view typeName) const
+        {
+            const auto found = m_resourceIds.find(std::string(name));
+            if (found == m_resourceIds.end())
+            {
+                return -1;
+            }
+            return m_resources[static_cast<std::size_t>(found->second)].typeName == typeName ? found->second : -3;
+        }
+
+        // The id of the new resource, or -1 if its name is empty or taken.
+        std::int32_t AddResource(ResourceRegistration registration)
+        {
+            if (registration.name.empty() || m_resourceIds.contains(registration.name))
+            {
+                return -1;
+            }
+            const auto id = static_cast<std::int32_t>(m_resources.size());
+            m_resourceIds.emplace(registration.name, id);
+            m_resources.push_back(std::move(registration));
+            m_generation = ++s_generations;
+            return id;
+        }
+
+        [[nodiscard]] const ResourceRegistration* GetResource(std::int32_t id) const noexcept
+        {
+            return id >= 0 && static_cast<std::size_t>(id) < m_resources.size()
+                       ? &m_resources[static_cast<std::size_t>(id)]
+                       : nullptr;
+        }
+
+        [[nodiscard]] const std::vector<ResourceRegistration>& Resources() const noexcept
+        {
+            return m_resources;
+        }
+
         // The id registered under a name, or -1.
         [[nodiscard]] std::int32_t Find(std::string_view name) const
         {
@@ -211,6 +252,8 @@ namespace Fenrir::Detail
         std::unordered_map<std::string, std::int32_t> m_ids;
         std::vector<EventRegistration> m_events;
         std::unordered_map<std::string, std::int32_t> m_eventIds;
+        std::vector<ResourceRegistration> m_resources;
+        std::unordered_map<std::string, std::int32_t> m_resourceIds;
     };
 
     /**

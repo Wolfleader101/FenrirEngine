@@ -534,13 +534,13 @@ namespace Fenrir
                 config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(contract));
                 return std::nullopt;
             },
-            // The App the native functions act on, and every extension's components and events.
+            // The App the native functions act on, and every extension's components, events and resources.
             [&]() -> std::optional<StartupFailure> {
                 state->context.app = &app;
                 state->context.call = Detail::CallContextAccess::Make(app, state->context);
                 state->context.components = &state->components;
                 state->context.changes = &state->changes;
-                // Every extension's components and events, in order, by the same rules.
+                // Every extension's components, events and resources, in order, by the same rules.
                 for (auto& extension : config.extensions)
                 {
                     const std::string source = "extension '" + extension.name + "'";
@@ -562,6 +562,13 @@ namespace Fenrir
                         if (state->components.AddEvent(std::move(registration)) < 0)
                         {
                             return StartupFailure{"an event in " + source + " has an empty or duplicate name", {}};
+                        }
+                    }
+                    for (auto& registration : extension.resources)
+                    {
+                        if (state->components.AddResource(std::move(registration)) < 0)
+                        {
+                            return StartupFailure{"a resource in " + source + " has an empty or duplicate name", {}};
                         }
                     }
                 }

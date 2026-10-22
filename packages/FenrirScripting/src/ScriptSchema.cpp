@@ -56,6 +56,25 @@ namespace Fenrir::Detail
             return Succeeded();
         }
 
+        Result ValidateAllResources(const std::vector<ResourceRegistration>& registrations,
+                                    const Iris::Component& component)
+        {
+            for (const auto& registration : registrations)
+            {
+                if (!registration.validate)
+                {
+                    continue;
+                }
+                if (auto validated = registration.validate(component); !validated.Succeeded())
+                {
+                    validated.diagnostic =
+                        "Resource '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+                    return validated;
+                }
+            }
+            return Succeeded();
+        }
+
         // Size and alignment, and each field's name, type, kind and offset: two builds of a struct with the same
         // fingerprint lay the same bytes out the same way. A type the assembly does not expose (internal) can only be
         // told apart by its size.
@@ -142,7 +161,11 @@ namespace Fenrir::Detail
                 {
                     return validated;
                 }
-                return ValidateAllEvents(registry.Events(), m_component);
+                if (auto validated = ValidateAllEvents(registry.Events(), m_component); !validated.Succeeded())
+                {
+                    return validated;
+                }
+                return ValidateAllResources(registry.Resources(), m_component);
             }
 
           private:

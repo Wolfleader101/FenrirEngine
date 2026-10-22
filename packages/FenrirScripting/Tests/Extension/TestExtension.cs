@@ -22,6 +22,37 @@ public static partial class Gadgets
     // The UTF-8 byte count of the text, times ten, plus the number; the native side keeps the text it received.
     [NativeFunction]
     public static partial int Label(string text, int number);
+
+    // Creates an entity through the change buffer and gives it a Charge of `level` in the same call; returns it.
+    [NativeFunction]
+    public static partial Entity SpawnCharged(int level);
+
+    // Records, in this order: Charge 1 on `kept`, its removal, Charge 3 on it, destroying `doomed`, Charge 9 on `doomed`
+    // (skipped at playback), and a Weather of `wind` in the active scene.
+    [NativeFunction]
+    public static partial void Rearrange(Entity kept, Entity doomed, float wind);
+}
+
+/// <summary>A scene resource the test extension gives C#: the native <c>Weather</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Weather")]
+public struct Weather : IResource
+{
+    public float Wind;
+    public int Gusts;
+}
+
+/// <summary>An app resource the test extension gives C#: the native <c>Settings</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Settings")]
+public struct Settings : IResource
+{
+    public int Volume;
+}
+
+/// <summary>A read-only app resource the test extension gives C#: the native <c>Clock</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Clock")]
+public struct Clock : IReadOnlyResource
+{
+    public double Seconds;
 }
 
 /// <summary>A component the test extension gives C#: the native <c>Charge</c>.</summary>
