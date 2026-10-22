@@ -623,7 +623,7 @@ int main(int argc, char* argv[])
     Fenrir::ScriptingConfig scriptingConfig{.scriptAssembly = projectSettings.scriptAssembly,
                                             .extensions = {ScriptingDemo::Extension()}};
 #ifdef FENRIR_PHYSICS
-    scriptingConfig.extensions.push_back(physics.ScriptingExtension());
+    scriptingConfig.extensions.push_back(Fenrir::PhysicsScriptingExtension());
 #endif
     auto scripting = Fenrir::Scripting::Install(app, std::move(scriptingConfig));
     // C# systems run in the Update phase when Install put them there; these run after them, so they see what C# just

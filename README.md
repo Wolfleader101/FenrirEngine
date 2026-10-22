@@ -28,5 +28,24 @@ build one locally only to chase a failure CI reports there.
 | `FENRIR_BUILD_TESTS` | `OFF` | Builds the package tests with Catch2 (the `libs/catch2` submodule, or an installed Catch2 v3): FenrirECS and FenrirApp always, FenrirPhysics when physics is on, FenrirScripting when scripting is on, and physics from C# (FenrirPhysicsScripting) when both are. |
 | `FENRIR_BUILD_EXAMPLES` | `ON` | Builds the DemoApp. Its third-party libraries (`examples/DemoApp/libs`) are not submodules, so turn it off on a fresh clone (CI does). |
 
+Packages that share types with bindings commit an API description (`packages/<Package>/api/<Package>.api.json`, ADR-0016),
+generated from their headers by `tools/describe-api`. The ordinary build never regenerates them:
+`cmake --build out/build/clang-x64-debug --target fenrir-describe-api` does (it needs the .NET SDK), and CI fails on a pull request
+whose descriptions are stale. See `tools/describe-api/README.md`.
+
+A C# binding is generated from those descriptions and committed too: FenrirPhysics's components, events and shared
+structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings` generates their C# mirrors
+(`packages/FenrirPhysics/Managed/Fenrir.Physics/Generated`), their Iris mappings and the extension's registration lists
+(`packages/FenrirPhysics/Scripting/src/Generated`) and a defaults test (`packages/FenrirPhysics/Scripting/Tests/Generated`)
+from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. Its native functions are written once too, as their
+C++ definitions in `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`: `fenrir-describe-api` describes them into
+`FenrirPhysics.natives.json` beside the binding's configuration, and the binding generates their C# declarations
+(`PhysicsNative`), their registration and a test of their outputs. FenrirScripting's built-in extension is bound the same
+way, from FenrirECS's and FenrirMath's descriptions (the engine's Transform, Name, Relationship and entity link) and its
+natives in `packages/FenrirScripting/src/Bindings.cpp`, by `packages/FenrirScripting/api/FenrirScripting.binding.toml`.
+After changing a shared type or a native, run
+`fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
+CI fails on a stale binding as on a stale description.
+
 The Iris checks are built from Iris itself with `IRIS_BUILD_TESTS`, see `packages/Iris/README.md`. The first configure of a
 fresh build directory can fail in the third-party assimp project; running the same configure again succeeds.

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The fixture's contract (generated mirrors and hand-written parts) built against the Fenrir scripting SDK of this
+       repository, with its source generators: the tagged-union storage must be what TaggedUnionGenerator accepts, and the
+       mirrors what the component and event generators accept, with no diagnostic. The tool's tests build it when the SDK
+       is present. -->
+  <PropertyGroup>
+    <AssemblyName>Iris.Bindings.SdkCheck</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../Fixture/Contract/**/*.cs" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildThisFileDirectory)../../../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+</Project>

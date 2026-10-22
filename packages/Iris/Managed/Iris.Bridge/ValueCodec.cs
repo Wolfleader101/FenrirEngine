@@ -106,7 +106,8 @@ internal static unsafe class ValueCodec
     // ---- Registered structs and enums
 
     // Copies a struct out of the caller's bytes: a plain memory copy, then every bool byte made 0 or 1, so a
-    // stray nonzero byte reads as true and managed code never sees an invalid bool.
+    // stray nonzero byte reads as true and managed code never sees an invalid bool. An opaque pointer field is
+    // part of the copy, its eight bytes unchanged in both directions.
     internal static object StructFromSlot(StructRecord record, ulong slot)
     {
         if (slot == 0) throw new BridgeArgumentException("A struct argument has no value.");

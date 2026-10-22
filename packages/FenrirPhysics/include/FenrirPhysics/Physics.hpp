@@ -13,8 +13,6 @@
 namespace Fenrir
 {
     class App;
-    // Only named here: FenrirPhysicsScripting defines Physics::ScriptingExtension().
-    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -55,6 +53,10 @@ namespace Fenrir
      *
      * Destroying it first removes every scene's physics world, then tears down the backend; the systems it installed
      * then do nothing. Destroy it before the App, and keep it alive while the App runs.
+     *
+     * It also holds the collision meshes, which every world shares and reaches (PhysicsWorld::CreateCollisionMesh), so
+     * code that holds a world needs nothing of the owner. Physics's scripting extension is such code: it is made by
+     * PhysicsScriptingExtension() in the FenrirPhysicsScripting library and acts on the active scene's world.
      */
     class Physics
     {
@@ -76,10 +78,11 @@ namespace Fenrir
          * triangle, counter-clockwise seen from the front). Copies what it needs, so the spans need not outlive the
          * call. Loading the data from a model or file is the caller's job.
          *
-         * Each kind of shape is cooked once, the first time a collider of that kind uses the mesh, and shared by every
-         * collider that refers to it in every scene. Logs an error and returns the default handle (no mesh) when there
-         * are no vertices, the indices are not whole triangles, or an index is out of range. Indices may be empty for
-         * a mesh used only as a hull.
+         * Meshes are shared by every scene's world, which reach the same meshes through
+         * PhysicsWorld::CreateCollisionMesh and PhysicsWorld::ReleaseCollisionMesh. Each kind of shape is cooked once,
+         * the first time a collider of that kind uses the mesh, and shared by every collider that refers to it in every
+         * scene. Logs an error and returns the default handle (no mesh) when there are no vertices, the indices are not
+         * whole triangles, or an index is out of range. Indices may be empty for a mesh used only as a hull.
          */
         [[nodiscard]] CollisionMesh CreateCollisionMesh(std::span<const Math::Vec3> vertices,
                                                         std::span<const std::uint32_t> indices);
@@ -100,22 +103,6 @@ namespace Fenrir
 
         /** @brief The collision layers named in the PhysicsConfig given to Install. */
         [[nodiscard]] const CollisionLayers& Layers() const;
-
-        /**
-         * @brief What physics gives C# (ADR-0009): the physics components, the native functions of
-         * `Fenrir.Physics.PhysicsWorld` and the `Fenrir.Physics` contract. Add it to ScriptingConfig::extensions.
-         *
-         * Its native functions act on the active scene's physics world and, for collision meshes, on this owner (the
-         * last one asked for its extension). With no world, no body, a released mesh or this owner destroyed, they do
-         * nothing and return false or zero. In debug builds each such case is warned about once per process for each
-         * place in FenrirPhysicsScripting's native code that notices it (its source location) and reason: not once per
-         * C# call site, so a second script calling the same function the same wrong way is not warned about again.
-         *
-         * Defined by the FenrirPhysicsScripting library, not FenrirPhysics (which never links FenrirScripting), so it
-         * exists only in a build with physics and scripting on. Include "FenrirPhysicsScripting/PhysicsScripting.hpp"
-         * and link FenrirPhysicsScripting to call it.
-         */
-        [[nodiscard]] Fenrir::ScriptingExtension ScriptingExtension() const;
 
       private:
         explicit Physics(std::shared_ptr<Detail::PhysicsState> state);

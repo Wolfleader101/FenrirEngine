@@ -146,13 +146,21 @@ namespace Fenrir
     };
 
     // this needs to be here because it needs to know about entity
+    /**
+     * @brief Where an entity sits in the hierarchy: its parent, its first child and its siblings, each the empty
+     * Entity when there is none. Every entity has one, and the entity list keeps the links consistent.
+     */
     struct Relationship
     {
         Relationship() = default;
 
+        /** @brief The entity's parent. */
         Entity parent = Entity();
+        /** @brief The first of its children; the rest follow through each child's nextSibling. */
         Entity firstChild = Entity();
+        /** @brief The next child of its parent. */
         Entity nextSibling = Entity();
+        /** @brief The previous child of its parent. */
         Entity prevSibling = Entity();
     };
 

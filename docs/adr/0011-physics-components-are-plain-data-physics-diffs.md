@@ -27,7 +27,7 @@ C# components cannot hold a tagged union today, so scripting needs that capabili
 
 FenrirECS will report component adds and removes (a neutral API, per ADR-0008), and physics creates and destroys bodies from those, in a batch before the step. Field edits are not reported. Each tick, physics compares each body's components against its private copy of what it last applied or wrote back (for a shape, the tag and the active kind's fields) and pushes the differences to the backend.
 
-*Amended 2026-10-16:* FenrirECS now reports them: `EntityList::Watch` returns a `ComponentWatch` that records every add and remove of one component type, which physics drains once per tick.
+*Amended 2026-10-16:* FenrirECS now reports them: `EntityList::Watch` returns a `ComponentWatch` that records every add and remove of one component type, which physics drains once per tick. It drains each watch through a tracked component set (`TrackedComponents`): the watch, a scan of what was there when the set was made, and the entities that have the type as of its last drain.
 
 We chose this over an edit hook (`on_update`, a dirty flag, or explicit "mark changed" calls) because C# systems write components through `Ref<T>` straight into ECS storage, which no hook sees, and because explicit calls are easy to forget. The cost is one plain-data comparison per body per tick, which is small beside the step itself; bevy_rapier uses the same technique for transforms.
 

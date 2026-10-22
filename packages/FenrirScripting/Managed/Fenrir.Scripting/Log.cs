@@ -1,5 +1,3 @@
-using System.Text;
-
 namespace Fenrir.Scripting;
 
 /// <summary>Writes to the engine's logger, so script messages appear with everything else.</summary>
@@ -14,13 +12,5 @@ public static class Log
     public static void Error(string? message) => Write(ErrorLevel, message);
 
     // The text goes across as UTF-8 and a length; a lone surrogate becomes U+FFFD rather than failing.
-    private static unsafe void Write(int level, string? message)
-    {
-        message ??= "";
-        int capacity = Encoding.UTF8.GetMaxByteCount(message.Length);
-        Span<byte> buffer = capacity <= 512 ? stackalloc byte[512] : new byte[capacity];
-        int count = Encoding.UTF8.GetBytes(message, buffer);
-        fixed (byte* text = buffer)
-            Native.Log(level, text, count);
-    }
+    private static void Write(int level, string? message) => Native.Log(level, message ?? "");
 }
