@@ -18,11 +18,11 @@
 
 **Touches:** `packages/FenrirAssets/`, `.gitmodules`, `CMakeLists.txt`, `README.md`, `.github/workflows/build-and-test.yml`, `docs/adr/0024-fenrirrenderer-materials-are-shared-assets-bound-through-a-reflected-material-set.md`, `docs/adr/0027-ui-draws-through-fenrirdraw2d-and-takes-input-through-input-routers.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirAssetsTests` (headless): handles are trivially copyable; an app-owned asset outlives scenes; a scene-owned asset is freed with its scene; an asset owned by two scenes lives until both end; `Unload` frees it and the old handle resolves as stale.
-- [ ] Loading the same path twice returns the same handle and adds the owner; `Add` never deduplicates.
-- [ ] `Replace` bumps the revision; `MeshData`'s bounds are computed on `Add` and `Replace`.
-- [ ] Load diagnostics name the path, reason and importer message for a missing file and a corrupt PNG; relative paths resolve against the asset root, absolute ones as given.
-- [ ] A PNG, a JPEG and an HDR fixture load with the right size and format; a pixel-less image and a six-face cubemap are accepted.
-- [ ] `FENRIR_ENABLE_ASSETS=OFF` builds the engine without FenrirAssets or stb; renderer on with assets off fails at configure; Clang and MSVC x64 presets build with no warnings from stb.
+- [x] `FenrirAssetsTests` (headless): handles are trivially copyable; an app-owned asset outlives scenes; a scene-owned asset is freed with its scene; an asset owned by two scenes lives until both end; `Unload` frees it and the old handle resolves as stale.
+- [x] Loading the same path twice returns the same handle and adds the owner; `Add` never deduplicates.
+- [x] `Replace` bumps the revision; `MeshData`'s bounds are computed on `Add` and `Replace`.
+- [x] Load diagnostics name the path, reason and importer message for a missing file and a corrupt PNG; relative paths resolve against the asset root, absolute ones as given.
+- [x] A PNG, a JPEG and an HDR fixture load with the right size and format; a pixel-less image and a six-face cubemap are accepted.
+- [x] `FENRIR_ENABLE_ASSETS=OFF` builds the engine without FenrirAssets or stb; renderer on with assets off fails at configure; Clang and MSVC x64 presets build with no warnings from stb.

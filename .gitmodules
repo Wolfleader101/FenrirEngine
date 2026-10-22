@@ -13,3 +13,6 @@
 [submodule "packages/FenrirPhysics/libs/JoltPhysics"]
 	path = packages/FenrirPhysics/libs/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics
+[submodule "packages/FenrirAssets/libs/stb"]
+	path = packages/FenrirAssets/libs/stb
+	url = https://github.com/nothings/stb
