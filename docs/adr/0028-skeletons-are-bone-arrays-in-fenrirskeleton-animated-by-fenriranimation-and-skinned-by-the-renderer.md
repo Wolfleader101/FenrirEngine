@@ -33,6 +33,7 @@ Seven parts, each with one job:
 - **The first implementation has one modifier:** a weighted per-bone override, enough for a ragdoll going limp or blending back. It is an initial implementation, not the contract for all pose modification; ordered modifiers (layers and masks, IK, procedural, ragdoll, gameplay) replace or generalise it as those features arrive.
 - *Amended by ADR-0036:* layers and masks are base-pose blending inside FenrirAnimation's `Animate` work, not pose modifiers; modifiers are procedural and physics work (IK, procedural posing, ragdolls, gameplay adjustments).
 - *Amended by ADR-0033:* modifiers resolve their own targets in order through `PoseEdit` in the `Modify` pose stage; finalisation computes the model matrices left and places attachments, and the palette is computed lazily on read.
+- *Refined by ADR-0037:* a bone attachment's parent may be any entity; its bone index is cached outside the component; attachments are placed in dependency order, report an `AttachmentState`, and detach through `Skeleton::Detach`.
 - *Amended by ADR-0031:* `SkeletonPose` is a plain component naming the instance; its arrays live in FenrirSkeleton's `SkeletonPoses` scene resource. Clips bind to skeletons from their own file by source node identity, and to others by name.
 - **Clips name bones by name**, resolved to indices once per clip and skeleton and cached, so a clip plays on any skeleton whose bone names match.
 
