@@ -40,6 +40,17 @@ namespace Fenrir
         return scene.GetResource<PhysicsWorld>();
     }
 
+    CollisionMesh PhysicsWorld::CreateCollisionMesh(std::span<const Math::Vec3> vertices,
+                                                    std::span<const std::uint32_t> indices)
+    {
+        return m_impl->m_meshes->Create(vertices, indices);
+    }
+
+    bool PhysicsWorld::ReleaseCollisionMesh(CollisionMesh mesh)
+    {
+        return m_impl->m_meshes->Release(mesh);
+    }
+
     void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
     {
         m_impl->Queue(entity, &Backend::World::AddImpulse, impulse);
@@ -72,7 +83,7 @@ namespace Fenrir
 
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
-        : m_entities(&entities), m_backend(settings, meshes, logger), m_poses(entities),
+        : m_entities(&entities), m_meshes(&meshes), m_backend(settings, meshes, logger), m_poses(entities),
           m_bodies(entities, logger, m_backend, m_poses), m_contacts(entities, m_backend, m_bodies),
           m_joints(entities, logger, m_backend, m_bodies, m_poses), m_characters(entities, logger, m_backend, m_poses),
           m_vehicles(entities, logger, m_backend, m_bodies, m_poses), m_canvas(m_backend)

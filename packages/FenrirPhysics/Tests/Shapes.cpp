@@ -93,6 +93,42 @@ TEST_CASE("A box falls onto a static triangle-mesh ground and rests on it", "[ph
     REQUIRE(PositionOf(box).y == Approx(0.5f).margin(restSlop));
 }
 
+TEST_CASE("A collision mesh made through one scene's world is used by a collider in another scene's world",
+          "[physics][shapes]")
+{
+    PhysicsApp test;
+    AddGround(test.Entities());
+    test.Run(tick);
+    PhysicsWorld* firstWorld = PhysicsWorld::Of(test.app.GetActiveScene());
+    REQUIRE(firstWorld != nullptr);
+    const CubeMesh cube(0.5f);
+    const CollisionMesh mesh = firstWorld->CreateCollisionMesh(cube.vertices, cube.indices);
+    {
+        INFO("a world cooks a valid mesh, as the owner does");
+        REQUIRE(mesh.id != 0);
+    }
+
+    Scene& other = test.app.CreateScene("Other");
+    test.app.ChangeActiveScene("Other");
+    AddGround(other.GetEntityList());
+    Entity hull = AddBody(other.GetEntityList(), Math::Vec3(0.0f, 3.0f, 0.0f), ConvexHullShape{mesh});
+    test.Run(3.0);
+
+    {
+        INFO("the meshes are the owner's, shared by every world: the other scene's hull of a unit cube rests with its "
+             "centre half a unit above its ground, it is at "
+             << PositionOf(hull).y);
+        REQUIRE(PositionOf(hull).y == Approx(0.5f).margin(restSlop));
+    }
+    {
+        INFO("the other scene's world releases the mesh the first world made, once");
+        PhysicsWorld* otherWorld = PhysicsWorld::Of(other);
+        REQUIRE(otherWorld != nullptr);
+        REQUIRE(otherWorld->ReleaseCollisionMesh(mesh));
+        REQUIRE_FALSE(test.physics.ReleaseCollisionMesh(mesh));
+    }
+}
+
 TEST_CASE("A dynamic triangle-mesh body falls and rests on the ground", "[physics][shapes]")
 {
     PhysicsApp test;

@@ -33,6 +33,7 @@
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
 #include "FenrirScripting/EngineMappings.hpp"
@@ -74,18 +75,18 @@ namespace
     {
         PhysicsScriptingApp()
             : physics(Physics::Install(headless.Get(), StepPosesOnly())),
-              scripting(Scripting::Install(headless.Get(), Config(physics)))
+              scripting(Scripting::Install(headless.Get(), Config()))
         {
             INFO("The fixture did not load with physics's extension");
             REQUIRE(scripting.HasScripts());
         }
 
-        static ScriptingConfig Config(const Physics& physics)
+        static ScriptingConfig Config()
         {
             ScriptingConfig config;
             config.scriptAssembly = fixture;
             config.hotReload = false;
-            config.extensions = {physics.ScriptingExtension()};
+            config.extensions = {PhysicsScriptingExtension()};
             return config;
         }
 
@@ -434,6 +435,10 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicl
 TEST_CASE("A collision mesh made from C# spans is usable by a collider, and released once", "[physics][scripting]")
 {
     PhysicsScriptingApp test;
+    // Meshes are made through the active scene's world, so the scene needs one first.
+    AddStaticBox(test, Math::Vec3(0.0f, -50.0f, 0.0f));
+    test.Run(1);
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) != nullptr);
     const auto mesh = test.Call<std::uint64_t>(WorldType, "MakeGroundMesh");
     {
         INFO("Cooking a valid mesh from C# gave the none handle");
@@ -547,20 +552,77 @@ TEST_CASE("On an entity without a body, functions from C# do nothing and return 
 #endif
 }
 
-TEST_CASE("Collision meshes from C# do nothing once the Physics owner is gone", "[physics][scripting]")
+TEST_CASE("With no physics world, collision meshes from C# give the none handle and false, warning once each in debug",
+          "[physics][scripting]")
 {
     PhysicsScriptingApp test;
+    // No frame has run with a body in the scene, so there is no physics world.
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
+
+    for (int call = 0; call < 2; ++call)
     {
-        // Moved out and destroyed: the owner whose extension the scripts were given ends while scripting runs.
+        {
+            INFO("Cooking a mesh with no world should give the none handle, not throw");
+            REQUIRE(test.Call<std::uint64_t>(WorldType, "MakeGroundMesh") == 0);
+        }
+        {
+            INFO("Releasing a mesh with no world should return false");
+            REQUIRE_FALSE(test.Call<bool>(WorldType, "ReleaseMesh", std::uint64_t{1}));
+        }
+    }
+#ifndef NDEBUG
+    {
+        INFO("A debug build should warn once for each, not on every call, that it had no world");
+        REQUIRE(WarningsAbout(test, "CreateCollisionMesh: the active scene has no physics world") == 1);
+        REQUIRE(WarningsAbout(test, "ReleaseCollisionMesh: the active scene has no physics world") == 1);
+    }
+#endif
+}
+
+TEST_CASE("Once the Physics owner is gone, collision meshes from C# give the none handle and false",
+          "[physics][scripting]")
+{
+    PhysicsScriptingApp test;
+    AddStaticBox(test, Math::Vec3(0.0f, -5.0f, 0.0f));
+    test.Run(1);
+    {
+        // Moved out and destroyed while scripting runs: it ends every scene's world, and its meshes with them.
         Physics ended = std::move(test.physics);
     }
     {
-        INFO("Cooking a mesh with no owner should give the none handle, not throw");
+        INFO("Cooking a mesh with the owner gone should give the none handle, not throw");
         REQUIRE(test.Call<std::uint64_t>(WorldType, "MakeGroundMesh") == 0);
     }
     {
-        INFO("Releasing a mesh with no owner should return false");
+        INFO("Releasing a mesh with the owner gone should return false");
         REQUIRE_FALSE(test.Call<bool>(WorldType, "ReleaseMesh", std::uint64_t{1}));
+    }
+}
+
+namespace
+{
+    constexpr const char* NativesType = "Fenrir.PhysicsScriptFixture.Natives";
+
+    // Every native function with an out parameter, in name order, as the fixture calls them.
+    constexpr std::array<std::string_view, 8> OutputNatives = {
+        "Bounds", "Depenetrate", "FrameFromWorld", "GetJointState", "Gravity", "MoveCast", "Raycast", "ShapeCast",
+    };
+} // namespace
+
+TEST_CASE("With no physics world, every native function from C# leaves its output as the default",
+          "[physics][scripting]")
+{
+    PhysicsScriptingApp test;
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
+    {
+        INFO("Fenrir.Physics's natives with an out parameter are not the " << OutputNatives.size()
+                                                                           << " this test names");
+        REQUIRE(test.Call<int>(NativesType, "OutputNativeCount") == static_cast<int>(OutputNatives.size()));
+    }
+    for (std::size_t which = 0; which < OutputNatives.size(); ++which)
+    {
+        INFO(OutputNatives[which] << " returned early without writing the default to its output");
+        REQUIRE(test.Call<bool>(NativesType, "LeavesOutputDefault", static_cast<int>(which)));
     }
 }
 
@@ -814,7 +876,7 @@ TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted 
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<EventRegistration>& events = config.extensions[0].events;
     {
         INFO("Physics's extension should share the contact and trigger events and JointBroken with C#");
@@ -1113,6 +1175,13 @@ TEST_CASE("FrameFromWorld from C# matches C++ under a scaled, turned parent, and
         INFO("A destroyed bodyB is not the world: C# should get identity frames, as C++ does");
         REQUIRE(CSharpGave(test, JointFrames{}));
     }
+#ifndef NDEBUG
+    {
+        test.Call<void>(JointsType, "FrameFromWorld", body, other, x, y, z, w, qx, qy, qz);
+        INFO("A debug build should warn once, not on every call, that bodyB is not alive");
+        REQUIRE(WarningsAbout(test, "FrameFromWorld: bodyB is not alive") == 1);
+    }
+#endif
 }
 
 TEST_CASE("A default(Joint) from C# names no body of this scene, so it holds nothing and does not crash",
@@ -1201,7 +1270,7 @@ TEST_CASE("The Joint mirror is checked as scripts load, and a drifted one fails 
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     const auto joint = std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
         return component.name == "Fenrir.Physics.Joint";
@@ -1746,7 +1815,7 @@ TEST_CASE("The CharacterBody mirror is checked as scripts load, and a drifted on
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     const auto character =
         std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
@@ -2162,7 +2231,7 @@ TEST_CASE("The four vehicle mirrors are shared with C#, and a drifted Vehicle fa
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     for (const std::string_view name : {"Fenrir.Physics.Vehicle", "Fenrir.Physics.VehicleWheel",
                                         "Fenrir.Physics.VehicleDifferential", "Fenrir.Physics.VehicleAntiRollBar"})

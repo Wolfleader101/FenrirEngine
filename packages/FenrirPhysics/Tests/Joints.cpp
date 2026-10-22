@@ -573,13 +573,11 @@ TEST_CASE("FrameFromWorld treats only an empty bodyB as the world", "[physics][j
     INFO("a destroyed bodyB is not the world: both frames are the identity");
     REQUIRE(toDestroyed.frameA.position == Math::Vec3(0.0f));
     REQUIRE(toDestroyed.frameB.position == Math::Vec3(0.0f));
-#ifndef NDEBUG
-    INFO("with one warning, in a debug build");
-    REQUIRE(test.warnings.size() == 1);
-#endif
+    INFO("and nothing is logged: FrameFromWorld has no app to log through");
+    REQUIRE(test.warnings.empty());
 }
 
-TEST_CASE("FrameFromWorld with a bodyA that is not alive gives identity frames", "[physics][joints]")
+TEST_CASE("FrameFromWorld with a bodyA that is not alive gives identity frames, and logs nothing", "[physics][joints]")
 {
     PhysicsApp test;
     Entity gone = AddBody(test.Entities(), Math::Vec3(0.0f));
@@ -594,10 +592,8 @@ TEST_CASE("FrameFromWorld with a bodyA that is not alive gives identity frames",
         REQUIRE(frames.frameB.position == Math::Vec3(0.0f));
         REQUIRE(frames.frameB.rotation == identity);
     }
-#ifndef NDEBUG
-    INFO("with one warning each, in a debug build");
-    REQUIRE(test.warnings.size() == 2);
-#endif
+    INFO("nothing is logged: FrameFromWorld has no app to log through");
+    REQUIRE(test.warnings.empty());
 }
 
 namespace
