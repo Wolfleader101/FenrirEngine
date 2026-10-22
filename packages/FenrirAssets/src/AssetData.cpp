@@ -6,6 +6,7 @@
 
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 
@@ -106,6 +107,13 @@ namespace Fenrir::Detail
             return std::move(read.diagnostic);
         }
         shader.parameters = CollectShaderParameters(*read.container);
+        return {};
+    }
+
+    std::string PrepareAsset(MaterialData&)
+    {
+        // Any material is usable: names and types are checked against its shader when they are set, and a stale
+        // shader handle is the renderer's to report (it draws the fallback material).
         return {};
     }
 } // namespace Fenrir::Detail

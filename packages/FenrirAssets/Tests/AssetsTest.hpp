@@ -11,12 +11,15 @@
 
 namespace AssetsTest
 {
-    // Keeps what was logged as errors, so a test can check a failure was reported. A second ConsoleLogger in one
+    // Keeps what was logged as errors, and as warnings if given somewhere to keep them, so a test can check a failure
+    // was reported. A second ConsoleLogger in one
     // process throws, so the tests never use one.
     class RecordingLogger : public Fenrir::ILogger
     {
       public:
-        explicit RecordingLogger(std::shared_ptr<std::vector<std::string>> errors) : m_errors(std::move(errors))
+        explicit RecordingLogger(std::shared_ptr<std::vector<std::string>> errors,
+                                 std::shared_ptr<std::vector<std::string>> warnings = nullptr)
+            : m_errors(std::move(errors)), m_warnings(std::move(warnings))
         {
         }
         void AddLogger(std::shared_ptr<ILogger>) override
@@ -33,8 +36,12 @@ namespace AssetsTest
         void InfoImpl(std::string_view) override
         {
         }
-        void WarnImpl(std::string_view) override
+        void WarnImpl(std::string_view message) override
         {
+            if (m_warnings)
+            {
+                m_warnings->emplace_back(message);
+            }
         }
         void ErrorImpl(std::string_view message) override
         {
@@ -47,6 +54,7 @@ namespace AssetsTest
 
       private:
         std::shared_ptr<std::vector<std::string>> m_errors;
+        std::shared_ptr<std::vector<std::string>> m_warnings;
     };
 
     // The directory holding the image fixtures, absolute.
@@ -60,7 +68,8 @@ namespace AssetsTest
     struct AssetsApp
     {
         std::shared_ptr<std::vector<std::string>> errors = std::make_shared<std::vector<std::string>>();
-        Fenrir::App app{std::make_unique<RecordingLogger>(errors)};
+        std::shared_ptr<std::vector<std::string>> warnings = std::make_shared<std::vector<std::string>>();
+        Fenrir::App app{std::make_unique<RecordingLogger>(errors, warnings)};
         Fenrir::Assets assets;
         Fenrir::AssetStore& store;
 

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "FenrirAssets/AssetStore.hpp"
@@ -29,6 +30,8 @@ namespace Fenrir::Detail
         std::vector<OwnerId> owners;
         // The loaded path and label, as deduplication keys it; empty for an added asset.
         std::string key;
+        // The problems already logged for this asset (a material's unknown parameter names), so each is logged once.
+        std::unordered_set<std::string> logged;
     };
 
     /** @brief Every asset of one kind, and the loaded ones by path. */

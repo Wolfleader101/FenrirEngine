@@ -11,6 +11,7 @@ add_library(FenrirAssets STATIC
     include/FenrirAssets/Assets.hpp
     include/FenrirAssets/AssetStore.hpp
     include/FenrirAssets/ImageData.hpp
+    include/FenrirAssets/MaterialData.hpp
     include/FenrirAssets/MeshData.hpp
     include/FenrirAssets/ShaderData.hpp
 
@@ -18,6 +19,7 @@ add_library(FenrirAssets STATIC
     src/AssetStore.cpp
     src/AssetStoreState.hpp
     src/AssetData.cpp
+    src/Materials.cpp
 
     src/Importers/ImageImporter.hpp
     src/Importers/Stb/StbImageImporter.cpp
