@@ -49,15 +49,22 @@ target_include_directories(FenrirPhysicsScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScripting)
 
 # The binding (ADR-0016): every physics component, event and shared struct is written once, in its C++ header, and
-# Iris.Bindings generates the rest from the API descriptions and api/FenrirPhysics.binding.toml, all committed:
-#   ../Managed/Fenrir.Physics/Generated/  the C# mirrors, beside which the contract's own .cs files add behaviour only;
-#   src/Generated/                        the Iris mappings and the extension's components, events and sharedStructs;
-#   Tests/Generated/                      the defaults test: C#'s new T() against C++'s T{}, field by field.
+# every native function once, as its definition in src/PhysicsScripting.cpp, which describe-api's natives mode reads
+# into api/FenrirPhysics.natives.json. Iris.Bindings generates the rest from those descriptions and
+# api/FenrirPhysics.binding.toml, all committed:
+#   ../Managed/Fenrir.Physics/Generated/  the C# mirrors, beside which the contract's own .cs files add behaviour only,
+#                                         and the natives' declarations, PhysicsNative;
+#   src/Generated/                        the Iris mappings and the extension's components, events, sharedStructs and
+#                                         functions;
+#   Tests/Generated/                      the defaults test (C#'s new T() against C++'s T{}, field by field) and the
+#                                         natives test (each output written when a native has nothing to act on).
 # The query types natives take by pointer are bound in the form C# holds them (src/ScriptQueries.hpp), which this
-# library describes itself, as api/FenrirPhysicsScripting.api.json. After changing a shared type, regenerate both stages:
+# library describes itself, as api/FenrirPhysicsScripting.api.json. After changing a shared type or a native, regenerate
+# both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings
 fenrir_describe_api(FenrirPhysicsScripting api/FenrirPhysicsScripting.api.toml)
+fenrir_describe_api_natives(FenrirPhysicsScripting api/FenrirPhysics.binding.toml)
 iris_generate_binding(FenrirPhysics api/FenrirPhysics.binding.toml ../api/FenrirPhysics.api.json
     api/FenrirPhysicsScripting.api.json)
 

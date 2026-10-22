@@ -230,7 +230,7 @@
       "role": "shared-struct",
       "size": 16,
       "alignment": 4,
-      "doc": "Which bodies a query can find. New, it finds every body except triggers.",
+      "doc": "Which bodies a query can find. New, it finds every body except triggers.\n\nThe default value (every field zero, which as written would find nothing) finds what a new one does, so a query function can take `default` as its filter.",
       "fields": [
         {
           "name": "mask",

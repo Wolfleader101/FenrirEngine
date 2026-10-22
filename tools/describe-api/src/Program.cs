@@ -4,11 +4,15 @@ namespace DescribeApi;
 
 /// <summary>
 /// <c>describe-api &lt;Package&gt;.api.toml [compile arguments...]</c>: writes <c>&lt;Package&gt;.api.json</c> beside the
-/// selection when its content changes. An argument <c>@file</c> reads more arguments from a file, one per line.
+/// selection when its content changes. <c>describe-api --natives &lt;Name&gt;.binding.toml [compile arguments...]</c>:
+/// writes the native functions of the configuration's <c>[natives]</c> sources to <c>&lt;Name&gt;.natives.json</c> beside
+/// it. An argument <c>@file</c> reads more arguments from a file, one per line.
 /// </summary>
 internal static class Program
 {
-    private const string Usage = "usage: describe-api <Package>.api.toml [compile arguments, or @file with one per line]";
+    private const string Usage =
+        "usage: describe-api <Package>.api.toml [compile arguments, or @file with one per line]\n" +
+        "       describe-api --natives <Name>.binding.toml [compile arguments, or @file with one per line]";
 
     public static int Main(string[] args)
     {
@@ -20,6 +24,21 @@ internal static class Program
 
         try
         {
+            if (args[0] == "--natives")
+            {
+                if (args.Length < 2)
+                {
+                    Console.Error.WriteLine(Usage);
+                    return 2;
+                }
+
+                var natives = NativesSelection.Read(args[1]);
+                var described = NativesDescriber.Describe(natives, ExpandResponseFiles(args[2..]));
+                var changed = WriteIfChanged(natives.DescriptionPath, NativesWriter.Write(described));
+                Console.WriteLine($"describe-api: {natives.DescriptionPath} {(changed ? "written" : "unchanged")}");
+                return 0;
+            }
+
             var selection = Selection.Read(args[0]);
             var description = Describer.Describe(selection, ExpandResponseFiles(args[1..]));
             var written = WriteIfChanged(selection.DescriptionPath, DescriptionWriter.Write(description));

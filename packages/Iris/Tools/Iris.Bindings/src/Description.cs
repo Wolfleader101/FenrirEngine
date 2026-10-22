@@ -199,17 +199,17 @@ internal static class Description
                    : new FieldKind(kind, OptionalString(field, "type"), null, null, 0);
     }
 
-    private static JsonElement Property(JsonElement element, string key, string where) =>
+    internal static JsonElement Property(JsonElement element, string key, string where) =>
         element.TryGetProperty(key, out var value)
             ? value
             : throw new BindingException($"{where}: the description has no '{key}'");
 
-    private static string String(JsonElement element, string key, string where) =>
+    internal static string String(JsonElement element, string key, string where) =>
         Property(element, key, where) is { ValueKind: JsonValueKind.String } value
             ? value.GetString()!
             : throw new BindingException($"{where}: '{key}' is not a string");
 
-    private static string? OptionalString(JsonElement element, string key) =>
+    internal static string? OptionalString(JsonElement element, string key) =>
         element.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static int Integer(JsonElement element, string key, string where) =>
@@ -217,12 +217,12 @@ internal static class Description
             ? number
             : throw new BindingException($"{where}: '{key}' is not an integer");
 
-    private static JsonElement Array(JsonElement element, string key, string where) =>
+    internal static JsonElement Array(JsonElement element, string key, string where) =>
         Property(element, key, where) is { ValueKind: JsonValueKind.Array } value
             ? value
             : throw new BindingException($"{where}: '{key}' is not a list");
 
-    private static JsonElement Object(JsonElement element, string key, string where) =>
+    internal static JsonElement Object(JsonElement element, string key, string where) =>
         Property(element, key, where) is { ValueKind: JsonValueKind.Object } value
             ? value
             : throw new BindingException($"{where}: '{key}' is not an object");

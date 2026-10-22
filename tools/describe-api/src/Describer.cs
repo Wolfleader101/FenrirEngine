@@ -111,7 +111,7 @@ internal sealed class Describer
         return new Description(m_selection.Package, InDependencyOrder());
     }
 
-    private static string[] Arguments(IReadOnlyList<string> compileArguments)
+    internal static string[] Arguments(IReadOnlyList<string> compileArguments)
     {
         var arguments = new List<string> { "-x", "c++" };
         if (!compileArguments.Any(argument => argument.StartsWith("-std=", StringComparison.Ordinal)))
@@ -537,7 +537,7 @@ internal sealed class Describer
         throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records");
     }
 
-    private static string? IntegerKind(Type type)
+    internal static string? IntegerKind(Type type)
     {
         var bits = type.Handle.SizeOf * 8;
         return type.Handle.kind switch

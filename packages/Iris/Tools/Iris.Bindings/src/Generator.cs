@@ -25,16 +25,37 @@ internal static class Generator
             files.Add(Path.Combine(config.CSharp.Generated, name), text);
         }
 
+        NativesDescription? natives = null;
+        IReadOnlyList<BoundNative> bound = [];
+        if (config.Natives is { } nativesConfig)
+        {
+            natives = NativesDescription.Read(nativesConfig.Description);
+            bound = Natives.Bind(binding, natives);
+            if (binding.Mirrored.Any(type => binding.CSharpName(type) == nativesConfig.Class))
+            {
+                throw new BindingException(
+                    $"{config.Path}: [natives] class {nativesConfig.Class} is also the C# name of a mirrored type");
+            }
+
+            var (name, text) = CSharpWriter.Natives(binding, natives, bound);
+            files.Add(Path.Combine(config.CSharp.Generated, name), text);
+        }
+
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
         if (config.Registration is { } registration)
         {
-            files.Add(registration.Source, CppWriter.Registration(binding, registration));
+            files.Add(registration.Source, CppWriter.Registration(binding, registration, natives));
         }
 
         if (config.Tests is { } tests)
         {
             files.Add(tests.Cpp, CppWriter.DefaultsTest(binding, tests));
             files.Add(tests.CSharp, CSharpWriter.Defaults(binding, tests, Path.GetFileName(tests.Cpp)));
+            if (natives != null && tests.NativesCpp is { } nativesCpp)
+            {
+                files.Add(nativesCpp, CppWriter.NativesTest(binding, tests, natives, bound));
+                files.Add(tests.NativesCSharp!, CSharpWriter.NativesTest(binding, tests, bound, Path.GetFileName(nativesCpp)));
+            }
         }
 
         return files;

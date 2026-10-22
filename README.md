@@ -37,7 +37,10 @@ A C# binding is generated from those descriptions and committed too: FenrirPhysi
 structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings` generates their C# mirrors
 (`packages/FenrirPhysics/Managed/Fenrir.Physics/Generated`), their Iris mappings and the extension's registration lists
 (`packages/FenrirPhysics/Scripting/src/Generated`) and a defaults test (`packages/FenrirPhysics/Scripting/Tests/Generated`)
-from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. After changing a shared type, run
+from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. Its native functions are written once too, as their
+C++ definitions in `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`: `fenrir-describe-api` describes them into
+`FenrirPhysics.natives.json` beside the binding's configuration, and the binding generates their C# declarations
+(`PhysicsNative`), their registration and a test of their outputs. After changing a shared type or a native, run
 `fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
 CI fails on a stale binding as on a stale description.
 

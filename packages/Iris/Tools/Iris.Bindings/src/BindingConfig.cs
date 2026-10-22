@@ -39,7 +39,10 @@ internal sealed record RegistrationConfig(
     string MakeSharedStruct,
     IReadOnlySet<string> ReadOnly);
 
-/// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
+/// <summary>
+/// The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly; and with
+/// natives, the natives test's two sources and C# class.
+/// </summary>
 internal sealed record TestsConfig(
     string Cpp,
     string CSharp,
@@ -47,7 +50,22 @@ internal sealed record TestsConfig(
     IReadOnlyList<string> Includes,
     string Setup,
     string Component,
-    string Tags);
+    string Tags,
+    string? NativesCpp,
+    string? NativesCSharp,
+    string? NativesClass);
+
+/// <summary>
+/// The native functions (<c>[natives]</c>): their description (<c>&lt;Name&gt;.natives.json</c> beside the
+/// configuration), the C# class declaring them, the SDK's attribute, the C++ factory each is registered by, and the C#
+/// type of each alias a native takes. <c>sources</c> and <c>context</c> are the header reader's.
+/// </summary>
+internal sealed record NativesConfig(
+    string Description,
+    string Class,
+    string Attribute,
+    string Make,
+    IReadOnlyDictionary<string, string> Types);
 
 /// <summary>
 /// A binding's configuration (<c>&lt;Name&gt;.binding.toml</c>, the tool's README): everything about the C# side and
@@ -62,6 +80,7 @@ internal sealed record BindingConfig(
     CppConfig Cpp,
     RegistrationConfig? Registration,
     TestsConfig? Tests,
+    NativesConfig? Natives,
     IReadOnlyDictionary<string, BoundType> BoundTypes,
     IReadOnlyDictionary<string, string> Names,
     IReadOnlyDictionary<string, string> Nouns,
@@ -90,7 +109,8 @@ internal sealed record BindingConfig(
         }
 
         var reader = new Reader(path);
-        reader.Keys(table, "", "namespace", "exclude", "csharp", "cpp", "registration", "tests", "bound-types", "names", "nouns");
+        reader.Keys(table, "", "namespace", "exclude", "csharp", "cpp", "registration", "tests", "natives", "bound-types", "names",
+                    "nouns");
         var csharp = reader.Table(table, "csharp");
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
@@ -116,11 +136,37 @@ internal sealed record BindingConfig(
         if (table.ContainsKey("tests"))
         {
             var section = reader.Table(table, "tests");
-            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags");
+            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags",
+                        "natives-cpp", "natives-csharp", "natives-class");
+            var natives = section.ContainsKey("natives-cpp") || section.ContainsKey("natives-csharp") ||
+                          section.ContainsKey("natives-class");
             tests = new TestsConfig(reader.PathOf(section, "cpp"), reader.PathOf(section, "csharp"),
                                     reader.String(section, "class"), reader.Strings(section, "includes"),
                                     reader.String(section, "setup"), reader.String(section, "component"),
-                                    reader.String(section, "tags"));
+                                    reader.String(section, "tags"),
+                                    natives ? reader.PathOf(section, "natives-cpp") : null,
+                                    natives ? reader.PathOf(section, "natives-csharp") : null,
+                                    natives ? reader.String(section, "natives-class") : null);
+        }
+
+        NativesConfig? nativesConfig = null;
+        if (table.ContainsKey("natives"))
+        {
+            var section = reader.Table(table, "natives");
+            reader.Keys(section, "natives", "sources", "context", "class", "attribute", "make", "types");
+            nativesConfig = new NativesConfig(
+                System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, fileName[..^Extension.Length] + ".natives.json"),
+                reader.String(section, "class"), reader.String(section, "attribute"), reader.String(section, "make"),
+                reader.StringTable(section, "types"));
+            if (registration is null)
+            {
+                throw new BindingException($"{path}: [natives] needs [registration], whose source registers them");
+            }
+        }
+
+        if (tests?.NativesCpp is not null && nativesConfig is null)
+        {
+            throw new BindingException($"{path}: [tests] natives-cpp needs [natives]");
         }
 
         var boundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);
@@ -153,7 +199,7 @@ internal sealed record BindingConfig(
                              csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events"),
                              reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
-            boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
+            nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
     }
 

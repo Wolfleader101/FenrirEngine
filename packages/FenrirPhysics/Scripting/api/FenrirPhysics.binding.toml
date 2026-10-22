@@ -45,7 +45,13 @@ includes = [
 
 [registration]
 source = "../src/Generated/FenrirPhysicsRegistration.cpp"
-includes = ["FenrirScripting/ComponentRegistry.hpp", "FenrirScripting/ScriptingExtension.hpp"]
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state and the query types as C# holds them.
+    "PhysicsScriptingState.hpp",
+    "ScriptQueries.hpp",
+]
 function = "Fenrir::Generated::RegisterPhysics"
 extension = "Fenrir::ScriptingExtension"
 make-component = "Fenrir::MakeComponent"
@@ -61,6 +67,10 @@ includes = ["PhysicsScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "Fenrir::Testing::PhysicsScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[physics][scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirPhysicsNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirPhysicsNatives.cs"
+natives-class = "Fenrir.PhysicsScriptFixture.Natives"
 
 [bound-types]
 "Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
@@ -78,3 +88,15 @@ tags = "[physics][scripting][bindings]"
 "Fenrir::CollisionShape" = "shape"
 "Fenrir::JointKind" = "joint"
 "Fenrir::VehicleKind" = "vehicle"
+
+# The native functions behind PhysicsWorld: tools/describe-api's natives mode reads every function in `sources` taking
+# `context` first (with the extension's state second) into FenrirPhysics.natives.json, and this binding generates from it
+# their C# declarations, the PhysicsNative class, and their registration.
+[natives]
+sources = ["../src/PhysicsScripting.cpp"]
+context = "Fenrir::CallContext"
+class = "PhysicsNative"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"
+# A native's entity parameters: their 32-bit value crosses, and C# passes an Entity.
+types = { "Fenrir::ScriptQueries::EntityId" = "Entity" }

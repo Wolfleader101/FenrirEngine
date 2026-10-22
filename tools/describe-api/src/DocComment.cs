@@ -17,8 +17,82 @@ internal static class DocComment
             return null;
         }
 
-        var paragraphs = new List<string>();
-        var paragraph = new StringBuilder();
+        return Join(Lines(raw));
+    }
+
+    /// <summary>A parameter's doc: whether <c>@param[out]</c> marks it an output, and its text.</summary>
+    public sealed record ParameterDoc(bool Output, string? Text);
+
+    /// <summary>A function's doc: its text without the commands below, each <c>@param</c>, and <c>@return</c>.</summary>
+    public sealed record FunctionDoc(string? Text, IReadOnlyDictionary<string, ParameterDoc> Parameters, string? Returns);
+
+    /// <summary>
+    /// A function's doc comment, split: <c>@param name</c>, <c>@param[in] name</c> or <c>@param[out] name</c> and
+    /// <c>@return</c> (or <c>@returns</c>) each take the text up to the next command or blank line; the rest is the
+    /// function's text, as <see cref="Text" /> gives it.
+    /// </summary>
+    public static FunctionDoc Function(string? raw)
+    {
+        var parameters = new Dictionary<string, ParameterDoc>(StringComparer.Ordinal);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new FunctionDoc(null, parameters, null);
+        }
+
+        var body = new List<string>();
+        string? returns = null;
+        List<string>? command = null;
+        Action<string?>? finish = null;
+        foreach (var line in Lines(raw).Append(""))
+        {
+            var isParam = line.StartsWith("@param", StringComparison.Ordinal) || line.StartsWith("\\param", StringComparison.Ordinal);
+            var isReturn = line.StartsWith("@return", StringComparison.Ordinal) || line.StartsWith("\\return", StringComparison.Ordinal);
+            if (command is not null && (line.Length == 0 || isParam || isReturn))
+            {
+                finish!(command.Count == 0 ? null : string.Join(' ', command));
+                command = null;
+            }
+
+            if (isParam)
+            {
+                var rest = line[6..];
+                var output = false;
+                if (rest.StartsWith('['))
+                {
+                    var close = rest.IndexOf(']');
+                    output = close > 0 && rest[1..close].Trim() == "out";
+                    rest = close > 0 ? rest[(close + 1)..] : rest;
+                }
+
+                rest = rest.Trim();
+                var space = rest.IndexOf(' ');
+                var name = space < 0 ? rest : rest[..space];
+                command = space < 0 ? [] : [rest[(space + 1)..].Trim()];
+                finish = text => parameters[name] = new ParameterDoc(output, text);
+            }
+            else if (isReturn)
+            {
+                var rest = line[(line.StartsWith("@returns", StringComparison.Ordinal) || line.StartsWith("\\returns", StringComparison.Ordinal) ? 8 : 7)..].Trim();
+                command = rest.Length == 0 ? [] : [rest];
+                finish = text => returns = text;
+            }
+            else if (command is not null)
+            {
+                command.Add(line);
+            }
+            else
+            {
+                body.Add(line);
+            }
+        }
+
+        return new FunctionDoc(Join(body), parameters, returns);
+    }
+
+    // The comment's lines without their markers or @brief, trimmed; blank lines kept as empty strings.
+    private static List<string> Lines(string raw)
+    {
+        var lines = new List<string>();
         foreach (var rawLine in raw.Replace("\r", "", StringComparison.Ordinal).Split('\n'))
         {
             var line = rawLine.Trim();
@@ -51,6 +125,19 @@ internal static class DocComment
                 line = line[6..].TrimStart();
             }
 
+            lines.Add(line);
+        }
+
+        return lines;
+    }
+
+    // Lines of one paragraph joined with a space, paragraphs with a blank line; null when there is no text.
+    private static string? Join(IEnumerable<string> lines)
+    {
+        var paragraphs = new List<string>();
+        var paragraph = new StringBuilder();
+        foreach (var line in lines)
+        {
             if (line.Length == 0)
             {
                 Flush();
