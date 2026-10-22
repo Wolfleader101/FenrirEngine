@@ -19,11 +19,12 @@ TEST_CASE("Installing input with no window adds the input resources", "[input][i
 
     INFO("the owner Install returns is valid");
     REQUIRE(input.IsValid());
-    INFO("the app has the keyboard, mouse, gamepads and input feed");
+    INFO("the app has the keyboard, mouse, gamepads, input feed and input claims");
     REQUIRE(app.TryGetResource<Fenrir::Keyboard>() != nullptr);
     REQUIRE(app.TryGetResource<Fenrir::Mouse>() != nullptr);
     REQUIRE(app.TryGetResource<Fenrir::Gamepads>() != nullptr);
     REQUIRE(app.TryGetResource<Fenrir::InputFeed>() != nullptr);
+    REQUIRE(app.TryGetResource<Fenrir::InputClaims>() != nullptr);
 }
 
 TEST_CASE("A second Install shares the input the app already has", "[input][install]")
@@ -65,6 +66,7 @@ TEST_CASE("The input resources go with the last owner", "[input][install]")
     INFO("once the last owner is gone, the app has no input resources");
     REQUIRE(app.TryGetResource<Fenrir::Keyboard>() == nullptr);
     REQUIRE(app.TryGetResource<Fenrir::InputFeed>() == nullptr);
+    REQUIRE(app.TryGetResource<Fenrir::InputClaims>() == nullptr);
 
     app.RunFrame(oneTick);
     Fenrir::Input again = Fenrir::Input::Install(app);

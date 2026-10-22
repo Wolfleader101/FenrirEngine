@@ -164,6 +164,41 @@ namespace Fenrir
             return changed;
         }
 
+        // Puts SDL's text input for a made window as ADR-0027 says: on, with the claimant's caret as the IME's text
+        // input area, while a router claims textInput there; otherwise as textInputByDefault says.
+        void ApplyTextInput(WindowState& state, WindowRecord& window)
+        {
+            const InputClaims* published = state.app->TryGetResource<InputClaims>();
+            const WindowInputClaims claims = published == nullptr ? WindowInputClaims{} : published->For(window.id);
+            if (claims.textInput && (!window.caretShown || window.caret != claims.caret))
+            {
+                // Whole pixels of logical units, rounded outwards so the area covers the caret.
+                const int left = static_cast<int>(std::floor(claims.caret.position.x));
+                const int top = static_cast<int>(std::floor(claims.caret.position.y));
+                const int right = static_cast<int>(std::ceil(claims.caret.position.x + claims.caret.size.x));
+                const int bottom = static_cast<int>(std::ceil(claims.caret.position.y + claims.caret.size.y));
+                const SDL_Rect area{left, top, right - left, bottom - top};
+                SDL_SetTextInputArea(window.sdl, &area, 0);
+                window.caret = claims.caret;
+                window.caretShown = true;
+            }
+            else if (!claims.textInput && window.caretShown)
+            {
+                SDL_SetTextInputArea(window.sdl, nullptr, 0);
+                window.caretShown = false;
+            }
+
+            const bool on = claims.textInput || state.config.textInputByDefault;
+            if (on && !SDL_TextInputActive(window.sdl))
+            {
+                SDL_StartTextInput(window.sdl);
+            }
+            else if (!on && SDL_TextInputActive(window.sdl))
+            {
+                SDL_StopTextInput(window.sdl);
+            }
+        }
+
         // Makes a window's SDL window, with `apiFlag` for its graphics surface (none for a plain window), and puts
         // what was asked of it before (title, cursor, text input) into effect.
         bool MakeWindow(WindowState& state, WindowRecord& window, SDL_WindowFlags apiFlag)
@@ -184,11 +219,7 @@ namespace Fenrir
             {
                 ApplyCursor(state, window);
             }
-            // Ticket 04 makes this follow routers' textInput claims.
-            if (state.config.textInputByDefault)
-            {
-                SDL_StartTextInput(window.sdl);
-            }
+            ApplyTextInput(state, window);
             return true;
         }
 
@@ -200,8 +231,8 @@ namespace Fenrir
             }
         }
 
-        // FenrirWindow's PreUpdate: takes SDL's events, feeds the input to FenrirInput and dispatches it, updates each
-        // window, and sleeps when nothing can be drawn.
+        // FenrirWindow's PreUpdate: takes SDL's events, feeds the input to FenrirInput and dispatches it, puts each
+        // window's text input as the routers' claims say, updates each window, and sleeps when nothing can be drawn.
         void Pump(App& app, WindowState& state)
         {
             InputFeed* feed = app.TryGetResource<InputFeed>();
@@ -263,6 +294,8 @@ namespace Fenrir
                 {
                     continue;
                 }
+                // After routing, so this frame's claims are in InputClaims.
+                ApplyTextInput(state, window);
                 if (ReadWindow(window))
                 {
                     app.SendEvent(

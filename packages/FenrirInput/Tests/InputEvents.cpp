@@ -128,9 +128,10 @@ TEST_CASE("Mouse, focus and gamepad input arrive as events with what was fed", "
     test.app.RunFrame(oneTick);
 
     const auto button = ReadAll(buttons, test.app);
-    INFO("one mouse button event: Middle down in the main window");
-    REQUIRE(button.size() == 1);
+    INFO("Middle down in the main window, then its release cancelled by the focus loss (ADR-0027)");
+    REQUIRE(button.size() == 2);
     REQUIRE((button[0].button == Fenrir::MouseButton::Middle && button[0].pressed && button[0].window == mainWindow));
+    REQUIRE((button[1].button == Fenrir::MouseButton::Middle && !button[1].pressed && button[1].cancelled));
 
     const auto motion = ReadAll(motions, test.app);
     INFO("one motion event with the position and motion fed");
