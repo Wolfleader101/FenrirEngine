@@ -24,6 +24,7 @@
 
 #include "AssetStoreState.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "Importers/ImageImporter.hpp"
@@ -364,6 +365,13 @@ namespace Fenrir
     {
         const Detail::AssetRecord* record = m_state->Find(kind, slot);
         return record != nullptr ? record->data.get() : nullptr;
+    }
+
+    std::span<const ShaderParameter> AssetStore::GetShaderParameters(AssetHandle<Shader> handle) const
+    {
+        const ShaderData* shader = TryGet(handle);
+        return shader != nullptr ? std::span<const ShaderParameter>(shader->parameters)
+                                 : std::span<const ShaderParameter>();
     }
 
     std::uint32_t AssetStore::RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const

@@ -19,3 +19,9 @@
 [submodule "packages/FenrirWindow/libs/SDL"]
 	path = packages/FenrirWindow/libs/SDL
 	url = https://github.com/libsdl-org/SDL
+[submodule "packages/FenrirRenderer/Tools/ShaderCompiler/libs/glslang"]
+	path = packages/FenrirRenderer/Tools/ShaderCompiler/libs/glslang
+	url = https://github.com/KhronosGroup/glslang
+[submodule "packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect"]
+	path = packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect

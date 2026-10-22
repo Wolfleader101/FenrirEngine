@@ -16,11 +16,11 @@
 
 **Touches:** `packages/FenrirRenderer/Tools/ShaderCompiler/`, `packages/FenrirRenderer/CMakeLists.txt`, `packages/FenrirRenderer/Shaders/`, `packages/FenrirAssets/`, `.gitmodules`, `CMakeLists.txt`, `cmake/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Shader-compiler fixture tests: the flattening formula on a fixture with every resource kind; `gl_InstanceIndex` refused; includes resolved; every combination of two variant keys built; set 2's reflection names, types, offsets and sizes as expected.
-- [ ] Each pragma error fails the build of its fixture with a message naming the file and line; a pragma inside an `#ifdef` applies only to variants defining it; the default block image holds the defaults at std140 offsets (a `vec3` followed by a `float`, an array stride case).
-- [ ] A container round-trips through the reader; a wrong magic or version is rejected with a diagnostic.
-- [ ] `GetShaderParameters` on a fixture container returns every parameter with its type and default.
-- [ ] Editing an included file rebuilds the containers that include it (depfiles); no glslang or SPIRV-Reflect include path reaches an engine target.
-- [ ] Clang and MSVC x64 debug and release presets build the tool with no warnings from glslang's or SPIRV-Reflect's sources.
+- [x] Shader-compiler fixture tests: the flattening formula on a fixture with every resource kind; `gl_InstanceIndex` refused; includes resolved; every combination of two variant keys built; set 2's reflection names, types, offsets and sizes as expected.
+- [x] Each pragma error fails the build of its fixture with a message naming the file and line; a pragma inside an `#ifdef` applies only to variants defining it; the default block image holds the defaults at std140 offsets (a `vec3` followed by a `float`, an array stride case).
+- [x] A container round-trips through the reader; a wrong magic or version is rejected with a diagnostic.
+- [x] `GetShaderParameters` on a fixture container returns every parameter with its type and default.
+- [x] Editing an included file rebuilds the containers that include it (depfiles); no glslang or SPIRV-Reflect include path reaches an engine target.
+- [x] Clang and MSVC x64 debug and release presets build the tool with no warnings from glslang's or SPIRV-Reflect's sources.
