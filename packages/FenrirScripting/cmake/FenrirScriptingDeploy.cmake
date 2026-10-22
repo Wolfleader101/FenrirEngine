@@ -1,5 +1,6 @@
 # fenrir_deploy_scripting(<target>): after <target> builds, copy what scripting needs at run time next to it: nethost,
-# the Iris bridge (iris_deploy) and the Fenrir.Scripting contract assembly that Scripting::Install shares.
+# the Iris bridge (iris_deploy) and the contract assemblies the built-in extension shares (Fenrir.Math and
+# Fenrir.Scripting).
 function(fenrir_deploy_scripting target)
     if(NOT FENRIR_SCRIPTING_CONTRACT_DIR)
         message(FATAL_ERROR "fenrir_deploy_scripting: FenrirScripting has not been added to the build.")
@@ -12,6 +13,7 @@ function(fenrir_deploy_scripting target)
         COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${target}>"
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
+            "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
             "$<TARGET_FILE_DIR:${target}>"
         VERBATIM
     )

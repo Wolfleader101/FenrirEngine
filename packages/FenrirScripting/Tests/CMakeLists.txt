@@ -24,6 +24,10 @@ target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SO
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)
 set_tests_properties(FenrirScriptingRules PROPERTIES TIMEOUT 60)
 
+# Every assembly below is rebuilt when the contracts are, so none runs against types a contract no longer has.
+set(fenrir_contract_files "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
+    "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll")
+
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
 file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
@@ -40,7 +44,7 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" -p:FixtureVariant=2
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/fixture-v2-obj/"
     DEPENDS ${fenrir_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
-        FenrirScriptingContract
+        FenrirScriptingContract ${fenrir_contract_files}
     COMMENT "Building the scripting test fixture assembly (and its version 2)"
     VERBATIM
 )
@@ -55,7 +59,7 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/bad-reports-obj/"
     DEPENDS ${fenrir_bad_reports_sources} "${CMAKE_CURRENT_SOURCE_DIR}/BadReports/Fenrir.BadReportFixture.csproj"
-        FenrirScriptingContract
+        FenrirScriptingContract ${fenrir_contract_files}
     COMMENT "Building the bad-report test fixture assembly"
     VERBATIM
 )
@@ -80,6 +84,7 @@ add_custom_command(
     DEPENDS ${fenrir_extension_sources} ${fenrir_extension_script_sources}
         "${CMAKE_CURRENT_SOURCE_DIR}/Extension/Fenrir.TestExtension.csproj"
         "${CMAKE_CURRENT_SOURCE_DIR}/ExtensionScript/Fenrir.TestExtensionScript.csproj" FenrirScriptingContract
+        ${fenrir_contract_files}
     COMMENT "Building the test extension's contract and the script assembly that uses it"
     VERBATIM
 )

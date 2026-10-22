@@ -1,14 +1,17 @@
-# FenrirInput: device-neutral input types, the Keyboard, Mouse and Gamepads app resources, input events and the input
-# feed (ADR-0017). Links no third-party library and is always built, like FenrirTime.
+# FenrirInput: device-neutral input types, the Keyboard, Mouse and Gamepads app resources, input events, the input
+# feed (ADR-0017), and input routers with their control owners and input claims (ADR-0027). Links no third-party
+# library and is always built, like FenrirTime.
 add_library(FenrirInput STATIC
     src/Devices.cpp
     src/Input.cpp
     src/InputDispatch.hpp
     src/InputFeed.cpp
+    src/InputRouting.cpp
     include/FenrirInput/Devices.hpp
     include/FenrirInput/Input.hpp
     include/FenrirInput/InputEvents.hpp
     include/FenrirInput/InputFeed.hpp
+    include/FenrirInput/InputRouter.hpp
     include/FenrirInput/InputTypes.hpp
 )
 

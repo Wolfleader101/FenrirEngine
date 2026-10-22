@@ -344,7 +344,7 @@ namespace Fenrir::Detail
         activeContext.compare_exchange_strong(expected, nullptr);
     }
 
-    ScriptingExtension BuiltInExtension(const std::filesystem::path& contract)
+    ScriptingExtension BuiltInExtension(const std::filesystem::path& math, const std::filesystem::path& contract)
     {
         constexpr auto notActive = static_cast<std::int32_t>(ChangeError::NotActive);
         constexpr std::int32_t unknown = -1;
@@ -384,7 +384,8 @@ namespace Fenrir::Detail
             NativeFunction::Make<&ResourceRemove>(prefix + "ResourceRemove", notActive),
         };
         extension.components = EngineComponents();
-        extension.sharedAssemblies = {contract};
+        // Fenrir.Math first: the scripting contract and every package's contract may refer to it.
+        extension.sharedAssemblies = {math, contract};
         return extension;
     }
 } // namespace Fenrir::Detail

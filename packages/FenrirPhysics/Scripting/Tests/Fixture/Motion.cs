@@ -1,3 +1,4 @@
+using Fenrir.Math;
 using Fenrir.Physics;
 using Fenrir.Scripting;
 

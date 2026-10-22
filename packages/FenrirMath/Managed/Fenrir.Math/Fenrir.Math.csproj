@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Math</AssemblyName>
+    <RootNamespace>Fenrir.Math</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirMath's C# contract (ADR-0029): pure managed maths, each type laid out as its FenrirMath counterpart, with no
+       native functions and no reference to scripting, so every package's contract can use it. The scripting contract
+       references it, the scripting SDK carries it, and the built-in extension shares it before anything else. -->
+</Project>

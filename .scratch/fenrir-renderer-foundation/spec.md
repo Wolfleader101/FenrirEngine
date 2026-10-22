@@ -210,7 +210,7 @@ Three demo apps (RendererDemo, ScriptingDemo, PhysicsDemo) on a shared demo scaf
 - **Surface functions** on `Window`, keyed by `WindowId`, with neutral types only (`void*` proc addresses, integer handles): request a surface (API, debug context, backbuffer description), get a proc address, make current, present, set the swap interval, and read the pixel size. Window's surface functions are statics taking `App&` (spike lesson 5).
 - **One main window**, keyed by `WindowId`; the API is shaped for several.
 - **Each frame:** pump SDL at the start of `PreUpdate` (sequential), feed FenrirInput, call `Input::Dispatch(app)`, and update each window's logical size, pixel size and content scale. Sleep at the end of `PreUpdate` when nothing can draw.
-  - `Input::Dispatch` processes everything fed since its last call and is a no-op with nothing pending. FenrirInput's own `PreUpdate` system calls it too, so pumped input reaches the game in the same frame whichever package was installed first (settled 2026-10-22, ticket 03).
+  - `Input::Dispatch` processes everything fed since its last call. The frame's first call also starts the routers' dispatch (`BeginDispatch`), even with nothing fed; later calls with nothing pending do nothing (ticket 04). FenrirInput's own `PreUpdate` system calls it too, so pumped input reaches the game in the same frame whichever package was installed first (settled 2026-10-22, ticket 03).
 - **Services:**
   - cursor modes (normal, hidden, captured with relative motion);
   - `SetCursorShape` (arrow, text, the four resize shapes, hand, not-allowed, hidden);

@@ -5,10 +5,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
     <AssemblyName>Fenrir.Scripting</AssemblyName>
     <RootNamespace>Fenrir.Scripting</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Engine math (Vector3, Quaternion and the rest) is FenrirMath's own contract, which Transform is built from. It is
+         copied beside this assembly, so the scripting SDK folder carries both. -->
+    <ProjectReference Include="../../../FenrirMath/Managed/Fenrir.Math/Fenrir.Math.csproj" />
+  </ItemGroup>
   <ItemGroup>
     <!-- The engine's own components (Transform, Name, Relationship) live in this assembly, so the generator that gives
          every component its Ref<T> accessors runs on it too. -->

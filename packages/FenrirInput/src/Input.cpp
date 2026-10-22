@@ -20,10 +20,12 @@ namespace Fenrir
             app->AddResource<Mouse>(*app);
             app->AddResource<Gamepads>(*app);
             app->AddResource<InputFeed>();
+            app->AddResource<InputClaims>();
         }
 
         InputInstallation::~InputInstallation()
         {
+            app->RemoveResource<InputClaims>();
             app->RemoveResource<InputFeed>();
             app->RemoveResource<Gamepads>();
             app->RemoveResource<Mouse>();
@@ -117,21 +119,6 @@ namespace Fenrir
             }
         } // namespace
 
-        void InputDispatch::Run(App& app)
-        {
-            InputFeed* feed = app.TryGetResource<InputFeed>();
-            if (feed == nullptr || feed->m_queue.empty())
-            {
-                return;
-            }
-            // Taken first, so input fed while it is dispatched waits for the next dispatch.
-            const std::vector<FedInput> fed = std::exchange(feed->m_queue, {});
-            for (const FedInput& input : fed)
-            {
-                Pass(app, input);
-            }
-        }
-
         void InputDispatch::Pass(App& app, const FedInput& input)
         {
             Keyboard& keyboard = app.GetResource<Keyboard>();
@@ -149,7 +136,11 @@ namespace Fenrir
                     using Event = std::decay_t<decltype(event)>;
                     if constexpr (std::is_same_v<Event, KeyEvent>)
                     {
-                        keyboard.m_modifiers = event.modifiers;
+                        // A cancelled release is not a key the user touched, so the modifiers stay as they were.
+                        if (!event.cancelled)
+                        {
+                            keyboard.m_modifiers = event.modifiers;
+                        }
                         // Unknown keys are sent as events but have no state of their own.
                         if (event.key != Key::Unknown)
                         {
@@ -263,6 +254,26 @@ namespace Fenrir
         {
             Detail::InputDispatch::Run(app);
         }
+    }
+
+    InputRouterId Input::AddInputRouter(App& app, int priority, std::shared_ptr<InputRouter> router)
+    {
+        return Detail::InputDispatch::AddRouter(app, priority, std::move(router));
+    }
+
+    void Input::RemoveInputRouter(App& app, InputRouterId router)
+    {
+        Detail::InputDispatch::RemoveRouter(app, router);
+    }
+
+    void Input::SetInputClaims(App& app, InputRouterId router, WindowId window, const WindowInputClaims& claims)
+    {
+        Detail::InputDispatch::SetClaims(app, router, window, claims);
+    }
+
+    void Input::SetGamepadClaim(App& app, InputRouterId router, bool claimed)
+    {
+        Detail::InputDispatch::SetGamepadClaim(app, router, claimed);
     }
 
     Input::Input(std::shared_ptr<Detail::InputInstallation> installation) : m_installation(std::move(installation))

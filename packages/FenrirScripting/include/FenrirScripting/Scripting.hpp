@@ -28,9 +28,9 @@ namespace Fenrir
         std::filesystem::path scriptAssembly;
 
         /**
-         * @brief The directory holding Iris.Bridge.dll, its .runtimeconfig.json and the scripting contract
-         * Fenrir.Scripting.dll (the build's fenrir_deploy_scripting puts them next to the executable). Empty means
-         * the executable's own directory.
+         * @brief The directory holding Iris.Bridge.dll, its .runtimeconfig.json, the scripting contract
+         * Fenrir.Scripting.dll and the math contract Fenrir.Math.dll (the build's fenrir_deploy_scripting puts them
+         * next to the executable). Empty means the executable's own directory.
          */
         std::filesystem::path bridgeDirectory;
 

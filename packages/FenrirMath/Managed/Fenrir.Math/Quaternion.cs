@@ -1,9 +1,9 @@
-namespace Fenrir.Scripting;
+namespace Fenrir.Math;
 
 /// <summary>
-/// A rotation, laid out exactly like the engine's <c>glm::quat</c>, which keeps <c>W</c> first in memory. The fields are
-/// declared in that order on purpose: the host checks this struct against the native layout when a script loads, and
-/// reordering them would fail the load.
+/// A rotation, laid out exactly like FenrirMath's <c>Math::Quat</c> (<c>glm::quat</c>), which keeps <c>W</c> first in
+/// memory. The fields are declared in that order on purpose: the host checks this struct against the native layout
+/// when a script loads, and reordering them would fail the load.
 /// </summary>
 public struct Quaternion : IEquatable<Quaternion>
 {

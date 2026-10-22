@@ -36,9 +36,10 @@ namespace Fenrir
         /**
          * @brief Starts SDL's video (and gamepads) for `app` and keeps `config`, but makes no window. Installs
          * FenrirInput if the app has none yet, and adds the pump: a sequential PreUpdate system that takes SDL's
-         * events, feeds them to the input feed, calls Input::Dispatch, and updates each window's sizes. If no renderer
-         * requested the main window's surface by then, a plain window (no graphics API) is made in the first frame's
-         * PreInit, so install it before the first frame.
+         * events, feeds them to the input feed, calls Input::Dispatch, puts each window's text input as the input
+         * routers' textInput claims say, and updates each window's sizes. If no renderer requested the main window's
+         * surface by then, a plain window (no graphics API) is made in the first frame's PreInit, so install it before
+         * the first frame.
          *
          * When SDL's video cannot start (no display), or the app already has a Window, it logs why and returns an owner
          * whose IsValid() is false: it added no systems, and FenrirWindow's functions do nothing for the app.

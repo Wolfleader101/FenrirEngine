@@ -135,6 +135,10 @@ What a script assembly says it defines when it loads: the C# components and even
 The shared assembly `Fenrir.Scripting` that every script assembly compiles against. It holds the stable engine API and never reloads.
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
+**Math contract**
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it.
+*Avoid:* math library (FenrirMath's functions stay in C++).
+
 **Scripting extension**
 What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, native resources and C++ events, the shared assemblies that are its C# contract, and the extension stages it hosts. FenrirScripting knows no package beyond its extension.
 *Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).

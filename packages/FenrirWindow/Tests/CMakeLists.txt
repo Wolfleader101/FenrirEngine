@@ -11,7 +11,7 @@ target_link_libraries(FenrirWindowProbe PUBLIC FenrirWindow PRIVATE SDL3::SDL3-s
 target_include_directories(FenrirWindowProbe PRIVATE ../src)
 
 add_executable(FenrirWindowTests PublicHeaders.cpp WindowTestApp.hpp Installs.cpp Windows.cpp Services.cpp
-                                 Surfaces.cpp WindowInput.cpp)
+                                 Surfaces.cpp WindowInput.cpp TextInput.cpp)
 target_link_libraries(FenrirWindowTests PRIVATE FenrirWindowProbe Catch2::Catch2WithMain)
 
 # Everything that needs no display.

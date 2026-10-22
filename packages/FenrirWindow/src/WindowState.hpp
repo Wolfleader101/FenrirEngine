@@ -36,6 +36,10 @@ namespace Fenrir
             float contentScale = 1.0f;
             bool minimised = false;
             bool focused = false;
+
+            /** @brief The textInput claimant's caret last given to SDL as the text input area, while one is shown. */
+            CaretRect caret;
+            bool caretShown = false;
         };
 
         /**
