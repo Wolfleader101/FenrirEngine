@@ -62,6 +62,123 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AMirrorWhoseDefaultsAreAllZeroHasNoConstructorOrInitialisers()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root =>
+        {
+            Field(root, "Fixture::Spring", "stiffness")["default"] = 0;
+            Field(root, "Fixture::Spring", "damping")["default"] = 0;
+        });
+
+        var spring = Mirror(Generator.Generate(FixtureConfig, [description]), "Spring.cs");
+
+        Assert.True(spring.Contains("    public float Stiffness;\n", StringComparison.Ordinal) &&
+                    spring.Contains("    public float Damping;\n", StringComparison.Ordinal) &&
+                    !spring.Contains("public Spring()", StringComparison.Ordinal),
+                    "With every default zero, C#'s default already holds them, so Spring should have bare fields and no " +
+                    $"constructor, but is:\n{spring}");
+    }
+
+    [Fact]
+    public void AReadOnlyMirrorKeepsItsConstructorWhateverItsDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root =>
+        {
+            foreach (var field in Type(root, "Fixture::Limits")["fields"]!.AsArray())
+            {
+                field!["default"] = 0;
+            }
+        });
+
+        var limits = Mirror(Generator.Generate(FixtureConfig, [description]), "Limits.cs");
+
+        Assert.True(limits.Contains("public readonly partial struct Limits", StringComparison.Ordinal) &&
+                    limits.Contains("    public readonly float Infinity = 0;\n", StringComparison.Ordinal) &&
+                    limits.Contains("public Limits()", StringComparison.Ordinal),
+                    $"Limits is in readonly-structs, so it should keep its readonly fields and constructor, but is:\n{limits}");
+    }
+
+    [Fact]
+    public void ABoundTypesOwnDefaultIsTheConfiguredExpression()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"] }\n" +
+                                           "\"Fixture::Quat\" = { type = \"Quaternion\" }\n" +
+                                           "\"Fixture::Handle\" = { type = \"Handle\", default = \"Handle.None\" }\n");
+        var description = WriteDescription(directory, _ => { });
+
+        var body = Mirror(Generator.Generate(config, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    public Handle Owner = Handle.None;\n", StringComparison.Ordinal),
+                    $"A field holding a bound type's own default should be its configured default, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AnIntegralComponentOfABoundTypeIsWrittenAsTheInteger()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root =>
+            Field(root, "Fixture::Body", "offset")["default"] = JsonNode.Parse("""{"x": 16777217, "y": 2, "z": 3.5}"""));
+
+        var body = Mirror(Generator.Generate(FixtureConfig, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    public Vector3 Offset = new(16777217, 2, 3.5f);\n", StringComparison.Ordinal),
+                    "A bound type's components have no described kind, so an integer should stay the integer it is (a " +
+                    $"float would round 16777217), but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AnExcludedTypeGetsNoMirrorMappingRegistrationOrTest()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", "exclude = [\"Fixture::Hit\"]\n");
+        var description = WriteDescription(directory, _ => { });
+
+        var generated = Generator.Generate(config, [description]);
+
+        Assert.False(generated.Keys.Any(path => Path.GetFileName(path) == "Hit.cs"), "An excluded type should get no mirror.");
+        var named = generated.Where(file => file.Value.Contains("Fixture::Hit", StringComparison.Ordinal) ||
+                                            file.Value.Contains("Fixture.Bindings.Hit", StringComparison.Ordinal))
+                             .Select(file => Path.GetFileName(file.Key))
+                             .ToList();
+        Assert.True(named.Count == 0,
+                    $"An excluded type should be in no mapping, registration or test, but these name it: {string.Join(", ", named)}");
+    }
+
+    [Theory]
+    [InlineData("exclude = [\"Fixture::Spring\"]\n",
+                "exclude names Fixture::Spring, but Fixture::Body::spring holds one: exclude Fixture::Body too")]
+    [InlineData("exclude = [\"Fixture::Missing\"]\n", "exclude names Fixture::Missing, which no description describes")]
+    public void AnExclusionTheBindingCannotHonourFailsSayingWhy(string exclude, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", exclude);
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AReadOnlyStructThatIsNotADescribedStructFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("readonly-structs = [\"Fixture::Limits\"]",
+                                                                         "readonly-structs = [\"Fixture::Motion\"]"));
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains("readonly-structs names Fixture::Motion, which is not a described struct",
+                                               StringComparison.Ordinal),
+                    $"An enum in readonly-structs should fail naming it, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void RunningTwiceRewritesNothing()
     {
         using var directory = new TemporaryDirectory();
@@ -199,10 +316,13 @@ public sealed class BindingTests
     }
 
     // A copy of the fixture's configuration in the directory, so every output lands there. `boundTypes` replaces the
-    // entries of [bound-types] when not empty.
-    private static string CopyConfig(TemporaryDirectory directory, string boundTypes)
+    // entries of [bound-types] when not empty; `topLevel` is added after the namespace, and `edit` applied last.
+    private static string CopyConfig(TemporaryDirectory directory, string boundTypes, string topLevel = "",
+                                     Func<string, string>? edit = null)
     {
         var text = File.ReadAllText(FixtureConfig);
+        var namespaceLine = text.IndexOf('\n', text.IndexOf("namespace = ", StringComparison.Ordinal)) + 1;
+        text = text[..namespaceLine] + topLevel + text[namespaceLine..];
         if (boundTypes.Length > 0)
         {
             var start = text.IndexOf("[bound-types]", StringComparison.Ordinal);
@@ -211,9 +331,13 @@ public sealed class BindingTests
         }
 
         var config = Path.Combine(directory.Path, "Fixture.binding.toml");
-        File.WriteAllText(config, text);
+        File.WriteAllText(config, edit == null ? text : edit(text));
         return config;
     }
+
+    // The generated mirror of that file name.
+    private static string Mirror(IReadOnlyDictionary<string, string> generated, string fileName) =>
+        generated.Single(file => Path.GetFileName(file.Key) == fileName).Value;
 
     // The fixture's description, edited, written as Fixture.api.json in the directory (the generated files name it).
     private static string WriteDescription(TemporaryDirectory directory, Action<JsonNode> edit)

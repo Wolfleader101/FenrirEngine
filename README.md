@@ -33,5 +33,13 @@ generated from their headers by `tools/describe-api`. The ordinary build never r
 `cmake --build out/build/clang-x64-debug --target fenrir-describe-api` does (it needs the .NET SDK), and CI fails on a pull request
 whose descriptions are stale. See `tools/describe-api/README.md`.
 
+A C# binding is generated from those descriptions and committed too: FenrirPhysics's components, events and shared
+structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings` generates their C# mirrors
+(`packages/FenrirPhysics/Managed/Fenrir.Physics/Generated`), their Iris mappings and the extension's registration lists
+(`packages/FenrirPhysics/Scripting/src/Generated`) and a defaults test (`packages/FenrirPhysics/Scripting/Tests/Generated`)
+from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. After changing a shared type, run
+`fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
+CI fails on a stale binding as on a stale description.
+
 The Iris checks are built from Iris itself with `IRIS_BUILD_TESTS`, see `packages/Iris/README.md`. The first configure of a
 fresh build directory can fail in the third-party assimp project; running the same configure again succeeds.

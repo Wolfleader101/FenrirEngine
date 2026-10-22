@@ -15,14 +15,15 @@ internal sealed class Binding
     public Binding(BindingConfig config, IReadOnlyList<DescribedType> described)
     {
         Config = config;
-        Types = described;
-        types = described.ToDictionary(type => type.Name, StringComparer.Ordinal);
+        CheckExcluded(described);
+        Types = described.Where(type => !config.Exclude.Contains(type.Name)).ToList();
+        types = Types.ToDictionary(type => type.Name, StringComparer.Ordinal);
         Check();
     }
 
     public BindingConfig Config { get; }
 
-    /// <summary>Every described type, dependencies first.</summary>
+    /// <summary>Every described type the binding binds (all but those it excludes), dependencies first.</summary>
     public IReadOnlyList<DescribedType> Types { get; }
 
     /// <summary>The types that get a C# mirror: every struct, tagged union and enum. Bound types have their own.</summary>
@@ -56,6 +57,68 @@ internal sealed class Binding
         Config.Names.TryGetValue($"{owner.Name}::{member}", out var qualified) ? qualified
         : Config.Names.TryGetValue(member, out var bare) ? bare
         : char.ToUpperInvariant(member[0]) + member[1..];
+
+    /// <summary>
+    /// Whether a struct's mirror is a <c>readonly struct</c> of <c>readonly</c> fields: an event under
+    /// <c>readonly-events</c>, or a struct <c>readonly-structs</c> names.
+    /// </summary>
+    public bool IsReadOnly(DescribedType type) =>
+        (type.Role == Role.Event && Config.CSharp.ReadOnlyEvents) || Config.CSharp.ReadOnlyStructs.Contains(type.Name);
+
+    /// <summary>
+    /// Whether a struct's mirror gets field initialisers and an explicit <c>public T() {}</c> to run them: when some
+    /// field's default is not all zero bytes, which is what C#'s <c>default</c> is. A read-only mirror always gets
+    /// them: C# never writes its fields, so <c>new T()</c> is the one way it names a value, and the constructor stays
+    /// whatever its defaults become.
+    /// </summary>
+    public bool NeedsConstructor(DescribedType type) => IsReadOnly(type) || !HasZeroDefaults(type);
+
+    private bool HasZeroDefaults(DescribedType type) => type.Fields.All(field => IsZero(field.Kind, field.Default));
+
+    /// <summary>Whether a recorded default is all zero bytes, so C#'s <c>default</c> already holds it.</summary>
+    private bool IsZero(FieldKind kind, JsonElement value)
+    {
+        switch (kind.Kind)
+        {
+            case "array":
+                var element = new FieldKind(kind.ElementKind!, kind.ElementType, null, null, 0);
+                return value.EnumerateArray().All(item => IsZero(element, item));
+            case "pointer":
+                return value.ValueKind == JsonValueKind.Null;
+            case "bool":
+                return value.ValueKind == JsonValueKind.False;
+            case "f32":
+            case "f64":
+                // -0 is not zero bytes.
+                return value.ValueKind == JsonValueKind.Number && value.GetDouble() is var number && number == 0 &&
+                       !double.IsNegative(number);
+            case "enum":
+                return Type(kind.Type!).Values.First(enumerator => enumerator.Name == value.GetString()).Value == 0;
+            case "struct":
+                return IsZero(Type(kind.Type!), value);
+            default:
+                return value.ValueKind == JsonValueKind.Number && value.GetRawText() == "0";
+        }
+    }
+
+    private bool IsZero(DescribedType type, JsonElement value)
+    {
+        var members = value.EnumerateObject().ToDictionary(member => member.Name, member => member.Value, StringComparer.Ordinal);
+        switch (type.Category)
+        {
+            case Category.BoundType:
+                // Its own default is zero unless [bound-types] gives it another; the components a default sets are numbers.
+                return members.Count == 0
+                           ? Config.BoundTypes[type.Name].Default == null
+                           : members.Values.All(component => IsZero(new FieldKind("f64", null, null, null, 0), component));
+            case Category.TaggedUnion:
+                // Its tag value is 0 (checked), so its default kind, with that kind's own defaults, decides.
+                var kind = type.Kinds.First(kind => kind.Name == type.DefaultKind);
+                return HasZeroDefaults(Type(kind.Kind.Type!));
+            default:
+                return type.Fields.All(field => IsZero(field.Kind, members.TryGetValue(field.Name, out var set) ? set : field.Default));
+        }
+    }
 
     /// <summary>The private field that holds a tagged union's kind: <c>_</c> and its tag value's C# name, lowered first.</summary>
     public string KindFieldName(DescribedType union, UnionKind kind)
@@ -177,14 +240,20 @@ internal sealed class Binding
         var members = value.EnumerateObject().ToList();
         if (members.Count == 0)
         {
-            return "new()";
+            return type.Category == Category.BoundType && Config.BoundTypes[type.Name].Default is { } own ? own : "new()";
         }
 
         if (type.Category == Category.BoundType)
         {
             // A bound type's components, by name in storage order: through its configured constructor, else by name.
+            // Their kinds are not described, so an integral value is written as the integer it is (as a float a large
+            // one would round), which C# converts to the component's type as C++ does.
             var bound = Config.BoundTypes[type.Name];
-            var components = members.ToDictionary(member => member.Name, member => Float(member.Value, true, where));
+            var components = members.ToDictionary(member => member.Name,
+                                                  member => member.Value.ValueKind == JsonValueKind.Number &&
+                                                            !member.Value.GetRawText().Any(c => c is '.' or 'e' or 'E')
+                                                                ? member.Value.GetRawText()
+                                                                : Float(member.Value, true, where));
             if (bound.Constructor is { } parameters)
             {
                 var missing = parameters.Where(parameter => !components.ContainsKey(parameter))
@@ -289,6 +358,32 @@ internal sealed class Binding
         return single ? text + "f" : text.Contains('.') || text.Contains('E') ? text : text + "d";
     }
 
+    // Every excluded type is described, and no type the binding keeps holds one.
+    private void CheckExcluded(IReadOnlyList<DescribedType> described)
+    {
+        foreach (var name in Config.Exclude.Where(name => described.All(type => type.Name != name)))
+        {
+            throw new BindingException($"{Config.Path}: exclude names {name}, which no description describes");
+        }
+
+        foreach (var type in described.Where(type => !Config.Exclude.Contains(type.Name)))
+        {
+            var held = new List<(string Member, string? Type)>();
+            held.AddRange(type.Fields.Select(field => (field.Name, field.Kind.Type ?? field.Kind.ElementType)));
+            held.AddRange(type.Kinds.Select(kind => (kind.Name, kind.Kind.Type)));
+            if (type.Tag is { } tag)
+            {
+                held.Add((tag.Name, tag.Kind.Type));
+            }
+
+            foreach (var (member, name) in held.Where(member => member.Type != null && Config.Exclude.Contains(member.Type)))
+            {
+                throw new BindingException(
+                    $"{Config.Path}: exclude names {name}, but {type.Name}::{member} holds one: exclude {type.Name} too");
+            }
+        }
+    }
+
     private void Check()
     {
         foreach (var type in Types.Where(type => type.Category == Category.BoundType && !Config.BoundTypes.ContainsKey(type.Name)))
@@ -314,6 +409,14 @@ internal sealed class Binding
             if (!types.TryGetValue(name, out var union) || union.Category != Category.TaggedUnion)
             {
                 throw new BindingException($"{Config.Path}: [nouns] names {name}, which is not a described tagged union");
+            }
+        }
+
+        foreach (var name in Config.CSharp.ReadOnlyStructs)
+        {
+            if (!types.TryGetValue(name, out var mirrored) || mirrored.Category != Category.Struct)
+            {
+                throw new BindingException($"{Config.Path}: readonly-structs names {name}, which is not a described struct");
             }
         }
 

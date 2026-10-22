@@ -80,7 +80,7 @@ internal static class CSharpWriter
         var config = binding.Config.CSharp;
         var name = binding.CSharpName(type);
         var interfaces = new List<string>();
-        var readOnly = false;
+        var readOnly = binding.IsReadOnly(type);
         switch (type.Role)
         {
             case Role.Component:
@@ -92,7 +92,6 @@ internal static class CSharpWriter
             case Role.Event:
                 text.Line($"[{config.EventAttribute}(\"{binding.QualifiedName(type)}\")]");
                 interfaces.Add(config.EventInterface);
-                readOnly = config.ReadOnlyEvents;
                 break;
         }
 
@@ -131,44 +130,54 @@ internal static class CSharpWriter
 
     private static void Fields(Binding binding, DescribedType type, string name, bool readOnly, Writer text)
     {
-        var field = readOnly ? "public readonly" : "public";
+        // With every default zero, `default` holds them, so the mirror has no initialisers and no constructor to run them.
+        var initialised = binding.NeedsConstructor(type);
         foreach (var member in type.Fields)
         {
             var memberName = binding.MemberName(type, member.Name);
+            // A field holding a read-only struct is read-only too, so C# cannot write the struct whole.
+            var field = readOnly || (member.Kind.Kind == "struct" && binding.IsReadOnly(binding.Type(member.Kind.Type!)))
+                            ? "public readonly"
+                            : "public";
             Doc(text, member.Doc);
             if (member.Kind.IsArray)
             {
                 text.Line($"{field} {Binding.ArrayTypeName(memberName)} {memberName};");
             }
-            else
+            else if (initialised)
             {
                 var value = binding.Default(member.Kind.Kind, member.Kind.Type, member.Default, member.Name);
                 text.Line($"{field} {binding.CSharpType(member.Kind.Kind, member.Kind.Type)} {memberName} = {value};");
             }
-        }
-
-        if (type.Fields.Count > 0)
-        {
-            text.Line();
-        }
-
-        // Explicit, so `new T()` runs the initialisers; an array's elements are set here, since C# cannot initialise one.
-        text.Line($"public {name}()");
-        text.Line("{");
-        text.Indent();
-        foreach (var member in type.Fields.Where(member => member.Kind.IsArray))
-        {
-            var memberName = binding.MemberName(type, member.Name);
-            var index = 0;
-            foreach (var element in member.Default.EnumerateArray())
+            else
             {
-                text.Line($"{memberName}[{index}] = {binding.ElementDefault(member.Kind, element, member.Name)};");
-                index++;
+                text.Line($"{field} {binding.CSharpType(member.Kind.Kind, member.Kind.Type)} {memberName};");
             }
         }
 
-        text.Outdent();
-        text.Line("}");
+        if (initialised)
+        {
+            text.Line();
+
+            // Explicit, so `new T()` runs the initialisers; an array's elements are set here, since C# cannot initialise
+            // one.
+            text.Line($"public {name}()");
+            text.Line("{");
+            text.Indent();
+            foreach (var member in type.Fields.Where(member => member.Kind.IsArray))
+            {
+                var memberName = binding.MemberName(type, member.Name);
+                var index = 0;
+                foreach (var element in member.Default.EnumerateArray())
+                {
+                    text.Line($"{memberName}[{index}] = {binding.ElementDefault(member.Kind, element, member.Name)};");
+                    index++;
+                }
+            }
+
+            text.Outdent();
+            text.Line("}");
+        }
 
         foreach (var member in type.Fields.Where(member => member.Kind.IsArray))
         {

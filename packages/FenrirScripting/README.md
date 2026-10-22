@@ -179,7 +179,8 @@ public struct Health : IComponent { public int Current; public int Max; }
 - **Engine types as fields.** A component or event holding a `Math::Vec3`, `Math::Quat` or `Transform` includes
   `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
   An `Entity` member is mapped through a stand-in struct that puts `Detail::EntityLinkView` (from the same header) where
-  the `Entity` is; C# sees it as an `EntityLink`, as in `Relationship` (FenrirPhysics's contact and trigger events do this).
+  the `Entity` is, or by a mapping of `Entity` itself declared by offset (`Iris::Field`, as FenrirPhysics's generated
+  binding does); C# sees it as an `EntityLink`, as in `Relationship`.
   In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
   `EntityLink.None` is the empty link (C++'s default `Entity`). See "Entity links" below.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
@@ -315,19 +316,17 @@ A union the generator cannot write for is a build error of its own, and gets no 
 | FENRIR0038 | A tag with no member of value 0 (the kind `new()` makes), or two members of one value. |
 
 - **`default(Shape)` is not `new Shape()`.** It is the tag-0 kind with every setting zero, not that kind's defaults.
-- **An empty kind** (a C++ `struct FixedJoint {};`, which takes one byte) cannot be mapped, because Iris maps no struct
-  without fields. Its C# struct keeps one private `byte` field and the native stand-in maps a one-byte member in its
-  place, as FenrirPhysics's `FixedJoint` and `BallJoint` do.
+- **An empty kind** (a C++ `struct FixedJoint {};`, which takes one byte) maps as an empty C# struct, which is one byte
+  too, through a mapping with no fields (`Iris::StructFields()`), as FenrirPhysics's `FixedJoint` and `BallJoint` do.
 - **Components defined in C# may hold a union too**: their struct is their definition, so there is no native side.
 - **A bool inside a kind** is fine in a component, which C# reads in place. But when Iris copies such a union from C++ by
   value (a struct argument of a C# method called from C++, or an array copy), it makes every byte where any kind has a
   bool 0 or 1, which can change another kind's bytes there. Keep bools out of the kinds of a union passed that way.
 
 **The native side is written by hand.** The generator emits no C++. The mapping lists the tag and each kind in
-declaration order, with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend (or, for a
-package that must not name Iris, as FenrirPhysics's unions do, map a plain stand-in with the same members through
-`MakeComponent<T, Mapping>`). The load checks what couples the two sides: the field names, their order, the offset and
-the tag's size. Adding a kind means the C++ union, the C++ enum, the mapping, the C# enum member and one C# field.
+declaration order, with `IRIS_FIELD_AS` for the C# names; it can reach private members by being a friend, or declare
+them by offset with `Iris::Field`, which is how FenrirPhysics's generated binding maps its unions without the package
+naming Iris. The load checks what couples the two sides: the field names, their order, the offset and the tag's size. Adding a kind means the C++ union, the C++ enum, the mapping, the C# enum member and one C# field.
 
 ```cpp
 class Shape {

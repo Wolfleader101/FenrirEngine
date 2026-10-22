@@ -15,6 +15,8 @@ event-interface = "IEvent"
 tagged-union-attribute = "TaggedUnion"
 pointer-type = "ulong"
 readonly-events = true
+# A struct C# reads and never writes: readonly, and so is Body's field holding it.
+readonly-structs = ["Fixture::Limits"]
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
@@ -41,11 +43,12 @@ setup = "const Fixture::DefaultsHarness harness;"
 component = "harness.Component()"
 tags = "[bindings]"
 
-# Vector3's defaults go through its constructor; Quaternion's and Handle's set components by name.
+# Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not
+# all zero bytes (its id is all bits set), so it names the expression that makes it.
 [bound-types]
 "Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
 "Fixture::Quat" = { type = "Quaternion" }
-"Fixture::Handle" = { type = "Handle" }
+"Fixture::Handle" = { type = "Handle", default = "new()" }
 
 # Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
 [names]

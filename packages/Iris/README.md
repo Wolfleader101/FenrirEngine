@@ -778,6 +778,10 @@ Each release lists every public change and what it replaces, as ADR-0006 (amende
 - **Added the binding generator** (`Tools/Iris.Bindings`, `iris_generate_binding()` in `cmake/IrisBindings.cmake`): C#
   mirrors, mappings, registration lists and a defaults test generated from an API description. It replaces writing
   each of those by hand; the public headers do not change.
+- **The binding generator binds an existing contract unchanged**: `exclude`, `readonly-structs` and a bound type's
+  `default` in the configuration, and a mirror whose defaults are all zero has no constructor. These replace the
+  surface a generated mirror would otherwise add or change (a constructor, writable state, an all-zero entity link),
+  so a hand-written contract can move to generated mirrors with its public API as it was.
 
 ## References
 

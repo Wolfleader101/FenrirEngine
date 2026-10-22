@@ -5,12 +5,15 @@ fenrir_add_catch2()
 
 set(fenrir_scripting_tests_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/Tests")
 add_executable(FenrirPhysicsScriptingTests
+    PhysicsScriptingApp.hpp
     PhysicsScriptingTests.cpp
+    Generated/FenrirPhysicsDefaultsTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-# The library's own src too, for the JointState mapping the tests check against the C# mirror.
-target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${fenrir_scripting_tests_dir}" ../src)
+# The library's own src too, for the generated mappings the defaults test walks and the bound types' mappings the
+# drifted stand-ins use.
+target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}" ../src)
 target_link_libraries(FenrirPhysicsScriptingTests PRIVATE FenrirPhysicsScripting Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirPhysicsScriptingTests)
 fenrir_deploy_physics_scripting(FenrirPhysicsScriptingTests)
@@ -18,7 +21,9 @@ fenrir_deploy_physics_scripting(FenrirPhysicsScriptingTests)
 # The fixture script assembly: compiled against the scripting SDK and the Fenrir.Physics contract, neither copied (the
 # host shares its own copies).
 set(fenrir_physics_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_physics_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the generated defaults test's C# class (Generated/), whose new() values the defaults test reads.
+file(GLOB fenrir_physics_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${fenrir_physics_fixture_dir}/Fenrir.PhysicsScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.PhysicsScriptFixture.csproj"
