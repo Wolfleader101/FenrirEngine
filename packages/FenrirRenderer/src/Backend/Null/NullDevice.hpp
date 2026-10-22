@@ -59,6 +59,8 @@ namespace Fenrir::Graphics
         void Submit(const CommandList& list) override;
         void Present() override;
         void WaitIdle() override;
+        /** @copydoc GraphicsDevice::SetVsync With no display to wait for, every mode is supported. */
+        Vsync SetVsync(Vsync mode) override;
 
       private:
         friend struct Fenrir::RendererProbe;
