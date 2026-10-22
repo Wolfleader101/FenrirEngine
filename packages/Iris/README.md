@@ -788,6 +788,11 @@ Each release lists every public change and what it replaces, as ADR-0006 (amende
   `docs/natives-description.md`): their C# declarations, their registration (each declared in the registration source)
   and a test that each native with an output writes its default when it returns early. It replaces declaring each
   native in C# and listing it in the extension by hand; the public headers do not change.
+- **The binding generator binds a contract whose names and fields are its own**: `registered-namespace` (components and
+  events registered under another namespace than the C# one), `[csharp] private-fields` and `fixed-buffers`, and natives
+  that take or return a `void*`, take a pointer they read and write (`[in,out]`) or give a value when they cannot be
+  called (`@notrunning`). These replace the hand-written mappings, registrations and declarations a contract needed
+  where a generated one would have changed its public API; the public headers do not change.
 
 ## References
 

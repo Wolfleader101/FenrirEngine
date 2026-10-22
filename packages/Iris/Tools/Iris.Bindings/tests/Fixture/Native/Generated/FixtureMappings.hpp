@@ -205,6 +205,23 @@ static_assert(sizeof(Fixture::Hit) == 32 && alignof(Fixture::Hit) == 8,
               "Fixture::Hit is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fixture::Size) == 8 && alignof(Fixture::Size) == 4,
+              "Fixture::Size is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fixture::Tag>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Tag";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("id", 0),
+        Iris::Field<void*>("owner", 8),
+        Iris::Field<std::uint8_t[4]>("Label", 16));
+};
+static_assert(sizeof(Fixture::Tag) == 24 && alignof(Fixture::Tag) == 8,
+              "Fixture::Tag is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
 template <>
 struct Iris::StructMapping<Fixture::Touched>
 {

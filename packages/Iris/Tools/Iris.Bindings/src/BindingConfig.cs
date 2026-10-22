@@ -9,7 +9,10 @@ namespace Iris.Bindings;
 /// </summary>
 internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default);
 
-/// <summary>Where the C# mirrors go, and the names of the SDK types they use.</summary>
+/// <summary>
+/// Where the C# mirrors go, the names of the SDK types they use, and the fields (<c>Type::member</c>) mirrored as private,
+/// or as fixed buffers rather than <c>[InlineArray]</c> structs.
+/// </summary>
 internal sealed record CSharpConfig(
     string Contract,
     string Generated,
@@ -22,7 +25,9 @@ internal sealed record CSharpConfig(
     string TaggedUnionAttribute,
     string PointerType,
     bool ReadOnlyEvents,
-    IReadOnlySet<string> ReadOnlyStructs);
+    IReadOnlySet<string> ReadOnlyStructs,
+    IReadOnlySet<string> PrivateFields,
+    IReadOnlySet<string> FixedBuffers);
 
 /// <summary>Where the Iris mappings go, and the headers they include.</summary>
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
@@ -76,6 +81,7 @@ internal sealed record BindingConfig(
     string Path,
     string Name,
     string Namespace,
+    string RegisteredNamespace,
     CSharpConfig CSharp,
     CppConfig Cpp,
     RegistrationConfig? Registration,
@@ -109,12 +115,12 @@ internal sealed record BindingConfig(
         }
 
         var reader = new Reader(path);
-        reader.Keys(table, "", "namespace", "exclude", "csharp", "cpp", "registration", "tests", "natives", "bound-types", "names",
+        reader.Keys(table, "", "namespace", "registered-namespace", "exclude", "csharp", "cpp", "registration", "tests", "natives", "bound-types", "names",
                     "nouns");
         var csharp = reader.Table(table, "csharp");
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
-                    "pointer-type", "readonly-events", "readonly-structs");
+                    "pointer-type", "readonly-events", "readonly-structs", "private-fields", "fixed-buffers");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes");
 
@@ -187,8 +193,10 @@ internal sealed record BindingConfig(
             }
         }
 
+        var space = reader.String(table, "namespace");
         return new BindingConfig(
-            path, fileName[..^Extension.Length], reader.String(table, "namespace"),
+            path, fileName[..^Extension.Length], space,
+            table.ContainsKey("registered-namespace") ? reader.String(table, "registered-namespace") : space,
             new CSharpConfig(reader.PathOf(csharp, "contract"), reader.PathOf(csharp, "generated"),
                              reader.Strings(csharp, "usings"), reader.String(csharp, "component-attribute"),
                              reader.String(csharp, "component-interface"),
@@ -197,7 +205,9 @@ internal sealed record BindingConfig(
                              reader.String(csharp, "tagged-union-attribute"),
                              csharp.ContainsKey("pointer-type") ? reader.String(csharp, "pointer-type") : "ulong",
                              csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events"),
-                             reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal)),
+                             reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal),
+                             reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
+                             reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
             nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));

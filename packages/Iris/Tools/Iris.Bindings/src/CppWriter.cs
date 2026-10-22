@@ -131,10 +131,11 @@ internal static class CppWriter
         text.Indent();
         List(text, "components", binding.Types.Where(type => type.Role == Role.Component),
              type => registration.ReadOnly.Contains(type.Name) ? registration.MakeReadOnlyComponent : registration.MakeComponent,
-             binding);
-        List(text, "events", binding.Types.Where(type => type.Role == Role.Event), _ => registration.MakeEvent, binding);
+             binding.RegisteredName);
+        List(text, "events", binding.Types.Where(type => type.Role == Role.Event), _ => registration.MakeEvent,
+             binding.RegisteredName);
         List(text, "sharedStructs", binding.Types.Where(type => type.Role == Role.SharedStruct),
-             _ => registration.MakeSharedStruct, binding);
+             _ => registration.MakeSharedStruct, binding.QualifiedName);
         if (natives != null)
         {
             var config = binding.Config.Natives!;
@@ -147,7 +148,9 @@ internal static class CppWriter
                 text.Line("extension.functions = {");
                 foreach (var native in natives.Functions)
                 {
-                    text.Line($"    {config.Make}<&{native.QualifiedName}>(\"{binding.Config.Namespace}.{config.Class}.{native.Name}\"),");
+                    // A native's @notrunning value is what C# gets when it cannot be called.
+                    var notRunning = native.NotRunning == null ? "" : $", {native.NotRunning}";
+                    text.Line($"    {config.Make}<&{native.QualifiedName}>(\"{binding.Config.Namespace}.{config.Class}.{native.Name}\"{notRunning}),");
                 }
 
                 text.Line("};");
@@ -298,7 +301,7 @@ internal static class CppWriter
     ];
 
     private static void List(Writer text, string member, IEnumerable<DescribedType> types,
-                             Func<DescribedType, string> make, Binding binding)
+                             Func<DescribedType, string> make, Func<DescribedType, string> name)
     {
         var entries = types.ToList();
         if (entries.Count == 0)
@@ -310,7 +313,7 @@ internal static class CppWriter
         text.Line($"extension.{member} = {{");
         foreach (var type in entries)
         {
-            text.Line($"    {make(type)}<{type.Name}>(\"{binding.QualifiedName(type)}\"),");
+            text.Line($"    {make(type)}<{type.Name}>(\"{name(type)}\"),");
         }
 
         text.Line("};");

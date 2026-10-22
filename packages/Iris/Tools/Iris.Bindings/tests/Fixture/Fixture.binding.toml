@@ -17,6 +17,9 @@ pointer-type = "ulong"
 readonly-events = true
 # A struct C# reads and never writes: readonly, and so is Body's field holding it.
 readonly-structs = ["Fixture::Limits"]
+# Tag's id and owner are C#'s to reach through members a hand-written part would add, and its label a fixed buffer.
+private-fields = ["Fixture::Tag::m_id", "Fixture::Tag::m_owner"]
+fixed-buffers = ["Fixture::Tag::m_label"]
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
@@ -64,10 +67,15 @@ types = { "Fixture::EntityId" = "Entity" }
 "Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
 "Fixture::Quat" = { type = "Quaternion" }
 "Fixture::Handle" = { type = "Handle", default = "new()" }
+# Described by layout only, and held by nothing: its C# type is never named.
+"Fixture::Size" = { type = "Size" }
 
 # Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
 [names]
 "Fixture::Limits::wideInfinity" = "DoubleInfinity"
+"Fixture::Tag::m_id" = "id"
+"Fixture::Tag::m_owner" = "owner"
+"Fixture::Tag::m_label" = "Label"
 "f64" = "Double"
 
 [nouns]

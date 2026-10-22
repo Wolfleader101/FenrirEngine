@@ -11,5 +11,6 @@ public static class Defaults
     public static global::Fixture.Bindings.Body Body() => new();
     public static global::Fixture.Bindings.Collider Collider() => new();
     public static global::Fixture.Bindings.Hit Hit() => new();
+    public static global::Fixture.Bindings.Tag Tag() => new();
     public static global::Fixture.Bindings.Touched Touched() => new();
 }
