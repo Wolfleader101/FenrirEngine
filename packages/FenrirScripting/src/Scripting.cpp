@@ -12,6 +12,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -20,6 +21,7 @@
 #include <string>
 #include <system_error>
 #include <thread>
+#include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -37,6 +39,10 @@
 #include <mach-o/dyld.h>
 #endif
 #include <unistd.h>
+#endif
+
+#if __has_include(<cxxabi.h>)
+#include <cxxabi.h>
 #endif
 
 namespace Fenrir
@@ -87,6 +93,22 @@ namespace Fenrir
 #else
             return static_cast<int>(getpid());
 #endif
+        }
+
+        // A type's name as its source spells it, for a diagnostic. MSVC's type_info already gives it; the Itanium ABI
+        // (GCC, and clang off Windows) gives the mangled name, which is demangled here.
+        std::string ReadableName(const std::type_index& type)
+        {
+#if __has_include(<cxxabi.h>)
+            int status = 0;
+            const std::unique_ptr<char, decltype(&std::free)> demangled(
+                abi::__cxa_demangle(type.name(), nullptr, nullptr, &status), &std::free);
+            if (status == 0 && demangled != nullptr)
+            {
+                return demangled.get();
+            }
+#endif
+            return type.name();
         }
     } // namespace
 
@@ -518,8 +540,9 @@ namespace Fenrir
                 return std::nullopt;
             }
             const std::string start = "the native function '" + function.Name() + "' of extension '" + extension.name +
-                                      "' takes an extension state of type '" + wanted->name() + "', but the extension ";
-            return StartupFailure{carried.has_value() ? start + "carries one of type '" + carried->name() + "'"
+                                      "' takes an extension state of type '" + ReadableName(*wanted) +
+                                      "', but the extension ";
+            return StartupFailure{carried.has_value() ? start + "carries one of type '" + ReadableName(*carried) + "'"
                                                       : start + "carries none",
                                   {}};
         };
