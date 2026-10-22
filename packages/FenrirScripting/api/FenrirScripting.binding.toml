@@ -1,0 +1,80 @@
+# The built-in extension's C# binding (ADR-0016, packages/Iris/Tools/Iris.Bindings/README.md): FenrirECS's and
+# FenrirMath's descriptions bound to the Fenrir.Scripting contract and the extension every Scripting includes first.
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
+# below; they are committed.
+namespace = "Fenrir.Scripting"
+# The engine's components go by their C++ names, Fenrir.Transform and the rest, not the contract's namespace.
+registered-namespace = "Fenrir"
+
+[csharp]
+contract = "../Managed/Fenrir.Scripting"
+generated = "../Managed/Fenrir.Scripting/Generated"
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+# The engine keeps the hierarchy consistent, so C# only reads a Relationship and the links in it.
+readonly-structs = ["Fenrir::Relationship", "Fenrir::Entity"]
+# A link's value and entity list are the engine's: C# reads them through EntityLink's Target and IsNull.
+private-fields = ["Fenrir::Entity::m_entityId", "Fenrir::Entity::m_entityList"]
+fixed-buffers = ["Fenrir::Name::name"]
+
+[cpp]
+mappings = "../include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirScripting/BoundMappings.hpp"]
+
+[registration]
+source = "../src/Generated/FenrirScriptingRegistration.cpp"
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state and the address alias.
+    "../EngineContext.hpp",
+]
+function = "Fenrir::Generated::RegisterScripting"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+read-only = ["Fenrir::Relationship"]
+
+[tests]
+cpp = "../Tests/Generated/FenrirScriptingDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirScriptingDefaults.cs"
+class = "Fenrir.ScriptFixture.Defaults"
+includes = ["FixtureApp.hpp", "ScriptingProbe.hpp"]
+setup = "Fenrir::Testing::FixtureApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirScriptingNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirScriptingNatives.cs"
+natives-class = "Fenrir.ScriptFixture.Natives"
+
+[bound-types]
+"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+# glm stores w first; C#'s constructor takes it last.
+"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
+
+[names]
+"Fenrir::Entity" = "EntityLink"
+"Fenrir::Entity::m_entityId" = "value"
+"Fenrir::Entity::m_entityList" = "owner"
+"Fenrir::Name::name" = "Text"
+"Fenrir::Transform::pos" = "Position"
+"Fenrir::Transform::rot" = "Rotation"
+
+# The engine's native functions: tools/describe-api's natives mode reads every function in `sources` taking `context`
+# first (with the EngineContext, the extension's state, second) into FenrirScripting.natives.json, and this binding
+# generates from it their C# declarations, the Native class, and their registration.
+[natives]
+sources = ["../src/Bindings.cpp"]
+context = "Fenrir::CallContext"
+class = "Native"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"
+# The addresses and counts natives write into C#'s memory are native-sized there.
+types = { "Fenrir::Detail::NativeAddress" = "nuint" }

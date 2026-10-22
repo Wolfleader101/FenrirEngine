@@ -29,7 +29,7 @@ Every type has:
 
 ### `struct`
 
-Plain data. `fields` lists every non-static data member in declaration order (which is storage order). A field is:
+Plain data. `fields` lists every non-static data member in declaration order (which is storage order), private ones included when the selection's `private-members` names the type. A field is:
 
 | Key | Value |
 | --- | --- |
@@ -54,7 +54,7 @@ A class whose only non-static data members are an enum tag followed by one anony
 
 ### `bound-type`
 
-A type every binding has its own of (a vector, a quaternion, an entity handle). Only `size` and `alignment` are recorded; its members are not read, and it need not be plain data.
+A type every binding has its own of (a vector, a quaternion, an entity handle). Only `size` and `alignment` are recorded; its members are not read, and it need not be plain data. A bound type that is a class template's specialisation the headers never instantiate (glm's quaternion, when nothing in them holds one) is instantiated to read its layout.
 
 ### `enum`
 
@@ -65,11 +65,11 @@ Described when a field uses it; an enum is never selected. It records `underlyin
 | Kind | Bytes |
 | --- | --- |
 | `i8`, `i16`, `i32`, `i64` | Signed integers. |
-| `u8`, `u16`, `u32`, `u64` | Unsigned integers. |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers. A `char` is a `u8` (a byte of text) on every target. |
 | `f32`, `f64` | IEEE floats. |
 | `bool` | One byte, 0 or 1. |
 | `char16` | A UTF-16 code unit (`char16_t`). |
-| `enum` | An enum of its underlying kind; `type` names it. |
+| `enum` | An enum of its underlying kind; `type` names it. An enum with no enumerators (`enum class Id : std::uint32_t {}`, EnTT's `entt::entity`) is a distinct integer type rather than a set of values, and is recorded as its underlying integer kind. |
 | `struct` | A described struct, tagged union or bound type, held by value; `type` names it. |
 | `array` | `length` elements of `elementKind`, contiguous. An array's elements are never arrays. |
 | `pointer` | 8 opaque bytes: any pointer, its target never described. |
@@ -91,7 +91,7 @@ Each field's `default` is the value its default member initialiser gives, record
 | `struct` of a bound type | An object of every component's value, by component name, in storage order; `{}` for the bound type's own default. |
 | `array` | A list of `length` element defaults. |
 
-The initialisers recorded are: a literal (`1.0f`, `0.05f`, `true`, `u'A'`), a `std::numbers` constant, or operators applied to those (`-1.0f`, `~0u`, `1u << 3`, `std::numbers::pi_v<float> / 4.0f`); an enumerator; `std::numeric_limits<T>::infinity()`, `max()` and `lowest()`; `{}` or `T{}` or no initialiser for a nested struct or bound type, and an aggregate initialiser setting some of a nested struct's members (`{.frequency = 2.0f}`); a bound type's constructor with literal arguments; and for arrays, a braced list of those (missing elements are zero). A scalar, enum, pointer or array of them with no initialiser fails, as does any other expression.
+The initialisers recorded are: a literal (`1.0f`, `0.05f`, `true`, `u'A'`), a `std::numbers` constant, or operators applied to those (`-1.0f`, `~0u`, `1u << 3`, `std::numbers::pi_v<float> / 4.0f`); an enumerator; `std::numeric_limits<T>::infinity()`, `max()` and `lowest()`; `{}` or `T{}` or no initialiser for a nested struct or bound type, and an aggregate initialiser setting some of a nested struct's members (`{.frequency = 2.0f}`); a bound type's constructor with literal arguments; and for arrays, a braced list of those (missing elements are zero). A field of an enum with no enumerators has no enumerator to name, so its initialiser may be any constant libclang evaluates (`entt::null`, which converts to all bits set), recorded as the integer. A scalar, enum, pointer or array of them with no initialiser fails, as does any other expression.
 
 A bound type's constructor arguments are matched to its components by name: its components are its fields in storage order (of an anonymous union, the first member's), and each parameter names one, ignoring leading underscores (`Quat(float w, float x, float y, float z)` and `qua(T _w, T _x, T _y, T _z)` both set `w` first). A constructor with one argument sets every component to it (`Vec3(0.5f)`). Anything else fails.
 
@@ -124,9 +124,10 @@ A **native function** is a free function defined in one of the sources whose fir
 | `source` | The source defining it, relative to the description, with `/`. |
 | `state` | The qualified name of its state's class, when it takes one. |
 | `noexcept` | `true` when it is declared `noexcept` (absent otherwise). |
-| `doc` | Its doc comment without the `@param` and `@return` commands (see below), when there is one. |
+| `doc` | Its doc comment without the `@param`, `@return` and `@notrunning` commands (see below), when there is one. |
+| `notRunning` | The C++ expression its `@notrunning` gives: the value a caller gets when the native cannot be called (absent otherwise). |
 | `returns` | Its result, as a type (below), with `doc` from `@return` (or `@returns`). |
-| `parameters` | Every parameter after the call context and the state, in order: `name`, its type (below), `output` and `doc`. |
+| `parameters` | Every parameter after the call context and the state, in order: `name`, its type (below), `output` or `inOut`, and `doc`. |
 
 ## Types
 
@@ -143,4 +144,4 @@ A reference (after the context and state), a pointer to a pointer, and a type of
 
 ## Doc commands
 
-The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@param[out]` on anything but a pointer to non-const data fails the tool, as does `@param` naming no parameter. The rest of the comment is the function's `doc`, as for a type ("Doc comments").
+The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, `@param[in,out] name text` marks it `inOut` (a pointer the native reads and writes), and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@notrunning expression` gives `notRunning`, the rest of its line. `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data fails the tool, as do `@param` naming no parameter and `@notrunning` on a native that returns nothing. The rest of the comment is the function's `doc`, as for a type ("Doc comments").

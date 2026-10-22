@@ -32,3 +32,6 @@ target_include_directories(FenrirECS PUBLIC include)
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0016): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirECS.api.json.
+fenrir_describe_api(FenrirECS api/FenrirECS.api.toml)

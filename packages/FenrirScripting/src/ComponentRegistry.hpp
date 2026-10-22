@@ -233,10 +233,4 @@ namespace Fenrir::Detail
         std::vector<SharedStructRegistration> m_sharedStructs;
         std::unordered_set<std::string> m_sharedStructNames;
     };
-
-    /**
-     * @brief The components the engine itself gives C#, for the built-in extension: Transform, Name and Relationship
-     * (read-only), all required.
-     */
-    [[nodiscard]] std::vector<ComponentRegistration> EngineComponents();
 } // namespace Fenrir::Detail

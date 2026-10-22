@@ -16,6 +16,7 @@ namespace Fixture::Natives
 namespace Fixture
 {
     void Say(const Host::CallContext&, const char* text, std::int32_t length) noexcept;
+    void* Next(const Host::CallContext&, std::uint64_t* cursor, const void* body);
     std::uint64_t Sum(const Host::CallContext&, const std::uint32_t* values, std::int32_t count, bool all, double scale);
 } // namespace Fixture
 
@@ -34,12 +35,14 @@ namespace Fixture::Bindings
         };
         extension.sharedStructs = {
             Host::MakeSharedStruct<Fixture::Hit>("Fixture.Bindings.Hit"),
+            Host::MakeSharedStruct<Fixture::Tag>("Fixture.Bindings.Tag"),
         };
         extension.functions = {
             Host::NativeFunction::Make<&Fixture::Natives::Push>("Fixture.Bindings.FixtureNative.Push"),
             Host::NativeFunction::Make<&Fixture::Natives::Find>("Fixture.Bindings.FixtureNative.Find"),
             Host::NativeFunction::Make<&Fixture::Natives::FindAll>("Fixture.Bindings.FixtureNative.FindAll"),
             Host::NativeFunction::Make<&Fixture::Say>("Fixture.Bindings.FixtureNative.Say"),
+            Host::NativeFunction::Make<&Fixture::Next>("Fixture.Bindings.FixtureNative.Next", nullptr),
             Host::NativeFunction::Make<&Fixture::Sum>("Fixture.Bindings.FixtureNative.Sum"),
         };
     }

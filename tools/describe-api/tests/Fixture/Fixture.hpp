@@ -65,6 +65,17 @@ namespace Fixture
         void* m_owner = nullptr;
     };
 
+    /** @brief A pair of values, as a class template. */
+    template <typename T>
+    struct Pair
+    {
+        T first;
+        T second;
+    };
+
+    /** @brief A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it. */
+    using Size = Pair<float>;
+
     /** @brief How a body moves. */
     enum class Motion : std::uint8_t
     {
@@ -228,6 +239,39 @@ namespace Fixture
         Handle body;
         Vec3 point = Vec3(0.0f);
         float distance = std::numeric_limits<float>::infinity();
+    };
+
+    /** @brief A distinct integer type: an enum with no enumerators, recorded as the integer it is. */
+    enum class Id : std::uint32_t
+    {
+    };
+
+    /** @brief The null Id, as a constant that converts to one (as EnTT's entt::null does). */
+    struct NullId
+    {
+        constexpr operator Id() const
+        {
+            return static_cast<Id>(~0u);
+        }
+    };
+
+    inline constexpr NullId noId{};
+
+    /**
+     * @brief A shared struct whose members are private: described all the same, since the selection's private-members
+     * names it.
+     */
+    class Tag
+    {
+      public:
+        Tag() = default;
+
+      private:
+        /** @brief An Id: its default is the constant its initialiser converts to. */
+        Id m_id = noId;
+        const void* m_owner = nullptr;
+        /** @brief Characters: bytes, on every target. */
+        char m_label[4] = {'a'};
     };
 
     /** @brief An event between two handles. */

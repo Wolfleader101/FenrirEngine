@@ -38,6 +38,14 @@ internal static unsafe partial class FixtureNative
     [NativeFunction]
     public static partial void Say(string text);
 
+    /// <summary>
+    /// The address of the next of `body`'s records: a pointer read and written, an untyped pointer, an untyped result,
+    /// and the value a caller gets when the native cannot be called.
+    /// </summary>
+    /// <param name="cursor">Where to start; moved past the record.</param>
+    [NativeFunction]
+    public static partial void* Next(ulong* cursor, void* body);
+
     /// <summary>Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result.</summary>
     [NativeFunction]
     public static partial ulong Sum(uint* values, int count, bool all, double scale);

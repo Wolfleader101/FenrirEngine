@@ -29,6 +29,12 @@ The roles:
 | `shared-struct` | Plain data native functions take or return by pointer. |
 | `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout only. |
 
+A selected component, event or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer).
+
+```toml
+private-members = ["MyPackage::Hit"]
+```
+
 Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
 
 ## The description
@@ -60,7 +66,7 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `the default '...' is not one the description records: ...` | A default member initialiser of a form `SCHEMA.md` ("Defaults") does not list. |
 | `has no default member initialiser` | A number, enum, pointer or array of them with no initialiser. |
 | `cannot tell which component of <T> each argument sets: ...` | A bound type's constructor whose parameters are not named after its components. |
-| `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union)` | A private (or protected) member of a class that is not a tagged union. |
+| `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union); ...` | A private (or protected) member of a class that is not a tagged union, unless `private-members` names it. |
 | `an anonymous struct or union outside the tagged-union shape (...)` | The same, for an anonymous member. |
 | `a reference member: a shared type holds values, not references` | A reference member. |
 | `a virtual function: a shared type is plain data` | A virtual function. |
@@ -89,9 +95,9 @@ context = "Fenrir::CallContext"             # What every native takes first.
 describe-api --natives <Name>.binding.toml [compile arguments, or @file]
 ```
 
-It parses each source on its own with the compile arguments and writes `<Name>.natives.json` beside the configuration (again only when its content changes): every free function defined there whose first parameter is `const Context&`, with whether its second is the extension's state (a reference to a non-const class), each later parameter's C++ type and name, its result and its doc comment, in source order. `@param[out]` in a native's doc marks an output. The format is the second half of `SCHEMA.md`.
+It parses each source on its own with the compile arguments and writes `<Name>.natives.json` beside the configuration (again only when its content changes): every free function defined there whose first parameter is `const Context&`, with whether its second is the extension's state (a reference to a non-const class), each later parameter's C++ type and name, its result and its doc comment, in source order. `@param[out]` in a native's doc marks an output, `@param[in,out]` a pointer it reads and writes, and `@notrunning <expression>` the C++ value a caller gets when the native cannot be called. The format is the second half of `SCHEMA.md`.
 
-In CMake, `fenrir_describe_api_natives(<target> <config>)` adds a binding's natives to `fenrir-describe-api`, compiled with `<target>`'s include directories and definitions; `packages/FenrirPhysics/Scripting/CMakeLists.txt` is the example. A native fails the tool, naming the function and parameter, when it has internal linkage (static or in an anonymous namespace: the generated registration names it from another file), takes a reference after the context and state, has an unnamed parameter, a pointer to a pointer or a type of no kind, documents `@param[out]` on anything but a pointer to non-const data, or documents a parameter it does not have.
+In CMake, `fenrir_describe_api_natives(<target> <config>)` adds a binding's natives to `fenrir-describe-api`, compiled with `<target>`'s include directories and definitions; `packages/FenrirPhysics/Scripting/CMakeLists.txt` is the example. A native fails the tool, naming the function and parameter, when it has internal linkage (static or in an anonymous namespace: the generated registration names it from another file), takes a reference after the context and state, has an unnamed parameter, a pointer to a pointer or a type of no kind, documents `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data, documents a parameter it does not have, or documents `@notrunning` but returns nothing.
 
 ## Tests
 

@@ -197,6 +197,12 @@ TEST_CASE("C#'s new Hit() has C++'s Fixture::Hit{} defaults, field by field", "[
     CheckDefaults<Fixture::Hit>(harness.Component(), "Hit");
 }
 
+TEST_CASE("C#'s new Tag() has C++'s Fixture::Tag{} defaults, field by field", "[bindings]")
+{
+    const Fixture::DefaultsHarness harness;
+    CheckDefaults<Fixture::Tag>(harness.Component(), "Tag");
+}
+
 TEST_CASE("C#'s new Touched() has C++'s Fixture::Touched{} defaults, field by field", "[bindings]")
 {
     const Fixture::DefaultsHarness harness;

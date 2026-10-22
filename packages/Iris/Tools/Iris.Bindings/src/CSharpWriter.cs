@@ -24,7 +24,7 @@ internal static class CSharpWriter
             usings.Add("System.Runtime.InteropServices");
         }
 
-        if (type.Fields.Any(field => field.Kind.IsArray))
+        if (type.Fields.Any(field => field.Kind.IsArray && !binding.IsFixedBuffer(type, field)))
         {
             usings.Add("System.Runtime.CompilerServices");
         }
@@ -47,6 +47,13 @@ internal static class CSharpWriter
 
         text.Line($"namespace {binding.Config.Namespace};");
         text.Line();
+        if (type.Fields.Any(field => binding.IsPrivate(type, field)))
+        {
+            // Native code reads and writes a private field, which the compiler cannot see.
+            text.Line("#pragma warning disable CS0169, CS0414, CS0649");
+            text.Line();
+        }
+
         Doc(text, type.Doc);
         if (type.Category == Category.Enum)
         {
@@ -84,13 +91,13 @@ internal static class CSharpWriter
         switch (type.Role)
         {
             case Role.Component:
-                text.Line($"[{config.ComponentAttribute}(\"{binding.QualifiedName(type)}\")]");
+                text.Line($"[{config.ComponentAttribute}(\"{binding.RegisteredName(type)}\")]");
                 interfaces.Add(binding.Config.Registration?.ReadOnly.Contains(type.Name) == true
                                    ? config.ReadOnlyComponentInterface
                                    : config.ComponentInterface);
                 break;
             case Role.Event:
-                text.Line($"[{config.EventAttribute}(\"{binding.QualifiedName(type)}\")]");
+                text.Line($"[{config.EventAttribute}(\"{binding.RegisteredName(type)}\")]");
                 interfaces.Add(config.EventInterface);
                 break;
         }
@@ -103,7 +110,9 @@ internal static class CSharpWriter
             text.Line("[StructLayout(LayoutKind.Explicit)]");
         }
 
-        var modifiers = readOnly ? "public readonly partial struct" : "public partial struct";
+        // A fixed buffer needs an unsafe context.
+        var unsafeType = type.Fields.Any(field => binding.IsFixedBuffer(type, field)) ? "unsafe " : "";
+        var modifiers = readOnly ? $"public readonly {unsafeType}partial struct" : $"public {unsafeType}partial struct";
         text.Line(interfaces.Count == 0 ? $"{modifiers} {name}" : $"{modifiers} {name} : {string.Join(", ", interfaces)}");
         text.Line("{");
         text.Indent();
@@ -135,12 +144,17 @@ internal static class CSharpWriter
         foreach (var member in type.Fields)
         {
             var memberName = binding.MemberName(type, member.Name);
+            var access = binding.IsPrivate(type, member) ? "private" : "public";
             // A field holding a read-only struct is read-only too, so C# cannot write the struct whole.
             var field = readOnly || (member.Kind.Kind == "struct" && binding.IsReadOnly(binding.Type(member.Kind.Type!)))
-                            ? "public readonly"
-                            : "public";
+                            ? $"{access} readonly"
+                            : access;
             Doc(text, member.Doc);
-            if (member.Kind.IsArray)
+            if (binding.IsFixedBuffer(type, member))
+            {
+                text.Line($"{field} fixed {binding.CSharpType(member.Kind.ElementKind!, null)} {memberName}[{member.Kind.Length}];");
+            }
+            else if (member.Kind.IsArray)
             {
                 text.Line($"{field} {Binding.ArrayTypeName(memberName)} {memberName};");
             }
@@ -179,7 +193,7 @@ internal static class CSharpWriter
             text.Line("}");
         }
 
-        foreach (var member in type.Fields.Where(member => member.Kind.IsArray))
+        foreach (var member in type.Fields.Where(member => member.Kind.IsArray && !binding.IsFixedBuffer(type, member)))
         {
             var memberName = binding.MemberName(type, member.Name);
             text.Line();

@@ -36,10 +36,11 @@ header change, and check in CI that it leaves the tree clean.
 ## The configuration
 
 `<Name>.binding.toml`, with paths relative to it. [`tests/Fixture/Fixture.binding.toml`](tests/Fixture/Fixture.binding.toml)
-uses every key.
+uses every key but `registered-namespace`, which a test sets.
 
 ```toml
 namespace = "My.Physics"               # The C# namespace of the mirrors, and of every registered name.
+registered-namespace = "My"            # Optional (namespace): components and events are registered as My.Type instead.
 exclude = ["My::RawHit"]               # Optional: described types this binding leaves out (it binds them in another form).
 
 [csharp]
@@ -55,6 +56,8 @@ tagged-union-attribute = "TaggedUnion"
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
 readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
+private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
+fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
 
 [cpp]
 mappings = "src/Generated/MyPhysicsMappings.hpp"
@@ -117,7 +120,8 @@ carries in another form, such as a struct C# holds with a smaller handle than C+
 itself and binds from that description.
 | `[tests] cpp` and `csharp` | A Catch2 case per component, event and shared struct, and the C# class with one `T()` method returning `new T()` for each. |
 
-**Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type`. A field's or
+**Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
+or event's `RegisteredNamespace.Type` when `registered-namespace` is set: a mapping still names the C# type). A field's or
 enumerator's is its C++ name with the first letter upper-cased, unless `[names]` says otherwise. A C# field cannot share
 its struct's name, so that fails until `[names]` renames one.
 
@@ -133,8 +137,10 @@ it adds no member C# did not have. A read-only mirror (an event under `readonly-
 `readonly-structs`) is a `readonly struct` of `readonly` fields, always with the constructor, and a field holding a
 read-only struct is `readonly` too. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
 interface, an event the event attribute and interface. An array is an `[InlineArray(N)]` struct nested in its mirror
-(`SamplesArray Samples`), filled by the constructor, since C# cannot initialise one. A pointer is `pointer-type` at its
-offset, an empty struct an empty struct.
+(`SamplesArray Samples`), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
+`fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
+field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
+it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.
 
 **Tagged unions.** The mirror holds the storage only, as the scripting SDK's tagged-union generator consumes it:
 `[TaggedUnion]`, `[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset(0)] private Tag _type;` and one
@@ -154,16 +160,18 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
-| `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function. |
+| `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. |
 | `[tests] natives-cpp` and `natives-csharp` | A Catch2 case per native with an output, and the C# class whose method for it calls the native through the function pointer the host bound, with every input zero or null and every output holding junk, and says whether each output then holds `new T()`. |
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
 would: an alias in `types` is its C# type; a number or `bool` is itself (`std::int32_t` is `int`, `std::uint64_t` is
 `ulong`); `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
-`std::int32_t` count is `T*` (a span C# fixes); a pointer its doc marks `@param[out]` is `out T`; any other `const T*` is
-`in T`. `T` is a number, or the C# name of a described type or a `types` alias. Anything else fails naming the function
-and parameter: a struct or enum by value, a pointer to a type nothing names, a pointer to non-const data that is neither
-an output nor followed by a count, or a result that is not a number, `bool` or `void`.
+`std::int32_t` count is `T*` (a span C# fixes); a pointer its doc marks `@param[out]` is `out T`, and one it marks
+`@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
+`in T`. `T` is a number, or the C# name of a described type or a `types` alias. A result is a number, `bool`, `void` or
+`void*`. Anything else fails naming the function and parameter: a struct or enum by value, a pointer to a type nothing
+names, a pointer to non-const data that is neither an output, read and written, nor followed by a count, or any other
+result.
 
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
 
@@ -181,7 +189,9 @@ Everything the tool cannot bind fails the run with a message naming the type and
 unknown key in the configuration, a description for another target, a bound type with no `[bound-types]` entry, two
 types with one C# name, a tagged union whose default kind is not tag 0 or whose kind is not a struct, a default of a form
 the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
-description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, and
+description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, a
+`private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
+of numbers or is in a read-only mirror, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, or a `[natives] class`
 that is also a mirror's name.
 

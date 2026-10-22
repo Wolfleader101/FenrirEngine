@@ -40,7 +40,10 @@ structs are written once, in its headers, and `packages/Iris/Tools/Iris.Bindings
 from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. Its native functions are written once too, as their
 C++ definitions in `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`: `fenrir-describe-api` describes them into
 `FenrirPhysics.natives.json` beside the binding's configuration, and the binding generates their C# declarations
-(`PhysicsNative`), their registration and a test of their outputs. After changing a shared type or a native, run
+(`PhysicsNative`), their registration and a test of their outputs. FenrirScripting's built-in extension is bound the same
+way, from FenrirECS's and FenrirMath's descriptions (the engine's Transform, Name, Relationship and entity link) and its
+natives in `packages/FenrirScripting/src/Bindings.cpp`, by `packages/FenrirScripting/api/FenrirScripting.binding.toml`.
+After changing a shared type or a native, run
 `fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
 CI fails on a stale binding as on a stale description.
 

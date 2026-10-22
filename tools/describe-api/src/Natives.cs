@@ -76,13 +76,20 @@ internal sealed record NativesSelection(string Path, string Binding, IReadOnlyLi
 internal sealed record NativeType(string Spelling, string Kind, string? Pointee = null, string? PointeeKind = null,
                                   bool Const = false);
 
-/// <summary>A parameter after the call context and the extension state.</summary>
-internal sealed record NativeParameter(string Name, NativeType Type, bool Output, string? Doc);
+/// <summary>
+/// A parameter after the call context and the extension state: an output (<c>@param[out]</c>), a pointer the function
+/// reads and writes (<c>@param[in,out]</c>), or an input.
+/// </summary>
+internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, string? Doc);
 
-/// <summary>One native function: a free function taking the call context first, and optionally its extension state.</summary>
+/// <summary>
+/// One native function: a free function taking the call context first, and optionally its extension state.
+/// <c>NotRunning</c> is the C++ expression its <c>@notrunning</c> gives, the value a caller gets when the function
+/// cannot be called.
+/// </summary>
 internal sealed record NativeFunctionDescription(string Name, string Namespace, string Source, string? State, bool NoExcept,
                                                  string? Doc, NativeType Returns, string? ReturnsDoc,
-                                                 IReadOnlyList<NativeParameter> Parameters);
+                                                 IReadOnlyList<NativeParameter> Parameters, string? NotRunning);
 
 /// <summary>What the natives mode writes: a binding's native functions in source order.</summary>
 internal sealed record NativesDescription(string Binding, string Context, IReadOnlyList<NativeFunctionDescription> Functions);
@@ -245,18 +252,21 @@ internal sealed class NativesDescriber
 
             var type = Spell(parameter.Type, parameter, subject);
             var output = false;
+            var inOut = false;
             if (doc.Parameters.TryGetValue(parameter.Name, out var parameterDoc))
             {
                 output = parameterDoc.Output;
-                if (output && (type?.Kind != "pointer" || type.Const))
+                inOut = parameterDoc.InOut;
+                if ((output || inOut) && (type?.Kind != "pointer" || type.Const))
                 {
-                    Error(parameter, subject, "is documented @param[out] but is not a pointer to non-const data");
+                    Error(parameter, subject,
+                          $"is documented @param[{(output ? "out" : "in,out")}] but is not a pointer to non-const data");
                 }
             }
 
             if (type is not null)
             {
-                described.Add(new NativeParameter(parameter.Name, type, output, parameterDoc?.Text));
+                described.Add(new NativeParameter(parameter.Name, type, output, inOut, parameterDoc?.Text));
             }
         }
 
@@ -280,8 +290,14 @@ internal sealed class NativesDescriber
         var noexcept = (CXCursor_ExceptionSpecificationKind)function.Handle.ExceptionSpecificationType is
             CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_BasicNoexcept or
             CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_NoThrow;
+        if (doc.NotRunning is not null && returns.Kind == "void")
+        {
+            Error(function, name, "documents @notrunning but returns nothing");
+            return null;
+        }
+
         return new NativeFunctionDescription(name, Namespace(function.Handle), where, state, noexcept, doc.Text, returns,
-                                             doc.Returns, described);
+                                             doc.Returns, described, doc.NotRunning);
     }
 
     // --- Types ---
@@ -474,6 +490,11 @@ internal static class NativesWriter
                 }
 
                 WriteDoc(json, function.Doc);
+                if (function.NotRunning is not null)
+                {
+                    json.WriteString("notRunning", function.NotRunning);
+                }
+
                 json.WriteStartObject("returns");
                 WriteType(json, function.Returns);
                 WriteDoc(json, function.ReturnsDoc);
@@ -487,6 +508,11 @@ internal static class NativesWriter
                     if (parameter.Output)
                     {
                         json.WriteBoolean("output", true);
+                    }
+
+                    if (parameter.InOut)
+                    {
+                        json.WriteBoolean("inOut", true);
                     }
 
                     WriteDoc(json, parameter.Doc);

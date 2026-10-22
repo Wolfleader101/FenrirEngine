@@ -27,9 +27,15 @@ internal sealed class Describer
 
     private readonly Dictionary<string, string> m_sources = new(StringComparer.Ordinal);
 
-    private Describer(Selection selection)
+    // Selected types that are specialisations of a class template the headers never instantiate (glm's quaternion,
+    // when nothing in them holds one), which a second parse instantiates.
+    private readonly IReadOnlyList<string> m_instantiate;
+    private readonly List<string> m_uninstantiated = [];
+
+    private Describer(Selection selection, IReadOnlyList<string> instantiate)
     {
         m_selection = selection;
+        m_instantiate = instantiate;
     }
 
     private sealed record Pending(Type Type, string Name, Role Role, Decl Decl, string? ReachedFrom);
@@ -37,15 +43,19 @@ internal sealed class Describer
     /// <summary>Describes the selection, or throws <see cref="DescribeException" /> with every diagnostic.</summary>
     public static Description Describe(Selection selection, IReadOnlyList<string> compileArguments)
     {
-        var describer = new Describer(selection);
-        return describer.Run(compileArguments);
+        var describer = new Describer(selection, []);
+        return describer.Run(compileArguments) ??
+               new Describer(selection, describer.m_uninstantiated).Run(compileArguments)!;
     }
 
-    private Description Run(IReadOnlyList<string> compileArguments)
+    // The description, or null when a selected type is a template specialisation that was never instantiated: its
+    // layout is unknown until something needs it complete, so the caller parses again, instantiating it.
+    private Description? Run(IReadOnlyList<string> compileArguments)
     {
         var directory = Path.GetDirectoryName(m_selection.Path)!;
         var mainPath = Path.Combine(directory, m_selection.Package + ".describe-api.cpp").Replace('\\', '/');
-        var source = string.Concat(m_selection.Headers.Select(header => $"#include \"{header.Replace('\\', '/')}\"\n"));
+        var source = string.Concat(m_selection.Headers.Select(header => $"#include \"{header.Replace('\\', '/')}\"\n")) +
+                     string.Concat(m_instantiate.Select(name => $"static_assert(sizeof(::{name}) > 0);\n"));
 
         using var index = CXIndex.Create();
         using var unsaved = CXUnsavedFile.Create(mainPath, source);
@@ -86,6 +96,11 @@ internal sealed class Describer
         foreach (var (name, role) in m_selection.Types)
         {
             Select(translationUnit.TranslationUnitDecl, name, role);
+        }
+
+        if (m_instantiate.Count == 0 && m_uninstantiated.Count > 0)
+        {
+            return null;
         }
 
         while (m_pending.Count > 0)
@@ -191,6 +206,11 @@ internal sealed class Describer
         }
 
         var decl = found is TypedefNameDecl ? (Decl?)canonical.AsTagDecl ?? found : found;
+        if (canonical.Handle.SizeOf < 0 && canonical.AsTagDecl is ClassTemplateSpecializationDecl)
+        {
+            m_uninstantiated.Add(name);
+        }
+
         Register(canonical, name, role, decl, null);
         if (found is TypedefNameDecl && role == Role.BoundType)
         {
@@ -378,10 +398,12 @@ internal sealed class Describer
         }
 
         var subject = $"{typeName}::{field.Name}";
-        if (field.Access != CX_CXXAccessSpecifier.CX_CXXPublic)
+        if (field.Access != CX_CXXAccessSpecifier.CX_CXXPublic && !m_selection.PrivateMembers.Contains(typeName))
         {
             var access = field.Access == CX_CXXAccessSpecifier.CX_CXXProtected ? "protected" : "private";
-            throw Error(field, subject, $"a {access} data member outside the tagged-union shape ({TaggedUnionShape})");
+            throw Error(field, subject,
+                        $"a {access} data member outside the tagged-union shape ({TaggedUnionShape}); a selection " +
+                        "shares one only when 'private-members' names its type");
         }
 
         if (field.IsBitField)
@@ -390,8 +412,30 @@ internal sealed class Describer
         }
 
         var type = Classify(field.Type, field, subject);
-        var value = Default(type, field.InClassInitializer, field, subject);
+        var value = IsHandle(field.Type) ? HandleDefault(type, field.InClassInitializer, field, subject)
+                                         : Default(type, field.InClassInitializer, field, subject);
         return new FieldDescription(field.Name, Offset(field), type, value, Doc(field));
+    }
+
+    /// <summary>
+    /// An enum with no enumerators (<c>enum class Id : std::uint32_t {}</c>, EnTT's <c>entt::entity</c>): a distinct
+    /// integer type, not a set of named values, so it is recorded as its underlying integer.
+    /// </summary>
+    private static bool IsHandle(Type type) =>
+        type.CanonicalType.AsTagDecl?.Definition is EnumDecl { Enumerators.Count: 0 };
+
+    /// <summary>
+    /// A handle's default: it has no enumerator to name, so its value is whatever constant libclang evaluates its
+    /// initialiser to (<c>entt::null</c> is all bits set).
+    /// </summary>
+    private DefaultValue HandleDefault(FieldType type, Expr? init, Decl at, string subject)
+    {
+        if (init is null)
+        {
+            throw Error(at, subject, "has no default member initialiser");
+        }
+
+        return IsZeroInit(Strip(init)) ? Zero(type, at, subject) : Evaluate(init, type.Kind, at, subject);
     }
 
     private TaggedUnionDescription DescribeTaggedUnion(CXXRecordDecl record, string name, Role role, long size,
@@ -510,8 +554,16 @@ internal sealed class Describer
                 return new FieldType("f32");
             case CXTypeKind.CXType_Double:
                 return new FieldType("f64");
+            case CXTypeKind.CXType_Enum when IsHandle(type):
+                var enumDecl = (EnumDecl)type.AsTagDecl!.Definition!;
+                return new FieldType(IntegerKind(enumDecl.IntegerType.CanonicalType) ??
+                                     throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records"));
             case CXTypeKind.CXType_Enum:
                 return new FieldType("enum", RegisterReferenced(type, subject));
+            case CXTypeKind.CXType_Char_S:
+            case CXTypeKind.CXType_Char_U:
+                // A char is a byte of text, unsigned on every target, so a description reads the same everywhere.
+                return new FieldType("u8");
             case CXTypeKind.CXType_Record:
                 return new FieldType("struct", RegisterReferenced(type, subject));
             case CXTypeKind.CXType_Pointer:

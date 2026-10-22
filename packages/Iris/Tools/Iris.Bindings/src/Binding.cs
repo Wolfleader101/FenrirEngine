@@ -52,8 +52,22 @@ internal sealed class Binding
         return Config.Names.TryGetValue(type.Name, out var name) ? name : type.Name[(type.Name.LastIndexOf(':') + 1)..];
     }
 
-    /// <summary>The name C# knows a mirrored type by, and the name it is registered under: <c>Namespace.Type</c>.</summary>
+    /// <summary>The name C# knows a mirrored type by, which shared structs are registered under: <c>Namespace.Type</c>.</summary>
     public string QualifiedName(DescribedType type) => $"{Config.Namespace}.{CSharpName(type)}";
+
+    /// <summary>
+    /// The name a component or event is registered under, which its C# attribute names:
+    /// <c>RegisteredNamespace.Type</c> (<c>registered-namespace</c>, the C# namespace unless it says otherwise).
+    /// </summary>
+    public string RegisteredName(DescribedType type) => $"{Config.RegisteredNamespace}.{CSharpName(type)}";
+
+    /// <summary>Whether a field's mirror is private (<c>[csharp] private-fields</c>): C# reaches it through hand-written members.</summary>
+    public bool IsPrivate(DescribedType owner, Field field) =>
+        Config.CSharp.PrivateFields.Contains($"{owner.Name}::{field.Name}");
+
+    /// <summary>Whether an array field is a fixed buffer (<c>[csharp] fixed-buffers</c>) rather than an <c>[InlineArray]</c> struct.</summary>
+    public bool IsFixedBuffer(DescribedType owner, Field field) =>
+        Config.CSharp.FixedBuffers.Contains($"{owner.Name}::{field.Name}");
 
     /// <summary>A field's or enumerator's C# name: <c>Type::member</c> or <c>member</c> in [names], else PascalCase.</summary>
     public string MemberName(DescribedType owner, string member) =>
@@ -420,6 +434,34 @@ internal sealed class Binding
             if (!types.TryGetValue(name, out var mirrored) || mirrored.Category != Category.Struct)
             {
                 throw new BindingException($"{Config.Path}: readonly-structs names {name}, which is not a described struct");
+            }
+        }
+
+        foreach (var (key, list) in new[] { ("private-fields", Config.CSharp.PrivateFields), ("fixed-buffers", Config.CSharp.FixedBuffers) })
+        {
+            foreach (var name in list)
+            {
+                var separator = name.LastIndexOf("::", StringComparison.Ordinal);
+                var owner = separator < 0 ? null : types.GetValueOrDefault(name[..separator]);
+                var field = owner?.Category == Category.Struct
+                                ? owner.Fields.FirstOrDefault(field => field.Name == name[(separator + 2)..])
+                                : null;
+                if (field == null)
+                {
+                    throw new BindingException($"{Config.Path}: {key} names {name}, which is not a field of a described struct");
+                }
+
+                // A fixed buffer holds numbers only, and is never readonly: C# allows neither.
+                if (key == "fixed-buffers" && (!field.Kind.IsArray || field.Kind.ElementKind is "struct" or "enum" or "pointer"))
+                {
+                    throw new BindingException($"{Config.Path}: fixed-buffers names {name}, which is not an array of numbers");
+                }
+
+                if (key == "fixed-buffers" && IsReadOnly(owner!))
+                {
+                    throw new BindingException(
+                        $"{Config.Path}: fixed-buffers names {name}, but {owner!.Name}'s mirror is read-only and a fixed buffer cannot be");
+                }
             }
         }
 

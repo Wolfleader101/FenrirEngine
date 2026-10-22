@@ -5,10 +5,16 @@ namespace Iris.Bindings;
 /// <summary>A native's parameter or result as the natives description records it: C++ spelling, kind, and pointee.</summary>
 internal sealed record NativeType(string Spelling, string Kind, string? Pointee, string? PointeeKind, bool Const);
 
-/// <summary>A parameter after the call context and the extension state.</summary>
-internal sealed record NativeParameter(string Name, NativeType Type, bool Output, string? Doc);
+/// <summary>
+/// A parameter after the call context and the extension state: an output, a pointer the native reads and writes
+/// (<c>inOut</c>), or an input.
+/// </summary>
+internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, string? Doc);
 
-/// <summary>One described native function (<c>docs/natives-description.md</c>).</summary>
+/// <summary>
+/// One described native function (<c>docs/natives-description.md</c>). <c>NotRunning</c> is the C++ expression of what a
+/// caller gets when it cannot be called.
+/// </summary>
 internal sealed record NativeFunction(
     string Name,
     string Namespace,
@@ -18,7 +24,8 @@ internal sealed record NativeFunction(
     string? Doc,
     NativeType Returns,
     string? ReturnsDoc,
-    IReadOnlyList<NativeParameter> Parameters)
+    IReadOnlyList<NativeParameter> Parameters,
+    string? NotRunning)
 {
     /// <summary>The C++ function's qualified name.</summary>
     public string QualifiedName => Namespace.Length == 0 ? Name : $"{Namespace}::{Name}";
@@ -55,8 +62,9 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
                 {
                     var parameterName = Description.String(parameter, "name", where);
                     return new NativeParameter(parameterName, ReadType(parameter, $"{where}::{parameterName}"),
-                                               Flag(parameter, "output"), Description.OptionalString(parameter, "doc"));
-                }).ToList());
+                                               Flag(parameter, "output"), Flag(parameter, "inOut"),
+                                               Description.OptionalString(parameter, "doc"));
+                }).ToList(), Description.OptionalString(function, "notRunning"));
         }).ToList();
         return new NativesDescription(path, Description.String(root, "context", path), functions);
     }
@@ -91,8 +99,10 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// Maps natives to C#: the leading context and state are dropped, and each C++ parameter becomes what the hand-written
 /// declarations used to say. A <c>const char*</c> with a <c>std::int32_t</c> length after it is a <c>string</c>; any
 /// other pointer with a <c>std::int32_t</c> count after it is a <c>T*</c> span; a <c>T*</c> its doc marks an output is
-/// <c>out T</c>; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, and an alias in <c>[natives] types</c>
-/// is the C# type it names. Anything else fails naming the function and parameter.
+/// <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is <c>void*</c>, an address
+/// C# passes as it is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, and an alias in
+/// <c>[natives] types</c> is the C# type it names. A result is a number, a bool, nothing, or a <c>void*</c>. Anything
+/// else fails naming the function and parameter.
 /// </summary>
 internal static class Natives
 {
@@ -129,17 +139,19 @@ internal static class Natives
 
     private static BoundNative Bind(Binding binding, NativesConfig config, NativeFunction function, string where)
     {
-        var result = function.Returns.Kind switch
+        var result = function.Returns switch
         {
-            "void" => "void",
-            "pointer" or "struct" or "enum" => throw Unmappable(where + " (result)", function.Returns,
-                                                                 "a native returns a number, a bool or nothing"),
-            var kind => Scalar(kind, where + " (result)", function.Returns),
+            { Kind: "void" } => "void",
+            { Kind: "pointer", PointeeKind: "void" } => "void*",
+            { Kind: "pointer" or "struct" or "enum" } => throw Unmappable(where + " (result)", function.Returns,
+                                                                       "a native returns a number, a bool, nothing or a void*"),
+            var type => Scalar(type.Kind, where + " (result)", type),
         };
         var wireResult = function.Returns.Kind switch
         {
             "void" => "void",
             "bool" => "byte",
+            "pointer" => "void*",
             var kind => Binding.CSharpScalar(kind),
         };
 
@@ -175,7 +187,7 @@ internal static class Natives
                     parameters.Add($"out {pointee} {name}");
                     wire.Add(new WireParameter($"{pointee}*", pointee));
                 }
-                else if (countFollows)
+                else if (countFollows || parameter.InOut || type.PointeeKind == "void")
                 {
                     parameters.Add($"{pointee}* {name}");
                     wire.Add(new WireParameter("void*", null));
@@ -188,8 +200,8 @@ internal static class Natives
                 else
                 {
                     throw Unmappable(subject, type,
-                                     "a pointer to non-const data is an output (its doc says [out]) or a span (its " +
-                                     "std::int32_t count follows it)");
+                                     "a pointer to non-const data is an output (its doc says [out]), read and written " +
+                                     "(its doc says [in,out]) or a span (its std::int32_t count follows it)");
                 }
 
                 continue;

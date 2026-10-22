@@ -104,6 +104,10 @@ remove, count and query it) and says how to check its layout against the C# stru
 | `Fenrir.Name` | `Name` (`Text`, a fixed UTF-8 buffer of 256 bytes) | `Fenrir::Name` | read and write |
 | `Fenrir.Relationship` | `Relationship` (`Parent`, `FirstChild`, `NextSibling`, `PrevSibling`) | `Fenrir::Relationship` | **read only** |
 
+They are the built-in extension's, and generated like any package's (ADR-0016): each is written once, in FenrirECS's
+headers, and its C# mirror, mapping and registration come from FenrirECS's API description (see "Adding to the engine's
+own API").
+
 ```csharp
 var t = new Entity(id).Get<Transform>();        // a Ref<Transform> into the engine's storage
 t.Position.X += 1;                              // visible to C++ through GetComponent<Transform>() at once
@@ -128,8 +132,8 @@ tether.Target = created;              // fine: a created entity's value is reser
 - **A link names an entity of the active scene.** The conversion stores the active scene's entity list beside the value,
   where a native `Entity` keeps it (the `EntityLinkOwner` native function gives it). Scripts never see that part: an
   `EntityLink` shows only `IsNull`, `Target` and `None`.
-- **`default(EntityLink)` is not `None`.** A zeroed link names entity 0 with no scene, so a component made with `default`
-  names entity 0 in each `Entity` field. C++'s `IsValid` is false for it; it does not crash, but write `EntityLink.None`
+- **`default(EntityLink)` is not `None`.** `new EntityLink()` is `None`, as C++'s default `Entity` is, but a zeroed link
+  names entity 0 with no scene, so a component made with `default` names entity 0 in each `Entity` field. C++'s `IsValid` is false for it; it does not crash, but write `EntityLink.None`
   where you mean "no entity".
 - The `ScriptingTests` entity-link tests are the proof: a link C# writes reads in C++ as the same entity of the active
   scene, `None` reads as a default `Entity`, a link to an entity created earlier in the same system survives playback, a
@@ -176,21 +180,20 @@ public struct Health : IComponent { public int Current; public int Max; }
   assembly is released, the app keeps running, and the error names the component and the field.
 - **Nothing registers after Install.** What scripting knows is fixed by the extensions given to `Install`; afterwards the
   registry changes only when a reload removes and adds the components and events the script assembly defines.
-- **Engine types as fields.** A component or event holding a `Math::Vec3`, `Math::Quat` or `Transform` includes
-  `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
-  An `Entity` member is mapped through a stand-in struct that puts `Detail::EntityLinkView` (from the same header) where
-  the `Entity` is, or by a mapping of `Entity` itself declared by offset (`Iris::Field`, as FenrirPhysics's generated
-  binding does); C# sees it as an `EntityLink`, as in `Relationship`.
+- **Engine types as fields.** A component or event holding a `Math::Vec3`, `Math::Quat`, `Transform` or `Entity` includes
+  `FenrirScripting/Generated/FenrirScriptingMappings.hpp`, the built-in binding's mappings, which name them as the
+  contract's `Vector3`, `Quaternion`, `Transform` and `EntityLink`. An `Entity` member then maps as itself, and C# sees it
+  as an `EntityLink`, as in `Relationship`.
   In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
   `EntityLink.None` is the empty link (C++'s default `Entity`). See "Entity links" below.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
   `W, X, Y, Z` in that order. Declaring `X, Y, Z, W` would have swapped every rotation silently.
-- **Members Iris cannot map** (a private buffer, a type holding a pointer) can be described by a plain struct with the same
-  size and layout: `MakeComponent<T, Mapping>(name)`. Size and alignment are checked at compile time. `Relationship` does
-  this, because an `Entity` holds a pointer to its entity list (C# sees the 32-bit entity value and keeps the rest opaque),
-  and so does `Name`, whose buffer is private.
+- **Members a mapping cannot name** (a private buffer) are declared by offset (`Iris::Field<T>("Name", offset)`), or the
+  component is described by a plain struct with the same size and layout: `MakeComponent<T, Mapping>(name)`. Size and
+  alignment are checked at compile time. A generated binding needs neither: the engine's `Name` keeps its buffer private
+  and `Entity` its value and entity list, and FenrirECS's API description records their layouts all the same.
 - **A native component is reached only through the C# type that was validated.** Declaring your own struct with
   `[NativeComponent("Fenrir.Relationship")]` does not work: the engine hands the component out only to the type whose
   layout it checked, and `Get<T>` throws for any other.
@@ -623,42 +626,48 @@ into exceptions) only where it wants.
 An extension with a generated binding (ADR-0016) writes only step 1: `tools/describe-api --natives` reads its C++
 natives into a natives description, and `Iris.Bindings` generates steps 2 and 3 from it, in one order (its README,
 "Natives"). The C++ function then needs external linkage, outside an anonymous namespace, since the generated
-registration names it from another file, and `@param[out]` in its doc makes a pointer an `out` parameter. FenrirPhysics's
-natives are built that way (`packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`).
+registration names it from another file. In its doc, `@param[out]` makes a pointer an `out` parameter, `@param[in,out]` a
+pointer C# passes as it is, and `@notrunning <expression>` the value C# gets when no Scripting is running (`Make`'s
+second argument). The engine's own natives (`src/Bindings.cpp`) and FenrirPhysics's
+(`packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`) are built that way.
 
 ## Adding to the engine's own API
 
 The engine's own API (Log, Time, Entity, components, events, queries, changes) is the built-in scripting extension: its
 native functions are the methods of the contract's `Native` class, declared like any package's. It also carries the
-engine's components (Transform, Name and Relationship, from `EngineComponents`) and, as its shared assembly, the
-`Fenrir.Scripting` contract. It is always the first extension, so the engine's components take their names before any
-other extension's, and the contract is shared before any other. To add a native function, in the order a script sees it:
+engine's components (Transform, Name and Relationship, all required) and, as its shared assembly, the `Fenrir.Scripting`
+contract. It is always the first extension, so the engine's components take their names before any other extension's,
+and the contract is shared before any other.
 
-1. **The C++ function**, in `src/Bindings.cpp`, over the `CallContext` like any native function. The engine's own state
-   (the component registry, the change buffer) is the built-in extension's extension state, the `EngineContext`, which
-   every one of its native functions takes second. A C++ exception that escapes it is stopped by Iris and logged;
-   scripts get a zero result.
+It is a generated binding (ADR-0016), as FenrirPhysics's is: `api/FenrirScripting.binding.toml` binds FenrirECS's and
+FenrirMath's API descriptions (`packages/FenrirECS/api`, `packages/FenrirMath/api`) and the natives description
+`api/FenrirScripting.natives.json`, which describe-api reads from `src/Bindings.cpp`. From them `Iris.Bindings` writes the
+contract's mirrors and `Native` class (`Managed/Fenrir.Scripting/Generated`), the mappings
+(`include/FenrirScripting/Generated`), the extension's lists (`src/Generated`) and two tests (`Tests/Generated`). Only the
+vector and quaternion, bound types, are mapped by hand (`include/FenrirScripting/BoundMappings.hpp`). To add a native
+function, in the order a script sees it:
+
+1. **The C++ function**, in `src/Bindings.cpp`'s `Fenrir::ScriptingNatives`, over the `CallContext` like any native
+   function, with a doc comment: it becomes the C# declaration's. The engine's own state (the component registry, the
+   change buffer) is the built-in extension's extension state, the `EngineContext`, which every one of its native
+   functions takes second. A C++ exception that escapes it is stopped by Iris and logged; scripts get a zero result.
+   `@notrunning` gives C# something other than zero when no Scripting is running.
 
    ```cpp
-   void Log(const CallContext& context, EngineContext&, std::int32_t level, const char* text, std::int32_t length);
+   /**
+    * @brief Writes `text` to the engine's logger at `level`: 0 Info, 1 Warn, 2 Error.
+    */
+   void Log(const CallContext& context, Detail::EngineContext&, std::int32_t level, const char* text,
+            std::int32_t length);
    ```
 
-2. **Its entry in `BuiltInExtension`**, named `Fenrir.Scripting.Native.<Method>`. Give a second argument if C# should get
-   something other than zero when no Scripting is running:
+2. **Regenerate** (`fenrir-describe-api`, then `fenrir-generate-bindings`): its `[NativeFunction]` declaration in `Native`
+   (`void Log(int level, string text)`) and its registration, `Fenrir.Scripting.Native.<Method>`, are generated.
 
-   ```cpp
-   NativeFunction::Make<&Log>(prefix + "Log"),
-   ```
-
-3. **The declaration in `Managed/Fenrir.Scripting/Native.cs`**: a `[NativeFunction]` method with the same parameters,
-   plus a **friendly wrapper** beside it that scripts use (UTF-8, lengths and `fixed` stay in the wrapper, because
-   `Native` is internal and passes pointers through):
+3. **A friendly wrapper** beside it that scripts use (`Native` is internal, and passes pointers through):
 
    ```csharp
-   [NativeFunction]
-   public static partial void Log(int level, byte* text, int length);     // in Native (internal)
-
-   public static class Log { public static void Info(string? message) => Write(0, message); /* UTF-8, length, fixed */ }
+   public static class Log { public static void Info(string? message) => Native.Log(0, message ?? ""); }
    ```
 
 Iris binds every generated field of the shared contract when it is shared, and **sharing fails** (so no scripts load, and

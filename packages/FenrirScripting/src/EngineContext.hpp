@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -14,6 +15,10 @@ namespace Fenrir::Detail
 {
     // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component.
     using ScriptEventDescription = ScriptComponentDescription;
+
+    // An address or count a native function writes into C#'s memory: a native-sized unsigned integer, which C# holds as
+    // nuint (api/FenrirScripting.binding.toml maps this alias).
+    using NativeAddress = std::uintptr_t;
 
     // What the engine's native functions act on: the built-in extension's extension state. Iris calls a native function
     // through a plain function pointer with no user data, so which Scripting is running is process-wide state (the

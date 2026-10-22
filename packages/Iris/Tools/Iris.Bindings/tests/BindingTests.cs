@@ -43,8 +43,8 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 21,
-                    $"The fixture should give 14 mirrors, the natives' class, the mappings, the registration and the " +
+        Assert.True(generated.Count == 22,
+                    $"The fixture should give 15 mirrors, the natives' class, the mappings, the registration and the " +
                     $"two files each of the defaults and natives tests, but gave {generated.Count} files.");
     }
 
@@ -108,7 +108,8 @@ public sealed class BindingTests
         using var directory = new TemporaryDirectory();
         var config = CopyConfig(directory, "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"] }\n" +
                                            "\"Fixture::Quat\" = { type = \"Quaternion\" }\n" +
-                                           "\"Fixture::Handle\" = { type = \"Handle\", default = \"Handle.None\" }\n");
+                                           "\"Fixture::Handle\" = { type = \"Handle\", default = \"Handle.None\" }\n" +
+                                           "\"Fixture::Size\" = { type = \"Size\" }\n");
         var description = WriteDescription(directory, _ => { });
 
         var body = Mirror(Generator.Generate(config, [description]), "Body.cs");
@@ -181,6 +182,60 @@ public sealed class BindingTests
                     $"An enum in readonly-structs should fail naming it, but failed with\n  {exception.Message}");
     }
 
+    [Theory]
+    [InlineData("private-fields = [\"Fixture::Tag::m_name\"]",
+                "private-fields names Fixture::Tag::m_name, which is not a field of a described struct")]
+    [InlineData("fixed-buffers = [\"Fixture::Tag::m_id\"]", "fixed-buffers names Fixture::Tag::m_id, which is not an array of numbers")]
+    [InlineData("fixed-buffers = [\"Fixture::Body::springs\"]",
+                "fixed-buffers names Fixture::Body::springs, which is not an array of numbers")]
+    [InlineData("fixed-buffers = [\"Fixture::Tag::m_label\"]\nreadonly-structs = [\"Fixture::Limits\", \"Fixture::Tag\"]",
+                "fixed-buffers names Fixture::Tag::m_label, but Fixture::Tag's mirror is read-only and a fixed buffer cannot be")]
+    public void AFieldListTheBindingCannotHonourFailsNamingTheField(string lists, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text =>
+        {
+            var start = text.IndexOf("private-fields = ", StringComparison.Ordinal);
+            var end = text.IndexOf('\n', text.IndexOf("fixed-buffers = ", StringComparison.Ordinal)) + 1;
+            text = text[..start] + lists + "\n" + text[end..];
+            return lists.Contains("readonly-structs", StringComparison.Ordinal)
+                       ? text.Replace("readonly-structs = [\"Fixture::Limits\"]\n", "", StringComparison.Ordinal)
+                       : text;
+        });
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ARegisteredNamespaceNamesTheComponentsAndEventsButNotTheSharedStructsOrMirrors()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", "registered-namespace = \"Fixture\"\n");
+        var description = WriteDescription(directory, _ => { });
+
+        var generated = Generator.Generate(config, [description]);
+
+        var registration = generated.Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+        var body = Mirror(generated, "Body.cs");
+        var touched = Mirror(generated, "Touched.cs");
+        var mappings = generated.Single(file => file.Key.EndsWith("FixtureMappings.hpp", StringComparison.Ordinal)).Value;
+        Assert.True(registration.Contains("Host::MakeComponent<Fixture::Body>(\"Fixture.Body\")", StringComparison.Ordinal) &&
+                    registration.Contains("Host::MakeEvent<Fixture::Touched>(\"Fixture.Touched\")", StringComparison.Ordinal) &&
+                    registration.Contains("Host::MakeSharedStruct<Fixture::Hit>(\"Fixture.Bindings.Hit\")", StringComparison.Ordinal),
+                    $"Components and events should be registered in the registered namespace, and shared structs by their C# " +
+                    $"name, but the registration is:\n{registration}");
+        Assert.True(body.Contains("[NativeComponent(\"Fixture.Body\")]", StringComparison.Ordinal) &&
+                    touched.Contains("[NativeEvent(\"Fixture.Touched\")]", StringComparison.Ordinal) &&
+                    body.Contains("namespace Fixture.Bindings;", StringComparison.Ordinal),
+                    $"The attributes should name the registered names, in mirrors of the C# namespace, but Body is:\n{body}");
+        Assert.True(mappings.Contains("typeName = \"Fixture.Bindings.Body\"", StringComparison.Ordinal),
+                    $"A mapping names the C# type, whatever it is registered as, but the mappings are:\n{mappings}");
+    }
+
     [Fact]
     public void RunningTwiceRewritesNothing()
     {
@@ -191,7 +246,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 21,$"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 22, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -310,10 +365,10 @@ public sealed class BindingTests
     [InlineData("Undescribed", "Fixture.natives.json: Find::origin: cannot map the C++ type 'const Fixture::Unknown*' to " +
                                "C#: no description describes Fixture::Unknown, and [natives] types does not name it")]
     [InlineData("NeitherOutNorSpan", "Fixture.natives.json: Find::hit: cannot map the C++ type 'Fixture::Hit*' to C#: a " +
-                                     "pointer to non-const data is an output (its doc says [out]) or a span (its " +
-                                     "std::int32_t count follows it)")]
+                                     "pointer to non-const data is an output (its doc says [out]), read and " +
+                                     "written (its doc says [in,out]) or a span (its std::int32_t count follows it)")]
     [InlineData("Result", "Fixture.natives.json: Sum (result): cannot map the C++ type 'const Fixture::Vec3*' to C#: a " +
-                          "native returns a number, a bool or nothing")]
+                          "native returns a number, a bool, nothing or a void*")]
     public void ANativeParameterTheBindingCannotMapFailsNamingTheFunctionAndParameter(string problem, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
