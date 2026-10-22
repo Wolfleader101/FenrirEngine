@@ -22,12 +22,12 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
   - an ordered list of commands
 - **A command** names:
   - a pipeline by index
-  - its texture slots, each an `AssetHandle<ImageData>` plus a sampler description (filter and wrap; linear clamp by default). Camera render targets are image assets (ADR-0026), so a scene view is sampled like any image.
+  - its texture slots, each an `AssetHandle<Image>` plus a sampler description (filter and wrap; linear clamp by default). Camera render targets are image assets (ADR-0026), so a scene view is sampled like any image. *Amended 2026-10-22 (renderer foundation ticket 05):* handles are typed by the short asset name, as C#'s are, so this ADR's `AssetHandle<Image>` and `AssetHandle<Shader>` were `AssetHandle<ImageData>` and `AssetHandle<ShaderData>`.
   - an optional scissor rectangle
   - an index offset and count, and a base vertex
   - a block of per-command parameter bytes
 - **A 2D pipeline description** is a plain value with these fields:
-  - a shader (an `AssetHandle<ShaderData>` built by `fenrir_add_shaders`, so GLSL 460 → SPIR-V, ADR-0018)
+  - a shader (an `AssetHandle<Shader>` built by `fenrir_add_shaders`, so GLSL 460 → SPIR-V, ADR-0018)
   - a vertex layout (stride, plus per attribute its location, format and offset)
   - an index type (16 or 32 bit)
   - a blend mode
@@ -166,7 +166,7 @@ ImGui is a submodule linked only by that piece, built only with the examples. It
 ## Not built, and kept possible
 
 - **The `Painter` and the retained UI framework:** new packages over FenrirDraw2D.
-- **An image target:** a draw list painted into an `AssetHandle<ImageData>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred.
+- **An image target:** a draw list painted into an `AssetHandle<Image>` render target, which an ordinary 3D material then samples. This is the first world-space UI. It needs rules for creation, resizing, clearing, and ordering in the graph before the views that sample it. Premultiplied storage is preferred.
 - **A world-space target:** a world matrix and the camera's view-projection, depth-tested in a view's `Transparent` stage. The target sets depth and transforms; the draw list doesn't change. Lighting or normal-based effects may need more than `localToClip` in set 0. That is an extension of the set, not of the draw list.
 - **Dynamic images:** image assets updated by sub-rectangle (font atlases, runtime UI textures) rather than whole re-upload. The resource API should not assume images are immutable or always uploaded whole.
 - **IME composition**, and C# authoring of draw lists through the managed host.

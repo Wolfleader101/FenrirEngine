@@ -13,6 +13,9 @@
 [submodule "packages/FenrirPhysics/libs/JoltPhysics"]
 	path = packages/FenrirPhysics/libs/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics
+[submodule "packages/FenrirAssets/libs/stb"]
+	path = packages/FenrirAssets/libs/stb
+	url = https://github.com/nothings/stb
 [submodule "packages/FenrirWindow/libs/SDL"]
 	path = packages/FenrirWindow/libs/SDL
 	url = https://github.com/libsdl-org/SDL
