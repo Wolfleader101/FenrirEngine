@@ -65,12 +65,14 @@ jobs:
       - name: Build
         run: cmake --build out/build/${{ matrix.preset }}
 
+      # The null tests only: the GL tests (label gl) need an OpenGL 4.6 core context, which the runner has no GPU for.
       - name: Test
-        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
+        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -LE gl
 
   linux:
     name: Linux (${{ matrix.preset }})
-    runs-on: ubuntu-latest
+    # The newest Ubuntu runner: its Mesa's llvmpipe gives the OpenGL 4.6 core context the GL tests need.
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -94,14 +96,22 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       # Ninja, and the X11 and Wayland development packages SDL3's video needs (FenrirWindow). With no display on the
-      # runner, FenrirWindow's window tests report skipped.
-      - name: Install Ninja and SDL3's video dependencies
+      # runner, FenrirWindow's window tests report skipped. Xvfb and Mesa's llvmpipe give the GL tests a display and an
+      # OpenGL context, and glxinfo reports its version.
+      - name: Install Ninja, SDL3's video dependencies and a virtual display
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
             libxkbcommon-dev libwayland-dev wayland-protocols libdecor-0-dev libegl1-mesa-dev libgl1-mesa-dev \
-            libdrm-dev libgbm-dev libdbus-1-dev libibus-1.0-dev libudev-dev
+            libdrm-dev libgbm-dev libdbus-1-dev libibus-1.0-dev libudev-dev \
+            xvfb mesa-utils
+
+      # The GL tests need OpenGL 4.6 core, which llvmpipe must offer itself: MESA_GL_VERSION_OVERRIDE is never set.
+      - name: OpenGL version
+        run: |
+          xvfb-run -a glxinfo -B | tee glxinfo.txt
+          grep -q "core profile version string: 4\.6" glxinfo.txt || { echo "::error::llvmpipe does not offer OpenGL 4.6 core"; exit 1; }
 
       - name: Tool versions
         run: |
@@ -118,4 +128,8 @@ jobs:
         run: cmake --build out/build/${{ matrix.preset }} -- -k 0
 
       - name: Test
-        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure
+        run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -LE gl
+
+      # The GL tests on llvmpipe, on a virtual display: verbose, so the log shows they ran rather than skipped.
+      - name: GL tests
+        run: xvfb-run -a ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -L gl -V

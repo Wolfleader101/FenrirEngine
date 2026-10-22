@@ -1,7 +1,9 @@
 // Only src/Backend/OpenGL/ may include GL or its loader (ADR-0016). This file includes every header of the renderer
-// core, the graphics device and the null backend before anything else, so if one of them ever reaches for GL, glad or
-// SDL, or the loader's include path reaches the core's users (this test target is one), the build fails here.
+// core, the graphics device and both backends before anything else, so if one of them ever reaches for GL, glad or
+// SDL, or the loader's include path reaches a user of the OpenGL backend (this test target links it), the build fails
+// here.
 #include "Backend/Null/NullDevice.hpp"
+#include "Backend/OpenGL/OpenGLDevice.hpp"
 #include "Core/FrameRingBuffer.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/RenderGraph.hpp"
@@ -15,11 +17,11 @@
 #include "Device/Resources.hpp"
 
 #if defined(GLAD_GL_H_) || defined(__gl_h_) || defined(__GL_H__) || defined(GL_VERSION_1_1) || defined(GL_TRUE)
-#error "A renderer core or null backend header includes GL or its loader."
+#error "A renderer core or backend header includes GL or its loader."
 #endif
 
 #if defined(SDL_h_) || defined(SDL_VERSION)
-#error "A renderer core or null backend header includes SDL."
+#error "A renderer core or backend header includes SDL."
 #endif
 
 #if __has_include(<glad/gl.h>)
@@ -32,7 +34,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-TEST_CASE("The core's headers compile without GL, its loader or SDL", "[renderer][seam]")
+TEST_CASE("The core's and the backends' headers compile without GL, its loader or SDL", "[renderer][seam]")
 {
     Fenrir::Graphics::BufferHandle handle;
 

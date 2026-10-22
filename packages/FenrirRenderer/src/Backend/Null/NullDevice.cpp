@@ -209,6 +209,11 @@ namespace Fenrir::Graphics
     {
     }
 
+    Vsync NullDevice::SetVsync(Vsync mode)
+    {
+        return mode;
+    }
+
     std::unique_ptr<GraphicsDevice> CreateNullDevice(const DeviceConfig& config)
     {
         return std::make_unique<NullDevice>(config);
