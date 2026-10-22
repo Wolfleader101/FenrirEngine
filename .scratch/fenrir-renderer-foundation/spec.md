@@ -483,7 +483,7 @@ Three demo apps (RendererDemo, ScriptingDemo, PhysicsDemo) on a shared demo scaf
   - Each contract lives in `packages/<Pkg>/Managed/Fenrir.<Pkg>/`, and its native functions in a static `<Pkg>Scripting` library, so no package links FenrirScripting.
   - Each builds only with `FENRIR_ENABLE_SCRIPTING` and its package's option.
   - The app adds `X::ScriptingExtension()` for each. Each is static and needs no installed package, so scripts always load.
-- **Components,** all writable straight mirrors (C++ field order in PascalCase, C++ defaults on `new`, `new` equal to `{}`): `MeshRenderer`, `Camera` and `DirectionalLight`. `Camera`'s unions use the `[TaggedUnion]` generator: `CameraProjection { Perspective, Orthographic }`, `RenderTarget { Window, Image }` and `CameraBackground { Scene, Colour }`. `WindowId` is a plain struct in `Fenrir.Window`.
+- **Components,** all writable straight mirrors (C++ field order in PascalCase, C++ defaults on `new`, `new` equal to `{}`): `MeshRenderer`, `Camera` and `DirectionalLight`. `Camera`'s unions use the `[TaggedUnion]` generator: `CameraProjection { Perspective, Orthographic }`, `RenderTarget { Window, Image }` and `CameraBackground { Scene, Colour }`. `WindowId` is a plain struct in `Fenrir.Input`, beside the input events that name it, as C++'s is in FenrirInput (ticket 23); `Fenrir.Window` builds on `Fenrir.Input`.
 - **Resources:** `Sky` (its union through the generator) and `AmbientLight` are writable scene-resource mirrors. `InputClaims` is a read-only app-resource mirror.
 - **`Fenrir.Assets`:**
   - `AssetHandle<T>` is a blittable `{ Index, Generation }` with a phantom `T` (`Mesh`, `Material`, `Image`, `Model`, `Shader`).
