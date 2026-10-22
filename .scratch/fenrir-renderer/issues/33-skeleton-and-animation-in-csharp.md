@@ -1,7 +1,7 @@
 # What does C# get from FenrirSkeleton and FenrirAnimation?
 
 Type: grilling
-Status: open
+Status: claimed
 Blocked by: 22, 28, 29
 
 ## Question
