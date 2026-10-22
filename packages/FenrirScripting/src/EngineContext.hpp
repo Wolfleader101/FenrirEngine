@@ -60,9 +60,9 @@ namespace Fenrir::Detail
 
     /**
      * @brief What the engine itself gives scripting, as the extension every Scripting includes first: its native
-     * functions (Log, Time, Entity, components, events, queries, changes; "Fenrir.Scripting.Native.<Method>", the
-     * methods of the scripting contract's Native class), its components (EngineComponents), and `contract`, the path of
-     * the scripting contract, as its shared assembly.
+     * functions (Log, Time, Entity, components, events, queries, changes, resources;
+     * "Fenrir.Scripting.Native.<Method>", the methods of the scripting contract's Native class), its components
+     * (EngineComponents), and `contract`, the path of the scripting contract, as its shared assembly.
      */
     [[nodiscard]] ScriptingExtension BuiltInExtension(const std::filesystem::path& contract);
 } // namespace Fenrir::Detail

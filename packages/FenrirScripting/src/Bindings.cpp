@@ -8,8 +8,10 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace Fenrir::Detail
 {
@@ -261,6 +263,42 @@ namespace Fenrir::Detail
             return 0;
         }
 
+        // ResourceIdOf: the id of the resource registered under a UTF-8 name for the C# type with the given full name;
+        // -1 if there is none, -3 if it is registered for a different C# type.
+        std::int32_t ResourceIdOf(const CallContext& context, const char* name, std::int32_t length,
+                                  const char* typeName, std::int32_t typeLength)
+        {
+            if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
+            {
+                return -1;
+            }
+            return Engine(context).components->ResolveResource(
+                std::string_view(name, static_cast<std::size_t>(length)),
+                std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        }
+
+        // ResourceGet: the resource in the engine's storage (the active scene's, for a scene resource), or null when
+        // there is none now.
+        void* ResourceGet(const CallContext& context, std::int32_t id)
+        {
+            const auto* resource = Engine(context).components->GetResource(id);
+            return resource == nullptr ? nullptr : resource->find(context.GetApp());
+        }
+
+        // ResourceInsert and ResourceRemove record a change for playback and return a ChangeError code. `value` is the
+        // resource's bytes, or null for a default one.
+        std::int32_t ResourceInsert(const CallContext& context, std::int32_t id, const void* value)
+        {
+            auto& engine = Engine(context);
+            return static_cast<std::int32_t>(engine.changes->InsertResource(*engine.components, id, value));
+        }
+
+        std::int32_t ResourceRemove(const CallContext& context, std::int32_t id)
+        {
+            auto& engine = Engine(context);
+            return static_cast<std::int32_t>(engine.changes->RemoveResource(*engine.components, id));
+        }
+
         // QueryCount and QueryFill: see Queries.hpp.
         std::int32_t QueryCount(const CallContext& context, const std::int32_t* ids, std::int32_t count)
         {
@@ -340,9 +378,58 @@ namespace Fenrir::Detail
             NativeFunction::Make<&ChangesDiscard>(prefix + "ChangesDiscard"),
             NativeFunction::Make<&QueryCount>(prefix + "QueryCount", unknown),
             NativeFunction::Make<&QueryFill>(prefix + "QueryFill", unknown),
+            NativeFunction::Make<&ResourceIdOf>(prefix + "ResourceIdOf", unknown),
+            NativeFunction::Make<&ResourceGet>(prefix + "ResourceGet"),
+            NativeFunction::Make<&ResourceInsert>(prefix + "ResourceInsert", notActive),
+            NativeFunction::Make<&ResourceRemove>(prefix + "ResourceRemove", notActive),
         };
         extension.components = EngineComponents();
         extension.sharedAssemblies = {contract};
         return extension;
     }
 } // namespace Fenrir::Detail
+
+namespace Fenrir
+{
+    ChangeBuffer CallContext::Changes() const noexcept
+    {
+        return ChangeBuffer(*m_app, *Detail::CallContextAccess::Engine(*this).changes);
+    }
+
+    std::uint32_t ChangeBuffer::CreateEntity() const
+    {
+        return m_changes->Create(m_app->GetActiveScene().GetEntityList());
+    }
+
+    bool ChangeBuffer::DestroyEntity(std::uint32_t entity) const
+    {
+        return m_changes->Destroy(m_app->GetActiveScene().GetEntityList(), entity) == Detail::ChangeError::None;
+    }
+
+    bool ChangeBuffer::RecordOn(std::uint32_t entity, std::function<void(Entity&)> change) const
+    {
+        if (!m_app->GetActiveScene().GetEntityList().HasEntity(entity))
+        {
+            return false;
+        }
+        m_changes->RecordNative([entity, apply = std::move(change)](App& app) {
+            EntityList& entities = app.GetActiveScene().GetEntityList();
+            if (!entities.HasEntity(entity))
+            {
+                return false;
+            }
+            Entity target = entities.GetEntity(entity);
+            apply(target);
+            return true;
+        });
+        return true;
+    }
+
+    void ChangeBuffer::Record(std::function<void(App&)> change) const
+    {
+        m_changes->RecordNative([apply = std::move(change)](App& app) {
+            apply(app);
+            return true;
+        });
+    }
+} // namespace Fenrir

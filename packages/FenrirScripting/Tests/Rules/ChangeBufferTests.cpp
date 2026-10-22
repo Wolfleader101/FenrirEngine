@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 namespace
 {
@@ -469,4 +470,126 @@ TEST_CASE("an event whose queue has gone is skipped with a warning", "[change-bu
     REQUIRE((result.applied == 0 && result.skipped == 1));
     INFO("The skipped send should have been reported");
     REQUIRE(world.headless.Logger().Contains(Testing::LogLevel::Warn, "skipped sending an event"));
+}
+
+namespace
+{
+    // A scene resource and a read-only app resource, as an extension would register them.
+    struct Weather
+    {
+        float Wind = 0.5F;
+    };
+
+    struct Clock
+    {
+        double Seconds = 0.0;
+    };
+} // namespace
+
+template <>
+struct Iris::StructMapping<Weather>
+{
+    static constexpr std::string_view typeName = "Rules.Weather";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Weather, Wind));
+};
+
+template <>
+struct Iris::StructMapping<Clock>
+{
+    static constexpr std::string_view typeName = "Rules.Clock";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(Clock, Seconds));
+};
+
+TEST_CASE("inserting and removing a resource play back in order, an insert with its value", "[change-buffer]")
+{
+    World world;
+    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    Weather value{3.0F};
+    REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
+    value.Wind = 9.0F;
+    REQUIRE(world.buffer.RemoveResource(world.registry, weather) == ChangeError::None);
+    REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
+    REQUIRE(world.buffer.InsertResource(world.registry, weather, nullptr) == ChangeError::None);
+    Scene& scene = world.headless.Get().GetActiveScene();
+    INFO("A recorded insert reached the scene before playback");
+    REQUIRE(scene.GetResource<Weather>() == nullptr);
+
+    const auto result = world.Apply();
+
+    INFO("Every change should be applied");
+    REQUIRE(result.applied == 4);
+    INFO("The last insert, with no value, should leave the C++ default");
+    REQUIRE(scene.GetResource<Weather>() != nullptr);
+    REQUIRE(scene.GetResource<Weather>()->Wind == 0.5F);
+}
+
+TEST_CASE("an insert copies its value when it is recorded", "[change-buffer]")
+{
+    World world;
+    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    Weather value{3.0F};
+    REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
+    value.Wind = 9.0F;
+
+    (void)world.Apply();
+
+    INFO("The insert should carry the value as it was when recorded");
+    REQUIRE(world.headless.Get().GetActiveScene().GetResource<Weather>()->Wind == 3.0F);
+}
+
+TEST_CASE("inserting or removing an unknown or read-only resource is refused", "[change-buffer]")
+{
+    World world;
+    const auto clock = world.registry.AddResource(MakeReadOnlyAppResource<Clock>("Rules.Clock"));
+    constexpr std::int32_t unknown = 42;
+
+    INFO("An unknown resource should be refused as unknown");
+    REQUIRE(world.buffer.InsertResource(world.registry, unknown, nullptr) == ChangeError::UnknownResource);
+    REQUIRE(world.buffer.RemoveResource(world.registry, unknown) == ChangeError::UnknownResource);
+    INFO("A read-only resource should be refused as read-only");
+    REQUIRE(world.buffer.InsertResource(world.registry, clock, nullptr) == ChangeError::ReadOnlyResource);
+    REQUIRE(world.buffer.RemoveResource(world.registry, clock) == ChangeError::ReadOnlyResource);
+    INFO("A refused change should not be recorded");
+    REQUIRE(world.buffer.Empty());
+}
+
+TEST_CASE("a change a native function recorded plays back in order with the rest", "[change-buffer]")
+{
+    World world;
+    const auto entity = world.NewEntity();
+    std::string order;
+    world.Add(entity, nullptr);
+    world.buffer.RecordNative([&](App&) {
+        order += world.VelocityOf(entity) != nullptr ? "after-add;" : "before-add;";
+        return true;
+    });
+    world.Remove(entity);
+    world.buffer.RecordNative([&](App&) {
+        order += world.VelocityOf(entity) == nullptr ? "after-remove;" : "before-remove;";
+        return false;
+    });
+
+    const auto result = world.Apply();
+
+    INFO("The native changes should run between the others, in the order recorded: " + order);
+    REQUIRE(order == "after-add;after-remove;");
+    INFO("A native change that could not apply should count as skipped");
+    REQUIRE((result.applied == 3 && result.skipped == 1));
+    REQUIRE(world.headless.Logger().Contains(Testing::LogLevel::Warn, "skipped a change a native function recorded"));
+}
+
+TEST_CASE("discarding drops the changes native functions recorded", "[change-buffer]")
+{
+    World world;
+    bool ran = false;
+    world.buffer.RecordNative([&](App&) {
+        ran = true;
+        return true;
+    });
+    world.buffer.Discard(world.Entities());
+
+    const auto result = world.Apply();
+
+    INFO("A discarded native change ran");
+    REQUIRE((!ran && result.applied == 0));
 }

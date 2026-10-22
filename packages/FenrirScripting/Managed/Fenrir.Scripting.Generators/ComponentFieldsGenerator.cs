@@ -17,13 +17,15 @@ namespace Fenrir.Scripting.Generators;
 /// component's storage (<c>ref readonly</c> for a <c>readonly</c> field, which scripts read but never write). A script
 /// then writes <c>t.Position.X += 1</c> with no <c>ref</c> at the call site. Every component
 /// also gets <c>ref readonly</c> properties on <c>ReadOnlyRef&lt;T&gt;</c>, and a component that only implements
-/// <c>IReadOnlyComponent</c> gets nothing else, so scripts cannot write it.
+/// <c>IReadOnlyComponent</c> gets nothing else, so scripts cannot write it. Native resources (<c>IResource</c> and
+/// <c>IReadOnlyResource</c>, which extend the component interfaces) get the same accessors.
 /// </summary>
 [Generator]
 public sealed class ComponentFieldsGenerator : IIncrementalGenerator
 {
     private const string ComponentInterface = "Fenrir.Scripting.IComponent";
     private const string ReadOnlyComponentInterface = "Fenrir.Scripting.IReadOnlyComponent";
+    private const string ReadOnlyResourceInterface = "Fenrir.Scripting.IReadOnlyResource";
 
     // Members of Ref<T> itself: a component field with one of these names would be shadowed, never reached.
     private static readonly string[] RefMembers = { "Value", "IsNull" };
@@ -172,10 +174,12 @@ public sealed class ComponentFieldsGenerator : IIncrementalGenerator
         if (ns != null)
             source.Append("}\n");
 
-        // A component the script defines (not one mirroring a native component) is reported to the engine as it loads.
+        // A component the script defines (not one mirroring a native component, and not a native resource, which shares
+        // the accessors but is no component) is reported to the engine as it loads.
         bool isNative = symbol.GetAttributes().Any(static attribute =>
             attribute.AttributeClass?.ToDisplayString() == "Fenrir.Scripting.NativeComponentAttribute");
-        string? tableEntry = writable && !isNative && !symbol.IsReadOnly ? fullName : null;
+        bool isResource = symbol.AllInterfaces.Any(static i => i.ToDisplayString() == ReadOnlyResourceInterface);
+        string? tableEntry = writable && !isNative && !isResource && !symbol.IsReadOnly ? fullName : null;
         return new ComponentModel(key, source.ToString(), diagnostics.ToImmutableArray(), tableEntry);
     }
 
