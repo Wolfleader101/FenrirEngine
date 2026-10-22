@@ -10,6 +10,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(FENRIR_ENABLE_SCRIPTING "Build the Iris .NET hosting library (packages/Iris)" OFF)
 option(FENRIR_ENABLE_PHYSICS "Build FenrirPhysics and JoltPhysics (the packages/FenrirPhysics/libs/JoltPhysics submodule)" ON)
+option(FENRIR_ENABLE_RENDERER "Build FenrirWindow and SDL3 (the packages/FenrirWindow/libs/SDL submodule); the renderer joins it later" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 option(FENRIR_BUILD_EXAMPLES "Build the DemoApp (needs its third-party libraries in examples/DemoApp/libs, which are not submodules)" ON)
 
@@ -50,6 +51,10 @@ add_subdirectory(packages/FenrirScene)
 add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
 add_subdirectory(packages/FenrirInput)
+
+if(FENRIR_ENABLE_RENDERER)
+    add_subdirectory(packages/FenrirWindow)
+endif()
 
 if(FENRIR_ENABLE_PHYSICS)
     add_subdirectory(packages/FenrirPhysics)

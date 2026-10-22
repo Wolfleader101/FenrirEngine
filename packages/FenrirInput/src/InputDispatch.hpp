@@ -37,7 +37,12 @@ namespace Fenrir
         class InputDispatch
         {
           public:
-            /** @brief Dispatches everything fed since the last dispatch. Runs in PreUpdate, sequentially. */
+            /**
+             * @brief Dispatches everything fed since the last dispatch (Input::Dispatch). Runs in PreUpdate,
+             * sequentially, and may run more than once a frame: from FenrirInput's own system and from a feeder that
+             * runs after it, such as FenrirWindow's pump. Routers must still get one BeginDispatch per frame, before
+             * the frame's first input.
+             */
             static void Run(App& app);
 
           private:
