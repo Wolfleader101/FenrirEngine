@@ -140,7 +140,7 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Scripting extension**
-What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, C++ events and shared structs, its extension state, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension. The engine's own scripting API is the *built-in extension*, on the same seam.
+What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, native resources, C++ events and shared structs, its extension state, the shared assemblies that are its C# contract, and the extension stages it hosts. FenrirScripting knows no package beyond its extension. The engine's own scripting API is the *built-in extension*, on the same seam.
 *Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).
 
 **Extension state**
@@ -167,17 +167,29 @@ Everything that lets one language use the engine: the generated mirrors of the e
 A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest.
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
+**Extension stage**
+A named point inside a package's own C++ work where C# systems run, declared by the package's scripting extension and joined with `[StageSystem(name, Order)]` (ADR-0039). The pose stages are the first. The extension runs each order group with one call into the script, and the systems' structural changes play back when the hosting system returns.
+*Avoid:* phase (FenrirApp's), hook, callback.
+
 **Native function**
 A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); its C# declaration and its registration are generated from it. In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
 *Avoid:* binding (that is the whole of what a language gets), internal call (the Iris-level term), engine API.
 
+**Native resource**
+A plain-data C++ resource, scene or app, that C# sees as a blittable struct marked `[NativeResource]` and reaches through `Resources.Get<T>()` (ADR-0029). A resource with methods (`Keyboard`, `DebugDraw`) is not one: C# gets a facade of native functions instead.
+*Avoid:* singleton, global, resource mirror (informal).
+
 **Call context**
-What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities. A native function may read and write component data through it, but makes no structural changes. It carries nothing of any extension: that is the extension state.
+What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities and the change buffer. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.
 
 ## FenrirEngine core
+
+**Colour**
+`Fenrir::Colour`: a colour as linear red, green, blue and alpha, however it was written (an sRGB hex value is converted when it is made).
+*Avoid:* color (spelling), packed colour, RGBA (alone).
 
 **World transform**
 Where an entity is in the scene, as opposed to its `Transform`, which is relative to its parent. Always computed from the entity's ancestors, never stored. Its scale is approximate when a parent's non-uniform scale meets a child's rotation (the exact form is the world matrix).
@@ -353,3 +365,385 @@ How much a tyre is sliding over the ground rather than rolling. Along the wheel,
 **Collision layer**
 One of 32 groups a body belongs to (it may belong to several). With its *collision mask*, the layers it collides with, it decides which bodies can touch: two touch only when each one's mask includes a layer of the other.
 *Avoid:* channel, group (a *collision group*, bodies that ignore each other, is a separate idea).
+
+## FenrirEngine rendering
+
+**Graphics API**
+An interface a GPU driver offers: OpenGL, Vulkan, D3D12, Metal.
+*Avoid:* backend (a graphics backend is FenrirRenderer's code for one), renderer.
+
+**Graphics backend**
+FenrirRenderer's private adapter for one graphics API, or the null backend, which draws nothing. One is chosen when the renderer is installed, and nothing outside FenrirRenderer names it.
+*Avoid:* renderer, RHI, driver.
+
+**Graphics device**
+The thin, private interface every graphics backend implements: GPU resources, passes and the commands recorded into them. The rest of FenrirRenderer draws only through it.
+*Avoid:* RHI, GPU layer, render API.
+
+**Shader container**
+The one versioned file `FenrirShaderCompiler` writes per shader program: each stage's compiled output per graphics backend (SPIR-V for OpenGL today), every variant, and the reflection debug builds check layouts against. FenrirRenderer's own shaders are embedded as containers; users' are loaded as assets.
+*Avoid:* shader binary, shader cache, effect.
+
+**Shader variant**
+One combination of a shader program's `#define` keys (lit or unlit, later skinned), compiled offline into its shader container.
+*Avoid:* permutation, specialisation (specialisation constants are a different mechanism, not used yet).
+
+**FenrirShaderCompiler**
+FenrirRenderer's build-time executable that compiles GLSL to SPIR-V and writes shader containers, run by the CMake function `fenrir_add_shaders`. It is never linked into the engine.
+*Avoid:* shaderc (a Google library), glslc.
+
+**Renderer core**
+The middle of FenrirRenderer's three layers: meshes, materials, the draw list, the render graph and its render features, over the graphics device. It knows nothing of the app, scenes or entities; the ECS facade above it reads the scene for it.
+*Avoid:* render engine, render backend.
+
+**Draw list**
+The plain-data list of what a frame draws, rebuilt each frame from the active scene: one item per draw, with its mesh, material, world matrix and sort key.
+*Avoid:* render queue, render world (a copy of the scene kept in sync, which FenrirRenderer does not have).
+
+**Render graph**
+The passes of one frame and the GPU resources they use, built and compiled every frame: ordered by render stage and dependencies, unused passes culled, transient targets pooled.
+*Avoid:* frame graph, render pipeline.
+
+**Render pass**
+One step of the render graph: the resources it uses and how, a render stage, and a function that records its commands.
+*Avoid:* pass (alone, when a graphics device pass could be meant), render node.
+
+**Render stage**
+Where in the frame a render pass runs, from a fixed list: `Shadow`, `Opaque`, `Background`, `Transparent`, `Debug`, `PostProcess`, `Output`, `Overlay`.
+*Avoid:* phase (a *phase* is FenrirApp's, such as `Render`), layer, queue.
+
+**Render feature**
+A part of the renderer core that adds render passes to each frame's render graph, such as the background or debug drawing.
+*Avoid:* plugin, render module.
+
+**View**
+One camera's drawing of the scene in a frame: its chain of render passes, from its scene targets to its output (the window or a texture).
+*Avoid:* viewport (the rectangle a view draws into), camera (the component a view comes from).
+
+**Graphics surface**
+What a window offers a graphics backend to draw into and present: the OpenGL context today, later a Vulkan surface, an `HWND` or a Metal layer. FenrirWindow creates it on the renderer's request; the backend owns what is built on it, such as a swapchain (ADR-0022).
+*Avoid:* swapchain (the backend's, built on a surface), context (alone), canvas.
+
+**Main window**
+The window FenrirWindow creates first and the foundation renderer draws to; closing it stops the app by default.
+*Avoid:* primary window, root window.
+
+**MeshRenderer**
+The component that makes an entity drawn: one mesh, one material and whether it is visible, one draw. A mesh with several materials is several entities (ADR-0023).
+*Avoid:* renderable, model (FenrirAssets' asset), mesh instance.
+
+**Fallback material**
+The built-in flat magenta unlit material a `MeshRenderer` draws with when its material is empty or stale, so the mistake shows on screen.
+*Avoid:* error material, default material (a default suggests it is meant to be used).
+
+**Material**
+A shared `MaterialData` asset saying how a mesh is drawn: a shader, a blend mode, whether it is double-sided, and its material parameters. Many entities name one material by its asset handle (ADR-0024).
+*Avoid:* material instance (there are no per-entity overrides), shader (a material names one), effect.
+
+**Material parameter**
+One named value in a material, set by name from C++ or C#: a scalar, vector, colour or texture with its sampler. The shader's material set gives each name its place. Its effective value is the material's parameter override, else the shader's parameter default.
+*Avoid:* uniform, property.
+
+**Parameter default**
+The value a material parameter takes when the material does not set it: what the shader declares with `#pragma fenrir default`, else zero (for a texture: white). The shader compiler checks it and stores it in the shader container's reflection (ADR-0024).
+*Avoid:* GLSL default (GLSL block members have none), initial value.
+
+**Parameter override**
+A value a material sets for one of its parameters, overriding the shader's parameter default. A material stores only its overrides, and `Reset` removes one. It is not a per-entity override, which would override a material and does not exist yet.
+*Avoid:* set value, local value.
+
+**Blend mode**
+How a material's pixels combine with what is behind them: `Opaque`, `Masked` (alpha cutoff), `AlphaBlend` or `Additive`. It picks the render stage and whether depth is written.
+*Avoid:* alpha mode (glTF's term, mapped onto it), render queue.
+
+**Material set**
+Binding set 2 of every material shader: its `MaterialParams` block and textures. Unlike the frame, view and draw sets, its layout is read from the shader container's build-time reflection.
+*Avoid:* descriptor set (Vulkan's), material block (only the uniform block in it).
+
+**Camera**
+The component that makes a view: its entity's world transform is where it looks from, plus a projection, an order, a viewport, a render target and a background. Every enabled camera in the active scene draws (ADR-0026).
+*Avoid:* active camera (there is none; every enabled camera draws), view (what a camera makes each frame), eye.
+
+**Viewport**
+The rectangle of its render target a view draws into, given as fractions of the target from its top-left corner.
+*Avoid:* view (the drawing itself), screen rect, scissor.
+
+**Render target**
+Where a view's output goes: a window, or an image asset made with a size but no pixels, which materials and the overlay sample like any image (ADR-0026).
+*Avoid:* render texture (no separate type), framebuffer, scene targets (a view's own intermediate colour and depth).
+
+**Sky**
+The scene resource saying what is drawn behind everything: a solid colour or a skybox. A camera uses it, or overrides it with a colour.
+*Avoid:* environment, clear colour (one of its forms), skydome.
+
+## FenrirEngine debug drawing
+
+**FenrirDebugDraw**
+The engine's debug-drawing package: the shapes and text game code and other packages ask to see, kept per scene as plain data with no GPU code. FenrirRenderer draws them; FenrirPhysics is one of the packages that draws into it (ADR-0025).
+*Avoid:* gizmos (Bevy's name; an editor's gizmos are handles you drag), debug renderer, line batcher.
+
+**Debug draw item**
+One shape or piece of text in a scene's debug drawing, kept for its duration: once, some seconds, or until cleared.
+*Avoid:* debug line (one kind of item), primitive, gizmo.
+
+**Debug group**
+A named set of debug draw items that is shown, hidden or cleared together, such as physics's.
+*Avoid:* category (physics's categories choose what it generates), layer, channel.
+
+**On-screen message**
+Debug text stacked in a corner of the window, newest first, which a later message with the same key replaces.
+*Avoid:* log (FenrirLogger's), toast, notification.
+
+## FenrirEngine 2D drawing
+
+**FenrirDraw2D**
+The engine's package of 2D draw data: plain data with no GPU code, knowing no renderer or UI. UI libraries and a future painter produce it; FenrirRenderer draws it (ADR-0027).
+*Avoid:* UI renderer, canvas (a future painter's surface), ImGui backend.
+
+**2D draw list**
+`DrawList2D`: one batch of 2D drawing as plain data: vertex and index bytes, 2D pipeline descriptions, and commands with textures, a scissor and an index range, in local logical coordinates. The same list can be shown on screen, in a texture or in the world; the target decides where.
+*Avoid:* draw list (alone: the frame's 3D one), draw data (ImGui's), display list.
+
+**2D pipeline description**
+A plain value saying how a 2D draw list's triangles are drawn: shader, vertex layout, index type, blend mode, input colour space and blend space. The renderer makes and caches a device pipeline from it.
+*Avoid:* material (a 3D asset), pipeline handle (the device's).
+
+**2D target**
+Where FenrirRenderer's 2D render feature draws a 2D draw list, supplying the transform from local to clip space, depth and how a scissor is realised. The window overlay is the only one built; an image target and a world-space target are planned.
+*Avoid:* render target (a camera's image), canvas, layer.
+
+**Overlay layer**
+The integer a 2D draw list is submitted to a window's overlay with: layers draw lowest first, and debug screen text draws above them all.
+*Avoid:* z-order, render stage (`Overlay` is the stage they all draw in), sort key.
+
+## FenrirEngine assets
+
+**FenrirAssets**
+The engine's asset package: loads files into plain CPU-side data and owns it behind asset handles. It has no GPU code; FenrirRenderer and animation each turn its data into their own form (ADR-0021).
+*Avoid:* resource manager, asset server, asset database (cooking and an editor database are out of scope).
+
+**Asset**
+One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, clip, shader container or model, loaded from a file or added from code.
+*Avoid:* resource (Iris and physics use it otherwise), file.
+
+**Asset handle**
+`AssetHandle<T>`: a typed index plus generation naming an asset. Plain data that keeps nothing alive; once its asset is freed, the generation no longer matches and users skip it.
+*Avoid:* reference, pointer, asset id.
+
+**Asset owner**
+The app or a scene, named when an asset is loaded or added. An asset is freed when its last owner ends, or when it is unloaded explicitly.
+*Avoid:* reference count, scope.
+
+**Asset root**
+The directory relative asset paths resolve against, set in `AssetsConfig`; by default `assets/` beside the executable.
+*Avoid:* content directory, mount, virtual file system.
+
+**Model**
+The asset a model file loads as: its whole node tree, bones included, pointing at its meshes, materials and skeletons, and its clips.
+*Avoid:* scene (FenrirScene's), prefab.
+
+**Sub-asset**
+An asset inside a model file, loadable on its own by label: `hero.fbx#Run`.
+*Avoid:* sub-resource, embedded asset.
+
+## FenrirEngine animation
+
+**FenrirSkeleton**
+The engine's skeleton package: each skeleton's runtime pose, bone lookup, pose modifiers, finalisation and bone attachments. It works without animation. FenrirRenderer reads it only through the skinning source, knowing neither it nor FenrirAnimation (ADR-0028, ADR-0041).
+*Avoid:* rig, armature (Blender's).
+
+**FenrirAnimation**
+The engine's animation package: plays and blends clips into a skeleton's base pose. It has no GPU code and needs no renderer (ADR-0028).
+*Avoid:* animator (as the package's name), animation system.
+
+**Bone**
+One node of a skeleton, named by its stable index in the skeleton's parents-first order and found by name. Bones are entries in arrays, not entities.
+*Avoid:* joint (a *joint* is a physics constraint between two bodies), node (a model's), socket.
+
+**Bone weight**
+How much one bone moves one vertex of a skinned mesh; each vertex has at most four.
+*Avoid:* joint weight, influence (alone), skin weight.
+
+**Clip**
+An asset of keyed bone transforms over time in seconds, plus timed clip events. It binds to skeletons from its own file by source identity and to others by bone name, so it plays on any skeleton whose bone names match (ADR-0031). Playback runs from 0 to its last key's time, its duration.
+*Avoid:* animation (alone), take, sequence, action (Blender's).
+
+**Skeleton entity**
+The entity that carries a skeleton instance's `SkeletonPose`. Skinned meshes and bone attachments name it.
+*Avoid:* rig entity, armature, root bone (a bone, not an entity).
+
+**Skeleton pose**
+`SkeletonPose`: the plain component naming one skeleton instance, whose mutable pose FenrirSkeleton holds as arrays indexed by bone: the base pose, the final pose, model-space matrices and the skinning palette. Model space is relative to the skeleton entity, never including its `Transform`; a bone's world matrix is the skeleton entity's world matrix times its model matrix. The skeleton asset it instances, `SkeletonData`, never changes (ADR-0031).
+*Avoid:* skeleton instance (alone), rig state.
+
+**Synthetic owner**
+A node the importer adds to a model so that each skeleton has its own skeleton entity when several would otherwise share one node.
+*Avoid:* dummy node, helper node (FBX's).
+
+**Ordinary node**
+A model node that is not a bone; it is spawned as an entity, and follows a bone through a bone attachment when it sits below one.
+*Avoid:* non-bone (as a noun), empty.
+
+**Rest pose**
+A skeleton's local bone transforms as the file authored them; a new instance starts in it. It need not match the bind pose.
+*Avoid:* default pose, T-pose, bind pose.
+
+**Bind pose**
+The pose a skeleton's meshes were skinned in, given by its inverse binds; at it, every skinning palette matrix is the identity.
+*Avoid:* rest pose, reference pose.
+
+**Skeleton bind space**
+The space skinned vertices are stored in: the skeleton entity's model space with the skeleton in its bind pose. Every importer normalises into it (ADR-0031).
+*Avoid:* mesh space (a mesh node's own), bind-shape space.
+
+**Base pose**
+A skeleton's local bone transforms as animation produced them, before any pose modifier. Powered ragdolls drive towards it.
+*Avoid:* animated pose (ambiguous once modifiers exist), rest pose, bind pose.
+
+**Final pose**
+A skeleton's local bone transforms after every pose modifier; finalisation derives model-space matrices and the skinning palette from it.
+*Avoid:* output pose, blended pose.
+
+**Pose modifier**
+Code that changes a skeleton's pose after animation, in order: IK, procedural posing, ragdoll blending, gameplay adjustments. It runs in the `Modify` pose stage and writes pose targets through a pose edit, each resolved into the final pose at once, so later modifiers see earlier ones' results (ADR-0033).
+*Avoid:* override (the first modifier's kind, not the general term), post-process, constraint (physics's sense).
+
+**Pose target**
+`Target`: one write a pose modifier makes to a bone: a transform in local, model or world space, a mask of translation, rotation and scale, and a weight. It is met when written, not held against later moves of the bone's ancestors.
+*Avoid:* goal, effector (IK's), constraint.
+
+**Pose edit**
+`PoseEdit`: a pose modifier's only access to one skeleton instance's final pose while it is built: reads of the base, local and model-space pose and writes of pose targets. Valid only during the modifier call that opened it.
+*Avoid:* pose handle, pose context.
+
+**Pose pipeline**
+FenrirSkeleton's ordered pose work each frame, on the active scene: reconcile, `Animate`, prepare, `Modify`, finalise, attach, `Late`. Its order does not depend on which packages are installed first (ADR-0033). A tick-posed skeleton also runs reconcile, `Animate` and a base finalise in each `PreTick`, and its frame pipeline blends the last two tick poses in place of `Animate` (ADR-0040).
+*Avoid:* animation update, pose graph.
+
+**Pose stage**
+One of the pose pipeline's public steps that others add work to, `Animate`, `Modify` or `Late`, each hosted in an app phase (all in `PostUpdate`, and `Animate` also in `PreTick` for tick-posed skeletons, ADR-0040) and ordered within by an order number.
+*Avoid:* phase (FenrirApp's), render stage (the renderer's), pass.
+
+**Skinning palette**
+One matrix per bone (model-space × inverse bind) that skinned vertices are moved by; one per skeleton instance, shared by every mesh skinned to it, built lazily for the current pose generation. The renderer uploads it as rows of 3×4 affine matrices (ADR-0035).
+*Avoid:* bone-matrix buffer (the renderer's upload of it), joint matrices.
+
+**Skinning source**
+`SkinningSource`: the interface, declared in FenrirAssets, through which the renderer reads a skeleton instance's state, pose generation, skinning palette and model matrices, and spawns a model's skeletons. FenrirSkeleton registers its implementation at install; with none registered, rigid meshes still draw and skinned draws are skipped (ADR-0041).
+*Avoid:* skeleton service, pose provider, animation backend.
+
+**Pose generation**
+A number FenrirSkeleton advances whenever a skeleton instance's final pose changes or the instance is rebuilt, never repeated within a scene; moving the skeleton entity does not advance it. Caches of a pose (the palette, the renderer's upload) are keyed by it (ADR-0035).
+*Avoid:* pose revision (an asset's revision is another thing), frame number, dirty flag.
+
+**Pose override**
+`PoseOverride`: FenrirSkeleton's first pose modifier, at `ModifierOrder::Override`: persistent pose targets per bone, set and cleared from outside the pipeline and written each frame in bone order, scaled by override weights (ADR-0033, ADR-0038).
+*Avoid:* modifier (the general term), ragdoll blend.
+
+**Override weight**
+A per-bone scale, default 1, that gameplay sets on a skeleton instance to say how much its pose override entries count, apart from the entries themselves; set per bone or over a subtree, latest assignment winning (ADR-0038).
+*Avoid:* blend weight (pose blending's), physics weight, influence.
+
+**Ragdoll glue**
+App code, or a package the physics map's ragdoll spec defines, that joins a ragdoll's bodies to a skeleton: it writes body poses in as pose overrides and reads the base pose for motor targets, so neither physics nor FenrirSkeleton depends on the other (ADR-0028, ADR-0038).
+*Avoid:* ragdoll system, physics animation.
+
+**Skinned mesh**
+A mesh whose vertices carry bone weights and are stored in skeleton bind space, drawn on an entity with a `SkinnedMesh` naming its skeleton entity. It is drawn with the skeleton entity's world matrix; its own entity's `Transform` is never applied (ADR-0035).
+*Avoid:* skin (glTF's grouping of joints), skeletal mesh (Unreal's asset).
+
+**Bind signature**
+A deterministic hash of a skeleton's bones, parents, engine names and inverse binds. A skinned mesh records the signature it was baked against, and the renderer skips a mesh paired with a skeleton whose signature differs (ADR-0035).
+*Avoid:* skeleton hash, skeleton id, compatibility key.
+
+**Bone attachment**
+`BoneAttachment`: a component that places its entity at a bone of a skeleton entity, by the bone's name, plus an offset. While it is present, FenrirSkeleton owns the entity's `Transform`: the object is moved through the offset, and its parent may be any entity. A named attachment point is an ordinary node that already has one (ADR-0037).
+*Avoid:* socket, mount point, parent bone.
+
+**Attachment state**
+Whether a bone attachment was placed this frame, and if not why: attached, skeleton missing, skeleton unavailable, bone not found, transform missing, or unplaceable. An attachment that is not placed keeps its last `Transform` (ADR-0037).
+*Avoid:* attachment status, resolved flag.
+
+**Pose timing**
+`PoseTiming`, a field of `SkeletonPose`: whether a skeleton's base pose is animated once a frame (`Frame`, the default) or once per fixed tick at tick time (`Tick`, a *tick-posed* skeleton), for bodies that must follow its bones during the physics step (ADR-0040).
+*Avoid:* update mode, animate physics (Unity's), fixed animation.
+
+**Simulation pose**
+A tick-posed skeleton's base pose as the last fixed tick evaluated it, with no pose modifiers: what tick code and the glue moving bone-following bodies read, through `PoseKind::Simulation`. On a frame-posed skeleton it is the render pose (ADR-0040).
+*Avoid:* physics pose, tick pose, fixed pose.
+
+**Render pose**
+A skeleton's final pose for this frame, what is drawn and what attachments follow. On a tick-posed skeleton it is built from the blend of the last two tick poses at physics's interpolation fraction, then modified as usual (ADR-0040).
+*Avoid:* display pose, interpolated pose, visual pose.
+
+**Animator**
+`Animator`: the plain component on a skeleton entity naming the clip to play, its speed, its loop mode (`Loop` or `Once`) and whether it plays. Game code writes it and FenrirAnimation never does; it holds no time. While it names a clip, FenrirAnimation owns the skeleton's whole base pose (ADR-0034). It is the skeleton's base animation layer, and gains a crossfade on a clip change (ADR-0036).
+*Avoid:* animation player, animation component, FenrirAnimation (the package).
+
+**Playback cursor**
+Where an `Animator`'s clip is, in seconds, owned by FenrirAnimation: it advances by frame time × speed, wraps or clamps by loop mode, and moves otherwise only by an explicit seek, which crosses no events.
+*Avoid:* playhead, animation time, clip time (a key's authored time).
+
+**Animation event**
+`AnimationEvent`: the ECS event sent when a playback cursor crosses one of its clip's timed events, identified by the event's index and the clip's revision. Delivery is best-effort per frame: at most a budget per skeleton per frame, the rest counted as dropped.
+*Avoid:* notify (Unreal's), animation callback, marker.
+
+**Animation layer**
+`AnimationLayer`: a plain component on its own entity that plays a clip onto a named skeleton entity over the layers below it, with a weight, an optional bone mask and a mode (override or additive). The skeleton's `Animator` is the base layer beneath them all; layers compose in order into the base pose (ADR-0036).
+*Avoid:* animation track, slot, blend node.
+
+**Crossfade**
+A layer's fade from its outgoing clip (or a snapshot of an interrupted fade) to its new clip over the layer's `fadeSeconds`, started by changing its clip; both clips keep their own playback cursors meanwhile.
+*Avoid:* transition (a state machine's), blend (the general operation).
+
+**Bone mask**
+`BoneMask`: a shared asset of per-bone weights, listed by engine bone name for a single bone or a subtree, that limits a layer to part of a skeleton; resolved per skeleton by name.
+*Avoid:* avatar mask (Unity's), bone filter, blend mask.
+
+**Additive layer**
+An animation layer whose clip adds its difference from a reference pose onto the pose beneath, scaled by the layer's weight, instead of replacing it.
+*Avoid:* additive clip (the clip is ordinary; the layer is additive), delta animation.
+
+**Reference pose**
+The complete local pose an additive layer's deltas are measured from: its clip at time 0 by default, or the skeleton's rest pose.
+*Avoid:* base pose (FenrirSkeleton's, another thing), bind pose, zero pose.
+
+## FenrirEngine input
+
+**Key code**
+Which key was pressed as the keyboard layout names it: the key that types Z on an AZERTY keyboard is `Key::W` on QWERTY and `Key::Z` on AZERTY. Use it for shortcuts named by letter.
+*Avoid:* keycode, virtual key, key (alone, when the difference matters).
+
+**Scancode**
+Where a key sits on the keyboard, whatever the layout: the same physical key on every layout. Use it for movement keys placed by position, such as WASD.
+*Avoid:* physical key, raw key.
+
+**Input feed**
+FenrirInput's public entry point, through which raw input comes in during `PreUpdate`: FenrirWindow passes on what its windowing library delivers, and tests or headless apps feed input by hand (ADR-0017).
+*Avoid:* input backend, input driver.
+
+**Input edge**
+A press or release since the reader last looked: "just pressed" or "just released". Read from `PreTick`, `Tick` or `PostTick`, the edges are those since the last tick; from any other phase, those since the last frame. So each press reaches each phase once.
+*Avoid:* trigger, down/up (they mean held or not held).
+
+**Input router**
+A callback registered on FenrirInput with a priority, such as a UI, that sees each input event before game code and may consume it. Consumed input never reaches the `Keyboard`, `Mouse` or `Gamepads` resources or game event readers (ADR-0027).
+*Avoid:* input handler, input layer, listener.
+
+**Input claim**
+What a router says it is doing with input in a window: the pointer is over it, it has captured the pointer, it has keyboard focus, or it wants text; plus an app-wide gamepad claim. Claims describe the interaction and drive text input; routers decide what is consumed.
+*Avoid:* capture flag, want-capture (ImGui's), focus (alone).
+
+**Control owner**
+Whoever took a key's, button's or pointer's press: the router that consumed it, or the game. Its repeats and its release go to the same owner, and a cancelled control's release goes to no one.
+*Avoid:* device owner (ownership is per control), grab.
+
+## FenrirEngine demo apps
+
+**Demo app**
+One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
+*Avoid:* DemoApp (the legacy single app, deleted once the demo apps replace it), sample, example (alone).
+
+**Demo scaffold**
+What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
+*Avoid:* demo framework, demo base, harness.
