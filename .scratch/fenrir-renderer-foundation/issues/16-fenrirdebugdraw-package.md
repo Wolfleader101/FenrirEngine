@@ -12,7 +12,7 @@
 - **Tessellation:** live, shown items into plain batches: line and triangle vertices tagged with depth mode and thickness, plus text runs (screen, message and world).
 - README for the package.
 
-**Blocked by:** 01 (Engine prerequisites).
+**Blocked by:** 01 (Engine prerequisites); 31 (The current phase and the frame and tick counts).
 
 **Touches:** `packages/FenrirDebugDraw/`, `CMakeLists.txt`
 

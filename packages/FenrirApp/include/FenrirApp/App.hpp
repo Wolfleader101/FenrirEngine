@@ -13,6 +13,7 @@
 #include <cstring>
 #include <iterator>
 #include <mutex>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -568,6 +569,15 @@ namespace Fenrir
         [[nodiscard]] bool IsRunning() const;
 
         /**
+         * @brief The phase whose systems are running, init phases and Exit included; empty outside Run, RunFrame and
+         * RunExit. It is set before a phase's first system starts and constant until its last one ends, so its parallel
+         * and sequential systems all read the same value. With Time's frameCount and tickCount, it lets a package
+         * answer by the caller's phase (input edges since the last tick or frame) whatever order packages were
+         * installed in.
+         */
+        [[nodiscard]] std::optional<SchedulePriority> CurrentPhase() const;
+
+        /**
          * @brief Send an event to the event queue. From a system added with AddSystems (run in parallel), the event is
          * held until the system's batch has run, then sent in the order the systems were registered.
          *
@@ -642,6 +652,7 @@ namespace Fenrir
         bool m_initialized = false;
         // The queues swap only once a tick has run since they last did, so tick readers never miss an event.
         bool m_tickedSinceSwap = false;
+        std::optional<SchedulePriority> m_phase;
 
         // One heap allocation per scene, so creating or destroying a scene never moves another: Entity handles and
         // references to a scene stay valid.
@@ -675,6 +686,9 @@ namespace Fenrir
 
         /** @brief Runs the init phases, the first time only. */
         void InitOnce();
+
+        /** @brief Runs one phase's systems, as the current phase. */
+        void RunPhase(SchedulePriority phase);
 
         /** @brief Swaps every event queue's buffers if a tick ran since the last swap. */
         void UpdateEvents();

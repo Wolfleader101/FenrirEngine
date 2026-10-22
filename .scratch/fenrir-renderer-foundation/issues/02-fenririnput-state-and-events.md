@@ -10,7 +10,7 @@
 - **Events:** every input is also an engine event read through `EventReader<T>`, once per reader, in order.
 - README for the package, including the main-thread rule for its dispatch system.
 
-**Blocked by:** 01 (Engine prerequisites).
+**Blocked by:** 01 (Engine prerequisites); 31 (The current phase and the frame and tick counts).
 
 **Touches:** `packages/FenrirInput/`, `CMakeLists.txt`
 

@@ -142,15 +142,16 @@ namespace Fenrir
         return *this;
     }
 
-    void Scheduler::Init(App& app)
+    void Scheduler::RunInitSystems(App& app, SchedulePriority priority)
     {
-        // for each priority, run each system in order of their insertion
-        for (auto& [priority, systems] : m_runOnceSystems)
+        const auto found = m_runOnceSystems.find(priority);
+        if (found == m_runOnceSystems.end())
         {
-            for (auto& system : systems)
-            {
-                system(app); // TODO this might need to be a wrapper, so it can take in Scene??
-            }
+            return;
+        }
+        for (auto& system : found->second)
+        {
+            system(app);
         }
     }
 } // namespace Fenrir
