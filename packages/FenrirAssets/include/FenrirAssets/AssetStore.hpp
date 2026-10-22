@@ -14,6 +14,7 @@
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
+#include "FenrirAssets/SpawnNodes.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -108,6 +109,8 @@ namespace Fenrir
         LabelNotFound,
         /** @brief Nothing imports this kind of asset from a file yet. */
         NoImporter,
+        /** @brief The `builtin:` name has no asset registered under it (AssetStore::AddBuiltin) yet. */
+        NotRegistered,
     };
 
     /** @brief Why a load failed, for a log or an editor. */
@@ -164,6 +167,14 @@ namespace Fenrir
          * A path already loaded as this kind of asset is not read again: it gives back the same handle and adds
          * `owner` to the asset's owners. A failure is logged and gives a diagnostic instead of a handle. Images are
          * read from PNG, JPEG (both RGBA8, sRGB) and HDR (RGBA32F, linear).
+         *
+         * A model loads from glTF, GLB, FBX or OBJ, and its meshes, materials and images load from the same file by
+         * label (`scene.gltf#Mesh0`, see Model). Either way the whole file is imported once: the model and every
+         * sub-asset are stored, all owned by `owner`, and a later load of any of them gives the same handle. Loading a
+         * model again adds the owner to its sub-assets too. Problems that leave the model usable (a skinned mesh left
+         * out, an image that failed and was replaced by white, a conflicting colour space) are logged as warnings.
+         *
+         * A `builtin:` name loads what AssetStore::AddBuiltin registered under it, and fails until something has.
          */
         template <typename T>
         [[nodiscard]] LoadResult<T> Load(std::string_view path, AssetOwner owner)
@@ -190,6 +201,27 @@ namespace Fenrir
             }
             Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
             const Detail::AssetSlot slot = AddSlot(Detail::AssetTraits<T>::kind, std::move(box), owner);
+            return {slot.index, slot.generation};
+        }
+
+        /**
+         * @brief Adds `data` as the built-in asset `name`, owned by the app; `name` starts with `builtin:`. Loading
+         * the name gives its handle. A name can be named before it has data: an imported material names
+         * `builtin:lit` or `builtin:unlit` whether or not FenrirRenderer has registered them yet, and its handle
+         * resolves once they are. Adding a name that already has data replaces it, as Replace does. Data that breaks
+         * its type's rules, or a name without the prefix, is refused with a logged error, and the handle is empty.
+         */
+        template <typename T>
+        AssetHandle<T> AddBuiltin(std::string_view name, AssetData<T> data)
+        {
+            using Data = AssetData<T>;
+            if (const std::string problem = Detail::PrepareAsset(data); !problem.empty())
+            {
+                Refuse(Detail::AssetTraits<T>::name, "add a built-in", problem);
+                return {};
+            }
+            Detail::AssetBox box(new Data(std::move(data)), &Detail::DestroyAssetData<Data>);
+            const Detail::AssetSlot slot = AddBuiltinSlot(Detail::AssetTraits<T>::kind, name, std::move(box));
             return {slot.index, slot.generation};
         }
 
@@ -358,6 +390,14 @@ namespace Fenrir
         bool Reset(AssetHandle<Material> material, std::string_view name);
         /** @} */
 
+        /**
+         * @brief Spawns `model`'s node tree into `scene` (ADR-0028, ADR-0031): a root entity under `parent` (or at the
+         * top of the scene if `parent` is null), and below it one entity per model node with its `Name`, its rest
+         * transform as its `Transform`, and its parent link. It adds nothing that draws: FenrirRenderer's SpawnModel
+         * adds the meshes. Nothing is spawned, and an error logged, if the handle does not resolve.
+         */
+        SpawnedNodes SpawnNodes(Scene& scene, AssetHandle<Model> model, Entity parent = {});
+
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;
 
@@ -365,6 +405,11 @@ namespace Fenrir
         Detail::AssetSlot LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
                                    std::optional<LoadDiagnostic>& diagnostic);
         Detail::AssetSlot AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner);
+        Detail::AssetSlot AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data);
+        Detail::AssetSlot ReserveBuiltin(Detail::AssetKind kind, std::string_view name);
+        [[nodiscard]] std::string ImportModelFile(const std::filesystem::path& file, const std::string& fileKey,
+                                                  AssetOwner owner);
+        void ShareModel(const Model& model, std::uint32_t owner);
         bool ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data);
         bool UnloadSlot(Detail::AssetKind kind, Detail::AssetSlot slot);
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;

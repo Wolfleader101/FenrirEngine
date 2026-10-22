@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -58,6 +59,21 @@ namespace Fenrir::Detail
         /** @brief Takes `owner` off every asset, freeing those it was the last owner of. */
         void ReleaseOwner(OwnerId owner);
     };
+
+    /**
+     * @brief Puts `data` in a free slot of `table` (or a new one) with `owner` as its only owner, at revision 1, and
+     * files it under `key` unless the key is empty.
+     */
+    AssetSlot InsertAsset(AssetTable& table, AssetBox data, OwnerId owner, std::string key);
+
+    /** @brief Reads the whole file into `bytes`; false if it could not be read. */
+    bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes);
+
+    /** @brief Adds `owner` to the record's owners, if it is not one already. */
+    void AddOwner(AssetRecord& record, OwnerId owner);
+
+    /** @brief The owner number of `owner` in the store `state`, making the scene an asset owner if it is not yet. */
+    OwnerId OwnerIdOf(const std::shared_ptr<AssetStoreState>& state, AssetOwner owner);
 
     /**
      * @brief The scene resource that makes a scene an asset owner. Made the first time the scene owns an asset; when

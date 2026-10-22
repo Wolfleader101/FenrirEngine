@@ -47,13 +47,16 @@ namespace Fenrir
     };
 
     /**
-     * @brief How a texture parameter is sampled (ADR-0024): its wrap, filter and anisotropy. The renderer core shares
-     * one sampler between parameters with equal descriptions. Default made, it is the spec's default sampler: repeat,
-     * trilinear, anisotropy 8.
+     * @brief How a texture parameter is sampled (ADR-0024): its wrap along each axis, filter and anisotropy. The
+     * renderer core shares one sampler between parameters with equal descriptions. Default made, it is the spec's
+     * default sampler: repeat, trilinear, anisotropy 8.
      */
     struct SamplerDescription
     {
-        SamplerWrap wrap = SamplerWrap::Repeat;
+        /** @brief The wrap across the texture's width, the U coordinate (glTF's S). */
+        SamplerWrap wrapU = SamplerWrap::Repeat;
+        /** @brief The wrap down the texture's height, the V coordinate (glTF's T). */
+        SamplerWrap wrapV = SamplerWrap::Repeat;
         SamplerFilter filter = SamplerFilter::Trilinear;
         /** @brief The most anisotropic filtering taken, 1 for none. The renderer clamps it to what the device has. */
         std::uint32_t anisotropy = 8;

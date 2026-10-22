@@ -112,7 +112,8 @@ TEST_CASE("The default sampler repeats, filters trilinearly and takes anisotropy
     const Fenrir::SamplerDescription sampler;
 
     INFO("the spec's default sampler");
-    REQUIRE(sampler.wrap == Fenrir::SamplerWrap::Repeat);
+    REQUIRE(sampler.wrapU == Fenrir::SamplerWrap::Repeat);
+    REQUIRE(sampler.wrapV == Fenrir::SamplerWrap::Repeat);
     REQUIRE(sampler.filter == Fenrir::SamplerFilter::Trilinear);
     REQUIRE(sampler.anisotropy == 8);
 }
@@ -146,7 +147,8 @@ TEST_CASE("Every parameter type and a colour can be set and read back", "[assets
     AssetsApp test;
     const AssetHandle<Material> material = test.store.CreateMaterial(AddFixtureShader(test), AssetOwner::App());
     const AssetHandle<Fenrir::Image> image = AddPixel(test);
-    const Fenrir::SamplerDescription sampler{Fenrir::SamplerWrap::ClampToEdge, Fenrir::SamplerFilter::Nearest, 1};
+    const Fenrir::SamplerDescription sampler{Fenrir::SamplerWrap::ClampToEdge, Fenrir::SamplerWrap::MirroredRepeat,
+                                             Fenrir::SamplerFilter::Nearest, 1};
 
     REQUIRE(test.store.SetVector2(material, "offset", Vec2(-1.0f, 4.0f)));
     REQUIRE(test.store.SetVector3(material, "emissive", Vec3(0.25f, 0.5f, 0.75f)));
@@ -310,9 +312,12 @@ TEST_CASE("Blend mode, alpha cutoff, double-sidedness and texture samplers round
 
     const AssetHandle<Fenrir::Image> image = AddPixel(test);
     for (const Fenrir::SamplerDescription sampler :
-         {Fenrir::SamplerDescription{Fenrir::SamplerWrap::Repeat, Fenrir::SamplerFilter::Trilinear, 8},
-          Fenrir::SamplerDescription{Fenrir::SamplerWrap::MirroredRepeat, Fenrir::SamplerFilter::Bilinear, 4},
-          Fenrir::SamplerDescription{Fenrir::SamplerWrap::ClampToEdge, Fenrir::SamplerFilter::Nearest, 1}})
+         {Fenrir::SamplerDescription{Fenrir::SamplerWrap::Repeat, Fenrir::SamplerWrap::Repeat,
+                                     Fenrir::SamplerFilter::Trilinear, 8},
+          Fenrir::SamplerDescription{Fenrir::SamplerWrap::MirroredRepeat, Fenrir::SamplerWrap::ClampToEdge,
+                                     Fenrir::SamplerFilter::Bilinear, 4},
+          Fenrir::SamplerDescription{Fenrir::SamplerWrap::ClampToEdge, Fenrir::SamplerWrap::Repeat,
+                                     Fenrir::SamplerFilter::Nearest, 1}})
     {
         REQUIRE(test.store.SetTexture(material, "baseColourTexture", image, sampler));
         const std::optional<Fenrir::MaterialTexture> texture =

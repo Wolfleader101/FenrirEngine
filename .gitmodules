@@ -25,3 +25,9 @@
 [submodule "packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect"]
 	path = packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect
 	url = https://github.com/KhronosGroup/SPIRV-Reflect
+[submodule "packages/FenrirAssets/libs/cgltf"]
+	path = packages/FenrirAssets/libs/cgltf
+	url = https://github.com/jkuhlmann/cgltf
+[submodule "packages/FenrirAssets/libs/ufbx"]
+	path = packages/FenrirAssets/libs/ufbx
+	url = https://github.com/ufbx/ufbx

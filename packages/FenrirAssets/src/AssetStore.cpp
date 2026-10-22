@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <format>
 #include <fstream>
 #include <iterator>
 #include <string>
@@ -24,10 +25,12 @@
 
 #include "AssetStoreState.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "Importers/ImageImporter.hpp"
+#include "Importers/ModelImporter.hpp"
 
 namespace Fenrir
 {
@@ -123,7 +126,34 @@ namespace Fenrir
             return resolved;
         }
 
-        bool ReadFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
+        // The prefix of a built-in asset's name, which is its key rather than a path.
+        constexpr std::string_view BuiltinPrefix = "builtin:";
+
+        std::string_view ReasonText(LoadFailure reason)
+        {
+            if (reason == LoadFailure::FileNotFound)
+            {
+                return "file not found";
+            }
+            if (reason == LoadFailure::ImportFailed)
+            {
+                return "import failed";
+            }
+            if (reason == LoadFailure::LabelNotFound)
+            {
+                return "label not found";
+            }
+            if (reason == LoadFailure::NotRegistered)
+            {
+                return "not registered";
+            }
+            return "no importer";
+        }
+    } // namespace
+
+    namespace Detail
+    {
+        bool ReadAssetFile(const std::filesystem::path& file, std::vector<std::byte>& bytes)
         {
             std::ifstream stream(file, std::ios::binary);
             if (!stream)
@@ -140,51 +170,7 @@ namespace Fenrir
             return true;
         }
 
-        std::string_view ReasonText(LoadFailure reason)
-        {
-            if (reason == LoadFailure::FileNotFound)
-            {
-                return "file not found";
-            }
-            if (reason == LoadFailure::ImportFailed)
-            {
-                return "import failed";
-            }
-            if (reason == LoadFailure::LabelNotFound)
-            {
-                return "label not found";
-            }
-            return "no importer";
-        }
-
-        Detail::OwnerId OwnerIdOf(const std::shared_ptr<Detail::AssetStoreState>& state, AssetOwner owner)
-        {
-            Scene* scene = owner.GetScene();
-            if (scene == nullptr)
-            {
-                return Detail::AppOwnerId;
-            }
-            // A scene that owned assets of an earlier store keeps that store's resource until it is replaced here.
-            if (const auto* existing = scene->GetResource<Detail::SceneAssetOwner>();
-                existing != nullptr && existing->store.lock() == state)
-            {
-                return existing->id;
-            }
-            const Detail::OwnerId id = state->nextSceneOwner++;
-            scene->AddResource<Detail::SceneAssetOwner>(state, id);
-            return id;
-        }
-
-        void AddOwner(Detail::AssetRecord& record, Detail::OwnerId owner)
-        {
-            if (std::find(record.owners.begin(), record.owners.end(), owner) == record.owners.end())
-            {
-                record.owners.push_back(owner);
-            }
-        }
-
-        Detail::AssetSlot Insert(Detail::AssetTable& table, Detail::AssetBox data, Detail::OwnerId owner,
-                                 std::string key)
+        AssetSlot InsertAsset(AssetTable& table, AssetBox data, OwnerId owner, std::string key)
         {
             std::uint32_t index = 0;
             if (!table.freeIndices.empty())
@@ -197,7 +183,7 @@ namespace Fenrir
                 index = static_cast<std::uint32_t>(table.records.size());
                 table.records.emplace_back();
             }
-            Detail::AssetRecord& record = table.records[index];
+            AssetRecord& record = table.records[index];
             record.data = std::move(data);
             record.revision = 1;
             record.owners = {owner};
@@ -208,10 +194,33 @@ namespace Fenrir
             }
             return {index, record.generation};
         }
-    } // namespace
 
-    namespace Detail
-    {
+        void AddOwner(AssetRecord& record, OwnerId owner)
+        {
+            if (std::find(record.owners.begin(), record.owners.end(), owner) == record.owners.end())
+            {
+                record.owners.push_back(owner);
+            }
+        }
+
+        OwnerId OwnerIdOf(const std::shared_ptr<AssetStoreState>& state, AssetOwner owner)
+        {
+            Scene* scene = owner.GetScene();
+            if (scene == nullptr)
+            {
+                return AppOwnerId;
+            }
+            // A scene that owned assets of an earlier store keeps that store's resource until it is replaced here.
+            if (const auto* existing = scene->GetResource<SceneAssetOwner>();
+                existing != nullptr && existing->store.lock() == state)
+            {
+                return existing->id;
+            }
+            const OwnerId id = state->nextSceneOwner++;
+            scene->AddResource<SceneAssetOwner>(state, id);
+            return id;
+        }
+
         AssetRecord* AssetStoreState::Find(AssetKind kind, AssetSlot slot)
         {
             AssetTable& table = TableOf(*this, kind);
@@ -284,12 +293,20 @@ namespace Fenrir
     Detail::AssetSlot AssetStore::LoadSlot(Detail::AssetKind kind, std::string_view path, AssetOwner owner,
                                            std::optional<LoadDiagnostic>& diagnostic)
     {
-        const AssetPath resolved = Resolve(m_state->root, path);
+        const bool builtin = path.starts_with(BuiltinPrefix);
+        const AssetPath resolved = builtin ? AssetPath{{}, {}, false, std::string(path)} : Resolve(m_state->root, path);
         Detail::AssetTable& table = TableOf(*m_state, kind);
-        if (const auto loaded = table.byKey.find(resolved.key); loaded != table.byKey.end())
+        // A built-in name an import reserved, with no data registered yet, is not loaded.
+        if (const auto loaded = table.byKey.find(resolved.key);
+            loaded != table.byKey.end() && table.records[loaded->second].data != nullptr)
         {
             Detail::AssetRecord& record = table.records[loaded->second];
-            AddOwner(record, OwnerIdOf(m_state, owner));
+            const Detail::OwnerId ownerId = Detail::OwnerIdOf(m_state, owner);
+            Detail::AddOwner(record, ownerId);
+            if (kind == Detail::AssetKind::Model)
+            {
+                ShareModel(*static_cast<const Model*>(record.data.get()), ownerId);
+            }
             return {loaded->second, record.generation};
         }
 
@@ -300,15 +317,55 @@ namespace Fenrir
             return {};
         };
 
+        if (builtin)
+        {
+            return fail(LoadFailure::NotRegistered,
+                        "nothing is registered under this built-in name yet (FenrirRenderer registers its built-in "
+                        "shaders when it is installed)");
+        }
         std::error_code error;
         if (!std::filesystem::is_regular_file(resolved.file, error))
         {
             return fail(LoadFailure::FileNotFound, "there is no file at this path");
         }
+        if (Detail::IsModelFile(resolved.file))
+        {
+            if (kind == Detail::AssetKind::Shader)
+            {
+                return fail(LoadFailure::NoImporter, "a model file holds no shaders");
+            }
+            if (kind == Detail::AssetKind::Model && resolved.labelled)
+            {
+                return fail(LoadFailure::LabelNotFound, "a model's sub-assets are meshes, materials and images, so '" +
+                                                            resolved.label + "' names no model");
+            }
+            if (kind != Detail::AssetKind::Model && !resolved.labelled)
+            {
+                return fail(LoadFailure::LabelNotFound,
+                            "a model file's meshes, materials and images load by label, such as 'file#Mesh0'");
+            }
+            const std::string fileKey = Utf8Text(resolved.file);
+            if (!TableOf(*m_state, Detail::AssetKind::Model).byKey.contains(fileKey))
+            {
+                if (std::string problem = ImportModelFile(resolved.file, fileKey, owner); !problem.empty())
+                {
+                    return fail(LoadFailure::ImportFailed, std::move(problem));
+                }
+            }
+            const auto found = table.byKey.find(resolved.key);
+            if (found == table.byKey.end())
+            {
+                return fail(LoadFailure::LabelNotFound,
+                            std::format("the model has no {} labelled '{}'", KindName(kind), resolved.label));
+            }
+            Detail::AssetRecord& record = table.records[found->second];
+            Detail::AddOwner(record, Detail::OwnerIdOf(m_state, owner));
+            return {found->second, record.generation};
+        }
         if (kind != Detail::AssetKind::Image)
         {
             return fail(LoadFailure::NoImporter,
-                        std::string("nothing imports a ") + std::string(KindName(kind)) + " from a file yet");
+                        std::string("nothing imports a ") + std::string(KindName(kind)) + " from this kind of file");
         }
         if (resolved.labelled)
         {
@@ -316,7 +373,7 @@ namespace Fenrir
                         "an image file has no sub-asset called '" + resolved.label + "', or any other");
         }
         std::vector<std::byte> bytes;
-        if (!ReadFile(resolved.file, bytes))
+        if (!Detail::ReadAssetFile(resolved.file, bytes))
         {
             return fail(LoadFailure::ImportFailed, "the file could not be read");
         }
@@ -330,12 +387,70 @@ namespace Fenrir
             return fail(LoadFailure::ImportFailed, std::move(problem));
         }
         Detail::AssetBox data(new ImageData(std::move(*imported.image)), &Detail::DestroyAssetData<ImageData>);
-        return Insert(table, std::move(data), OwnerIdOf(m_state, owner), resolved.key);
+        return Detail::InsertAsset(table, std::move(data), Detail::OwnerIdOf(m_state, owner), resolved.key);
     }
 
     Detail::AssetSlot AssetStore::AddSlot(Detail::AssetKind kind, Detail::AssetBox data, AssetOwner owner)
     {
-        return Insert(TableOf(*m_state, kind), std::move(data), OwnerIdOf(m_state, owner), {});
+        return Detail::InsertAsset(TableOf(*m_state, kind), std::move(data), Detail::OwnerIdOf(m_state, owner), {});
+    }
+
+    Detail::AssetSlot AssetStore::AddBuiltinSlot(Detail::AssetKind kind, std::string_view name, Detail::AssetBox data)
+    {
+        if (!name.starts_with(BuiltinPrefix))
+        {
+            Refuse(KindName(kind), "add a built-in",
+                   std::format("its name '{}' does not start with '{}'", name, BuiltinPrefix));
+            return {};
+        }
+        const Detail::AssetSlot slot = ReserveBuiltin(kind, name);
+        Detail::AssetRecord& record = *m_state->Find(kind, slot);
+        const bool replacing = record.data != nullptr;
+        record.data = std::move(data);
+        if (replacing)
+        {
+            ++record.revision;
+            if (kind == Detail::AssetKind::Shader)
+            {
+                WarnOverridesShaderLacks({slot.index, slot.generation});
+            }
+        }
+        return slot;
+    }
+
+    Detail::AssetSlot AssetStore::ReserveBuiltin(Detail::AssetKind kind, std::string_view name)
+    {
+        Detail::AssetTable& table = TableOf(*m_state, kind);
+        if (const auto found = table.byKey.find(std::string(name)); found != table.byKey.end())
+        {
+            return {found->second, table.records[found->second].generation};
+        }
+        // No data yet, so the handle does not resolve until AddBuiltin fills the slot. The empty box never calls its
+        // deleter; AddBuiltin's data brings its own.
+        return Detail::InsertAsset(table, Detail::AssetBox(nullptr, &Detail::DestroyAssetData<ShaderData>),
+                                   Detail::AppOwnerId, std::string(name));
+    }
+
+    void AssetStore::ShareModel(const Model& model, std::uint32_t owner)
+    {
+        const auto share = [&](Detail::AssetKind kind, std::uint32_t index, std::uint32_t generation) {
+            if (Detail::AssetRecord* record = m_state->Find(kind, {index, generation}))
+            {
+                Detail::AddOwner(*record, owner);
+            }
+        };
+        for (const AssetHandle<Mesh> mesh : model.meshes)
+        {
+            share(Detail::AssetKind::Mesh, mesh.index, mesh.generation);
+        }
+        for (const AssetHandle<Material> material : model.materials)
+        {
+            share(Detail::AssetKind::Material, material.index, material.generation);
+        }
+        for (const AssetHandle<Image> image : model.images)
+        {
+            share(Detail::AssetKind::Image, image.index, image.generation);
+        }
     }
 
     bool AssetStore::ReplaceSlot(Detail::AssetKind kind, Detail::AssetSlot slot, Detail::AssetBox data)
@@ -381,7 +496,7 @@ namespace Fenrir
     std::uint32_t AssetStore::RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const
     {
         const Detail::AssetRecord* record = m_state->Find(kind, slot);
-        return record != nullptr ? record->revision : 0;
+        return record != nullptr && record->data != nullptr ? record->revision : 0;
     }
 
     void AssetStore::Refuse(std::string_view assetName, std::string_view action, const std::string& problem)
