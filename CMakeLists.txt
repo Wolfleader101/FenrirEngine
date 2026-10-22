@@ -52,6 +52,8 @@ add_subdirectory(packages/FenrirCore)
 add_subdirectory(packages/FenrirApp)
 add_subdirectory(packages/FenrirInput)
 
+# Always built: it links no library (ADR-0025).
+add_subdirectory(packages/FenrirDebugDraw)
 if(FENRIR_ENABLE_RENDERER)
     add_subdirectory(packages/FenrirWindow)
 endif()
