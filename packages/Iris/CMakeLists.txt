@@ -26,6 +26,8 @@ else()
     set(IRIS_BRIDGE_DIR "${IRIS_PREBUILT_BRIDGE_DIR}")
 endif()
 include(cmake/IrisDeploy.cmake)
+# iris_generate_binding() and the bindings target (Tools/Iris.Bindings).
+include(cmake/IrisBindings.cmake)
 if(NOT iris_is_top_level)
     # A parent project that adds Iris needs the bridge location to call iris_deploy.
     set(IRIS_BRIDGE_DIR "${IRIS_BRIDGE_DIR}" PARENT_SCOPE)
@@ -42,6 +44,9 @@ if(IRIS_BUILD_TESTS)
     enable_testing()
     add_subdirectory(Tests)
 endif()
+
+# After Tests, whose Catch2 the binding generator's defaults test uses.
+add_subdirectory(Tools/Iris.Bindings)
 
 if(IRIS_INSTALL)
     include(CMakePackageConfigHelpers)

@@ -2,6 +2,8 @@
 
 `<Package>.api.json` is what `describe-api` writes from a package's selection (`README.md`). It is language-neutral: a binding's generator reads it, never the headers. `tests/Fixture/Fixture.api.json` is a worked example of every part below.
 
+Iris keeps a copy of this schema as the input format its binding generator accepts (`packages/Iris/docs/api-description.md`), so a change to it changes that copy too.
+
 The file is UTF-8 JSON with two-space indents, LF line ends and a final newline. Every list is in a fixed order, so the same headers always give the same bytes, on any platform.
 
 ## The file

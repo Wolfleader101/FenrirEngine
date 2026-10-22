@@ -1,8 +1,9 @@
 name: API descriptions
 
-# Regenerates every committed API description (ADR-0016, tools/describe-api/README.md) and fails when that leaves the
-# tree dirty: a header change was committed without its regenerated description. Both runners, because a description
-# is the same bytes on every platform.
+# Regenerates every committed API description (ADR-0016, tools/describe-api/README.md) and every binding generated from
+# them (packages/Iris/Tools/Iris.Bindings/README.md), and fails when that leaves the tree dirty: a header change was
+# committed without its regenerated description, or a description without its regenerated binding. Both runners, because
+# both are the same bytes on every platform. It also runs the binding generator's own tests.
 
 on:
   pull_request:
@@ -22,7 +23,7 @@ env:
 
 jobs:
   describe:
-    name: Descriptions up to date (${{ matrix.os }})
+    name: Descriptions and bindings up to date (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -45,18 +46,26 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      # Configuring is enough: fenrir-describe-api reads headers and builds nothing of the engine.
+      # Configuring is enough: fenrir-describe-api reads headers and fenrir-generate-bindings reads descriptions, and
+      # neither builds anything of the engine. Scripting is on because Iris holds the binding generator.
       - name: Configure
-        run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF
+        run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF -DFENRIR_ENABLE_SCRIPTING=ON
 
       - name: Regenerate the descriptions
         run: cmake --build out/describe --target fenrir-describe-api --config Debug
+
+      - name: Regenerate the bindings
+        run: cmake --build out/describe --target fenrir-generate-bindings --config Debug
 
       - name: Fail on a dirty tree
         shell: bash
         run: |
           git add --intent-to-add --all
           if ! git diff --exit-code; then
-            echo "::error::The committed API descriptions are stale. Run 'cmake --build <build-dir> --target fenrir-describe-api' and commit the result."
+            echo "::error::The committed API descriptions or bindings are stale. Run 'cmake --build <build-dir> --target fenrir-describe-api', then '--target fenrir-generate-bindings', and commit the result."
             exit 1
           fi
+
+      # After the check, so nothing the tests build can count as a change.
+      - name: Test the binding generator
+        run: dotnet test packages/Iris/Tools/Iris.Bindings/tests/Iris.Bindings.Tests.csproj --nologo

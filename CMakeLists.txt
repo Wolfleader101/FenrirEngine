@@ -40,6 +40,8 @@ include(cmake/FenrirDescribeApi.cmake)
 add_subdirectory(tools/describe-api)
 
 if(FENRIR_ENABLE_SCRIPTING)
+    # iris_generate_binding() adds each binding (ADR-0016) to fenrir-generate-bindings, which the build never runs.
+    set(IRIS_GENERATE_BINDINGS_TARGET fenrir-generate-bindings)
     add_subdirectory(packages/Iris)
 endif()
 

@@ -1,0 +1,56 @@
+# The fixture's binding: Fixture.api.json bound to C#. Paths are relative to this file. The generated files are committed
+# beside the hand-written ones, and the tests compare a fresh run with them byte for byte.
+namespace = "Fixture.Bindings"
+
+[csharp]
+contract = "Contract"
+generated = "Contract/Generated"
+# The SDK's names: the same mirrors compile against stubs of them and once against the Fenrir scripting SDK.
+usings = ["Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+pointer-type = "ulong"
+readonly-events = true
+
+[cpp]
+mappings = "Native/Generated/FixtureMappings.hpp"
+includes = ["Fixture.hpp", "BoundMappings.hpp"]
+
+# Never compiled here: Iris has no extension type. The names show the form a host's registration takes.
+[registration]
+source = "Native/Generated/FixtureRegistration.cpp"
+includes = ["Host/Extension.hpp"]
+function = "Fixture::Bindings::Register"
+extension = "Host::Extension"
+make-component = "Host::MakeComponent"
+make-read-only-component = "Host::MakeReadOnlyComponent"
+make-event = "Host::MakeEvent"
+make-shared-struct = "Host::MakeSharedStruct"
+read-only = ["Fixture::Collider"]
+
+[tests]
+cpp = "Tests/Generated/FixtureDefaultsTests.cpp"
+csharp = "Tests/Generated/FixtureDefaults.cs"
+class = "Fixture.Bindings.Tests.Defaults"
+includes = ["DefaultsHarness.hpp"]
+setup = "const Fixture::DefaultsHarness harness;"
+component = "harness.Component()"
+tags = "[bindings]"
+
+# Vector3's defaults go through its constructor; Quaternion's and Handle's set components by name.
+[bound-types]
+"Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Fixture::Quat" = { type = "Quaternion" }
+"Fixture::Handle" = { type = "Handle" }
+
+# Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
+[names]
+"Fixture::Limits::wideInfinity" = "DoubleInfinity"
+"f64" = "Double"
+
+[nouns]
+"Fixture::Shape" = "shape"
