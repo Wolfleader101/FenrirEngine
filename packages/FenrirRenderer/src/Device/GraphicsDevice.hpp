@@ -21,6 +21,22 @@ namespace Fenrir::Graphics
          * slot is freed this many frames later, and per-frame buffers ring over this many copies (ADR-0019).
          */
         std::uint32_t framesInFlight = 2;
+        /**
+         * @brief Whether the graphics API's own validation reports misuse, to the logger the backend was given. Costly;
+         * the null backend has none.
+         */
+        bool debugValidation = false;
+    };
+
+    /** @brief How presenting waits for the display. */
+    enum class Vsync : std::uint8_t
+    {
+        /** @brief Presents at once; frames may tear. */
+        Off,
+        /** @brief Waits for vertical sync. */
+        On,
+        /** @brief Waits for vertical sync unless the frame is late, which then tears instead of waiting. */
+        Adaptive,
     };
 
     /** @brief A new pipeline, or why the backend refused its shader or state. */
@@ -127,6 +143,12 @@ namespace Fenrir::Graphics
 
         /** @brief Blocks until the GPU has finished every submitted frame, as teardown does. */
         virtual void WaitIdle() = 0;
+
+        /**
+         * @brief Sets how Present waits for the display, returning the mode now in effect. A mode the surface does not
+         * support falls back to `On`, logged.
+         */
+        virtual Vsync SetVsync(Vsync mode) = 0;
 
       protected:
         GraphicsDevice() = default;
