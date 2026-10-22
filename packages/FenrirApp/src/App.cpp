@@ -32,6 +32,12 @@ namespace Fenrir
         return *this;
     }
 
+    App& App::AddSequentialSystem(SchedulePriority priority, SystemFunc system)
+    {
+        m_scheduler.AddSequentialSystem(priority, std::move(system));
+        return *this;
+    }
+
     const std::unique_ptr<ILogger>& App::Logger() const
     {
         return m_logger;
@@ -239,6 +245,8 @@ namespace Fenrir
         m_scheduler.RunSystems(*this, SchedulePriority::Update);
 
         m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
+
+        m_scheduler.RunSystems(*this, SchedulePriority::Render);
 
         UpdateEvents();
     }

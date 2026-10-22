@@ -12,10 +12,10 @@
 
 **Touches:** `packages/FenrirApp/`, `packages/FenrirScheduler/`, `packages/FenrirMath/include/FenrirMath/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] FenrirApp tests (through `App::RunFrame`): an app resource is reachable from every phase, replaced by a second `AddResource`, gone after `RemoveResource`, and destroyed with the App (a destructor counter); `TryGetResource` is empty when absent.
-- [ ] A `Render` system runs once per frame after `PostUpdate` and before the swap: it sees an event sent in `PostUpdate` that frame, and sees each frame's interpolated pose; with zero and with several ticks in a frame it still runs exactly once.
-- [ ] A sequential system runs on the App's thread (thread id checked), with parallel systems still on workers.
-- [ ] `Colour::FromSrgb` decodes to linear within a tolerance on known values (0x000000FF, 0xFFFFFFFF, mid grey 0x808080FF), alpha untouched.
-- [ ] Clang and MSVC x64 debug and release presets build with no new warnings.
+- [x] FenrirApp tests (through `App::RunFrame`): an app resource is reachable from every phase, replaced by a second `AddResource`, gone after `RemoveResource`, and destroyed with the App (a destructor counter); `TryGetResource` is empty when absent.
+- [x] A `Render` system runs once per frame after `PostUpdate` and before the swap: it sees an event sent in `PostUpdate` that frame, and sees each frame's interpolated pose; with zero and with several ticks in a frame it still runs exactly once.
+- [x] A sequential system runs on the App's thread (thread id checked), with parallel systems still on workers.
+- [x] `Colour::FromSrgb` decodes to linear within a tolerance on known values (0x000000FF, 0xFFFFFFFF, mid grey 0x808080FF), alpha untouched.
+- [x] Clang and MSVC x64 debug and release presets build with no new warnings.
