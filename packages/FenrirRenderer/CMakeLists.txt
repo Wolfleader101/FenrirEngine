@@ -6,9 +6,13 @@
 #   src/Backend/Null).
 # - FenrirRendererOpenGL: the OpenGL 4.6 backend (src/Backend/OpenGL), the only target that includes GL or links its
 #   loader, FenrirGlad (libs/glad), which it links PRIVATE.
-# - FenrirRendererCore: the renderer core (src/Core): the render graph, render features and the frame. It has no
-#   FenrirApp, FenrirECS, FenrirScene or FenrirWindow dependency, so it is tested with the null backend and no App.
-# The ECS facade, FenrirRenderer itself, joins them in a later ticket.
+# - FenrirRendererCore: the renderer core (src/Core): the render graph, render features, the frame and the scene
+#   renderer drawing the meshes and materials it is given, with the built-in shaders (Shaders/Builtin) embedded. It has
+#   no FenrirApp, FenrirECS, FenrirScene or FenrirWindow dependency, so it is tested with the null backend and no App.
+#   It uses FenrirAssets' plain data types (MeshData, MaterialData, ShaderData) through FenrirAssets' include
+#   directory, but never links FenrirAssets or sees its store (ADR-0023).
+# - FenrirRenderer: the ECS facade (include/, src/Facade): Renderer::Install, the components and the Render system.
+#   The only public target, and the only one that links FenrirWindow, PRIVATE.
 add_subdirectory(Tools/ShaderCompiler)
 add_subdirectory(libs/glad)
 
@@ -34,6 +38,8 @@ add_library(FenrirRendererOpenGL STATIC
 target_link_libraries(FenrirRendererOpenGL PUBLIC FenrirRendererDevice FenrirLogger PRIVATE FenrirGlad)
 
 add_library(FenrirRendererCore STATIC
+    src/Core/BuiltinShaders.hpp
+    src/Core/BuiltinShaders.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
     src/Core/RenderFeature.hpp
@@ -41,10 +47,37 @@ add_library(FenrirRendererCore STATIC
     src/Core/RenderGraph.cpp
     src/Core/RendererCore.hpp
     src/Core/RendererCore.cpp
+    src/Core/SceneFrame.hpp
+    src/Core/SceneRenderer.hpp
+    src/Core/SceneRenderer.cpp
     src/Core/TransientPool.hpp
     src/Core/TransientPool.cpp
 )
-target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice)
+target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath FenrirLogger)
+# FenrirAssets' data types only: its headers, not its library, so the core cannot reach the store or the App.
+target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include")
+# The built-in shader programs, embedded, so the renderer runs with no files beside it.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinUnlit VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/unlit.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/lit.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
+                   FRAGMENT Shaders/Builtin/fallback.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/background.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
+                   FRAGMENT Shaders/Builtin/output.frag EMBED)
+
+add_library(FenrirRenderer STATIC
+    include/FenrirRenderer/Components.hpp
+    include/FenrirRenderer/Renderer.hpp
+
+    src/Facade/Renderer.cpp
+    src/Facade/RendererState.hpp
+)
+target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
+target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
+                                                                            FenrirWindow)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)

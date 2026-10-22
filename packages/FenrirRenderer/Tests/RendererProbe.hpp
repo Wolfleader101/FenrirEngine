@@ -3,18 +3,22 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "Backend/Null/NullDevice.hpp"
 #include "Core/RendererCore.hpp"
 #include "Core/TransientPool.hpp"
+#include "Facade/RendererState.hpp"
+#include "FenrirRenderer/Renderer.hpp"
 
 namespace Fenrir
 {
     /**
-     * @brief The tests' one way inside the renderer: what the null backend received and the device's live handles.
-     * NullDevice, RendererCore and TransientPool name this type as a friend, so none of it is part of the renderer's
-     * interface. Every function needs the null backend.
+     * @brief The tests' one way inside the renderer: what the null backend received, the device's live handles, the
+     * bytes, bindings and labels it keeps, and the Renderer owner's core and surface. NullDevice, RendererCore,
+     * TransientPool and Renderer name this type as a friend, so none of it is part of the renderer's interface. Every
+     * function that reads the device needs the null backend, except SceneColour.
      */
     struct RendererProbe
     {
@@ -93,6 +97,85 @@ namespace Fenrir
         [[nodiscard]] static std::size_t TransientCount(const Render::RendererCore& core)
         {
             return TransientCount(core.m_transients);
+        }
+
+        /** @brief The renderer core a valid Renderer owner draws with. */
+        [[nodiscard]] static Render::RendererCore& Core(const Renderer& renderer)
+        {
+            return *renderer.m_state->core;
+        }
+
+        /** @brief The graphics device a valid Renderer owner draws through. */
+        [[nodiscard]] static Graphics::GraphicsDevice& Device(const Renderer& renderer)
+        {
+            return renderer.m_state->core->Device();
+        }
+
+        /** @brief The CommandLists the renderer's last frame submitted, in order. */
+        [[nodiscard]] static const std::vector<Graphics::CommandList>& Submitted(const Renderer& renderer)
+        {
+            return Submitted(Core(renderer));
+        }
+
+        /**
+         * @brief Makes the null backend's surface report `size` from now on, as a resized or (with an empty size) a
+         * minimised window would.
+         */
+        static void SetSurfaceSize(const Renderer& renderer, Graphics::PixelSize size)
+        {
+            dynamic_cast<Detail::NullSurface&>(*renderer.m_state->surface).sizeOverride = size;
+        }
+
+        /** @brief The label a pipeline was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device,
+                                               Graphics::PipelineHandle pipeline)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_pipelines.Find(pipeline);
+            return found == nullptr ? std::string() : found->label;
+        }
+
+        /** @brief The label a binding group was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device,
+                                               Graphics::BindingGroupHandle group)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_groups.Find(group);
+            return found == nullptr ? std::string() : found->label;
+        }
+
+        /** @brief What a live binding group binds; empty for a stale one. */
+        [[nodiscard]] static std::vector<Graphics::BindingGroupEntry> Entries(const Graphics::GraphicsDevice& device,
+                                                                              Graphics::BindingGroupHandle group)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_groups.Find(group);
+            return found == nullptr ? std::vector<Graphics::BindingGroupEntry>() : found->desc.entries;
+        }
+
+        /** @brief A live buffer's bytes as last written; empty for a stale one. */
+        [[nodiscard]] static std::vector<std::byte> Bytes(const Graphics::GraphicsDevice& device,
+                                                          Graphics::BufferHandle buffer)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_buffers.Find(buffer);
+            return found == nullptr ? std::vector<std::byte>() : found->bytes;
+        }
+
+        /**
+         * @brief A SceneColor texture the last frame drew into (the transient pool's RGBA16F colour target), on any
+         * backend; empty if there is none.
+         */
+        [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer)
+        {
+            const Render::RendererCore& core = Core(renderer);
+            // The set the last frame took from.
+            for (const auto& entry : core.m_transients.m_sets.at(core.m_transients.m_current))
+            {
+                const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
+                if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
+                    core.m_device->IsLive(entry.texture))
+                {
+                    return entry.texture;
+                }
+            }
+            return {};
         }
     };
 } // namespace Fenrir
