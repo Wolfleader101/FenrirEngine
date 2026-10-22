@@ -68,30 +68,36 @@ namespace Fenrir::Backend
         std::uint32_t value = ~0u;
     };
 
-    /**
-     * @brief A vehicle's drivetrain: its engine, gearbox and limited-slip ratio (a tracked vehicle's limited-slip ratio
-     * is the default, unused). A trailer's is the defaults in Manual, held in neutral, so nothing drives its wheels.
-     */
-    inline WheeledVehicle DrivetrainOf(const VehicleKind& kind)
+    /** @brief What steers and drives a vehicle's wheels. */
+    enum class VehicleController : std::uint8_t
     {
-        if (kind.Is<TrailerVehicle>())
-        {
-            return WheeledVehicle{.transmission = {.mode = TransmissionMode::Manual}};
-        }
-        if (kind.Is<MotorcycleVehicle>())
-        {
-            const MotorcycleVehicle& motorcycle = kind.As<MotorcycleVehicle>();
-            return WheeledVehicle{.engine = motorcycle.engine,
-                                  .transmission = motorcycle.transmission,
-                                  .limitedSlipRatio = motorcycle.limitedSlipRatio};
-        }
-        if (kind.Is<TrackedVehicle>())
-        {
-            const TrackedVehicle& tracked = kind.As<TrackedVehicle>();
-            return WheeledVehicle{.engine = tracked.engine, .transmission = tracked.transmission};
-        }
-        return kind.As<WheeledVehicle>();
-    }
+        /** @brief Steered by turning wheels, driven through differentials. */
+        Wheeled,
+        /** @brief Wheeled, leaning into turns and standing at rest by itself. */
+        Motorcycle,
+        /** @brief Two tracks, each driven at its own speed ratio. */
+        Tracked
+    };
+
+    /**
+     * @brief How a vehicle is driven, its settings already in range: physics resolves each kind of vehicle into one.
+     * An unpowered vehicle is given a Manual gearbox, and input that holds it in neutral, so its engine drives
+     * nothing: it ignores its differentials, and reads back no engine speed, gear or clutch.
+     */
+    struct VehicleDriveDesc
+    {
+        VehicleController controller = VehicleController::Wheeled;
+        bool powered = true;
+        VehicleEngine engine = {};
+        VehicleTransmission transmission = {};
+        /** @brief Between differentials; a tracked vehicle's is unused. */
+        float limitedSlipRatio = 1.4f;
+        /** @brief Motorcycle only. */
+        MotorcycleLean lean = {};
+        /** @brief Tracked only. */
+        VehicleTrack leftTrack = {};
+        VehicleTrack rightTrack = {};
+    };
 
     /** @brief One wheel of a vehicle, its settings already in range: physics corrects them first. */
     struct VehicleWheelDesc
@@ -104,8 +110,23 @@ namespace Fenrir::Backend
         /** @brief In the body's axes, before steering: turns X to the wheel's axle (its right), Y to its up and -Z to
          * its forward. */
         Math::Quat rest = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
-        /** @brief Its settings; `vehicle`, `position`, the angles and `state` are ignored. */
-        VehicleWheel settings;
+        /** @brief Metres. */
+        float radius = 0.3f;
+        float width = 0.1f;
+        VehicleSuspension suspension = {};
+        /** @brief kg m². A tracked vehicle's wheels ignore it and the fields below but `track`: their track holds
+         * their inertia, brakes and grip. */
+        float inertia = 0.9f;
+        float angularDamping = 0.2f;
+        /** @brief Radians at full steer. */
+        float maxSteerAngle = 0.0f;
+        /** @brief Newton metres at full brake and full handbrake. */
+        float maxBrakeTorque = 1500.0f;
+        float maxHandbrakeTorque = 4000.0f;
+        VehicleTyre longitudinal = {};
+        VehicleTyre lateral = {};
+        /** @brief Tracked only. */
+        VehicleTrackSide track = VehicleTrackSide::Left;
     };
 
     /** @brief One differential of a vehicle, naming at least one wheel, its settings already in range. */
@@ -152,13 +173,13 @@ namespace Fenrir::Backend
     };
 
     /**
-     * @brief Everything needed to make a vehicle on a made dynamic body. Chassis-local +Y is up and -Z is forward. Its
-     * kind's settings are already in range.
+     * @brief Everything needed to make a vehicle on a made dynamic body, or to update it. Chassis-local +Y is up and -Z
+     * is forward. Its settings are already in range.
      */
     struct VehicleDesc
     {
         BodyId body;
-        VehicleKind kind;
+        VehicleDriveDesc drive;
         /** @brief In wheel order. */
         std::vector<VehicleWheelDesc> wheels;
         /** @brief None drives every wheel equally, each by a differential of its own with the defaults. */
@@ -169,7 +190,7 @@ namespace Fenrir::Backend
         float maxTilt = std::numbers::pi_v<float>;
         /** @brief Where the vehicle comes in the solve: lower first, as JointDesc::priority. */
         std::uint32_t priority = 0;
-        /** @brief None starts it at idle in neutral, its wheels still. */
+        /** @brief On making only: none starts it at idle in neutral, its wheels still. */
         std::optional<VehicleCarry> carried;
     };
 
@@ -644,41 +665,28 @@ namespace Fenrir::Backend
         void DestroyVehicle(VehicleId id);
 
         /**
-         * @brief Applies a vehicle's kind, already in range, from the next Step: its engine (the current RPM kept in
-         * its new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic
-         * shift under way is finished at once), its limited-slip ratio, a motorcycle's lean switches and a tracked
-         * vehicle's tracks. The kind's type and a motorcycle's lean limit are as the vehicle was made with. Wakes its
-         * body. Never during a step.
+         * @brief Gives a vehicle a new description from the next Step, on the same body with the same wheels in the
+         * same order; `desc.carried` is ignored. What can change in place does: its engine (the current RPM kept in its
+         * new range), its gearbox (the current gear kept within its new gears; switched to Manual, an automatic shift
+         * under way is finished at once), its limited-slip ratio, a motorcycle's lean switches, a tracked vehicle's
+         * tracks, its wheels (their spin and suspension carrying on; a tracked wheel may change track, and its tracks'
+         * driven wheels follow), its probe, its tilt limit, its differentials and its anti-roll bars. A different
+         * controller, a change of whether it is powered, or a motorcycle's new lean limit makes it again, as
+         * CreateVehicle does, carrying over what ReadVehicle reads of it: its engine speed, gear (within its new gears)
+         * and clutch, unless it is made unpowered, and each wheel's spin. Then it returns true. Wakes nothing but a
+         * vehicle made again. Never during a step.
          */
-        void UpdateVehicle(VehicleId id, const VehicleKind& kind);
+        bool UpdateVehicle(VehicleId id, const VehicleDesc& desc);
 
         /** @brief Gives a vehicle its driver input, already in range, which it keeps until the next call: in Manual its
          * gear and clutch too, at once. A tracked vehicle takes `forward`, its track ratios (a ratio of 0 replaced by a
          * tiny one) and `brake`. Wakes its body if `wake`. */
         void SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake);
 
-        /** @brief Replaces a vehicle's differentials, as VehicleDesc::differentials: none drives every wheel equally.
-         * A tracked vehicle ignores them. Never during a step. */
-        void SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials);
-
-        /** @brief Replaces a vehicle's anti-roll bars. Never during a step. */
-        void SetVehicleAntiRollBars(VehicleId id, std::span<const VehicleAntiRollBarDesc> antiRollBars);
-
         /** @brief A vehicle and its wheels as the last step (or its making) left them. A step that leaves its body
-         * asleep stops its wheels, so they read 0 rad/s and keep their spin angle. */
+         * asleep stops its wheels, so they read 0 rad/s and keep their spin angle. An unpowered vehicle reads no
+         * engine speed, gear or clutch. */
         [[nodiscard]] VehicleRead ReadVehicle(VehicleId id) const;
-
-        /** @brief Gives one of a vehicle's wheels, by its wheel index, new settings, patched in place: its spin and
-         * suspension carry on from where they are. A tracked vehicle's wheel may change track, and its tracks' driven
-         * wheels follow. Wakes nothing. Never during a step. */
-        void UpdateVehicleWheel(VehicleId id, std::size_t wheel, const VehicleWheelDesc& desc);
-
-        /** @brief How a vehicle's wheels find the ground from the next step. Wakes nothing. Never during a step. */
-        void SetVehicleProbe(VehicleId id, VehicleProbe probe);
-
-        /** @brief The cone, in radians from 0 to π, around world up past which a vehicle's body cannot pitch or roll;
-         * π is off. Wakes nothing. Never during a step. */
-        void SetVehicleMaxTilt(VehicleId id, float maxTilt);
 
         /** @brief Moves a body to a pose at once, waking it. */
         void Teleport(BodyId id, const Math::Vec3& position, const Math::Quat& rotation);

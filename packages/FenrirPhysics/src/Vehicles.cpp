@@ -34,15 +34,15 @@ namespace Fenrir::Detail
         constexpr float suspensionTick = 0.08f;
 
         // A wheel's contact colour: the worse of its two slips against its tyres'.
-        std::uint32_t GripColour(const VehicleWheel& settings, const Backend::VehicleWheelRead& read)
+        std::uint32_t GripColour(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
         {
             const float along = std::abs(read.longitudinalSlip);
             const float across = std::abs(read.lateralSlip);
-            if (along > settings.longitudinal.slideSlip || across > settings.lateral.slideSlip)
+            if (along > wheel.longitudinal.slideSlip || across > wheel.lateral.slideSlip)
             {
                 return DebugColour::PastSlideSlip;
             }
-            if (along > settings.longitudinal.peakSlip || across > settings.lateral.peakSlip)
+            if (along > wheel.longitudinal.peakSlip || across > wheel.lateral.peakSlip)
             {
                 return DebugColour::PastPeakSlip;
             }
@@ -274,7 +274,7 @@ namespace Fenrir::Detail
         for (auto& [chassis, record] : m_vehicles)
         {
             if (record.Made() && std::ranges::any_of(bodies, [&record](const Backend::BodyId body) {
-                    return body.value == record.body.value;
+                    return body.value == record.desc.body.value;
                 }))
             {
                 // Rebuilt in this drain, it carries over; gone for good, it is inactive in the edits, which forget it.
@@ -427,16 +427,15 @@ namespace Fenrir::Detail
             }
 
             const VehicleLinks& links = linksOf[chassis];
+            const Math::Vec3& scale = m_poses->Baseline(chassis).scale;
             bool wake = false;
-            if (!record.Made() || record.body.value != body->id.value || record.wheels != wheels ||
-                Rebuilds(record.kind, vehicle.kind))
+            if (!record.Made() || record.desc.body.value != body->id.value || record.wheels != wheels)
             {
-                // A wheel-set change, the chassis's body rebuilt, a kind change or a motorcycle's lean limit: what
-                // still maps carries over, a new wheel still.
+                // A wheel-set change, or the chassis's body rebuilt: what still maps carries over, a new wheel still.
                 DropVehicle(record, true);
                 Backend::VehicleDesc desc;
                 desc.body = body->id;
-                desc.kind = InRange(vehicle.kind, chassis, record.warned, *m_logger);
+                desc.drive = DriveDescOf(vehicle.kind, chassis, record.warned, *m_logger);
                 desc.probe = vehicle.probe;
                 desc.maxTilt = TiltOf(vehicle);
                 desc.priority = chassis;
@@ -445,16 +444,16 @@ namespace Fenrir::Detail
                 for (const std::uint32_t wheel : wheels)
                 {
                     const VehicleWheel& settings = m_entities->GetEntity(wheel).GetComponent<VehicleWheel>();
-                    desc.wheels.push_back(WheelDesc(wheel, settings, m_poses->Baseline(chassis).scale));
-                    record.appliedWheels.push_back(settings);
+                    desc.wheels.push_back(WheelDesc(wheel, settings, scale));
+                    record.writtenWheels.push_back(settings);
                 }
                 if (record.carry)
                 {
-                    desc.carried = Backend::VehicleCarry{
-                        .engineRpm = record.carry->engineRpm,
-                        .gear = std::min(record.carry->gear, Backend::DrivetrainOf(desc.kind).transmission.gearCount),
-                        .clutch = record.carry->clutch,
-                        .wheels = {}};
+                    desc.carried =
+                        Backend::VehicleCarry{.engineRpm = record.carry->engineRpm,
+                                              .gear = std::min(record.carry->gear, desc.drive.transmission.gearCount),
+                                              .clutch = record.carry->clutch,
+                                              .wheels = {}};
                     for (const std::uint32_t wheel : wheels)
                     {
                         const auto spin = record.carry->wheels.find(wheel);
@@ -464,51 +463,21 @@ namespace Fenrir::Detail
                     record.carry.reset();
                 }
                 record.id = m_backend->CreateVehicle(desc);
-                record.body = body->id;
+                desc.carried.reset();
                 record.wheels = wheels;
-                record.links = links;
-                record.given = desc.wheels;
-                record.probe = vehicle.probe;
-                record.maxTilt = vehicle.maxTilt;
-                record.kind = vehicle.kind;
-                record.applied = desc.kind;
-                // Posed at once, against the chassis as the edits left it.
-                HandWheels(chassis, record, m_backend->ReadVehicle(record.id));
-                m_poses->WriteBack();
+                record.desc = std::move(desc);
+                ShowMade(chassis, record);
                 wake = true;
             }
             else
             {
-                if (!Same(vehicle.kind, record.kind))
-                {
-                    // A live edit: the engine, the gearbox, the limited-slip ratio, a motorcycle's lean switches and a
-                    // tracked vehicle's tracks, from the next step.
-                    record.applied = InRange(vehicle.kind, chassis, record.warned, *m_logger);
-                    m_backend->UpdateVehicle(record.id, record.applied);
-                    record.kind = vehicle.kind;
-                    wake = true;
-                }
-                // The wheels, the probe and the tilt limit.
-                wake = SyncVehicleSettings(record, vehicle, m_poses->Baseline(chassis).scale) || wake;
-            }
-            // Differential and anti-roll-bar edits and relinks, live.
-            if (!Same(links.differentials, record.links.differentials))
-            {
-                m_backend->SetVehicleDifferentials(record.id, links.differentials);
-                record.links.differentials = links.differentials;
-                wake = true;
-            }
-            if (!Same(links.antiRollBars, record.links.antiRollBars))
-            {
-                m_backend->SetVehicleAntiRollBars(record.id, links.antiRollBars);
-                record.links.antiRollBars = links.antiRollBars;
-                wake = true;
+                wake = UpdateVehicle(chassis, record, vehicle, links, scale);
             }
 
             // Any change wakes it, even one its ranges clamp away.
-            wake = wake || !Same(vehicle.input, record.input);
-            m_backend->SetVehicleInput(record.id, Clamped(vehicle.input, record.applied), wake);
-            record.input = vehicle.input;
+            wake = wake || !Same(vehicle.input, record.written.input);
+            m_backend->SetVehicleInput(record.id, Clamped(vehicle.input, record.desc.drive), wake);
+            record.written = vehicle;
         }
     }
 
@@ -518,42 +487,73 @@ namespace Fenrir::Detail
         return WheelDescOf(entity, wheel, scale, m_wheelWarnings[entity], *m_logger);
     }
 
-    bool Vehicles::SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale)
+    bool Vehicles::UpdateVehicle(std::uint32_t chassis, VehicleRecord& record, const Vehicle& vehicle,
+                                 const VehicleLinks& links, const Math::Vec3& scale)
     {
+        Backend::VehicleDesc& desc = record.desc;
         bool changed = false;
+        // Corrected, and so warned about, only when edited.
+        if (!Same(vehicle.kind, record.written.kind))
+        {
+            desc.drive = DriveDescOf(vehicle.kind, chassis, record.warned, *m_logger);
+            changed = true;
+        }
         for (std::size_t i = 0; i < record.wheels.size(); ++i)
         {
             const VehicleWheel& wheel = m_entities->GetEntity(record.wheels[i]).GetComponent<VehicleWheel>();
             // A wheel's position follows the chassis's scale, so a scale change moves it, as an edit does.
-            if (Same(wheel, record.appliedWheels[i]) && Fenrir::Same(wheel.position * scale, record.given[i].position))
+            if (Same(wheel, record.writtenWheels[i]) && Fenrir::Same(wheel.position * scale, desc.wheels[i].position))
             {
                 continue;
             }
-            record.given[i] = WheelDesc(record.wheels[i], wheel, scale);
-            m_backend->UpdateVehicleWheel(record.id, i, record.given[i]);
-            record.appliedWheels[i] = wheel;
+            desc.wheels[i] = WheelDesc(record.wheels[i], wheel, scale);
+            record.writtenWheels[i] = wheel;
             changed = true;
         }
-        if (vehicle.probe != record.probe)
+        if (vehicle.probe != record.written.probe)
         {
-            m_backend->SetVehicleProbe(record.id, vehicle.probe);
-            record.probe = vehicle.probe;
+            desc.probe = vehicle.probe;
             changed = true;
         }
-        if (!Fenrir::Same(vehicle.maxTilt, record.maxTilt))
+        if (!Fenrir::Same(vehicle.maxTilt, record.written.maxTilt))
         {
-            m_backend->SetVehicleMaxTilt(record.id, TiltOf(vehicle));
-            record.maxTilt = vehicle.maxTilt;
+            desc.maxTilt = TiltOf(vehicle);
             changed = true;
+        }
+        // Differential and anti-roll-bar edits and relinks.
+        if (!Same(links.differentials, desc.differentials))
+        {
+            desc.differentials = links.differentials;
+            changed = true;
+        }
+        if (!Same(links.antiRollBars, desc.antiRollBars))
+        {
+            desc.antiRollBars = links.antiRollBars;
+            changed = true;
+        }
+        // Made again by the backend, it is shown as a new vehicle is.
+        if (changed && m_backend->UpdateVehicle(record.id, desc))
+        {
+            ShowMade(chassis, record);
         }
         return changed;
+    }
+
+    void Vehicles::ShowMade(std::uint32_t chassis, VehicleRecord& record)
+    {
+        record.parked.reset();
+        record.previous.clear();
+        record.current.clear();
+        record.snap = true;
+        HandWheels(chassis, record, m_backend->ReadVehicle(record.id));
+        m_poses->WriteBack();
     }
 
     void Vehicles::HandWheels(std::uint32_t chassis, const VehicleRecord& record, const Backend::VehicleRead& read)
     {
         for (std::size_t i = 0; i < record.wheels.size(); ++i)
         {
-            m_poses->HandWheel(record.wheels[i], chassis, WheelPose(record.given[i], read.wheels[i]));
+            m_poses->HandWheel(record.wheels[i], chassis, WheelPose(record.desc.wheels[i], read.wheels[i]));
         }
     }
 
@@ -570,7 +570,7 @@ namespace Fenrir::Detail
                 continue;
             }
             // Asleep, it keeps what the step it fell asleep left: the backend stopped its wheels then.
-            if (!m_backend->IsSleeping(record.body))
+            if (!m_backend->IsSleeping(record.desc.body))
             {
                 record.parked.reset();
             }
@@ -668,7 +668,7 @@ namespace Fenrir::Detail
                 between.compression = from.compression + (to.compression - from.compression) * fraction;
                 between.steerAngle = from.steer + (to.steer - from.steer) * fraction;
                 between.spinAngle = from.spin + (to.spin - from.spin) * fraction;
-                const Transform local = WheelPose(record.given[i], between);
+                const Transform local = WheelPose(record.desc.wheels[i], between);
                 Transform world = *at;
                 world.pos = at->pos + at->rot * local.pos;
                 world.rot = at->rot * local.rot;
@@ -688,16 +688,16 @@ namespace Fenrir::Detail
             }
             const Transform& body = m_poses->Baseline(chassis);
             const Backend::VehicleRead read = m_backend->ReadVehicle(record.id);
-            for (std::size_t i = 0; i < record.given.size(); ++i)
+            for (std::size_t i = 0; i < record.desc.wheels.size(); ++i)
             {
-                const Backend::VehicleWheelDesc& given = record.given[i];
+                const Backend::VehicleWheelDesc& given = record.desc.wheels[i];
                 const Backend::VehicleWheelRead& wheel = read.wheels[i];
                 const Transform pose = WheelPose(given, wheel);
 
                 // The suspension in the chassis's axes: from the top of its travel down to full extension, with a
                 // cross-tick across it at the wheel's centre, in the axes of the wheel's mount.
                 const LineWriter suspension = canvas.Writer(body.pos, body.rot, DebugColour::Suspension);
-                suspension(given.position + given.steeringAxis * given.settings.suspension.travel, given.position);
+                suspension(given.position + given.steeringAxis * given.suspension.travel, given.position);
                 for (const Math::Vec3& axis : {xAxis, zAxis})
                 {
                     const Math::Vec3 across = suspensionTick * (given.rest * axis);
@@ -707,13 +707,13 @@ namespace Fenrir::Detail
                 // The wheel in its own plane, Y and Z about its axle X, with a spoke up its Y.
                 const LineWriter rim =
                     canvas.Writer(body.pos + body.rot * pose.pos, body.rot * pose.rot, DebugColour::Wheel);
-                const float radius = given.settings.radius;
+                const float radius = given.radius;
                 rim.Arc(Math::Vec3(0.0f), yAxis, zAxis, radius, 0.0f, 2.0f * pi, circleSegments);
                 rim(Math::Vec3(0.0f), radius * yAxis);
 
                 if (wheel.onGround)
                 {
-                    canvas.ContactPoint(wheel.contactPoint, wheel.contactNormal, GripColour(given.settings, wheel));
+                    canvas.ContactPoint(wheel.contactPoint, wheel.contactNormal, GripColour(given, wheel));
                 }
             }
         }

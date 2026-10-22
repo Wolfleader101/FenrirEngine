@@ -24,7 +24,7 @@ namespace Fenrir::Detail
     /** @brief Whether two driver inputs are the same, bit for bit. */
     [[nodiscard]] bool Same(const VehicleInput& a, const VehicleInput& b);
 
-    /** @brief Whether two kinds that do not rebuild (Rebuilds) have the same settings: a difference is a live edit. */
+    /** @brief Whether two kinds are the same kind of vehicle with the same settings. */
     [[nodiscard]] bool Same(const VehicleKind& a, const VehicleKind& b);
 
     /** @brief Whether two vehicles' differentials, as given to the backend, are the same. */
@@ -35,24 +35,21 @@ namespace Fenrir::Detail
     [[nodiscard]] bool Same(const std::vector<Backend::VehicleAntiRollBarDesc>& a,
                             const std::vector<Backend::VehicleAntiRollBarDesc>& b);
 
-    /** @brief Whether changing from kind `a` to `b` rebuilds the vehicle: a different kind, or a motorcycle's lean
-     * limit. */
-    [[nodiscard]] bool Rebuilds(const VehicleKind& a, const VehicleKind& b);
-
-    /** @brief Driver input in its ranges for the vehicle's `kind` (already in range), silently, as joint position
-     * targets are. In Manual `forward` is a pedal, so reversing is the gear's job. */
-    [[nodiscard]] VehicleInput Clamped(const VehicleInput& input, const VehicleKind& kind);
+    /** @brief Driver input in its ranges for how the vehicle is driven (`drive`), silently, as joint position targets
+     * are. In Manual `forward` is a pedal, so reversing is the gear's job. */
+    [[nodiscard]] VehicleInput Clamped(const VehicleInput& input, const Backend::VehicleDriveDesc& drive);
 
     /** @brief A tilt limit from 0 to a half turn, silently: a half turn or more is off. */
     [[nodiscard]] float TiltOf(const Vehicle& vehicle);
 
     /**
-     * @brief The kind of the Vehicle on `entity` corrected into the ranges the backend can use. The kinds of
-     * out-of-range value it held that `warned` does not have are warned about through `logger`, and `warned` becomes
-     * those it holds now, so a valid value clears its warning.
+     * @brief How the Vehicle on `entity` is driven, from its kind corrected into the ranges the backend can use. The
+     * kinds of out-of-range value it held that `warned` does not have are warned about through `logger`, and `warned`
+     * becomes those it holds now, so a valid value clears its warning. A trailer is an unpowered wheeled vehicle with
+     * the default engine and a Manual gearbox, held in neutral by Clamped.
      */
-    [[nodiscard]] VehicleKind InRange(const VehicleKind& kind, std::uint32_t entity, std::uint32_t& warned,
-                                      ILogger& logger);
+    [[nodiscard]] Backend::VehicleDriveDesc DriveDescOf(const VehicleKind& kind, std::uint32_t entity,
+                                                        std::uint32_t& warned, ILogger& logger);
 
     /** @brief The backend's wheel for the VehicleWheel on `entity`, its settings corrected (each kind of out-of-range
      * value warned about once per wheel, `warned` kept with it) and its position scaled by `scale`, the chassis's world
