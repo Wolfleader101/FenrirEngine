@@ -35,7 +35,13 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_compile_options(/W4)
 endif()
 
+# fenrir_describe_api() and the fenrir-describe-api target, which packages that share types with bindings use (ADR-0016).
+include(cmake/FenrirDescribeApi.cmake)
+add_subdirectory(tools/describe-api)
+
 if(FENRIR_ENABLE_SCRIPTING)
+    # iris_generate_binding() adds each binding (ADR-0016) to fenrir-generate-bindings, which the build never runs.
+    set(IRIS_GENERATE_BINDINGS_TARGET fenrir-generate-bindings)
     add_subdirectory(packages/Iris)
 endif()
 

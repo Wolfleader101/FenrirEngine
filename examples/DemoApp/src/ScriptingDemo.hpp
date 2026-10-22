@@ -30,7 +30,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 namespace ScriptingDemo

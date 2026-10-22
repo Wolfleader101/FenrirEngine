@@ -45,6 +45,20 @@ static unsafe class StructMappingChecks
 
     private enum Small : short { A }
 
+    // The managed types an opaque pointer field can be, and one it cannot (four bytes where the pointer is).
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WithNint { public int Id; public nint Owner; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WithNuint { public int Id; public nuint Owner; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WithLong { public int Id; public long Owner; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WithUlong { public int Id; public ulong Owner; }
+    [StructLayout(LayoutKind.Explicit, Size = 16)]
+    private struct WithUint { [FieldOffset(0)] public int Id; [FieldOffset(8)] public uint Owner; }
+
+    private struct Empty { }
+
     private sealed class Registered : StructMapping.IRegisteredStructs
     {
         private readonly Dictionary<Type, StructRecord> records = new();
@@ -133,6 +147,30 @@ static unsafe class StructMappingChecks
             "StructMappingChecks+Small is 2 bytes but the native enum is 4.", "A wrong enum size");
         Expect(typeof(Small), "StructMappingChecks+Small|2|x", "The enum description is malformed.", "A malformed enum");
         Expect(typeof(Pt), "StructMappingChecks+Pt|2|4", "StructMappingChecks+Pt is not an enum.", "A struct described as an enum");
+
+        // An opaque pointer field: eight bytes held by nint, nuint, long or ulong.
+        const string Pointer = "17";
+        foreach (Type pointerHolder in new[] { typeof(WithNint), typeof(WithNuint), typeof(WithLong), typeof(WithUlong) })
+        {
+            string? refused = Refused(pointerHolder, $"{pointerHolder.FullName}|16\nId|0|{Int32}|\nOwner|8|{Pointer}|");
+            Check(refused == null, $"A pointer field held as {pointerHolder.Name} was refused: {refused}");
+        }
+        Expect(typeof(WithUint), $"StructMappingChecks+WithUint|16\nId|0|{Int32}|\nOwner|8|{Pointer}|",
+            "Field 'Owner' of StructMappingChecks+WithUint is System.UInt32, which does not match the native field's type (a pointer, held as nint, nuint, long or ulong).",
+            "A pointer field held as uint");
+        Expect(typeof(WithNint), $"StructMappingChecks+WithNint|16\nId|0|{Int32}|\nOwner|8|{UInt32}|",
+            "Field 'Owner' of StructMappingChecks+WithNint is System.IntPtr, which does not match the native field's type.",
+            "A nint field described as a number");
+
+        // An empty struct: no field lines, one byte.
+        StructRecord empty = StructMapping.Describe(typeof(Empty), StructMapping.Parse("StructMappingChecks+Empty|1"), new Registered());
+        Check(empty.Size == 1 && empty.BoolOffsets.Length == 0, "An empty struct was not accepted as one byte");
+        Expect(typeof(Pt), "StructMappingChecks+Pt|1",
+            "StructMappingChecks+Pt has field 'X' but the native struct declares no fields.", "No fields for a struct with fields");
+        Expect(typeof(Empty), "StructMappingChecks+Empty|4",
+            "The native struct StructMappingChecks+Empty declares no fields but is 4 bytes; an empty struct is 1.", "No fields but four bytes");
+        Expect(typeof(Empty), $"StructMappingChecks+Empty|1\nX|0|{UInt8}|",
+            "StructMappingChecks+Empty has 0 fields but the native struct declares 1.", "A field for an empty struct");
 
         Console.WriteLine("Struct mapping: each mismatch of a description with its managed type is refused and named, with no component.");
     }

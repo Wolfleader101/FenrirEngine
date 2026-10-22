@@ -57,8 +57,9 @@ namespace Fenrir::Detail
      * and reads its types), and one for tests that returns literals. Everything else reconcile does is rules over the
      * answers.
      *
-     * The questions are asked in a fixed order: the components, then the events, then whether the native components and
-     * events match their C# structs, then (for what is kept) a layout fingerprint of each definition.
+     * The questions are asked in a fixed order: the components, then the events, then whether the native components,
+     * events and shared structs match their C# structs, then (for what is kept) a layout fingerprint of each
+     * definition.
      */
     class ScriptAssembly
     {
@@ -82,9 +83,10 @@ namespace Fenrir::Detail
         [[nodiscard]] virtual std::string Fingerprint(const ScriptComponentDescription& description) = 0;
 
         /**
-         * @brief Checks every native component and event in `registry` against its C# struct in this assembly.
+         * @brief Checks every native component, event and shared struct in `registry` against its C# struct in this
+         * assembly.
          *
-         * @return success, or a diagnostic naming the component or event and the first mismatching field
+         * @return success, or a diagnostic naming the component, event or shared struct and the first mismatching field
          */
         [[nodiscard]] virtual Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) = 0;
     };
@@ -93,9 +95,9 @@ namespace Fenrir::Detail
      * @brief Everything that must hold before a freshly loaded script assembly is kept, and then the keeping.
      *
      * It either commits the whole load or changes nothing: what the assembly defines is discovered and checked, every
-     * native component and event is checked against its C# struct, and only then is what the previous generation left
-     * in the ECS and the App compared with this one's definitions (unchanged data stays, anything else goes with a
-     * warning) and the new definitions registered.
+     * native component, event and shared struct is checked against its C# struct, and only then is what the previous
+     * generation left in the ECS and the App compared with this one's definitions (unchanged data stays, anything else
+     * goes with a warning) and the new definitions registered.
      *
      * @param app where script data lives: the entity lists of its scenes and its event queues
      * @param registry the components and events scripts can name; gains the assembly's definitions

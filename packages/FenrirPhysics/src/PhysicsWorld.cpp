@@ -2,143 +2,21 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
-#include <map>
-#include <string>
-#include <tuple>
+#include <span>
 #include <utility>
-#include <vector>
 
-#include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
-#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirScene/Scene.hpp"
-#include "Same.hpp"
 #include "WorldImpl.hpp"
 
 namespace Fenrir
 {
     namespace
     {
-        // The diff's overloads below would otherwise hide those for plain values.
-        using Fenrir::Same;
-
-        bool Same(const Backend::Motion& a, const Backend::Motion& b)
-        {
-            return a.motionType == b.motionType && Same(a.mass, b.mass) && Same(a.linearDamping, b.linearDamping) &&
-                   Same(a.angularDamping, b.angularDamping) && Same(a.gravityScale, b.gravityScale);
-        }
-
-        Entity ParentOf(const Entity& entity)
-        {
-            return entity.HasComponent<Relationship>() ? entity.GetComponent<Relationship>().parent : Entity();
-        }
-
-        Transform LocalOf(const Entity& entity)
-        {
-            return entity.HasComponent<Transform>() ? entity.GetComponent<Transform>() : Transform();
-        }
-
-        // The backend keeps one surface per body, so a compound body has one material: its own entity's, else that of
-        // the first of its colliders (in entity order) with one, else the default.
-        template <typename Parts>
-        PhysicsMaterial MaterialOf(EntityList& entities, const Entity& body, const Parts& parts)
-        {
-            if (body.HasComponent<PhysicsMaterial>())
-            {
-                return body.GetComponent<PhysicsMaterial>();
-            }
-            for (const auto& part : parts)
-            {
-                const Entity collider = entities.GetEntity(part.entity);
-                if (collider.HasComponent<PhysicsMaterial>())
-                {
-                    return collider.GetComponent<PhysicsMaterial>();
-                }
-            }
-            return PhysicsMaterial{};
-        }
-
-        // Read from the body's entity: it applies to all the body's colliders.
-        CollisionFilter FilterOf(Entity& entity)
-        {
-            return entity.HasComponent<CollisionFilter>() ? entity.GetComponent<CollisionFilter>() : CollisionFilter{};
-        }
-
-        Backend::Motion MotionOf(const RigidBody* rigidBody)
-        {
-            if (rigidBody == nullptr)
-            {
-                return Backend::Motion{};
-            }
-            return Backend::Motion{rigidBody->motionType, rigidBody->mass, rigidBody->linearDamping,
-                                   rigidBody->angularDamping, rigidBody->gravityScale};
-        }
-
-        RigidBody* RigidBodyOf(Entity& entity)
-        {
-            return entity.HasComponent<RigidBody>() ? &entity.GetComponent<RigidBody>() : nullptr;
-        }
-
-        // A trigger is a kinematic body whatever RigidBody its entity has: it follows its entity and pushes nothing.
-        Backend::Motion MotionOf(Entity& entity, bool isTrigger)
-        {
-            if (isTrigger)
-            {
-                return Backend::Motion{.motionType = MotionType::Kinematic};
-            }
-            return MotionOf(RigidBodyOf(entity));
-        }
-
-        // A trigger collider is always its own backend body (the backend's sensor flag is per body), even beneath
-        // another body.
-        bool IsTrigger(const Entity& entity)
-        {
-            return entity.HasComponent<Trigger>() && entity.HasComponent<Collider>();
-        }
-
-        // The nearest of `from` and its ancestors with a RigidBody that hosts a compound body, or none. A trigger's
-        // entity hosts no compound body: a RigidBody there does not make the trigger move as one.
-        Entity NearestBodyHost(const Entity& from)
-        {
-            for (Entity e = from; e.IsValid(); e = ParentOf(e))
-            {
-                if (e.HasComponent<RigidBody>() && !e.HasComponent<Trigger>())
-                {
-                    return e;
-                }
-            }
-            return Entity();
-        }
-
-        template <typename TEvent, typename Key>
-        void SortAndSend(App& app, std::vector<TEvent>& events, Key key)
-        {
-            std::sort(events.begin(), events.end(),
-                      [&key](const TEvent& a, const TEvent& b) { return key(a) < key(b); });
-            for (const TEvent& event : events)
-            {
-                app.SendEvent(event);
-            }
-        }
-
-        // How many ancestors the entity has: blending writes parents before children.
-        int DepthOf(const Entity& entity)
-        {
-            int depth = 0;
-            for (Entity at = entity;
-                 at.HasComponent<Relationship>() && at.GetComponent<Relationship>().parent.IsValid();
-                 at = at.GetComponent<Relationship>().parent)
-            {
-                ++depth;
-            }
-            return depth;
-        }
-
         // Enough collision steps that none is longer than a 60 Hz step.
         int CollisionSteps(float dt)
         {
@@ -160,6 +38,17 @@ namespace Fenrir
     PhysicsWorld* PhysicsWorld::Of(Scene& scene)
     {
         return scene.GetResource<PhysicsWorld>();
+    }
+
+    CollisionMesh PhysicsWorld::CreateCollisionMesh(std::span<const Math::Vec3> vertices,
+                                                    std::span<const std::uint32_t> indices)
+    {
+        return m_impl->m_meshes->Create(vertices, indices);
+    }
+
+    bool PhysicsWorld::ReleaseCollisionMesh(CollisionMesh mesh)
+    {
+        return m_impl->m_meshes->Release(mesh);
     }
 
     void PhysicsWorld::AddImpulse(const Entity& entity, const Math::Vec3& impulse)
@@ -194,34 +83,11 @@ namespace Fenrir
 
     PhysicsWorld::Impl::Impl(EntityList& entities, const Backend::WorldSettings& settings,
                              Backend::CollisionMeshes& meshes, ILogger& logger)
-        : m_entities(&entities), m_logger(&logger), m_backend(settings, meshes, logger),
-          m_rigidBodies(entities.Watch(ComponentType::Native<RigidBody>())),
-          m_colliders(entities.Watch(ComponentType::Native<Collider>())),
-          m_triggers(entities.Watch(ComponentType::Native<Trigger>())),
-          m_jointWatch(entities.Watch(ComponentType::Native<Joint>())),
-          m_characterWatch(entities.Watch(ComponentType::Native<CharacterBody>())),
-          m_vehicleWatch(entities.Watch(ComponentType::Native<Vehicle>())),
-          m_wheelWatch(entities.Watch(ComponentType::Native<VehicleWheel>())),
-          m_differentialWatch(entities.Watch(ComponentType::Native<VehicleDifferential>())),
-          m_antiRollBarWatch(entities.Watch(ComponentType::Native<VehicleAntiRollBar>()))
+        : m_entities(&entities), m_meshes(&meshes), m_backend(settings, meshes, logger), m_poses(entities),
+          m_bodies(entities, logger, m_backend, m_poses), m_contacts(entities, m_backend, m_bodies),
+          m_joints(entities, logger, m_backend, m_bodies, m_poses), m_characters(entities, logger, m_backend, m_poses),
+          m_vehicles(entities, logger, m_backend, m_bodies, m_poses), m_canvas(m_backend)
     {
-        // A watch records only what happens after it is made: the components already there are found once, here.
-        const ComponentType colliders[] = {ComponentType::Native<Collider>()};
-        entities.ForEachWith(colliders, [this](std::uint32_t entity) { m_colliderEntities.insert(entity); });
-        const ComponentType rigidBodies[] = {ComponentType::Native<RigidBody>()};
-        entities.ForEachWith(rigidBodies, [this](std::uint32_t entity) { m_rigidBodyEntities.insert(entity); });
-        const ComponentType joints[] = {ComponentType::Native<Joint>()};
-        entities.ForEachWith(joints, [this](std::uint32_t entity) { m_jointEntities.insert(entity); });
-        const ComponentType characters[] = {ComponentType::Native<CharacterBody>()};
-        entities.ForEachWith(characters, [this](std::uint32_t entity) { m_characterEntities.insert(entity); });
-        const ComponentType vehicles[] = {ComponentType::Native<Vehicle>()};
-        entities.ForEachWith(vehicles, [this](std::uint32_t entity) { m_vehicleEntities.insert(entity); });
-        const ComponentType wheels[] = {ComponentType::Native<VehicleWheel>()};
-        entities.ForEachWith(wheels, [this](std::uint32_t entity) { m_wheelEntities.insert(entity); });
-        const ComponentType differentials[] = {ComponentType::Native<VehicleDifferential>()};
-        entities.ForEachWith(differentials, [this](std::uint32_t entity) { m_differentials.try_emplace(entity); });
-        const ComponentType antiRollBars[] = {ComponentType::Native<VehicleAntiRollBar>()};
-        entities.ForEachWith(antiRollBars, [this](std::uint32_t entity) { m_antiRollBars.try_emplace(entity); });
     }
 
     void PhysicsWorld::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
@@ -231,808 +97,112 @@ namespace Fenrir
 
     void PhysicsWorld::Impl::Step(App& app, float dt)
     {
-        SyncBodies();
-        PushEdits(dt);
-        PushCharacterEdits();
-        // After the bodies' edits: a body's scale decides whether its joints are recreated.
-        SyncJoints(dt);
-        // After the joints: a vehicle is made after its body and its body's joints.
-        SyncVehicles();
-        ApplyPushes();
-        // 3b: before the step, so a character's pushes act in it and it moves against the bodies the step will move.
-        MoveCharacters(dt);
+        // Drain and rebuild. A joint's constraint and a vehicle go before their bodies, and characters go before the
+        // bodies' batch and are made after it, so the bodies come in a reproducible order.
+        const Detail::Bodies::Rebuild rebuild = m_bodies.Plan();
+        m_joints.Drain();
+        m_vehicles.Drain();
+        m_joints.DropOn(rebuild.destroyed);
+        m_vehicles.DropOn(rebuild.destroyed);
+        m_characters.Drop(rebuild.changed);
+        m_bodies.Apply(rebuild);
+        m_characters.Make();
+
+        // Edits. After the bodies': a body's scale decides whether its joints are recreated, and a vehicle is made
+        // after its body and its body's joints.
+        m_bodies.PushEdits(dt);
+        m_characters.PushEdits();
+        m_joints.Sync(dt);
+        m_vehicles.Sync();
+        m_bodies.ApplyPushes();
+
+        // Moves: before the step, so a character's pushes act in it and it moves against the bodies the step will
+        // move.
+        m_characters.Move(dt);
+
         m_backend.Step(dt, CollisionSteps(dt));
-        WriteBack();
-        // After the chassis: wheels are posed against its new pose.
-        WriteBackVehicles(dt);
-        MeasureJoints();
-        BreakJoints();
-        SendEvents(app);
-        AdvancePoses();
+
+        // Write-back: bodies, characters and wheels through Poses, parents first, each wheel after its chassis and
+        // against its new pose.
+        m_bodies.HandPoses();
+        m_characters.HandPoses();
+        m_vehicles.WriteBack(dt);
+        m_poses.WriteBack();
+        m_characters.ResetIdle();
+
+        // Joints after the step.
+        m_joints.Measure();
+        m_joints.Break();
+
+        // Events, then the shown poses and the debug lines.
+        m_contacts.Send(app, m_characters.MoveContacts());
+        m_joints.SendBroken(app);
+        m_poses.Advance();
         DrawDebugLines();
-    }
-
-    void PhysicsWorld::Impl::Shown::Advance(const Transform& world)
-    {
-        previous = snap ? world : current;
-        current = world;
-        snap = false;
-        heldByGame = false;
-    }
-
-    void PhysicsWorld::Impl::Shown::Restore(Transform& local, bool turnIsTeleport)
-    {
-        const bool moved = !Same(local.pos, shownLocal.pos);
-        const bool turned = !Same(local.rot, shownLocal.rot) || !Same(local.scale, shownLocal.scale);
-        // Game code moved or turned it during Update: what it changed stays, and the rest goes back to the true pose,
-        // so a turn alone does not leave it at its blended position.
-        if (!moved)
-        {
-            local.pos = trueLocal.pos;
-        }
-        if (!turned)
-        {
-            local.rot = trueLocal.rot;
-            local.scale = trueLocal.scale;
-        }
-        if (moved || turned)
-        {
-            heldByGame = true;
-            // Nothing blends across a jump.
-            snap = snap || moved || turnIsTeleport;
-        }
-    }
-
-    Transform PhysicsWorld::Impl::Shown::Between(float fraction) const
-    {
-        Transform world = current;
-        world.pos = previous.pos + (current.pos - previous.pos) * fraction;
-        world.rot = Math::Slerp(previous.rot, current.rot, fraction);
-        return world;
-    }
-
-    void PhysicsWorld::Impl::AdvancePoses()
-    {
-        for (auto& [id, record] : m_bodies)
-        {
-            record.shown.Advance(record.world);
-        }
-        for (auto& [id, record] : m_characters)
-        {
-            record.shown.Advance(record.world);
-        }
     }
 
     void PhysicsWorld::Impl::Restore()
     {
-        const auto restore = [this](std::uint32_t id, Shown& shown, bool turnIsTeleport) {
-            if (shown.blended && m_entities->HasEntity(id))
-            {
-                shown.Restore(m_entities->GetEntity(id).GetComponent<Transform>(), turnIsTeleport);
-            }
-            shown.blended = false;
-        };
-        for (auto& [id, record] : m_bodies)
-        {
-            restore(id, record.shown, true);
-        }
-        // A character's turn is not a teleport.
-        for (auto& [id, record] : m_characters)
-        {
-            restore(id, record.shown, false);
-        }
-        RestoreWheels();
+        m_poses.Restore();
     }
 
     void PhysicsWorld::Impl::Blend(float fraction)
     {
-        struct Blended
-        {
-            int depth;
-            Entity entity;
-            const Transform* stepPose;
-            Shown* shown;
-            // Shown at its step pose: one that is not interpolated, written only because an ancestor is.
-            bool atStepPose;
-        };
-        std::vector<Blended> blended;
-        std::vector<Blended> carried;
-        std::set<std::uint32_t> interpolated;
-        const auto add = [&](std::uint32_t id, const Transform& stepPose, Shown& shown, bool interpolate) {
-            Entity entity = m_entities->GetEntity(id);
-            if (interpolate)
-            {
-                interpolated.insert(id);
-                blended.push_back(Blended{DepthOf(entity), entity, &stepPose, &shown, false});
-            }
-            else
-            {
-                carried.push_back(Blended{DepthOf(entity), entity, &stepPose, &shown, true});
-            }
-        };
-        for (auto& [id, record] : m_bodies)
-        {
-            if (!record.Active() || record.motion.motionType == MotionType::Static || record.shown.heldByGame ||
-                !m_entities->HasEntity(id))
-            {
-                continue; // an inactive collider has no simulated pose to show
-            }
-            Entity entity = m_entities->GetEntity(id);
-            const RigidBody* rigidBody = RigidBodyOf(entity);
-            if (rigidBody == nullptr || !entity.HasComponent<Transform>())
-            {
-                continue;
-            }
-            add(id, record.world, record.shown, rigidBody->interpolate);
-        }
-        for (auto& [id, record] : m_characters)
-        {
-            if (record.shown.heldByGame || !m_entities->HasEntity(id))
-            {
-                continue;
-            }
-            add(id, record.world, record.shown, m_entities->GetEntity(id).GetComponent<CharacterBody>().interpolate);
-        }
-        // One that is not interpolated is still moved by an interpolated ancestor's blend, through its local
-        // Transform: it is written back at its own step pose, so it is shown where it is.
-        for (const Blended& body : carried)
-        {
-            for (Entity above = ParentOf(body.entity); above.IsValid(); above = ParentOf(above))
-            {
-                if (interpolated.contains(above.GetId()))
-                {
-                    blended.push_back(body);
-                    break;
-                }
-            }
-        }
-        // Parents before children, so each child's world pose is set against its parent's blended one.
-        std::stable_sort(blended.begin(), blended.end(),
-                         [](const Blended& a, const Blended& b) { return a.depth < b.depth; });
-
-        // Every true local Transform is saved before any is overwritten.
-        for (const Blended& body : blended)
-        {
-            body.shown->trueLocal = body.entity.GetComponent<Transform>();
-        }
-        for (const Blended& body : blended)
-        {
-            Shown& shown = *body.shown;
-            Transform world = *body.stepPose;
-            if (!body.atStepPose)
-            {
-                const Transform between = shown.Between(fraction);
-                world.pos = between.pos;
-                world.rot = between.rot;
-            }
-            SetWorldTransform(body.entity, world);
-            shown.shownLocal = body.entity.GetComponent<Transform>();
-            shown.blended = true;
-        }
-        // After the bodies: wheels are posed on their chassis's blended pose.
-        BlendWheels(fraction);
+        // Wheels are handed first, on their chassis's blended pose, for Poses to write after the bodies.
+        m_vehicles.BlendWheels(fraction);
+        m_poses.Blend(fraction);
     }
 
-    std::uint32_t PhysicsWorld::Impl::BodyEntityOf(std::uint32_t entity) const
+    void PhysicsWorld::SetDebugDraw(DebugDraw categories)
     {
-        const Entity collider = m_entities->GetEntity(entity);
-        if (IsTrigger(collider))
-        {
-            return entity;
-        }
-        const Entity host = NearestBodyHost(collider);
-        return host.IsValid() ? host.GetId() : entity;
+        m_impl->m_debugDraw = categories;
     }
 
-    std::uint32_t PhysicsWorld::Impl::ResolveBody(std::uint32_t entity) const
+    DebugDraw PhysicsWorld::DebugDrawCategories() const
     {
-        if (!m_entities->HasEntity(entity))
-        {
-            return entity;
-        }
-        return HasBodyComponent(m_entities->GetEntity(entity)) ? BodyEntityOf(entity) : entity;
+        return m_impl->m_debugDraw;
     }
 
-    std::uint32_t PhysicsWorld::Impl::AttachedBodyOf(std::uint32_t trigger) const
+    std::span<const DebugLine> PhysicsWorld::DebugLines() const
     {
-        if (!m_entities->HasEntity(trigger))
-        {
-            return trigger;
-        }
-        // The nearest ancestor body or character, if there is one: a trigger beneath a character moves with it too.
-        for (Entity above = ParentOf(m_entities->GetEntity(trigger)); above.IsValid(); above = ParentOf(above))
-        {
-            if (IsCharacterCollider(above.GetId()) ||
-                (above.HasComponent<RigidBody>() && !above.HasComponent<Trigger>()))
-            {
-                return above.GetId();
-            }
-        }
-        return trigger;
+        return m_impl->m_canvas.Lines();
     }
 
-    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(std::uint32_t entity)
+    void PhysicsWorld::Impl::DrawDebugLines()
     {
-        if (m_entities->HasEntity(entity) && !HasBodyComponent(m_entities->GetEntity(entity)))
+        if (m_debugDraw == DebugDraw::None)
         {
-            return nullptr;
+            m_canvas.Clear();
+            return;
         }
-        // A destroyed entity's body, if it had one, lasts until the next step.
-        const auto it = m_bodies.find(ResolveBody(entity));
-        return it == m_bodies.end() ? nullptr : &it->second;
-    }
-
-    PhysicsWorld::Impl::Record* PhysicsWorld::Impl::FindBody(const Entity& entity)
-    {
-        return entity.IsValid() ? FindBody(entity.GetId()) : nullptr;
-    }
-
-    std::vector<PhysicsWorld::Impl::Part> PhysicsWorld::Impl::PartsOf(std::span<const std::uint32_t> entities,
-                                                                      std::uint32_t body, const Math::Vec3& bodyScale)
-    {
-        std::vector<Part> parts;
-        parts.reserve(entities.size());
-        std::vector<Entity> chain;
-        for (std::uint32_t id : entities)
+        m_canvas.Begin();
+        if (Includes(m_debugDraw, DebugDraw::Colliders))
         {
-            Entity entity = m_entities->GetEntity(id);
-            // Composed from the body down through the locals, with GetWorldTransform's own step, but starting from the
-            // body's scale alone: the pose then stays the same, bit for bit, however the body moves.
-            chain.clear();
-            for (Entity e = entity; e.IsValid() && e.GetId() != body; e = ParentOf(e))
-            {
-                chain.push_back(e);
-            }
-            Transform pose(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), bodyScale);
-            for (auto it = chain.rbegin(); it != chain.rend(); ++it)
-            {
-                pose = ComposeTransform(pose, LocalOf(*it));
-            }
-            const CollisionShape& shape = entity.GetComponent<Collider>().shape;
-            parts.push_back(Part{id, shape, pose, m_backend.CanMakeShape(shape),
-                                 id != body && entity.HasComponent<CollisionFilter>()});
+            m_bodies.DrawColliders(m_canvas);
         }
-        return parts;
-    }
-
-    std::vector<Backend::ColliderPart> PhysicsWorld::Impl::UsableParts(std::span<const Part> parts)
-    {
-        std::vector<Backend::ColliderPart> usable;
-        for (const Part& part : parts)
+        if (Includes(m_debugDraw, DebugDraw::Joints))
         {
-            if (part.usable)
-            {
-                usable.push_back(
-                    Backend::ColliderPart{part.shape, part.pose.scale, part.pose.pos, part.pose.rot, part.entity});
-            }
+            m_joints.Draw(m_canvas);
         }
-        return usable;
-    }
-
-    void PhysicsWorld::Impl::WarnAbout(std::span<const Part> parts, std::span<const Part> before)
-    {
-        for (std::size_t i = 0; i < parts.size(); ++i)
+        if (Includes(m_debugDraw, DebugDraw::Characters))
         {
-            const Part& part = parts[i];
-            const bool known = i < before.size() && before[i].entity == part.entity;
-            if (!part.usable && (!known || before[i].usable))
-            {
-                m_logger->Warn("The collider of entity " + std::to_string(part.entity) +
-                               " refers to a collision mesh that is released or cannot be used as its kind of shape; "
-                               "it is inactive until its shape changes");
-            }
-            if (part.filtered && (!known || !before[i].filtered))
-            {
-                m_logger->Warn("The CollisionFilter of entity " + std::to_string(part.entity) +
-                               " is ignored: its collider is part of the body of an ancestor, whose filter applies to "
-                               "all its colliders");
-            }
+            m_characters.Draw(m_canvas);
         }
-    }
-
-    void PhysicsWorld::Impl::SyncBodies()
-    {
-        // Only each entity's net effect matters: an entity whose components came or went has its body rebuilt from
-        // what it has now (added then removed: no body; removed then added: a new body).
-        std::set<std::uint32_t> changed;
-        const auto track = [this, &changed](ComponentWatch& watch, std::set<std::uint32_t>& tracked, auto has) {
-            for (const ComponentChange& change : watch.Drain())
-            {
-                changed.insert(change.entity);
-                if (m_entities->HasEntity(change.entity) && has(m_entities->GetEntity(change.entity)))
-                {
-                    tracked.insert(change.entity);
-                }
-                else
-                {
-                    tracked.erase(change.entity);
-                }
-            }
-        };
-        track(m_rigidBodies, m_rigidBodyEntities, [](const Entity& e) { return e.HasComponent<RigidBody>(); });
-        track(m_colliders, m_colliderEntities, [](const Entity& e) { return e.HasComponent<Collider>(); });
-        // Becoming or ceasing to be a character body changes whether the entity's collider is a body of its own.
-        track(m_characterWatch, m_characterEntities, [](const Entity& e) { return e.HasComponent<CharacterBody>(); });
-        // Becoming or ceasing to be a trigger changes what kind of backend body the collider needs, and which body it
-        // is part of.
-        for (const ComponentChange& change : m_triggers.Drain())
+        if (Includes(m_debugDraw, DebugDraw::Vehicles))
         {
-            changed.insert(change.entity);
+            m_vehicles.Draw(m_canvas);
         }
-        DrainJoints();
-        DrainVehicles();
-
-        // Which colliders form which body, from the hierarchy as it is now (reparenting is not reported, so this is
-        // worked out every tick).
-        std::map<std::uint32_t, std::vector<std::uint32_t>> assembly;
-        std::erase_if(m_characterChildren, [this](std::uint32_t id) { return !m_colliderEntities.contains(id); });
-        for (std::uint32_t collider : m_colliderEntities)
+        if (Includes(m_debugDraw, DebugDraw::Contacts))
         {
-            if (IsCharacterCollider(collider))
-            {
-                continue;
-            }
-            if (!IsCharacterChild(collider))
-            {
-                m_characterChildren.erase(collider);
-                assembly[BodyEntityOf(collider)].push_back(collider);
-            }
-            else if (m_characterChildren.insert(collider).second)
-            {
-                m_logger->Warn("The collider of entity " + std::to_string(collider) +
-                               " is beneath a character body, which has no compound shape; it makes no body until it "
-                               "has a RigidBody of its own or is moved from beneath the character");
-            }
+            m_contacts.Draw(m_canvas);
         }
-
-        for (std::uint32_t rigidBody : m_rigidBodyEntities)
-        {
-            if (assembly.contains(rigidBody))
-            {
-                m_empty.erase(rigidBody);
-            }
-            else if (m_empty.insert(rigidBody).second)
-            {
-                m_logger->Warn("The RigidBody of entity " + std::to_string(rigidBody) +
-                               " has no collider on its entity or beneath it; it is inactive in physics until it has "
-                               "one");
-            }
-        }
-        std::erase_if(m_empty, [this](std::uint32_t entity) { return !m_rigidBodyEntities.contains(entity); });
-
-        // Rebuilt: bodies whose entity or colliders changed, whose set of colliders changed, or whose colliders'
-        // shapes became usable or unusable (a collision mesh released, or a shape changed to one that can be made).
-        std::vector<Backend::BodyId> destroyed;
-        for (auto it = m_bodies.begin(); it != m_bodies.end();)
-        {
-            const auto& [body, record] = *it;
-            const auto wanted = assembly.find(body);
-            bool rebuild =
-                wanted == assembly.end() || changed.contains(body) || wanted->second.size() != record.parts.size();
-            for (std::size_t i = 0; !rebuild && i < record.parts.size(); ++i)
-            {
-                const std::uint32_t collider = wanted->second[i];
-                rebuild = collider != record.parts[i].entity || changed.contains(collider) ||
-                          m_backend.CanMakeShape(m_entities->GetEntity(collider).GetComponent<Collider>().shape) !=
-                              record.parts[i].usable;
-            }
-            if (!rebuild)
-            {
-                assembly.erase(wanted);
-                ++it;
-                continue;
-            }
-            destroyed.push_back(record.id);
-            it = m_bodies.erase(it);
-        }
-        RemoveJointsOf(destroyed);
-        RemoveVehiclesOf(destroyed);
-        // Characters before the bodies' batch, and made after it, so their bodies come in a reproducible order.
-        DropCharacters(changed);
-        m_backend.DestroyBodies(destroyed);
-
-        std::vector<std::uint32_t> entities;
-        std::vector<Backend::BodyDesc> descs;
-        for (const auto& [id, colliders] : assembly)
-        {
-            Entity entity = m_entities->GetEntity(id);
-            const bool isTrigger = IsTrigger(entity);
-            const RigidBody* rigidBody = isTrigger ? nullptr : RigidBodyOf(entity);
-            const Transform world = GetWorldTransform(entity);
-            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
-            WarnAbout(parts, {});
-
-            Backend::BodyDesc desc;
-            desc.motion = MotionOf(entity, isTrigger);
-            desc.canMove = isTrigger || rigidBody != nullptr;
-            desc.isTrigger = isTrigger;
-            desc.parts = UsableParts(parts);
-            desc.material = MaterialOf(*m_entities, entity, parts);
-            desc.filter = EffectiveFilterOf(entity);
-            desc.position = world.pos;
-            desc.rotation = world.rot;
-            if (rigidBody != nullptr)
-            {
-                desc.linearVelocity = rigidBody->linearVelocity;
-                desc.angularVelocity = rigidBody->angularVelocity;
-            }
-            desc.entity = id;
-            const auto made = m_bodies.emplace(id, Record{Backend::BodyId{}, desc.canMove, desc.motion,
-                                                          std::move(parts), desc.material, desc.filter, world,
-                                                          desc.linearVelocity, desc.angularVelocity});
-            made.first->second.isTrigger = isTrigger;
-            if (desc.parts.empty())
-            {
-                continue; // inactive: none of its colliders can be made
-            }
-            entities.push_back(id);
-            descs.push_back(std::move(desc));
-        }
-
-        std::vector<Backend::BodyId> ids(descs.size());
-        m_backend.CreateBodies(descs, ids);
-        for (std::size_t i = 0; i < descs.size(); ++i)
-        {
-            m_bodies.at(entities[i]).id = ids[i];
-        }
-        MakeCharacters();
-    }
-
-    void PhysicsWorld::Impl::PushEdits(float dt)
-    {
-        for (auto& [id, record] : m_bodies)
-        {
-            if (!record.Active())
-            {
-                continue; // inactive: no body to push to
-            }
-            Entity entity = m_entities->GetEntity(id);
-            RigidBody* rigidBody = record.isTrigger ? nullptr : RigidBodyOf(entity);
-            const Backend::Motion motion = MotionOf(entity, record.isTrigger);
-            const Transform world = GetWorldTransform(entity);
-
-            bool pushVelocity = false;
-            if (!Same(motion, record.motion))
-            {
-                m_backend.SetMotion(record.id, motion);
-                // A body that becomes dynamic starts with the velocity its RigidBody holds, not one the backend gave it
-                // while it was kinematic.
-                pushVelocity = motion.motionType == MotionType::Dynamic;
-                record.motion = motion;
-            }
-
-            std::vector<std::uint32_t> colliders;
-            colliders.reserve(record.parts.size());
-            for (const Part& part : record.parts)
-            {
-                colliders.push_back(part.entity);
-            }
-            std::vector<Part> parts = PartsOf(colliders, id, world.scale);
-            WarnAbout(parts, record.parts);
-            if (!std::ranges::equal(parts, record.parts, [](const Part& a, const Part& b) {
-                    return Same(a.shape, b.shape) && Same(a.pose.pos, b.pose.pos) && Same(a.pose.rot, b.pose.rot) &&
-                           Same(a.pose.scale, b.pose.scale);
-                }))
-            {
-                m_backend.SetShape(record.id, UsableParts(parts), id, motion.mass);
-            }
-            record.parts = std::move(parts);
-
-            const PhysicsMaterial material = MaterialOf(*m_entities, entity, record.parts);
-            if (!Same(material, record.material))
-            {
-                m_backend.SetMaterial(record.id, material);
-                record.material = material;
-            }
-
-            const CollisionFilter filter = EffectiveFilterOf(entity);
-            if (!Same(filter, record.filter))
-            {
-                m_backend.SetFilter(record.id, filter);
-                record.filter = filter;
-            }
-
-            if (motion.motionType == MotionType::Kinematic)
-            {
-                // Every step, even unmoved: otherwise the body keeps its last velocity and drifts.
-                m_backend.MoveKinematic(record.id, world.pos, world.rot, dt);
-            }
-            else if (!Same(world.pos, record.world.pos) || !Same(world.rot, record.world.rot))
-            {
-                // Its joints keep the impulses they carried last step: the backend pulls them back together by
-                // position, so they still hold the same load, and starting them from nothing would overshoot it and
-                // could break them.
-                m_backend.Teleport(record.id, world.pos, world.rot);
-                record.shown.snap = true;
-            }
-            record.world = world;
-
-            if (rigidBody != nullptr && motion.motionType == MotionType::Dynamic &&
-                (pushVelocity || !Same(rigidBody->linearVelocity, record.linearVelocity) ||
-                 !Same(rigidBody->angularVelocity, record.angularVelocity)))
-            {
-                m_backend.SetVelocity(record.id, rigidBody->linearVelocity, rigidBody->angularVelocity);
-                record.linearVelocity = rigidBody->linearVelocity;
-                record.angularVelocity = rigidBody->angularVelocity;
-            }
-        }
-    }
-
-    void PhysicsWorld::Impl::Queue(const Entity& entity, Pusher pusher, const Math::Vec3& amount)
-    {
-        if (entity.IsValid())
-        {
-            m_pushes.push_back(Push{entity.GetId(), pusher, amount});
-        }
-    }
-
-    void PhysicsWorld::Impl::ApplyPushes()
-    {
-        for (const Push& push : m_pushes)
-        {
-            const Record* record = FindBody(push.entity);
-            if (record == nullptr || !record->Active())
-            {
-                continue; // no body: nothing to push
-            }
-            (m_backend.*push.pusher)(record->id, push.amount);
-        }
-        m_pushes.clear();
-    }
-
-    void PhysicsWorld::Impl::WriteBack()
-    {
-        // Parents before children: a body's or character's local Transform is written against its parent's world
-        // transform, so a parent written after it would move it again.
-        std::vector<std::tuple<int, std::uint32_t, bool>> order;
-        for (const auto& [id, record] : m_bodies)
-        {
-            if (record.motion.motionType == MotionType::Dynamic && record.Active())
-            {
-                order.emplace_back(DepthOf(m_entities->GetEntity(id)), id, false);
-            }
-        }
-        for (const auto& [id, record] : m_characters)
-        {
-            order.emplace_back(DepthOf(m_entities->GetEntity(id)), id, true);
-        }
-        std::ranges::sort(order);
-
-        for (const auto& [depth, id, isCharacter] : order)
-        {
-            Entity entity = m_entities->GetEntity(id);
-            if (isCharacter)
-            {
-                WriteBackCharacter(entity, m_characters.at(id));
-                continue;
-            }
-            Record& record = m_bodies.at(id);
-            const Backend::BodyState state = m_backend.GetState(record.id);
-
-            Transform world = record.world;
-            world.pos = state.position;
-            world.rot = state.rotation;
-            SetWorldTransform(entity, world);
-            // Read back the way the diff reads, so rounding through a parent is not taken for a game edit.
-            record.world = GetWorldTransform(entity);
-
-            RigidBody& rigidBody = entity.GetComponent<RigidBody>();
-            rigidBody.linearVelocity = state.linearVelocity;
-            rigidBody.angularVelocity = state.angularVelocity;
-            record.linearVelocity = state.linearVelocity;
-            record.angularVelocity = state.angularVelocity;
-        }
-        ResetIdleCharacters();
-    }
-
-    CollisionFilter PhysicsWorld::Impl::EffectiveFilterOf(Entity& entity) const
-    {
-        if (entity.HasComponent<Trigger>() && !entity.GetComponent<Trigger>().enabled)
-        {
-            return CollisionFilter{.layers = 0u, .mask = 0u};
-        }
-        return FilterOf(entity);
-    }
-
-    bool PhysicsWorld::Impl::ReportsContacts(std::uint32_t body) const
-    {
-        if (!m_entities->HasEntity(body))
-        {
-            return false;
-        }
-        Entity entity = m_entities->GetEntity(body);
-        return entity.HasComponent<ContactEvents>() && entity.GetComponent<ContactEvents>().enabled;
-    }
-
-    void PhysicsWorld::Impl::SendEvents(App& app)
-    {
-        std::vector<ContactBegin> begins;
-        std::vector<ContactEnd> ends;
-        std::vector<TriggerEnter> enters;
-        std::vector<TriggerExit> exits;
-        const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
-
-        for (const Backend::TouchChange& change : m_backend.TouchChanges())
-        {
-            const Backend::Touch& touch = change.touch;
-            const bool isBegin = change.kind == Backend::TouchChange::Kind::Begin;
-            if (touch.isTrigger1 || touch.isTrigger2)
-            {
-                const bool firstIsTrigger = touch.isTrigger1;
-                const OverlapKey key{firstIsTrigger ? touch.entity1 : touch.entity2,
-                                     firstIsTrigger ? touch.entity2 : touch.entity1,
-                                     firstIsTrigger ? touch.collider2 : touch.collider1};
-                // A trigger beneath a body ignores that body: it moves with it, so it would always be inside it.
-                if (isBegin && key.otherBody == AttachedBodyOf(key.trigger))
-                {
-                    continue;
-                }
-                if (isBegin && m_reportedOverlaps.insert(key).second)
-                {
-                    enters.push_back(
-                        TriggerEnter{entity(key.trigger), entity(key.otherBody), entity(key.otherCollider)});
-                }
-                else if (!isBegin && m_reportedOverlaps.erase(key) > 0)
-                {
-                    exits.push_back(TriggerExit{entity(key.trigger), entity(key.otherBody), entity(key.otherCollider)});
-                }
-                continue;
-            }
-
-            if (touch.isCharacter1 || touch.isCharacter2)
-            {
-                continue; // merged with the characters' moves below
-            }
-            const auto [key, oriented] = Oriented(touch);
-            if (isBegin)
-            {
-                if ((ReportsContacts(key.bodyA) || ReportsContacts(key.bodyB)) && m_reportedContacts.insert(key).second)
-                {
-                    begins.push_back(ContactBegin{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA),
-                                                  entity(key.colliderB), oriented.point, oriented.normal,
-                                                  oriented.relativeSpeed});
-                }
-            }
-            else if (m_reportedContacts.erase(key) > 0)
-            {
-                ends.push_back(
-                    ContactEnd{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA), entity(key.colliderB)});
-            }
-        }
-
-        TrackCharacterContacts(begins, ends);
-
-        // A contact neither body reports any more (ContactEvents removed or disabled) ends now, as if it separated.
-        for (auto it = m_reportedContacts.begin(); it != m_reportedContacts.end();)
-        {
-            if (ReportsContacts(it->bodyA) || ReportsContacts(it->bodyB))
-            {
-                ++it;
-                continue;
-            }
-            ends.push_back(
-                ContactEnd{entity(it->bodyA), entity(it->bodyB), entity(it->colliderA), entity(it->colliderB)});
-            it = m_reportedContacts.erase(it);
-        }
-
-        // Sorted by entity, so the order is the same on every run whatever order the backend found them in.
-        const auto contactOrder = [](const auto& event) {
-            return std::make_tuple(event.bodyA.GetId(), event.bodyB.GetId(), event.colliderA.GetId(),
-                                   event.colliderB.GetId());
-        };
-        const auto overlapOrder = [](const auto& event) {
-            return std::make_tuple(event.trigger.GetId(), event.otherBody.GetId(), event.otherCollider.GetId());
-        };
-        SortAndSend(app, begins, contactOrder);
-        SortAndSend(app, ends, contactOrder);
-        SortAndSend(app, enters, overlapOrder);
-        SortAndSend(app, exits, overlapOrder);
-        SortAndSend(app, m_broken, [](const JointBroken& event) { return event.joint.GetId(); });
-        m_broken.clear();
-    }
-
-    std::pair<PhysicsWorld::Impl::ContactKey, Backend::Touch> PhysicsWorld::Impl::Oriented(const Backend::Touch& touch)
-    {
-        if (std::tie(touch.entity1, touch.collider1) <= std::tie(touch.entity2, touch.collider2))
-        {
-            return {ContactKey{touch.entity1, touch.entity2, touch.collider1, touch.collider2}, touch};
-        }
-        Backend::Touch turned = touch;
-        std::swap(turned.body1, turned.body2);
-        std::swap(turned.entity1, turned.entity2);
-        std::swap(turned.collider1, turned.collider2);
-        std::swap(turned.isTrigger1, turned.isTrigger2);
-        std::swap(turned.isCharacter1, turned.isCharacter2);
-        turned.normal = -touch.normal;
-        return {ContactKey{turned.entity1, turned.entity2, turned.collider1, turned.collider2}, turned};
-    }
-
-    void PhysicsWorld::Impl::TrackCharacterContacts(std::vector<ContactBegin>& begins, std::vector<ContactEnd>& ends)
-    {
-        // The move found its contacts before the step, so where both sources begin a pair at once, the move saw it
-        // first: its findings go in first, and the first finding of a pair stands.
-        std::map<ContactKey, Backend::Touch> now;
-        for (const auto& [id, record] : m_characters)
-        {
-            for (const Backend::Touch& touch : record.moved.contacts)
-            {
-                now.insert(Oriented(touch));
-            }
-        }
-        // A character's body meets only dynamic bodies and triggers in the step: kinematic and static ones never
-        // collide with it there.
-        for (const Backend::Touch& touch : m_backend.Touches())
-        {
-            if ((touch.isCharacter1 || touch.isCharacter2) && !touch.isTrigger1 && !touch.isTrigger2)
-            {
-                now.insert(Oriented(touch));
-            }
-        }
-
-        const auto entity = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
-        for (const auto& [key, touch] : now)
-        {
-            if (!m_characterTouches.contains(key) && (ReportsContacts(key.bodyA) || ReportsContacts(key.bodyB)) &&
-                m_reportedContacts.insert(key).second)
-            {
-                begins.push_back(ContactBegin{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA),
-                                              entity(key.colliderB), touch.point, touch.normal, touch.relativeSpeed});
-            }
-        }
-        // Neither source has it: separated, or the character or the body is gone (a character disabled or inactive
-        // has no moves and no body), so every begin has its end.
-        for (const auto& [key, touch] : m_characterTouches)
-        {
-            if (!now.contains(key) && m_reportedContacts.erase(key) > 0)
-            {
-                ends.push_back(
-                    ContactEnd{entity(key.bodyA), entity(key.bodyB), entity(key.colliderA), entity(key.colliderB)});
-            }
-        }
-        m_characterTouches = std::move(now);
+        m_bodies.DrawMotion(m_canvas, Includes(m_debugDraw, DebugDraw::Velocities),
+                            Includes(m_debugDraw, DebugDraw::Bounds));
+        m_canvas.End();
     }
 
     void PhysicsWorld::Impl::ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const
     {
-        if (!entity.IsValid())
-        {
-            return; // a destroyed entity's touches end at the next step, but it has no body to ask about now
-        }
-        const auto handle = [this](std::uint32_t id) { return m_entities->HandleOf(id); };
-        const auto report = [&](std::uint32_t asked, const Backend::Touch& touch) {
-            if (touch.entity1 == asked)
-            {
-                func(Contact{handle(touch.entity1), handle(touch.collider1), handle(touch.entity2),
-                             handle(touch.collider2), touch.point, touch.normal});
-            }
-            else if (touch.entity2 == asked)
-            {
-                func(Contact{handle(touch.entity2), handle(touch.collider2), handle(touch.entity1),
-                             handle(touch.collider1), touch.point, -touch.normal});
-            }
-        };
-        // A character's are its last move's, from before the step.
-        if (const auto character = m_characters.find(entity.GetId()); character != m_characters.end())
-        {
-            for (const Backend::Touch& touch : character->second.moved.contacts)
-            {
-                report(entity.GetId(), touch);
-            }
-            return;
-        }
-        // A child collider's entity stands for the compound body it belongs to.
-        const std::uint32_t asked = ResolveBody(entity.GetId());
-        for (const Backend::Touch& touch : m_backend.Touches())
-        {
-            if (!touch.isTrigger1 && !touch.isTrigger2 && !touch.isCharacter1 && !touch.isCharacter2)
-            {
-                report(asked, touch);
-            }
-        }
-        // A body touching a character, as the contact events tell it.
-        for (const auto& [key, touch] : m_characterTouches)
-        {
-            report(asked, touch);
-        }
+        m_contacts.ForEachContact(entity, m_characters.MoveContactsOf(entity), func);
     }
 } // namespace Fenrir

@@ -119,6 +119,54 @@ namespace Fenrir
     }
 
     /**
+     * @brief One shared struct: plain data a native function takes or returns by pointer that is neither a component
+     * nor an event (a query filter, a hit). It has no storage and no id; it is listed only so its C# mirror is checked
+     * against its Iris StructMapping when a script assembly loads, as a native component's is, and the load fails
+     * naming the struct and field when they differ.
+     *
+     * Made by MakeSharedStruct and listed in the `sharedStructs` of the ScriptingExtension whose native functions use
+     * it.
+     */
+    struct SharedStructRegistration
+    {
+        /** The name it goes by in diagnostics: the full name of its C# struct, "Namespace.Type". */
+        std::string name;
+
+        /** The full name of the C# struct it is validated against (the mapping's typeName). */
+        std::string typeName;
+
+        /** Size and alignment in bytes. */
+        std::size_t size = 0;
+        std::size_t alignment = 0;
+
+        /** Checks the C# struct against the struct's Iris StructMapping. */
+        std::function<Iris::CallResult<void>(const Iris::Component&)> validate;
+    };
+
+    /**
+     * @brief Registers the shared struct `T` under `name`, mirrored by the C# struct that `Mapping`'s
+     * Iris::StructMapping names. `T` must be copyable as plain bytes, since native functions pass it by pointer across
+     * the boundary. `Mapping` is `T` unless its members are not accessible to a mapping; see MakeComponent.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] SharedStructRegistration MakeSharedStruct(std::string name)
+    {
+        static_assert(std::is_trivially_copyable_v<T>,
+                      "A shared struct crosses to C# by pointer as bytes, so it must be trivially copyable.");
+        static_assert(sizeof(Mapping) == sizeof(T) && alignof(Mapping) == alignof(T),
+                      "The mapping must have the size and alignment of the shared struct it stands for.");
+        static_assert(Iris::StructValue<Mapping>,
+                      "The mapping needs an Iris::StructMapping and must be trivially copyable standard-layout data.");
+        SharedStructRegistration registration;
+        registration.name = std::move(name);
+        registration.typeName = std::string(Iris::StructMapping<Mapping>::typeName);
+        registration.size = sizeof(T);
+        registration.alignment = alignof(T);
+        registration.validate = [](const Iris::Component& component) { return component.ValidateStruct<Mapping>(); };
+        return registration;
+    }
+
+    /**
      * @brief Registers the native component `T` under `name`, mirrored by the C# struct that `Mapping`'s
      * Iris::StructMapping names. Scripts read and write the component's memory directly.
      *
