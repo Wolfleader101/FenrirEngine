@@ -74,6 +74,10 @@ jobs:
     # The newest Ubuntu runner: its Mesa's llvmpipe gives the OpenGL 4.6 core context the GL tests need.
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      # xvfb-run's default screen is 8 bits deep, which has no visual for the GL tests' 8-bit-per-channel RGBA
+      # backbuffer ("Couldn't find matching GLX visual"); a 24-bit screen has one.
+      XVFB_SCREEN: -screen 0 1280x1024x24
     strategy:
       fail-fast: false
       matrix:
@@ -115,7 +119,7 @@ jobs:
       # The GL tests need OpenGL 4.6 core, which llvmpipe must offer itself: MESA_GL_VERSION_OVERRIDE is never set.
       - name: OpenGL version
         run: |
-          xvfb-run -a glxinfo -B | tee glxinfo.txt
+          xvfb-run -a -s "$XVFB_SCREEN" glxinfo -B | tee glxinfo.txt
           grep -q "core profile version string: 4\.6" glxinfo.txt || { echo "::error::llvmpipe does not offer OpenGL 4.6 core"; exit 1; }
 
       - name: Tool versions
@@ -135,6 +139,9 @@ jobs:
       - name: Test
         run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -LE gl
 
-      # The GL tests on llvmpipe, on a virtual display: verbose, so the log shows they ran rather than skipped.
+      # The GL tests on llvmpipe, on a virtual display: verbose, so the log shows they ran. Without a 4.6 core device
+      # they skip, which CTest counts as passing, so the step fails if they did.
       - name: GL tests
-        run: xvfb-run -a ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -L gl -V
+        run: |
+          xvfb-run -a -s "$XVFB_SCREEN" ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -L gl -V | tee gl-tests.txt
+          if grep -q "no OpenGL 4.6 core device" gl-tests.txt; then echo "::error::the GL tests skipped"; exit 1; fi
