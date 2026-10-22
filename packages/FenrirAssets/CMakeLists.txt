@@ -2,6 +2,9 @@
 # importers sit behind a private seam: only src/Importers/ includes a third-party library, and each is linked PRIVATE,
 # so neither its headers nor its compile definitions reach FenrirAssets's users.
 add_subdirectory(libs)
+# The shader container format, its reader and writer: a target of its own with no dependencies, so the renderer core
+# and FenrirShaderCompiler use it without the store.
+add_subdirectory(ShaderContainer)
 
 add_library(FenrirAssets STATIC
     include/FenrirAssets/AssetHandle.hpp
@@ -20,7 +23,7 @@ add_library(FenrirAssets STATIC
     src/Importers/Stb/StbImageImporter.cpp
 )
 
-target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath PRIVATE FenrirStbImage)
+target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath FenrirShaderContainer PRIVATE FenrirStbImage)
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 

@@ -1,12 +1,15 @@
 // FenrirAssets hides its importers at compile time (ADR-0021). This file includes the public headers before anything
 // else, so if one of them ever reaches for stb, or stb's include path or definitions reach a user of FenrirAssets (this
-// test target is one), the build fails here.
+// test target is one), the build fails here. The same goes for glslang and SPIRV-Reflect, which only
+// FenrirShaderCompiler links (ADR-0018), though FenrirAssets reads the shader containers it writes.
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirAssets/ShaderGlBindings.hpp"
 
 #if defined(STBI_VERSION) || defined(STBI_INCLUDE_STB_IMAGE_H)
 #error "A FenrirAssets public header includes stb_image."
@@ -18,6 +21,10 @@
 
 #if defined(STBI_ONLY_PNG) || defined(STBI_ONLY_JPEG) || defined(STBI_ONLY_HDR) || defined(STBI_NO_STDIO)
 #error "stb_image's compile definitions reach a target outside FenrirAssets: it must be linked PRIVATE."
+#endif
+
+#if __has_include(<glslang/Public/ShaderLang.h>) || __has_include(<spirv_reflect.h>)
+#error "FenrirShaderCompiler's libraries reach FenrirAssets's users: only the build-time tool may link them."
 #endif
 
 #include <type_traits>

@@ -5,12 +5,14 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_set>
 #include <utility>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirAssets/ShaderContainer.hpp"
 
 namespace Fenrir
 {
@@ -242,6 +244,13 @@ namespace Fenrir
         {
             return RevisionOf(Detail::AssetTraits<T>::kind, {handle.index, handle.generation});
         }
+
+        /**
+         * @brief The material parameters of the shader `handle` names, each with its type and parameter default, read
+         * from its container alone (ShaderData::parameters). For an editor, or anything showing what a material
+         * inherits. Empty if the handle does not resolve. Valid until the shader is replaced or freed.
+         */
+        [[nodiscard]] std::span<const ShaderParameter> GetShaderParameters(AssetHandle<Shader> handle) const;
 
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;

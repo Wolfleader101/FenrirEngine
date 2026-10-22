@@ -2,6 +2,7 @@
 #include <format>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/ImageData.hpp"
@@ -97,8 +98,14 @@ namespace Fenrir::Detail
         return {};
     }
 
-    std::string PrepareAsset(ShaderData&)
+    std::string PrepareAsset(ShaderData& shader)
     {
+        ShaderContainerResult read = ReadShaderContainer(shader.bytes);
+        if (!read.Ok())
+        {
+            return std::move(read.diagnostic);
+        }
+        shader.parameters = CollectShaderParameters(*read.container);
         return {};
     }
 } // namespace Fenrir::Detail
