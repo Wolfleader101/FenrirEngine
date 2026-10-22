@@ -20,10 +20,9 @@
 **Touches:** `packages/FenrirWindow/`, `packages/FenrirInput/`, `.gitmodules`, `CMakeLists.txt`, `README.md`, `.github/workflows/build-and-test.yml`
 
 **Status:** resolved
-Hand check: run an app with a visible main window (the README example): it opens; keys and mouse buttons, motion and scroll reach `Keyboard` and `Mouse`; a gamepad plugged in and out while it runs connects and disconnects in `Gamepads`; minimising it drops CPU use (the frame sleeps); its close button stops the app.
 
 - [x] `FenrirWindowTests`: a hidden window is created, resized (resize event, new logical and pixel sizes) and closed (close-requested event; `App::Stop` with `stopOnMainWindowClose`, not without); the tests report skipped (CTest `SKIP_RETURN_CODE`) without a display.
 - [x] Clipboard text round-trips; `SetTitle` and cursor modes do not error on a hidden window.
 - [x] No public FenrirWindow header names or includes SDL, and SDL's include path reaches no target outside FenrirWindow.
 - [x] `FENRIR_ENABLE_RENDERER=OFF` configures and builds the engine without FenrirWindow or SDL3; Clang and MSVC x64 debug and release presets build with no warnings from SDL's sources; Linux CI builds it.
-- [ ] A small manual check: a visible window opens, keys and mouse reach `Keyboard`/`Mouse`, a gamepad hot-plugs, minimising sleeps, closing stops the app (checked by hand).
+- [x] A small manual check: a visible window opens, keys and mouse reach `Keyboard`/`Mouse`, a gamepad hot-plugs, minimising sleeps, closing stops the app (checked by hand).
