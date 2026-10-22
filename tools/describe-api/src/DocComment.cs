@@ -20,34 +20,45 @@ internal static class DocComment
         return Join(Lines(raw));
     }
 
-    /// <summary>A parameter's doc: whether <c>@param[out]</c> marks it an output, and its text.</summary>
-    public sealed record ParameterDoc(bool Output, string? Text);
-
-    /// <summary>A function's doc: its text without the commands below, each <c>@param</c>, and <c>@return</c>.</summary>
-    public sealed record FunctionDoc(string? Text, IReadOnlyDictionary<string, ParameterDoc> Parameters, string? Returns);
+    /// <summary>
+    /// A parameter's doc: whether <c>@param[out]</c> marks it an output, or <c>@param[in,out]</c> a pointer the function
+    /// reads and writes, and its text.
+    /// </summary>
+    public sealed record ParameterDoc(bool Output, bool InOut, string? Text);
 
     /// <summary>
-    /// A function's doc comment, split: <c>@param name</c>, <c>@param[in] name</c> or <c>@param[out] name</c> and
-    /// <c>@return</c> (or <c>@returns</c>) each take the text up to the next command or blank line; the rest is the
-    /// function's text, as <see cref="Text" /> gives it.
+    /// A function's doc: its text without the commands below, each <c>@param</c>, <c>@return</c>, and the
+    /// <c>@notrunning</c> value.
+    /// </summary>
+    public sealed record FunctionDoc(string? Text, IReadOnlyDictionary<string, ParameterDoc> Parameters, string? Returns,
+                                     string? NotRunning);
+
+    /// <summary>
+    /// A function's doc comment, split: <c>@param name</c>, <c>@param[in] name</c>, <c>@param[out] name</c> or
+    /// <c>@param[in,out] name</c> and <c>@return</c> (or <c>@returns</c>) each take the text up to the next command or
+    /// blank line, and <c>@notrunning</c> the rest of its line, a C++ expression; the rest is the function's text, as
+    /// <see cref="Text" /> gives it.
     /// </summary>
     public static FunctionDoc Function(string? raw)
     {
         var parameters = new Dictionary<string, ParameterDoc>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return new FunctionDoc(null, parameters, null);
+            return new FunctionDoc(null, parameters, null, null);
         }
 
         var body = new List<string>();
         string? returns = null;
+        string? notRunning = null;
         List<string>? command = null;
         Action<string?>? finish = null;
         foreach (var line in Lines(raw).Append(""))
         {
             var isParam = line.StartsWith("@param", StringComparison.Ordinal) || line.StartsWith("\\param", StringComparison.Ordinal);
             var isReturn = line.StartsWith("@return", StringComparison.Ordinal) || line.StartsWith("\\return", StringComparison.Ordinal);
-            if (command is not null && (line.Length == 0 || isParam || isReturn))
+            var isNotRunning = line.StartsWith("@notrunning", StringComparison.Ordinal) ||
+                               line.StartsWith("\\notrunning", StringComparison.Ordinal);
+            if (command is not null && (line.Length == 0 || isParam || isReturn || isNotRunning))
             {
                 finish!(command.Count == 0 ? null : string.Join(' ', command));
                 command = null;
@@ -56,11 +67,11 @@ internal static class DocComment
             if (isParam)
             {
                 var rest = line[6..];
-                var output = false;
+                var direction = "";
                 if (rest.StartsWith('['))
                 {
                     var close = rest.IndexOf(']');
-                    output = close > 0 && rest[1..close].Trim() == "out";
+                    direction = close > 0 ? rest[1..close].Replace(" ", "", StringComparison.Ordinal) : "";
                     rest = close > 0 ? rest[(close + 1)..] : rest;
                 }
 
@@ -68,7 +79,11 @@ internal static class DocComment
                 var space = rest.IndexOf(' ');
                 var name = space < 0 ? rest : rest[..space];
                 command = space < 0 ? [] : [rest[(space + 1)..].Trim()];
-                finish = text => parameters[name] = new ParameterDoc(output, text);
+                finish = text => parameters[name] = new ParameterDoc(direction == "out", direction == "in,out", text);
+            }
+            else if (isNotRunning)
+            {
+                notRunning = line["@notrunning".Length..].Trim();
             }
             else if (isReturn)
             {
@@ -86,7 +101,7 @@ internal static class DocComment
             }
         }
 
-        return new FunctionDoc(Join(body), parameters, returns);
+        return new FunctionDoc(Join(body), parameters, returns, notRunning is { Length: > 0 } ? notRunning : null);
     }
 
     // The comment's lines without their markers or @brief, trimmed; blank lines kept as empty strings.

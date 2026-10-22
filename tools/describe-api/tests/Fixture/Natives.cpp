@@ -94,6 +94,23 @@ namespace Fixture
         (void)length;
     }
 
+    /**
+     * @brief The address of the next of `body`'s records: a pointer read and written, an untyped pointer, an untyped
+     * result, and the value a caller gets when the native cannot be called.
+     * @param[in,out] cursor Where to start; moved past the record.
+     * @notrunning nullptr
+     */
+    void* Next(const Host::CallContext& context, std::uint64_t* cursor, const void* body)
+    {
+        (void)context;
+        if (cursor == nullptr)
+        {
+            return nullptr;
+        }
+        ++*cursor;
+        return const_cast<void*>(body);
+    }
+
     /** @brief Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result. */
     std::uint64_t Sum(const Host::CallContext& context, const std::uint32_t* values, std::int32_t count, bool all,
                       double scale)

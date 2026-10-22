@@ -34,6 +34,17 @@ namespace Failing
         return value != 0;
     }
 
+    /** @param[in,out] values Read and written, but const. */
+    bool InOutConst(const Host::CallContext&, const int* values)
+    {
+        return values != nullptr;
+    }
+
+    /** @notrunning 1 */
+    void NotRunningVoid(const Host::CallContext&)
+    {
+    }
+
     /** @param missing No such parameter. */
     bool DocumentsMissing(const Host::CallContext&, int value)
     {

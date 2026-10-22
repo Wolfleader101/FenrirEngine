@@ -589,6 +589,51 @@
       ]
     },
     {
+      "name": "Fixture::Size",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it."
+    },
+    {
+      "name": "Fixture::Tag",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 8,
+      "doc": "A shared struct whose members are private: described all the same, since the selection's private-members names it.",
+      "fields": [
+        {
+          "name": "m_id",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295,
+          "doc": "An Id: its default is the constant its initialiser converts to."
+        },
+        {
+          "name": "m_owner",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        },
+        {
+          "name": "m_label",
+          "offset": 16,
+          "kind": "array",
+          "elementKind": "u8",
+          "length": 4,
+          "default": [
+            97,
+            0,
+            0,
+            0
+          ],
+          "doc": "Characters: bytes, on every target."
+        }
+      ]
+    },
+    {
       "name": "Fixture::Touched",
       "category": "struct",
       "role": "event",

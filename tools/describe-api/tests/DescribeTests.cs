@@ -45,7 +45,8 @@ public sealed class DescribeTests
                 "Failing::UnknownDefault::scale: the default 'Scale()' is not one the description records")]
     [InlineData("PrivateMember",
                 "Failing::PrivateMember::m_hidden: a private data member outside the tagged-union shape " +
-                "(one enum tag followed by one anonymous union)")]
+                "(one enum tag followed by one anonymous union); a selection shares one only when 'private-members' " +
+                "names its type")]
     [InlineData("ReferenceMember",
                 "Failing::ReferenceMember::target: a reference member: a shared type holds values, not references")]
     [InlineData("VirtualFunction",
@@ -78,6 +79,25 @@ public sealed class DescribeTests
                      "A failed run should write no description.");
     }
 
+    [Theory]
+    [InlineData("\"Failing::NoInitialiser\" = \"component\"")]
+    [InlineData("\"Failing::PrivateMember\" = \"bound-type\"")]
+    public void PrivateMembersNamingATypeTheSelectionDoesNotShareFails(string types)
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Private.api.toml");
+        File.WriteAllText(selection,
+                          $"headers = [\"{header}\"]\nprivate-members = [\"Failing::PrivateMember\"]\n\n[types]\n{types}\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
+
+        Assert.True(exception.Message.Contains("'private-members' names Failing::PrivateMember, which [types] does not " +
+                                               "select as a component, event or shared struct", StringComparison.Ordinal),
+                    "A private-members entry that is not a selected plain-data type should fail naming it, but failed " +
+                    $"with\n  {exception.Message}");
+    }
+
     [Fact]
     public void TheFixturesNativesGiveTheCommittedNativesDescriptionByteForByte()
     {
@@ -98,6 +118,8 @@ public sealed class DescribeTests
                 "values and pointers")]
     [InlineData("Unnamed (parameter 2): is unnamed: a native's parameters are named in C#")]
     [InlineData("OutValue::value: is documented @param[out] but is not a pointer to non-const data")]
+    [InlineData("InOutConst::values: is documented @param[in,out] but is not a pointer to non-const data")]
+    [InlineData("NotRunningVoid: documents @notrunning but returns nothing")]
     [InlineData("DocumentsMissing: documents a parameter 'missing' it does not have")]
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
     [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]

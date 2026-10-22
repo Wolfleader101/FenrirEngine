@@ -27,9 +27,10 @@ A **native function** is a free function defined in one of the sources whose fir
 | `source` | The source defining it, relative to the description, with `/`. |
 | `state` | The qualified name of its state's class, when it takes one. |
 | `noexcept` | `true` when it is declared `noexcept` (absent otherwise). |
-| `doc` | Its doc comment without the `@param` and `@return` commands (see below), when there is one. |
+| `doc` | Its doc comment without the `@param`, `@return` and `@notrunning` commands (see below), when there is one. |
+| `notRunning` | The C++ expression its `@notrunning` gives: the value a caller gets when the native cannot be called (absent otherwise). |
 | `returns` | Its result, as a type (below), with `doc` from `@return` (or `@returns`). |
-| `parameters` | Every parameter after the call context and the state, in order: `name`, its type (below), `output` and `doc`. |
+| `parameters` | Every parameter after the call context and the state, in order: `name`, its type (below), `output` or `inOut`, and `doc`. |
 
 ## Types
 
@@ -46,4 +47,4 @@ A reference (after the context and state), a pointer to a pointer, and a type of
 
 ## Doc commands
 
-The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@param[out]` on anything but a pointer to non-const data fails the tool, as does `@param` naming no parameter. The rest of the comment is the function's `doc`, as for a type ("Doc comments" in [the API description](api-description.md)).
+The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, `@param[in,out] name text` marks it `inOut` (a pointer the native reads and writes), and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@notrunning expression` gives `notRunning`, the rest of its line. `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data fails the tool, as do `@param` naming no parameter and `@notrunning` on a native that returns nothing. The rest of the comment is the function's `doc`, as for a type ("Doc comments" in [the API description](api-description.md)).

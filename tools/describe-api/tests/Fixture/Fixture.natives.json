@@ -125,6 +125,38 @@
       ]
     },
     {
+      "name": "Next",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "The address of the next of `body`'s records: a pointer read and written, an untyped pointer, an untyped result, and the value a caller gets when the native cannot be called.",
+      "notRunning": "nullptr",
+      "returns": {
+        "type": "void*",
+        "kind": "pointer",
+        "pointee": "void",
+        "pointeeKind": "void"
+      },
+      "parameters": [
+        {
+          "name": "cursor",
+          "type": "std::uint64_t*",
+          "kind": "pointer",
+          "pointee": "std::uint64_t",
+          "pointeeKind": "u64",
+          "inOut": true,
+          "doc": "Where to start; moved past the record."
+        },
+        {
+          "name": "body",
+          "type": "const void*",
+          "kind": "pointer",
+          "pointee": "void",
+          "pointeeKind": "void",
+          "const": true
+        }
+      ]
+    },
+    {
       "name": "Sum",
       "namespace": "Fixture",
       "source": "Natives.cpp",
