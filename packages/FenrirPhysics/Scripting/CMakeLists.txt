@@ -2,8 +2,9 @@
 # holding the native functions behind it. A library of its own so FenrirPhysics never links FenrirScripting. The root
 # build adds this directory only when FENRIR_ENABLE_PHYSICS and FENRIR_ENABLE_SCRIPTING are both on.
 
-# The contract, built against the scripting SDK with the .NET SDK Iris found. fenrir_deploy_physics_scripting copies it
-# next to an executable, beside the scripting contract, where Scripting::Install finds the extension's relative path.
+# The contract, built against the scripting SDK with the .NET SDK Iris found, and rebuilt whenever the SDK's contracts
+# (Fenrir.Scripting and Fenrir.Math) are. fenrir_deploy_physics_scripting copies it next to an executable, beside the
+# scripting contract, where Scripting::Install finds the extension's relative path.
 set(FENRIR_PHYSICS_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-physics/contract" CACHE INTERNAL "Where the Fenrir.Physics contract is built")
 set(fenrir_physics_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.Physics")
 file(GLOB fenrir_physics_contract_sources CONFIGURE_DEPENDS "${fenrir_physics_managed_dir}/*.cs")
@@ -14,7 +15,8 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/contract-obj/"
     DEPENDS ${fenrir_physics_contract_sources} "${fenrir_physics_managed_dir}/Fenrir.Physics.csproj"
-        FenrirScriptingContract
+        FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
+        "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
     COMMENT "Building the Fenrir.Physics contract"
     VERBATIM
 )

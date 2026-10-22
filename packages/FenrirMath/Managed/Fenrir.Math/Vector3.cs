@@ -1,6 +1,6 @@
-namespace Fenrir.Scripting;
+namespace Fenrir.Math;
 
-/// <summary>Three floats, laid out exactly like the engine's <c>glm::vec3</c>.</summary>
+/// <summary>Three floats, laid out exactly like FenrirMath's <c>Math::Vec3</c> (<c>glm::vec3</c>).</summary>
 public struct Vector3 : IEquatable<Vector3>
 {
     public float X, Y, Z;

@@ -1,3 +1,5 @@
+using Fenrir.Math;
+
 namespace Fenrir.Scripting;
 
 /// <summary>An entity's place in the world: the engine's <c>Fenrir::Transform</c>, shared with native code.</summary>

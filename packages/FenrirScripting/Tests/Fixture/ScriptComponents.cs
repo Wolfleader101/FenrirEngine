@@ -1,4 +1,5 @@
 using System.Runtime.Intrinsics;
+using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.ScriptFixture;

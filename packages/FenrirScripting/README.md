@@ -19,14 +19,21 @@ app.Run();
 loads the one script assembly. It never throws, and a missing or invalid assembly, or a missing runtime, is
 logged as an error and the app runs without scripts (`HasScripts()` is false).
 
-- **Where .NET comes from.** The Iris bridge (`Iris.Bridge.dll`, its `.runtimeconfig.json`), `nethost` and the
-  scripting contract `Fenrir.Scripting.dll` must sit next to the executable, or in
-  `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target>)` on the executable.
+- **Where .NET comes from.** The Iris bridge (`Iris.Bridge.dll`, its `.runtimeconfig.json`), `nethost`, the
+  scripting contract `Fenrir.Scripting.dll` and the math contract `Fenrir.Math.dll` must sit next to the executable, or
+  in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target>)` on the executable.
 - **The contract.** `Fenrir.Scripting` (`Managed/Fenrir.Scripting`) is the C# API scripts compile against: `Entity`,
   `Log` and `Time` so far. `Scripting::Install` always shares it with Iris, as one copy in the default load context
   that is never reloaded, so its types have one identity across every load and reload of the script assembly. A
   script project references it with `<Private>false</Private>` (compile against it, do not copy it). The version is
   part of the contract: a script built against a newer minor than the host's fails to load.
+- **The math contract.** `Fenrir.Math` (`packages/FenrirMath/Managed/Fenrir.Math`, namespace `Fenrir.Math`, ADR-0029)
+  holds `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray` and `Bounds`, each laid out as its
+  FenrirMath counterpart (`Math::Vec2` to `Math::Mat4`, `Fenrir::Colour`, `Math::Ray`, `Math::AABB`). It is pure managed
+  code with no native functions, so any package's contract can use it. The scripting contract is built on it
+  (`Transform` holds its `Vector3` and `Quaternion`), and `Scripting::Install` shares it first, before
+  `Fenrir.Scripting`. A script names it with `using Fenrir.Math;`. Inside a `Fenrir.*` namespace, `Math` then means the
+  namespace, so write `System.Math` (or `MathF`) for the BCL's.
 - **One active Scripting.** The engine's native functions act on the App of the `Scripting` that is active, so a
   second `Install` while one is alive logs an error and runs without scripts.
 - **The script assembly path** comes from the project: the `scriptAssembly` field of the `.feproj` (DemoApp reads it
@@ -39,7 +46,7 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
 ## Writing a script project
 
 A script project needs only the scripting SDK: one folder holding `Fenrir.Scripting.dll` (the contract),
-`analyzers/Fenrir.Scripting.Generators.dll` (the source generator) and `Fenrir.Scripting.props`. CMake builds it into
+`Fenrir.Math.dll` (the math contract it is built on), `analyzers/Fenrir.Scripting.Generators.dll` (the source generator) and `Fenrir.Scripting.props`. CMake builds it into
 `<build>/fenrir-scripting/contract/`. Import the props file and nothing else is needed:
 
 ```xml
@@ -52,8 +59,8 @@ A script project needs only the scripting SDK: one folder holding `Fenrir.Script
 </Project>
 ```
 
-The props file references the contract for compilation only (the host shares its own copy at run time), turns on
-runs the generator (the field accessors are C# 14 extension properties, the default for net10.0). A script's output must not carry its own copy of `Fenrir.Scripting.dll`.
+The props file references the two contracts for compilation only (the host shares its own copies at run time), turns on
+runs the generator (the field accessors are C# 14 extension properties, the default for net10.0). A script's output must not carry its own copy of `Fenrir.Scripting.dll` or `Fenrir.Math.dll`.
 
 ### Components and `Ref<T>`
 
@@ -176,8 +183,11 @@ public struct Health : IComponent { public int Current; public int Max; }
   assembly is released, the app keeps running, and the error names the component and the field.
 - **Nothing registers after Install.** What scripting knows is fixed by the extensions given to `Install`; afterwards the
   registry changes only when a reload removes and adds the components and events the script assembly defines.
-- **Engine types as fields.** A component or event holding a `Math::Vec3`, `Math::Quat` or `Transform` includes
-  `FenrirScripting/EngineMappings.hpp`, whose mappings name them as the contract's `Vector3`, `Quaternion` and `Transform`.
+- **Engine types as fields.** A component, event or resource holding a FenrirMath type (`Math::Vec2`, `Vec3`, `Vec4`,
+  `Quat`, `Fenrir::Colour`, `Math::Ray`, `Math::AABB`) or a `Transform` includes `FenrirScripting/EngineMappings.hpp`,
+  whose mappings name them as `Fenrir.Math`'s `Vector2` to `Bounds` and the contract's `Transform`. glm keeps a
+  `Math::Mat4`'s columns private, so a struct holding one is mapped through a stand-in that puts `Detail::Mat4View`
+  (four `Math::Vec4` columns) where the matrix is; C# sees a `Matrix4x4` of `Column0` to `Column3`.
   An `Entity` member is mapped through a stand-in struct that puts `Detail::EntityLinkView` (from the same header) where
   the `Entity` is; C# sees it as an `EntityLink`, as in `Relationship` (FenrirPhysics's contact and trigger events do this).
   In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
@@ -709,9 +719,9 @@ into exceptions) only where it wants.
 
 The engine's own API (Log, Time, Entity, components, events, queries, changes, resources) is the built-in scripting
 extension: its native functions are the methods of the contract's `Native` class, declared like any package's. It also
-carries the engine's components (Transform, Name and Relationship, from `EngineComponents`) and, as its shared assembly, the
-`Fenrir.Scripting` contract. It is always the first extension, so the engine's components take their names before any
-other extension's, and the contract is shared before any other. To add a native function, in the order a script sees it:
+carries the engine's components (Transform, Name and Relationship, from `EngineComponents`) and, as its shared assemblies,
+`Fenrir.Math` and then the `Fenrir.Scripting` contract built on it. It is always the first extension, so the engine's
+components take their names before any other extension's, and the two contracts are shared before any other. To add a native function, in the order a script sees it:
 
 1. **The C++ function**, in `src/Bindings.cpp`, over the `CallContext` like any native function. The engine's own state
    (the component registry, the change buffer) comes from the context's internal part. A C++ exception that escapes it is
