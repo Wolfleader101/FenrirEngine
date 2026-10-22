@@ -6,6 +6,9 @@
 
 namespace Fenrir
 {
+    /**
+     * @brief An entity's place in the world, relative to its parent: every entity has one.
+     */
     struct Transform
     {
         Transform() = default;
@@ -15,8 +18,11 @@ namespace Fenrir
         {
         }
 
+        /** @brief The position, relative to the parent. */
         Math::Vec3 pos = Math::Vec3(0.0f, 0.0f, 0.0f);
+        /** @brief The rotation, relative to the parent. */
         Math::Quat rot = Math::Quat(1.0f, 0.0f, 0.0f, 0.0f);
+        /** @brief The scale on each axis, relative to the parent. */
         Math::Vec3 scale = Math::Vec3(1.0f, 1.0f, 1.0f);
     };
 
@@ -33,6 +39,9 @@ namespace Fenrir
         return mdl_mat;
     }
 
+    /**
+     * @brief An entity's name: a fixed 256-byte UTF-8 buffer, so at most 255 bytes of text. Every entity has one.
+     */
     struct Name
     {
 
@@ -91,7 +100,7 @@ namespace Fenrir
         }
 
       private:
-        // max name length is 255 characters
+        /** @brief The bytes, zero-terminated (so the name is at most 255 bytes). */
         char name[256] = {0};
     };
 

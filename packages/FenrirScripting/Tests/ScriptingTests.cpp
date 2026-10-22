@@ -6,7 +6,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
@@ -74,7 +74,8 @@ struct Iris::StructMapping<TestNative::FloatHealth>
         Iris::StructFields(IRIS_FIELD(TestNative::FloatHealth, Current), IRIS_FIELD(TestNative::FloatHealth, Max));
 };
 
-// A component with an Entity field, as a joint names its bodies, and the stand-in that maps it to the fixture's Tether.
+// A component with an Entity field, as a joint names its bodies, mapped to the fixture's Tether. Entity maps to the
+// contract's EntityLink through the built-in binding's generated mapping.
 namespace TestNative
 {
     struct Tether
@@ -82,20 +83,14 @@ namespace TestNative
         Fenrir::Entity target;
         std::int32_t length = 0;
     };
-
-    struct TetherView
-    {
-        Fenrir::Detail::EntityLinkView target;
-        std::int32_t length;
-    };
 } // namespace TestNative
 
 template <>
-struct Iris::StructMapping<TestNative::TetherView>
+struct Iris::StructMapping<TestNative::Tether>
 {
     static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Tether";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::TetherView, target, "Target"),
-                                                      IRIS_FIELD_AS(TestNative::TetherView, length, "Length"));
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::Tether, target, "Target"),
+                                                      IRIS_FIELD_AS(TestNative::Tether, length, "Length"));
 };
 
 // A component holding a tagged union, shaped like FenrirPhysics's Collider and CollisionShape: a private tag and
@@ -1583,7 +1578,7 @@ namespace
 
     ComponentRegistration TetherComponent()
     {
-        return MakeComponent<TestNative::Tether, TestNative::TetherView>("Test.Tether");
+        return MakeComponent<TestNative::Tether>("Test.Tether");
     }
 
     void AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp()

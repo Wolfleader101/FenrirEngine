@@ -2177,7 +2177,8 @@
       "category": "bound-type",
       "role": "bound-type",
       "size": 40,
-      "alignment": 4
+      "alignment": 4,
+      "doc": "An entity's place in the world, relative to its parent: every entity has one."
     },
     {
       "name": "Fenrir::Trigger",

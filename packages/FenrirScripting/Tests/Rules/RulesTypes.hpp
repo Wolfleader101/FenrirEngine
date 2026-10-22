@@ -8,8 +8,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "ComponentRegistry.hpp"
+#include "EngineContext.hpp"
 
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <utility>
 
@@ -18,7 +20,8 @@ namespace RulesTest
     // Adds the engine's own components to `registry`, as the built-in extension gives them to a Scripting.
     inline void AddEngineComponents(Fenrir::Detail::ComponentRegistry& registry)
     {
-        for (auto& registration : Fenrir::Detail::EngineComponents())
+        auto builtIn = Fenrir::Detail::BuiltInExtension({}, std::make_shared<Fenrir::Detail::EngineContext>());
+        for (auto& registration : builtIn.components)
         {
             REQUIRE(registry.Add(std::move(registration)) >= 0);
         }

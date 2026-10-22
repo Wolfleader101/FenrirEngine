@@ -1,26 +1,15 @@
 #pragma once
 
-// The physics binding's own mappings of the two entity types it binds (FenrirPhysics.binding.toml, [bound-types]),
-// written by hand as a binding maps its bound types; FenrirScripting/EngineMappings.hpp maps the vector, quaternion and
-// Transform. The generated mappings include this header.
+// The physics binding's own mapping of the 32-bit entity value it binds (FenrirPhysics.binding.toml, [bound-types]),
+// written by hand as a binding maps its bound types. The vector, quaternion, Transform and Fenrir::Entity (as C#'s
+// EntityLink) are the built-in binding's, generated from FenrirECS's and FenrirMath's descriptions into
+// FenrirScripting/Generated/FenrirScriptingMappings.hpp. The generated mappings include this header.
 
 #include <cstdint>
 #include <string_view>
 
-#include "FenrirECS/Entity.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "ScriptQueries.hpp"
-
-// A Fenrir::Entity is its 32-bit value, then a pointer to its list, which C#'s EntityLink holds opaquely. Its members
-// are private, so the mapping declares them by offset.
-template <>
-struct Iris::StructMapping<Fenrir::Entity>
-{
-    static constexpr std::string_view typeName = "Fenrir.Scripting.EntityLink";
-    static constexpr auto fields =
-        Iris::StructFields(Iris::Field<std::uint32_t>("value", 0), Iris::Field<std::uint32_t>("reserved", 4),
-                           Iris::Field<void*>("owner", 8));
-};
 
 // A C# Entity's Value is an auto-property, so its field has the compiler's name.
 template <>
