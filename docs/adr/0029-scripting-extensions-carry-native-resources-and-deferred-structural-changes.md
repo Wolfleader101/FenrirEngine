@@ -38,3 +38,4 @@ ADR-0009 gave a scripting extension three things: native functions, native compo
 - FenrirScripting gains a prerequisite in the foundation spec: native resources (`[NativeResource]`, registration, layout checks, `Resources`, deferred insert and remove), the change buffer on the call context, and the `Fenrir.Math` move. The README's extension sections are rewritten to cover it.
 - Physics's `PhysicsWorld.Gravity` is a candidate to become a resource mirror. That is the physics map's call.
 - Resources defined in C# by script assemblies (a game's own singletons) are not part of this. They are left for later.
+- *Amended by ADR-0039:* an extension may also declare stages that C# systems join; FenrirSkeleton's pose stages are the first.

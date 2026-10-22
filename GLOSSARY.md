@@ -136,12 +136,16 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Scripting extension**
-What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, native resources and C++ events, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension.
+What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, native resources and C++ events, the shared assemblies that are its C# contract, and the extension stages it hosts. FenrirScripting knows no package beyond its extension.
 *Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).
 
 **Tagged union**
 A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest.
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
+
+**Extension stage**
+A named point inside a package's own C++ work where C# systems run, declared by the package's scripting extension and joined with `[StageSystem(name, Order)]` (ADR-0039). The pose stages are the first. The extension runs each order group with one call into the script, and the systems' structural changes play back when the hosting system returns.
+*Avoid:* phase (FenrirApp's), hook, callback.
 
 **Native function**
 A C++ function that C# calls, declared once on each side and named by the full name of the C# method that calls it (`Namespace.Type.Method`). In C++ its first parameter is the call context; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
