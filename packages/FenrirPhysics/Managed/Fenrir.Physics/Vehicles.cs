@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Physics;

@@ -1,3 +1,4 @@
+using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace DemoScripts;

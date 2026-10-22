@@ -11,9 +11,9 @@
 
 **Touches:** `packages/FenrirMath/Managed/`, `packages/FenrirScripting/Managed/`, `packages/FenrirScripting/Tests/`, `packages/FenrirPhysics/Managed/`, `packages/FenrirPhysics/Scripting/`, `examples/DemoApp/scripts/`, `FenrirScripting.sln`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Scripting harness tests check each `Fenrir.Math` type's size and field offsets against its C++ counterpart.
-- [ ] `Transform`'s C# mirror uses `Fenrir.Math.Vector3` and `Quaternion` and still matches the C++ layout.
-- [ ] Physics scripting tests pass on the moved contract.
-- [ ] The legacy DemoApp's scripts still build with `FENRIR_BUILD_LEGACY_DEMOAPP=ON` and scripting on.
+- [x] Scripting harness tests check each `Fenrir.Math` type's size and field offsets against its C++ counterpart.
+- [x] `Transform`'s C# mirror uses `Fenrir.Math.Vector3` and `Quaternion` and still matches the C++ layout.
+- [x] Physics scripting tests pass on the moved contract.
+- [x] The legacy DemoApp's scripts still build with `FENRIR_BUILD_LEGACY_DEMOAPP=ON` and scripting on.

@@ -31,7 +31,8 @@ public unsafe struct Name : IComponent
     public void SetText(string? text)
     {
         text ??= "";
-        ReadOnlySpan<char> source = text.AsSpan(0, Math.Min(text.Length, Capacity));
+        // System.Math in full: inside namespace Fenrir, Math names the Fenrir.Math namespace.
+        ReadOnlySpan<char> source = text.AsSpan(0, System.Math.Min(text.Length, Capacity));
         Span<byte> encoded = stackalloc byte[Encoding.UTF8.GetMaxByteCount(source.Length)];
         int length = Encoding.UTF8.GetBytes(source, encoded);
         if (length > Capacity - 1)

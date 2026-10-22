@@ -500,6 +500,7 @@ namespace Fenrir
         std::filesystem::path assembly;
         std::filesystem::path bridgeDirectory;
         std::filesystem::path contract;
+        std::filesystem::path math;
         Detail::GenerationLifecycle::Settings settings;
 
         // Starting is a list of stages, run in order, and the first to fail ends it: one place reports why, gives
@@ -528,10 +529,16 @@ namespace Fenrir
                 {
                     return StartupFailure{"the contract '" + contract.string() + "' is missing", {}};
                 }
+                // The engine's math types are their own contract, which the scripting contract is built on.
+                math = bridgeDirectory / "Fenrir.Math.dll";
+                if (!std::filesystem::is_regular_file(math, error))
+                {
+                    return StartupFailure{"the math contract '" + math.string() + "' is missing", {}};
+                }
                 // The engine's own API is the first extension: its native functions, components and contract are
                 // declared, checked and registered like any package's. Being first, its components take their names
-                // before anyone else's, and its contract is shared before any other.
-                config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(contract));
+                // before anyone else's, and its contracts are shared before any other.
+                config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(math, contract));
                 return std::nullopt;
             },
             // The App the native functions act on, and every extension's components, events and resources.
@@ -630,8 +637,8 @@ namespace Fenrir
                 configuration.runtimeConfigPath = bridgeDirectory / "Iris.Bridge.runtimeconfig.json";
                 configuration.bridgeAssemblyPath = bridgeDirectory / "Iris.Bridge.dll";
                 configuration.dotnetRoot = config.dotnetRoot;
-                // Every extension's contract, in order, so the built-in extension's (the scripting contract) comes
-                // first: the others may refer to it, and each is bound as it is shared.
+                // Every extension's contract, in order, so the built-in extension's (Fenrir.Math, then the scripting
+                // contract) come first: the others may refer to them, and each is bound as it is shared.
                 // A relative path is beside the scripting contract, where the build deploys a package's contract.
                 for (const auto& extension : config.extensions)
                 {

@@ -295,9 +295,9 @@ namespace Fenrir
         std::string name;
 
         /**
-         * @brief Its C# contract: assemblies every script load shares as one copy, after the scripting contract (which
-         * the built-in extension shares) and in extension order. A relative path is in the bridge directory, beside the
-         * scripting contract, where a package's deploy function puts its contract.
+         * @brief Its C# contract: assemblies every script load shares as one copy, after Fenrir.Math and the scripting
+         * contract (which the built-in extension shares) and in extension order. A relative path is in the bridge
+         * directory, beside the scripting contract, where a package's deploy function puts its contract.
          */
         std::vector<std::filesystem::path> sharedAssemblies;
 
