@@ -1,0 +1,32 @@
+# 11: Renderer tracer bullet: a lit mesh drawn by a camera
+
+**What to build:** FenrirRenderer exists end to end, thinly: `Renderer::Install` opens the main window's surface, and an entity with a `MeshRenderer` naming a code-built cube and a `builtin:lit` material is drawn by a `Camera` entity, lit by a `DirectionalLight` and the `AmbientLight`, and presented each frame (spec: "FenrirRenderer: layers and the graphics device" (`RendererConfig`, surface and present, teardown), "FenrirRenderer: the frame", "FenrirRenderer: the ECS facade", "Materials and lights" (binding sets, opaque render state, built-ins, default textures, pipelines, lights), "Cameras, render targets and sky" (perspective only, the main window, reversed-Z), "Shaders" (built-ins); ADR-0016, ADR-0019, ADR-0022, ADR-0023, ADR-0024, ADR-0026). Blend modes, textures and user shaders are ticket 13; the full camera ticket 14; the sky ticket 15.
+
+- **`Renderer::Install(App&, RendererConfig)`** returns the move-only `Renderer` owner and installs the sequential `Render` systems; FenrirAssets and FenrirWindow (unless `Null`) must be installed first. Fails with one log and an invalid owner when the backend cannot start, or without a valid `Window` for any backend but `Null`; never falls back to null. Registers its embedded built-in containers under `builtin:` names.
+- **`RendererConfig`:** `backend` (`OpenGL` default, or `Null`), `vsync` (changeable at runtime through `Renderer`), `msaa` (stored; resolve built in ticket 14), `debugValidation` (on in Debug), `framesInFlight` (2). No tuning settings and no native escape hatch.
+- **Surface and present:** the main window's surface requested with the backend's API, a 4.6 core context (debug when validating), and an sRGB colour backbuffer with no depth, stencil or MSAA. Each `Render` reads the pixel size first; a minimised or zero-sized window builds, submits and presents nothing, but the frame index still advances. Present is the last step. Teardown waits for the GPU, frees device resources and releases the surface before `Window` tears down.
+- **The frame** (all sequential, main thread): read window sizes; read the active scene into the draw list and views; gather asset data; prepare (upload new or changed `(key, revision, data)`, GPU resources keyed by handle and revision, freed when a handle goes stale; pipelines lazily); build and compile the graph; record and `Submit`; present.
+- **`MeshRenderer { AssetHandle<Mesh> mesh; AssetHandle<Material> material; bool visible = true; }`:** read each `Render` from the active scene only, `GetWorldMatrix` once per item, nothing kept between frames, no scene resource of the renderer's. `visible` hides its own entity; an empty or stale mesh is skipped (stale logged once per handle); an empty or stale material draws with the **fallback material** (flat magenta, unlit), logged once; a missing `Transform` is the identity.
+- **Draw list:** per item mesh, material, world matrix and 64-bit sort key (stage in the high bits; opaque by pipeline, material, mesh). One draw per item.
+- **Passes per view** for this ticket: `Opaque` (depth write, greater-or-equal, reversed-Z with `SceneDepth` cleared to 0) → `Background` (a clear colour at depth 0) → `Output` (clamp and sRGB-encode the linear RGBA16F `SceneColor` into the backbuffer). Transients `SceneColor` and 32-bit float `SceneDepth`.
+- **`Camera`** with `Perspective { verticalFov = 60°, near = 0.1 }` (infinite far) and `enabled`, drawing into the whole main window; the aspect from the pixel size. A window with no camera is cleared to black, logged once. (Ticket 14 adds every other field.)
+- **Lights:** `DirectionalLight { Colour colour; float intensity; }` along its entity's world −Z, the first per active scene used and more warned once; `AmbientLight { Colour colour; float intensity; }` scene resource, dim grey by default.
+- **Built-in shaders** on the engine includes, built by `fenrir_add_shaders` and embedded as byte arrays: `unlit` (base colour × vertex colour here; textures in 13), `lit` (metallic-roughness GGX, one directional light, constant ambient, linear HDR), the fallback, the background clear and `Output`. Parameters and defaults by pragma as the spec lists; nothing seeded in C++. Sets 0, 1 and 3 declared in C++ and checked against reflection in debug builds (a mismatch fails pipeline creation with a diagnostic); set 2 laid out from reflection with its default block image under the overrides.
+- **Default textures:** 1×1 `white`, `black` and `normal` owned by the renderer, ready for ticket 13.
+- **Read-back:** `Renderer::GetWorldBounds(Entity) -> std::optional<Math::AABB>` from local bounds and the world matrix; `Renderer::Stats()` with last frame's draw, pass and upload counts.
+- A vertex attribute the shader reads but the mesh lacks binds a constant default (normal +Y, UV 0, colour white), logged once.
+- **`PublicHeaders.cpp`** for FenrirRenderer (no GL, SDL, glslang or SPIRV-Reflect).
+- README for the package: install order, the main-thread rule, the `Render`-phase rule.
+
+**Blocked by:** 07 (Materials on the asset store: overrides over shader defaults); 10 (The OpenGL 4.6 backend and GL pixel probes).
+
+**Touches:** `packages/FenrirRenderer/`, `CMakeLists.txt`
+
+**Status:** ready-for-agent
+
+- [ ] `FenrirRendererTests` on the null backend through `App::RunFrame` and `RendererProbe`: one `MeshRenderer` and one camera give one draw in `Opaque` with the lit pipeline and the frame, view, material and draw bindings; `visible = false` gives none; a stale mesh is skipped and logged once; an empty material draws with the fallback pipeline, logged once; opaque items sort by pipeline, material, mesh.
+- [ ] Parameter defaults reach the uploaded material block, and an override replaces its member; a `Replace` of the mesh re-uploads it once (revision); unloading it frees the GPU side.
+- [ ] A minimised window submits nothing while the frame index advances; no camera clears to black, logged once.
+- [ ] `GetWorldBounds` and `Stats` report expected values; `Install` with `Null` needs no window, and with `OpenGL` but no window returns an invalid owner whose calls do nothing.
+- [ ] GL pixel probes: an unlit quad's colour; the nearer of two quads wins under reversed-Z; a lit face matches N·L with ambient within tolerance.
+- [ ] A small C++ test app (or the GL test harness, visibly) shows a lit cube in a window; resizing and minimising need no code (checked by hand).
