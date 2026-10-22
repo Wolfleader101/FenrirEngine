@@ -28,5 +28,10 @@ build one locally only to chase a failure CI reports there.
 | `FENRIR_BUILD_TESTS` | `OFF` | Builds the package tests with Catch2 (the `libs/catch2` submodule, or an installed Catch2 v3): FenrirECS and FenrirApp always, FenrirPhysics when physics is on, FenrirScripting when scripting is on, and physics from C# (FenrirPhysicsScripting) when both are. |
 | `FENRIR_BUILD_EXAMPLES` | `ON` | Builds the DemoApp. Its third-party libraries (`examples/DemoApp/libs`) are not submodules, so turn it off on a fresh clone (CI does). |
 
+Packages that share types with bindings commit an API description (`packages/<Package>/api/<Package>.api.json`, ADR-0016),
+generated from their headers by `tools/describe-api`. The ordinary build never regenerates them:
+`cmake --build out/build/clang-x64-debug --target fenrir-describe-api` does (it needs the .NET SDK), and CI fails on a pull request
+whose descriptions are stale. See `tools/describe-api/README.md`.
+
 The Iris checks are built from Iris itself with `IRIS_BUILD_TESTS`, see `packages/Iris/README.md`. The first configure of a
 fresh build directory can fail in the third-party assimp project; running the same configure again succeeds.
