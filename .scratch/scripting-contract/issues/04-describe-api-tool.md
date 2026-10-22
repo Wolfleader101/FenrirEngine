@@ -15,9 +15,14 @@
 
 **Touches:** `tools/describe-api/`, `CMakeLists.txt` (root), `cmake/`, `.github/workflows/`, `README.md`.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The fixture header produces the committed expected description byte for byte on Windows and Linux CI; each failing fixture fails with the documented diagnostic.
-- [ ] Running the tool twice on unchanged headers rewrites nothing; `fenrir-describe-api` is not built by the default build.
-- [ ] CI fails on a tree where a description is stale (proved once in the PR by a deliberately stale commit, then fixed).
-- [ ] Nothing under `tools/describe-api` references Iris, C#, FenrirScripting or any Fenrir type by name beyond the fixture.
+- [x] The fixture header produces the committed expected description byte for byte on Windows and Linux CI; each failing fixture fails with the documented diagnostic.
+- [x] Running the tool twice on unchanged headers rewrites nothing; `fenrir-describe-api` is not built by the default build.
+- [x] CI fails on a tree where a description is stale (proved once in the PR by a deliberately stale commit, then fixed).
+- [x] Nothing under `tools/describe-api` references Iris, C#, FenrirScripting or any Fenrir type by name beyond the fixture.
+
+**Resolved by:** branch claude/describe-api-tool (PR #94), into claude/physics-vehicles-spec, built alongside 01–03 and merged after 03. `tools/describe-api` (ClangSharp 20.1.2 and libclang from NuGet, Tomlyn for the selection) writes the description in the schema of `tools/describe-api/SCHEMA.md`; `cmake/FenrirDescribeApi.cmake` holds `fenrir_describe_api()` and the `fenrir-describe-api` target, which passes the target's transitive include directories and definitions through an `@file`. The fixture is itself registered, so the CI job `.github/workflows/api-descriptions.yml` (Windows and Linux) covers it; CTest runs the xunit tests as `DescribeApiTests`. Evidence: `clang-x64-debug` 82/82; the deliberately stale commit 75f99ee failed the job on both runners with only the changed `radius` default in the diff (run 39725321366), so both platforms give the same bytes, and e18cf9f reverts it. Points for review:
+- **Three default forms beyond this ticket's list**, found by a trial run on FenrirPhysics's `Joints.hpp` and needed by 05: `std::numbers` constants with operators, an aggregate initialiser overriding some of a nested struct's members (`{.frequency = 2.0f}` records `{"frequency": 2}`), and bound-type constructor parameters matched to components ignoring leading underscores (glm's `qua(T _w, ...)`, which stores `w` first).
+- **Enumerator docs**: clang attaches a comment to the next enumerator when only a comma lies between; the tool drops a comment that ends before the previous enumerator does.
+- **Linux headers**: libclang's packages ship without clang's own headers, so off Windows the tool borrows `clang -print-resource-dir` from `PATH`. On Windows it does not: the MSVC headers stand alone, and another clang version's intrinsics headers do not parse.
