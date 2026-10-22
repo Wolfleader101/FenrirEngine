@@ -5,7 +5,7 @@ The main window of a Fenrir app, its services and its graphics surface, and the 
 ```cpp
 #include "FenrirWindow/Window.hpp"
 
-Fenrir::App app;
+Fenrir::App app(std::make_unique<Fenrir::ConsoleLogger>());
 Fenrir::WindowConfig config;
 config.title = "My game";
 Fenrir::Window window = Fenrir::Window::Install(app, config); // before the Renderer; keep it alive while the app runs
