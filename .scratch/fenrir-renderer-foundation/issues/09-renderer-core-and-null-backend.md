@@ -16,10 +16,10 @@
 
 **Touches:** `packages/FenrirRenderer/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Core tests with a fake surface and no `App`: resources are created, used and destroyed; a destroyed handle's slot is freed only after `framesInFlight` frames, and its old handle is detected as stale.
-- [ ] A recorded `CommandList` replays through the null backend's `Submit`, and `RendererProbe` reads back the passes, pipelines, bindings and draws in order.
-- [ ] Graph: passes order by stage then registration; a reader is ordered after its writer across stages; an unread pass is culled; reading an unwritten resource is reported as an error; two transients with equal descriptions and disjoint lifetimes share a pool entry; an imported resource is never pooled.
-- [ ] Per-frame ring buffers advance with the frame index.
-- [ ] No GL or loader include is reachable from the core or the null backend; Clang and MSVC x64 debug and release presets build with no new warnings.
+- [x] Core tests with a fake surface and no `App`: resources are created, used and destroyed; a destroyed handle's slot is freed only after `framesInFlight` frames, and its old handle is detected as stale.
+- [x] A recorded `CommandList` replays through the null backend's `Submit`, and `RendererProbe` reads back the passes, pipelines, bindings and draws in order.
+- [x] Graph: passes order by stage then registration; a reader is ordered after its writer across stages; an unread pass is culled; reading an unwritten resource is reported as an error; two transients with equal descriptions and disjoint lifetimes share a pool entry; an imported resource is never pooled.
+- [x] Per-frame ring buffers advance with the frame index.
+- [x] No GL or loader include is reachable from the core or the null backend; Clang and MSVC x64 debug and release presets build with no new warnings.
