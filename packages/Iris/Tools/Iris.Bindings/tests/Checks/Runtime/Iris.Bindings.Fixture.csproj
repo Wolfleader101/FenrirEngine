@@ -5,10 +5,13 @@
     <AssemblyName>Iris.Bindings.Fixture</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- The generated natives test calls function pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="../../Fixture/Contract/**/*.cs" />
+    <!-- The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it. -->
+    <Compile Include="../../Fixture/Contract/**/*.cs" Exclude="../../Fixture/Contract/Generated/FixtureNative.cs" />
     <Compile Include="../../Fixture/Tests/Generated/*.cs" />
     <Compile Include="../Stubs.cs" />
   </ItemGroup>

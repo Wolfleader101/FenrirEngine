@@ -489,33 +489,6 @@ TEST_CASE("Once the Physics owner is gone, collision meshes from C# give the non
     }
 }
 
-namespace
-{
-    constexpr const char* NativesType = "Fenrir.PhysicsScriptFixture.Natives";
-
-    // Every native function with an out parameter, in name order, as the fixture calls them.
-    constexpr std::array<std::string_view, 8> OutputNatives = {
-        "Bounds", "Depenetrate", "FrameFromWorld", "GetJointState", "Gravity", "MoveCast", "Raycast", "ShapeCast",
-    };
-} // namespace
-
-TEST_CASE("With no physics world, every native function from C# leaves its output as the default",
-          "[physics][scripting]")
-{
-    PhysicsScriptingApp test;
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
-    {
-        INFO("Fenrir.Physics's natives with an out parameter are not the " << OutputNatives.size()
-                                                                           << " this test names");
-        REQUIRE(test.Call<int>(NativesType, "OutputNativeCount") == static_cast<int>(OutputNatives.size()));
-    }
-    for (std::size_t which = 0; which < OutputNatives.size(); ++which)
-    {
-        INFO(OutputNatives[which] << " returned early without writing the default to its output");
-        REQUIRE(test.Call<bool>(NativesType, "LeavesOutputDefault", static_cast<int>(which)));
-    }
-}
-
 TEST_CASE("C# edits physics components in place, and reading the wrong kind of shape throws", "[physics][scripting]")
 {
     PhysicsScriptingApp test;

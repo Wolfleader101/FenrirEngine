@@ -17,6 +17,8 @@ public sealed class BindingTests
 
     private static string FixtureDescription => Path.Combine(FixtureDirectory, "Fixture.api.json");
 
+    private static string FixtureNatives => Path.Combine(FixtureDirectory, "Fixture.natives.json");
+
     private static CSharpParseOptions Latest => CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest);
 
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
@@ -41,9 +43,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 18,
-                    $"The fixture should give 14 mirrors, the mappings, the registration and the two defaults test " +
-                    $"files, but gave {generated.Count} files.");
+        Assert.True(generated.Count == 21,
+                    $"The fixture should give 14 mirrors, the natives' class, the mappings, the registration and the " +
+                    $"two files each of the defaults and natives tests, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -133,7 +135,8 @@ public sealed class BindingTests
     public void AnExcludedTypeGetsNoMirrorMappingRegistrationOrTest()
     {
         using var directory = new TemporaryDirectory();
-        var config = CopyConfig(directory, "", "exclude = [\"Fixture::Hit\"]\n");
+        // Without natives: one of them takes a Hit.
+        var config = CopyConfig(directory, "", "exclude = [\"Fixture::Hit\"]\n", WithoutNatives);
         var description = WriteDescription(directory, _ => { });
 
         var generated = Generator.Generate(config, [description]);
@@ -188,7 +191,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 18, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 21,$"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -268,9 +271,88 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void ANativeAddedWithAnOutputIsDeclaredRegisteredAndTested()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        var before = Generator.Generate(config, [description]);
+        WriteNatives(directory, root =>
+        {
+            var added = Native(root, "Find").DeepClone();
+            added["name"] = "Nearest";
+            root["functions"]!.AsArray().Add(added);
+        });
+
+        var after = Generator.Generate(config, [description]);
+
+        var added = Changes(before, after).Where(change => change.Contains("Nearest", StringComparison.Ordinal)).ToList();
+        string[] expected =
+        [
+            "FixtureNative.cs: '' became '    public static partial bool Nearest(in Vector3 origin, float distance, out Hit hit);'",
+            "FixtureRegistration.cpp: '} // namespace Fixture::Natives' became '    bool Nearest(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);'",
+            "FixtureRegistration.cpp: '' became '            Host::NativeFunction::Make<&Fixture::Natives::Nearest>(\"Fixture.Bindings.FixtureNative.Nearest\"),'",
+            "FixtureNatives.cs: '' became '    public static bool Nearest()'",
+            "FixtureNativesTests.cpp: '' became 'TEST_CASE(\"Fixture.Bindings.FixtureNative.Nearest, given nothing to act on, writes its output's default\", \"[bindings]\")'",
+        ];
+        foreach (var line in expected)
+        {
+            Assert.True(added.Any(change => change.EndsWith(line[(line.IndexOf("became", StringComparison.Ordinal))..], StringComparison.Ordinal) &&
+                                            change.StartsWith(line[..line.IndexOf(':')], StringComparison.Ordinal)),
+                        $"A native with an output, added to the description, should give\n  {line}\nbut the changes naming it were:\n  " +
+                        string.Join("\n  ", added));
+        }
+    }
+
+    [Theory]
+    [InlineData("ByValue", "Fixture.natives.json: Find::origin: cannot map the C++ type 'Fixture::Spring' to C#: Iris " +
+                           "passes no struct or enum by value: take a const pointer")]
+    [InlineData("Undescribed", "Fixture.natives.json: Find::origin: cannot map the C++ type 'const Fixture::Unknown*' to " +
+                               "C#: no description describes Fixture::Unknown, and [natives] types does not name it")]
+    [InlineData("NeitherOutNorSpan", "Fixture.natives.json: Find::hit: cannot map the C++ type 'Fixture::Hit*' to C#: a " +
+                                     "pointer to non-const data is an output (its doc says [out]) or a span (its " +
+                                     "std::int32_t count follows it)")]
+    [InlineData("Result", "Fixture.natives.json: Sum (result): cannot map the C++ type 'const Fixture::Vec3*' to C#: a " +
+                          "native returns a number, a bool or nothing")]
+    public void ANativeParameterTheBindingCannotMapFailsNamingTheFunctionAndParameter(string problem, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        WriteNatives(directory, root =>
+        {
+            switch (problem)
+            {
+                case "ByValue":
+                    Parameter(root, "Find", "origin").ReplaceWith(JsonNode.Parse(
+                        """{ "name": "origin", "type": "Fixture::Spring", "kind": "struct" }"""));
+                    break;
+                case "Undescribed":
+                    Parameter(root, "Find", "origin")["type"] = "const Fixture::Unknown*";
+                    Parameter(root, "Find", "origin")["pointee"] = "Fixture::Unknown";
+                    break;
+                case "NeitherOutNorSpan":
+                    Parameter(root, "Find", "hit").AsObject().Remove("output");
+                    break;
+                case "Result":
+                    Native(root, "Sum")["returns"] = JsonNode.Parse(
+                        """{ "type": "const Fixture::Vec3*", "kind": "pointer", "pointee": "Fixture::Vec3", "pointeeKind": "struct", "const": true }""");
+                    break;
+            }
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void TheMirrorsAndDefaultsClassCompileAgainstStubsOfTheSdk()
     {
+        // The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
+                          .Where(path => Path.GetFileName(path) != "FixtureNative.cs")
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
                           .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), Latest, path, cancellationToken: Cancel))
@@ -280,7 +362,8 @@ public sealed class BindingTests
                              .Select(path => MetadataReference.CreateFromFile(path));
         var compilation = CSharpCompilation.Create(
             "Iris.Bindings.StubCheck", sources, references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable,
+                                         allowUnsafe: true));
 
         using var assembly = new MemoryStream();
         var result = compilation.Emit(assembly, cancellationToken: Cancel);
@@ -332,8 +415,32 @@ public sealed class BindingTests
 
         var config = Path.Combine(directory.Path, "Fixture.binding.toml");
         File.WriteAllText(config, edit == null ? text : edit(text));
+        File.Copy(FixtureNatives, Path.Combine(directory.Path, "Fixture.natives.json"), overwrite: true);
         return config;
     }
+
+    // A configuration's text without [natives] or the natives test.
+    private static string WithoutNatives(string text)
+    {
+        var start = text.IndexOf("[natives]", StringComparison.Ordinal);
+        var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
+        text = text[..start] + text[end..];
+        return string.Join('\n', text.Split('\n').Where(line => !line.StartsWith("natives-", StringComparison.Ordinal)));
+    }
+
+    // The fixture's natives description, edited, written as Fixture.natives.json beside a copied configuration.
+    private static void WriteNatives(TemporaryDirectory directory, Action<JsonNode> edit)
+    {
+        var root = JsonNode.Parse(File.ReadAllText(FixtureNatives))!;
+        edit(root);
+        File.WriteAllText(Path.Combine(directory.Path, "Fixture.natives.json"), root.ToJsonString());
+    }
+
+    private static JsonNode Native(JsonNode root, string name) =>
+        root["functions"]!.AsArray().First(function => (string)function!["name"]! == name)!;
+
+    private static JsonNode Parameter(JsonNode root, string function, string parameter) =>
+        Native(root, function)["parameters"]!.AsArray().First(node => (string)node!["name"]! == parameter)!;
 
     // The generated mirror of that file name.
     private static string Mirror(IReadOnlyDictionary<string, string> generated, string fileName) =>

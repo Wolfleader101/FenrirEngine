@@ -33,6 +33,9 @@ internal sealed class Binding
     public IEnumerable<DescribedType> Registered =>
         Types.Where(type => type.Role is Role.Component or Role.Event or Role.SharedStruct);
 
+    /// <summary>The described type of that name, or null.</summary>
+    public DescribedType? Find(string name) => types.GetValueOrDefault(name);
+
     public DescribedType Type(string name) =>
         types.TryGetValue(name, out var type)
             ? type

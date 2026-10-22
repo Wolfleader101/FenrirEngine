@@ -12,6 +12,12 @@
 
 namespace Fenrir::ScriptQueries
 {
+    /**
+     * @brief A C# Entity as a native function takes it: the entity's 32-bit value, which is what crosses. The binding
+     * (FenrirPhysics.binding.toml, [natives] types) declares a parameter of this type as a C# Entity.
+     */
+    using EntityId = std::uint32_t;
+
     /** @brief A C# Entity: an entity's 32-bit value alone. */
     struct EntityValue
     {
@@ -25,7 +31,12 @@ namespace Fenrir::ScriptQueries
         std::uint32_t value = 0;
     };
 
-    /** @brief Which bodies a query can find. New, it finds every body except triggers. */
+    /**
+     * @brief Which bodies a query can find. New, it finds every body except triggers.
+     *
+     * The default value (every field zero, which as written would find nothing) finds what a new one does, so a query
+     * function can take `default` as its filter.
+     */
     struct QueryFilter
     {
         /** @brief The collision layers to find, one bit per layer: a body is found if it is in any of them. */

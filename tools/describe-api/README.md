@@ -1,6 +1,6 @@
 # describe-api
 
-Reads the C++ headers a package selects and writes the package's **API description** (ADR-0016): a committed, language-neutral JSON record of the plain-data types it shares with bindings, with each type's layout, field kinds, default values and doc comments, its enums and its tagged unions. A binding's generator reads the description, never the headers, so the package's headers stay the one place a shared type is written by hand.
+Reads the C++ headers a package selects and writes the package's **API description** (ADR-0016): a committed, language-neutral JSON record of the plain-data types it shares with bindings, with each type's layout, field kinds, default values and doc comments, its enums and its tagged unions. A binding's generator reads the description, never the headers, so the package's headers stay the one place a shared type is written by hand. Its second mode describes a binding's native functions from their C++ definitions ("Native functions" below), so a native is written by hand once too.
 
 The tool knows nothing of any binding. It is a .NET console program that uses libclang (the `ClangSharp` and `libclang` NuGet packages, so no LLVM install) to read headers.
 
@@ -75,6 +75,24 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 
 Errors clang reports reading the headers are printed as clang gives them.
 
+## Native functions
+
+A second mode reads a binding's native functions, the C++ functions its script language calls. They are glue for one binding, not shared types, so they are not in the API description and their configuration lives with the binding: the `[natives]` section of its `<Name>.binding.toml`, of which this tool reads two keys and ignores the rest.
+
+```toml
+[natives]
+sources = ["../src/PhysicsScripting.cpp"]   # Relative to this file; natives are described in this order.
+context = "Fenrir::CallContext"             # What every native takes first.
+```
+
+```sh
+describe-api --natives <Name>.binding.toml [compile arguments, or @file]
+```
+
+It parses each source on its own with the compile arguments and writes `<Name>.natives.json` beside the configuration (again only when its content changes): every free function defined there whose first parameter is `const Context&`, with whether its second is the extension's state (a reference to a non-const class), each later parameter's C++ type and name, its result and its doc comment, in source order. `@param[out]` in a native's doc marks an output. The format is the second half of `SCHEMA.md`.
+
+In CMake, `fenrir_describe_api_natives(<target> <config>)` adds a binding's natives to `fenrir-describe-api`, compiled with `<target>`'s include directories and definitions; `packages/FenrirPhysics/Scripting/CMakeLists.txt` is the example. A native fails the tool, naming the function and parameter, when it has internal linkage (static or in an anonymous namespace: the generated registration names it from another file), takes a reference after the context and state, has an unnamed parameter, a pointer to a pointer or a type of no kind, documents `@param[out]` on anything but a pointer to non-const data, or documents a parameter it does not have.
+
 ## Tests
 
-`tests/` (xunit) describes the fixture (`tests/Fixture/Fixture.hpp`) and compares the result with the committed `Fixture.api.json` byte for byte, checks a second run rewrites nothing, and describes each type in `tests/Fixture/Failing.hpp` alone, expecting its diagnostic. CTest runs them as `DescribeApiTests` when tests are built; by hand, `dotnet test tools/describe-api/tests`. The fixture is also described by `fenrir-describe-api`, so regenerate it with that target after changing the tool or the fixture.
+`tests/` (xunit) describes the fixture (`tests/Fixture/Fixture.hpp`) and compares the result with the committed `Fixture.api.json` byte for byte, checks a second run rewrites nothing, describes each type in `tests/Fixture/Failing.hpp` alone, expecting its diagnostic, describes the fixture's natives (`tests/Fixture/Natives.cpp`, through `tests/Fixture/Fixture.binding.toml`) against the committed `Fixture.natives.json`, and describes `tests/Fixture/FailingNatives.cpp`, expecting each refused native's diagnostic. CTest runs them as `DescribeApiTests` when tests are built; by hand, `dotnet test tools/describe-api/tests`. The fixture is also described by `fenrir-describe-api`, so regenerate it with that target after changing the tool or the fixture.

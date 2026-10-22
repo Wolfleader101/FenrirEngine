@@ -78,6 +78,44 @@ public sealed class DescribeTests
                      "A failed run should write no description.");
     }
 
+    [Fact]
+    public void TheFixturesNativesGiveTheCommittedNativesDescriptionByteForByte()
+    {
+        var selection = NativesSelection.Read(Path.Combine(FixtureDirectory(), "Fixture.binding.toml"));
+        var described = NativesWriter.Write(NativesDescriber.Describe(selection, []));
+        var committed = File.ReadAllText(selection.DescriptionPath);
+
+        Assert.True(committed == described,
+                    "The fixture's natives description differs from the committed Fixture.natives.json. If the change is " +
+                    "meant, regenerate it (the fenrir-describe-api target) and review the diff.\n" +
+                    FirstDifference(committed, described));
+    }
+
+    [Theory]
+    [InlineData("Hidden: has internal linkage (static, or in an anonymous namespace): the generated registration " +
+                "declares and names it from another source file")]
+    [InlineData("ByReference::value: is a reference: after the call context and the extension state, a native takes " +
+                "values and pointers")]
+    [InlineData("Unnamed (parameter 2): is unnamed: a native's parameters are named in C#")]
+    [InlineData("OutValue::value: is documented @param[out] but is not a pointer to non-const data")]
+    [InlineData("DocumentsMissing: documents a parameter 'missing' it does not have")]
+    [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
+    [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]
+    public void EachUndescribableNativeFailsNamingTheFunctionAndParameter(string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var source = Path.Combine(FixtureDirectory(), "FailingNatives.cpp").Replace('\\', '/');
+        var config = Path.Combine(directory.Path, "Failing.binding.toml");
+        File.WriteAllText(config, $"[natives]\nsources = [\"{source}\"]\ncontext = \"Host::CallContext\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => NativesDescriber.Describe(NativesSelection.Read(config), []));
+
+        Assert.True(exception.Message.Contains("error: " + diagnostic, StringComparison.Ordinal),
+                    $"Describing FailingNatives.cpp should report\n  {diagnostic}\namong\n  {exception.Message}");
+        Assert.False(File.Exists(Path.Combine(directory.Path, "Failing.natives.json")),
+                     "A failed run should write no description.");
+    }
+
     private static string FirstDifference(string expected, string actual)
     {
         var expectedLines = expected.Split('\n');

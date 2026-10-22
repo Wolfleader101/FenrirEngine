@@ -5,7 +5,13 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Physics;
 
-/// <summary>Which bodies a query can find. New, it finds every body except triggers.</summary>
+/// <summary>
+/// Which bodies a query can find. New, it finds every body except triggers.
+/// </summary>
+/// <remarks>
+/// The default value (every field zero, which as written would find nothing) finds what a new one does, so a query
+/// function can take `default` as its filter.
+/// </remarks>
 public partial struct QueryFilter
 {
     /// <summary>The collision layers to find, one bit per layer: a body is found if it is in any of them.</summary>

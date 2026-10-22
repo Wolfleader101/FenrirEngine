@@ -620,6 +620,12 @@ shares its name with another in its type (FENRIR0024), returns a string (FENRIR0
 (FENRIR0026). Your friendly API calls the declared method like any other, and adds behaviour (such as turning error codes
 into exceptions) only where it wants.
 
+An extension with a generated binding (ADR-0016) writes only step 1: `tools/describe-api --natives` reads its C++
+natives into a natives description, and `Iris.Bindings` generates steps 2 and 3 from it, in one order (its README,
+"Natives"). The C++ function then needs external linkage, outside an anonymous namespace, since the generated
+registration names it from another file, and `@param[out]` in its doc makes a pointer an `out` parameter. FenrirPhysics's
+natives are built that way (`packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`).
+
 ## Adding to the engine's own API
 
 The engine's own API (Log, Time, Entity, components, events, queries, changes) is the built-in scripting extension: its

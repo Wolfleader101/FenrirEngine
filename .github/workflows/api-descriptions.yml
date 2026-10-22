@@ -46,7 +46,7 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      # Configuring is enough: fenrir-describe-api reads headers and fenrir-generate-bindings reads descriptions, and
+      # Configuring is enough: fenrir-describe-api reads headers and natives' sources, fenrir-generate-bindings reads descriptions, and
       # neither builds anything of the engine. Scripting is on because Iris holds the binding generator.
       - name: Configure
         run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF -DFENRIR_ENABLE_SCRIPTING=ON

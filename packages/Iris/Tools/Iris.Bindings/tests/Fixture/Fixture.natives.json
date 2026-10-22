@@ -1,0 +1,163 @@
+{
+  "binding": "Fixture",
+  "context": "Host::CallContext",
+  "functions": [
+    {
+      "name": "Push",
+      "namespace": "Fixture::Natives",
+      "source": "Natives.cpp",
+      "state": "Host::State",
+      "doc": "Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fixture::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "force",
+          "type": "const Fixture::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fixture::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Find",
+      "namespace": "Fixture::Natives",
+      "source": "Natives.cpp",
+      "state": "Host::State",
+      "doc": "The nearest hit from `origin`.\n\nA second paragraph of the function's doc.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it hit."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fixture::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fixture::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "distance",
+          "type": "float",
+          "kind": "f32",
+          "doc": "How far to look."
+        },
+        {
+          "name": "hit",
+          "type": "Fixture::Hit*",
+          "kind": "pointer",
+          "pointee": "Fixture::Hit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "Where it hit; the default when it did not."
+        }
+      ]
+    },
+    {
+      "name": "FindAll",
+      "namespace": "Fixture::Natives",
+      "source": "Natives.cpp",
+      "doc": "Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fixture::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fixture::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fixture::Hit*",
+          "kind": "pointer",
+          "pointee": "Fixture::Hit",
+          "pointeeKind": "struct"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "Say",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "noexcept": true,
+      "doc": "Logs text: a native outside the others' namespace, noexcept, taking characters and their length.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "text",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "Sum",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result.",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64"
+      },
+      "parameters": [
+        {
+          "name": "values",
+          "type": "const std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "all",
+          "type": "bool",
+          "kind": "bool"
+        },
+        {
+          "name": "scale",
+          "type": "double",
+          "kind": "f64"
+        }
+      ]
+    }
+  ]
+}

@@ -415,8 +415,10 @@ Mappings need not be written by hand. [`Tools/Iris.Bindings`](Tools/Iris.Binding
 ([the format](docs/api-description.md)), written from a C++ package's headers, and a binding's configuration, and
 generates the C# mirror of each shared struct, tagged union and enum, a `StructMapping` per type built with
 `Iris::Field<T>` (so private members need no stand-in), the registration lists of the extension that shares them, and a
-Catch2 test that C#'s `new T()` holds C++'s `T{}` defaults field by field. `iris_generate_binding()` adds a binding to a
-target the ordinary build never runs.
+Catch2 test that C#'s `new T()` holds C++'s `T{}` defaults field by field. From a natives description
+([the format](docs/natives-description.md)), written from the C++ native functions themselves, it also generates their C#
+declarations, their registration and a test that each writes its outputs when it returns early.
+`iris_generate_binding()` adds a binding to a target the ordinary build never runs.
 
 ### Arrays
 
@@ -782,6 +784,10 @@ Each release lists every public change and what it replaces, as ADR-0006 (amende
   `default` in the configuration, and a mirror whose defaults are all zero has no constructor. These replace the
   surface a generated mirror would otherwise add or change (a constructor, writable state, an all-zero entity link),
   so a hand-written contract can move to generated mirrors with its public API as it was.
+- **The binding generator writes native functions** (`[natives]` in the configuration, read from a natives description,
+  `docs/natives-description.md`): their C# declarations, their registration (each declared in the registration source)
+  and a test that each native with an output writes its default when it returns early. It replaces declaring each
+  native in C# and listing it in the extension by hand; the public headers do not change.
 
 ## References
 

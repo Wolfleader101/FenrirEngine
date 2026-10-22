@@ -92,15 +92,25 @@ internal static class CppWriter
 
     /// <summary>
     /// The registration lists: one function that sets the extension's components, events and shared structs, each made
-    /// with the C# name derived from the namespace and the type.
+    /// with the C# name derived from the namespace and the type, and with natives its functions, each declared here and
+    /// made with the C# name of its declaration.
     /// </summary>
-    public static string Registration(Binding binding, RegistrationConfig registration)
+    public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives)
     {
-        var text = Header(binding, "The extension's registration lists: every described component, event and shared struct.");
+        var text = Header(binding,
+                          natives == null
+                              ? "The extension's registration lists: every described component, event and shared struct."
+                              : "The extension's registration lists: every described component, event, shared struct and native function.",
+                          natives);
         text.Line($"#include \"{Relative(registration.Source, binding.Config.Cpp.Mappings)}\"");
         foreach (var include in registration.Includes)
         {
             text.Line($"#include \"{include}\"");
+        }
+
+        if (natives != null)
+        {
+            Declarations(text, natives);
         }
 
         var separator = registration.Function.LastIndexOf("::", StringComparison.Ordinal);
@@ -125,6 +135,25 @@ internal static class CppWriter
         List(text, "events", binding.Types.Where(type => type.Role == Role.Event), _ => registration.MakeEvent, binding);
         List(text, "sharedStructs", binding.Types.Where(type => type.Role == Role.SharedStruct),
              _ => registration.MakeSharedStruct, binding);
+        if (natives != null)
+        {
+            var config = binding.Config.Natives!;
+            if (natives.Functions.Count == 0)
+            {
+                text.Line("extension.functions = {};");
+            }
+            else
+            {
+                text.Line("extension.functions = {");
+                foreach (var native in natives.Functions)
+                {
+                    text.Line($"    {config.Make}<&{native.QualifiedName}>(\"{binding.Config.Namespace}.{config.Class}.{native.Name}\"),");
+                }
+
+                text.Line("};");
+            }
+        }
+
         text.Outdent();
         text.Line("}");
         if (separator > 0)
@@ -137,6 +166,136 @@ internal static class CppWriter
         text.Line("// clang-format on");
         return text.ToString();
     }
+
+    // Each native's declaration, so the registration can name it from this file: consecutive natives of one namespace
+    // inside one block. The context and state are unnamed (a parameter may take either name).
+    private static void Declarations(Writer text, NativesDescription natives)
+    {
+        var groups = new List<List<NativeFunction>>();
+        foreach (var function in natives.Functions)
+        {
+            if (groups.Count == 0 || groups[^1][0].Namespace != function.Namespace)
+            {
+                groups.Add([]);
+            }
+
+            groups[^1].Add(function);
+        }
+
+        foreach (var group in groups)
+        {
+            var space = group[0].Namespace;
+            text.Line();
+            if (space.Length > 0)
+            {
+                text.Line($"namespace {space}");
+                text.Line("{");
+                text.Indent();
+            }
+
+            foreach (var function in group)
+            {
+                var parameters = new List<string> { $"const {natives.Context}&" };
+                if (function.State != null)
+                {
+                    parameters.Add($"{function.State}&");
+                }
+
+                parameters.AddRange(function.Parameters.Select(parameter => $"{parameter.Type.Spelling} {parameter.Name}"));
+                text.Line($"{function.Returns.Spelling} {function.Name}({string.Join(", ", parameters)})" +
+                          $"{(function.NoExcept ? " noexcept" : "")};");
+            }
+
+            if (space.Length > 0)
+            {
+                text.Outdent();
+                text.Line($"}} // namespace {space}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// The natives test: a case per native function with an output, calling its method in the natives test's C# class
+    /// (which calls the native with every input zero or null) and requiring that it found each output holding its
+    /// default.
+    /// </summary>
+    public static string NativesTest(Binding binding, TestsConfig tests, NativesDescription natives,
+                                     IReadOnlyList<BoundNative> bound)
+    {
+        var config = binding.Config.Natives!;
+        var text = Header(binding, "Each native function with an output writes its default when it returns early.", natives);
+        text.Line("#include \"Iris/Iris.hpp\"");
+        foreach (var include in tests.Includes)
+        {
+            text.Line($"#include \"{include}\"");
+        }
+
+        text.Line();
+        text.Line("#include <catch2/catch_test_macros.hpp>");
+        text.Line();
+        text.Line("#include <string_view>");
+        text.Line();
+        text.Line("namespace");
+        text.Line("{");
+        text.Indent();
+        text.Line($"constexpr std::string_view NativesClass = \"{tests.NativesClass}\";");
+        text.Line();
+        foreach (var line in NativesCheck)
+        {
+            text.Line(line);
+        }
+
+        text.Outdent();
+        text.Line("} // namespace");
+        foreach (var native in bound.Where(native => native.HasOutput))
+        {
+            var name = native.Function.Name;
+            text.Line();
+            text.Line($"TEST_CASE(\"{binding.Config.Namespace}.{config.Class}.{name}, given nothing to act on, writes its " +
+                      $"output's default\", \"{tests.Tags}\")");
+            text.Line("{");
+            text.Indent();
+            text.Line(tests.Setup);
+            text.Line($"CheckOutputs({tests.Component}, \"{name}\");");
+            text.Outdent();
+            text.Line("}");
+        }
+
+        text.Line();
+        text.Line("// clang-format on");
+        return text.ToString();
+    }
+
+    // The natives test's check, written into the test so it needs only Iris's headers.
+    private static readonly string[] NativesCheck =
+    [
+        "// Calls the natives class's method for `native`, which calls the native with every input zero or null, and",
+        "// requires that each output then holds its default.",
+        "void CheckOutputs(const Iris::Component* component, std::string_view native)",
+        "{",
+        "    {",
+        "        INFO(\"There is no loaded C# assembly holding the natives test\");",
+        "        REQUIRE(component != nullptr);",
+        "    }",
+        "    const auto type = component->FindType(NativesClass);",
+        "    {",
+        "        INFO(\"The natives test class \" << NativesClass << \" was not found: \" << type.diagnostic);",
+        "        REQUIRE(type.Succeeded());",
+        "    }",
+        "    const auto handle = type.value->FindMethod<bool()>(native);",
+        "    {",
+        "        INFO(\"The natives test method \" << native << \" was not found: \" << handle.diagnostic);",
+        "        REQUIRE(handle.Succeeded());",
+        "    }",
+        "    const auto result = handle.value->Invoke();",
+        "    {",
+        "        INFO(\"Calling \" << native << \" failed: \" << result.diagnostic);",
+        "        REQUIRE(result.Succeeded());",
+        "    }",
+        "    INFO(native << \" returned early without writing the default to its output\");",
+        "    REQUIRE(*result.value);",
+        "}",
+    ];
 
     private static void List(Writer text, string member, IEnumerable<DescribedType> types,
                              Func<DescribedType, string> make, Binding binding)
@@ -393,14 +552,20 @@ internal static class CppWriter
         "}",
     ];
 
-    private static Writer Header(Binding binding, string purpose)
+    private static Writer Header(Binding binding, string purpose, NativesDescription? natives = null)
     {
         // Formatting is off from the first line: the header names every description, which can run past any width.
         var text = new Writer();
         text.Line("// clang-format off");
         text.Line();
+        var inputs = binding.Types.Select(type => Path.GetFileName(type.Source)).Distinct().ToList();
+        if (natives != null)
+        {
+            inputs.Add(Path.GetFileName(natives.Path));
+        }
+
         text.Line($"// Generated by Iris.Bindings from {Path.GetFileName(binding.Config.Path)} and " +
-                  $"{string.Join(", ", binding.Types.Select(type => Path.GetFileName(type.Source)).Distinct())}: do not edit.");
+                  $"{string.Join(", ", inputs)}: do not edit.");
         text.Line($"// {purpose}");
         text.Line();
         return text;
