@@ -4230,10 +4230,12 @@ namespace
             REQUIRE(!scripting.HasScripts());
         }
         {
+            // The state types are spelled by type_index::name(), which GCC and Clang mangle ("...5OtherE"), so only
+            // the type's own name is looked for.
             INFO("The failure did not name the function and both state types");
             REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Fenrir.TestExtension.Gadgets.Tally'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Other'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Other"));
         }
     }
 
