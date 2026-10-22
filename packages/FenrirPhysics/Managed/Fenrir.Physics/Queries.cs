@@ -125,9 +125,9 @@ public struct Aabb
     public Vector3 Max;
 }
 
-/// <summary>Which categories of debug lines a physics world draws. Bit flags.</summary>
+/// <summary>Which categories of debug lines a physics world draws into its scene's debug drawing. Bit flags.</summary>
 [Flags]
-public enum DebugDraw : uint
+public enum PhysicsDebugCategories : uint
 {
     None = 0,
     /// <summary>Each collider's wireframe at its body's pose, coloured by motion type.</summary>

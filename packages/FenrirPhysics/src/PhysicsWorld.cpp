@@ -249,7 +249,6 @@ namespace Fenrir
         BreakJoints();
         SendEvents(app);
         AdvancePoses();
-        DrawDebugLines();
     }
 
     void PhysicsWorld::Impl::Shown::Advance(const Transform& world)

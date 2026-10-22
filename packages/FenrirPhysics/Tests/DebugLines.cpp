@@ -1,11 +1,12 @@
-// Debug lines through the frame seam: a world's lines are switched on, frames run, and the lines it made are checked
-// against what its bodies are known to be.
+// Debug lines through the frame seam: a world's lines are switched on, frames run, and the lines its scene's DebugDraw
+// shows are checked against what its bodies are known to be.
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -41,10 +42,16 @@ namespace
                point.y <= box.max.y + margin && point.z >= box.min.z - margin && point.z <= box.max.z + margin;
     }
 
-    std::vector<float> SortedLengths(std::span<const DebugLine> lines)
+    std::size_t CountColoured(std::span<const DrawnLine> lines, const Colour& colour)
+    {
+        return static_cast<std::size_t>(std::count_if(
+            lines.begin(), lines.end(), [colour](const DrawnLine& line) { return SameColour(line.colour, colour); }));
+    }
+
+    std::vector<float> SortedLengths(std::span<const DrawnLine> lines)
     {
         std::vector<float> lengths;
-        for (const DebugLine& line : lines)
+        for (const DrawnLine& line : lines)
         {
             lengths.push_back(glm::length(line.to - line.from));
         }
@@ -62,9 +69,73 @@ TEST_CASE("A world draws no debug lines until they are switched on", "[physics][
 
     PhysicsWorld& world = WorldOf(test);
     INFO("debug drawing is off by default");
-    REQUIRE(world.DebugDrawCategories() == DebugDraw::None);
+    REQUIRE(world.DebugDrawCategories() == PhysicsDebugCategories::None);
     INFO("so a world with bodies touching and moving has no lines");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
+}
+
+TEST_CASE(
+    "A world's debug lines are drawn into its scene's DebugDraw in the Physics group, and last until the next tick",
+    "[physics][debug]")
+{
+    PhysicsApp test;
+    AddGround(test.Entities());
+    test.Run(tick);
+    PhysicsWorld& world = WorldOf(test);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
+    test.Run(tick);
+    INFO("the ground's twelve edges are drawn");
+    REQUIRE(DrawnLines(test.app).size() == 12);
+
+    const auto ticks = [&test] { return test.app.GetTime().tickCount; };
+    const auto stepped = ticks();
+    test.app.RunFrame(tick * 0.25);
+    INFO("a frame with no tick, and so no step, still shows them");
+    REQUIRE(ticks() == stepped);
+    REQUIRE(DrawnLines(test.app).size() == 12);
+
+    test.app.RunFrame(tick * 0.8);
+    INFO("the next tick's step draws them again rather than adding to them");
+    REQUIRE(ticks() == stepped + 1);
+    REQUIRE(DrawnLines(test.app).size() == 12);
+
+    DebugDraw& draw = *test.app.GetActiveScene().GetResource<DebugDraw>();
+    draw.HideGroup(PhysicsDebugGroup);
+    REQUIRE(PhysicsDebugGroup == "Physics");
+    test.Run(tick);
+    INFO("hiding the Physics group hides them");
+    REQUIRE(DrawnLines(test.app).empty());
+
+    draw.ShowGroup(PhysicsDebugGroup);
+    INFO("shown again with no step between, the hidden step's lines were still recorded");
+    REQUIRE(DrawnLines(test.app).size() == 12);
+
+    world.SetDebugDraw(PhysicsDebugCategories::None);
+    const auto last = ticks();
+    test.app.RunFrame(tick * 0.25);
+    INFO("switched off, the last step's lines stay until the next tick");
+    REQUIRE(ticks() == last);
+    REQUIRE(DrawnLines(test.app).size() == 12);
+    test.app.RunFrame(tick * 0.8);
+    INFO("and are gone after it");
+    REQUIRE(ticks() == last + 1);
+    REQUIRE(DrawnLines(test.app).empty());
+}
+
+TEST_CASE("A world steps with its lines switched on in an app with no debug drawing", "[physics][debug]")
+{
+    App app(std::make_unique<SilentLogger>(), 1);
+    Physics physics = Physics::Install(app, StepPosesOnly());
+    AddGround(app.GetActiveScene().GetEntityList());
+    app.RunFrame(tick);
+    PhysicsWorld* world = PhysicsWorld::Of(app.GetActiveScene());
+    REQUIRE(world != nullptr);
+    world->SetDebugDraw(PhysicsDebugCategories::All);
+    app.RunFrame(tick);
+
+    INFO("there is no DebugDraw to draw into, and nothing fails");
+    REQUIRE(app.GetActiveScene().GetResource<DebugDraw>() == nullptr);
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::All);
 }
 
 TEST_CASE("A box collider is drawn as its twelve edges, inside its bounds, in its motion type's colour",
@@ -76,12 +147,12 @@ TEST_CASE("A box collider is drawn as its twelve edges, inside its bounds, in it
     box.GetComponent<Transform>().rot = Math::AngleAxis(0.5f * 3.14159265f, Math::Vec3(0.0f, 1.0f, 0.0f));
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Colliders);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
     INFO("lines are made by a step: none yet");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
 
     test.Run(tick);
-    const std::span<const DebugLine> lines = world.DebugLines();
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
     INFO("a box has twelve edges");
     REQUIRE(lines.size() == 12);
 
@@ -89,13 +160,13 @@ TEST_CASE("A box collider is drawn as its twelve edges, inside its bounds, in it
     INFO("its bounds, turned, run 4 along x and 2 along z");
     REQUIRE(bounds.max.x - bounds.min.x == Approx(4.0f).margin(1.0e-3f));
     REQUIRE(bounds.max.z - bounds.min.z == Approx(2.0f).margin(1.0e-3f));
-    for (const DebugLine& line : lines)
+    for (const DrawnLine& line : lines)
     {
         INFO("every edge lies inside the box's bounds");
         REQUIRE(Inside(line.from, bounds));
         REQUIRE(Inside(line.to, bounds));
         INFO("and is drawn in the static colour");
-        REQUIRE(line.colour == DebugColour::Static);
+        REQUIRE(SameColour(line.colour, PhysicsDebugColour::Static));
     }
 
     const std::vector<float> lengths = SortedLengths(lines);
@@ -116,51 +187,47 @@ TEST_CASE("Each category of debug lines is drawn only when it is switched on", "
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
 
-    const auto coloured = [&world](std::uint32_t colour) {
-        return static_cast<std::size_t>(
-            std::count_if(world.DebugLines().begin(), world.DebugLines().end(),
-                          [colour](const DebugLine& line) { return line.colour == colour; }));
-    };
-    const auto draw = [&](DebugDraw categories) {
+    const auto coloured = [&test](const Colour& colour) { return CountColoured(DrawnLines(test.app), colour); };
+    const auto draw = [&](PhysicsDebugCategories categories) {
         world.SetDebugDraw(categories);
         test.Run(tick);
     };
 
-    draw(DebugDraw::Contacts);
+    draw(PhysicsDebugCategories::Contacts);
     INFO("contacts alone: a cross and a normal for each contact, nothing else");
-    REQUIRE(!world.DebugLines().empty());
-    REQUIRE(coloured(DebugColour::Contact) == world.DebugLines().size());
-    REQUIRE(world.DebugLines().size() % 4 == 0);
+    REQUIRE(!DrawnLines(test.app).empty());
+    REQUIRE(coloured(PhysicsDebugColour::Contact) == DrawnLines(test.app).size());
+    REQUIRE(DrawnLines(test.app).size() % 4 == 0);
 
-    draw(DebugDraw::Bounds);
+    draw(PhysicsDebugCategories::Bounds);
     INFO("bounds alone: twelve edges for each of the two bodies");
-    REQUIRE(world.DebugLines().size() == 24);
-    REQUIRE(coloured(DebugColour::Bounds) == 24);
+    REQUIRE(DrawnLines(test.app).size() == 24);
+    REQUIRE(coloured(PhysicsDebugColour::Bounds) == 24);
 
     // Sent sliding, so it moves whether or not it has settled.
     box.GetComponent<RigidBody>().linearVelocity = Math::Vec3(3.0f, 0.0f, 0.0f);
-    draw(DebugDraw::Velocities);
+    draw(PhysicsDebugCategories::Velocities);
     INFO("velocities alone: one line for the moving body, none for the static ground");
-    REQUIRE(world.DebugLines().size() == 1);
-    REQUIRE(coloured(DebugColour::Velocity) == 1);
-    const DebugLine& velocity = world.DebugLines()[0];
+    REQUIRE(DrawnLines(test.app).size() == 1);
+    REQUIRE(coloured(PhysicsDebugColour::Velocity) == 1);
+    const DrawnLine velocity = DrawnLines(test.app)[0];
     INFO("it starts at the body and points along its velocity, as far as a tenth of a second takes it");
     REQUIRE(velocity.from.x == Approx(PositionOf(box).x).margin(1.0e-4f));
     REQUIRE(velocity.to.x - velocity.from.x == Approx(0.3f).margin(0.05f));
 
-    draw(DebugDraw::Colliders);
+    draw(PhysicsDebugCategories::Colliders);
     INFO("colliders alone: the two boxes' edges, the ground static and the body dynamic");
-    REQUIRE(world.DebugLines().size() == 24);
-    REQUIRE(coloured(DebugColour::Static) == 12);
-    REQUIRE(coloured(DebugColour::Dynamic) == 12);
+    REQUIRE(DrawnLines(test.app).size() == 24);
+    REQUIRE(coloured(PhysicsDebugColour::Static) == 12);
+    REQUIRE(coloured(PhysicsDebugColour::Dynamic) == 12);
 
-    draw(DebugDraw::Colliders | DebugDraw::Bounds);
+    draw(PhysicsDebugCategories::Colliders | PhysicsDebugCategories::Bounds);
     INFO("categories combine");
-    REQUIRE(world.DebugLines().size() == 48);
+    REQUIRE(DrawnLines(test.app).size() == 48);
 
-    draw(DebugDraw::None);
+    draw(PhysicsDebugCategories::None);
     INFO("switched off, the next step clears them");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
 }
 
 TEST_CASE("A sleeping body's collider is drawn dimmed; kinematic bodies and triggers have their own colours",
@@ -174,29 +241,31 @@ TEST_CASE("A sleeping body's collider is drawn dimmed; kinematic bodies and trig
     trigger.AddComponent<Trigger>();
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Colliders);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
     test.Run(3.0);
     REQUIRE(world.IsSleeping(box));
 
-    const auto coloured = [&world](std::uint32_t colour) {
-        return static_cast<std::size_t>(
-            std::count_if(world.DebugLines().begin(), world.DebugLines().end(),
-                          [colour](const DebugLine& line) { return line.colour == colour; }));
-    };
-    INFO("dimmed is half as bright, as opaque");
-    REQUIRE(DebugColour::Dimmed(0xFF8040FFu) == 0x7F4020FFu);
+    const auto coloured = [&test](const Colour& colour) { return CountColoured(DrawnLines(test.app), colour); };
+    INFO("dimmed is half as bright as sRGB counts it, mid grey's share of each channel, alpha unchanged");
+    const Colour dimmed = PhysicsDebugColour::Dimmed(Colour{1.0f, 0.5f, 0.25f, 0.75f});
+    REQUIRE(dimmed.r == Approx(Colour::Grey.r));
+    REQUIRE(dimmed.g == Approx(0.5f * Colour::Grey.g));
+    REQUIRE(dimmed.b == Approx(0.25f * Colour::Grey.b));
+    REQUIRE(dimmed.a == 0.75f);
     INFO("the box at rest is asleep: its edges are dimmed");
-    REQUIRE(coloured(DebugColour::Dimmed(DebugColour::Dynamic)) == 12);
-    REQUIRE(coloured(DebugColour::Dynamic) == 0);
+    REQUIRE(coloured(PhysicsDebugColour::Dimmed(PhysicsDebugColour::Dynamic)) == 12);
+    REQUIRE(coloured(PhysicsDebugColour::Dynamic) == 0);
     INFO("the ground is static, the paddle kinematic, and the trigger has the trigger colour");
-    REQUIRE(coloured(DebugColour::Static) == 12);
-    REQUIRE(coloured(DebugColour::Kinematic) + coloured(DebugColour::Dimmed(DebugColour::Kinematic)) == 12);
-    REQUIRE(coloured(DebugColour::Trigger) == 12);
+    REQUIRE(coloured(PhysicsDebugColour::Static) == 12);
+    REQUIRE(coloured(PhysicsDebugColour::Kinematic) +
+                coloured(PhysicsDebugColour::Dimmed(PhysicsDebugColour::Kinematic)) ==
+            12);
+    REQUIRE(coloured(PhysicsDebugColour::Trigger) == 12);
 
     box.GetComponent<RigidBody>().linearVelocity = Math::Vec3(0.0f, 2.0f, 0.0f);
     test.Run(tick);
     INFO("woken, its edges are bright again");
-    REQUIRE(coloured(DebugColour::Dynamic) == 12);
+    REQUIRE(coloured(PhysicsDebugColour::Dynamic) == 12);
 }
 
 TEST_CASE("Spheres, capsules, hulls and meshes are drawn inside their bounds", "[physics][debug]")
@@ -219,12 +288,12 @@ TEST_CASE("Spheres, capsules, hulls and meshes are drawn inside their bounds", "
     mesh.AddComponent<Collider>(Collider{MeshShape{cube}});
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Colliders);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
     test.Run(tick);
 
     const std::array<Entity, 4> bodies = {sphere, capsule, hull, mesh};
     std::array<std::size_t, 4> counts{};
-    for (const DebugLine& line : world.DebugLines())
+    for (const DrawnLine& line : DrawnLines(test.app))
     {
         // Each line belongs to the body whose bounds hold it: the bodies are well apart.
         bool placed = false;
@@ -248,11 +317,11 @@ TEST_CASE("Spheres, capsules, hulls and meshes are drawn inside their bounds", "
     REQUIRE(counts[3] == 36);
 
     INFO("the hull is drawn stretched, two units along x, and the mesh three units along y");
-    const auto extent = [&world](const Entity& entity, int axis) {
+    const auto extent = [&world, &test](const Entity& entity, int axis) {
         const Math::AABB bounds = world.Bounds(entity).value();
         float low = 1e9f;
         float high = -1e9f;
-        for (const DebugLine& line : world.DebugLines())
+        for (const DrawnLine& line : DrawnLines(test.app))
         {
             if (Inside(line.from, bounds, 0.01f) && Inside(line.to, bounds, 0.01f))
             {
@@ -281,16 +350,16 @@ TEST_CASE("Each collider of a compound body is drawn at its own world pose", "[p
     body.GetComponent<Transform>().rot = Math::AngleAxis(0.5f * 3.14159265f, Math::Vec3(0.0f, 0.0f, 1.0f));
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Colliders);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
     test.Run(tick);
 
     INFO("two unit boxes: twelve edges each");
-    REQUIRE(world.DebugLines().size() == 24);
+    REQUIRE(DrawnLines(test.app).size() == 24);
     const Math::AABB above(Math::Vec3(-0.5f, 3.5f, -0.5f), Math::Vec3(0.5f, 4.5f, 0.5f));
     const Math::AABB below(Math::Vec3(-0.5f, -0.5f, -0.5f), Math::Vec3(0.5f, 0.5f, 0.5f));
     std::size_t inAbove = 0;
     std::size_t inBelow = 0;
-    for (const DebugLine& line : world.DebugLines())
+    for (const DrawnLine& line : DrawnLines(test.app))
     {
         inAbove += Inside(line.from, above) && Inside(line.to, above) ? 1 : 0;
         inBelow += Inside(line.from, below) && Inside(line.to, below) ? 1 : 0;
@@ -303,21 +372,15 @@ TEST_CASE("Each collider of a compound body is drawn at its own world pose", "[p
 namespace
 {
     // The colours of a joint's axes: frameA's X, Y, Z, then frameB's.
-    const std::array<std::uint32_t, 6> jointColours = {
-        DebugColour::JointAX, DebugColour::JointAY, DebugColour::JointAZ,
-        DebugColour::JointBX, DebugColour::JointBY, DebugColour::JointBZ,
+    const std::array<Colour, 6> jointColours = {
+        PhysicsDebugColour::JointAX, PhysicsDebugColour::JointAY, PhysicsDebugColour::JointAZ,
+        PhysicsDebugColour::JointBX, PhysicsDebugColour::JointBY, PhysicsDebugColour::JointBZ,
     };
 
-    std::size_t CountColoured(std::span<const DebugLine> lines, std::uint32_t colour)
-    {
-        return static_cast<std::size_t>(std::count_if(
-            lines.begin(), lines.end(), [colour](const DebugLine& line) { return line.colour == colour; }));
-    }
-
-    std::size_t JointLines(std::span<const DebugLine> lines)
+    std::size_t JointLines(std::span<const DrawnLine> lines)
     {
         std::size_t count = 0;
-        for (const std::uint32_t colour : jointColours)
+        for (const Colour& colour : jointColours)
         {
             count += CountColoured(lines, colour);
         }
@@ -325,11 +388,11 @@ namespace
     }
 
     // The line of `colour` that starts at `from`, if any.
-    const DebugLine* LineFrom(std::span<const DebugLine> lines, std::uint32_t colour, const Math::Vec3& from)
+    const DrawnLine* LineFrom(std::span<const DrawnLine> lines, const Colour& colour, const Math::Vec3& from)
     {
-        for (const DebugLine& line : lines)
+        for (const DrawnLine& line : lines)
         {
-            if (line.colour == colour && glm::length(line.from - from) < 1.0e-3f)
+            if (SameColour(line.colour, colour) && glm::length(line.from - from) < 1.0e-3f)
             {
                 return &line;
             }
@@ -371,16 +434,16 @@ TEST_CASE("Each joint is drawn as its two frames' axes, coinciding at its rest p
     const TwoJoints joints(test.Entities());
     test.Run(tick);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Joints);
+    world.SetDebugDraw(PhysicsDebugCategories::Joints);
     test.Run(0.5);
 
-    const std::span<const DebugLine> lines = world.DebugLines();
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
     INFO("two joints, two frames each, three axes a frame: twelve lines and nothing else");
     REQUIRE(lines.size() == 12);
-    for (const std::uint32_t colour : jointColours)
+    for (std::size_t axis = 0; axis < jointColours.size(); ++axis)
     {
-        INFO("one line of each axis colour for each joint: colour " << std::hex << colour);
-        REQUIRE(CountColoured(lines, colour) == 2);
+        INFO("one line of each axis colour for each joint: axis colour " << axis);
+        REQUIRE(CountColoured(lines, jointColours[axis]) == 2);
     }
 
     // The hinge is to the world, so frameB is in world space; the fixed joint's frameA is on a stretched post.
@@ -389,8 +452,8 @@ TEST_CASE("Each joint is drawn as its two frames' axes, coinciding at its rest p
         INFO("at the joint at " << anchor.x << ", " << anchor.y << ", " << anchor.z);
         for (std::size_t axis = 0; axis < 3; ++axis)
         {
-            const DebugLine* a = LineFrom(lines, jointColours[axis], anchor);
-            const DebugLine* b = LineFrom(lines, jointColours[axis + 3], anchor);
+            const DrawnLine* a = LineFrom(lines, jointColours[axis], anchor);
+            const DrawnLine* b = LineFrom(lines, jointColours[axis + 3], anchor);
             INFO("both frames' axis " << axis << " start at the anchor");
             REQUIRE(a != nullptr);
             REQUIRE(b != nullptr);
@@ -402,7 +465,7 @@ TEST_CASE("Each joint is drawn as its two frames' axes, coinciding at its rest p
         }
     }
 
-    const DebugLine* hingeAxis = LineFrom(lines, DebugColour::JointAX, joints.hingeAnchor);
+    const DrawnLine* hingeAxis = LineFrom(lines, PhysicsDebugColour::JointAX, joints.hingeAnchor);
     REQUIRE(hingeAxis != nullptr);
     const Math::Vec3 along = glm::normalize(hingeAxis->to - hingeAxis->from);
     INFO("a frame's X axis is drawn along its world X: the hinge's, turned to point up");
@@ -411,7 +474,7 @@ TEST_CASE("Each joint is drawn as its two frames' axes, coinciding at its rest p
 
 TEST_CASE("Joints are drawn only when their category is on, and All includes it", "[physics][debug][joints]")
 {
-    STATIC_REQUIRE(Includes(DebugDraw::All, DebugDraw::Joints));
+    STATIC_REQUIRE(Includes(PhysicsDebugCategories::All, PhysicsDebugCategories::Joints));
 
     PhysicsApp test;
     const TwoJoints joints(test.Entities());
@@ -420,16 +483,17 @@ TEST_CASE("Joints are drawn only when their category is on, and All includes it"
 
     test.Run(tick);
     INFO("off by default: no lines");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
 
-    world.SetDebugDraw(DebugDraw::Colliders | DebugDraw::Contacts | DebugDraw::Velocities | DebugDraw::Bounds);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders | PhysicsDebugCategories::Contacts |
+                       PhysicsDebugCategories::Velocities | PhysicsDebugCategories::Bounds);
     test.Run(tick);
     INFO("every other category: lines, but none of a joint's");
-    REQUIRE(!world.DebugLines().empty());
-    REQUIRE(JointLines(world.DebugLines()) == 0);
+    REQUIRE(!DrawnLines(test.app).empty());
+    REQUIRE(JointLines(DrawnLines(test.app)) == 0);
 
-    world.SetDebugDraw(DebugDraw::All);
+    world.SetDebugDraw(PhysicsDebugCategories::All);
     test.Run(tick);
     INFO("All: the two joints' twelve axes among the rest");
-    REQUIRE(JointLines(world.DebugLines()) == 12);
+    REQUIRE(JointLines(DrawnLines(test.app)) == 12);
 }

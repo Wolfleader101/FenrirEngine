@@ -43,6 +43,8 @@
 #include <cmath>
 
 #include "CharacterScene.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirPhysics/Physics.hpp"
 #include "JointsScene.hpp"
 #include "MotorcycleScene.hpp"
@@ -361,8 +363,9 @@ class PhysicsDemo
     }
 
     // In Update, between the renderer's drawing and the editor's: F2 moves on to the next category of debug lines, and
-    // the lines the last step made are drawn in one pass. They show each body at its true step pose, so between ticks
-    // a moving body's model, drawn at its interpolated pose, may trail its lines by up to a step.
+    // the lines the scene's DebugDraw holds, which the last step drew there, are drawn in one pass. They show each body
+    // at its true step pose, so between ticks a moving body's model, drawn at its interpolated pose, may trail its
+    // lines by up to a step.
     void DebugLines(Fenrir::App& app)
     {
         bool stepped = false;
@@ -390,12 +393,18 @@ class PhysicsDemo
             m_debugWorld = world;
         }
 
-        m_lineVertices.clear();
-        for (const Fenrir::DebugLine& line : world->DebugLines())
+        const Fenrir::DebugDraw* draw = app.GetActiveScene().GetResource<Fenrir::DebugDraw>();
+        if (draw == nullptr)
         {
-            const Fenrir::Math::Vec3 colour = ColourOf(line.colour);
-            m_lineVertices.push_back(LineVertex{line.from, colour});
-            m_lineVertices.push_back(LineVertex{line.to, colour});
+            return;
+        }
+        m_lineVertices.clear();
+        for (const Fenrir::DebugLineBatch& batch : draw->Tessellate().lines)
+        {
+            for (const Fenrir::DebugVertex& vertex : batch.vertices)
+            {
+                m_lineVertices.push_back(LineVertex{vertex.position, ColourOf(vertex.colour)});
+            }
         }
         m_renderer->DrawLines(m_lineVertices);
     }
@@ -403,30 +412,30 @@ class PhysicsDemo
   private:
     struct DebugMode
     {
-        Fenrir::DebugDraw categories;
+        Fenrir::PhysicsDebugCategories categories;
         const char* name;
     };
 
     // What F2 steps through, starting from none.
     static constexpr std::array<DebugMode, 9> debugModes = {
-        DebugMode{Fenrir::DebugDraw::None, "off"},
-        DebugMode{Fenrir::DebugDraw::Colliders, "colliders"},
-        DebugMode{Fenrir::DebugDraw::Contacts, "contacts"},
-        DebugMode{Fenrir::DebugDraw::Velocities, "velocities"},
-        DebugMode{Fenrir::DebugDraw::Bounds, "bounds"},
-        DebugMode{Fenrir::DebugDraw::Joints, "joints"},
-        DebugMode{Fenrir::DebugDraw::Characters, "characters"},
-        DebugMode{Fenrir::DebugDraw::Vehicles, "vehicles"},
-        DebugMode{Fenrir::DebugDraw::All, "all"},
+        DebugMode{Fenrir::PhysicsDebugCategories::None, "off"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Colliders, "colliders"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Contacts, "contacts"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Velocities, "velocities"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Bounds, "bounds"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Joints, "joints"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Characters, "characters"},
+        DebugMode{Fenrir::PhysicsDebugCategories::Vehicles, "vehicles"},
+        DebugMode{Fenrir::PhysicsDebugCategories::All, "all"},
     };
 
-    // A debug line's 0xRRGGBBAA colour as the line shader takes it.
-    static Fenrir::Math::Vec3 ColourOf(std::uint32_t colour)
+    // A debug line's linear colour as the line shader takes it: sRGB-encoded, as the screen shows it unconverted.
+    static Fenrir::Math::Vec3 ColourOf(const Fenrir::Colour& colour)
     {
-        const auto channel = [colour](unsigned shift) {
-            return static_cast<float>((colour >> shift) & 0xFFu) / 255.0f;
+        const auto encode = [](float linear) {
+            return linear <= 0.0031308f ? linear * 12.92f : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
         };
-        return Fenrir::Math::Vec3(channel(24u), channel(16u), channel(8u));
+        return Fenrir::Math::Vec3(encode(colour.r), encode(colour.g), encode(colour.b));
     }
 
     // A static backpack, its collider a triangle mesh cooked from the model's vertex data: FenrirPhysics takes plain
@@ -613,6 +622,9 @@ int main(int argc, char* argv[])
 #ifdef FENRIR_PHYSICS
     // Declared after the app, so every scene's physics world and the physics backend end before the app does. Before
     // scripting, which is given physics's scripting extension, so scripting ends first.
+    // Physics draws its debug lines into each scene's DebugDraw, which DebugDrawing gives every scene; declared before
+    // physics, so it ends after it.
+    auto debugDrawing = Fenrir::DebugDrawing::Install(app);
     auto physics = Fenrir::Physics::Install(app);
 #endif
 

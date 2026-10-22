@@ -34,20 +34,20 @@ namespace
         return *world;
     }
 
-    std::vector<DebugLine> LinesIn(std::span<const DebugLine> lines, std::uint32_t colour)
+    std::vector<DrawnLine> LinesIn(std::span<const DrawnLine> lines, const Colour& colour)
     {
-        std::vector<DebugLine> found;
+        std::vector<DrawnLine> found;
         std::copy_if(lines.begin(), lines.end(), std::back_inserter(found),
-                     [colour](const DebugLine& line) { return line.colour == colour; });
+                     [colour](const DrawnLine& line) { return SameColour(line.colour, colour); });
         return found;
     }
 
     // The lowest and highest y any of `lines` reaches.
-    std::pair<float, float> HeightsOf(const std::vector<DebugLine>& lines)
+    std::pair<float, float> HeightsOf(const std::vector<DrawnLine>& lines)
     {
         float low = lines.front().from.y;
         float high = low;
-        for (const DebugLine& line : lines)
+        for (const DrawnLine& line : lines)
         {
             low = std::min({low, line.from.y, line.to.y});
             high = std::max({high, line.from.y, line.to.y});
@@ -67,24 +67,24 @@ TEST_CASE("A character standing still is drawn as its shape and its ground norma
     REQUIRE(character.GetComponent<CharacterBody>().state.ground == GroundState::OnGround);
 
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Characters);
+    world.SetDebugDraw(PhysicsDebugCategories::Characters);
     test.Run(tick);
-    const std::span<const DebugLine> lines = world.DebugLines();
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
 
     INFO("the capsule in the Character colour, standing on the ground from y 0 to 1.6, around its centre");
-    const std::vector<DebugLine> shape = LinesIn(lines, DebugColour::Character);
+    const std::vector<DrawnLine> shape = LinesIn(lines, PhysicsDebugColour::Character);
     REQUIRE(shape.size() == capsuleLines);
     const auto [low, high] = HeightsOf(shape);
     REQUIRE(low == Approx(0.0f).margin(0.03));
     REQUIRE(high == Approx(1.6f).margin(0.03));
-    for (const DebugLine& line : shape)
+    for (const DrawnLine& line : shape)
     {
         REQUIRE(std::abs(line.from.x - 1.0f) <= 0.3f + 1.0e-3f);
         REQUIRE(std::abs(line.from.z - 2.0f) <= 0.3f + 1.0e-3f);
     }
 
     INFO("one ground normal, in the walkable ground colour, from the ground point straight up");
-    const std::vector<DebugLine> normal = LinesIn(lines, DebugColour::Ground);
+    const std::vector<DrawnLine> normal = LinesIn(lines, PhysicsDebugColour::Ground);
     REQUIRE(normal.size() == 1);
     const CharacterState& state = character.GetComponent<CharacterBody>().state;
     REQUIRE(normal[0].from == state.groundPoint);
@@ -95,10 +95,10 @@ TEST_CASE("A character standing still is drawn as its shape and its ground norma
     INFO("standing still it moved nothing, so no moved-velocity line: those are all its lines");
     REQUIRE(lines.size() == capsuleLines + 1);
 
-    world.SetDebugDraw(DebugDraw::None);
+    world.SetDebugDraw(PhysicsDebugCategories::None);
     test.Run(tick);
     INFO("with Characters off, nothing");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
 }
 
 TEST_CASE("A walking character's moved velocity is drawn as far as it travels in a tenth of a second",
@@ -113,12 +113,12 @@ TEST_CASE("A walking character's moved velocity is drawn as far as it travels in
     test.Run(0.25);
 
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Characters);
+    world.SetDebugDraw(PhysicsDebugCategories::Characters);
     test.Run(tick);
-    const std::span<const DebugLine> lines = world.DebugLines();
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
     INFO("its shape, its ground normal and one moved-velocity line");
     REQUIRE(lines.size() == capsuleLines + 2);
-    const std::vector<DebugLine> moved = LinesIn(lines, DebugColour::Velocity);
+    const std::vector<DrawnLine> moved = LinesIn(lines, PhysicsDebugColour::Velocity);
     REQUIRE(moved.size() == 1);
     INFO("from the character's centre, 2 m/s for a tenth of a second: 0.2 m along x");
     REQUIRE(moved[0].from == PositionOf(character));
@@ -136,17 +136,17 @@ TEST_CASE("All draws a character's lines, and Colliders draws none for it", "[ph
     test.Run(0.5);
 
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Colliders);
+    world.SetDebugDraw(PhysicsDebugCategories::Colliders);
     test.Run(tick);
     INFO("Colliders draws the ground's twelve edges, static grey, and nothing of the character");
-    REQUIRE(world.DebugLines().size() == 12);
-    REQUIRE(LinesIn(world.DebugLines(), DebugColour::Static).size() == 12);
+    REQUIRE(DrawnLines(test.app).size() == 12);
+    REQUIRE(LinesIn(DrawnLines(test.app), PhysicsDebugColour::Static).size() == 12);
 
-    world.SetDebugDraw(DebugDraw::All);
+    world.SetDebugDraw(PhysicsDebugCategories::All);
     test.Run(tick);
     INFO("All includes Characters: the capsule and the ground normal");
-    REQUIRE(LinesIn(world.DebugLines(), DebugColour::Character).size() == capsuleLines);
-    REQUIRE(LinesIn(world.DebugLines(), DebugColour::Ground).size() == 1);
+    REQUIRE(LinesIn(DrawnLines(test.app), PhysicsDebugColour::Character).size() == capsuleLines);
+    REQUIRE(LinesIn(DrawnLines(test.app), PhysicsDebugColour::Ground).size() == 1);
 }
 
 TEST_CASE("A character's ground normal on ground too steep to walk is drawn in the steep ground colour",
@@ -161,14 +161,14 @@ TEST_CASE("A character's ground normal on ground too steep to walk is drawn in t
     Drive(test.app, character);
     test.Run(0.25);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Characters);
+    world.SetDebugDraw(PhysicsDebugCategories::Characters);
     test.Run(tick);
     REQUIRE(character.GetComponent<CharacterBody>().state.ground == GroundState::OnSteepGround);
 
     INFO("one ground normal, steep coloured, leaning the ramp's way");
-    const std::vector<DebugLine> normal = LinesIn(world.DebugLines(), DebugColour::SteepGround);
+    const std::vector<DrawnLine> normal = LinesIn(DrawnLines(test.app), PhysicsDebugColour::SteepGround);
     REQUIRE(normal.size() == 1);
-    REQUIRE(LinesIn(world.DebugLines(), DebugColour::Ground).empty());
+    REQUIRE(LinesIn(DrawnLines(test.app), PhysicsDebugColour::Ground).empty());
     const Math::Vec3 along = normal[0].to - normal[0].from;
     REQUIRE(glm::length(along) == Approx(0.5f).margin(1.0e-3));
     REQUIRE(along.x < -0.1f);
@@ -189,12 +189,12 @@ TEST_CASE("While a stand-up is blocked the crouched shape is drawn, and the stan
 
     character.GetComponent<Collider>().shape = CapsuleShape{.halfHeight = 0.5f, .radius = 0.3f};
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Characters);
+    world.SetDebugDraw(PhysicsDebugCategories::Characters);
     test.Run(tick);
     REQUIRE(character.GetComponent<CharacterBody>().state.shapeBlocked);
     INFO("the Collider asks for 1.6 m, but the shape drawn is the crouched one in use, from 0 to 1.0 m");
     {
-        const std::vector<DebugLine> shape = LinesIn(world.DebugLines(), DebugColour::Character);
+        const std::vector<DrawnLine> shape = LinesIn(DrawnLines(test.app), PhysicsDebugColour::Character);
         REQUIRE(shape.size() == capsuleLines);
         const auto [low, high] = HeightsOf(shape);
         REQUIRE(low == Approx(0.0f).margin(0.03));
@@ -205,7 +205,7 @@ TEST_CASE("While a stand-up is blocked the crouched shape is drawn, and the stan
     test.Run(tick);
     REQUIRE_FALSE(character.GetComponent<CharacterBody>().state.shapeBlocked);
     INFO("with the roof gone it stands, and the standing shape is drawn, from 0 to 1.6 m");
-    const std::vector<DebugLine> shape = LinesIn(world.DebugLines(), DebugColour::Character);
+    const std::vector<DrawnLine> shape = LinesIn(DrawnLines(test.app), PhysicsDebugColour::Character);
     REQUIRE(shape.size() == capsuleLines);
     const auto [low, high] = HeightsOf(shape);
     REQUIRE(low == Approx(0.0f).margin(0.03));
@@ -222,15 +222,15 @@ TEST_CASE("Disabled and inactive characters draw nothing", "[physics][debug][cha
     Drive(test.app, inactive);
     test.Run(0.5);
     PhysicsWorld& world = WorldOf(test);
-    world.SetDebugDraw(DebugDraw::Characters);
+    world.SetDebugDraw(PhysicsDebugCategories::Characters);
     test.Run(tick);
     INFO("both are drawn while active and enabled");
-    REQUIRE(LinesIn(world.DebugLines(), DebugColour::Character).size() == 2 * capsuleLines);
+    REQUIRE(LinesIn(DrawnLines(test.app), PhysicsDebugColour::Character).size() == 2 * capsuleLines);
 
     disabled.GetComponent<CharacterBody>().enabled = false;
     // Inactive: a character with no Collider has no shape.
     inactive.RemoveComponent<Collider>();
     test.Run(tick);
     INFO("disabled, and with no Collider, neither draws a line");
-    REQUIRE(world.DebugLines().empty());
+    REQUIRE(DrawnLines(test.app).empty());
 }

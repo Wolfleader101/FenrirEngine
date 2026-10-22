@@ -13,10 +13,12 @@
 
 **Touches:** `packages/FenrirPhysics/`, `examples/DemoApp/src/`, `examples/DemoApp/scripts/`, `.scratch/fenrir-physics/map.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirPhysicsTests` debug cases pass on `DebugDraw` batches: each category draws the expected lines in the `Physics` group, nothing when its flag is off, and items last until the next tick.
-- [ ] Hiding the `Physics` group hides physics's output without stopping recording.
-- [ ] No `DebugLine`, `DebugLines()` or packed `DebugColour` remains; `PhysicsDebugCategories` is used in C++ and C#, and physics's scripting tests pass.
+Hand check: in the DemoApp, F2 still cycles the physics debug lines (off, colliders, contacts, velocities, bounds, joints, characters, vehicles, all) and they draw as before, now read from the scene's `DebugDraw`: the Default scene's colliders (static grey, dynamic green, kinematic blue, sleeping dimmed, the trigger pink), contacts, velocities and bounds; the joints scenes (F4) their joint frames; the character scenes (F5) the capsules and ground normals; the vehicle scenes (F6) the wheels, suspension and grip-coloured contacts, with the Vehicles (C#) scene's V still toggling them. The colours look as they did.
+
+- [x] `FenrirPhysicsTests` debug cases pass on `DebugDraw` batches: each category draws the expected lines in the `Physics` group, nothing when its flag is off, and items last until the next tick.
+- [x] Hiding the `Physics` group hides physics's output without stopping recording.
+- [x] No `DebugLine`, `DebugLines()` or packed `DebugColour` remains; `PhysicsDebugCategories` is used in C++ and C#, and physics's scripting tests pass.
 - [ ] The legacy DemoApp still builds with `FENRIR_BUILD_LEGACY_DEMOAPP=ON`.
-- [ ] Clang and MSVC x64 debug and release presets build with no new warnings.
+- [x] Clang and MSVC x64 debug and release presets build with no new warnings.

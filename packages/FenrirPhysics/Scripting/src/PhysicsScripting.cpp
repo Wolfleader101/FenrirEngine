@@ -1277,7 +1277,8 @@ namespace Fenrir
             {
                 return false;
             }
-            world->SetDebugDraw(static_cast<DebugDraw>(categories & static_cast<std::uint32_t>(DebugDraw::All)));
+            world->SetDebugDraw(static_cast<PhysicsDebugCategories>(
+                categories & static_cast<std::uint32_t>(PhysicsDebugCategories::All)));
             return true;
         }
 
