@@ -74,9 +74,8 @@ namespace Fenrir::Detail
             std::vector<Backend::VehicleAntiRollBarDesc> antiRollBars;
         };
 
-        // What physics knows of a vehicle, by chassis entity: its backend vehicle, the body and wheel entities it was
-        // made with, and the driver input and kind last given to it. None while it is disabled or inactive, or has no
-        // wheels.
+        // What physics knows of a vehicle, by chassis entity: its backend vehicle, the wheel entities it was made
+        // with, and what was last applied to it. None while it is disabled or inactive, or has no wheels.
         struct VehicleRecord
         {
             [[nodiscard]] bool Made() const
@@ -85,20 +84,15 @@ namespace Fenrir::Detail
             }
 
             Backend::VehicleId id;
-            Backend::BodyId body;
-            // In wheel order (entity order), with each wheel's settings as last applied and as given to the backend.
+            // In wheel order (entity order).
             std::vector<std::uint32_t> wheels;
-            std::vector<VehicleWheel> appliedWheels;
-            std::vector<Backend::VehicleWheelDesc> given;
-            VehicleProbe probe = VehicleProbe::Cylinder;
-            float maxTilt = 0.0f;
-            // The driver input as game code last wrote it: any change wakes the chassis.
-            VehicleInput input;
-            // The differentials and anti-roll bars last given to it.
-            VehicleLinks links;
-            // The kind as game code last gave it, to notice its edits, and as applied, in range.
-            VehicleKind kind;
-            VehicleKind applied;
+            // The Vehicle, its driver input included, and its wheels as game code last wrote them, to notice their
+            // edits: any change wakes the chassis, even one their ranges clamp away.
+            Vehicle written;
+            std::vector<VehicleWheel> writtenWheels;
+            // The description last given to the backend: their settings corrected, on the chassis's body, with the
+            // vehicle's differentials and anti-roll bars.
+            Backend::VehicleDesc desc;
             // The kinds of out-of-range value its kind holds and has been warned about: each is warned about once per
             // vehicle until a valid value clears it.
             std::uint32_t warned = 0;
@@ -159,9 +153,13 @@ namespace Fenrir::Detail
          * value warned about once per wheel) and its position scaled by `scale`, the chassis's world scale. */
         [[nodiscard]] Backend::VehicleWheelDesc WheelDesc(std::uint32_t entity, const VehicleWheel& wheel,
                                                           const Math::Vec3& scale);
-        /** @brief Patches a made vehicle's edited wheels, probe and tilt limit into its backend vehicle; true if
-         * anything changed. */
-        bool SyncVehicleSettings(VehicleRecord& record, const Vehicle& vehicle, const Math::Vec3& scale);
+        /** @brief Gives the made vehicle on `chassis` a new description if its Vehicle, its wheels, or its `links` were
+         * edited, its wheels' positions scaled by `scale`; true if anything changed. */
+        bool UpdateVehicle(std::uint32_t chassis, VehicleRecord& record, const Vehicle& vehicle,
+                           const VehicleLinks& links, const Math::Vec3& scale);
+        /** @brief Shows a vehicle just made, or made again by the backend, as a new one: its wheels posed at once
+         * against the chassis as the edits left it, and snapped between ticks. */
+        void ShowMade(std::uint32_t chassis, VehicleRecord& record);
         /** @brief A wheel's pose relative to its chassis's origin, in the chassis's axes: its position raised up its
          * steering axis by its compression, turned by its camber and toe, steered about its steering axis, then spun
          * about its axle, X. */

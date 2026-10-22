@@ -13,9 +13,15 @@
 
 **Touches:** `packages/FenrirPhysics/src/` (`Backend/Backend.hpp`, `Backend/Jolt/JoltBackend.cpp`, `Vehicles.*`, `VehicleSettings.cpp`).
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `Backend::World` has five vehicle methods; `Backend.hpp` has no `DrivetrainOf` and no `VehicleWheel` inside `VehicleWheelDesc`; `JoltBackend.cpp` does not name `TrailerVehicle`.
-- [ ] The front end has no `Rebuilds`; `VehicleRecord` holds the last applied description and input.
-- [ ] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
-- [ ] `scripts/demo-smoke.sh` passes all nine physics scenes.
+- [x] `Backend::World` has five vehicle methods; `Backend.hpp` has no `DrivetrainOf` and no `VehicleWheel` inside `VehicleWheelDesc`; `JoltBackend.cpp` does not name `TrailerVehicle`.
+- [x] The front end has no `Rebuilds`; `VehicleRecord` holds the last applied description and input.
+- [x] `FenrirPhysicsTests` and the physics scripting tests pass unedited on `clang-x64-debug`.
+- [x] `scripts/demo-smoke.sh` passes all nine physics scenes.
+
+**Resolved by:** branch claude/vehicle-one-description, into claude/physics-vehicles-spec. `Backend::World`'s vehicle methods are `CreateVehicle`, `UpdateVehicle(id, desc)`, `SetVehicleInput`, `ReadVehicle` and `DestroyVehicle`. `VehicleDesc` carries a `VehicleDriveDesc` (`controller`: wheeled, motorcycle or tracked; `powered`; engine, gearbox, limited-slip ratio, lean, tracks) in place of the kind, and `VehicleWheelDesc` carries flat fields only. `VehicleSettings.cpp`'s `DriveDescOf` corrects a kind and resolves it (a trailer: unpowered, the default engine, Manual), replacing `InRange` and `DrivetrainOf`; `Clamped` reads the drive description. Jolt's `UpdateVehicle` re-fills every patchable setting and makes a new tester only for a new probe kind or a resized wheel under a sphere probe. It rebuilds in the same slot (`Impl::MakeVehicle`/`UnmakeVehicle`, the same Jolt calls in the same order as the old destroy and create) for a different controller, a change of `powered`, or a motorcycle's lean limit. It carries over what `ReadVehicle` reads, the gear capped to the new count, and returns true. The front end then shows the vehicle as new (wheels posed at once, snapped, `parked` cleared), as its own rebuild did. Two points for review:
+- **`powered` rebuilds as well.** Wheeled↔trailer was a rebuild before, and Jolt sets up an unpowered vehicle's default differentials only when it is made.
+- **Raw copies stay in the record.** `VehicleRecord` holds `desc` and `written` (the Vehicle as last written, with its input), plus the raw wheels. The raw copies are what an edit is compared against: an edit wakes the chassis even when correcting it gives the same value, as it did before.
+
+One edge case changed: before, the front end compared the lean limit as written, and now Jolt compares it after correction. So a motorcycle whose lean limit goes from one out-of-range value to another that clamps to the same angle is no longer rebuilt. The debug lines read tyres from the description's wheels. `clang-x64-debug` passes 81/81 tests unedited, and `scripts/demo-smoke.sh` passed all nine physics scenes.

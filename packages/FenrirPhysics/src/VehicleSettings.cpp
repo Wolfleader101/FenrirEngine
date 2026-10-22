@@ -54,6 +54,15 @@ namespace Fenrir::Detail
                    Fenrir::Same(a.lateralFriction, b.lateralFriction);
         }
 
+        bool Same(const Backend::VehicleDriveDesc& a, const Backend::VehicleDriveDesc& b)
+        {
+            return a.controller == b.controller && a.powered == b.powered && Same(a.engine, b.engine) &&
+                   Same(a.transmission, b.transmission) && Fenrir::Same(a.limitedSlipRatio, b.limitedSlipRatio) &&
+                   a.lean.enabled == b.lean.enabled && Fenrir::Same(a.lean.maxAngle, b.lean.maxAngle) &&
+                   a.lean.limitSteering == b.lean.limitSteering && Same(a.leftTrack, b.leftTrack) &&
+                   Same(a.rightTrack, b.rightTrack);
+        }
+
         bool Same(const Backend::VehicleDifferentialDesc& a, const Backend::VehicleDifferentialDesc& b)
         {
             return a.leftWheel == b.leftWheel && a.rightWheel == b.rightWheel && Fenrir::Same(a.ratio, b.ratio) &&
@@ -143,14 +152,23 @@ namespace Fenrir::Detail
         Backend::VehicleWheelDesc DescOf(const VehicleWheel& corrected, const Math::Vec3& position)
         {
             const float side = position.x < 0.0f ? -1.0f : 1.0f;
-            Backend::VehicleWheelDesc desc;
-            desc.position = position;
-            desc.steeringAxis =
-                Math::AngleAxis(corrected.caster, Math::Vec3(1.0f, 0.0f, 0.0f)) * Math::Vec3(0.0f, 1.0f, 0.0f);
-            desc.rest = Math::AngleAxis(side * corrected.toe, Math::Vec3(0.0f, 1.0f, 0.0f)) *
-                        Math::AngleAxis(-side * corrected.camber, Math::Vec3(0.0f, 0.0f, 1.0f));
-            desc.settings = corrected;
-            return desc;
+            return Backend::VehicleWheelDesc{
+                .position = position,
+                .steeringAxis =
+                    Math::AngleAxis(corrected.caster, Math::Vec3(1.0f, 0.0f, 0.0f)) * Math::Vec3(0.0f, 1.0f, 0.0f),
+                .rest = Math::AngleAxis(side * corrected.toe, Math::Vec3(0.0f, 1.0f, 0.0f)) *
+                        Math::AngleAxis(-side * corrected.camber, Math::Vec3(0.0f, 0.0f, 1.0f)),
+                .radius = corrected.radius,
+                .width = corrected.width,
+                .suspension = corrected.suspension,
+                .inertia = corrected.inertia,
+                .angularDamping = corrected.angularDamping,
+                .maxSteerAngle = corrected.maxSteerAngle,
+                .maxBrakeTorque = corrected.maxBrakeTorque,
+                .maxHandbrakeTorque = corrected.maxHandbrakeTorque,
+                .longitudinal = corrected.longitudinal,
+                .lateral = corrected.lateral,
+                .track = corrected.track};
         }
 
         // The engine's inertia an inertia of 0 is raised to: the backend divides by it.
@@ -253,6 +271,38 @@ namespace Fenrir::Detail
 
         // Just above 0: the least gearbox-to-wheel ratio a differential can have.
         constexpr float minDifferentialRatio = 1e-3f;
+
+        // How a kind of vehicle is driven. A trailer is unpowered: the default engine and a Manual gearbox, which
+        // Clamped holds in neutral, so nothing drives its wheels.
+        Backend::VehicleDriveDesc DriveOf(const VehicleKind& kind)
+        {
+            if (kind.Is<TrailerVehicle>())
+            {
+                return Backend::VehicleDriveDesc{.powered = false, .transmission = {.mode = TransmissionMode::Manual}};
+            }
+            if (kind.Is<MotorcycleVehicle>())
+            {
+                const MotorcycleVehicle& motorcycle = kind.As<MotorcycleVehicle>();
+                return Backend::VehicleDriveDesc{.controller = Backend::VehicleController::Motorcycle,
+                                                 .engine = motorcycle.engine,
+                                                 .transmission = motorcycle.transmission,
+                                                 .limitedSlipRatio = motorcycle.limitedSlipRatio,
+                                                 .lean = motorcycle.lean};
+            }
+            if (kind.Is<TrackedVehicle>())
+            {
+                const TrackedVehicle& tracked = kind.As<TrackedVehicle>();
+                return Backend::VehicleDriveDesc{.controller = Backend::VehicleController::Tracked,
+                                                 .engine = tracked.engine,
+                                                 .transmission = tracked.transmission,
+                                                 .leftTrack = tracked.left,
+                                                 .rightTrack = tracked.right};
+            }
+            const WheeledVehicle& wheeled = kind.As<WheeledVehicle>();
+            return Backend::VehicleDriveDesc{.engine = wheeled.engine,
+                                             .transmission = wheeled.transmission,
+                                             .limitedSlipRatio = wheeled.limitedSlipRatio};
+        }
     } // namespace
 
     bool Same(const VehicleWheel& a, const VehicleWheel& b)
@@ -278,17 +328,7 @@ namespace Fenrir::Detail
 
     bool Same(const VehicleKind& a, const VehicleKind& b)
     {
-        const WheeledVehicle x = Backend::DrivetrainOf(a);
-        const WheeledVehicle y = Backend::DrivetrainOf(b);
-        const bool sameLean =
-            !a.Is<MotorcycleVehicle>() ||
-            (a.As<MotorcycleVehicle>().lean.enabled == b.As<MotorcycleVehicle>().lean.enabled &&
-             a.As<MotorcycleVehicle>().lean.limitSteering == b.As<MotorcycleVehicle>().lean.limitSteering);
-        const bool sameTracks =
-            !a.Is<TrackedVehicle>() || (Same(a.As<TrackedVehicle>().left, b.As<TrackedVehicle>().left) &&
-                                        Same(a.As<TrackedVehicle>().right, b.As<TrackedVehicle>().right));
-        return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
-               Fenrir::Same(x.limitedSlipRatio, y.limitedSlipRatio) && sameLean && sameTracks;
+        return a.Type() == b.Type() && Same(DriveOf(a), DriveOf(b));
     }
 
     bool Same(const std::vector<Backend::VehicleDifferentialDesc>& a,
@@ -303,20 +343,12 @@ namespace Fenrir::Detail
         return SameAll(a, b);
     }
 
-    bool Rebuilds(const VehicleKind& a, const VehicleKind& b)
+    VehicleInput Clamped(const VehicleInput& input, const Backend::VehicleDriveDesc& drive)
     {
-        return a.Type() != b.Type() ||
-               (a.Is<MotorcycleVehicle>() &&
-                !Fenrir::Same(a.As<MotorcycleVehicle>().lean.maxAngle, b.As<MotorcycleVehicle>().lean.maxAngle));
-    }
-
-    VehicleInput Clamped(const VehicleInput& input, const VehicleKind& kind)
-    {
-        const VehicleTransmission transmission = Backend::DrivetrainOf(kind).transmission;
-        const bool manual = transmission.mode == TransmissionMode::Manual;
+        const bool manual = drive.transmission.mode == TransmissionMode::Manual;
         VehicleInput clamped = input;
-        // A trailer has no engine or gearbox to drive.
-        if (kind.Is<TrailerVehicle>())
+        // An unpowered vehicle has no engine or gearbox to drive.
+        if (!drive.powered)
         {
             clamped.forward = 0.0f;
             clamped.gear = 0;
@@ -328,7 +360,7 @@ namespace Fenrir::Detail
         clamped.handbrake = std::clamp(input.handbrake, 0.0f, 1.0f);
         clamped.leftTrack = std::clamp(input.leftTrack, -1.0f, 1.0f);
         clamped.rightTrack = std::clamp(input.rightTrack, -1.0f, 1.0f);
-        clamped.gear = std::clamp(clamped.gear, -1, transmission.gearCount);
+        clamped.gear = std::clamp(clamped.gear, -1, drive.transmission.gearCount);
         clamped.clutch = std::clamp(clamped.clutch, 0.0f, 1.0f);
         return clamped;
     }
@@ -338,7 +370,8 @@ namespace Fenrir::Detail
         return std::clamp(vehicle.maxTilt, 0.0f, std::numbers::pi_v<float>);
     }
 
-    VehicleKind InRange(const VehicleKind& kind, std::uint32_t entity, std::uint32_t& warned, ILogger& logger)
+    Backend::VehicleDriveDesc DriveDescOf(const VehicleKind& kind, std::uint32_t entity, std::uint32_t& warned,
+                                          ILogger& logger)
     {
         OutOfRange check("Vehicle", entity, warned, logger, OutOfRange::Lifetime::UntilValid);
         VehicleKind corrected = kind;
@@ -368,7 +401,7 @@ namespace Fenrir::Detail
         {
             correct(corrected.As<WheeledVehicle>());
         }
-        return corrected;
+        return DriveOf(corrected);
     }
 
     Backend::VehicleWheelDesc WheelDescOf(std::uint32_t entity, const VehicleWheel& wheel, const Math::Vec3& scale,
