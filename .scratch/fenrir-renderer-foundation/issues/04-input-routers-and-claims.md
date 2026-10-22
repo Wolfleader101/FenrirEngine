@@ -17,7 +17,6 @@
 **Touches:** `packages/FenrirInput/`, `packages/FenrirWindow/src/`
 
 **Status:** resolved
-Hand check: in a visible window with `textInputByDefault = false`, a router claiming `textInput` turns typing (TextEvent) on, the IME candidate window sits at the claimed caret, and clearing the claim turns typing off again.
 
 - [x] `FenrirInputTests` routers cases: priority and stable tie order; a consumed event reaches no lower router, no resource and no game reader; a router added during dispatch starts next frame and one removed stops at once.
 - [x] Ownership: a press taken by a router sends its repeats and release only to it; a game-owned press still releases to the game after a router appears; motion, scroll and text dispatch per event; pointer capture routes a window's pointer events to its holder first.
