@@ -348,6 +348,10 @@ namespace Fenrir
         }
         record->data = std::move(data);
         ++record->revision;
+        if (kind == Detail::AssetKind::Shader)
+        {
+            WarnOverridesShaderLacks({slot.index, slot.generation});
+        }
         return true;
     }
 

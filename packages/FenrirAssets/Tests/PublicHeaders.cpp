@@ -6,6 +6,7 @@
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
+#include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/ShaderData.hpp"

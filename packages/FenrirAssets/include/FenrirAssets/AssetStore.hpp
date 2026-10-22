@@ -12,7 +12,10 @@
 #include <utility>
 
 #include "FenrirAssets/AssetHandle.hpp"
+#include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
+#include "FenrirMath/Colour.hpp"
+#include "FenrirMath/Math.hpp"
 
 namespace Fenrir
 {
@@ -49,6 +52,7 @@ namespace Fenrir
         [[nodiscard]] std::string PrepareAsset(MeshData& mesh);
         [[nodiscard]] std::string PrepareAsset(ImageData& image);
         [[nodiscard]] std::string PrepareAsset(ShaderData& shader);
+        [[nodiscard]] std::string PrepareAsset(MaterialData& material);
         /** @} */
     } // namespace Detail
 
@@ -138,8 +142,9 @@ namespace Fenrir
      * @brief The asset store: every asset the app holds, as plain CPU-side data behind asset handles (ADR-0021). An app
      * resource, made by Assets::Install and reached with `app.GetResource<AssetStore>()`.
      *
-     * Main thread only: loading, adding, replacing and unloading must not run alongside anything else that uses the
-     * store. Reads (TryGet, IsValid, Revision) may run together from any thread while nothing writes.
+     * Main thread only: loading, adding, replacing, unloading and material edits must not run alongside anything else
+     * that uses the store. Reads (TryGet, IsValid, Revision, the material TryGet calls) may run together from any
+     * thread while nothing writes.
      */
     class AssetStore
     {
@@ -191,7 +196,9 @@ namespace Fenrir
         /**
          * @brief Swaps the data of the asset `handle` names for `data` and bumps its revision, so every user sees the
          * change. Its owners, path and handle stay. False, with a logged error, if the handle does not resolve or the
-         * data breaks its type's rules; the asset is then unchanged. A mesh's bounds are computed here.
+         * data breaks its type's rules; the asset is then unchanged. A mesh's bounds are computed here. Replacing a
+         * shader logs a warning, once per material, for each parameter override of a material on it that the new
+         * shader lacks or types differently: the override is kept and ignored.
          */
         template <typename T>
         bool Replace(AssetHandle<T> handle, AssetData<T> data)
@@ -235,9 +242,9 @@ namespace Fenrir
         }
 
         /**
-         * @brief The asset's revision: 1 when it is loaded or added, one more on each Replace. Users that keep a
-         * copy made from the data (the renderer's GPU side) compare it to know when to remake it. Zero if the handle
-         * does not resolve.
+         * @brief The asset's revision: 1 when it is loaded or added, one more on each Replace, each material set and
+         * each Reset that removes an override. Users that keep a copy made from the data (the renderer's GPU side)
+         * compare it to know when to remake it. Zero if the handle does not resolve.
          */
         template <typename T>
         [[nodiscard]] std::uint32_t Revision(AssetHandle<T> handle) const
@@ -252,6 +259,105 @@ namespace Fenrir
          */
         [[nodiscard]] std::span<const ShaderParameter> GetShaderParameters(AssetHandle<Shader> handle) const;
 
+        /**
+         * @name Material edits
+         * Make and edit materials through the store, so C++ and C# agree on names, types and revisions (ADR-0024). A
+         * material stores only its parameter overrides; every other parameter reads its shader's parameter default.
+         *
+         * Each set bumps the material's revision. A parameter set checks the name and type against the shader's
+         * parameters (GetShaderParameters): an unknown name or a wrong type is logged once per material and ignored,
+         * and the set returns false. A set on a material handle that does not resolve is logged and returns false. A
+         * colour is a `vec4` parameter, in linear values.
+         * @{
+         */
+
+        /**
+         * @brief A new material drawing with `shader`, owned by `owner`: opaque, single-sided, with no parameter
+         * overrides. Empty, with a logged error, if the shader handle does not resolve.
+         */
+        [[nodiscard]] AssetHandle<Material> CreateMaterial(AssetHandle<Shader> shader, AssetOwner owner);
+
+        /**
+         * @brief A new material copying `material`'s shader, blend mode, alpha cutoff, double-sidedness and parameter
+         * overrides, owned by `owner`. Only overrides are copied, not resolved defaults, so the clone's unset
+         * parameters still follow the shader's defaults. Empty, with a logged error, if `material` does not resolve.
+         */
+        [[nodiscard]] AssetHandle<Material> CloneMaterial(AssetHandle<Material> material, AssetOwner owner);
+
+        /** @brief Sets a `float` parameter. */
+        bool SetFloat(AssetHandle<Material> material, std::string_view name, float value);
+        /** @brief Sets a `vec2` parameter. */
+        bool SetVector2(AssetHandle<Material> material, std::string_view name, Math::Vec2 value);
+        /** @brief Sets a `vec3` parameter. */
+        bool SetVector3(AssetHandle<Material> material, std::string_view name, Math::Vec3 value);
+        /** @brief Sets a `vec4` parameter. */
+        bool SetVector4(AssetHandle<Material> material, std::string_view name, Math::Vec4 value);
+        /** @brief Sets a `vec4` parameter to a colour's linear red, green, blue and alpha. */
+        bool SetColour(AssetHandle<Material> material, std::string_view name, Colour value);
+        /** @brief Sets a texture parameter to `image`, read with `sampler`. */
+        bool SetTexture(AssetHandle<Material> material, std::string_view name, AssetHandle<Image> image,
+                        SamplerDescription sampler = {});
+        /** @brief Sets how the material's pixels combine with what is behind them. */
+        bool SetBlendMode(AssetHandle<Material> material, BlendMode blendMode);
+        /** @brief Sets the alpha below which a `Masked` material discards a pixel. */
+        bool SetAlphaCutoff(AssetHandle<Material> material, float alphaCutoff);
+        /** @brief Sets whether both faces of the material are drawn. */
+        bool SetDoubleSided(AssetHandle<Material> material, bool doubleSided);
+
+        /**
+         * @brief The parameter's effective value: the material's override, else the shader's parameter default.
+         * Empty only if the material does not resolve, its shader lacks the name, or the parameter is of another type.
+         * A texture parameter left unset reads an empty image (the shader's default texture) with the default sampler.
+         * Reads never bump the revision.
+         */
+        [[nodiscard]] std::optional<float> TryGetFloat(AssetHandle<Material> material, std::string_view name) const;
+        /** @copydoc TryGetFloat */
+        [[nodiscard]] std::optional<Math::Vec2> TryGetVector2(AssetHandle<Material> material,
+                                                              std::string_view name) const;
+        /** @copydoc TryGetFloat */
+        [[nodiscard]] std::optional<Math::Vec3> TryGetVector3(AssetHandle<Material> material,
+                                                              std::string_view name) const;
+        /** @copydoc TryGetFloat */
+        [[nodiscard]] std::optional<Math::Vec4> TryGetVector4(AssetHandle<Material> material,
+                                                              std::string_view name) const;
+        /** @copydoc TryGetFloat */
+        [[nodiscard]] std::optional<Colour> TryGetColour(AssetHandle<Material> material, std::string_view name) const;
+        /** @copydoc TryGetFloat */
+        [[nodiscard]] std::optional<MaterialTexture> TryGetTexture(AssetHandle<Material> material,
+                                                                   std::string_view name) const;
+
+        /**
+         * @brief The material's own override of the parameter, if it sets one of this type. It does not consult the
+         * shader, so it also reads an override the shader no longer has.
+         */
+        [[nodiscard]] std::optional<float> TryGetOverrideFloat(AssetHandle<Material> material,
+                                                               std::string_view name) const;
+        /** @copydoc TryGetOverrideFloat */
+        [[nodiscard]] std::optional<Math::Vec2> TryGetOverrideVector2(AssetHandle<Material> material,
+                                                                      std::string_view name) const;
+        /** @copydoc TryGetOverrideFloat */
+        [[nodiscard]] std::optional<Math::Vec3> TryGetOverrideVector3(AssetHandle<Material> material,
+                                                                      std::string_view name) const;
+        /** @copydoc TryGetOverrideFloat */
+        [[nodiscard]] std::optional<Math::Vec4> TryGetOverrideVector4(AssetHandle<Material> material,
+                                                                      std::string_view name) const;
+        /** @copydoc TryGetOverrideFloat */
+        [[nodiscard]] std::optional<Colour> TryGetOverrideColour(AssetHandle<Material> material,
+                                                                 std::string_view name) const;
+        /** @copydoc TryGetOverrideFloat */
+        [[nodiscard]] std::optional<MaterialTexture> TryGetOverrideTexture(AssetHandle<Material> material,
+                                                                           std::string_view name) const;
+
+        /** @brief Whether the material has an override of the parameter. */
+        [[nodiscard]] bool IsSet(AssetHandle<Material> material, std::string_view name) const;
+
+        /**
+         * @brief Removes the material's override of the parameter, so it reads the shader's default again. True, and
+         * the revision bumped, only if there was an override to remove.
+         */
+        bool Reset(AssetHandle<Material> material, std::string_view name);
+        /** @} */
+
         /** @brief The asset root relative paths resolve against, absolute. */
         [[nodiscard]] const std::filesystem::path& Root() const noexcept;
 
@@ -264,6 +370,13 @@ namespace Fenrir
         [[nodiscard]] const void* Find(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         [[nodiscard]] std::uint32_t RevisionOf(Detail::AssetKind kind, Detail::AssetSlot slot) const;
         void Refuse(std::string_view assetName, std::string_view action, const std::string& problem);
+        bool SetParameter(AssetHandle<Material> material, std::string_view name, MaterialValue value);
+        [[nodiscard]] MaterialData* EditMaterial(AssetHandle<Material> material, std::string_view action);
+        [[nodiscard]] std::optional<MaterialValue> EffectiveValue(AssetHandle<Material> material, std::string_view name,
+                                                                  ShaderParameterType type) const;
+        [[nodiscard]] std::optional<MaterialValue> OverrideValue(AssetHandle<Material> material, std::string_view name,
+                                                                 ShaderParameterType type) const;
+        void WarnOverridesShaderLacks(AssetHandle<Shader> shader);
 
         // Shared with the scenes that own assets, which hold it weakly: a scene that ends after the store frees
         // nothing.

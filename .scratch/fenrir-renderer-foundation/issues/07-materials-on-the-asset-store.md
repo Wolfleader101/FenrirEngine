@@ -13,10 +13,10 @@
 
 **Touches:** `packages/FenrirAssets/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirAssetsTests` materials cases, on a fixture shader container: a new material's `TryGet…` reads the shader's defaults and `IsSet` is false; a set makes `IsSet` true and `TryGetOverride` return it; `Reset` restores the default.
-- [ ] Revisions: each set bumps it; reads never do; `Reset` bumps it only when an override existed.
-- [ ] `CloneMaterial` copies overrides, and a clone of an unset parameter still follows the shader's default.
-- [ ] An unknown name and a wrong type are each logged once per material and ignored; `TryGet` on them is empty.
-- [ ] Blend mode, alpha cutoff, double-sidedness and texture samplers round-trip.
+- [x] `FenrirAssetsTests` materials cases, on a fixture shader container: a new material's `TryGet…` reads the shader's defaults and `IsSet` is false; a set makes `IsSet` true and `TryGetOverride` return it; `Reset` restores the default.
+- [x] Revisions: each set bumps it; reads never do; `Reset` bumps it only when an override existed.
+- [x] `CloneMaterial` copies overrides, and a clone of an unset parameter still follows the shader's default.
+- [x] An unknown name and a wrong type are each logged once per material and ignored; `TryGet` on them is empty.
+- [x] Blend mode, alpha cutoff, double-sidedness and texture samplers round-trip.
