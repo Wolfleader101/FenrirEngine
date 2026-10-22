@@ -174,7 +174,7 @@ namespace Fixture
 
     struct SphereShape
     {
-        float radius = 0.5f;
+        float radius = 0.75f;
     };
 
     /** @brief Which kind of shape a Shape holds. */
