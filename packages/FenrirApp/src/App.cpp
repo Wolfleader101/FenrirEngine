@@ -188,8 +188,26 @@ namespace Fenrir
         if (!m_initialized)
         {
             m_initialized = true;
-            m_scheduler.Init(*this);
+            for (const SchedulePriority phase :
+                 {SchedulePriority::PreInit, SchedulePriority::Init, SchedulePriority::PostInit})
+            {
+                m_phase = phase;
+                m_scheduler.RunInitSystems(*this, phase);
+            }
+            m_phase.reset();
         }
+    }
+
+    void App::RunPhase(SchedulePriority phase)
+    {
+        m_phase = phase;
+        m_scheduler.RunSystems(*this, phase);
+        m_phase.reset();
+    }
+
+    std::optional<SchedulePriority> App::CurrentPhase() const
+    {
+        return m_phase;
     }
 
     void App::Run()
@@ -206,7 +224,7 @@ namespace Fenrir
 
     void App::RunExit()
     {
-        m_scheduler.RunSystems(*this, SchedulePriority::Exit);
+        RunPhase(SchedulePriority::Exit);
     }
 
     void App::RunFrame(double deltaTime)
@@ -214,17 +232,19 @@ namespace Fenrir
         InitOnce();
 
         m_time.Advance(deltaTime);
+        ++m_time.frameCount;
 
-        m_scheduler.RunSystems(*this, SchedulePriority::PreUpdate);
+        RunPhase(SchedulePriority::PreUpdate);
 
-        m_scheduler.RunSystems(*this, SchedulePriority::BeforeTicks);
+        RunPhase(SchedulePriority::BeforeTicks);
 
         int ticks = 0;
         while (m_time.accumulator >= m_time.tickRate && ticks < m_time.maxTicksPerFrame)
         {
-            m_scheduler.RunSystems(*this, SchedulePriority::PreTick);
-            m_scheduler.RunSystems(*this, SchedulePriority::Tick);
-            m_scheduler.RunSystems(*this, SchedulePriority::PostTick);
+            ++m_time.tickCount;
+            RunPhase(SchedulePriority::PreTick);
+            RunPhase(SchedulePriority::Tick);
+            RunPhase(SchedulePriority::PostTick);
 
             m_time.accumulator -= m_time.tickRate;
             ++ticks;
@@ -240,13 +260,13 @@ namespace Fenrir
             m_time.accumulator = 0.0;
         }
 
-        m_scheduler.RunSystems(*this, SchedulePriority::AfterTicks);
+        RunPhase(SchedulePriority::AfterTicks);
 
-        m_scheduler.RunSystems(*this, SchedulePriority::Update);
+        RunPhase(SchedulePriority::Update);
 
-        m_scheduler.RunSystems(*this, SchedulePriority::PostUpdate);
+        RunPhase(SchedulePriority::PostUpdate);
 
-        m_scheduler.RunSystems(*this, SchedulePriority::Render);
+        RunPhase(SchedulePriority::Render);
 
         UpdateEvents();
     }
