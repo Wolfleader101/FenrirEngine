@@ -25,7 +25,7 @@ app.Run(); // closing the main window stops it too
 
 ## Each frame
 
-The **pump** is a sequential `PreUpdate` system. It takes SDL's events, feeds the input to FenrirInput's input feed, and calls `Input::Dispatch`, so this frame's input reaches `Keyboard`, `Mouse`, `Gamepads` and the input events in this frame, whichever package was installed first. It then reads each window's logical size, pixel size and content scale. When no window can be drawn (all minimised), it sleeps `minimisedFrameSleep` (about 7 ms) at the end of `PreUpdate`; when no window has the focus, it sleeps `unfocusedFrameSleep` (0 by default, so never). Ticks keep running on their accumulator.
+The **pump** is a sequential `PreUpdate` system. It takes SDL's events, feeds the input to FenrirInput's input feed, and calls `Input::Dispatch`, so this frame's input reaches `Keyboard`, `Mouse`, `Gamepads` and the input events in this frame, whichever package was installed first. After that dispatch, it puts each window's SDL text input as the input routers' claims say (below). It then reads each window's logical size, pixel size and content scale. When no window can be drawn (all minimised), it sleeps `minimisedFrameSleep` (about 7 ms) at the end of `PreUpdate`; when no window has the focus, it sleeps `unfocusedFrameSleep` (0 by default, so never). Ticks keep running on their accumulator.
 
 ## Main-thread rule
 
@@ -33,7 +33,11 @@ SDL's events, windows and GL calls must stay on the main thread (ADR-0020). Ever
 
 ## WindowConfig
 
-`title`; `logicalSize` (1280 x 720); `visible` (default `true`; `false` gives a hidden window for GL tests and tools, and presenting to it does nothing); `stopOnMainWindowClose` (default `true`); `minimisedFrameSleep` (0.007 s); `unfocusedFrameSleep` (0 s); `textInputByDefault` (default `true`: SDL's text input is on in each window, so typing sends `TextEvent`; ticket 04 makes it follow input routers' `textInput` claims).
+`title`; `logicalSize` (1280 x 720); `visible` (default `true`; `false` gives a hidden window for GL tests and tools, and presenting to it does nothing); `stopOnMainWindowClose` (default `true`); `minimisedFrameSleep` (0.007 s); `unfocusedFrameSleep` (0 s); `textInputByDefault` (default `true`: SDL's text input is on in each window no router claims `textInput` in, so typing sends `TextEvent`; a UI app sets it to `false`).
+
+## Text input
+
+SDL's text input follows the input routers' `textInput` claims (ADR-0027). In each window where a router claims `textInput` (FenrirInput's `InputClaims`), the pump keeps it on, with the claimant's caret rectangle as SDL's text input area, where the IME places its candidates. In other windows it follows `textInputByDefault`. A claim published during a frame takes effect in the next frame's pump.
 
 ## Windows and events
 

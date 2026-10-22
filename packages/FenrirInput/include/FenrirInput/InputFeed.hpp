@@ -1,10 +1,10 @@
 #pragma once
 
 #include <string_view>
-#include <variant>
 #include <vector>
 
 #include "FenrirInput/InputEvents.hpp"
+#include "FenrirInput/InputRouter.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -15,8 +15,7 @@ namespace Fenrir
         class InputDispatch;
 
         /** @brief One input fed and not yet dispatched: the event it becomes. */
-        using FedInput = std::variant<KeyEvent, TextEvent, MouseButtonEvent, MouseMotionEvent, MouseScrollEvent,
-                                      WindowFocusEvent, GamepadConnectionEvent, GamepadButtonEvent, GamepadAxisEvent>;
+        using FedInput = RoutedInput;
     } // namespace Detail
 
     /**
@@ -25,11 +24,11 @@ namespace Fenrir
      * headless app feeds input by hand. An app resource added by Input::Install.
      *
      * Each call queues one input. FenrirInput's dispatch, a sequential PreUpdate system, takes the queue in the order
-     * it was fed: it updates Keyboard, Mouse and Gamepads and sends each input as its event. Input fed before the
-     * dispatch runs (between frames, or from an earlier sequential PreUpdate system) is dispatched that frame. A
-     * feeder that runs after it, such as a window's pump, calls Input::Dispatch once it has fed, so its input is
-     * dispatched that frame too; input fed later and not dispatched waits for the next frame. Feed from the thread that
-     * runs the App, outside parallel systems.
+     * it was fed: each input goes to the input routers, and what they pass updates Keyboard, Mouse and Gamepads and
+     * is sent as its event. Input fed before the dispatch runs (between frames, or from an earlier sequential
+     * PreUpdate system) is dispatched that frame. A feeder that runs after it, such as a window's pump, calls
+     * Input::Dispatch once it has fed, so its input is dispatched that frame too; input fed later and not dispatched
+     * waits for the next frame. Feed from the thread that runs the App, outside parallel systems.
      */
     class InputFeed
     {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "FenrirInput/InputRouter.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
 
@@ -22,5 +23,9 @@ namespace Fenrir
         static void PushFocusGained(App& app, WindowId window);
         /** @brief Resizes `window` to `logicalSize` and waits for the OS to apply it. False if SDL refuses. */
         static bool Resize(App& app, WindowId window, WindowSize logicalSize);
+        /** @brief Whether SDL's text input is on in `window` (false for a window not made). */
+        static bool IsTextInputOn(App& app, WindowId window);
+        /** @brief SDL's text input area in `window`, in logical units: where the IME places its candidates. */
+        static CaretRect TextInputArea(App& app, WindowId window);
     };
 } // namespace Fenrir

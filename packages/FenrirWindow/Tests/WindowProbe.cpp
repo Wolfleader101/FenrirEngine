@@ -16,6 +16,13 @@ namespace Fenrir
             return record == nullptr || record->sdl == nullptr ? 0 : SDL_GetWindowID(record->sdl);
         }
 
+        SDL_Window* SdlWindow(App& app, WindowId window)
+        {
+            Detail::WindowState* state = Detail::FindWindowState(app);
+            const Detail::WindowRecord* record = state == nullptr ? nullptr : state->Find(window);
+            return record == nullptr ? nullptr : record->sdl;
+        }
+
         void PushWindowEvent(App& app, WindowId window, SDL_EventType type)
         {
             SDL_Event event{};
@@ -57,5 +64,24 @@ namespace Fenrir
             return false;
         }
         return SDL_SetWindowSize(record->sdl, logicalSize.width, logicalSize.height) && SDL_SyncWindow(record->sdl);
+    }
+
+    bool WindowProbe::IsTextInputOn(App& app, WindowId window)
+    {
+        SDL_Window* sdl = SdlWindow(app, window);
+        return sdl != nullptr && SDL_TextInputActive(sdl);
+    }
+
+    CaretRect WindowProbe::TextInputArea(App& app, WindowId window)
+    {
+        SDL_Window* sdl = SdlWindow(app, window);
+        SDL_Rect area{};
+        int cursor = 0;
+        if (sdl == nullptr || !SDL_GetTextInputArea(sdl, &area, &cursor))
+        {
+            return {};
+        }
+        return CaretRect{{static_cast<float>(area.x), static_cast<float>(area.y)},
+                         {static_cast<float>(area.w), static_cast<float>(area.h)}};
     }
 } // namespace Fenrir

@@ -22,6 +22,11 @@ namespace Fenrir
         bool pressed = false;
         /** @brief True for the repeats a held key sends; a repeat is not a new press. */
         bool repeat = false;
+        /**
+         * @brief True for a release sent by a cancellation (ADR-0027): a router raised keyboardFocus or the window lost
+         * the focus while the key was held. The key may still be down; its physical release goes to no one.
+         */
+        bool cancelled = false;
     };
 
     /** @brief One Unicode codepoint of typed text: text fed as several codepoints is one event per codepoint. */
@@ -38,6 +43,11 @@ namespace Fenrir
         MouseButton button = MouseButton::Left;
         /** @brief True when the button went down, false when it went up. */
         bool pressed = false;
+        /**
+         * @brief True for a release sent by a cancellation (ADR-0027): a router raised pointerCapture or the window
+         * lost the focus while the button was held. The button may still be down; its physical release goes to no one.
+         */
+        bool cancelled = false;
     };
 
     /** @brief The mouse moved over a window. */

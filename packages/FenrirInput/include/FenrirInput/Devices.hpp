@@ -9,7 +9,8 @@
 #include "FenrirMath/Math.hpp"
 
 // The app resources Input::Install adds: the polled state of the keyboard, the mouse and the gamepads (ADR-0017).
-// Any system may read them, in parallel or not; only FenrirInput's dispatch, in PreUpdate, writes them.
+// Any system may read them, in parallel or not; only FenrirInput writes them: its dispatch, in PreUpdate, and the
+// cancelled releases sent when an input router raises keyboardFocus or pointerCapture (ADR-0027).
 //
 // Input edges follow the reading phase. Read from PreTick, Tick or PostTick, "just pressed" and "just released" are
 // the edges since the last tick; read from any other phase (or outside the frame), the edges since the last frame.

@@ -38,7 +38,10 @@ namespace Fenrir
         double minimisedFrameSleep = 0.007;
         /** @brief Seconds slept at the end of PreUpdate while no window has the input focus; 0 never sleeps. */
         double unfocusedFrameSleep = 0.0;
-        /** @brief True turns SDL's text input on in each window it makes, so typing sends TextEvent. */
+        /**
+         * @brief True keeps SDL's text input on in each window, so typing sends TextEvent. A window where an input
+         * router claims textInput (ADR-0027) has it on, with the claim's caret, either way; a UI app sets this false.
+         */
         bool textInputByDefault = true;
     };
 
