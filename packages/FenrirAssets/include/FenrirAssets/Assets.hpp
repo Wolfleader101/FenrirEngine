@@ -5,7 +5,9 @@
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirAssets/SpawnNodes.hpp"
 
 namespace Fenrir
 {

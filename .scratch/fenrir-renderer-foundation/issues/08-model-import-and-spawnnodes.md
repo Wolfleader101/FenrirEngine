@@ -16,11 +16,11 @@
 
 **Touches:** `packages/FenrirAssets/`, `.gitmodules`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FenrirAssetsTests` import cases: the glTF, GLB, FBX and OBJ fixtures give the same node tree, meshes and material mapping (blend mode, double-sided, factors, textures and samplers), within the formats' known differences.
-- [ ] A missing texture is replaced by a white image with a warning; colour spaces follow first use, and a conflicting use warns.
-- [ ] The skinned fixture loads with its skinned mesh left out and one diagnostic naming it.
-- [ ] `file#Label` loads a sub-asset and returns the same handle as the model's own reference.
-- [ ] `SpawnNodes` gives one entity per node with the right names, local transforms and parents, under a given parent, with `nodes` indexed by model node.
-- [ ] No public header names cgltf or ufbx; Clang and MSVC x64 presets build with no warnings from their sources.
+- [x] `FenrirAssetsTests` import cases: the glTF, GLB, FBX and OBJ fixtures give the same node tree, meshes and material mapping (blend mode, double-sided, factors, textures and samplers), within the formats' known differences.
+- [x] A missing texture is replaced by a white image with a warning; colour spaces follow first use, and a conflicting use warns.
+- [x] The skinned fixture loads with its skinned mesh left out and one diagnostic naming it.
+- [x] `file#Label` loads a sub-asset and returns the same handle as the model's own reference.
+- [x] `SpawnNodes` gives one entity per node with the right names, local transforms and parents, under a given parent, with `nodes` indexed by model node.
+- [x] No public header names cgltf or ufbx; Clang and MSVC x64 presets build with no warnings from their sources.

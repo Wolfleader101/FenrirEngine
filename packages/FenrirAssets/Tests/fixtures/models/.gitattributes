@@ -1,0 +1,8 @@
+# The importers read these fixtures exactly as make_fixtures.py wrote them, so git converts no line endings in them.
+*.gltf binary
+*.bin binary
+*.glb binary
+*.fbx binary
+*.obj binary
+*.mtl binary
+*.png binary

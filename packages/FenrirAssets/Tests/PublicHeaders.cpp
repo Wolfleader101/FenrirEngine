@@ -1,16 +1,18 @@
-// FenrirAssets hides its importers at compile time (ADR-0021). This file includes the public headers before anything
-// else, so if one of them ever reaches for stb, or stb's include path or definitions reach a user of FenrirAssets (this
-// test target is one), the build fails here. The same goes for glslang and SPIRV-Reflect, which only
-// FenrirShaderCompiler links (ADR-0018), though FenrirAssets reads the shader containers it writes.
+// FenrirAssets hides its importers at compile time (ADR-0021, ADR-0031). This file includes the public headers before
+// anything else, so if one of them ever reaches for stb, cgltf or ufbx, or their include paths or definitions reach a
+// user of FenrirAssets (this test target is one), the build fails here. The same goes for glslang and SPIRV-Reflect,
+// which only FenrirShaderCompiler links (ADR-0018), though FenrirAssets reads the shader containers it writes.
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/MeshData.hpp"
+#include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirAssets/ShaderGlBindings.hpp"
+#include "FenrirAssets/SpawnNodes.hpp"
 
 #if defined(STBI_VERSION) || defined(STBI_INCLUDE_STB_IMAGE_H)
 #error "A FenrirAssets public header includes stb_image."
@@ -22,6 +24,14 @@
 
 #if defined(STBI_ONLY_PNG) || defined(STBI_ONLY_JPEG) || defined(STBI_ONLY_HDR) || defined(STBI_NO_STDIO)
 #error "stb_image's compile definitions reach a target outside FenrirAssets: it must be linked PRIVATE."
+#endif
+
+#if defined(CGLTF_H_INCLUDED__) || defined(UFBX_UFBX_H_INCLUDED)
+#error "A FenrirAssets public header includes cgltf or ufbx."
+#endif
+
+#if __has_include(<cgltf.h>) || __has_include("cgltf.h") || __has_include(<ufbx.h>) || __has_include("ufbx.h")
+#error "cgltf's or ufbx's include path reaches a target outside FenrirAssets: they must be linked PRIVATE."
 #endif
 
 #if __has_include(<glslang/Public/ShaderLang.h>) || __has_include(<spirv_reflect.h>)
