@@ -215,7 +215,7 @@ public static class PhysicsWorld
 
     /// <summary>Chooses which categories of debug lines the world draws, from the next step on.</summary>
     /// <returns>Whether there was a world to draw them.</returns>
-    public static bool SetDebugDraw(DebugDraw categories) => PhysicsNative.SetDebugDraw((uint)categories);
+    public static bool SetDebugDraw(PhysicsDebugCategories categories) => PhysicsNative.SetDebugDraw((uint)categories);
 
     /// <summary>
     /// Cooks a collision mesh from <paramref name="vertices"/> and, for <see cref="MeshShape"/>, the triangles

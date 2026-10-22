@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "Backend/Backend.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/ComponentWatch.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirPhysics/Characters.hpp"
@@ -45,6 +46,13 @@ namespace Fenrir
          * overloaded joints, and send the step's contact, trigger and JointBroken events to `app`.
          */
         void Step(App& app, float dt);
+
+        /**
+         * @brief After Step: draws the debug lines of the categories switched on, from the world as the step left it,
+         * into `draw` (its scene's DebugDraw, or null when debug drawing is not installed, and then nothing is drawn),
+         * in the PhysicsDebugGroup with duration 0.
+         */
+        void DrawDebugLines(DebugDraw* draw);
 
         /** @brief Calls `func` for each contact of `entity`'s body touching now. */
         void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
@@ -323,14 +331,13 @@ namespace Fenrir
          * end-of-move contacts and its body's step contacts, adding the begins and ends of the pairs reported. */
         void TrackCharacterContacts(std::vector<ContactBegin>& begins, std::vector<ContactEnd>& ends);
 
-        // Debug lines (DebugLines.cpp): remade after each step from the categories switched on, if any.
-        void DrawDebugLines();
+        // Debug lines (DebugLines.cpp), drawn by DrawDebugLines.
         struct ShapeEdgesKey;
-        void DrawColliders(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
-        void DrawJoints();
-        void DrawCharacters(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
-        void DrawVehicles();
-        void DrawPart(const Part& part, const Transform& body, std::uint32_t colour,
+        void DrawColliders(DebugDraw& draw, std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
+        void DrawJoints(DebugDraw& draw);
+        void DrawCharacters(DebugDraw& draw, std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
+        void DrawVehicles(DebugDraw& draw);
+        void DrawPart(DebugDraw& draw, const Part& part, const Transform& body, const Colour& colour,
                       std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used);
 
         // The filter a body's backend body has: a disabled trigger's collides with nothing.
@@ -560,9 +567,8 @@ namespace Fenrir
         // In the order game code made them, applied after the edits are pushed and before the step.
         std::vector<Push> m_pushes;
 
-        // The debug lines switched on, and those the last step made.
-        DebugDraw m_debugDraw = DebugDraw::None;
-        std::vector<DebugLine> m_debugLines;
+        // The categories of debug lines switched on.
+        PhysicsDebugCategories m_debugDraw = PhysicsDebugCategories::None;
 
         // The edges of the hulls and meshes drawn by the last step, in their own space before scale, as pairs of ends:
         // asked of the backend once per collision mesh while it is drawn.

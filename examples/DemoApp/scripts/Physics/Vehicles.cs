@@ -501,7 +501,7 @@ public sealed class VehiclesInput : ISystem
                 break;
             case VehiclesScene.KeyV:
                 driver.DrawVehicles = !driver.DrawVehicles;
-                PhysicsWorld.SetDebugDraw(driver.DrawVehicles ? DebugDraw.Vehicles : DebugDraw.None);
+                PhysicsWorld.SetDebugDraw(driver.DrawVehicles ? PhysicsDebugCategories.Vehicles : PhysicsDebugCategories.None);
                 context.Log.Info(driver.DrawVehicles ? "V: the vehicles' debug lines are on" : "V: debug lines off");
                 break;
             case VehiclesScene.KeyU:

@@ -223,20 +223,19 @@ namespace Fenrir
         /**
          * @brief Chooses which categories of debug lines the world draws, from the next step on. None (the default)
          * draws nothing and costs one check per step.
-         */
-        void SetDebugDraw(DebugDraw categories);
-
-        /** @brief The categories of debug lines the world draws. */
-        [[nodiscard]] DebugDraw DebugDrawCategories() const;
-
-        /**
-         * @brief The debug lines of the categories SetDebugDraw chose, made from the world as the last step left it,
-         * and valid until the next step. Empty before the first step after they are switched on.
+         *
+         * After each step the world draws the lines of these categories, made from the world as the step left it, into
+         * its scene's DebugDraw (FenrirDebugDraw, ADR-0025), in the PhysicsDebugGroup and with duration 0, so they
+         * last until the next tick. Hide that group to hide them. In an app without DebugDrawing installed the scene
+         * has no DebugDraw, and nothing is drawn.
          *
          * They show each body at its true step pose. Between ticks an interpolated body's Transform is blended between
          * its last two step poses, so its rendered model may lag its lines by up to one step.
          */
-        [[nodiscard]] std::span<const DebugLine> DebugLines() const;
+        void SetDebugDraw(PhysicsDebugCategories categories);
+
+        /** @brief The categories of debug lines the world draws. */
+        [[nodiscard]] PhysicsDebugCategories DebugDrawCategories() const;
 
       private:
         // FenrirPhysics's own systems step the world through its state; the tests read a diagnostic.

@@ -35,7 +35,7 @@ add_library(FenrirPhysics STATIC
     src/Backend/Jolt/JoltBackend.cpp
 )
 
-target_link_libraries(FenrirPhysics PUBLIC FenrirApp FenrirScene FenrirECS FenrirMath PRIVATE Jolt)
+target_link_libraries(FenrirPhysics PUBLIC FenrirApp FenrirScene FenrirECS FenrirMath FenrirDebugDraw PRIVATE Jolt)
 
 target_include_directories(FenrirPhysics PUBLIC include PRIVATE src)
 

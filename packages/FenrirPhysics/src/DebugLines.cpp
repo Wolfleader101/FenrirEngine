@@ -1,13 +1,13 @@
-// A physics world's debug lines, made after each step from FenrirPhysics's own record of its bodies (shape, step pose,
-// motion type, trigger flag) and what it asks the backend privately (contacts, bounds, sleep, velocity, the edges of a
-// cooked hull or mesh, each vehicle's wheels). Never through the backend's own debug renderer, so they look the same
-// whatever the backend.
+// A physics world's debug lines, drawn after each step into its scene's DebugDraw (ADR-0025) from FenrirPhysics's own
+// record of its bodies (shape, step pose, motion type, trigger flag) and what it asks the backend privately (contacts,
+// bounds, sleep, velocity, the edges of a cooked hull or mesh, each vehicle's wheels). Never through the backend's own
+// debug renderer, so they look the same whatever the backend.
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <map>
 #include <numbers>
-#include <span>
 #include <vector>
 
 #include "Backend/Primitive.hpp"
@@ -33,35 +33,37 @@ namespace Fenrir
         // Half the size of the cross-tick at a vehicle wheel's centre on its suspension.
         constexpr float suspensionTick = 0.08f;
 
-        // Adds lines through a pose: points given in the shape's own space come out in world space.
+        // How every debug line is drawn: in the Physics group, with duration 0, so a step's lines last until the
+        // next tick.
+        const ShapeOptions lineOptions{.group = PhysicsDebugGroup};
+
+        // Draws lines through a pose: points given in the shape's own space come out in world space.
         class LineWriter
         {
           public:
-            LineWriter(std::vector<DebugLine>& lines, const Math::Vec3& position, const Math::Quat& rotation,
-                       std::uint32_t colour)
-                : m_lines(&lines), m_position(position), m_rotation(rotation), m_colour(colour)
+            LineWriter(DebugDraw& draw, const Math::Vec3& position, const Math::Quat& rotation, const Colour& colour)
+                : m_draw(&draw), m_position(position), m_rotation(rotation), m_colour(colour)
             {
             }
 
             void operator()(const Math::Vec3& from, const Math::Vec3& to) const
             {
-                m_lines->push_back(DebugLine{Place(from), Place(to), m_colour});
+                m_draw->Line(Place(from), Place(to), m_colour, lineOptions);
             }
 
             // A circle of `radius` about `centre`, in the plane of the unit axes `u` and `v`, from `start` to `end`
-            // radians.
+            // radians: `segments` lines, drawn as one polyline.
             void Arc(const Math::Vec3& centre, const Math::Vec3& u, const Math::Vec3& v, float radius, float start,
                      float end, int segments) const
             {
-                const auto at = [&](float angle) {
-                    return centre + radius * (std::cos(angle) * u + std::sin(angle) * v);
-                };
-                for (int i = 0; i < segments; ++i)
+                std::vector<Math::Vec3> points;
+                points.reserve(static_cast<std::size_t>(segments) + 1);
+                for (int i = 0; i <= segments; ++i)
                 {
-                    const float a = start + (end - start) * static_cast<float>(i) / static_cast<float>(segments);
-                    const float b = start + (end - start) * static_cast<float>(i + 1) / static_cast<float>(segments);
-                    (*this)(at(a), at(b));
+                    const float angle = start + (end - start) * static_cast<float>(i) / static_cast<float>(segments);
+                    points.push_back(Place(centre + radius * (std::cos(angle) * u + std::sin(angle) * v)));
                 }
+                m_draw->Polyline(points, false, m_colour, lineOptions);
             }
 
           private:
@@ -70,10 +72,10 @@ namespace Fenrir
                 return m_position + m_rotation * point;
             }
 
-            std::vector<DebugLine>* m_lines;
+            DebugDraw* m_draw;
             Math::Vec3 m_position;
             Math::Quat m_rotation;
-            std::uint32_t m_colour;
+            Colour m_colour;
         };
 
         const Math::Vec3 xAxis(1.0f, 0.0f, 0.0f);
@@ -132,84 +134,78 @@ namespace Fenrir
             Box(write, -size, size);
         }
 
-        std::uint32_t ColliderColour(bool isTrigger, MotionType motionType, bool sleeping)
+        Colour ColliderColour(bool isTrigger, MotionType motionType, bool sleeping)
         {
-            std::uint32_t colour = DebugColour::Static;
+            Colour colour = PhysicsDebugColour::Static;
             if (isTrigger)
             {
-                colour = DebugColour::Trigger;
+                colour = PhysicsDebugColour::Trigger;
             }
             else if (motionType == MotionType::Kinematic)
             {
-                colour = DebugColour::Kinematic;
+                colour = PhysicsDebugColour::Kinematic;
             }
             else if (motionType == MotionType::Dynamic)
             {
-                colour = DebugColour::Dynamic;
+                colour = PhysicsDebugColour::Dynamic;
             }
-            return sleeping ? DebugColour::Dimmed(colour) : colour;
+            return sleeping ? PhysicsDebugColour::Dimmed(colour) : colour;
         }
 
         // A wheel's contact colour: the worse of its two slips against its tyres'.
-        std::uint32_t GripColour(const VehicleWheel& settings, const Backend::VehicleWheelRead& read)
+        Colour GripColour(const VehicleWheel& settings, const Backend::VehicleWheelRead& read)
         {
             const float along = std::abs(read.longitudinalSlip);
             const float across = std::abs(read.lateralSlip);
             if (along > settings.longitudinal.slideSlip || across > settings.lateral.slideSlip)
             {
-                return DebugColour::PastSlideSlip;
+                return PhysicsDebugColour::PastSlideSlip;
             }
             if (along > settings.longitudinal.peakSlip || across > settings.lateral.peakSlip)
             {
-                return DebugColour::PastPeakSlip;
+                return PhysicsDebugColour::PastPeakSlip;
             }
-            return DebugColour::Gripping;
+            return PhysicsDebugColour::Gripping;
         }
     } // namespace
 
-    void PhysicsWorld::SetDebugDraw(DebugDraw categories)
+    void PhysicsWorld::SetDebugDraw(PhysicsDebugCategories categories)
     {
         m_impl->m_debugDraw = categories;
     }
 
-    DebugDraw PhysicsWorld::DebugDrawCategories() const
+    PhysicsDebugCategories PhysicsWorld::DebugDrawCategories() const
     {
         return m_impl->m_debugDraw;
     }
 
-    std::span<const DebugLine> PhysicsWorld::DebugLines() const
+    void PhysicsWorld::Impl::DrawDebugLines(DebugDraw* draw)
     {
-        return m_impl->m_debugLines;
-    }
-
-    void PhysicsWorld::Impl::DrawDebugLines()
-    {
-        m_debugLines.clear();
-        if (m_debugDraw == DebugDraw::None)
+        if (draw == nullptr || m_debugDraw == PhysicsDebugCategories::None)
         {
             m_shapeEdges.clear();
             return;
         }
         // Hull and mesh edges are asked of the backend once per mesh while they are drawn; ids are never reused.
         std::map<ShapeEdgesKey, std::vector<Math::Vec3>> used;
-        if (Includes(m_debugDraw, DebugDraw::Colliders))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Colliders))
         {
-            DrawColliders(used);
+            DrawColliders(*draw, used);
         }
-        if (Includes(m_debugDraw, DebugDraw::Joints))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Joints))
         {
-            DrawJoints();
+            DrawJoints(*draw);
         }
-        if (Includes(m_debugDraw, DebugDraw::Characters))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Characters))
         {
-            DrawCharacters(used);
+            DrawCharacters(*draw, used);
         }
-        if (Includes(m_debugDraw, DebugDraw::Vehicles))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Vehicles))
         {
-            DrawVehicles();
+            DrawVehicles(*draw);
         }
         m_shapeEdges = std::move(used);
-        if (Includes(m_debugDraw, DebugDraw::Contacts))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Contacts))
         {
             for (const Backend::Touch& touch : m_backend.Touches())
             {
@@ -217,8 +213,8 @@ namespace Fenrir
                 {
                     continue; // an overlap, not a contact
                 }
-                const LineWriter write(m_debugLines, touch.point, Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
-                                       DebugColour::Contact);
+                const LineWriter write(*draw, touch.point, Math::Quat(1.0f, 0.0f, 0.0f, 0.0f),
+                                       PhysicsDebugColour::Contact);
                 for (const Math::Vec3& axis : {xAxis, yAxis, zAxis})
                 {
                     write(-contactCross * axis, contactCross * axis);
@@ -232,25 +228,26 @@ namespace Fenrir
             {
                 continue; // no body to draw
             }
-            if (Includes(m_debugDraw, DebugDraw::Velocities) && record.motion.motionType != MotionType::Static)
+            if (Includes(m_debugDraw, PhysicsDebugCategories::Velocities) &&
+                record.motion.motionType != MotionType::Static)
             {
                 const Math::Vec3 velocity = m_backend.GetState(record.id).linearVelocity;
                 if (velocity != Math::Vec3(0.0f))
                 {
-                    m_debugLines.push_back(DebugLine{record.world.pos, record.world.pos + velocitySeconds * velocity,
-                                                     DebugColour::Velocity});
+                    draw->Line(record.world.pos, record.world.pos + velocitySeconds * velocity,
+                               PhysicsDebugColour::Velocity, lineOptions);
                 }
             }
-            if (Includes(m_debugDraw, DebugDraw::Bounds))
+            if (Includes(m_debugDraw, PhysicsDebugCategories::Bounds))
             {
                 const Math::AABB bounds = m_backend.Bounds(record.id);
-                Box(LineWriter(m_debugLines, Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), DebugColour::Bounds),
+                Box(LineWriter(*draw, Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), PhysicsDebugColour::Bounds),
                     bounds.min, bounds.max);
             }
         }
     }
 
-    void PhysicsWorld::Impl::DrawColliders(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
+    void PhysicsWorld::Impl::DrawColliders(DebugDraw& draw, std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
     {
         for (const auto& [id, record] : m_bodies)
         {
@@ -259,18 +256,18 @@ namespace Fenrir
                 continue;
             }
             const bool sleeping = record.motion.motionType != MotionType::Static && m_backend.IsSleeping(record.id);
-            const std::uint32_t colour = ColliderColour(record.isTrigger, record.motion.motionType, sleeping);
+            const Colour colour = ColliderColour(record.isTrigger, record.motion.motionType, sleeping);
             for (const Part& part : record.parts)
             {
                 if (part.usable)
                 {
-                    DrawPart(part, record.world, colour, used);
+                    DrawPart(draw, part, record.world, colour, used);
                 }
             }
         }
     }
 
-    void PhysicsWorld::Impl::DrawCharacters(std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
+    void PhysicsWorld::Impl::DrawCharacters(DebugDraw& draw, std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
     {
         // Only characters with a backend character: disabled and inactive ones have no record, and draw nothing.
         for (const auto& [id, record] : m_characters)
@@ -281,25 +278,25 @@ namespace Fenrir
                             .pose = Transform(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), record.scale),
                             .usable = true,
                             .filtered = false};
-            DrawPart(part, record.world, DebugColour::Character, used);
+            DrawPart(draw, part, record.world, PhysicsDebugColour::Character, used);
 
             const Backend::CharacterMoved& moved = record.moved;
             if (moved.ground == GroundState::OnGround || moved.ground == GroundState::OnSteepGround)
             {
-                const std::uint32_t colour =
-                    moved.ground == GroundState::OnGround ? DebugColour::Ground : DebugColour::SteepGround;
-                m_debugLines.push_back(
-                    DebugLine{moved.groundPoint, moved.groundPoint + groundNormal * moved.groundNormal, colour});
+                const Colour& colour = moved.ground == GroundState::OnGround ? PhysicsDebugColour::Ground
+                                                                             : PhysicsDebugColour::SteepGround;
+                draw.Line(moved.groundPoint, moved.groundPoint + groundNormal * moved.groundNormal, colour,
+                          lineOptions);
             }
             if (moved.movedVelocity != Math::Vec3(0.0f))
             {
-                m_debugLines.push_back(DebugLine{
-                    record.world.pos, record.world.pos + velocitySeconds * moved.movedVelocity, DebugColour::Velocity});
+                draw.Line(record.world.pos, record.world.pos + velocitySeconds * moved.movedVelocity,
+                          PhysicsDebugColour::Velocity, lineOptions);
             }
         }
     }
 
-    void PhysicsWorld::Impl::DrawVehicles()
+    void PhysicsWorld::Impl::DrawVehicles(DebugDraw& draw)
     {
         // Only vehicles with a backend vehicle: disabled and inactive ones have none, and draw nothing.
         const Math::Quat none(1.0f, 0.0f, 0.0f, 0.0f);
@@ -319,7 +316,7 @@ namespace Fenrir
 
                 // The suspension in the chassis's axes: from the top of its travel down to full extension, with a
                 // cross-tick across it at the wheel's centre, in the axes of the wheel's mount.
-                const LineWriter suspension(m_debugLines, body.pos, body.rot, DebugColour::Suspension);
+                const LineWriter suspension(draw, body.pos, body.rot, PhysicsDebugColour::Suspension);
                 suspension(given.position + given.steeringAxis * given.settings.suspension.travel, given.position);
                 for (const Math::Vec3& axis : {xAxis, zAxis})
                 {
@@ -328,15 +325,15 @@ namespace Fenrir
                 }
 
                 // The wheel in its own plane, Y and Z about its axle X, with a spoke up its Y.
-                const LineWriter rim(m_debugLines, body.pos + body.rot * pose.pos, body.rot * pose.rot,
-                                     DebugColour::Wheel);
+                const LineWriter rim(draw, body.pos + body.rot * pose.pos, body.rot * pose.rot,
+                                     PhysicsDebugColour::Wheel);
                 const float radius = given.settings.radius;
                 rim.Arc(Math::Vec3(0.0f), yAxis, zAxis, radius, 0.0f, 2.0f * pi, circleSegments);
                 rim(Math::Vec3(0.0f), radius * yAxis);
 
                 if (wheel.onGround)
                 {
-                    const LineWriter contact(m_debugLines, wheel.contactPoint, none, GripColour(given.settings, wheel));
+                    const LineWriter contact(draw, wheel.contactPoint, none, GripColour(given.settings, wheel));
                     for (const Math::Vec3& axis : {xAxis, yAxis, zAxis})
                     {
                         contact(-contactCross * axis, contactCross * axis);
@@ -347,11 +344,11 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::DrawJoints()
+    void PhysicsWorld::Impl::DrawJoints(DebugDraw& draw)
     {
         // Every kind draws the same two frames. Shapes of a kind's own (limit arcs, cones) would go here, by kind.
-        const auto frame = [this](const JointFrame& local, const Transform* body, const Math::Vec3& scale, float length,
-                                  std::array<std::uint32_t, 3> colours) {
+        const auto frame = [&draw](const JointFrame& local, const Transform* body, const Math::Vec3& scale,
+                                   float length, const std::array<Colour, 3>& colours) {
             // A frame's position follows its body's scale and its rotation does not, as the constraint was made; the
             // world end's frame is already in world space.
             const Math::Vec3 position =
@@ -360,7 +357,7 @@ namespace Fenrir
             const std::array<Math::Vec3, 3> axes = {xAxis, yAxis, zAxis};
             for (std::size_t i = 0; i < axes.size(); ++i)
             {
-                LineWriter(m_debugLines, position, rotation, colours[i])(Math::Vec3(0.0f), length * axes[i]);
+                LineWriter(draw, position, rotation, colours[i])(Math::Vec3(0.0f), length * axes[i]);
             }
         };
         for (const auto& [entity, record] : m_joints)
@@ -369,8 +366,9 @@ namespace Fenrir
             if (!record.HasConstraint())
             {
                 // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
-                constexpr std::array<std::uint32_t, 3> grey = {DebugColour::InactiveJoint, DebugColour::InactiveJoint,
-                                                               DebugColour::InactiveJoint};
+                const std::array<Colour, 3> grey = {PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint};
                 if (const Record* a = JointBodyOf(joint.bodyA))
                 {
                     frame(joint.frameA, &a->world, a->world.scale, jointAxisA, grey);
@@ -389,24 +387,26 @@ namespace Fenrir
                 continue; // not expected: SyncJoints drops a constraint before its bodies go
             }
             // A disabled joint, broken or switched off by game code, is dimmed.
-            const auto colour = [&joint](std::uint32_t full) {
-                return joint.enabled ? full : DebugColour::Dimmed(full);
+            const auto colour = [&joint](const Colour& full) {
+                return joint.enabled ? full : PhysicsDebugColour::Dimmed(full);
             };
             frame(joint.frameA, &a->world, record.scaleA, jointAxisA,
-                  {colour(DebugColour::JointAX), colour(DebugColour::JointAY), colour(DebugColour::JointAZ)});
+                  {colour(PhysicsDebugColour::JointAX), colour(PhysicsDebugColour::JointAY),
+                   colour(PhysicsDebugColour::JointAZ)});
             frame(joint.frameB, toWorld ? nullptr : &b->world, record.scaleB, jointAxisB,
-                  {colour(DebugColour::JointBX), colour(DebugColour::JointBY), colour(DebugColour::JointBZ)});
+                  {colour(PhysicsDebugColour::JointBX), colour(PhysicsDebugColour::JointBY),
+                   colour(PhysicsDebugColour::JointBZ)});
         }
     }
 
-    void PhysicsWorld::Impl::DrawPart(const Part& part, const Transform& body, std::uint32_t colour,
+    void PhysicsWorld::Impl::DrawPart(DebugDraw& draw, const Part& part, const Transform& body, const Colour& colour,
                                       std::map<ShapeEdgesKey, std::vector<Math::Vec3>>& used)
     {
         // Each collider at its own world pose: the body's step pose, then the part's pose in the body.
         const Math::Vec3 position = body.pos + body.rot * part.pose.pos;
         const Math::Quat rotation = body.rot * part.pose.rot;
         const Math::Vec3& scale = part.pose.scale;
-        const LineWriter write(m_debugLines, position, rotation, colour);
+        const LineWriter write(draw, position, rotation, colour);
         const CollisionShape& shape = part.shape;
         if (!shape.Is<ConvexHullShape>() && !shape.Is<MeshShape>())
         {

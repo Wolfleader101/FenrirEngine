@@ -172,15 +172,15 @@ public static class World
 
     public static float ContactPointY(int index) => contacts[index].Point.Y;
 
-    public static bool DrawColliders() => PhysicsWorld.SetDebugDraw(DebugDraw.Colliders);
+    public static bool DrawColliders() => PhysicsWorld.SetDebugDraw(PhysicsDebugCategories.Colliders);
 
-    public static bool DrawJoints() => PhysicsWorld.SetDebugDraw(DebugDraw.Joints);
+    public static bool DrawJoints() => PhysicsWorld.SetDebugDraw(PhysicsDebugCategories.Joints);
 
-    public static bool DrawCharacters() => PhysicsWorld.SetDebugDraw(DebugDraw.Characters);
+    public static bool DrawCharacters() => PhysicsWorld.SetDebugDraw(PhysicsDebugCategories.Characters);
 
-    public static bool DrawVehicles() => PhysicsWorld.SetDebugDraw(DebugDraw.Vehicles);
+    public static bool DrawVehicles() => PhysicsWorld.SetDebugDraw(PhysicsDebugCategories.Vehicles);
 
-    public static bool DrawAll() => PhysicsWorld.SetDebugDraw(DebugDraw.All);
+    public static bool DrawAll() => PhysicsWorld.SetDebugDraw(PhysicsDebugCategories.All);
 
     // A 20 by 20 square at y = 0, its two triangles facing up, cooked from C# spans.
     public static ulong MakeGroundMesh()
