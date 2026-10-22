@@ -103,7 +103,8 @@ namespace Fenrir
          */
         Scheduler& AddSequentialSystem(SchedulePriority priority, SystemFunc system);
 
-        void Init(App& app);
+        /** @brief Runs one init phase's systems (PreInit, Init or PostInit), in the order added. */
+        void RunInitSystems(App& app, SchedulePriority priority);
         void RunSystems(App& app, SchedulePriority priority);
 
         /** @brief The worker threads parallel systems run on, which other engine work may share. */
