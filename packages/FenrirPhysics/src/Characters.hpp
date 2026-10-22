@@ -15,6 +15,7 @@
 #include "FenrirECS/TrackedComponents.hpp"
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Components.hpp"
+#include "InactiveTracker.hpp"
 
 namespace Fenrir
 {
@@ -97,7 +98,6 @@ namespace Fenrir::Detail
         void ApplyShape(const Entity& entity, CharacterRecord& record);
 
         EntityList* m_entities;
-        ILogger* m_logger;
         Backend::World* m_backend;
         Poses* m_poses;
 
@@ -105,8 +105,8 @@ namespace Fenrir::Detail
         // and moved in that order.
         TrackedComponents m_characterEntities;
         std::map<std::uint32_t, CharacterRecord> m_characters;
-        // CharacterBodies that cannot be characters now (beside a RigidBody, with no Collider, or with a shape a
-        // character cannot use): each is warned about once, when it becomes one.
-        std::set<std::uint32_t> m_inactiveCharacters;
+        // Inactive CharacterBodies: those that cannot be characters now (beside a RigidBody, with no Collider, or with
+        // a shape a character cannot use).
+        InactiveTracker m_inactive;
     };
 } // namespace Fenrir::Detail

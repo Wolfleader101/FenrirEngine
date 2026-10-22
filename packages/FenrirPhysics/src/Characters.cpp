@@ -62,8 +62,12 @@ namespace Fenrir::Detail
     } // namespace
 
     Characters::Characters(EntityList& entities, ILogger& logger, Backend::World& backend, Poses& poses)
-        : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_poses(&poses),
-          m_characterEntities(entities, ComponentType::Native<CharacterBody>())
+        : m_entities(&entities), m_backend(&backend), m_poses(&poses),
+          m_characterEntities(entities, ComponentType::Native<CharacterBody>()),
+          m_inactive(logger, [](std::uint32_t entity, const std::string& why) {
+              return "The CharacterBody of entity " + std::to_string(entity) + " is inactive: " + why +
+                     "; it is a character again once it can be";
+          })
     {
     }
 
@@ -94,20 +98,11 @@ namespace Fenrir::Detail
     {
         std::vector<std::uint32_t> entities;
         std::vector<Backend::CharacterDesc> descs;
-        std::erase_if(m_inactiveCharacters, [this](std::uint32_t id) { return !m_characterEntities.Contains(id); });
+        m_inactive.Keep(m_characterEntities.Entities());
         for (std::uint32_t id : m_characterEntities.Entities())
         {
             const Entity entity = m_entities->GetEntity(id);
-            const std::string why = WhyNoCharacter(entity, *m_backend);
-            if (why.empty())
-            {
-                m_inactiveCharacters.erase(id);
-            }
-            else if (m_inactiveCharacters.insert(id).second)
-            {
-                m_logger->Warn("The CharacterBody of entity " + std::to_string(id) + " is inactive: " + why +
-                               "; it is a character again once it can be");
-            }
+            m_inactive.Report(id, WhyNoCharacter(entity, *m_backend));
             if (m_characters.contains(id) || !ShouldBeCharacter(entity, *m_backend))
             {
                 continue;

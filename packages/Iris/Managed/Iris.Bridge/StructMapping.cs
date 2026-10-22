@@ -7,7 +7,9 @@ namespace Iris.Bridge;
 // The struct mapping a native host describes, and the check of it against the managed type. A struct is a first line
 // "TypeName|size", then one line per field in declaration order, "name|offset|kind|nestedTypeName" (nestedTypeName
 // is empty unless kind is Struct or Enum, and a nested type must be registered first); an inline array field has
-// six parts, "name|offset|InlineArray|elementNestedTypeName|elementKind|length". An enum is one line,
+// six parts, "name|offset|InlineArray|elementNestedTypeName|elementKind|length". A struct with no field lines is an
+// empty struct, one byte on both sides. A Pointer field is opaque: eight bytes copied unchanged, held by a managed
+// nint, nuint, long or ulong. An enum is one line,
 // "TypeName|size|underlyingKind". Any mismatch throws BridgeArgumentException, naming it. The result is the
 // StructRecord the codec uses. Nothing here knows about components: the nested types registered so far are given
 // as IRegisteredStructs.
@@ -64,18 +66,22 @@ internal static class StructMapping
         return -1;
     }
 
-    private static bool IsBlittableField(Type type) =>
-        PrimitiveKindOf(type) >= 0 || type.IsEnum || (type.IsValueType && !type.IsPrimitive && BlittableProblem(type) == null);
+    // The managed types an opaque pointer field can be: pointer-sized integers, or 64-bit ones.
+    private static bool IsPointerField(Type type) =>
+        type == typeof(IntPtr) || type == typeof(UIntPtr) || type == typeof(long) || type == typeof(ulong);
 
-    // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers, bool, char,
-    // enums, fixed-size arrays and other blittable structs, with sequential or explicit layout.
+    private static bool IsBlittableField(Type type) =>
+        PrimitiveKindOf(type) >= 0 || IsPointerField(type) || type.IsEnum || (type.IsValueType && !type.IsPrimitive && BlittableProblem(type) == null);
+
+    // Why a type cannot be copied byte for byte, or null if it can: a struct of sized numbers, nint, nuint, bool,
+    // char, enums, fixed-size arrays and other blittable structs, with sequential or explicit layout, or with no
+    // fields at all.
     internal static string? BlittableProblem(Type type)
     {
         if (!type.IsValueType || type.IsPrimitive || type.IsEnum || type.ContainsGenericParameters)
             return $"{type} is not a struct.";
         if (type.IsAutoLayout) return $"{type} has automatic layout, so its layout is not fixed.";
         FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-        if (fields.Length == 0) return $"{type} has no fields.";
         foreach (FieldInfo field in fields)
             if (!IsBlittableField(field.FieldType))
                 return $"{type} is not blittable: field '{field.Name}' has type {field.FieldType}.";
@@ -90,6 +96,7 @@ internal static class StructMapping
     {
         int primitive = PrimitiveKindOf(type);
         if (primitive >= 0) return primitive;
+        if (type == typeof(IntPtr) || type == typeof(UIntPtr)) return (int)ValueKind.Pointer;
         return type.IsEnum ? (int)ValueKind.Enum : (int)ValueKind.Struct;
     }
 
@@ -130,6 +137,7 @@ internal static class StructMapping
         (int)ValueKind.Struct => "a struct",
         (int)ValueKind.Enum => "an enum",
         (int)ValueKind.InlineArray => "a fixed-size array",
+        (int)ValueKind.Pointer => "a pointer",
         _ => ValueKinds.ToType(kind, allowVoid: false).Name
     };
 
@@ -141,6 +149,14 @@ internal static class StructMapping
         FieldInfo[] fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
         Array.Sort(fields, (left, right) => left.MetadataToken.CompareTo(right.MetadataToken));
         int managedSize = ManagedLayout.SizeOf(type);
+        // An empty struct is one byte on both sides, so a size mismatch here would hide the field that differs.
+        if (lines.Length == 1)
+        {
+            if (fields.Length > 0)
+                throw new BridgeArgumentException($"{type} has field '{fields[0].Name}' but the native struct declares no fields.");
+            if (nativeSize != 1)
+                throw new BridgeArgumentException($"The native struct {type} declares no fields but is {nativeSize} bytes; an empty struct is 1.");
+        }
         if (managedSize != nativeSize)
             throw new BridgeArgumentException($"{type} is {managedSize} bytes but the native struct is {nativeSize}.");
         if (lines.Length - 1 != fields.Length)
@@ -171,6 +187,12 @@ internal static class StructMapping
                 if (shape.Length != length)
                     throw new BridgeArgumentException($"Field '{field.Name}' of {type} holds {shape.Length} elements but the native array holds {length}.");
                 AddBoolOffsets(registered, bools, offset, shape.ElementKind, shape.ElementNested, length);
+                continue;
+            }
+            if ((ValueKind)kind == ValueKind.Pointer)
+            {
+                if (parts.Length != 4 || parts[3].Length != 0 || !IsPointerField(field.FieldType))
+                    throw new BridgeArgumentException($"Field '{field.Name}' of {type} is {field.FieldType}, which does not match the native field's type (a pointer, held as nint, nuint, long or ulong).");
                 continue;
             }
             if (parts.Length != 4 || shape.Kind != kind || !SameNested(registered, shape.Nested, kind, parts[3]))

@@ -1360,7 +1360,10 @@ namespace Fenrir::Backend
             VehicleProbe probe = VehicleProbe::Cylinder;
             BodyId body;
             // Its controller: a motorcycle's is a wheeled one that leans; a tracked vehicle's has no differentials.
-            VehicleType type = VehicleType::Wheeled;
+            // Each is fixed when the vehicle is made, as are whether it is powered and a motorcycle's lean limit.
+            VehicleController controller = VehicleController::Wheeled;
+            bool powered = true;
+            float maxLeanAngle = 0.0f;
             // A tracked vehicle's wheels, in wheel order, and its tracks' settings, left then right: a wheel's grip is
             // its track's.
             std::vector<TrackedWheel> trackedWheels;
@@ -1394,10 +1397,21 @@ namespace Fenrir::Backend
             else
             {
                 slot.tester = new JPH::VehicleCollisionTesterCastCylinder(
-                    layer, slot.type == VehicleType::Motorcycle ? 1.0f : 0.1f);
+                    layer, slot.controller == VehicleController::Motorcycle ? 1.0f : 0.1f);
             }
             slot.tester->SetBodyFilter(slot.filter.get());
             slot.constraint->SetVehicleCollisionTester(slot.tester);
+        }
+
+        // A vehicle made from `desc`, its constraint added to the system and its body woken. Never during a step.
+        VehicleSlot MakeVehicle(const VehicleDesc& desc);
+
+        // Takes a vehicle's constraint out of the system, waking its body. Never during a step.
+        void UnmakeVehicle(const VehicleSlot& slot)
+        {
+            system.RemoveStepListener(slot.constraint);
+            system.RemoveConstraint(slot.constraint);
+            Bodies().ActivateBody(ToJolt(slot.body));
         }
 
         // Counts or uncounts the joint in `joinedPairs`, giving a body a collision group when it enters its first
@@ -3215,21 +3229,20 @@ namespace Fenrir::Backend
 
         // A wheel for Jolt, as every kind's has it: the suspension down its steering axis, and the wheel turned by its
         // camber and toe.
-        void FillWheel(JPH::WheelSettings& out, const VehicleWheelDesc& desc)
+        void FillWheel(JPH::WheelSettings& out, const VehicleWheelDesc& wheel)
         {
-            const VehicleWheel& wheel = desc.settings;
-            const JPH::Vec3 axis = ToJolt(desc.steeringAxis).Normalized();
+            const JPH::Vec3 axis = ToJolt(wheel.steeringAxis).Normalized();
             out.mSteeringAxis = axis;
             out.mSuspensionDirection = -axis;
-            out.mWheelUp = ToJolt(desc.rest * Math::Vec3(0.0f, 1.0f, 0.0f)).Normalized();
-            out.mWheelForward = ToJolt(desc.rest * Math::Vec3(0.0f, 0.0f, -1.0f)).Normalized();
+            out.mWheelUp = ToJolt(wheel.rest * Math::Vec3(0.0f, 1.0f, 0.0f)).Normalized();
+            out.mWheelForward = ToJolt(wheel.rest * Math::Vec3(0.0f, 0.0f, -1.0f)).Normalized();
             const bool rigid = wheel.suspension.travel <= 0.0f || wheel.suspension.spring.frequency <= 0.0f;
             const float travel = rigid ? 0.0f : wheel.suspension.travel;
             // Jolt's hard point is a margin above the top of the travel: its bump stop engages only below its min
             // length, and a probe starting inside the ground finds it at length 0, so with no margin a bottomed-out
             // wheel never stops the chassis sinking.
             const float margin = wheel.radius;
-            out.mPosition = ToJolt(desc.position) + axis * (travel + margin);
+            out.mPosition = ToJolt(wheel.position) + axis * (travel + margin);
             out.mSuspensionMinLength = margin;
             out.mSuspensionMaxLength = travel + margin;
             out.mSuspensionPreloadLength = wheel.suspension.preload;
@@ -3242,10 +3255,9 @@ namespace Fenrir::Backend
         }
 
         // A wheeled vehicle's or a motorcycle's wheel: with its own inertia, steering, brakes and tyres.
-        void Fill(JPH::WheelSettingsWV& out, const VehicleWheelDesc& desc)
+        void Fill(JPH::WheelSettingsWV& out, const VehicleWheelDesc& wheel)
         {
-            FillWheel(out, desc);
-            const VehicleWheel& wheel = desc.settings;
+            FillWheel(out, wheel);
             out.mInertia = wheel.inertia;
             out.mAngularDamping = wheel.angularDamping;
             out.mMaxSteerAngle = wheel.maxSteerAngle;
@@ -3365,14 +3377,14 @@ namespace Fenrir::Backend
         // Calls `func` with the vehicle's controller as its own type, wheeled (a motorcycle's included) or tracked:
         // both have an engine and a gearbox.
         template <typename Constraint, typename Func>
-        void WithController(Constraint& constraint, VehicleType type, Func&& func)
+        void WithController(Constraint& constraint, VehicleController controller, Func&& func)
         {
             constexpr bool constant = std::is_const_v<Constraint>;
             using Tracked =
                 std::conditional_t<constant, const JPH::TrackedVehicleController, JPH::TrackedVehicleController>;
             using Wheeled =
                 std::conditional_t<constant, const JPH::WheeledVehicleController, JPH::WheeledVehicleController>;
-            if (type == VehicleType::Tracked)
+            if (controller == VehicleController::Tracked)
             {
                 func(static_cast<Tracked&>(*constraint.GetController()));
             }
@@ -3403,24 +3415,24 @@ namespace Fenrir::Backend
         }
     } // namespace
 
-    VehicleId World::CreateVehicle(const VehicleDesc& desc)
+    World::Impl::VehicleSlot World::Impl::MakeVehicle(const VehicleDesc& desc)
     {
-        Impl& impl = *m_impl;
-        const WheeledVehicle wheeled = DrivetrainOf(desc.kind);
-        const bool motorcycle = desc.kind.Is<MotorcycleVehicle>();
-        const bool tracked = desc.kind.Is<TrackedVehicle>();
+        const VehicleDriveDesc& drive = desc.drive;
+        const bool motorcycle = drive.controller == VehicleController::Motorcycle;
+        const bool tracked = drive.controller == VehicleController::Tracked;
         JPH::VehicleConstraintSettings settings;
         settings.mUp = vehicleUp;
         settings.mForward = vehicleForward;
         settings.mConstraintPriority = desc.priority;
         Fill(settings.mAntiRollBars, desc.antiRollBars);
         settings.mMaxPitchRollAngle = desc.maxTilt;
-        Impl::VehicleSlot slot;
-        slot.type = desc.kind.Type();
+        VehicleSlot slot;
+        slot.controller = drive.controller;
+        slot.powered = drive.powered;
+        slot.maxLeanAngle = drive.lean.maxAngle;
         if (tracked)
         {
-            const TrackedVehicle& kind = desc.kind.As<TrackedVehicle>();
-            slot.tracks = {kind.left, kind.right};
+            slot.tracks = {drive.leftTrack, drive.rightTrack};
         }
         // Each vehicle its own wheel settings: its wheels read them by reference.
         for (const VehicleWheelDesc& wheel : desc.wheels)
@@ -3428,11 +3440,10 @@ namespace Fenrir::Backend
             JPH::Ref<JPH::WheelSettings> made;
             if (tracked)
             {
-                const VehicleTrackSide side = wheel.settings.track;
                 auto* onTrack = new JPH::WheelSettingsTV();
-                Fill(*onTrack, wheel, slot.tracks[static_cast<std::size_t>(side)]);
+                Fill(*onTrack, wheel, slot.tracks[static_cast<std::size_t>(wheel.track)]);
                 made = onTrack;
-                slot.trackedWheels.push_back(TrackedWheel{.side = side, .z = wheel.position.z});
+                slot.trackedWheels.push_back(TrackedWheel{.side = wheel.track, .z = wheel.position.z});
             }
             else
             {
@@ -3446,8 +3457,8 @@ namespace Fenrir::Backend
         if (tracked)
         {
             auto* controller = new JPH::TrackedVehicleControllerSettings();
-            Fill(controller->mEngine, wheeled.engine);
-            Fill(controller->mTransmission, wheeled.transmission);
+            Fill(controller->mEngine, drive.engine);
+            Fill(controller->mTransmission, drive.transmission);
             for (const VehicleTrackSide side : trackSides)
             {
                 JPH::VehicleTrackSettings& track = Sides(controller->mTracks)[static_cast<std::size_t>(side)];
@@ -3462,44 +3473,43 @@ namespace Fenrir::Backend
             if (motorcycle)
             {
                 auto* bike = new JPH::MotorcycleControllerSettings();
-                bike->mMaxLeanAngle = desc.kind.As<MotorcycleVehicle>().lean.maxAngle;
+                bike->mMaxLeanAngle = drive.lean.maxAngle;
                 controller = bike;
             }
             else
             {
                 controller = new JPH::WheeledVehicleControllerSettings();
             }
-            Fill(controller->mEngine, wheeled.engine);
-            Fill(controller->mTransmission, wheeled.transmission);
-            // A trailer is the wheeled controller in neutral, ignoring game code's differentials. Jolt asserts on a
-            // controller with no differential driving a wheel, so it keeps the default ones, which neutral leaves
-            // undriven: Jolt's clutch carries nothing at a gear ratio of 0.
+            Fill(controller->mEngine, drive.engine);
+            Fill(controller->mTransmission, drive.transmission);
+            // An unpowered vehicle ignores game code's differentials. Jolt asserts on a controller with no differential
+            // driving a wheel, so it keeps the default ones, which its gearbox in neutral leaves undriven: Jolt's
+            // clutch carries nothing at a gear ratio of 0.
             Fill(controller->mDifferentials,
-                 desc.kind.Is<TrailerVehicle>() ? std::span<const VehicleDifferentialDesc>()
-                                                : std::span<const VehicleDifferentialDesc>(desc.differentials),
+                 drive.powered ? std::span<const VehicleDifferentialDesc>(desc.differentials)
+                               : std::span<const VehicleDifferentialDesc>(),
                  desc.wheels.size());
-            controller->mDifferentialLimitedSlipRatio = wheeled.limitedSlipRatio;
+            controller->mDifferentialLimitedSlipRatio = drive.limitedSlipRatio;
             settings.mController = controller;
         }
 
         slot.body = desc.body;
         slot.probe = desc.probe;
         {
-            JPH::BodyLockWrite lock(impl.system.GetBodyLockInterfaceNoLock(), ToJolt(desc.body));
+            JPH::BodyLockWrite lock(system.GetBodyLockInterfaceNoLock(), ToJolt(desc.body));
             JPH_ASSERT(lock.Succeeded());
             slot.constraint = new JPH::VehicleConstraint(lock.GetBody(), settings);
         }
         if (motorcycle)
         {
-            Fill(static_cast<JPH::MotorcycleController&>(*slot.constraint->GetController()),
-                 desc.kind.As<MotorcycleVehicle>().lean);
+            Fill(static_cast<JPH::MotorcycleController&>(*slot.constraint->GetController()), drive.lean);
         }
         if (desc.carried)
         {
-            // A trailer has no engine or gear to carry: it stays at idle in neutral.
-            if (!desc.kind.Is<TrailerVehicle>())
+            // An unpowered vehicle has no engine or gear to carry: it stays at idle in neutral.
+            if (drive.powered)
             {
-                WithController(*slot.constraint, slot.type, [&desc](auto& made) {
+                WithController(*slot.constraint, slot.controller, [&desc](auto& made) {
                     made.GetEngine().SetCurrentRPM(desc.carried->engineRpm);
                     made.GetTransmission().Set(desc.carried->gear, 1.0f - desc.carried->clutch);
                 });
@@ -3523,14 +3533,20 @@ namespace Fenrir::Backend
                 }
             }
         }
-        slot.filter = std::make_unique<Impl::ProbeFilter>(ToJolt(desc.body), impl.characterListener);
-        impl.Retest(slot);
+        slot.filter = std::make_unique<ProbeFilter>(ToJolt(desc.body), characterListener);
+        Retest(slot);
 
-        impl.system.AddConstraint(slot.constraint);
-        impl.system.AddStepListener(slot.constraint);
+        system.AddConstraint(slot.constraint);
+        system.AddStepListener(slot.constraint);
         // Jolt wakes nothing when a constraint is added.
-        impl.Bodies().ActivateBody(ToJolt(desc.body));
+        Bodies().ActivateBody(ToJolt(desc.body));
+        return slot;
+    }
 
+    VehicleId World::CreateVehicle(const VehicleDesc& desc)
+    {
+        Impl& impl = *m_impl;
+        Impl::VehicleSlot slot = impl.MakeVehicle(desc);
         if (impl.freeVehicles.empty())
         {
             impl.vehicles.push_back(std::move(slot));
@@ -3545,70 +3561,131 @@ namespace Fenrir::Backend
     void World::DestroyVehicle(VehicleId id)
     {
         Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        m_impl->system.RemoveStepListener(slot.constraint);
-        m_impl->system.RemoveConstraint(slot.constraint);
-        m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+        m_impl->UnmakeVehicle(slot);
         slot = Impl::VehicleSlot{};
         m_impl->freeVehicles.push_back(id.value);
     }
 
-    void World::UpdateVehicle(VehicleId id, const VehicleKind& kind)
+    bool World::UpdateVehicle(VehicleId id, const VehicleDesc& desc)
     {
-        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        const WheeledVehicle wheeled = DrivetrainOf(kind);
+        Impl& impl = *m_impl;
+        Impl::VehicleSlot& slot = impl.vehicles[id.value];
+        const VehicleDriveDesc& drive = desc.drive;
+        // Jolt fixes a vehicle's controller and a motorcycle's lean limit when it is made, and an unpowered vehicle is
+        // made with the default differentials: one changing any of them is made again in its place, carrying on from
+        // where it reads, a new wheel still.
+        if (drive.controller != slot.controller || drive.powered != slot.powered ||
+            (drive.controller == VehicleController::Motorcycle &&
+             std::bit_cast<std::uint32_t>(drive.lean.maxAngle) != std::bit_cast<std::uint32_t>(slot.maxLeanAngle)))
+        {
+            const VehicleRead read = ReadVehicle(id);
+            VehicleDesc remade = desc;
+            remade.carried = VehicleCarry{.engineRpm = read.state.engineRpm,
+                                          .gear = std::min(read.state.gear, drive.transmission.gearCount),
+                                          .clutch = read.state.clutch,
+                                          .wheels = {}};
+            for (const VehicleWheelRead& wheel : read.wheels)
+            {
+                remade.carried->wheels.push_back(
+                    VehicleWheelSpin{.angularVelocity = wheel.angularVelocity, .spinAngle = wheel.spinAngle});
+            }
+            impl.UnmakeVehicle(slot);
+            slot = Impl::VehicleSlot{};
+            slot = impl.MakeVehicle(remade);
+            return true;
+        }
+
         // Jolt's engine and gearbox are their own settings, read every step.
-        WithController(*slot.constraint, slot.type, [&wheeled](auto& controller) {
+        WithController(*slot.constraint, slot.controller, [&drive](auto& controller) {
             JPH::VehicleEngine& engine = controller.GetEngine();
-            Fill(engine, wheeled.engine);
+            Fill(engine, drive.engine);
             engine.ClampRPM();
             JPH::VehicleTransmission& transmission = controller.GetTransmission();
             if (transmission.mMode == JPH::ETransmissionMode::Auto &&
-                wheeled.transmission.mode == TransmissionMode::Manual)
+                drive.transmission.mode == TransmissionMode::Manual)
             {
                 FinishShift(transmission);
             }
-            Fill(transmission, wheeled.transmission);
+            Fill(transmission, drive.transmission);
             // Fewer gears than the one engaged: the top one.
-            if (transmission.GetCurrentGear() > wheeled.transmission.gearCount)
+            if (transmission.GetCurrentGear() > drive.transmission.gearCount)
             {
-                transmission.Set(wheeled.transmission.gearCount, transmission.GetClutchFriction());
+                transmission.Set(drive.transmission.gearCount, transmission.GetClutchFriction());
             }
         });
-        if (kind.Is<TrackedVehicle>())
+        const bool tracked = slot.controller == VehicleController::Tracked;
+        if (tracked)
         {
             // A track's own settings in place, keeping its wheels and its spin; its grip is its wheels'.
-            const TrackedVehicle& tracked = kind.As<TrackedVehicle>();
-            slot.tracks = {tracked.left, tracked.right};
+            slot.tracks = {drive.leftTrack, drive.rightTrack};
             auto& controller = static_cast<JPH::TrackedVehicleController&>(*slot.constraint->GetController());
             for (const VehicleTrackSide side : trackSides)
             {
                 Fill(Sides(controller.GetTracks())[static_cast<std::size_t>(side)],
                      slot.tracks[static_cast<std::size_t>(side)]);
             }
-            for (std::size_t i = 0; i < slot.wheels.size(); ++i)
-            {
-                const VehicleTrack& track = slot.tracks[static_cast<std::size_t>(slot.trackedWheels[i].side)];
-                auto& wheel = static_cast<JPH::WheelSettingsTV&>(*slot.wheels[i]);
-                wheel.mLongitudinalFriction = track.longitudinalFriction;
-                wheel.mLateralFriction = track.lateralFriction;
-            }
         }
         else
         {
             auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
-            controller.SetDifferentialLimitedSlipRatio(wheeled.limitedSlipRatio);
-            if (kind.Is<MotorcycleVehicle>())
+            controller.SetDifferentialLimitedSlipRatio(drive.limitedSlipRatio);
+            if (slot.controller == VehicleController::Motorcycle)
             {
-                Fill(static_cast<JPH::MotorcycleController&>(controller), kind.As<MotorcycleVehicle>().lean);
+                Fill(static_cast<JPH::MotorcycleController&>(controller), drive.lean);
             }
         }
-        m_impl->Bodies().ActivateBody(ToJolt(slot.body));
+
+        // The wheels in place, their spin and suspension carrying on. Jolt reads them by reference, and its checks ran
+        // only when each was made: physics checked these values.
+        bool resized = false;
+        for (std::size_t i = 0; i < slot.wheels.size(); ++i)
+        {
+            const VehicleWheelDesc& wheel = desc.wheels[i];
+            resized = resized || std::bit_cast<std::uint32_t>(slot.wheels[i]->mRadius) !=
+                                     std::bit_cast<std::uint32_t>(wheel.radius);
+            if (tracked)
+            {
+                Fill(static_cast<JPH::WheelSettingsTV&>(*slot.wheels[i]), wheel,
+                     slot.tracks[static_cast<std::size_t>(wheel.track)]);
+                slot.trackedWheels[i] = TrackedWheel{.side = wheel.track, .z = wheel.position.z};
+            }
+            else
+            {
+                Fill(static_cast<JPH::WheelSettingsWV&>(*slot.wheels[i]), wheel);
+            }
+        }
+        // A wheel moved, or moved to the other track, can change both tracks' wheels and driven wheels: Jolt reads
+        // which wheels each track has every step.
+        if (tracked)
+        {
+            auto& controller = static_cast<JPH::TrackedVehicleController&>(*slot.constraint->GetController());
+            for (const VehicleTrackSide side : trackSides)
+            {
+                Assign(Sides(controller.GetTracks())[static_cast<std::size_t>(side)], side, slot.trackedWheels);
+            }
+        }
+        // A new tester only for a new probe, or a sphere sized from wheels that changed size.
+        if (desc.probe != slot.probe || (resized && slot.probe == VehicleProbe::Sphere))
+        {
+            slot.probe = desc.probe;
+            impl.Retest(slot);
+        }
+        slot.constraint->SetMaxPitchRollAngle(desc.maxTilt);
+        // An unpowered vehicle keeps the default differentials, undriven in neutral. A tracked vehicle's tracks are its
+        // drive.
+        if (slot.powered && !tracked)
+        {
+            auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
+            Fill(controller.GetDifferentials(), desc.differentials, slot.constraint->GetWheels().size());
+        }
+        Fill(slot.constraint->GetAntiRollBars(), desc.antiRollBars);
+        return false;
     }
 
     void World::SetVehicleInput(VehicleId id, const VehicleInput& input, bool wake)
     {
         const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        if (slot.type == VehicleType::Tracked)
+        if (slot.controller == VehicleController::Tracked)
         {
             auto& controller = static_cast<JPH::TrackedVehicleController&>(*slot.constraint->GetController());
             controller.SetDriverInput(input.forward, TrackRatio(input.leftTrack), TrackRatio(input.rightTrack),
@@ -3621,7 +3698,7 @@ namespace Fenrir::Backend
             controller.SetDriverInput(input.forward, input.steer, input.brake, input.handbrake);
         }
         // In Manual the gear and clutch are game code's; Jolt's clutch is the friction it gives, 1 engaged.
-        WithController(*slot.constraint, slot.type, [&input](auto& controller) {
+        WithController(*slot.constraint, slot.controller, [&input](auto& controller) {
             JPH::VehicleTransmission& transmission = controller.GetTransmission();
             if (transmission.mMode == JPH::ETransmissionMode::Manual)
             {
@@ -3633,24 +3710,6 @@ namespace Fenrir::Backend
         {
             m_impl->Bodies().ActivateBody(ToJolt(slot.body));
         }
-    }
-
-    void World::SetVehicleDifferentials(VehicleId id, std::span<const VehicleDifferentialDesc> differentials)
-    {
-        const Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        // A trailer ignores them: it keeps the default ones, undriven in neutral. A tracked vehicle's tracks are its
-        // drive.
-        if (slot.type == VehicleType::Trailer || slot.type == VehicleType::Tracked)
-        {
-            return;
-        }
-        auto& controller = static_cast<JPH::WheeledVehicleController&>(*slot.constraint->GetController());
-        Fill(controller.GetDifferentials(), differentials, slot.constraint->GetWheels().size());
-    }
-
-    void World::SetVehicleAntiRollBars(VehicleId id, std::span<const VehicleAntiRollBarDesc> antiRollBars)
-    {
-        Fill(m_impl->vehicles[id.value].constraint->GetAntiRollBars(), antiRollBars);
     }
 
     VehicleRead World::ReadVehicle(VehicleId id) const
@@ -3666,24 +3725,24 @@ namespace Fenrir::Backend
             JPH_ASSERT(lock.Succeeded());
             const JPH::Body& body = lock.GetBody();
             read.state.forwardSpeed = body.GetLinearVelocity().Dot(body.GetRotation() * vehicleForward);
-            if (slot.type == VehicleType::Motorcycle)
+            if (slot.controller == VehicleController::Motorcycle)
             {
                 // + right: a bike leaning right has its right side down.
                 const JPH::Vec3 right = body.GetRotation() * JPH::Vec3::sAxisX();
                 read.state.leanAngle = -std::asin(std::clamp(right.Dot(constraint.GetWorldUp()), -1.0f, 1.0f));
             }
         }
-        // A trailer's idling engine and neutral gearbox are the backend's, not its: its fields stay 0.
-        if (slot.type != VehicleType::Trailer)
+        // An unpowered vehicle's idling engine and neutral gearbox are the backend's, not its: its fields stay 0.
+        if (slot.powered)
         {
-            WithController(constraint, slot.type, [&read](const auto& controller) {
+            WithController(constraint, slot.controller, [&read](const auto& controller) {
                 read.state.engineRpm = controller.GetEngine().GetCurrentRPM();
                 read.state.gear = controller.GetTransmission().GetCurrentGear();
                 read.state.clutch = 1.0f - controller.GetTransmission().GetClutchFriction();
                 read.state.shifting = controller.GetTransmission().IsSwitchingGear();
             });
         }
-        const bool tracked = slot.type == VehicleType::Tracked;
+        const bool tracked = slot.controller == VehicleController::Tracked;
         if (tracked)
         {
             // A track's speed is its driven wheel's rim speed.
@@ -3737,50 +3796,6 @@ namespace Fenrir::Backend
         return read;
     }
 
-    void World::UpdateVehicleWheel(VehicleId id, std::size_t wheel, const VehicleWheelDesc& desc)
-    {
-        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        // Jolt reads it by reference, and its checks ran only when the wheel was made: physics checked these values.
-        if (slot.type == VehicleType::Tracked)
-        {
-            const VehicleTrackSide side = desc.settings.track;
-            Fill(static_cast<JPH::WheelSettingsTV&>(*slot.wheels[wheel]), desc,
-                 slot.tracks[static_cast<std::size_t>(side)]);
-            // A wheel moved, or moved to the other track, can change both tracks' wheels and driven wheels: Jolt reads
-            // which wheels each track has every step.
-            slot.trackedWheels[wheel] = TrackedWheel{.side = side, .z = desc.position.z};
-            auto& controller = static_cast<JPH::TrackedVehicleController&>(*slot.constraint->GetController());
-            for (const VehicleTrackSide each : trackSides)
-            {
-                Assign(Sides(controller.GetTracks())[static_cast<std::size_t>(each)], each, slot.trackedWheels);
-            }
-        }
-        else
-        {
-            Fill(static_cast<JPH::WheelSettingsWV&>(*slot.wheels[wheel]), desc);
-        }
-        // The sphere is sized from the wheels.
-        if (slot.probe == VehicleProbe::Sphere)
-        {
-            m_impl->Retest(slot);
-        }
-    }
-
-    void World::SetVehicleProbe(VehicleId id, VehicleProbe probe)
-    {
-        Impl::VehicleSlot& slot = m_impl->vehicles[id.value];
-        if (slot.probe != probe)
-        {
-            slot.probe = probe;
-            m_impl->Retest(slot);
-        }
-    }
-
-    void World::SetVehicleMaxTilt(VehicleId id, float maxTilt)
-    {
-        m_impl->vehicles[id.value].constraint->SetMaxPitchRollAngle(maxTilt);
-    }
-
     void World::Step(float dt, int collisionSteps)
     {
         JPH::BodyIDVector awake;
@@ -3794,7 +3809,7 @@ namespace Fenrir::Backend
         m_impl->CutMotorsAtLimits(dt);
         for (Impl::VehicleSlot& slot : m_impl->vehicles)
         {
-            if (slot.constraint != nullptr && slot.type == VehicleType::Motorcycle)
+            if (slot.constraint != nullptr && slot.controller == VehicleController::Motorcycle)
             {
                 CapLeanDamping(static_cast<JPH::MotorcycleController&>(*slot.constraint->GetController()),
                                *slot.constraint->GetVehicleBody(), dt / static_cast<float>(collisionSteps));
@@ -3814,7 +3829,7 @@ namespace Fenrir::Backend
                     wheel->SetAngularVelocity(0.0f);
                 }
                 // A tracked vehicle's wheels turn with their tracks.
-                if (slot.type == VehicleType::Tracked)
+                if (slot.controller == VehicleController::Tracked)
                 {
                     auto& controller = static_cast<JPH::TrackedVehicleController&>(*slot.constraint->GetController());
                     for (JPH::VehicleTrack& track : controller.GetTracks())

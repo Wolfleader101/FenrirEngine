@@ -1,0 +1,11 @@
+# The fixture's selection: the headers to read, relative to this file, and each shared type's role.
+headers = ["Fixture.hpp"]
+
+[types]
+"Fixture::Body" = "component"
+"Fixture::Collider" = "component"
+"Fixture::Touched" = "event"
+"Fixture::Hit" = "shared-struct"
+"Fixture::Vec3" = "bound-type"
+"Fixture::Quat" = "bound-type"
+"Fixture::Handle" = "bound-type"

@@ -48,7 +48,7 @@ One load of a component, identified by its token. Loading the same assembly agai
 The C++ function type that names a managed method, such as `std::int32_t(std::int32_t, std::int32_t)` for `int Add(int, int)`. Lookups match it exactly. The C++ types decide the managed types, and an unsupported type does not compile.
 
 **Mapped struct**
-A C++ struct with a `StructMapping` that mirrors a managed blittable struct field by field. The mapping is validated against the managed type the first time a component uses it.
+A C++ struct with a `StructMapping` that mirrors a managed blittable struct field by field. The mapping is validated against the managed type the first time a component uses it. A mapping is written by hand, or generated from an *API description* together with the managed struct it mirrors.
 
 **Object**
 A managed object that native code owns through an `Iris::Object`. While the `Object` exists, the managed object is rooted and its component can't be released.
@@ -140,19 +140,39 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Scripting extension**
-What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components and C++ events, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension.
+What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, C++ events and shared structs, its extension state, and the shared assemblies that are its C# contract. FenrirScripting knows no package beyond its extension. The engine's own scripting API is the *built-in extension*, on the same seam.
 *Avoid:* plugin, module (*module* is the review vocabulary, and the Iris glossary avoids it for Iris components).
+
+**Extension state**
+What a scripting extension carries for its native functions to work on: one value of a type the extension names, handed to each of its native functions that asks for it. It is the only way a native function reaches anything of its package beyond the call context.
+*Avoid:* owner, global, user data.
+
+**Shared struct**
+Plain data a native function takes or returns by pointer that is neither a component nor an event (a query filter, a hit). It is mirrored in C# like a component and checked against its mapping when a script assembly loads.
+*Avoid:* query mirror, parameter struct.
+
+**API description**
+The language-neutral record of the plain-data types a package shares with any binding, generated from the package's C++ headers and committed beside them: each type's fields, their offsets, kinds, defaults and docs, its enums and tagged unions. A binding's generator reads the description, never the headers. The package's headers are the one place a shared type is described by hand.
+*Avoid:* schema, IDL, manifest, interop definition.
+
+**Bound type**
+A type the API description records by layout only, because every binding already has its own (a vector, a quaternion, a transform). A binding's own configuration says which of its types stands for it.
+*Avoid:* primitive, built-in type.
+
+**Binding**
+Everything that lets one language use the engine: the generated mirrors of the engine's shared types, the glue that calls the engine, and the language's own runtime hosting. C# scripting (FenrirScripting and the packages' scripting extensions, over Iris) is the engine's first binding; the engine itself knows none of them.
+*Avoid:* wrapper, scripting language (a binding may be no scripting at all).
 
 **Tagged union**
 A value that holds exactly one of several kinds, with a tag saying which one (a collision shape, a joint kind, a vehicle kind). In C# it is a struct with one view per kind, and the view throws if the value holds another kind. The author writes the tag and the storage; FenrirScripting's `[TaggedUnion]` generator writes the rest.
 *Avoid:* variant, sum type, discriminated union (a proposed C# language feature, not this).
 
 **Native function**
-A C++ function that C# calls, declared once on each side and named by the full name of the C# method that calls it (`Namespace.Type.Method`). In C++ its first parameter is the call context; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
-*Avoid:* binding, internal call (the Iris-level term), engine API.
+A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); its C# declaration and its registration are generated from it. In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
+*Avoid:* binding (that is the whole of what a language gets), internal call (the Iris-level term), engine API.
 
 **Call context**
-What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities. A native function may read and write component data through it, but makes no structural changes.
+What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities. A native function may read and write component data through it, but makes no structural changes. It carries nothing of any extension: that is the extension state.
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.

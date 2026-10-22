@@ -37,6 +37,27 @@ public struct Packed
     [FieldOffset(4)] public int High;
 }
 
+// An opaque pointer: native code keeps an address in Owner, and managed code only carries it.
+public struct Linked
+{
+    public uint Value;
+    public uint Reserved;
+    public ulong Owner;
+}
+
+// Wrong on purpose for a native pointer: the same size, but only four bytes where the pointer is.
+[StructLayout(LayoutKind.Explicit, Size = 16)]
+public struct NarrowLinked
+{
+    [FieldOffset(0)] public uint Value;
+    [FieldOffset(8)] public uint Owner;
+}
+
+// An empty struct: one byte, as in C++, and no fields.
+public struct Empty
+{
+}
+
 public static class Structs
 {
     public static Vec3 Add(Vec3 left, Vec3 right) => new() { X = left.X + right.X, Y = left.Y + right.Y, Z = left.Z + right.Z };
@@ -52,6 +73,10 @@ public static class Structs
     public static WithBool Flip(WithBool value) => new() { Flag = !value.Flag, Value = value.Value };
     public static int Length(WithText value) => value.Name?.Length ?? 0;
     public static int Mixed(int first, Vec3 second, double third) => first + (int)second.X + (int)third;
+    public static Linked Bump(Linked value) => new() { Value = value.Value + 1, Reserved = value.Reserved, Owner = value.Owner };
+    public static ulong OwnerOf(Linked value) => value.Owner;
+    public static Linked Adopt(ulong owner) => new() { Owner = owner };
+    public static Empty Same(Empty value) => value;
 }
 
 public class Body

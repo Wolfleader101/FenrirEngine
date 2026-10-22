@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Iris VERSION 0.2.0 LANGUAGES CXX)
+project(Iris VERSION 0.3.0 LANGUAGES CXX)
 
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     set(iris_is_top_level ON)

@@ -21,6 +21,7 @@
 #include <system_error>
 #include <thread>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #if defined(_WIN32)
@@ -108,14 +109,18 @@ namespace Fenrir
         ILogger* logger = nullptr;
         Detail::ComponentRegistry components;
         Detail::ChangeBuffer changes;
-        Detail::EngineContext context;
+        // The built-in extension's state. While it is the active context, a Scripting is running for every extension's
+        // native functions.
+        std::shared_ptr<Detail::EngineContext> context = std::make_shared<Detail::EngineContext>();
         bool contextActive = false;
+        // Every extension's extension state, kept alive as long as the native functions that receive it can be called.
+        std::vector<std::shared_ptr<void>> extensionStates;
 
         // Scripting is live when the engine context points at this state and an App is attached: only then can scripts
         // act on the scene, and only then do changes and reloads mean anything.
         [[nodiscard]] bool IsLive() const noexcept
         {
-            return contextActive && context.app != nullptr;
+            return contextActive && context->app != nullptr;
         }
         std::unique_ptr<Iris::Host> host;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
@@ -264,7 +269,7 @@ namespace Fenrir
                 }
                 if (IsLive())
                 {
-                    Detail::DropScriptData(*context.app, owned);
+                    Detail::DropScriptData(*context->app, owned);
                 }
                 if (host != nullptr && generations.PendingUnloadCount() != 0)
                 {
@@ -282,7 +287,7 @@ namespace Fenrir
             }
             if (contextActive)
             {
-                Detail::DeactivateEngineContext(&context);
+                Detail::DeactivateEngineContext(context.get());
                 contextActive = false;
             }
             const std::lock_guard<std::mutex> lock(mutex);
@@ -399,7 +404,7 @@ namespace Fenrir
         {
             return {};
         }
-        return {m_state->phaseCalls, m_state->context.queryCalls, m_state->changes.Size()};
+        return {m_state->phaseCalls, m_state->context->queryCalls, m_state->changes.Size()};
     }
 
     Scripting::ChangeSummary Scripting::ApplyChanges()
@@ -408,7 +413,7 @@ namespace Fenrir
         {
             return {};
         }
-        const auto result = m_state->changes.Apply(*m_state->context.app, m_state->components);
+        const auto result = m_state->changes.Apply(*m_state->context->app, m_state->components);
         return {result.applied, result.skipped};
     }
 
@@ -416,7 +421,7 @@ namespace Fenrir
     {
         if (m_state && m_state->IsLive())
         {
-            m_state->changes.Discard(m_state->context.app->GetActiveScene().GetEntityList());
+            m_state->changes.Discard(m_state->context->app->GetActiveScene().GetEntityList());
         }
     }
 
@@ -502,6 +507,23 @@ namespace Fenrir
         std::filesystem::path contract;
         Detail::GenerationLifecycle::Settings settings;
 
+        // Why `function` cannot be listed by `extension`: it takes an extension state the extension does not carry, or
+        // one of another type. Nothing for a stateless function.
+        const auto checkState = [](const NativeFunction& function,
+                                   const ScriptingExtension& extension) -> std::optional<StartupFailure> {
+            const auto& wanted = function.StateType();
+            const auto& carried = extension.m_stateType;
+            if (!wanted.has_value() || wanted == carried)
+            {
+                return std::nullopt;
+            }
+            const std::string start = "the native function '" + function.Name() + "' of extension '" + extension.name +
+                                      "' takes an extension state of type '" + wanted->name() + "', but the extension ";
+            return StartupFailure{carried.has_value() ? start + "carries one of type '" + carried->name() + "'"
+                                                      : start + "carries none",
+                                  {}};
+        };
+
         // Starting is a list of stages, run in order, and the first to fail ends it: one place reports why, gives
         // everything back and returns a Scripting without scripts. The order matters where the comments say so.
         const std::vector<StartupStage> stages = {
@@ -531,22 +553,25 @@ namespace Fenrir
                 // The engine's own API is the first extension: its native functions, components and contract are
                 // declared, checked and registered like any package's. Being first, its components take their names
                 // before anyone else's, and its contract is shared before any other.
-                config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(contract));
+                config.extensions.insert(config.extensions.begin(), Detail::BuiltInExtension(contract, state->context));
                 return std::nullopt;
             },
-            // The App the native functions act on, and every extension's components and events.
+            // The App the native functions act on, and every extension's components, events and shared structs.
             [&]() -> std::optional<StartupFailure> {
-                state->context.app = &app;
-                state->context.call = Detail::CallContextAccess::Make(app, state->context);
-                state->context.components = &state->components;
-                state->context.changes = &state->changes;
-                // Every extension's components and events, in order, by the same rules.
+                state->context->app = &app;
+                state->context->call = CallContext(app);
+                state->context->components = &state->components;
+                state->context->changes = &state->changes;
+                // Every extension's components, events and shared structs, in order, by the same rules. A name names
+                // one of them, whatever its kind, across every extension.
+                std::unordered_set<std::string> names;
                 for (auto& extension : config.extensions)
                 {
                     const std::string source = "extension '" + extension.name + "'";
                     for (auto& registration : extension.components)
                     {
-                        if (state->components.Add(std::move(registration)) < 0)
+                        if (!names.insert(registration.name).second ||
+                            state->components.Add(std::move(registration)) < 0)
                         {
                             return StartupFailure{"a component in " + source + " has an empty or duplicate name", {}};
                         }
@@ -559,15 +584,26 @@ namespace Fenrir
                                                       " names a queue the app already has under another type",
                                                   {}};
                         }
-                        if (state->components.AddEvent(std::move(registration)) < 0)
+                        if (!names.insert(registration.name).second ||
+                            state->components.AddEvent(std::move(registration)) < 0)
                         {
                             return StartupFailure{"an event in " + source + " has an empty or duplicate name", {}};
+                        }
+                    }
+                    for (auto& registration : extension.sharedStructs)
+                    {
+                        if (!names.insert(registration.name).second ||
+                            !state->components.AddSharedStruct(std::move(registration)))
+                        {
+                            return StartupFailure{"a shared struct in " + source + " has an empty or duplicate name",
+                                                  {}};
                         }
                     }
                 }
                 return std::nullopt;
             },
-            // Every extension's native functions are named Namespace.Type.Method, and no name is declared twice.
+            // Every extension's native functions are named Namespace.Type.Method, no name is declared twice, and each
+            // one that takes an extension state is listed by an extension carrying a state of its type.
             [&]() -> std::optional<StartupFailure> {
                 std::unordered_map<std::string, std::string> declaredBy;
                 for (const auto& extension : config.extensions)
@@ -579,6 +615,10 @@ namespace Fenrir
                             return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
                                                       extension.name + "' is not named Namespace.Type.Method",
                                                   {}};
+                        }
+                        if (auto failure = checkState(function, extension))
+                        {
+                            return failure;
                         }
                         const auto [first, added] = declaredBy.emplace(function.Name(), extension.name);
                         if (!added)
@@ -597,7 +637,7 @@ namespace Fenrir
             },
             // Only one Scripting is active in a process, and the native functions are registered before .NET starts.
             [&]() -> std::optional<StartupFailure> {
-                if (!Detail::ActivateEngineContext(&state->context))
+                if (!Detail::ActivateEngineContext(state->context.get()))
                 {
                     return StartupFailure{"another Scripting is already active in this process", {}};
                 }
@@ -605,9 +645,14 @@ namespace Fenrir
                 // Before the host shares the extensions' contracts: sharing binds their fields to these.
                 for (const auto& extension : config.extensions)
                 {
+                    if (extension.m_state != nullptr)
+                    {
+                        state->extensionStates.push_back(extension.m_state);
+                    }
                     for (const auto& function : extension.functions)
                     {
-                        if (const auto registered = function.Register(); !registered.Succeeded())
+                        // A stateless function ignores the state; checkState made sure a stateful one gets its type.
+                        if (const auto registered = function.Register(extension.m_state.get()); !registered.Succeeded())
                         {
                             return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
                                                       extension.name + "' could not be registered",
@@ -680,11 +725,11 @@ namespace Fenrir
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
                 hooks.reconcile = [self](const Iris::Component& loaded) {
-                    return Detail::Reconcile(self->context, self->components, loaded, self->owned);
+                    return Detail::Reconcile(*self->context, self->components, loaded, self->owned);
                 };
                 hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
                 hooks.stop = [self] { self->StopSystems(); };
-                hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context.app, self->components); };
+                hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context->app, self->components); };
                 const bool hotReload = settings.hotReload;
                 state->generations.Configure(state->host.get(), &logger, std::move(settings), std::move(hooks));
 
