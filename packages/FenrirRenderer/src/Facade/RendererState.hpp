@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <optional>
+#include <set>
+#include <utility>
 
 #include "Core/RendererCore.hpp"
 #include "Core/SceneRenderer.hpp"
@@ -97,6 +99,10 @@ namespace Fenrir::Detail
         StaleHandleLog fallbackMaterials;
         bool loggedNoCamera = false;
         bool loggedLights = false;
+        /** @brief Cameras that draw nothing, by entity id and why. */
+        std::set<std::pair<std::uint32_t, std::uint8_t>> loggedCameras;
+        /** @brief Cameras of equal order into one target, by their entity ids. */
+        std::set<std::pair<std::uint32_t, std::uint32_t>> loggedTies;
         /** @} */
 
         RendererState() = default;

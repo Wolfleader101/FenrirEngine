@@ -98,13 +98,16 @@ namespace FenrirDemo
         std::string appKeyHelp;
         /** @brief The ordered scene list; PageDown and PageUp step through it, wrapping. */
         std::vector<DemoScene> scenes;
+        /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
+        std::uint32_t msaa = 1;
         /** @brief The smoke-run switches; DemoScaffold reads them from the environment unless given. */
         std::optional<DemoRunOptions> run;
     };
 
     /**
-     * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray from the camera through
-     * the clicked point. Renderer ticket 14 makes it from ScreenPointToRay.
+     * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray, from
+     * Renderer::ScreenPointToRay, from the camera drawn at the clicked point (Renderer::CameraAt) through it. A click
+     * where no camera draws sends nothing.
      */
     struct DemoSceneClickEvent
     {

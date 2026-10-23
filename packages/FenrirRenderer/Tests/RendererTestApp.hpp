@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <memory>
 #include <span>
 #include <string>
@@ -21,6 +22,7 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirShaders/SampledPicture.hpp"
 #include "RecordingLogger.hpp"
 #include "RendererProbe.hpp"
 
@@ -148,6 +150,62 @@ namespace RendererTest
         return labels;
     }
 
+    /** @brief One pass the device received: how it began, and the first viewport, last pipeline and groups set in it.
+     */
+    struct PassRecord
+    {
+        Fenrir::Graphics::PassDesc pass;
+        Fenrir::Graphics::PixelRect viewport;
+        Fenrir::Graphics::PipelineHandle pipeline;
+        std::array<Fenrir::Graphics::BindingGroupHandle, 4> groups{};
+    };
+
+    /** @brief Every pass the device received, in order. */
+    inline std::vector<PassRecord> PassRecordsIn(const std::vector<Fenrir::Graphics::CommandList>& lists)
+    {
+        using namespace Fenrir::Graphics;
+        std::vector<PassRecord> passes;
+        for (const CommandList& list : lists)
+        {
+            bool viewportSet = false;
+            for (const Command& command : list.commands)
+            {
+                if (const auto* begin = std::get_if<CmdBeginPass>(&command))
+                {
+                    passes.push_back({begin->pass, {}, {}, {}});
+                    viewportSet = false;
+                }
+                else if (passes.empty())
+                {
+                    continue;
+                }
+                else if (const auto* viewport = std::get_if<CmdSetViewport>(&command); viewport && !viewportSet)
+                {
+                    passes.back().viewport = viewport->rect;
+                    viewportSet = true;
+                }
+                else if (const auto* pipeline = std::get_if<CmdSetPipeline>(&command))
+                {
+                    passes.back().pipeline = pipeline->pipeline;
+                }
+                else if (const auto* group = std::get_if<CmdSetBindingGroup>(&command))
+                {
+                    passes.back().groups.at(group->set) = group->group;
+                }
+            }
+        }
+        return passes;
+    }
+
+    /** @brief The passes labelled `label` among `passes`, in order. */
+    inline std::vector<PassRecord> Labelled(const std::vector<PassRecord>& passes, std::string_view label)
+    {
+        std::vector<PassRecord> found;
+        std::copy_if(passes.begin(), passes.end(), std::back_inserter(found),
+                     [&](const PassRecord& p) { return p.pass.label == label; });
+        return found;
+    }
+
     /** @brief How many of `messages` contain `text`. */
     inline std::size_t CountContaining(const std::vector<std::string>& messages, std::string_view text)
     {
@@ -215,6 +273,34 @@ namespace RendererTest
             return Store().CreateMaterial(Builtin(name), Fenrir::AssetOwner::App());
         }
 
+        /**
+         * @brief A material on the test shader SampledPicture, which samples its texture parameter `picture` (white by
+         * default), set to `image`.
+         */
+        [[nodiscard]] Fenrir::AssetHandle<Fenrir::Material> SampledMaterial(Fenrir::AssetHandle<Fenrir::Image> image)
+        {
+            if (m_sampled.IsEmpty())
+            {
+                Fenrir::ShaderData data;
+                const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::SampledPicture));
+                data.bytes.assign(bytes.begin(), bytes.end());
+                m_sampled = Store().Add<Fenrir::Shader>(std::move(data), Fenrir::AssetOwner::App());
+            }
+            const auto material = Store().CreateMaterial(m_sampled, Fenrir::AssetOwner::App());
+            INFO("the test material takes the image as its picture");
+            REQUIRE(Store().SetTexture(material, "picture", image));
+            return material;
+        }
+
+        /** @brief A render target: an RGBA8 sRGB image of `width` by `height` with no pixels (ADR-0026). */
+        [[nodiscard]] Fenrir::AssetHandle<Fenrir::Image> TargetImage(std::uint32_t width, std::uint32_t height)
+        {
+            Fenrir::ImageData data;
+            data.width = width;
+            data.height = height;
+            return Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
+        }
+
         [[nodiscard]] Fenrir::AssetHandle<Fenrir::Mesh> Mesh(Fenrir::MeshData data = Cube())
         {
             return Store().Add<Fenrir::Mesh>(std::move(data), Fenrir::AssetOwner::App());
@@ -235,6 +321,12 @@ namespace RendererTest
             Fenrir::Entity entity = ActiveScene().GetEntityList().CreateEntity();
             entity.AddComponent<Fenrir::MeshRenderer>(Fenrir::MeshRenderer{mesh, material, true});
             return entity;
+        }
+
+        /** @brief Every pass of the last frame, in order. */
+        [[nodiscard]] std::vector<PassRecord> Passes() const
+        {
+            return PassRecordsIn(Fenrir::RendererProbe::Submitted(renderer));
         }
 
         /** @brief Runs one frame of a sixtieth of a second. */
@@ -273,5 +365,8 @@ namespace RendererTest
             }
             return {};
         }
+
+      private:
+        Fenrir::AssetHandle<Fenrir::Shader> m_sampled;
     };
 } // namespace RendererTest

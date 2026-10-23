@@ -47,11 +47,18 @@ namespace Fenrir::Render
      * revision remakes them, and a material follows a new revision of its shader.
      *
      * **Each frame** (AddPasses, after SetFrame): the draws are resolved to pipelines, made lazily and cached by
-     * shader, vertex layout and culling while the shader lives, and sorted by a 64-bit key (render stage in the high
-     * bits; then pipeline, material and mesh). Each view gets transient `SceneColor` (linear RGBA16F) and `SceneDepth`
-     * (32-bit float, reversed-Z, cleared to 0) and three passes: `Opaque`, one draw per item; `Background`, its clear
-     * colour at depth 0; and `Output`, SceneColor clamped into the backbuffer. With no view the backbuffer is cleared
-     * to black.
+     * shader, vertex layout, culling and sample count while the shader lives, and sorted by a 64-bit key (render stage
+     * in the high bits; then pipeline, material and mesh). One render graph holds every view (ADR-0019). Each view gets
+     * transient `SceneColor` (linear RGBA16F) and `SceneDepth` (32-bit float, reversed-Z, cleared to 0) at its
+     * viewport's size with the configured MSAA samples, and three passes: `Opaque`, one draw per item; `Background`,
+     * its clear colour at depth 0; and `Output`, which resolves SceneColor and clamps it into its viewport of its
+     * render target, the window's backbuffer or an image. The first view into a target clears it to black. With no
+     * view the backbuffer is cleared to black.
+     *
+     * **Render target images** (ADR-0026) are prepared like assets, as RGBA8 sRGB textures of their image's size. A
+     * material texture parameter naming one binds it, and a view whose draws sample an image another view draws is
+     * ordered after it by the graph. A view whose draws sample its own target, or an image whose views would have to
+     * wait on it (a cycle, broken in the views' order), gets the parameter's default texture there, logged once.
      *
      * **Bindings.** Sets 0 (frame), 1 (view) and 3 (draw) are declared here as `Fenrir/Frame.glsl`, `View.glsl` and
      * `Draw.glsl` declare them; in debug builds a shader whose reflection disagrees fails pipeline creation with a
@@ -63,8 +70,11 @@ namespace Fenrir::Render
     class SceneRenderer final : public RenderFeature
     {
       public:
-        /** @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`. */
-        SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger);
+        /**
+         * @brief Makes the default textures, the fixed sets' layouts and the internal pipelines on `device`, for scene
+         * targets of `samples` samples per pixel (1: no MSAA).
+         */
+        SceneRenderer(Graphics::GraphicsDevice& device, ILogger& logger, std::uint32_t samples = 1);
         ~SceneRenderer() override;
 
         SceneRenderer(const SceneRenderer&) = delete;
@@ -93,7 +103,13 @@ namespace Fenrir::Render
         void PrepareMaterial(AssetKey key, std::uint32_t revision, const MaterialData& material);
         void ReleaseMaterial(AssetKey key);
 
+        [[nodiscard]] bool IsTargetCurrent(AssetKey key, std::uint32_t revision) const;
+        /** @brief A render target image: an RGBA8 sRGB texture of `size` that views draw into and materials sample. */
+        void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
+        void ReleaseTarget(AssetKey key);
+
         /** @brief The keys with GPU resources, for the facade to release those that went stale. */
+        [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
         [[nodiscard]] std::vector<AssetKey> ShaderKeys() const;
         [[nodiscard]] std::vector<AssetKey> MeshKeys() const;
         [[nodiscard]] std::vector<AssetKey> MaterialKeys() const;
@@ -135,6 +151,26 @@ namespace Fenrir::Render
             std::uint32_t id = 0;
         };
 
+        /** @brief A prepared render target image: its texture and size. */
+        struct TargetEntry
+        {
+            std::uint32_t revision = 0;
+            Graphics::TextureHandle texture;
+            Graphics::PixelSize size;
+        };
+
+        /** @brief A material texture parameter naming an image, and what was bound for it. */
+        struct SampledImage
+        {
+            /** @brief The parameter's index in MaterialEntry::bindings. */
+            std::size_t binding = 0;
+            AssetKey image;
+            /** @brief The render target's texture bound; empty when the image was not a prepared target. */
+            Graphics::TextureHandle bound;
+            /** @brief The parameter's default texture, bound in a view that may not sample the image. */
+            Graphics::TextureHandle fallback;
+        };
+
         /** @brief A prepared material: its block and binding group, for the shader revision it was laid out for. */
         struct MaterialEntry
         {
@@ -146,16 +182,27 @@ namespace Fenrir::Render
             std::uint32_t shaderRevision = 0;
             Graphics::BufferHandle block;
             Graphics::BindingGroupHandle group;
+            /** @brief What `group` binds, to make it again with images replaced. */
+            std::vector<Graphics::BindingGroupEntry> bindings;
+            Graphics::BindingGroupLayoutHandle layout;
+            /** @brief Its texture parameters that name an image. */
+            std::vector<SampledImage> images;
+            /** @brief Groups with some of its sampled targets replaced by defaults, by the replaced targets. */
+            std::map<std::vector<AssetKey>, Graphics::BindingGroupHandle> withoutTargets;
             bool doubleSided = false;
             std::uint32_t id = 0;
         };
 
-        /** @brief What a mesh pipeline is made for: the program, which read streams the mesh has, and culling. */
+        /**
+         * @brief What a mesh pipeline is made for: the program, which read streams the mesh has, culling and the scene
+         * targets' sample count.
+         */
         struct PipelineKey
         {
             const ShaderEntry* shader = nullptr;
             std::uint32_t streams = 0;
             bool doubleSided = false;
+            std::uint32_t samples = 1;
 
             friend auto operator<=>(const PipelineKey&, const PipelineKey&) = default;
         };
@@ -175,7 +222,8 @@ namespace Fenrir::Render
         {
             std::uint64_t sortKey = 0;
             const PipelineEntry* pipeline = nullptr;
-            Graphics::BindingGroupHandle material;
+            /** @brief Null for the fallback material, which binds no group. */
+            MaterialEntry* material = nullptr;
             const MeshEntry* mesh = nullptr;
             Math::Mat4 world{1.0f};
         };
@@ -222,10 +270,19 @@ namespace Fenrir::Render
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const MeshEntry& mesh,
                                                         bool doubleSided);
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(const ShaderContainer& container,
+                                                                    const ShaderVariant* variant,
                                                                     Graphics::BindingGroupLayoutHandle layout,
-                                                                    Graphics::TextureFormat colour, bool depthTested);
+                                                                    Graphics::TextureFormat colour, bool depthTested,
+                                                                    std::uint32_t samples);
+        /** @brief A sampler for a material texture parameter's description, shared by equal descriptions. */
+        [[nodiscard]] Graphics::SamplerHandle SamplerFor(const SamplerDescription& description);
+        /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
+        [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
+                                                                const std::vector<AssetKey>& replaced);
         [[nodiscard]] Graphics::BindingGroupLayoutHandle MaterialLayoutOf(const ShaderVariant& variant);
         [[nodiscard]] Graphics::BindingGroupHandle OutputGroup(Graphics::TextureHandle sceneColour);
+        /** @brief Adds the pass that clears the window to black, for a frame with no view into it. */
+        static void AddWindowClear(RenderGraph& graph, const FrameContext& frame);
         void DestroyPipelinesOf(const ShaderEntry& shader);
         void DestroyMaterial(MaterialEntry& material);
         void DestroyMesh(MeshEntry& mesh);
@@ -234,10 +291,15 @@ namespace Fenrir::Render
 
         Graphics::GraphicsDevice& m_device;
         ILogger& m_logger;
+        /** @brief The scene targets' samples per pixel. */
+        std::uint32_t m_samples;
 
         std::map<AssetKey, ShaderEntry> m_shaders;
         std::map<AssetKey, MeshEntry> m_meshes;
         std::map<AssetKey, MaterialEntry> m_materials;
+        std::map<AssetKey, TargetEntry> m_targets;
+        /** @brief The samplers made for material parameters, by description. */
+        std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;
         std::uint32_t m_nextId = 1;
 
@@ -272,5 +334,7 @@ namespace Fenrir::Render
         SceneStats m_stats;
         /** @brief The missing vertex streams already logged, by mesh and vertex location. */
         std::set<std::pair<AssetKey, std::uint32_t>> m_loggedStreams;
+        /** @brief The images views could not sample already logged, by the view's target and the image. */
+        std::set<std::pair<AssetKey, AssetKey>> m_loggedSampling;
     };
 } // namespace Fenrir::Render

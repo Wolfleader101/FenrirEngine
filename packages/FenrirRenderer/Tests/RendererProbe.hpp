@@ -142,6 +142,30 @@ namespace Fenrir
             return found == nullptr ? std::string() : found->label;
         }
 
+        /** @brief The description a live texture was made with; the default description for a stale one. */
+        [[nodiscard]] static Graphics::TextureDesc Desc(const Graphics::GraphicsDevice& device,
+                                                        Graphics::TextureHandle texture)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_textures.Find(texture);
+            return found == nullptr ? Graphics::TextureDesc{} : found->desc;
+        }
+
+        /** @brief The samples per pixel a live pipeline draws with; 0 for a stale one. */
+        [[nodiscard]] static std::uint32_t Samples(const Graphics::GraphicsDevice& device,
+                                                   Graphics::PipelineHandle pipeline)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_pipelines.Find(pipeline);
+            return found == nullptr ? 0 : found->samples;
+        }
+
+        /** @brief The variant keys of the shader a live pipeline runs; empty for a stale one. */
+        [[nodiscard]] static std::vector<std::string> Keys(const Graphics::GraphicsDevice& device,
+                                                           Graphics::PipelineHandle pipeline)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_pipelines.Find(pipeline);
+            return found == nullptr ? std::vector<std::string>() : found->keys;
+        }
+
         /** @brief What a live binding group binds; empty for a stale one. */
         [[nodiscard]] static std::vector<Graphics::BindingGroupEntry> Entries(const Graphics::GraphicsDevice& device,
                                                                               Graphics::BindingGroupHandle group)
@@ -158,11 +182,29 @@ namespace Fenrir
             return found == nullptr ? std::vector<std::byte>() : found->bytes;
         }
 
+        /** @brief The texture behind a render target image the renderer has prepared, on any backend; else empty. */
+        [[nodiscard]] static Graphics::TextureHandle ImageTexture(const Renderer& renderer, AssetHandle<Image> image)
+        {
+            const auto& targets = renderer.m_state->scene->m_targets;
+            const auto found = targets.find(Render::KeyOf(image));
+            return found == targets.end() ? Graphics::TextureHandle{} : found->second.texture;
+        }
+
         /**
          * @brief A SceneColor texture the last frame drew into (the transient pool's RGBA16F colour target), on any
          * backend; empty if there is none.
          */
         [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer)
+        {
+            return SceneColour(renderer, 0, 0);
+        }
+
+        /**
+         * @brief The SceneColor texture of `width` by `height` pixels the last frame drew into, on any backend, for a
+         * frame with several views; any size when both are 0. Empty if there is none.
+         */
+        [[nodiscard]] static Graphics::TextureHandle SceneColour(const Renderer& renderer, std::uint32_t width,
+                                                                 std::uint32_t height)
         {
             const Render::RendererCore& core = Core(renderer);
             // The set the last frame took from.
@@ -170,6 +212,7 @@ namespace Fenrir
             {
                 const auto* desc = std::get_if<Graphics::TextureDesc>(&entry.desc);
                 if (desc != nullptr && desc->format == Graphics::TextureFormat::Rgba16Float &&
+                    (width == 0 || (desc->width == width && desc->height == height)) &&
                     core.m_device->IsLive(entry.texture))
                 {
                     return entry.texture;

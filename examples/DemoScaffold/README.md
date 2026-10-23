@@ -27,6 +27,7 @@ return demo.Run();
 
 `DemoScaffold::Install(App&, DemoConfig)` installs FenrirWindow (for the OpenGL backend), FenrirInput, FenrirAssets,
 FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. Scripting joins with the scripting demo apps.
+`DemoConfig::msaa` sets the renderer's MSAA samples (`RendererConfig::msaa`; 1, off, by default).
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
 A `DemoScene` is one entry of the app's ordered scene list: a `name`, a one-line `keyHelp`, the `keys` a smoke run
@@ -43,7 +44,7 @@ destroys that FenrirScene, and the assets the scene loaded for itself (owned by 
 | F2 | The app's (`DemoConfig::appKeyHelp` says what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
 | Right mouse button | Held, the mouse looks around, and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |
-| Left click | Sends `DemoSceneClickEvent`, the ray from the drawing camera through the clicked point. |
+| Left click | Sends `DemoSceneClickEvent`, the ray (`Renderer::ScreenPointToRay`) from the camera drawn at the clicked point (`Renderer::CameraAt`) through it. A click where no camera draws sends nothing. |
 
 Every other key is the scene's.
 

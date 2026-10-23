@@ -31,6 +31,15 @@ namespace
         };
         return scene;
     }
+
+    // A camera in `scene` that draws into an image, as a monitor's camera does, rather than into the window.
+    Fenrir::Entity ImageCamera(Fenrir::Scene& scene)
+    {
+        Fenrir::Entity camera = scene.GetEntityList().CreateEntity();
+        camera.AddComponent<Fenrir::Transform>();
+        camera.AddComponent<Fenrir::Camera>().target = Fenrir::ImageTarget{};
+        return camera;
+    }
 } // namespace
 
 TEST_CASE("The first frame enters the first scene", "[demo][scenes]")
@@ -120,6 +129,49 @@ TEST_CASE("A scene with a camera of its own turns the free-fly camera off until 
     INFO("F3 again goes back to the scene's camera");
     REQUIRE(sceneCamera.GetComponent<Fenrir::Camera>().enabled);
     REQUIRE_FALSE(test.demo.FreeFlyCamera().GetComponent<Fenrir::Camera>().enabled);
+}
+
+TEST_CASE("F3 leaves a scene's cameras that draw into images on, so what they draw keeps changing",
+          "[demo][scenes][camera]")
+{
+    Fenrir::Entity windowCamera;
+    Fenrir::Entity imageCamera;
+    FenrirDemo::DemoScene scene = SceneWithCamera(windowCamera);
+    scene.spawn = [&windowCamera, &imageCamera](Fenrir::App&, Fenrir::Scene& spawned) {
+        windowCamera = spawned.GetEntityList().CreateEntity();
+        windowCamera.AddComponent<Fenrir::Transform>();
+        windowCamera.AddComponent<Fenrir::Camera>();
+        imageCamera = ImageCamera(spawned);
+    };
+    DemoTestApp test({scene});
+    test.Frames();
+
+    test.Tap(Fenrir::Key::F3);
+    INFO("F3 turned the camera drawing into an image off along with the one drawing into the window");
+    REQUIRE(imageCamera.GetComponent<Fenrir::Camera>().enabled);
+    INFO("F3 left the scene's window camera on beside the free-fly camera");
+    REQUIRE_FALSE(windowCamera.GetComponent<Fenrir::Camera>().enabled);
+
+    test.Tap(Fenrir::Key::F3);
+    INFO("F3 again did not leave both of the scene's cameras on");
+    REQUIRE(windowCamera.GetComponent<Fenrir::Camera>().enabled);
+    REQUIRE(imageCamera.GetComponent<Fenrir::Camera>().enabled);
+}
+
+TEST_CASE("A scene whose only camera draws into an image draws the window through the free-fly camera",
+          "[demo][scenes][camera]")
+{
+    Fenrir::Entity imageCamera;
+    FenrirDemo::DemoScene scene = EmptyScene("Monitor only");
+    scene.spawn = [&imageCamera](Fenrir::App&, Fenrir::Scene& spawned) { imageCamera = ImageCamera(spawned); };
+    DemoTestApp test({scene});
+    test.Frames();
+
+    INFO("a camera drawing into an image was taken for one drawing the window, so the free-fly camera stayed off");
+    REQUIRE(test.demo.FreeFlyCameraOn());
+    REQUIRE(test.demo.FreeFlyCamera().GetComponent<Fenrir::Camera>().enabled);
+    INFO("the image camera was turned off");
+    REQUIRE(imageCamera.GetComponent<Fenrir::Camera>().enabled);
 }
 
 TEST_CASE("A scene with no camera of its own draws through the free-fly camera", "[demo][scenes][camera]")

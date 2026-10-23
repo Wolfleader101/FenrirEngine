@@ -49,9 +49,9 @@ namespace Fenrir::Graphics
         return m_buffers.Add(std::move(buffer));
     }
 
-    TextureHandle NullDevice::CreateTexture(const TextureDesc&, std::string_view)
+    TextureHandle NullDevice::CreateTexture(const TextureDesc& desc, std::string_view label)
     {
-        return m_textures.Add({});
+        return m_textures.Add({desc, std::string(label)});
     }
 
     SamplerHandle NullDevice::CreateSampler(const SamplerDesc&, std::string_view)
@@ -69,10 +69,15 @@ namespace Fenrir::Graphics
         return m_groups.Add({desc, std::string(label)});
     }
 
-    PipelineResult NullDevice::CreatePipeline(const PipelineDesc&, std::string_view label)
+    PipelineResult NullDevice::CreatePipeline(const PipelineDesc& desc, std::string_view label)
     {
         // Any shader container is accepted: there is nothing to compile it for.
-        return {m_pipelines.Add({std::string(label)}), {}};
+        NullPipeline pipeline{std::string(label), desc.samples, {}};
+        if (desc.shader != nullptr)
+        {
+            pipeline.keys = desc.shader->keys;
+        }
+        return {m_pipelines.Add(std::move(pipeline)), {}};
     }
 
     bool NullDevice::WriteBuffer(BufferHandle buffer, std::size_t offset, std::span<const std::byte> bytes)

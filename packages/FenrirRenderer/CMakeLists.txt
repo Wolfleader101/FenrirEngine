@@ -65,8 +65,9 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Bui
                    FRAGMENT Shaders/Builtin/fallback.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/background.frag EMBED)
+# MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/output.frag EMBED)
+                   FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
@@ -76,7 +77,7 @@ add_library(FenrirRenderer STATIC
     src/Facade/RendererState.hpp
 )
 target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
-target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
+target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
                                                                             FenrirWindow)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).

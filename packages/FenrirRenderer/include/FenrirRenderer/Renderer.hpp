@@ -4,13 +4,14 @@
 #include <memory>
 #include <optional>
 
+#include "FenrirECS/Entity.hpp"
+#include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Components.hpp"
 
 namespace Fenrir
 {
     class App;
-    class Entity;
     struct RendererProbe;
 
     namespace Detail
@@ -54,7 +55,9 @@ namespace Fenrir
         GraphicsBackend backend = GraphicsBackend::OpenGL;
         /** @brief Changeable later with Renderer::SetVsync. A mode the surface lacks falls back to `On`, logged. */
         Vsync vsync = Vsync::On;
-        /** @brief Samples per pixel of the scene targets; 1 is off. Kept, but not yet drawn with (renderer ticket 14).
+        /**
+         * @brief Samples per pixel of every view's scene targets, resolved in Output: 1 (off), 2, 4 or 8. Another
+         * count uses the largest of those below it, logged.
          */
         std::uint32_t msaa = 1;
         /** @brief Whether the graphics API reports misuse to the app's logger; costly. On in Debug builds. */
@@ -127,6 +130,29 @@ namespace Fenrir
 
         /** @brief What the last drawn frame did; zeros before the first and for an invalid owner. */
         [[nodiscard]] RendererStats Stats() const;
+
+        /** @name Picking
+         * Computed on call from the camera's world matrix and its render target's size now (ADR-0026), so they can be
+         * used in Update. Points are in logical coordinates for a window (from its top-left corner) and in pixels for
+         * an image. Each is empty for an invalid owner, an entity that is not alive or has no Camera, or a camera that
+         * draws nothing (a window other than the main window, a stale or empty target image, a viewport under one
+         * pixel); a disabled camera still answers.
+         * @{
+         */
+        /**
+         * @brief The ray from `camera` through `point`: a perspective camera's from its position, an orthographic
+         * camera's from the point in its plane along its -Z. Empty for a point outside the camera's viewport.
+         */
+        [[nodiscard]] std::optional<Math::Ray> ScreenPointToRay(const Entity& camera, Math::Vec2 point) const;
+        /** @brief Where `point` appears in `camera`'s target. Empty for a point behind the camera. */
+        [[nodiscard]] std::optional<Math::Vec2> WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const;
+        /**
+         * @brief The camera drawn last at `point` of `window`: the highest-order enabled camera in the active scene
+         * whose viewport holds it, of equal orders the highest entity id. A null Entity if there is none, or the
+         * window is not the main window.
+         */
+        [[nodiscard]] Entity CameraAt(WindowId window, Math::Vec2 point) const;
+        /** @} */
 
       private:
         friend struct Fenrir::RendererProbe;
