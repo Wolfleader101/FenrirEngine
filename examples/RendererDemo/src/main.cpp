@@ -12,7 +12,9 @@ int main()
 
     FenrirDemo::DemoConfig config;
     config.appName = "RendererDemo";
-    config.scenes = {RendererDemo::MeshesAndMaterials()};
+    config.scenes = {RendererDemo::MeshesAndMaterials(), RendererDemo::CamerasAndTargets()};
+    // Every scene's edges are smoothed by 4x MSAA, resolved in each view's Output pass.
+    config.msaa = 4;
 
     FenrirDemo::DemoScaffold demo = FenrirDemo::DemoScaffold::Install(app, std::move(config));
     return demo.Run();

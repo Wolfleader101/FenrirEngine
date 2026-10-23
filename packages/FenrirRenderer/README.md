@@ -37,7 +37,7 @@ app.Run();
 
 ## RendererConfig
 
-`backend` (`OpenGL`, or `Null`); `vsync` (`Off`, `On` default, `Adaptive`; changeable with `Renderer::SetVsync`, which returns the mode in effect, an unsupported one falling back to `On`, logged); `msaa` (samples for the scene targets, default 1; kept, drawn with from renderer ticket 14); `debugValidation` (on in Debug builds: GL's debug messages reach the app's logger); `framesInFlight` (2). There are no tuning settings and no native escape hatch.
+`backend` (`OpenGL`, or `Null`); `vsync` (`Off`, `On` default, `Adaptive`; changeable with `Renderer::SetVsync`, which returns the mode in effect, an unsupported one falling back to `On`, logged); `msaa` (samples per pixel of every view's `SceneColor` and `SceneDepth`, resolved in `Output`: 1 (off, the default), 2, 4 or 8; another count uses the largest of those below it, logged); `debugValidation` (on in Debug builds: GL's debug messages reach the app's logger); `framesInFlight` (2). There are no tuning settings and no native escape hatch.
 
 ## Main-thread rule and the Render phase
 
@@ -49,20 +49,28 @@ app.Run();
 All in `Render`, on the main thread (ADR-0019):
 
 1. Read the main window's pixel size. A minimised or zero-sized window builds, submits and presents nothing, but the frame index still advances.
-2. Read the active scene: every visible `MeshRenderer` (with `GetWorldMatrix` once each), every enabled `Camera`, the first `DirectionalLight` (more are warned about once) and the `AmbientLight`. Inactive scenes are never read, and nothing is kept between frames.
-3. Prepare: upload each mesh and material that is new or has a new revision, keyed by asset handle and revision, and free the GPU side of each handle that went stale. Pipelines are made the first time a draw needs them and kept while their shader lives.
-4. Build the render graph: per camera `Opaque` (one draw per item, sorted by pipeline, material and mesh; reversed-Z depth cleared to 0) → `Background` (a dark grey at depth 0 until the sky arrives) → `Output` (the linear RGBA16F `SceneColor` clamped and encoded into the sRGB backbuffer). With no camera the window is cleared to black, logged once.
+2. Read the active scene: every visible `MeshRenderer` (with `GetWorldMatrix` once each), every enabled `Camera` as a view, the first `DirectionalLight` (more are warned about once) and the `AmbientLight`. Inactive scenes are never read, and nothing is kept between frames.
+3. Prepare: upload each mesh and material that is new or has a new revision, and make each render target image's texture, keyed by asset handle and revision, and free the GPU side of each handle that went stale. Pipelines are made the first time a draw needs them (keyed by shader, vertex streams, culling and sample count) and kept while their shader lives.
+4. Build one render graph for every view: per view `Opaque` (one draw per item, sorted by pipeline, material and mesh; reversed-Z depth cleared to 0) → `Background` (the camera's colour, or a dark grey at depth 0 until the sky arrives) → `Output` (the linear RGBA16F `SceneColor` resolved, clamped and encoded into the view's viewport of its sRGB target). A view whose draws sample an image another view draws runs after it. A window no view draws into is cleared to black, logged once.
 5. Record each pass and submit it; then present.
 
 ## Components and resources
 
 - `MeshRenderer { mesh, material, visible = true }`: one mesh, one material, one draw. `visible` hides only its own entity. An empty or stale mesh is skipped (a stale one logged once per handle); an empty or stale material draws with the fallback material, flat magenta and unlit, logged once per handle. A missing `Transform` is the identity.
-- `Camera { Perspective projection { verticalFov = 60 degrees in radians, near = 0.1 }, enabled = true }`: a view from its entity along local -Z, +Y up, into the whole main window, with an infinite far plane and reversed-Z depth; the aspect comes from the window's pixel size. Renderer ticket 14 adds orthographic projections, `order`, viewports, image targets and the rest.
+- `Camera`: a view from its entity along local -Z, +Y up, with reversed-Z depth (ADR-0026). Every enabled camera in the active scene draws one view a frame; there is no active camera.
+  - `projection`: `Perspective { verticalFov = 60 degrees in radians, near = 0.1 }`, with an infinite far plane, or `Orthographic { height (full, world units) = 10, near = 0.1, far = 1000 }`. The aspect comes from the viewport's pixel size. A tagged union, as FenrirPhysics' `CollisionShape` is: assign a kind (`camera.projection = Fenrir::Orthographic{20.0f}`) and read it with `Is<T>()` and `As<T>()`.
+  - `enabled` (true) and `order` (0): views into one target draw lowest order first, ties by entity id, logged once.
+  - `viewport`: `{ x, y, width, height }` as fractions of the target from its top-left corner, the whole target by default. Each view has its own scene targets at its viewport's pixel size, and `Output` writes only its viewport; the first view into a target clears it to black.
+  - `target`: `WindowTarget { window }` (the main window, the default) or `ImageTarget { image }`, a render target: an `ImageData` with a size, RGBA8, sRGB, flat, and no pixels, made with the store's `Add` and resized with `Replace`. A material texture parameter naming it samples it, and the view drawing it runs first. A view whose own draws sample its target gets the parameter's default texture there, logged once, as does one whose sampling would make views wait on each other in a cycle (broken in the views' order).
+  - `background`: `SceneBackground` (the default: a dark grey until the sky) or `ColourBackground { colour }`.
+  - `drawDebug` (true): read by the debug drawing feature.
+
+  Not drawn, logged once: a camera targeting a window other than the main window, a viewport under one pixel, or a target image that is empty, stale or not a render target. A minimised window draws nothing.
 - `DirectionalLight { colour, intensity }` shines along its entity's world -Z. `AmbientLight { colour, intensity }` is a scene resource; a scene without one is lit by a dim grey. Intensities are plain multipliers.
 
 ## Materials and built-in shaders
 
-Materials are FenrirAssets' `MaterialData`, edited through the asset store (ADR-0024). The renderer lays a material's set 2 out from its shader container's reflection: the `MaterialParams` block is the shader's default block image with the material's overrides written over it, and each texture binds the renderer's default 1x1 `white`, `black` or `normal` texture, as its parameter default says (material textures are bound from renderer ticket 13). Sets 0 (frame), 1 (view) and 3 (draw) are declared in C++ as `Fenrir/Frame.glsl`, `View.glsl` and `Draw.glsl` declare them, and in debug builds a shader whose reflection disagrees fails its pipeline with a diagnostic and draws as the fallback material. A vertex stream a shader reads but the mesh lacks binds a constant (normal +Y, UV 0, colour white), logged once per mesh.
+Materials are FenrirAssets' `MaterialData`, edited through the asset store (ADR-0024). The renderer lays a material's set 2 out from its shader container's reflection: the `MaterialParams` block is the shader's default block image with the material's overrides written over it, and each texture binds the renderer's default 1x1 `white`, `black` or `normal` texture, as its parameter default says (a render target image binds its texture; other images are bound from renderer ticket 13). Sets 0 (frame), 1 (view) and 3 (draw) are declared in C++ as `Fenrir/Frame.glsl`, `View.glsl` and `Draw.glsl` declare them, and in debug builds a shader whose reflection disagrees fails its pipeline with a diagnostic and draws as the fallback material. A vertex stream a shader reads but the mesh lacks binds a constant (normal +Y, UV 0, colour white), logged once per mesh.
 
 - `builtin:unlit`: `baseColour` (white) times the vertex colour.
 - `builtin:lit`: metallic-roughness GGX, one directional light and constant ambient, written as linear HDR, with `baseColour` (white), `emissive` (opaque black), `metallic` (0) and `roughness` (0.5). Its BRDF is scaled by pi, so a white light of intensity 1 on a white rough face gives about 1.
@@ -73,6 +81,16 @@ The built-ins are built by `fenrir_add_shaders` from `Shaders/Builtin/` and embe
 
 - `GetWorldBounds(entity)`: the box around the entity's mesh in world space, from the mesh's local bounds and the world matrix now; empty without a `MeshRenderer` or with a mesh that does not resolve.
 - `Stats()`: the last drawn frame's `draws` (one per item per camera), `passes` run, and `uploads` (meshes and material blocks).
+
+## Picking
+
+Computed on call from the camera's world matrix and its target's size now, so usable in `Update` (ADR-0026). Points are logical window coordinates from the top-left for a window (with no window, the null backend's 1280 x 720) and pixels for an image.
+
+- `ScreenPointToRay(camera, point)`: the ray through the point, from a perspective camera's position, or from the point in an orthographic camera's plane along its -Z.
+- `WorldToScreenPoint(camera, point)`: where a world point appears in the camera's target.
+- `CameraAt(window, point)`: the highest-order enabled camera whose viewport holds the point (of equal orders, the highest entity id: the one drawn last); a null `Entity` if none.
+
+A stale entity, one with no `Camera`, a camera that draws nothing, a point outside the viewport, or a point behind the camera gives empty. There is no mesh picking.
 
 ## Layers
 

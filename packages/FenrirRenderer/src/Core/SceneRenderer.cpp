@@ -244,6 +244,53 @@ namespace Fenrir::Render
         {
             return container.FindVariant({});
         }
+
+        /** @brief The device sampler a material texture parameter's description asks for. */
+        SamplerDesc ToSamplerDesc(const SamplerDescription& description)
+        {
+            // By SamplerWrap: repeat, mirrored repeat, clamp to edge.
+            constexpr std::array<AddressMode, 3> wraps{AddressMode::Repeat, AddressMode::MirroredRepeat,
+                                                       AddressMode::ClampToEdge};
+            SamplerDesc desc;
+            desc.addressU = wraps.at(static_cast<std::size_t>(description.wrapU));
+            desc.addressV = wraps.at(static_cast<std::size_t>(description.wrapV));
+            desc.addressW = desc.addressU;
+            const bool nearest = description.filter == SamplerFilter::Nearest;
+            desc.minFilter = nearest ? Filter::Nearest : Filter::Linear;
+            desc.magFilter = desc.minFilter;
+            desc.mipFilter = description.filter == SamplerFilter::Trilinear ? Filter::Linear : Filter::Nearest;
+            desc.maxAnisotropy = static_cast<float>(std::max<std::uint32_t>(description.anisotropy, 1));
+            return desc;
+        }
+
+        /** @brief Whether `from` waits, directly or through other views, on `to`, by each view's `waitsOn`. */
+        bool Waits(const std::vector<std::vector<std::size_t>>& waitsOn, std::size_t from, std::size_t to)
+        {
+            std::vector<bool> seen(waitsOn.size(), false);
+            std::vector<std::size_t> stack{from};
+            while (!stack.empty())
+            {
+                const std::size_t view = stack.back();
+                stack.pop_back();
+                if (view == to)
+                {
+                    return true;
+                }
+                if (seen[view])
+                {
+                    continue;
+                }
+                seen[view] = true;
+                stack.insert(stack.end(), waitsOn[view].begin(), waitsOn[view].end());
+            }
+            return false;
+        }
+
+        /** @brief How a log line names a view's target: an image by its asset index, or the window. */
+        std::string TargetName(AssetKey target)
+        {
+            return target.IsEmpty() ? std::string("the window") : std::format("image {}", target.index);
+        }
     } // namespace
 
     // ---- BlockRing ----
@@ -316,7 +363,8 @@ namespace Fenrir::Render
 
     // ---- SceneRenderer ----
 
-    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger) : m_device(device), m_logger(logger)
+    SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
+        : m_device(device), m_logger(logger), m_samples(std::max<std::uint32_t>(samples, 1))
     {
         m_frameLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "Frame");
         m_viewLayout = m_device.CreateBindingGroupLayout({{{0, ShaderBindingKind::UniformBuffer}}}, "View");
@@ -366,8 +414,12 @@ namespace Fenrir::Render
         {
             m_outputLayout = MaterialLayoutOf(*variant);
         }
-        m_backgroundPipeline = MakeInternalPipeline(m_background, m_backgroundLayout, TextureFormat::Rgba16Float, true);
-        m_outputPipeline = MakeInternalPipeline(m_output, m_outputLayout, TextureFormat::Rgba8Srgb, false);
+        m_backgroundPipeline = MakeInternalPipeline(m_background, BaseVariant(m_background), m_backgroundLayout,
+                                                    TextureFormat::Rgba16Float, true, m_samples);
+        // With MSAA, Output reads every sample of SceneColor and averages them: the resolve.
+        constexpr std::array<std::string_view, 1> msaa{"MSAA"};
+        const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
+        m_outputPipeline = MakeInternalPipeline(m_output, output, m_outputLayout, TextureFormat::Rgba8Srgb, false, 1);
 
         m_frameBlocks = std::make_unique<BlockRing>(m_device, m_frameLayout, false, sizeof(FrameBlock), "Frame");
         m_viewBlocks = std::make_unique<BlockRing>(m_device, m_viewLayout, false, sizeof(ViewBlock), "View");
@@ -386,6 +438,14 @@ namespace Fenrir::Render
         for (auto& [key, mesh] : m_meshes)
         {
             DestroyMesh(mesh);
+        }
+        for (auto& [key, target] : m_targets)
+        {
+            m_device.Destroy(target.texture);
+        }
+        for (auto& [desc, sampler] : m_samplers)
+        {
+            m_device.Destroy(sampler);
         }
         for (auto& [key, pipeline] : m_pipelines)
         {
@@ -442,12 +502,13 @@ namespace Fenrir::Render
         return m_device.CreateBindingGroupLayout(desc, "Material");
     }
 
-    PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container,
+    PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container, const ShaderVariant* variant,
                                                        BindingGroupLayoutHandle layout, TextureFormat colour,
-                                                       bool depthTested)
+                                                       bool depthTested, std::uint32_t samples)
     {
         PipelineDesc desc;
-        desc.shader = BaseVariant(container);
+        desc.shader = variant;
+        desc.samples = samples;
         desc.sets.at(MaterialSet) = layout;
         desc.cull = CullMode::None;
         desc.colourFormats = {colour};
@@ -466,7 +527,60 @@ namespace Fenrir::Render
         return made.pipeline;
     }
 
+    SamplerHandle SceneRenderer::SamplerFor(const SamplerDescription& description)
+    {
+        const auto found = std::find_if(m_samplers.begin(), m_samplers.end(),
+                                        [&](const auto& made) { return made.first == description; });
+        if (found != m_samplers.end())
+        {
+            return found->second;
+        }
+        const SamplerHandle sampler = m_device.CreateSampler(ToSamplerDesc(description), "Material sampler");
+        m_samplers.emplace_back(description, sampler);
+        return sampler;
+    }
+
     // ---- Prepare ----
+
+    bool SceneRenderer::IsTargetCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_targets.find(key);
+        return found != m_targets.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareTarget(AssetKey key, std::uint32_t revision, PixelSize size)
+    {
+        ReleaseTarget(key);
+        TargetEntry& entry = m_targets[key];
+        entry.revision = revision;
+        entry.size = size;
+        TextureDesc desc;
+        desc.format = TextureFormat::Rgba8Srgb;
+        desc.width = size.width;
+        desc.height = size.height;
+        desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
+        entry.texture = m_device.CreateTexture(desc, "Render target image");
+    }
+
+    void SceneRenderer::ReleaseTarget(AssetKey key)
+    {
+        const auto found = m_targets.find(key);
+        if (found != m_targets.end())
+        {
+            m_device.Destroy(found->second.texture);
+            m_targets.erase(found);
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::TargetKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_targets)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
 
     bool SceneRenderer::IsShaderCurrent(AssetKey key, std::uint32_t revision) const
     {
@@ -610,7 +724,15 @@ namespace Fenrir::Render
         const MaterialEntry& material = found->second;
         const auto shader = m_shaders.find(material.shaderKey);
         const ShaderEntry* now = shader == m_shaders.end() ? nullptr : &shader->second;
-        return now == material.shader && (now == nullptr || now->revision == material.shaderRevision);
+        if (now != material.shader || (now != nullptr && now->revision != material.shaderRevision))
+        {
+            return false;
+        }
+        // A render target it samples was made, remade at a new size or released since.
+        return std::all_of(material.images.begin(), material.images.end(), [this](const SampledImage& image) {
+            const auto target = m_targets.find(image.image);
+            return (target == m_targets.end() ? TextureHandle{} : target->second.texture) == image.bound;
+        });
     }
 
     void SceneRenderer::PrepareMaterial(AssetKey key, std::uint32_t revision, const MaterialData& material)
@@ -642,9 +764,26 @@ namespace Fenrir::Render
             bound.binding = binding.binding;
             if (binding.kind == ShaderBindingKind::Texture)
             {
-                // Texture overrides are bound from renderer ticket 13; until then every texture binds its default.
-                bound.texture = m_defaultTextures.at(static_cast<std::size_t>(DefaultTextureOf(variant, binding.name)));
+                const TextureHandle fallback =
+                    m_defaultTextures.at(static_cast<std::size_t>(DefaultTextureOf(variant, binding.name)));
+                bound.texture = fallback;
                 bound.sampler = m_defaultSampler;
+                // A render target image binds its texture (ADR-0026). Other images are uploaded from renderer ticket
+                // 13; until then they bind the default.
+                const auto value = material.overrides.find(binding.name);
+                const MaterialTexture* texture =
+                    value == material.overrides.end() ? nullptr : std::get_if<MaterialTexture>(&value->second);
+                if (texture != nullptr && !texture->image.IsEmpty())
+                {
+                    SampledImage image{bindings.size(), KeyOf(texture->image), {}, fallback};
+                    if (const auto target = m_targets.find(image.image); target != m_targets.end())
+                    {
+                        image.bound = target->second.texture;
+                        bound.texture = image.bound;
+                        bound.sampler = SamplerFor(texture->sampler);
+                    }
+                    entry.images.push_back(image);
+                }
             }
             else if (variant.materialBlockBinding == binding.binding && !variant.defaultBlock.empty())
             {
@@ -657,14 +796,55 @@ namespace Fenrir::Render
             }
             bindings.push_back(bound);
         }
-        if (!shader->second.materialLayout.IsEmpty())
+        entry.layout = shader->second.materialLayout;
+        entry.bindings = bindings;
+        if (!entry.layout.IsEmpty())
         {
-            entry.group = m_device.CreateBindingGroup({shader->second.materialLayout, std::move(bindings)}, "Material");
+            entry.group = m_device.CreateBindingGroup({entry.layout, std::move(bindings)}, "Material");
         }
+    }
+
+    BindingGroupHandle SceneRenderer::GroupWithout(MaterialEntry& material, const std::vector<AssetKey>& replaced)
+    {
+        std::vector<AssetKey> mine;
+        for (const SampledImage& image : material.images)
+        {
+            if (!image.bound.IsEmpty() && std::find(replaced.begin(), replaced.end(), image.image) != replaced.end())
+            {
+                mine.push_back(image.image);
+            }
+        }
+        if (mine.empty())
+        {
+            return material.group;
+        }
+        std::sort(mine.begin(), mine.end());
+        mine.erase(std::unique(mine.begin(), mine.end()), mine.end());
+        if (const auto found = material.withoutTargets.find(mine); found != material.withoutTargets.end())
+        {
+            return found->second;
+        }
+        std::vector<BindingGroupEntry> bindings = material.bindings;
+        for (const SampledImage& image : material.images)
+        {
+            if (std::binary_search(mine.begin(), mine.end(), image.image))
+            {
+                bindings.at(image.binding).texture = image.fallback;
+                bindings.at(image.binding).sampler = m_defaultSampler;
+            }
+        }
+        const BindingGroupHandle group =
+            m_device.CreateBindingGroup({material.layout, std::move(bindings)}, "Material");
+        material.withoutTargets.emplace(std::move(mine), group);
+        return group;
     }
 
     void SceneRenderer::DestroyMaterial(MaterialEntry& material)
     {
+        for (const auto& [replaced, group] : material.withoutTargets)
+        {
+            m_device.Destroy(group);
+        }
         m_device.Destroy(material.group);
         m_device.Destroy(material.block);
     }
@@ -735,7 +915,7 @@ namespace Fenrir::Render
                 present |= 1u << location;
             }
         }
-        const PipelineKey key{&shader, read & present, doubleSided};
+        const PipelineKey key{&shader, read & present, doubleSided, m_samples};
         if (const auto found = m_pipelines.find(key); found != m_pipelines.end())
         {
             return found->second;
@@ -769,6 +949,7 @@ namespace Fenrir::Render
         }
         desc.cull = doubleSided ? CullMode::None : CullMode::Back;
         desc.colourFormats = {TextureFormat::Rgba16Float};
+        desc.samples = m_samples;
         if (entry.failure.empty())
         {
             PipelineResult made = m_device.CreatePipeline(desc, shader.container.name);
@@ -796,7 +977,7 @@ namespace Fenrir::Render
                 continue;
             }
             const auto material = m_materials.find(request.material);
-            const MaterialEntry* found = material == m_materials.end() ? nullptr : &material->second;
+            MaterialEntry* found = material == m_materials.end() ? nullptr : &material->second;
             const ShaderEntry* shader =
                 found != nullptr && found->shader != nullptr && found->shader->variant != nullptr ? found->shader
                                                                                                   : &m_fallback;
@@ -830,7 +1011,7 @@ namespace Fenrir::Render
             const bool fallback = shader == &m_fallback;
             ResolvedDraw draw;
             draw.pipeline = pipeline;
-            draw.material = fallback ? BindingGroupHandle{} : found->group;
+            draw.material = fallback ? nullptr : found;
             draw.mesh = &mesh->second;
             draw.world = request.world;
             const std::uint64_t materialId = fallback ? 0 : found->id;
@@ -859,6 +1040,16 @@ namespace Fenrir::Render
         return group;
     }
 
+    void SceneRenderer::AddWindowClear(RenderGraph& graph, const FrameContext& frame)
+    {
+        // A window no view draws into is cleared to black.
+        const GraphResource backbuffer = frame.backbuffer;
+        graph.AddPass(
+            "Clear", RenderStage::Output, QueueKind::Graphics,
+            [=](PassBuilder& pass) { pass.ColourAttachment(backbuffer, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 1.0f}); },
+            [](PassContext&) {});
+    }
+
     void SceneRenderer::AddPasses(RenderGraph& graph, const FrameContext& frame)
     {
         // The Output groups of SceneColor textures the transient pool has let go of.
@@ -878,12 +1069,7 @@ namespace Fenrir::Render
         m_stats.draws = 0;
         if (m_frame.views.empty())
         {
-            // A window with no camera is cleared to black.
-            const GraphResource backbuffer = frame.backbuffer;
-            graph.AddPass(
-                "Clear", RenderStage::Output, QueueKind::Graphics,
-                [=](PassBuilder& pass) { pass.ColourAttachment(backbuffer, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 1.0f}); },
-                [](PassContext&) {});
+            AddWindowClear(graph, frame);
             return;
         }
 
@@ -901,23 +1087,107 @@ namespace Fenrir::Render
             const DrawBlock block{world, glm::transpose(glm::inverse(world))};
             m_drawBlocks->Write(frameIndex, i, BytesOf(block));
         }
-        m_viewBlocks->Reserve(m_frame.views.size());
-        m_backgroundBlocks->Reserve(m_frame.views.size());
+        const std::vector<ViewRequest>& views = m_frame.views;
+        m_viewBlocks->Reserve(views.size());
+        m_backgroundBlocks->Reserve(views.size());
+
+        // The render target images this frame's draws sample, each imported into the graph once.
+        std::set<AssetKey> sampled;
+        for (const ResolvedDraw& draw : *draws)
+        {
+            if (draw.material != nullptr)
+            {
+                for (const SampledImage& image : draw.material->images)
+                {
+                    if (!image.bound.IsEmpty() && m_targets.contains(image.image))
+                    {
+                        sampled.insert(image.image);
+                    }
+                }
+            }
+        }
+        std::map<AssetKey, GraphResource> images;
+        const auto imported = [&](AssetKey key) {
+            if (const auto found = images.find(key); found != images.end())
+            {
+                return found->second;
+            }
+            const TargetEntry& target = m_targets.at(key);
+            TextureDesc desc;
+            desc.format = TextureFormat::Rgba8Srgb;
+            desc.width = target.size.width;
+            desc.height = target.size.height;
+            desc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
+            const GraphResource resource =
+                graph.ImportTexture(std::format("Image {}", key.index), target.texture, desc);
+            images.emplace(key, resource);
+            return resource;
+        };
+
+        // Which sampled images each view may read. A view samples an image after every view that draws it, so the
+        // graph orders them; one that would wait on itself, directly or through other views, gets the default texture
+        // for that image instead (ADR-0026), the views taken in their order.
+        std::vector<std::vector<std::size_t>> waitsOn(views.size());
+        std::vector<std::vector<AssetKey>> replaced(views.size());
+        std::vector<std::vector<AssetKey>> reads(views.size());
+        for (std::size_t v = 0; v < views.size(); ++v)
+        {
+            for (const AssetKey image : sampled)
+            {
+                std::vector<std::size_t> writers;
+                for (std::size_t w = 0; w < views.size(); ++w)
+                {
+                    if (views[w].target == image && m_targets.contains(image))
+                    {
+                        writers.push_back(w);
+                    }
+                }
+                const bool own = views[v].target == image;
+                const bool cycle =
+                    std::any_of(writers.begin(), writers.end(), [&](std::size_t w) { return Waits(waitsOn, w, v); });
+                if (own || cycle)
+                {
+                    replaced[v].push_back(image);
+                    if (m_loggedSampling.insert({views[v].target, image}).second)
+                    {
+                        m_logger.Warn(own ? "FenrirRenderer: a view into {} draws materials that sample its own target "
+                                            "image, so they sample the default texture there"
+                                          : "FenrirRenderer: a view into {} draws materials that sample image {}, "
+                                            "whose views wait on it in a cycle, so they sample the default texture "
+                                            "there",
+                                      TargetName(views[v].target), image.index);
+                    }
+                    continue;
+                }
+                waitsOn[v].insert(waitsOn[v].end(), writers.begin(), writers.end());
+                reads[v].push_back(image);
+            }
+        }
 
         const BindingGroupHandle frameGroup = m_frameBlocks->Group(frameIndex, 0);
         const BindingGroupHandle drawGroup = m_drawBlocks->Group(frameIndex, 0);
-        const PixelRect viewport{0, 0, frame.size.width, frame.size.height};
-        for (std::size_t v = 0; v < m_frame.views.size(); ++v)
+        // The targets drawn into so far: the first view into each clears it. The window's key is empty.
+        std::set<AssetKey> cleared;
+        for (std::size_t v = 0; v < views.size(); ++v)
         {
-            const ViewRequest& request = m_frame.views[v];
+            const ViewRequest& request = views[v];
+            const bool intoImage = !request.target.IsEmpty();
+            if (intoImage && !m_targets.contains(request.target))
+            {
+                continue;
+            }
+            const GraphResource target = intoImage ? imported(request.target) : frame.backbuffer;
+            const PixelRect rect = request.viewport;
+            const PixelRect viewport{0, 0, rect.width, rect.height};
+
             const Math::Mat4 viewProjection = request.projection * request.view;
-            const ViewBlock viewBlock{
-                request.view,
-                request.projection,
-                viewProjection,
-                glm::inverse(viewProjection),
-                Math::Vec4(request.position, 1.0f),
-                Math::Vec4(0.0f, 0.0f, static_cast<float>(frame.size.width), static_cast<float>(frame.size.height))};
+            const ViewBlock viewBlock{request.view,
+                                      request.projection,
+                                      viewProjection,
+                                      glm::inverse(viewProjection),
+                                      Math::Vec4(request.position, 1.0f),
+                                      Math::Vec4(static_cast<float>(rect.x), static_cast<float>(rect.y),
+                                                 static_cast<float>(rect.width), static_cast<float>(rect.height))};
             m_viewBlocks->Write(frameIndex, v, BytesOf(viewBlock));
             const BackgroundBlock backgroundBlock{
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
@@ -925,10 +1195,25 @@ namespace Fenrir::Render
             const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
             const BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
 
+            // Each draw's material group in this view, with the images it may not sample replaced.
+            auto groups = std::make_shared<std::vector<BindingGroupHandle>>();
+            groups->reserve(draws->size());
+            for (const ResolvedDraw& draw : *draws)
+            {
+                groups->push_back(draw.material == nullptr ? BindingGroupHandle{}
+                                                           : GroupWithout(*draw.material, replaced[v]));
+            }
+            std::vector<GraphResource> samples;
+            for (const AssetKey image : reads[v])
+            {
+                samples.push_back(imported(image));
+            }
+
             TextureDesc colourDesc;
             colourDesc.format = TextureFormat::Rgba16Float;
-            colourDesc.width = frame.size.width;
-            colourDesc.height = frame.size.height;
+            colourDesc.width = rect.width;
+            colourDesc.height = rect.height;
+            colourDesc.samples = m_samples;
             colourDesc.usage = TextureUsage::ColourAttachment | TextureUsage::Sampled;
             TextureDesc depthDesc = colourDesc;
             depthDesc.format = TextureFormat::Depth32Float;
@@ -941,8 +1226,12 @@ namespace Fenrir::Render
                 [=](PassBuilder& pass) {
                     pass.ColourAttachment(sceneColour, LoadOp::Clear, {0.0f, 0.0f, 0.0f, 0.0f});
                     pass.DepthAttachment(sceneDepth, LoadOp::Clear, 0.0f);
+                    for (const GraphResource image : samples)
+                    {
+                        pass.Sample(image);
+                    }
                 },
-                [this, draws, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
+                [this, draws, groups, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(viewport);
                     const PipelineEntry* current = nullptr;
@@ -950,6 +1239,7 @@ namespace Fenrir::Render
                     for (std::size_t i = 0; i < draws->size(); ++i)
                     {
                         const ResolvedDraw& draw = (*draws)[i];
+                        const BindingGroupHandle group = (*groups)[i];
                         const bool newPipeline = draw.pipeline != current;
                         if (newPipeline)
                         {
@@ -959,11 +1249,11 @@ namespace Fenrir::Render
                             encoder.SetBindingGroup(1, viewGroup);
                             encoder.SetBindingGroup(3, drawGroup);
                         }
-                        if (!draw.material.IsEmpty() && (newPipeline || draw.material != material))
+                        if (!group.IsEmpty() && (newPipeline || group != material))
                         {
-                            encoder.SetBindingGroup(MaterialSet, draw.material);
+                            encoder.SetBindingGroup(MaterialSet, group);
                         }
-                        material = draw.material;
+                        material = group;
                         for (std::size_t slot = 0; slot < current->locations.size(); ++slot)
                         {
                             const std::uint32_t location = current->locations[slot];
@@ -999,23 +1289,55 @@ namespace Fenrir::Render
                     encoder.Draw({.vertexCount = 3});
                 });
 
-            const GraphResource backbuffer = frame.backbuffer;
-            // The first view clears the window; each later one draws over it.
-            const LoadOp load = v == 0 ? LoadOp::Clear : LoadOp::Load;
+            // The first view into a target clears all of it; each later one draws over it, in its viewport only.
+            const LoadOp load = cleared.insert(request.target).second ? LoadOp::Clear : LoadOp::Load;
             graph.AddPass(
                 "Output", RenderStage::Output, QueueKind::Graphics,
                 [=](PassBuilder& pass) {
                     pass.Sample(sceneColour);
-                    pass.ColourAttachment(backbuffer, load, {0.0f, 0.0f, 0.0f, 1.0f});
+                    pass.ColourAttachment(target, load, {0.0f, 0.0f, 0.0f, 1.0f});
                 },
-                [this, sceneColour, viewport](PassContext& context) {
+                [this, sceneColour, rect](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
+                    encoder.SetViewport(rect);
                     encoder.SetPipeline(m_outputPipeline);
                     encoder.SetBindingGroup(MaterialSet, OutputGroup(context.Texture(sceneColour)));
                     encoder.Draw({.vertexCount = 3});
                 });
         }
+        if (!cleared.contains(AssetKey{}))
+        {
+            AddWindowClear(graph, frame);
+        }
+    }
+
+    Math::Mat4 ReversedZOrthographic(float height, float aspect, float near, float far)
+    {
+        Math::Mat4 projection(1.0f);
+        projection[0][0] = 2.0f / (height * aspect);
+        projection[1][1] = 2.0f / height;
+        // Depth is (far + z) / (far - near) for view-space z = -distance: 1 at the near plane, 0 at the far one.
+        projection[2][2] = 1.0f / (far - near);
+        projection[3][2] = far / (far - near);
+        return projection;
+    }
+
+    PixelRect ViewportPixels(float x, float y, float width, float height, PixelSize size)
+    {
+        const auto edge = [](float fraction, std::uint32_t pixels) {
+            const float at = std::round(fraction * static_cast<float>(pixels));
+            return static_cast<std::int64_t>(std::clamp(at, 0.0f, static_cast<float>(pixels)));
+        };
+        const std::int64_t left = edge(x, size.width);
+        const std::int64_t right = edge(x + width, size.width);
+        const std::int64_t top = edge(y, size.height);
+        const std::int64_t bottom = edge(y + height, size.height);
+        if (right <= left || bottom <= top)
+        {
+            return {};
+        }
+        return {static_cast<std::int32_t>(left), static_cast<std::int32_t>(top),
+                static_cast<std::uint32_t>(right - left), static_cast<std::uint32_t>(bottom - top)};
     }
 
     Math::Mat4 ReversedZPerspective(float verticalFov, float aspect, float near)

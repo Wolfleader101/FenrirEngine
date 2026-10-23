@@ -1,7 +1,9 @@
 #include "FenrirRenderer/Renderer.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
+#include <format>
 #include <span>
 #include <string>
 #include <utility>
@@ -10,6 +12,7 @@
 #include "Core/BuiltinShaders.hpp"
 #include "Facade/RendererState.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -33,6 +36,9 @@ namespace Fenrir
         {
             return {key.index, key.generation};
         }
+
+        // A WindowTarget's default is the main window.
+        static_assert(WindowTarget{}.window == Window::MainWindow());
 
         // The public modes mirror the device's, in the same order.
         static_assert(static_cast<int>(Vsync::Off) == static_cast<int>(Graphics::Vsync::Off) &&
@@ -80,6 +86,34 @@ namespace Fenrir
             return true;
         }
 
+        /** @brief Whether `image` is a render target: a flat RGBA8 sRGB image with a size and no pixels (ADR-0026). */
+        bool IsRenderTarget(const ImageData& image)
+        {
+            return image.pixels.empty() && image.format == ImageFormat::RGBA8 &&
+                   image.colourSpace == ColourSpace::Srgb && image.shape == ImageShape::Flat && image.width > 0 &&
+                   image.height > 0;
+        }
+
+        /**
+         * @brief Whether the image is a render target whose texture is ready: prepared now if it is new or resized. An
+         * image that is not (or no longer) a render target has its texture released.
+         */
+        bool PrepareTarget(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Image> handle)
+        {
+            const ImageData* data = store.TryGet(handle);
+            if (data == nullptr || !IsRenderTarget(*data))
+            {
+                scene.ReleaseTarget(KeyOf(handle));
+                return false;
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!scene.IsTargetCurrent(KeyOf(handle), revision))
+            {
+                scene.PrepareTarget(KeyOf(handle), revision, {data->width, data->height});
+            }
+            return true;
+        }
+
         bool PrepareMaterial(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Material> handle)
         {
             const MaterialData* data = store.TryGet(handle);
@@ -87,8 +121,17 @@ namespace Fenrir
             {
                 return false;
             }
-            // Its shader first: the material's block is laid out from the shader's reflection.
+            // Its shader first: the material's block is laid out from the shader's reflection. Then the render target
+            // images it samples, whose textures it binds.
             PrepareShader(scene, store, data->shader);
+            for (const auto& [name, value] : data->overrides)
+            {
+                const auto* texture = std::get_if<MaterialTexture>(&value);
+                if (texture != nullptr && !texture->image.IsEmpty())
+                {
+                    PrepareTarget(scene, store, texture->image);
+                }
+            }
             const std::uint32_t revision = store.Revision(handle);
             if (!scene.IsMaterialCurrent(KeyOf(handle), revision))
             {
@@ -119,6 +162,13 @@ namespace Fenrir
                 if (!store.IsValid(HandleOf<Shader>(key)))
                 {
                     scene.ReleaseShader(key);
+                }
+            }
+            for (const AssetKey key : scene.TargetKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleaseTarget(key);
                 }
             }
         }
@@ -156,13 +206,187 @@ namespace Fenrir
             return lighting;
         }
 
-        /** @brief Every enabled camera in the active scene, each a view of the whole surface. */
-        std::vector<Render::ViewRequest> ReadViews(Scene& scene, Graphics::PixelSize size)
+        /** @brief Why a camera draws no view. */
+        enum class CameraProblem : std::uint8_t
         {
-            std::vector<Render::ViewRequest> views;
+            None,
+            OtherWindow,
+            NoImage,
+            StaleImage,
+            NotRenderTarget,
+            TinyViewport,
+        };
+
+        /** @brief A camera resolved against its render target as it is now. */
+        struct ResolvedCamera
+        {
+            CameraProblem problem = CameraProblem::None;
+            /** @brief The camera's world matrix. */
+            Math::Mat4 world{1.0f};
+            /** @brief View to clip, reversed-Z. */
+            Math::Mat4 projection{1.0f};
+            /** @brief The image it draws into; empty for the main window. */
+            AssetHandle<Image> image;
+            /** @brief Its viewport in its target's pixels. */
+            Graphics::PixelRect pixels;
+            /**
+             * @brief The target's size in the units picking takes points in: logical units for a window, pixels for an
+             * image.
+             */
+            Math::Vec2 pickingSize{0.0f};
+            /** @brief The target's size in pixels. */
+            Graphics::PixelSize pixelSize;
+        };
+
+        /** @brief The main window's size in logical units; with no window, the null surface's size in pixels. */
+        Math::Vec2 MainWindowLogicalSize(Detail::RendererState& state)
+        {
+            if (Window::Exists(*state.app, Window::MainWindow()))
+            {
+                const WindowSize size = Window::LogicalSize(*state.app, Window::MainWindow());
+                return {static_cast<float>(size.width), static_cast<float>(size.height)};
+            }
+            const Graphics::PixelSize size = state.surface->GetPixelSize();
+            return {static_cast<float>(size.width), static_cast<float>(size.height)};
+        }
+
+        /**
+         * @brief Where and how `camera` on `entity` draws now: its projection from its viewport's pixel size, and the
+         * viewport in its target's pixels, or why it draws nothing.
+         */
+        ResolvedCamera ResolveCamera(Detail::RendererState& state, const AssetStore* store, const Entity& entity,
+                                     const Camera& camera)
+        {
+            ResolvedCamera resolved;
+            if (camera.target.Is<WindowTarget>())
+            {
+                if (camera.target.As<WindowTarget>().window != Window::MainWindow())
+                {
+                    resolved.problem = CameraProblem::OtherWindow;
+                    return resolved;
+                }
+                resolved.pixelSize = state.surface->GetPixelSize();
+                resolved.pickingSize = MainWindowLogicalSize(state);
+            }
+            else
+            {
+                resolved.image = camera.target.As<ImageTarget>().image;
+                const ImageData* data = store == nullptr ? nullptr : store->TryGet(resolved.image);
+                if (resolved.image.IsEmpty() || data == nullptr)
+                {
+                    resolved.problem = resolved.image.IsEmpty() ? CameraProblem::NoImage : CameraProblem::StaleImage;
+                    return resolved;
+                }
+                if (!IsRenderTarget(*data))
+                {
+                    resolved.problem = CameraProblem::NotRenderTarget;
+                    return resolved;
+                }
+                resolved.pixelSize = {data->width, data->height};
+                resolved.pickingSize = {static_cast<float>(data->width), static_cast<float>(data->height)};
+            }
+
+            const Viewport& viewport = camera.viewport;
+            resolved.pixels =
+                Render::ViewportPixels(viewport.x, viewport.y, viewport.width, viewport.height, resolved.pixelSize);
+            if (resolved.pixels.width == 0 || resolved.pixels.height == 0)
+            {
+                resolved.problem = CameraProblem::TinyViewport;
+                return resolved;
+            }
+            const float aspect = static_cast<float>(resolved.pixels.width) / static_cast<float>(resolved.pixels.height);
+            if (camera.projection.Is<Perspective>())
+            {
+                const Perspective& perspective = camera.projection.As<Perspective>();
+                resolved.projection = Render::ReversedZPerspective(perspective.verticalFov, aspect, perspective.near);
+            }
+            else
+            {
+                const Orthographic& orthographic = camera.projection.As<Orthographic>();
+                resolved.projection =
+                    Render::ReversedZOrthographic(orthographic.height, aspect, orthographic.near, orthographic.far);
+            }
+            resolved.world = GetWorldMatrix(entity);
+            return resolved;
+        }
+
+        /** @brief A camera's viewport in picking units: its pixel rectangle scaled to them, from the top-left. */
+        struct PickingRect
+        {
+            float left = 0.0f;
+            float top = 0.0f;
+            float width = 0.0f;
+            float height = 0.0f;
+        };
+
+        /** @brief `camera`'s viewport in the units picking takes points in. */
+        PickingRect PickingRectOf(const ResolvedCamera& camera)
+        {
+            const float scaleX = camera.pickingSize.x / static_cast<float>(camera.pixelSize.width);
+            const float scaleY = camera.pickingSize.y / static_cast<float>(camera.pixelSize.height);
+            return {static_cast<float>(camera.pixels.x) * scaleX, static_cast<float>(camera.pixels.y) * scaleY,
+                    static_cast<float>(camera.pixels.width) * scaleX,
+                    static_cast<float>(camera.pixels.height) * scaleY};
+        }
+
+        /** @brief Whether `point` is inside `rect`, its right and bottom edges excluded. */
+        bool Holds(const PickingRect& rect, Math::Vec2 point)
+        {
+            return point.x >= rect.left && point.x < rect.left + rect.width && point.y >= rect.top &&
+                   point.y < rect.top + rect.height;
+        }
+
+        /** @brief Logs once per camera entity and problem why a camera draws nothing. */
+        void LogProblem(Detail::RendererState& state, std::uint32_t id, const Camera& camera, CameraProblem problem)
+        {
+            if (!state.loggedCameras.insert({id, static_cast<std::uint8_t>(problem)}).second)
+            {
+                return;
+            }
+            ILogger& log = *state.app->Logger();
+            if (problem == CameraProblem::OtherWindow)
+            {
+                log.Warn("FenrirRenderer: camera entity {} targets window {}, not the main window, so it is not drawn",
+                         id, camera.target.As<WindowTarget>().window.value);
+            }
+            else if (problem == CameraProblem::NoImage)
+            {
+                log.Warn("FenrirRenderer: camera entity {} has no target image, so it is not drawn", id);
+            }
+            else if (problem == CameraProblem::StaleImage)
+            {
+                log.Warn("FenrirRenderer: camera entity {} names a stale target image ({}), so it is not drawn", id,
+                         camera.target.As<ImageTarget>().image.index);
+            }
+            else if (problem == CameraProblem::NotRenderTarget)
+            {
+                log.Warn("FenrirRenderer: camera entity {} targets image {}, which is not a render target (a flat "
+                         "RGBA8 sRGB image with no pixels), so it is not drawn",
+                         id, camera.target.As<ImageTarget>().image.index);
+            }
+            else if (problem == CameraProblem::TinyViewport)
+            {
+                log.Warn("FenrirRenderer: camera entity {} has a viewport under one pixel of its target, so it is not "
+                         "drawn",
+                         id);
+            }
+        }
+
+        /**
+         * @brief Every enabled camera in the active scene that can draw, as a view, preparing the images they draw
+         * into, in the order they draw: by order, then entity id, a tie in one target logged once.
+         */
+        std::vector<Render::ViewRequest> ReadViews(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        {
+            struct Candidate
+            {
+                Render::ViewRequest request;
+                std::int32_t order = 0;
+                std::uint32_t id = 0;
+            };
+            std::vector<Candidate> candidates;
             EntityList& entities = scene.GetEntityList();
             const std::array<ComponentType, 1> cameras{ComponentType::Native<Camera>()};
-            const float aspect = static_cast<float>(size.width) / static_cast<float>(size.height);
             entities.ForEachWith(cameras, [&](std::uint32_t id) {
                 const Entity entity = entities.GetEntity(id);
                 const Camera& camera = entity.GetComponent<Camera>();
@@ -170,15 +394,55 @@ namespace Fenrir
                 {
                     return;
                 }
-                const Math::Mat4 world = GetWorldMatrix(entity);
-                Render::ViewRequest view;
-                view.view = glm::inverse(world);
-                view.projection =
-                    Render::ReversedZPerspective(camera.projection.verticalFov, aspect, camera.projection.near);
-                view.position = Math::Vec3(world[3]);
-                view.background = BackgroundColour;
-                views.push_back(view);
+                const ResolvedCamera resolved = ResolveCamera(state, &store, entity, camera);
+                if (resolved.problem != CameraProblem::None)
+                {
+                    LogProblem(state, id, camera, resolved.problem);
+                    return;
+                }
+                if (!resolved.image.IsEmpty())
+                {
+                    PrepareTarget(*state.scene, store, resolved.image);
+                }
+                Candidate candidate;
+                candidate.order = camera.order;
+                candidate.id = id;
+                Render::ViewRequest& view = candidate.request;
+                view.view = glm::inverse(resolved.world);
+                view.projection = resolved.projection;
+                view.position = Math::Vec3(resolved.world[3]);
+                view.background = camera.background.Is<ColourBackground>()
+                                      ? camera.background.As<ColourBackground>().colour
+                                      : BackgroundColour;
+                view.target = KeyOf(resolved.image);
+                view.viewport = resolved.pixels;
+                candidates.push_back(candidate);
             });
+
+            std::sort(candidates.begin(), candidates.end(), [](const Candidate& a, const Candidate& b) {
+                return a.order != b.order ? a.order < b.order : a.id < b.id;
+            });
+            std::vector<Render::ViewRequest> views;
+            for (std::size_t i = 0; i < candidates.size(); ++i)
+            {
+                for (std::size_t j = 0; j < i; ++j)
+                {
+                    const Candidate& a = candidates[j];
+                    const Candidate& b = candidates[i];
+                    if (a.order == b.order && a.request.target == b.request.target &&
+                        state.loggedTies.insert({a.id, b.id}).second)
+                    {
+                        state.app->Logger()->Warn("FenrirRenderer: cameras {} and {} draw into {} with the same order "
+                                                  "{}; the lower entity id draws first",
+                                                  a.id, b.id,
+                                                  a.request.target.IsEmpty()
+                                                      ? std::string("the main window")
+                                                      : std::format("image {}", a.request.target.index),
+                                                  a.order);
+                    }
+                }
+                views.push_back(candidates[i].request);
+            }
             return views;
         }
 
@@ -236,15 +500,18 @@ namespace Fenrir
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *store);
                 frame.lighting = ReadLighting(state, scene);
-                frame.views = ReadViews(scene, size);
+                frame.views = ReadViews(state, *store, scene);
                 frame.draws = ReadDraws(state, *store, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);
-                if (frame.views.empty() && !state.loggedNoCamera)
+                const bool windowDrawn =
+                    std::any_of(frame.views.begin(), frame.views.end(),
+                                [](const Render::ViewRequest& view) { return view.target.IsEmpty(); });
+                if (!windowDrawn && !state.loggedNoCamera)
                 {
                     state.loggedNoCamera = true;
-                    app.Logger()->Warn("FenrirRenderer: the active scene has no enabled Camera, so the main window is "
-                                       "cleared to black");
+                    app.Logger()->Warn("FenrirRenderer: the active scene has no enabled Camera drawing into the main "
+                                       "window, so it is cleared to black");
                 }
             }
             state.scene->SetFrame(std::move(frame));
@@ -261,6 +528,26 @@ namespace Fenrir
                 state.stats.passes = report.passesRun;
                 state.stats.uploads = scene.uploads;
             }
+        }
+
+        /** @brief The MSAA sample count to draw with: 1, 2, 4 or 8, the largest not above the asked-for one, logged. */
+        std::uint32_t SupportedMsaa(App& app, const RendererConfig& config)
+        {
+            std::uint32_t samples = 1;
+            for (const std::uint32_t supported : {2u, 4u, 8u})
+            {
+                if (supported <= config.msaa)
+                {
+                    samples = supported;
+                }
+            }
+            if (samples != config.msaa)
+            {
+                app.Logger()->Warn("FenrirRenderer: RendererConfig::msaa {} is not 1, 2, 4 or 8, so the scene targets "
+                                   "have {} samples",
+                                   config.msaa, samples);
+            }
+            return samples;
         }
 
         /** @brief Registers every built-in shader under its `builtin:` name; false, logged, if one is refused. */
@@ -402,7 +689,8 @@ namespace Fenrir
             return Renderer(nullptr);
         }
         state->core = std::make_unique<Render::RendererCore>(std::move(made), *state->surface);
-        auto scene = std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger());
+        auto scene =
+            std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
         state->scene = scene.get();
         state->core->AddFeature(std::move(scene));
 
@@ -468,4 +756,121 @@ namespace Fenrir
     {
         return m_state == nullptr ? RendererStats{} : m_state->stats;
     }
+
+    namespace
+    {
+        /** @brief `entity`'s camera resolved against its target now; empty if it has none or it draws nothing. */
+        std::optional<ResolvedCamera> PickingCamera(Detail::RendererState& state, const Entity& entity)
+        {
+            if (!entity.IsValid() || !entity.HasComponent<Camera>())
+            {
+                return std::nullopt;
+            }
+            ResolvedCamera resolved =
+                ResolveCamera(state, state.app->TryGetResource<AssetStore>(), entity, entity.GetComponent<Camera>());
+            if (resolved.problem != CameraProblem::None)
+            {
+                return std::nullopt;
+            }
+            return resolved;
+        }
+    } // namespace
+
+    std::optional<Math::Ray> Renderer::ScreenPointToRay(const Entity& camera, Math::Vec2 point) const
+    {
+        if (m_state == nullptr)
+        {
+            return std::nullopt;
+        }
+        const std::optional<ResolvedCamera> resolved = PickingCamera(*m_state, camera);
+        if (!resolved)
+        {
+            return std::nullopt;
+        }
+        const PickingRect rect = PickingRectOf(*resolved);
+        if (!Holds(rect, point))
+        {
+            return std::nullopt;
+        }
+        // The point in normalised device coordinates, +y up.
+        const float x = 2.0f * (point.x - rect.left) / rect.width - 1.0f;
+        const float y = 1.0f - 2.0f * (point.y - rect.top) / rect.height;
+        const float aspect = static_cast<float>(resolved->pixels.width) / static_cast<float>(resolved->pixels.height);
+
+        // In the camera's local space, looking along -Z: a perspective ray leaves the camera's position through the
+        // point, and an orthographic one leaves the point in the camera's plane along -Z.
+        Math::Vec3 origin(0.0f);
+        Math::Vec3 direction(0.0f, 0.0f, -1.0f);
+        const Projection& projection = camera.GetComponent<Camera>().projection;
+        if (projection.Is<Perspective>())
+        {
+            const float tanHalf = std::tan(projection.As<Perspective>().verticalFov * 0.5f);
+            direction = Math::Vec3(x * tanHalf * aspect, y * tanHalf, -1.0f);
+        }
+        else
+        {
+            const float halfHeight = projection.As<Orthographic>().height * 0.5f;
+            origin = Math::Vec3(x * halfHeight * aspect, y * halfHeight, 0.0f);
+        }
+        const Math::Mat4& world = resolved->world;
+        return Math::Ray(Math::Vec3(world * Math::Vec4(origin, 1.0f)), Math::Vec3(world * Math::Vec4(direction, 0.0f)));
+    }
+
+    std::optional<Math::Vec2> Renderer::WorldToScreenPoint(const Entity& camera, Math::Vec3 point) const
+    {
+        if (m_state == nullptr)
+        {
+            return std::nullopt;
+        }
+        const std::optional<ResolvedCamera> resolved = PickingCamera(*m_state, camera);
+        if (!resolved)
+        {
+            return std::nullopt;
+        }
+        const Math::Vec4 local = glm::inverse(resolved->world) * Math::Vec4(point, 1.0f);
+        // In front of the camera is local -Z.
+        if (local.z >= 0.0f)
+        {
+            return std::nullopt;
+        }
+        const Math::Vec4 clip = resolved->projection * local;
+        const float x = clip.x / clip.w;
+        const float y = clip.y / clip.w;
+        const PickingRect rect = PickingRectOf(*resolved);
+        return Math::Vec2(rect.left + (x + 1.0f) * 0.5f * rect.width, rect.top + (1.0f - y) * 0.5f * rect.height);
+    }
+
+    Entity Renderer::CameraAt(WindowId window, Math::Vec2 point) const
+    {
+        if (m_state == nullptr || window != Window::MainWindow())
+        {
+            return {};
+        }
+        Scene& scene = m_state->app->GetActiveScene();
+        EntityList& entities = scene.GetEntityList();
+        const std::array<ComponentType, 1> cameras{ComponentType::Native<Camera>()};
+        Entity found;
+        std::int32_t foundOrder = 0;
+        // The view drawn last at the point: the highest order, and of equal orders the highest entity id.
+        entities.ForEachWith(cameras, [&](std::uint32_t id) {
+            const Entity entity = entities.GetEntity(id);
+            const Camera& camera = entity.GetComponent<Camera>();
+            if (!camera.enabled || !camera.target.Is<WindowTarget>())
+            {
+                return;
+            }
+            const std::optional<ResolvedCamera> resolved = PickingCamera(*m_state, entity);
+            if (!resolved || !Holds(PickingRectOf(*resolved), point))
+            {
+                return;
+            }
+            if (!found.IsValid() || camera.order > foundOrder || (camera.order == foundOrder && id > found.GetId()))
+            {
+                found = entity;
+                foundOrder = camera.order;
+            }
+        });
+        return found;
+    }
+
 } // namespace Fenrir

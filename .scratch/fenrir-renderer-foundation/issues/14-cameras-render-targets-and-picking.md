@@ -14,11 +14,13 @@
 
 **Touches:** `packages/FenrirRenderer/`, `examples/DemoScaffold/`, `examples/RendererDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Null-backend tests: two cameras draw in `order` with their viewport rectangles; ties log once; an image-target view is ordered before the view sampling it; self-sampling gets the default texture, logged once; each skip case is skipped and logged once; disabled cameras draw nothing.
-- [ ] Picking tests (no GPU): `ScreenPointToRay` at the viewport centre is the camera's −Z; `WorldToScreenPoint` inverts it; `CameraAt` returns the highest-order camera under a point; every empty case is empty; orthographic rays are parallel.
-- [ ] With `msaa = 4` the scene targets have 4 samples and `Output` resolves.
-- [ ] GL pixel probes: an image target written by one camera and sampled by a material reads back the expected colour; an MSAA run renders with no GL errors.
-- [ ] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
+Hand check: in RendererDemo's "Cameras and render targets" scene (examples/RendererDemo/README.md), the main view fills the window with the orthographic top-down minimap in the top-right corner; the monitor shows the circling third camera's image, upright and moving; L cycles one view, side by side and one over the other, each view filling its part exactly; O sends the minimap under the main views and back; P switches the main views between perspective and orthographic; resizing the window keeps every viewport proportional; box edges are smooth (4x MSAA).
+
+- [x] Null-backend tests: two cameras draw in `order` with their viewport rectangles; ties log once; an image-target view is ordered before the view sampling it; self-sampling gets the default texture, logged once; each skip case is skipped and logged once; disabled cameras draw nothing.
+- [x] Picking tests (no GPU): `ScreenPointToRay` at the viewport centre is the camera's −Z; `WorldToScreenPoint` inverts it; `CameraAt` returns the highest-order camera under a point; every empty case is empty; orthographic rays are parallel.
+- [x] With `msaa = 4` the scene targets have 4 samples and `Output` resolves.
+- [x] GL pixel probes: an image target written by one camera and sampled by a material reads back the expected colour; an MSAA run renders with no GL errors.
+- [x] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
 - [ ] Scene 2 by hand: split screen halves, the minimap, the monitor, and the order, layout and projection keys look right; resizing the window keeps viewports proportional (checked by hand).

@@ -15,4 +15,9 @@ layout(location = 0) out vec4 outColour;
 void main()
 {
     outColour = background.colour;
+    // Depth 0, as the full-screen triangle already is, written so the depth test runs after the shader. With several
+    // views, each view's passes run between other views' (by render stage), and NVIDIA's early depth culling then
+    // sometimes passed this pass over a view's opaque items when it came back to that view's SceneDepth; the late test
+    // against the stored depth is right.
+    gl_FragDepth = 0.0;
 }

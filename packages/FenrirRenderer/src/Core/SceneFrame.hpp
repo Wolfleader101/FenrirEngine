@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <vector>
 
+#include "Device/CommandList.hpp"
+#include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
@@ -46,17 +48,24 @@ namespace Fenrir::Render
         Math::Mat4 world{1.0f};
     };
 
-    /** @brief One camera's view of the scene, drawn into the whole target. */
+    /**
+     * @brief One camera's view of the scene (ADR-0026): drawn into its own scene targets at its viewport's size, then
+     * written by Output into its viewport of its render target.
+     */
     struct ViewRequest
     {
         /** @brief World to view: the inverse of the camera's world matrix. */
         Math::Mat4 view{1.0f};
-        /** @brief View to clip, reversed-Z (ReversedZPerspective). */
+        /** @brief View to clip, reversed-Z (ReversedZPerspective or ReversedZOrthographic). */
         Math::Mat4 projection{1.0f};
         /** @brief The camera's world position. */
         Math::Vec3 position{0.0f};
         /** @brief What the Background pass draws where nothing opaque was drawn, linear. */
         Colour background = Colour::Black;
+        /** @brief The render target image it draws into, prepared with PrepareTarget; empty for the window. */
+        AssetKey target;
+        /** @brief Its viewport in its target's pixels, from the top-left: at least one pixel, inside the target. */
+        Graphics::PixelRect viewport;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame block (`Fenrir/Frame.glsl`). */
@@ -77,6 +86,11 @@ namespace Fenrir::Render
     struct SceneFrame
     {
         std::vector<DrawRequest> draws;
+        /**
+         * @brief The views, in order: views into one target draw in this order, the first clearing it. A view
+         * sampling an image another view draws is drawn after it, unless that would close a cycle of views waiting on
+         * each other, taking the views in this order: then the view gets the default texture there, logged once.
+         */
         std::vector<ViewRequest> views;
         SceneLighting lighting;
         /** @brief Seconds since the app started, and this frame's delta. */
@@ -90,4 +104,17 @@ namespace Fenrir::Render
      * looking along -Z, clip +Y up.
      */
     [[nodiscard]] Math::Mat4 ReversedZPerspective(float verticalFov, float aspect, float near);
+
+    /**
+     * @brief An orthographic projection with reversed-Z depth in [0, 1] (ADR-0026): `height` world units tall and
+     * `height * aspect` wide, centred on the view axis, with depth 1 at `near` and 0 at `far` in front of the camera.
+     */
+    [[nodiscard]] Math::Mat4 ReversedZOrthographic(float height, float aspect, float near, float far);
+
+    /**
+     * @brief The pixels of a target `size` that a normalised viewport (fractions from the top-left) covers: its edges
+     * rounded to the nearest pixel and clipped to the target. Empty (zero wide or high) when that is under one pixel.
+     */
+    [[nodiscard]] Graphics::PixelRect ViewportPixels(float x, float y, float width, float height,
+                                                     Graphics::PixelSize size);
 } // namespace Fenrir::Render

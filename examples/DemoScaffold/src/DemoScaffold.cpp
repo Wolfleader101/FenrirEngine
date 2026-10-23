@@ -13,7 +13,6 @@
 #include "FenrirAssets/Assets.hpp"
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
-#include "FenrirECS/WorldTransform.hpp"
 #include "FenrirInput/Input.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "FenrirRenderer/Components.hpp"
@@ -34,9 +33,6 @@ namespace FenrirDemo
         constexpr float MaxSpeed = 200.0f;
         // Just short of straight up or down, where yaw stops meaning anything.
         constexpr float MaxPitch = 1.55f;
-
-        // The null backend's surface size (packages/FenrirRenderer/README.md), for clicks with no window.
-        constexpr Fenrir::WindowSize NullSurfaceSize{1280, 720};
 
         // A smoke run's frames are this long, so it runs the same however fast the machine is.
         constexpr double SmokeFrameSeconds = 1.0 / 60.0;
@@ -489,51 +485,20 @@ namespace FenrirDemo
                 transform.rot = rotation;
             }
 
-            // The camera drawing the scene: the free-fly camera when it is on, else the scene's first enabled one.
-            [[nodiscard]] Fenrir::Entity DrawingCamera()
-            {
-                if (freeFlyOn)
-                {
-                    return freeFly;
-                }
-                Fenrir::Entity found;
-                ForEachSceneCamera(app->GetActiveScene(), [&](Fenrir::Entity entity, Fenrir::Camera& camera) {
-                    if (!found.IsValid() && camera.enabled)
-                    {
-                        found = entity;
-                    }
-                });
-                return found;
-            }
-
+            // The ray from the camera drawn at the clicked point, through it (ADR-0026's picking).
             void UpdateClick(const Fenrir::Mouse& mouse)
             {
-                if (!mouse.JustPressed(Fenrir::MouseButton::Left) || mouse.IsDown(Fenrir::MouseButton::Right))
+                if (!mouse.JustPressed(Fenrir::MouseButton::Left) || mouse.IsDown(Fenrir::MouseButton::Right) ||
+                    !renderer || !renderer->IsValid())
                 {
                     return;
-                }
-                const Fenrir::Entity camera = DrawingCamera();
-                if (!camera.IsValid())
-                {
-                    return;
-                }
-                Fenrir::WindowSize size = Fenrir::Window::LogicalSize(*app, Fenrir::Window::MainWindow());
-                if (size.width <= 0 || size.height <= 0)
-                {
-                    size = NullSurfaceSize;
                 }
                 const Fenrir::Math::Vec2 position = mouse.Position();
-                const float width = static_cast<float>(size.width);
-                const float height = static_cast<float>(size.height);
-                const float ndcX = 2.0f * position.x / width - 1.0f;
-                const float ndcY = 1.0f - 2.0f * position.y / height;
-                const float tanHalf = std::tan(camera.GetComponent<Fenrir::Camera>().projection.verticalFov * 0.5f);
-
-                const Fenrir::Math::Mat4 world = Fenrir::GetWorldMatrix(camera);
-                const Fenrir::Math::Vec3 local(ndcX * tanHalf * width / height, ndcY * tanHalf, -1.0f);
-                const Fenrir::Math::Vec3 direction = Fenrir::Math::Vec3(world * Fenrir::Math::Vec4(local, 0.0f));
-                const Fenrir::Math::Vec3 origin = Fenrir::Math::Vec3(world[3]);
-                app->SendEvent(DemoSceneClickEvent{Fenrir::Math::Ray(origin, direction), position});
+                const Fenrir::Entity camera = renderer->CameraAt(Fenrir::Window::MainWindow(), position);
+                if (const std::optional<Fenrir::Math::Ray> ray = renderer->ScreenPointToRay(camera, position))
+                {
+                    app->SendEvent(DemoSceneClickEvent{*ray, position});
+                }
             }
 
             // A smoke run's keys: key i of n goes down at frame (i + 1) * frames / (n + 1), and up a frame later.
@@ -698,6 +663,7 @@ namespace FenrirDemo
 
         Fenrir::RendererConfig renderer;
         renderer.backend = run.backend;
+        renderer.msaa = state->config.msaa;
         if (smoke)
         {
             // GL debug errors fail a smoke run in every build, and it runs as fast as it can.
