@@ -17,8 +17,10 @@ FENRIR_DEMO_SMOKE=60 FENRIR_DEMO_BACKEND=null out/build/clang-x64-debug/examples
 | 2 | Cameras and render targets | A ring of coloured boxes round a spinning white one, seen by its own cameras: a main view, a second view for split screen, an orthographic top-down minimap in the top-right corner over them, and a monitor whose screen shows what a third camera, circling the scene, draws into an image target. The monitor's own camera sees the screen black: a view does not sample its own target (logged once). | L: the layout, cycling one view, side by side and one over the other. O: the minimap's `order`, over or under the main views. P: the main views' projection, perspective or orthographic. |
 | 3 | Sky | A plinth with a spinning box and a ring of lit spheres under the scene's `Sky`: the skybox cubemap from the shared assets (`examples/assets/skybox/`, a procedural sky with hills and a sun, loaded from `skybox.cubemap`), or one dusk colour. The free-fly camera can override the `Sky` with a teal colour of its own (`ColourBackground`). | B: the scene's `Sky`, the cubemap or the dusk colour. O: the camera's own background, the teal colour or the scene's `Sky`. |
 | 4 | Debug draw | Every FenrirDebugDraw shape, wire and solid, twice: a depth-tested block on the left and an on-top block on the right, both behind a low wall, each shape labelled in world text. A sphere orbits above them with an axes frame, a box, a circle (kept forever) and a label drawn relative to it. Screen text with Latin-1 accents and a `?` for a character outside it, and two keyed on-screen messages updated every frame. | 1, 2, 3: show or hide the Wire, Solid and Labels groups. T: a sphere, a label and an unkeyed message at the orbiter for three seconds. F: an arrow and label kept forever (`DebugDraw::Forever`), one more each press. X: clear the forever group. |
+| 6a | Meshes and materials (C#) | Scene 1 again, built and run entirely by C# systems (`scripts/MeshesAndMaterials.cs`) on the scripting extensions: the same entities, materials and keys, with the backpack from C#'s `Renderer.SpawnModel`. The stripes shader, which C# cannot load by path, is embedded in the app and named `builtin:renderer-demo-stripes`. Only with scripting built (`FENRIR_ENABLE_SCRIPTING`), after the C++ scenes. | As scene 1. |
 
-Every scene draws with 4x MSAA (`DemoConfig::msaa`).
+Every scene draws with 4x MSAA (`DemoConfig::msaa`). With scripting built the scene list has five scenes, so the logged
+scene numbers below read `/5` instead of `/4`.
 
 ## Hand checks
 
@@ -84,3 +86,10 @@ Every scene draws with 4x MSAA (`DemoConfig::msaa`).
     later. Each F adds a green arrow and "forever #n" label that stay; X removes them all.
   - Text stays crisp, not blurred or blocky, at sizes from the small labels to the titles, and with Windows' display
     scale set to 150% (the screen text, messages and help panel grow with it).
+- Meshes and materials (C#), with scripting built (PageUp from the first scene, or
+  `FENRIR_DEMO_SCENE="Meshes and materials (C#)"`):
+  - It looks the same as Meshes and materials, object for object (step between the two with PageDown and PageUp, or
+    run each with `FENRIR_DEMO_SCENE`): the backpack, the unlit and lit primitives, the scrolling stripes, the magenta
+    cube and the empty gap, the grid, the four blend modes over the checkerboard and the two turning quads.
+  - L, M, V and C do what they do there, logging the same lines.
+  - Leaving it and coming back spawns it once again, not twice over.

@@ -108,6 +108,19 @@ Computed on call from the camera's world matrix and its target's size now, so us
 
 A stale entity, one with no `Camera`, a camera that draws nothing, a point outside the viewport, or a point behind the camera gives empty. There is no mesh picking.
 
+## The app's renderer
+
+Code that does not hold the owner reaches the renderer installed in an `App` through statics of the same names that take the `App` first: `Renderer::IsInstalled(app)`, `GetWorldBounds(app, entity)`, `Stats(app)`, `ScreenPointToRay(app, camera, point)`, `WorldToScreenPoint(app, camera, point)` and `CameraAt(app, window, point)`. Each answers as the owner's function while the owner `Install` made lives and is valid, and as an invalid owner otherwise. The scripting extension uses them.
+
+## From C#
+
+With `FENRIR_ENABLE_SCRIPTING` on, `FenrirRendererScripting` (`Scripting/`) gives C# the `Fenrir.Renderer` contract (`Managed/Fenrir.Renderer/`, ADR-0029): add `Renderer::ScriptingExtension()` (`FenrirRendererScripting/RendererScripting.hpp`) to `ScriptingConfig::extensions` after Input's and Assets's, whose contracts it builds on, and call `fenrir_deploy_renderer_scripting(<target>)` beside their deploy functions. It needs no `Renderer` installed.
+
+- **Components:** `MeshRenderer`, `Camera` and `DirectionalLight`, writable mirrors of the C++ ones: the same fields in PascalCase, and `new` is C++'s `{}`. `Camera`'s unions are `[TaggedUnion]` structs: `CameraProjection` (`Perspective` or `Orthographic`), `RenderTarget` (`WindowTarget` or `ImageTarget`) and `CameraBackground` (`SceneBackground` or `ColourBackground`); `WindowTarget.Window` is a `Fenrir.Input.WindowId`.
+- **Resources:** `Sky` (`ColourSky` or `CubemapSky`, a union too) and `AmbientLight`, writable scene-resource mirrors: `Resources.Get<Sky>()`, `Resources.Insert(new AmbientLight())`.
+- **`Renderer`** (write `Fenrir.Renderer.Renderer` inside a `Fenrir.*` namespace): `ScreenPointToRay(camera, point, out ray)`, `WorldToScreenPoint(camera, point, out screenPoint)` and `CameraAt(window, point)`; `GetWorldBounds(entity, out bounds)` and `Stats(out stats)`; and `SpawnModel(model)` or `SpawnModel(model, parent)`, which records the tree C++'s `SpawnModel` makes through the change buffer and returns its root, alive at once so the same system can give it components.
+- **No-op rules:** with no renderer (or, for `SpawnModel`, no asset store), an entity that is not alive or has no `Camera`, or an empty or stale model, a function does nothing and returns `false`, zero or `Entity.None`; nothing throws, and a debug build warns once per native call site and reason.
+
 ## Layers
 
 Three targets, three layers (ADR-0019): `FenrirRenderer`, the ECS facade (`include/`, `src/Facade/`), the only one with public headers and the only one that links FenrirWindow, `PRIVATE`; `FenrirRendererCore`, the renderer core (`src/Core/`), with no FenrirApp, FenrirECS, FenrirScene or FenrirWindow dependency; and the graphics device with its backends (`src/Device/`, `src/Backend/`), where only `src/Backend/OpenGL/` includes GL. The core and the facade are tested on the null backend through `RendererProbe` (`FenrirRendererTests`), and the OpenGL backend and the scene through GL pixel probes (`FenrirRendererGlTests`, CTest label `gl`, skipped without a display or an OpenGL 4.6 context).

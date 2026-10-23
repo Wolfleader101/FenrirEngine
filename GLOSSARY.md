@@ -121,7 +121,7 @@ What a system reads events through: it remembers which events of one kind it has
 A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
 
 **Structural change**
-Creating or destroying an entity, adding or removing a component, or inserting or removing a resource from C#. A structural change made from a C# system, or from a native function it calls (through the call context's change buffer), takes effect only when that system returns; an entity created that way is usable at once.
+Creating or destroying an entity, parenting one under another (from a native function), adding or removing a component, or inserting or removing a resource from C#. A structural change made from a C# system, or from a native function it calls (through the call context's change buffer), takes effect only when that system returns; an entity created that way is usable at once.
 
 **Script assembly**
 A user's C# assembly holding C# components and systems. The engine loads it as one Iris component, and it reloads as a new generation.

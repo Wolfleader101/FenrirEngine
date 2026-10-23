@@ -19,6 +19,11 @@
 #include "FenrirScene/Scene.hpp"
 #include "FenrirWindow/Window.hpp"
 
+#ifdef FENRIR_DEMO_SCRIPTING
+#include "DemoScripting.hpp"
+#include "FenrirScripting/Scripting.hpp"
+#endif
+
 namespace FenrirDemo
 {
     namespace
@@ -161,11 +166,17 @@ namespace FenrirDemo
             std::optional<Fenrir::Assets> assets;
             std::optional<Fenrir::DebugDrawing> debugDrawing;
             std::optional<Fenrir::Renderer> renderer;
+#ifdef FENRIR_DEMO_SCRIPTING
+            // Last, so it ends first, while the packages its extensions reach are there.
+            std::optional<Fenrir::Scripting> scripting;
+#endif
 
             // The App's own first scene, kept empty and active between leaving one demo scene and entering the next.
             std::string holderScene;
             bool started = false;
             std::optional<std::size_t> current;
+            // Scene entries so far, which a C# scene's CSharpScene marker carries.
+            std::uint32_t entries = 0;
 
             Fenrir::Entity freeFly;
             bool freeFlyOn = true;
@@ -292,6 +303,11 @@ namespace FenrirDemo
                 framesInScene = 0;
                 secondsActive = 0.0;
                 keysPressed = 0;
+                ++entries;
+                if (demoScene.csharpScene != 0)
+                {
+                    scene.AddResource<CSharpScene>(CSharpScene{demoScene.csharpScene, entries});
+                }
 
                 // The free-fly camera first, so the scene can find it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
@@ -699,6 +715,19 @@ namespace FenrirDemo
             renderer.vsync = Fenrir::Vsync::Off;
         }
         state->renderer = Fenrir::Renderer::Install(app, renderer);
+#ifdef FENRIR_DEMO_SCRIPTING
+        if (!state->config.scriptAssembly.empty())
+        {
+            Fenrir::ScriptingConfig scripting;
+            // The asset store's root is the default, `assets` beside the executable, so its parent is the
+            // executable's directory, where fenrir_add_demo_app puts the scripts.
+            scripting.scriptAssembly = state->assets->Store().Root().parent_path() / state->config.scriptAssembly;
+            // A smoke run is a check of the scripts as built, not an editing session.
+            scripting.hotReload = !smoke;
+            scripting.extensions = Detail::DemoScriptingExtensions();
+            state->scripting = Fenrir::Scripting::Install(app, std::move(scripting));
+        }
+#endif
 
         std::weak_ptr<Detail::DemoState> weak = state;
         app.AddSequentialSystem(Fenrir::SchedulePriority::BeforeTicks, [weak](Fenrir::App&) {

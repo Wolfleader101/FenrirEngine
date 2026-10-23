@@ -13,8 +13,8 @@ fenrir_add_demo_app(RendererDemo SOURCES src/main.cpp src/MeshesAndMaterials.cpp
 `fenrir_add_demo_app(<name> SOURCES … SCRIPTS … ASSETS …)` makes the executable and links the scaffold. Its asset
 root, the `assets` folder beside the executable (FenrirAssets' default root), gets the shared `examples/assets/` and
 then each `ASSETS` directory copied in after every build, so an app's file replaces a shared one of the same name. With
-`FENRIR_BUILD_TESTS` on, it registers the app's smoke runs in CTest (below). `SCRIPTS` is accepted and not used yet:
-building and copying the app's C# script project, and the `Fenrir.Demo` assembly, come with scripting in the demo apps.
+`FENRIR_BUILD_TESTS` on, it registers the app's smoke runs in CTest (below). `SCRIPTS <dir>` names the app's C# scripts
+project, `<dir>/<App>.Scripts.csproj` (see "C# scenes").
 
 ```cpp
 Fenrir::App app(std::make_unique<Fenrir::ConsoleLogger>());
@@ -26,7 +26,8 @@ return demo.Run();
 ```
 
 `DemoScaffold::Install(App&, DemoConfig)` installs FenrirWindow (for the OpenGL backend), FenrirInput, FenrirAssets,
-FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. Scripting joins with the scripting demo apps.
+FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. With scripting built and
+`DemoConfig::scriptAssembly` set, it installs Scripting last (see "C# scenes").
 `DemoConfig::msaa` sets the renderer's MSAA samples (`RendererConfig::msaa`; 1, off, by default).
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
@@ -34,6 +35,25 @@ A `DemoScene` is one entry of the app's ordered scene list: a `name`, a one-line
 presses, where the free-fly camera starts, a `spawn` function and an optional per-frame `update` (in `Update`, on the
 main thread). Each time a scene is entered it is spawned into a FenrirScene of its own, named after it; leaving it
 destroys that FenrirScene, and the assets the scene loaded for itself (owned by the scene) go with it.
+
+## C# scenes
+
+With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
+
+- **The scripts project**, `<App>.Scripts.csproj` in the directory `SCRIPTS` names, references the contracts and the
+  scaffold's shared `Fenrir.Demo` assembly (`Managed/Fenrir.Demo`) with `HintPath`s to the `Fenrir<Name>ContractDir`
+  folders `fenrir_add_demo_app` passes (RendererDemo's `scripts/` is the example). It is built to `scripts/` beside the
+  executable, with the contracts and what scripting needs at run time, and the app's sources get
+  `FENRIR_DEMO_SCRIPT_ASSEMBLY`, its path, for `DemoConfig::scriptAssembly`. Without scripting, `SCRIPTS` is ignored and
+  `FENRIR_DEMO_SCRIPT_ASSEMBLY` is not defined.
+- **Scripting** runs the scripts with every installed package's extension (Input, Window, Assets, Renderer) and the
+  scaffold's own, which shares `Fenrir.Demo`: the `CSharpScene` marker, a read-only scene resource, and
+  `DemoSceneClickEvent`, the scene click as a native event. A script assembly that fails to load is logged as an error,
+  so it fails a smoke run. Hot reload is on, except in a smoke run.
+- **A C# scene** is a `DemoScene` with a nonzero `csharpScene` number and no `spawn`. Each time it is entered its
+  FenrirScene gets a `CSharpScene { Scene, Entry }`, `Entry` new for each entry. Its C# systems do nothing unless
+  `CSharpScene.IsActive(number, out entry)`, and spawn the scene when `entry` is one they have not seen; the scene's
+  assets and entities go with its FenrirScene, as a C++ scene's do.
 
 ## Keys
 

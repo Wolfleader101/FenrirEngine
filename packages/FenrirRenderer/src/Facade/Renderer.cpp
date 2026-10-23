@@ -802,6 +802,12 @@ namespace Fenrir
             {
                 Window::ReleaseSurface(*app, Window::MainWindow());
             }
+            // Only this state's resource: a later Install's must stay.
+            const InstalledRenderer* installed = app == nullptr ? nullptr : app->TryGetResource<InstalledRenderer>();
+            if (installed != nullptr && installed->state.expired())
+            {
+                app->RemoveResource<InstalledRenderer>();
+            }
         }
     } // namespace Detail
 
@@ -878,6 +884,7 @@ namespace Fenrir
                                         RenderActiveScene(running, *current);
                                     }
                                 });
+        app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
         return Renderer(std::move(state));
     }
 
@@ -1046,4 +1053,47 @@ namespace Fenrir
         return found;
     }
 
+    namespace
+    {
+        /**
+         * @brief A second handle on `app`'s installed renderer state, for one call of a static: it shares the owner's
+         * state, so it answers as the owner does, and ending it ends nothing while the owner lives. Invalid when the
+         * app has no live owner.
+         */
+        std::shared_ptr<Detail::RendererState> InstalledState(App& app)
+        {
+            const Detail::InstalledRenderer* installed = app.TryGetResource<Detail::InstalledRenderer>();
+            return installed == nullptr ? nullptr : installed->state.lock();
+        }
+    } // namespace
+
+    bool Renderer::IsInstalled(App& app)
+    {
+        return InstalledState(app) != nullptr;
+    }
+
+    std::optional<Math::AABB> Renderer::GetWorldBounds(App& app, const Entity& entity)
+    {
+        return Renderer(InstalledState(app)).GetWorldBounds(entity);
+    }
+
+    RendererStats Renderer::Stats(App& app)
+    {
+        return Renderer(InstalledState(app)).Stats();
+    }
+
+    std::optional<Math::Ray> Renderer::ScreenPointToRay(App& app, const Entity& camera, Math::Vec2 point)
+    {
+        return Renderer(InstalledState(app)).ScreenPointToRay(camera, point);
+    }
+
+    std::optional<Math::Vec2> Renderer::WorldToScreenPoint(App& app, const Entity& camera, Math::Vec3 point)
+    {
+        return Renderer(InstalledState(app)).WorldToScreenPoint(camera, point);
+    }
+
+    Entity Renderer::CameraAt(App& app, WindowId window, Math::Vec2 point)
+    {
+        return Renderer(InstalledState(app)).CameraAt(window, point);
+    }
 } // namespace Fenrir

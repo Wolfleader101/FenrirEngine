@@ -13,6 +13,7 @@ namespace Fenrir
 {
     class App;
     struct RendererProbe;
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -153,6 +154,31 @@ namespace Fenrir
          */
         [[nodiscard]] Entity CameraAt(WindowId window, Math::Vec2 point) const;
         /** @} */
+
+        /** @name The app's renderer
+         * For code that does not hold the owner, such as FenrirRenderer's scripting extension: each answers as the
+         * function of the same name of the owner Install made for `app`, while that owner lives and is valid, and as
+         * an invalid owner otherwise. Call them from the main thread, as the owner's.
+         * @{
+         */
+        /** @brief Whether `app` has a valid Renderer owner now. */
+        [[nodiscard]] static bool IsInstalled(App& app);
+        [[nodiscard]] static std::optional<Math::AABB> GetWorldBounds(App& app, const Entity& entity);
+        [[nodiscard]] static RendererStats Stats(App& app);
+        [[nodiscard]] static std::optional<Math::Ray> ScreenPointToRay(App& app, const Entity& camera,
+                                                                       Math::Vec2 point);
+        [[nodiscard]] static std::optional<Math::Vec2> WorldToScreenPoint(App& app, const Entity& camera,
+                                                                          Math::Vec3 point);
+        [[nodiscard]] static Entity CameraAt(App& app, WindowId window, Math::Vec2 point);
+        /** @} */
+
+        /**
+         * @brief FenrirRenderer's scripting extension (ADR-0029): the Fenrir.Renderer contract's components, resources
+         * and native functions. Defined in the FenrirRendererScripting library, built only with FENRIR_ENABLE_RENDERER
+         * and FENRIR_ENABLE_SCRIPTING: include "FenrirRendererScripting/RendererScripting.hpp" and link it to call it.
+         * It needs no Renderer installed; its functions then do nothing.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
       private:
         friend struct Fenrir::RendererProbe;

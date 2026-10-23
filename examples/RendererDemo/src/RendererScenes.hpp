@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 // RendererDemo's scenes, in the order of its scene list. Each renderer feature ticket adds its scene here.
@@ -30,4 +32,19 @@ namespace RendererDemo
      * groups, draw for three seconds, draw forever and clear.
      */
     [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
+
+    /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
+    inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
+
+    /**
+     * @brief Meshes and materials (C#): a twin of Meshes and materials, the same scene with the same keys, spawned and
+     * run entirely by C# systems (scripts/MeshesAndMaterials.cs). For an app with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterialsCSharp();
+
+    /** @brief The name the stripes shader, embedded in the app, has for C#, which cannot load a shader by path. */
+    inline constexpr const char* StripesShaderName = "builtin:renderer-demo-stripes";
+
+    /** @brief Gives the app's asset store the shaders RendererDemo's C# scenes load by name (StripesShaderName). */
+    void AddCSharpShaders(Fenrir::App& app);
 } // namespace RendererDemo

@@ -6,8 +6,12 @@
 # the app's smoke runs in CTest, one per backend: <name>-Smoke-null everywhere, and <name>-Smoke-opengl labelled gl,
 # reported skipped without an OpenGL 4.6 context.
 #
-# SCRIPTS names the app's C# script project. It is accepted and not yet used: building and copying it, and the
-# Fenrir.Demo assembly, come with scripting in the demo apps (renderer ticket 25).
+# SCRIPTS names the directory of the app's C# scripts project, `<name>.Scripts.csproj`. With scripting built
+# (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
+# Fenrir.Assets, Fenrir.Renderer and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=),
+# and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
+# sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
+# DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
 include_guard(GLOBAL)
 
 set(FENRIR_DEMO_SHARED_ASSETS "${CMAKE_CURRENT_LIST_DIR}/../../assets" CACHE INTERNAL "")
@@ -43,6 +47,10 @@ function(fenrir_add_demo_app name)
         )
     endforeach()
 
+    if(demo_SCRIPTS AND FENRIR_ENABLE_SCRIPTING)
+        fenrir_add_demo_scripts(${name} "${demo_SCRIPTS}")
+    endif()
+
     # Every scene, whatever FENRIR_DEMO_SCENE and FENRIR_DEMO_KEYS the shell has: empty is unset.
     if(FENRIR_BUILD_TESTS)
         add_test(NAME ${name}-Smoke-null COMMAND ${name})
@@ -60,4 +68,59 @@ function(fenrir_add_demo_app name)
             LABELS "demo;gl"
         )
     endif()
+endfunction()
+
+# fenrir_add_demo_scripts(<name> <dir>): builds the demo app <name>'s scripts project <dir>/<name>.Scripts.csproj and
+# deploys it, the contracts and scripting's run-time files beside the executable (see fenrir_add_demo_app's SCRIPTS).
+function(fenrir_add_demo_scripts name scripts_dir)
+    cmake_path(ABSOLUTE_PATH scripts_dir BASE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" NORMALIZE)
+    set(project "${scripts_dir}/${name}.Scripts.csproj")
+    if(NOT EXISTS "${project}")
+        message(FATAL_ERROR "fenrir_add_demo_app(${name}): SCRIPTS has no ${name}.Scripts.csproj in ${scripts_dir}")
+    endif()
+    file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${scripts_dir}/*.cs")
+    list(FILTER sources EXCLUDE REGEX "/(obj|bin)/")
+
+    # Built into a folder of its own, then copied beside the executable: the contracts are compile-time only (the host
+    # shares its own copies), so the folder holds the scripts alone.
+    set(out "${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts")
+    add_custom_command(
+        OUTPUT "${out}/${name}.Scripts.dll"
+        COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${project}" --configuration Release --output "${out}" -nologo -v:q
+            "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
+            "-p:FenrirInputContractDir=${FENRIR_INPUT_CONTRACT_DIR}/"
+            "-p:FenrirWindowContractDir=${FENRIR_WINDOW_CONTRACT_DIR}/"
+            "-p:FenrirAssetsContractDir=${FENRIR_ASSETS_CONTRACT_DIR}/"
+            "-p:FenrirRendererContractDir=${FENRIR_RENDERER_CONTRACT_DIR}/"
+            "-p:FenrirDemoContractDir=${FENRIR_DEMO_CONTRACT_DIR}/"
+            "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts-obj/"
+        DEPENDS ${sources} "${project}"
+            FenrirScriptingContract "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
+            "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
+            FenrirInputContract "${FENRIR_INPUT_CONTRACT_DIR}/Fenrir.Input.dll"
+            FenrirWindowContract "${FENRIR_WINDOW_CONTRACT_DIR}/Fenrir.Window.dll"
+            FenrirAssetsContract "${FENRIR_ASSETS_CONTRACT_DIR}/Fenrir.Assets.dll"
+            FenrirRendererContract "${FENRIR_RENDERER_CONTRACT_DIR}/Fenrir.Renderer.dll"
+            FenrirDemoContract "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll"
+        COMMENT "Building ${name}'s C# scripts"
+        VERBATIM
+    )
+    add_custom_target(${name}Scripts DEPENDS "${out}/${name}.Scripts.dll")
+    add_custom_target(${name}DeployScripts
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${name}>/scripts"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${out}/${name}.Scripts.dll" "${out}/${name}.Scripts.deps.json"
+            "$<TARGET_FILE_DIR:${name}>/scripts"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll"
+            "$<TARGET_FILE_DIR:${name}>"
+        VERBATIM
+    )
+    add_dependencies(${name}DeployScripts ${name}Scripts FenrirDemoContract)
+    add_dependencies(${name} ${name}DeployScripts)
+    target_compile_definitions(${name} PRIVATE FENRIR_DEMO_SCRIPT_ASSEMBLY="scripts/${name}.Scripts.dll")
+
+    fenrir_deploy_scripting(${name})
+    fenrir_deploy_input_scripting(${name})
+    fenrir_deploy_window_scripting(${name})
+    fenrir_deploy_assets_scripting(${name})
+    fenrir_deploy_renderer_scripting(${name})
 endfunction()

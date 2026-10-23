@@ -14,10 +14,11 @@
 
 **Touches:** `packages/FenrirRenderer/Managed/`, `packages/FenrirRenderer/Scripting/`, `examples/DemoScaffold/`, `examples/RendererDemo/`, `CMakeLists.txt`, `FenrirScripting.sln`
 
-**Status:** ready-for-agent
+**Status:** resolved
+Hand check: RendererDemo scene 6a, "Meshes and materials (C#)" (the hand checks in `examples/RendererDemo/README.md`), looks the same as scene 1, "Meshes and materials", object for object (step between them with PageUp and PageDown): the backpack, the unlit and lit primitives, the scrolling stripes, the magenta cube and the empty gap, the metallic/roughness grid, the four blend modes and the two turning quads; L, M, V and C do what they do in scene 1; leaving it and coming back spawns it once again.
 
-- [ ] Extension tests: each mirror's layout matches C++ and `new` equals `{}`; a C# system loads a mesh, makes a material, sets a colour and spawns a `MeshRenderer` and `Camera` that `RendererProbe` sees drawn; `SpawnModel` from C# returns a root usable in the same system.
-- [ ] `ScreenPointToRay` from C# agrees with C++; `Sky` written from C# reaches the draw list's background; `AmbientLight` written from C# reaches the frame block.
-- [ ] With no renderer installed every call no-ops with the documented return.
-- [ ] `FENRIR_DEMO_SMOKE` runs RendererDemo's C# scene on null and GL with no errors, with scripting on.
+- [x] Extension tests: each mirror's layout matches C++ and `new` equals `{}`; a C# system loads a mesh, makes a material, sets a colour and spawns a `MeshRenderer` and `Camera` that `RendererProbe` sees drawn; `SpawnModel` from C# returns a root usable in the same system.
+- [x] `ScreenPointToRay` from C# agrees with C++; `Sky` written from C# reaches the draw list's background; `AmbientLight` written from C# reaches the frame block.
+- [x] With no renderer installed every call no-ops with the documented return.
+- [x] `FENRIR_DEMO_SMOKE` runs RendererDemo's C# scene on null and GL with no errors, with scripting on.
 - [ ] Scene 6a by hand: it matches scene 1 (checked by hand).

@@ -117,7 +117,13 @@ namespace Fenrir::Detail
         RendererState& operator=(const RendererState&) = delete;
         RendererState(RendererState&&) = delete;
         RendererState& operator=(RendererState&&) = delete;
-        /** @brief Frees the GPU side, then releases the main window's surface. */
+        /** @brief Frees the GPU side, releases the main window's surface, and removes its InstalledRenderer. */
         ~RendererState();
+    };
+
+    /** @brief The app resource through which Renderer's statics find the installed renderer's state. */
+    struct InstalledRenderer
+    {
+        std::weak_ptr<RendererState> state;
     };
 } // namespace Fenrir::Detail
