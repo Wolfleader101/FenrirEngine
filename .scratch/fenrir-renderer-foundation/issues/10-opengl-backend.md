@@ -20,6 +20,6 @@
 - [x] GL tests (skipped without 4.6): clearing an offscreen target to a colour reads back that colour; a pass drawing a full-screen triangle from an embedded test container reads back its colour; the top row of an offscreen target is row 0 of the read-back.
 - [x] A deliberately bad GL call under validation fails its test through the debug callback.
 - [x] Deferred destruction frees GL objects after `framesInFlight` frames.
-- [ ] The CI Linux job prints a 4.6 llvmpipe version and runs the GL suite green; Windows CI runs the null tests.
+- [x] The CI Linux job prints a 4.6 llvmpipe version and runs the GL suite green; Windows CI runs the null tests.
 - [x] No GL or glad include is reachable outside `src/Backend/OpenGL/` and `libs/glad`; Clang and MSVC x64 debug and release presets build with no new warnings.
 - [x] The GL suite passes on the developer's own GPU (checked by hand).

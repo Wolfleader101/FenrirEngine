@@ -14,7 +14,7 @@ cmake --build out/build/clang-x64-debug
 ctest --test-dir out/build/clang-x64-debug
 ```
 
-CI (`.github/workflows/build-and-test.yml`) runs these steps without the DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`. `linux-debug` also runs the renderer's GL tests (CTest label `gl`) on Mesa's llvmpipe under Xvfb; the Windows jobs run the null tests only.
+CI (`.github/workflows/build-and-test.yml`) runs these steps without the DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`. `linux-debug` also runs the renderer's GL tests (CTest label `gl`) on Mesa's llvmpipe, through SDL's offscreen video driver over EGL; the Windows jobs run the null tests only.
 
 Before opening a PR, build and test `clang-x64-debug`, and run the DemoApp smoke run of each scene the change touches
 (`FENRIR_DEMO_SCENE` with `FENRIR_DEMO_KEYS=1`, see `examples/DemoApp/README.md`). `scripts/demo-smoke.sh` runs every physics scene's
