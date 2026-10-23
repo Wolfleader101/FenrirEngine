@@ -4,7 +4,6 @@
 #include <cmath>
 #include <cstring>
 #include <format>
-#include <numeric>
 #include <string_view>
 #include <type_traits>
 #include <variant>
