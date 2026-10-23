@@ -1,7 +1,9 @@
 name: Build and test
 
 # Builds the engine and runs its tests (README.md, "Building and testing") with every CMakePresets.json preset CI can run.
-# The DemoApp is left out (FENRIR_BUILD_EXAMPLES=OFF): its third-party libraries in examples/DemoApp/libs are not submodules.
+# The demo apps are built (FENRIR_BUILD_EXAMPLES=ON), and their CTest smoke runs run with the tests: on the null backend
+# everywhere, and on OpenGL (label gl) in the Linux GL step. The legacy DemoApp is left out (FENRIR_BUILD_LEGACY_DEMOAPP is
+# off by default): its third-party libraries in examples/DemoApp/libs are not submodules.
 
 on:
   pull_request:
@@ -19,7 +21,7 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   # Matches the projects' TargetFramework (net10.0); the repo has no global.json.
   DOTNET_VERSION: 10.0.x
-  FENRIR_CMAKE_OPTIONS: -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_PHYSICS=ON -DFENRIR_ENABLE_ASSETS=ON -DFENRIR_ENABLE_RENDERER=ON -DFENRIR_BUILD_TESTS=ON -DFENRIR_BUILD_EXAMPLES=OFF
+  FENRIR_CMAKE_OPTIONS: -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_PHYSICS=ON -DFENRIR_ENABLE_ASSETS=ON -DFENRIR_ENABLE_RENDERER=ON -DFENRIR_BUILD_TESTS=ON -DFENRIR_BUILD_EXAMPLES=ON
 
 jobs:
   windows:
