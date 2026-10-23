@@ -42,6 +42,15 @@ namespace RendererDemo
      */
     [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterialsCSharp();
 
+    /** @brief Debug draw (C#)'s number, which its C# systems know it by (scripts/DebugDrawScene.cs). */
+    inline constexpr std::uint32_t DebugDrawingCSharpScene = 2;
+
+    /**
+     * @brief Debug draw (C#): a twin of Debug draw, the same shapes, text and keys, spawned, drawn and run entirely by
+     * C# systems through the Fenrir.DebugDraw facade (scripts/DebugDrawScene.cs). For an app with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene DebugDrawingCSharp();
+
     /** @brief The name the stripes shader, embedded in the app, has for C#, which cannot load a shader by path. */
     inline constexpr const char* StripesShaderName = "builtin:renderer-demo-stripes";
 

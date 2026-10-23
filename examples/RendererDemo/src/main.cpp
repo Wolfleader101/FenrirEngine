@@ -18,6 +18,7 @@ int main()
     // The C# twins, run by the app's scripts.
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
     config.scenes.push_back(RendererDemo::MeshesAndMaterialsCSharp());
+    config.scenes.push_back(RendererDemo::DebugDrawingCSharp());
 #endif
     // Every scene's edges are smoothed by 4x MSAA, resolved in each view's Output pass.
     config.msaa = 4;

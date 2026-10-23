@@ -8,7 +8,7 @@
 #
 # SCRIPTS names the directory of the app's C# scripts project, `<name>.Scripts.csproj`. With scripting built
 # (FENRIR_ENABLE_SCRIPTING) it is built against the scripting SDK and the contracts (Fenrir.Input, Fenrir.Window,
-# Fenrir.Assets, Fenrir.Renderer and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=),
+# Fenrir.Assets, Fenrir.Renderer, Fenrir.DebugDraw and the scaffold's Fenrir.Demo, whose folders it gets as -p:Fenrir<Name>ContractDir=),
 # and copied to `scripts/` beside the executable, with the contracts and what scripting needs at run time; the app's
 # sources get FENRIR_DEMO_SCRIPT_ASSEMBLY, its path relative to the executable's directory, for
 # DemoConfig::scriptAssembly. Without scripting, SCRIPTS is ignored.
@@ -92,6 +92,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
             "-p:FenrirWindowContractDir=${FENRIR_WINDOW_CONTRACT_DIR}/"
             "-p:FenrirAssetsContractDir=${FENRIR_ASSETS_CONTRACT_DIR}/"
             "-p:FenrirRendererContractDir=${FENRIR_RENDERER_CONTRACT_DIR}/"
+            "-p:FenrirDebugDrawContractDir=${FENRIR_DEBUGDRAW_CONTRACT_DIR}/"
             "-p:FenrirDemoContractDir=${FENRIR_DEMO_CONTRACT_DIR}/"
             "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/${name}-scripts-obj/"
         DEPENDS ${sources} "${project}"
@@ -101,6 +102,7 @@ function(fenrir_add_demo_scripts name scripts_dir)
             FenrirWindowContract "${FENRIR_WINDOW_CONTRACT_DIR}/Fenrir.Window.dll"
             FenrirAssetsContract "${FENRIR_ASSETS_CONTRACT_DIR}/Fenrir.Assets.dll"
             FenrirRendererContract "${FENRIR_RENDERER_CONTRACT_DIR}/Fenrir.Renderer.dll"
+            FenrirDebugDrawContract "${FENRIR_DEBUGDRAW_CONTRACT_DIR}/Fenrir.DebugDraw.dll"
             FenrirDemoContract "${FENRIR_DEMO_CONTRACT_DIR}/Fenrir.Demo.dll"
         COMMENT "Building ${name}'s C# scripts"
         VERBATIM
@@ -123,4 +125,5 @@ function(fenrir_add_demo_scripts name scripts_dir)
     fenrir_deploy_window_scripting(${name})
     fenrir_deploy_assets_scripting(${name})
     fenrir_deploy_renderer_scripting(${name})
+    fenrir_deploy_debugdraw_scripting(${name})
 endfunction()

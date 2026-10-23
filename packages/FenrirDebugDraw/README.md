@@ -59,6 +59,36 @@ From a system the scheduler runs in parallel, an item is held in the system's se
 recorded in the order the systems were registered, as events are. Sequential systems record directly. Read
 `Tessellate` on the main thread, from a sequential system, as the renderer does in `Render`.
 
+## From C#
+
+With `FENRIR_ENABLE_SCRIPTING` on, `FenrirDebugDrawScripting` (`Scripting/`) gives C# the `Fenrir.DebugDraw` contract
+(`Managed/Fenrir.DebugDraw/`, ADR-0029): add `DebugDrawing::ScriptingExtension()`
+(`FenrirDebugDrawScripting/DebugDrawScripting.hpp`) to `ScriptingConfig::extensions`, and call
+`fenrir_deploy_debugdraw_scripting(<target>)` beside `fenrir_deploy_scripting(<target>)`. It needs no owner, so scripts
+always load.
+
+```csharp
+using Fenrir.DebugDraw;
+
+DebugDraw.Line(from, to, Colour.Red);
+DebugDraw.Sphere(centre, 0.5f, Colour.Green, new ShapeOptions { Duration = 2.0f, Segments = 32 });
+DebugDraw.Message(1, $"speed: {speed:0} m/s", Colour.White);
+```
+
+- **`DebugDraw`** (write `Fenrir.DebugDraw.DebugDraw` inside a `Fenrir.*` namespace) is a static facade of native
+  functions, not a mirror (ADR-0029): every C++ call above, by the same name, into the active scene's `DebugDraw`, so
+  lifetimes, groups and tessellation are C++'s own. It is the only way C# draws debug shapes; physics's contract keeps
+  only `PhysicsWorld.SetDebugDraw(PhysicsDebugCategories)`, which picks what physics draws into the `Physics` group.
+- **Options:** `ShapeOptions` and `TextOptions` are structs whose `new` is C++'s `{}` (group `Default`, duration 0,
+  `relativeTo` `Entity.None`, thickness 1, `DepthMode.Tested`, 24 segments, size 16); leaving them out is the same.
+  `DebugDraw.Forever` is the forever duration. Points and triangles are `ReadOnlySpan<Vector3>`, text is any
+  `ReadOnlySpan<char>`, and math is `Fenrir.Math`'s.
+- **Lifetimes from C#:** duration 0 drawn from a `Phase.Tick` system lasts until the next tick, and from any other
+  phase until the end of the frame's `Render`, as in C++.
+- **No-op rules:** with no `DebugDraw` in the active scene (debug drawing not installed) or a `relativeTo` entity that is
+  not alive, a call draws nothing and `IsGroupShown` is false; nothing throws, and a debug build warns once per native
+  call site and reason.
+
 ## What a renderer reads
 
 `DebugDraw::Tessellate()` returns `DebugBatches`: the live items of shown groups in world space, with `relativeTo`

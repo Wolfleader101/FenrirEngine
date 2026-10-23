@@ -25,6 +25,10 @@
       <HintPath>$(FenrirRendererContractDir)Fenrir.Renderer.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Fenrir.DebugDraw">
+      <HintPath>$(FenrirDebugDrawContractDir)Fenrir.DebugDraw.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
     <Reference Include="Fenrir.Demo">
       <HintPath>$(FenrirDemoContractDir)Fenrir.Demo.dll</HintPath>
       <Private>false</Private>
@@ -39,6 +43,9 @@
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirRenderer/Managed/Fenrir.Renderer/Fenrir.Renderer.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Fenrir.DebugDraw.csproj">
       <Private>false</Private>
     </ProjectReference>
     <ProjectReference Include="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo/Fenrir.Demo.csproj">
