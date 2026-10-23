@@ -105,6 +105,7 @@ namespace Fenrir::Graphics
             CullMode cull = CullMode::Back;
             DepthState depth;
             BlendMode blend = BlendMode::None;
+            bool encodeSrgb = true;
         };
 
         void CheckLive(bool live, const char* what);

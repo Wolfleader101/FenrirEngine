@@ -13,8 +13,8 @@
 
 **Touches:** `packages/FenrirDraw2D/`, `packages/FenrirRenderer/`, `CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Null-backend tests: two layers draw lowest first, then submission and command order, all before debug screen text; scissors resolve to the expected pixel rectangles at content scale 1 and 1.5; pipeline descriptions equal by value share one pipeline; an over-limit command is skipped and logged once; a submission to an undrawn window is dropped and logged once.
-- [ ] GL pixel probes: straight and premultiplied quads over opaque and non-opaque destinations give the ADR's results within tolerance; layering order; a scissor at content scale other than 1 clips the right pixels; `Gamma` on a non-sRGB target logs and draws as `Linear`.
-- [ ] FenrirDraw2D has no GPU or renderer dependency; Clang and MSVC x64 presets build with no new warnings.
+- [x] Null-backend tests: two layers draw lowest first, then submission and command order, all before debug screen text; scissors resolve to the expected pixel rectangles at content scale 1 and 1.5; pipeline descriptions equal by value share one pipeline; an over-limit command is skipped and logged once; a submission to an undrawn window is dropped and logged once.
+- [x] GL pixel probes: straight and premultiplied quads over opaque and non-opaque destinations give the ADR's results within tolerance; layering order; a scissor at content scale other than 1 clips the right pixels; `Gamma` on a non-sRGB target logs and draws as `Linear`.
+- [x] FenrirDraw2D has no GPU or renderer dependency; Clang and MSVC x64 presets build with no new warnings.

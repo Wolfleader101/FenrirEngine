@@ -490,6 +490,7 @@ namespace Fenrir::Graphics
         pipeline.cull = desc.cull;
         pipeline.depth = desc.depth;
         pipeline.blend = desc.blend;
+        pipeline.encodeSrgb = desc.encodeSrgb;
         gl.CreateVertexArrays(1, &pipeline.vertexArray);
         for (std::size_t slot = 0; slot < desc.vertexBuffers.size(); ++slot)
         {
@@ -759,6 +760,8 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
+        // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
+        m_gl->Enable(GL_FRAMEBUFFER_SRGB);
         m_gl->PopDebugGroup();
         m_replay = ReplayState{};
     }
@@ -809,6 +812,14 @@ namespace Fenrir::Graphics
         else
         {
             gl.Disable(GL_BLEND);
+        }
+        if (pipeline->encodeSrgb)
+        {
+            gl.Enable(GL_FRAMEBUFFER_SRGB);
+        }
+        else
+        {
+            gl.Disable(GL_FRAMEBUFFER_SRGB);
         }
     }
 
