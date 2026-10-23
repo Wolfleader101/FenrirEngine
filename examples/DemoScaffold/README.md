@@ -79,8 +79,10 @@ Shared demo assets live in `examples/assets/`, and an app's own in `examples/<Ap
 
 - `cube.obj`: a cube of side 1 centred on the origin, with normals and UVs (`cube.obj#Mesh0`).
 - `sphere.obj`: a UV sphere of radius 0.5, 32 segments by 16 rings, with normals and UVs (`sphere.obj#Mesh0`).
+- `backpack/backpack.obj`: Berk Gedik's "Survival Guitar Backpack (Low Poly)", CC BY 4.0, with its diffuse, normal and
+  specular textures; `backpack/attribution.txt` holds the attribution and the changes made to it.
 
-The backpack, the art-deco texture set and the skybox cubemap come with the scenes that use them.
+The art-deco texture set and the skybox cubemap come with the scenes that use them.
 
 ## Tests
 

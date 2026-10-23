@@ -129,6 +129,8 @@ namespace Fenrir::Graphics
         {
             std::vector<BindingGroupEntry> entries;
             std::vector<ShaderBindingKind> kinds;
+            /** @brief Each entry's index among its layout's bindings of its kind, for GlBindingOf. */
+            std::vector<std::uint32_t> indicesInKind;
         };
 
         /** @brief The code of one program: the GL SPIR-V of its vertex and fragment stages. */

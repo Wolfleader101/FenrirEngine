@@ -1,5 +1,6 @@
 #include "GlRewrite.hpp"
 
+#include <algorithm>
 #include <map>
 
 #include "FenrirAssets/ShaderGlBindings.hpp"
@@ -33,7 +34,20 @@ namespace Fenrir::ShaderCompiler
         }
     } // namespace
 
-    std::vector<std::uint32_t> RewriteForGl(const std::vector<std::uint32_t>& spirv)
+    GlBindingMap GlBindingsOf(const std::vector<ShaderBinding>& bindings)
+    {
+        GlBindingMap points;
+        for (const ShaderBinding& binding : bindings)
+        {
+            const auto below = std::ranges::count_if(bindings, [&](const ShaderBinding& other) {
+                return other.set == binding.set && other.kind == binding.kind && other.binding < binding.binding;
+            });
+            points[{binding.set, binding.binding}] = GlBindingOf(binding.set, static_cast<std::uint32_t>(below));
+        }
+        return points;
+    }
+
+    std::vector<std::uint32_t> RewriteForGl(const std::vector<std::uint32_t>& spirv, const GlBindingMap& bindings)
     {
         std::vector<std::uint32_t> words = spirv;
 
@@ -57,7 +71,12 @@ namespace Fenrir::ShaderCompiler
             else if (decoration == DecorationBinding)
             {
                 const auto set = setOf.find(target);
-                value = GlBindingOf(set != setOf.end() ? set->second : 0, value);
+                // Every binding a stage declares is in its variant's reflection.
+                const auto point = bindings.find({set != setOf.end() ? set->second : 0, value});
+                if (point != bindings.end())
+                {
+                    value = point->second;
+                }
             }
             else if (decoration == DecorationBuiltIn && value == BuiltInVertexIndex)
             {

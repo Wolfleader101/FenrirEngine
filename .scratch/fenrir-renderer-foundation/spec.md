@@ -269,7 +269,7 @@ Three demo apps (RendererDemo, ScriptingDemo, PhysicsDemo) on a shared demo scaf
   1. resolves `#include` (`GL_GOOGLE_include_directive`) against the engine's shared include directory;
   2. builds every combination of the named `#define` variant keys;
   3. compiles each stage as Vulkan GLSL to SPIR-V 1.0;
-  4. writes the GL copy: sets zeroed, each binding flattened per resource kind as `set × 4 + binding` (uniform buffers, storage buffers and textures counted separately, so at most 4 bindings of a kind per set), and `VertexIndex` retargeted to `VertexId`;
+  4. writes the GL copy: sets zeroed, each binding flattened per resource kind as `set × 4 + its index among the set's bindings of its kind, in binding order` (uniform buffers, storage buffers and textures counted separately, so at most 4 bindings of a kind per set, and a `MaterialParams` block at binding 0 with textures at bindings 1 to 4 fits), and `VertexIndex` retargeted to `VertexId`. *Amended 2026-10-23 (renderer ticket 13): it was `set × 4 + binding`, which left no room for the built-ins' block and four textures in set 2;*
   5. reflects and checks the parameter defaults;
   6. writes one shader container.
 - **The flattening formula** is shared by the tool and the GL backend, and documented once.
@@ -360,7 +360,7 @@ Three demo apps (RendererDemo, ScriptingDemo, PhysicsDemo) on a shared demo scaf
 - **Read-back:**
   - `Renderer::GetWorldBounds(Entity) -> std::optional<Math::AABB>`, computed on call from `MeshData`'s local bounds and the world matrix;
   - `Renderer::Stats()`: last frame's draw, pass and upload counts.
-- **`SpawnModel(scene, AssetHandle<Model>, parent = {}) -> Entity`** calls `SpawnNodes`, then adds a `MeshRenderer` per mesh of each node (a child entity per extra mesh or submesh). It returns the root. The animation spec inserts `SpawnSkeletons` and skin references between those two steps.
+- **`SpawnModel(scene, AssetHandle<Model>, parent = {}) -> Entity`** calls `SpawnNodes`, then adds a `MeshRenderer` per mesh of each node (a child entity per extra mesh or submesh). It returns the root. *Amended 2026-10-23 (renderer ticket 13):* in C++ it is a free function taking the asset store first, `SpawnModel(store, scene, model, parent = {})`, as `SpawnNodes` is the store's. The animation spec inserts `SpawnSkeletons` and skin references between those two steps.
 
 ### Materials and lights (ADR-0024, ticket 41)
 
@@ -377,7 +377,8 @@ Three demo apps (RendererDemo, ScriptingDemo, PhysicsDemo) on a shared demo scaf
   - `builtin:unlit` is base colour × base-colour texture × vertex colour.
   - `builtin:lit` is metallic-roughness GGX with one directional light and constant ambient, writing linear HDR.
   - Parameters: `baseColour`, `baseColourTexture`, `metallic`, `roughness`, `metallicRoughnessTexture`, `normalTexture`, `emissive` and `emissiveTexture`.
-  - Defaults by pragma: base colour white, emissive black, metallic 0, roughness 0.5, and the textures' `white`/`normal`/`black`. Nothing is seeded in C++.
+  - Defaults by pragma: base colour white, emissive black, metallic 0, roughness 0.5, and the textures' `white`/`normal`/`white`. Nothing is seeded in C++.
+  - `emissive` is multiplied by `emissiveTexture`, as glTF does, so `emissiveTexture` defaults to `white` (amended 2026-10-23, renderer ticket 13; it was `black`).
 - **Default textures:** the renderer owns one 1×1 each of `white`, `black` and `normal` (0.5, 0.5, 1, linear), each sampled with the parameter's sampler.
 - **Variants:** the renderer picks the keys, never the user. `ALPHA_MASK` comes from `Masked`; `SKINNED` is reserved (see "Room left for animation"). A missing texture binds its default instead of adding a key. A user shader's own keys stay off.
 - **User shaders** are full vertex and fragment programs on the engine includes, with their own set 2, built by `fenrir_add_shaders` and loaded as `ShaderData`. Lighting is the shader's choice.

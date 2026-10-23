@@ -10,6 +10,7 @@
 #include <tuple>
 #include <utility>
 
+#include "FenrirAssets/ShaderGlBindings.hpp"
 #include "GlRewrite.hpp"
 #include "Pragmas.hpp"
 #include "Reflection.hpp"
@@ -35,6 +36,19 @@ namespace Fenrir::ShaderCompiler
             StageReflection reflection;
             std::vector<DefaultPragma> pragmas;
         };
+
+        const char* BindingKindName(ShaderBindingKind kind)
+        {
+            switch (kind)
+            {
+            case ShaderBindingKind::UniformBuffer:
+                return "uniform block";
+            case ShaderBindingKind::StorageBuffer:
+                return "storage block";
+            default:
+                return "texture";
+            }
+        }
 
         const char* StageName(ShaderStage stage)
         {
@@ -219,9 +233,21 @@ namespace Fenrir::ShaderCompiler
                     }
                 }
             }
+            // How many bindings of each kind each set has held so far, in binding order: at most ShaderBindingsPerSet.
+            std::map<std::pair<std::uint32_t, ShaderBindingKind>, std::uint32_t> perKind;
             for (const auto& [key, found] : merged)
             {
                 const ReflectedBinding& reflected = *found.first;
+                const std::uint32_t count = ++perKind[{reflected.binding.set, reflected.binding.kind}];
+                if (count > ShaderBindingsPerSet)
+                {
+                    diagnostics.Error(found.second->file,
+                                      std::format("'{}' is {} {} of set {}, but a set holds at most {} bindings of a "
+                                                  "kind",
+                                                  reflected.binding.name, BindingKindName(reflected.binding.kind),
+                                                  count, reflected.binding.set, ShaderBindingsPerSet));
+                    continue;
+                }
                 variant.bindings.push_back(reflected.binding);
                 const bool materialBlock = reflected.binding.kind == ShaderBindingKind::UniformBuffer &&
                                            reflected.binding.name == MaterialBlockName;
@@ -329,14 +355,15 @@ namespace Fenrir::ShaderCompiler
             MergeReflection(stages, materialSet, variant, diagnostics);
             ApplyDefaults(stages, materialSet, variant, diagnostics);
             variant.defaultBlock = DefaultBlock(variant);
+            const GlBindingMap glBindings = GlBindingsOf(variant.bindings);
             for (StageBuild& stage : stages)
             {
                 if (stage.compiled.stage == ShaderStage::Vertex)
                 {
                     variant.vertexInputs = stage.reflection.vertexInputs;
                 }
-                variant.stages.push_back(
-                    {stage.compiled.stage, RewriteForGl(stage.compiled.spirv), std::move(stage.compiled.spirv)});
+                variant.stages.push_back({stage.compiled.stage, RewriteForGl(stage.compiled.spirv, glBindings),
+                                          std::move(stage.compiled.spirv)});
             }
             if (diagnostics.ErrorCount() != errorsBefore)
             {

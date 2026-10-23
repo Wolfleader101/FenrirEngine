@@ -4,6 +4,7 @@
 // fails here.
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirRenderer/SpawnModel.hpp"
 
 #if defined(GLAD_GL_H_) || defined(__gl_h_) || defined(__GL_H__) || defined(GL_VERSION_1_1) || defined(GL_TRUE)
 #error "A FenrirRenderer public header includes GL or its loader."

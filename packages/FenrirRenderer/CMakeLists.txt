@@ -57,10 +57,11 @@ target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath 
 # FenrirAssets' data types only: its headers, not its library, so the core cannot reach the store or the App.
 target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include")
 # The built-in shader programs, embedded, so the renderer runs with no files beside it.
+# ALPHA_MASK: the variant a Masked material draws with (ADR-0024).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinUnlit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/unlit.frag EMBED)
+                   FRAGMENT Shaders/Builtin/unlit.frag KEYS ALPHA_MASK EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/mesh.vert
-                   FRAGMENT Shaders/Builtin/lit.frag EMBED)
+                   FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
                    FRAGMENT Shaders/Builtin/fallback.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
@@ -72,9 +73,11 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Built
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
     include/FenrirRenderer/Renderer.hpp
+    include/FenrirRenderer/SpawnModel.hpp
 
     src/Facade/Renderer.cpp
     src/Facade/RendererState.hpp
+    src/Facade/SpawnModel.cpp
 )
 target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
 target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL

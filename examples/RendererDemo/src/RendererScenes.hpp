@@ -5,7 +5,11 @@
 // RendererDemo's scenes, in the order of its scene list. Each renderer feature ticket adds its scene here.
 namespace RendererDemo
 {
-    /** @brief Meshes and materials: a placeholder until renderer ticket 13 fills it; a lit cube under a light. */
+    /**
+     * @brief Meshes and materials: the imported backpack, primitives in builtin:unlit and builtin:lit, a
+     * metallic/roughness grid, the four blend modes and a double-sided quad, a user shader, the magenta fallback and an
+     * empty and a stale mesh; keys turn the light, change the ambient, hide the backpack and edit a shared material.
+     */
     [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterials();
 
     /**

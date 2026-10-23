@@ -103,6 +103,8 @@ namespace Fenrir::Detail
         std::set<std::pair<std::uint32_t, std::uint8_t>> loggedCameras;
         /** @brief Cameras of equal order into one target, by their entity ids. */
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedTies;
+        /** @brief Images materials name that cannot be sampled as a 2D texture, by index and generation. */
+        std::set<std::pair<std::uint32_t, std::uint32_t>> loggedImages;
         /** @} */
 
         RendererState() = default;

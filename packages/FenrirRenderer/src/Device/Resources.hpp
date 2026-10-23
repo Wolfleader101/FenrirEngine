@@ -78,6 +78,7 @@ namespace Fenrir::Graphics
         Rgba8Srgb,
         Rgba16Float,
         Depth32Float,
+        Rgba32Float,
     };
 
     /** @brief Whether a texture is one image or six cube faces. */
@@ -237,6 +238,7 @@ namespace Fenrir::Graphics
         Alpha,
         /** @brief Premultiplied alpha: source, plus destination times one minus the source's alpha. */
         Premultiplied,
+        /** @brief The source colour added to the destination's; the destination's alpha kept. */
         Additive,
     };
 

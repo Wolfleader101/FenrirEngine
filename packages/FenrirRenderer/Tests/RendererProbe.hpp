@@ -142,6 +142,37 @@ namespace Fenrir
             return found == nullptr ? std::string() : found->label;
         }
 
+        /** @brief The label a texture was made with. */
+        [[nodiscard]] static std::string Label(const Graphics::GraphicsDevice& device, Graphics::TextureHandle texture)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_textures.Find(texture);
+            return found == nullptr ? std::string() : found->label;
+        }
+
+        /** @brief Which mip levels of a live texture WriteTexture wrote, by level; empty for a stale one. */
+        [[nodiscard]] static std::vector<bool> WrittenMips(const Graphics::GraphicsDevice& device,
+                                                           Graphics::TextureHandle texture)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_textures.Find(texture);
+            return found == nullptr ? std::vector<bool>() : found->writtenMips;
+        }
+
+        /** @brief A pipeline's render state: culling, depth test and write, and blending. */
+        struct PipelineState
+        {
+            Graphics::CullMode cull = Graphics::CullMode::Back;
+            Graphics::DepthState depth;
+            Graphics::BlendMode blend = Graphics::BlendMode::None;
+        };
+
+        /** @brief The render state a live pipeline was made with; the defaults for a stale one. */
+        [[nodiscard]] static PipelineState State(const Graphics::GraphicsDevice& device,
+                                                 Graphics::PipelineHandle pipeline)
+        {
+            const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_pipelines.Find(pipeline);
+            return found == nullptr ? PipelineState{} : PipelineState{found->cull, found->depth, found->blend};
+        }
+
         /** @brief The description a live texture was made with; the default description for a stale one. */
         [[nodiscard]] static Graphics::TextureDesc Desc(const Graphics::GraphicsDevice& device,
                                                         Graphics::TextureHandle texture)

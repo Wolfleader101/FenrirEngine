@@ -7,8 +7,6 @@
 
 #include <spirv_reflect.h>
 
-#include "FenrirAssets/ShaderGlBindings.hpp"
-
 namespace Fenrir::ShaderCompiler
 {
     namespace
@@ -137,14 +135,6 @@ namespace Fenrir::ShaderCompiler
                 diagnostics.Error(file, std::format("'{}' (set {}, binding {}) is an array of resources, which the "
                                                     "engine does not bind",
                                                     binding.name, binding.set, binding.binding));
-                continue;
-            }
-            if (binding.binding >= ShaderBindingsPerSet)
-            {
-                diagnostics.Error(file, std::format("'{}' is at binding {} of set {}, but a set holds at most {} "
-                                                    "bindings of a kind (bindings 0 to {})",
-                                                    binding.name, binding.binding, binding.set, ShaderBindingsPerSet,
-                                                    ShaderBindingsPerSet - 1));
                 continue;
             }
             if (block)

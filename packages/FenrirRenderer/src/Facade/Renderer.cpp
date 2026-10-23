@@ -106,6 +106,8 @@ namespace Fenrir
                 scene.ReleaseTarget(KeyOf(handle));
                 return false;
             }
+            // An image replaced by a render target has no pixels to upload any more.
+            scene.ReleaseImage(KeyOf(handle));
             const std::uint32_t revision = store.Revision(handle);
             if (!scene.IsTargetCurrent(KeyOf(handle), revision))
             {
@@ -114,22 +116,59 @@ namespace Fenrir
             return true;
         }
 
-        bool PrepareMaterial(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Material> handle)
+        /**
+         * @brief Prepares an image a material samples: a render target as one, a flat image with pixels uploaded with
+         * its mips. Anything else (a cubemap, or an image with no pixels that is not a render target) is released and
+         * logged once, and the material binds its parameter's default texture there.
+         */
+        void PrepareSampledImage(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle)
         {
+            Render::SceneRenderer& scene = *state.scene;
+            const ImageData* data = store.TryGet(handle);
+            if (data != nullptr && IsRenderTarget(*data))
+            {
+                PrepareTarget(scene, store, handle);
+                return;
+            }
+            scene.ReleaseTarget(KeyOf(handle));
+            if (data == nullptr || data->shape != ImageShape::Flat || data->pixels.empty())
+            {
+                scene.ReleaseImage(KeyOf(handle));
+                if (data != nullptr && state.loggedImages.insert({handle.index, handle.generation}).second)
+                {
+                    state.app->Logger()->Warn("FenrirRenderer: a material samples image {}, which is {}, so it gets "
+                                              "its parameter's default texture there",
+                                              handle.index,
+                                              data->shape != ImageShape::Flat
+                                                  ? "a cubemap"
+                                                  : "neither a render target nor an image with pixels");
+                }
+                return;
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!scene.IsImageCurrent(KeyOf(handle), revision))
+            {
+                scene.PrepareImage(KeyOf(handle), revision, *data);
+            }
+        }
+
+        bool PrepareMaterial(Detail::RendererState& state, const AssetStore& store, AssetHandle<Material> handle)
+        {
+            Render::SceneRenderer& scene = *state.scene;
             const MaterialData* data = store.TryGet(handle);
             if (data == nullptr)
             {
                 return false;
             }
-            // Its shader first: the material's block is laid out from the shader's reflection. Then the render target
-            // images it samples, whose textures it binds.
+            // Its shader first: the material's block is laid out from the shader's reflection. Then the images and
+            // render target images it samples, whose textures it binds.
             PrepareShader(scene, store, data->shader);
             for (const auto& [name, value] : data->overrides)
             {
                 const auto* texture = std::get_if<MaterialTexture>(&value);
                 if (texture != nullptr && !texture->image.IsEmpty())
                 {
-                    PrepareTarget(scene, store, texture->image);
+                    PrepareSampledImage(state, store, texture->image);
                 }
             }
             const std::uint32_t revision = store.Revision(handle);
@@ -169,6 +208,13 @@ namespace Fenrir
                 if (!store.IsValid(HandleOf<Image>(key)))
                 {
                     scene.ReleaseTarget(key);
+                }
+            }
+            for (const AssetKey key : scene.ImageKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleaseImage(key);
                 }
             }
         }
@@ -471,7 +517,7 @@ namespace Fenrir
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
-                if (PrepareMaterial(*state.scene, store, renderer.material))
+                if (PrepareMaterial(state, store, renderer.material))
                 {
                     draw.material = KeyOf(renderer.material);
                 }
