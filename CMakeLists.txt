@@ -90,6 +90,10 @@ endif()
 if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirWindow/Scripting)
 endif()
+# Assets's builds with assets on.
+if(FENRIR_ENABLE_ASSETS AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirAssets/Scripting)
+endif()
 
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)

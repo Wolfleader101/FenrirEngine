@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load.
+         The C++ mappings of AssetHandle<T> name it too (AssetMappings.hpp), so change both together. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.Assets</AssemblyName>
+    <RootNamespace>Fenrir.Assets</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirAssets's scripting contract (ADR-0029): asset handles, and the Assets, Materials and Shaders classes over the
+       native functions FenrirAssetsScripting gives C#. Built against the scripting SDK (for the native function generator)
+       and Fenrir.Math; CMake passes -p:FenrirScriptingSdk=<the SDK folder>/. The host shares it with every script load. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+</Project>
