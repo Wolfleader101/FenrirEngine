@@ -6,7 +6,10 @@ fenrir_add_demo_app(RendererDemo
         src/MeshesAndMaterials.cpp
         src/CamerasAndTargets.cpp
         src/Sky.cpp
+        src/DebugDrawScene.cpp
 )
+# "Debug draw" draws into its scene's DebugDraw.
+target_link_libraries(RendererDemo PRIVATE FenrirDebugDraw)
 # The monitor screen's shader in "Cameras and render targets", a user shader embedded in the app.
 fenrir_add_shaders(RendererDemo PROGRAM RendererDemoMonitor VERTEX shaders/monitor.vert FRAGMENT shaders/monitor.frag
                    EMBED)

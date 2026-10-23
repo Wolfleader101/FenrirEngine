@@ -40,7 +40,7 @@ destroys that FenrirScene, and the assets the scene loaded for itself (owned by 
 | Key | What it does |
 | --- | --- |
 | PageDown / PageUp | The next / previous scene, wrapping at both ends. |
-| F1 | Shows or hides the help panel: the app, the scene and the scene's keys. Showing it also logs it. The panel is debug screen text, which the renderer draws from renderer ticket 17 on; until then only the log shows it. |
+| F1 | Shows or hides the help panel: the app, the scene and the scene's keys. Showing it also logs it. The panel is debug screen text in the window's bottom-left corner, clear of the on-screen messages, which stack from its top-left. |
 | F2 | The app's (`DemoConfig::appKeyHelp` says what it does). |
 | F3 | Turns the free-fly camera on or off. A scene that spawns an enabled `Camera` of its own starts with the free-fly camera off; F3 then switches between the two. |
 | Right mouse button | Held, the mouse looks around, and WASD moves the free-fly camera (by key position), Shift makes it faster and the wheel changes its speed. Without it, WASD and the wheel are the scene's. |

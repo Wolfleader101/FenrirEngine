@@ -4,6 +4,7 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <span>
 #include <string>
 #include <utility>
@@ -14,6 +15,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -518,6 +520,7 @@ namespace Fenrir
                 }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
+                view.drawDebug = camera.drawDebug;
                 candidates.push_back(candidate);
             });
 
@@ -589,6 +592,67 @@ namespace Fenrir
             return draws;
         }
 
+        /** @brief The core's copy of a FenrirDebugDraw vertex. */
+        Render::DebugShapeVertex ToCore(const DebugVertex& vertex)
+        {
+            return {vertex.position, vertex.colour};
+        }
+
+        Render::DebugDepth ToCore(DepthMode depth)
+        {
+            return depth == DepthMode::OnTop ? Render::DebugDepth::OnTop : Render::DebugDepth::Tested;
+        }
+
+        /**
+         * @brief The active scene's debug drawing this frame (ADR-0025), tessellated by its DebugDraw and copied into
+         * the core's plain data; empty when the scene has no DebugDraw.
+         */
+        Render::DebugFrame ReadDebug(Detail::RendererState& state, Scene& scene)
+        {
+            Render::DebugFrame frame;
+            const DebugDraw* draw = scene.GetResource<DebugDraw>();
+            if (draw == nullptr)
+            {
+                return frame;
+            }
+            const DebugBatches batches = draw->Tessellate();
+            for (const DebugLineBatch& batch : batches.lines)
+            {
+                Render::DebugLines& lines = frame.lines.emplace_back();
+                lines.depth = ToCore(batch.depth);
+                lines.thickness = batch.thickness;
+                std::transform(batch.vertices.begin(), batch.vertices.end(), std::back_inserter(lines.vertices),
+                               [](const DebugVertex& v) { return ToCore(v); });
+            }
+            for (const DebugTriangleBatch& batch : batches.triangles)
+            {
+                Render::DebugTriangles& triangles = frame.triangles.emplace_back();
+                triangles.depth = ToCore(batch.depth);
+                std::transform(batch.vertices.begin(), batch.vertices.end(), std::back_inserter(triangles.vertices),
+                               [](const DebugVertex& v) { return ToCore(v); });
+            }
+            for (const DebugTextRun& run : batches.texts)
+            {
+                const Render::DebugText text{run.text, run.position, run.size, run.colour};
+                if (run.space == DebugTextSpace::World)
+                {
+                    frame.worldTexts.push_back(text);
+                }
+                else if (run.space == DebugTextSpace::Message)
+                {
+                    frame.messages.push_back(text);
+                }
+                else
+                {
+                    frame.screenTexts.push_back(text);
+                }
+            }
+            frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
+                                     ? Window::ContentScale(*state.app, Window::MainWindow())
+                                     : 1.0f;
+            return frame;
+        }
+
         /** @brief One Render: the steps of ADR-0019, all on the main thread. */
         void RenderActiveScene(App& app, Detail::RendererState& state)
         {
@@ -597,6 +661,7 @@ namespace Fenrir
             // Read the window size first: a minimised window builds nothing, but the frame index still advances.
             const Graphics::PixelSize size = state.surface->GetPixelSize();
             Render::SceneFrame frame;
+            Render::DebugFrame debug;
             if (!size.IsEmpty() && store != nullptr)
             {
                 Scene& scene = app.GetActiveScene();
@@ -604,6 +669,7 @@ namespace Fenrir
                 frame.lighting = ReadLighting(state, scene);
                 frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
                 frame.draws = ReadDraws(state, *store, scene);
+                debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);
                 const bool windowDrawn =
@@ -617,6 +683,7 @@ namespace Fenrir
                 }
             }
             state.scene->SetFrame(std::move(frame));
+            state.debug->SetFrame(std::move(debug));
 
             const Render::FrameReport report = state.core->RenderFrame();
             for (const std::string& error : report.errors)
@@ -794,7 +861,11 @@ namespace Fenrir
         auto scene =
             std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
         state->scene = scene.get();
+        // Debug drawing goes into the views the scene renderer drew, so it is added after it.
+        auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);
+        state->debug = debug.get();
         state->core->AddFeature(std::move(scene));
+        state->core->AddFeature(std::move(debug));
 
         const Graphics::Vsync wanted = ToDevice(config.vsync);
         state->core->Device().SetVsync(wanted);

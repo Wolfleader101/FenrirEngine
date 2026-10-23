@@ -6,11 +6,12 @@ fenrir_add_catch2()
 
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
-                                   Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DeviceTest.hpp
+                                   Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
+                                   DebugDrawing.cpp DeviceTest.hpp
                                    FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
-target_link_libraries(FenrirRendererTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL
+target_link_libraries(FenrirRendererTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirDebugDraw
                                                   Catch2::Catch2WithMain)
 # A shader whose frame set is not the renderer's, for the debug check of the fixed sets.
 fenrir_add_shaders(FenrirRendererTests PROGRAM WrongFrameSet VERTEX fixtures/wrong_frame.vert
@@ -35,12 +36,12 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 # tests only, and developers run these on their own GPU.
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
-                                     OpenGL/Sky.cpp OpenGL/GlProbe.hpp
+                                     OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/GlProbe.hpp
                                      OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)
 target_link_libraries(FenrirRendererGlTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirWindow
-                                                    FenrirApp Catch2::Catch2WithMain)
+                                                    FenrirApp FenrirDebugDraw Catch2::Catch2WithMain)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlFullscreenFill VERTEX OpenGL/fixtures/fullscreen.vert
                    FRAGMENT OpenGL/fixtures/fill.frag EMBED)
 fenrir_add_shaders(FenrirRendererGlTests PROGRAM GlPositionFill VERTEX OpenGL/fixtures/position.vert

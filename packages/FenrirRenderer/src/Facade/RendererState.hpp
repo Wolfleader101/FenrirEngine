@@ -5,6 +5,7 @@
 #include <set>
 #include <utility>
 
+#include "Core/DebugFeature.hpp"
 #include "Core/RendererCore.hpp"
 #include "Core/SceneRenderer.hpp"
 #include "Device/GraphicsSurface.hpp"
@@ -88,6 +89,8 @@ namespace Fenrir::Detail
         std::unique_ptr<Render::RendererCore> core;
         /** @brief The core's scene render feature, which the core owns. */
         Render::SceneRenderer* scene = nullptr;
+        /** @brief The core's debug render feature, which the core owns. */
+        Render::DebugFeature* debug = nullptr;
         RendererStats stats;
         /** @brief Seconds of frame time since the first Render. */
         double time = 0.0;

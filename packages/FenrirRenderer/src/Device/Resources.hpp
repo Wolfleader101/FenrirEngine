@@ -79,6 +79,8 @@ namespace Fenrir::Graphics
         Rgba16Float,
         Depth32Float,
         Rgba32Float,
+        /** @brief One linear channel, read by shaders as red; the debug font's signed-distance-field atlas. */
+        R8Unorm,
     };
 
     /** @brief Whether a texture is one image or six cube faces. */

@@ -23,4 +23,11 @@ namespace RendererDemo
      * can override with a colour of its own; keys switch the sky and the override.
      */
     [[nodiscard]] FenrirDemo::DemoScene Sky();
+
+    /**
+     * @brief Debug draw: every wire and solid shape, in a depth-tested row behind a wall and an on-top row through it,
+     * with world-text labels; shapes relative to an orbiting sphere; screen text and keyed messages; keys toggle
+     * groups, draw for three seconds, draw forever and clear.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
 } // namespace RendererDemo

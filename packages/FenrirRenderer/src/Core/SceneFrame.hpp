@@ -71,6 +71,8 @@ namespace Fenrir::Render
         AssetKey target;
         /** @brief Its viewport in its target's pixels, from the top-left: at least one pixel, inside the target. */
         Graphics::PixelRect viewport;
+        /** @brief Whether the view draws the scene's debug drawing in its `Debug` stage (Camera::drawDebug). */
+        bool drawDebug = true;
     };
 
     /** @brief The light every view of the scene is lit by, in the frame block (`Fenrir/Frame.glsl`). */

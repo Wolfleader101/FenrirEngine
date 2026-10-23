@@ -399,7 +399,10 @@ namespace Fenrir
         Viewport viewport;
         RenderTarget target;
         CameraBackground background;
-        /** @brief Whether the view draws the scene's debug drawing (renderer ticket 17). */
+        /**
+         * @brief Whether the view draws the scene's debug shapes and world text (ADR-0025). Screen text and messages
+         * belong to the window, not the view, and draw either way.
+         */
         bool drawDebug = true;
     };
 

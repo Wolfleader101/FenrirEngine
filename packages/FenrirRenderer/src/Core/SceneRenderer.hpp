@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include "Core/FrameRingBuffer.hpp"
+#include "Core/BlockRing.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/SceneFrame.hpp"
 #include "Device/GraphicsDevice.hpp"
@@ -37,6 +37,18 @@ namespace Fenrir::Render
         std::uint32_t draws = 0;
         /** @brief Meshes, images and material blocks uploaded since the last call. */
         std::uint32_t uploads = 0;
+    };
+
+    /** @brief A view the scene renderer added passes for this frame, for render features that draw into it. */
+    struct DrawnView
+    {
+        /** @brief Its place in SceneFrame::views. */
+        std::size_t view = 0;
+        /** @brief Its scene targets, which its Output pass reads after every earlier stage. */
+        GraphResource sceneColour;
+        GraphResource sceneDepth;
+        /** @brief Its view block's binding group this frame: binding set 1, as `Fenrir/View.glsl` declares it. */
+        Graphics::BindingGroupHandle viewGroup;
     };
 
     /**
@@ -149,6 +161,30 @@ namespace Fenrir::Render
 
         /** @brief The last frame's draws, and the uploads since the last call. */
         [[nodiscard]] SceneStats TakeStats();
+
+        /** @brief What SetFrame last gave it. */
+        [[nodiscard]] const SceneFrame& Frame() const noexcept
+        {
+            return m_frame;
+        }
+
+        /** @brief The views the last AddPasses drew, in the order their passes were added. */
+        [[nodiscard]] const std::vector<DrawnView>& DrawnViews() const noexcept
+        {
+            return m_drawnViews;
+        }
+
+        /** @brief The layout of the view block's binding groups (set 1). */
+        [[nodiscard]] Graphics::BindingGroupLayoutHandle ViewLayout() const noexcept
+        {
+            return m_viewLayout;
+        }
+
+        /** @brief The scene targets' samples per pixel. */
+        [[nodiscard]] std::uint32_t Samples() const noexcept
+        {
+            return m_samples;
+        }
 
       private:
         friend struct Fenrir::RendererProbe;
@@ -287,45 +323,6 @@ namespace Fenrir::Render
             bool transparent = false;
         };
 
-        /**
-         * @brief Uniform or storage blocks written each frame, in one ring buffer per frame in flight (ADR-0019), with
-         * a binding group per copy and slot. It grows as more slots are needed.
-         */
-        class BlockRing
-        {
-          public:
-            BlockRing(Graphics::GraphicsDevice& device, Graphics::BindingGroupLayoutHandle layout, bool storage,
-                      std::size_t slotSize, std::string label);
-            ~BlockRing();
-            BlockRing(const BlockRing&) = delete;
-            BlockRing& operator=(const BlockRing&) = delete;
-            BlockRing(BlockRing&&) = delete;
-            BlockRing& operator=(BlockRing&&) = delete;
-
-            /** @brief Makes room for `slots` slots, remaking the buffers if there is not. */
-            void Reserve(std::size_t slots);
-            /** @brief Writes `bytes` at slot `slot` of frame `frameIndex`'s copy. */
-            void Write(std::uint64_t frameIndex, std::size_t slot, std::span<const std::byte> bytes);
-            /**
-             * @brief The binding group of slot `slot` in frame `frameIndex`'s copy; a storage ring has one group per
-             * copy spanning every slot.
-             */
-            [[nodiscard]] Graphics::BindingGroupHandle Group(std::uint64_t frameIndex, std::size_t slot) const;
-
-          private:
-            void DestroyGroups();
-
-            Graphics::GraphicsDevice& m_device;
-            Graphics::BindingGroupLayoutHandle m_layout;
-            bool m_storage;
-            std::size_t m_slotSize;
-            std::string m_label;
-            std::size_t m_slots = 0;
-            std::unique_ptr<FrameRingBuffer> m_ring;
-            /** @brief By copy, then slot (one slot for a storage ring). */
-            std::vector<std::vector<Graphics::BindingGroupHandle>> m_groups;
-        };
-
         [[nodiscard]] const PipelineEntry& MeshPipeline(const ShaderEntry& shader, const VariantEntry& variant,
                                                         const MeshEntry& mesh, BlendMode blend, bool doubleSided);
         /** @brief Records `order`'s draws of `draws` into a pass, binding each one's pipeline, groups and streams. */
@@ -404,6 +401,7 @@ namespace Fenrir::Render
         std::map<std::pair<std::uint32_t, std::uint32_t>, Graphics::BindingGroupHandle> m_outputGroups;
 
         SceneFrame m_frame;
+        std::vector<DrawnView> m_drawnViews;
         SceneStats m_stats;
         /** @brief The missing vertex streams already logged, by mesh and vertex location. */
         std::set<std::pair<AssetKey, std::uint32_t>> m_loggedStreams;

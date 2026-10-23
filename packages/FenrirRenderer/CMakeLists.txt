@@ -15,6 +15,7 @@
 #   The only public target, and the only one that links FenrirWindow, PRIVATE.
 add_subdirectory(Tools/ShaderCompiler)
 add_subdirectory(libs/glad)
+add_subdirectory(libs/stb_truetype)
 
 add_library(FenrirRendererDevice STATIC
     src/Device/CommandList.hpp
@@ -38,8 +39,14 @@ add_library(FenrirRendererOpenGL STATIC
 target_link_libraries(FenrirRendererOpenGL PUBLIC FenrirRendererDevice FenrirLogger PRIVATE FenrirGlad)
 
 add_library(FenrirRendererCore STATIC
+    src/Core/BlockRing.hpp
+    src/Core/BlockRing.cpp
     src/Core/BuiltinShaders.hpp
     src/Core/BuiltinShaders.cpp
+    src/Core/DebugFeature.hpp
+    src/Core/DebugFeature.cpp
+    src/Core/DebugFont.hpp
+    src/Core/DebugFont.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
     src/Core/RenderFeature.hpp
@@ -53,7 +60,21 @@ add_library(FenrirRendererCore STATIC
     src/Core/TransientPool.hpp
     src/Core/TransientPool.cpp
 )
-target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath FenrirLogger)
+target_link_libraries(FenrirRendererCore PUBLIC FenrirRendererDevice FenrirMath FenrirLogger PRIVATE FenrirStbTruetype)
+# The debug font (ADR-0025), an OFL monospace TrueType font checked in with its licence (Resources/Fonts), embedded as a
+# byte array generated at build time, so the renderer runs with no files beside it.
+set(debug_font "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Fonts/JetBrainsMono-Regular.ttf")
+set(debug_font_header "${CMAKE_CURRENT_BINARY_DIR}/resources/include/FenrirResources/DebugFont.hpp")
+add_custom_command(
+    OUTPUT "${debug_font_header}"
+    COMMAND "${CMAKE_COMMAND}" -DINPUT=${debug_font} -DOUTPUT=${debug_font_header} -DNAME=DebugFont -P
+            "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBytes.cmake"
+    DEPENDS "${debug_font}" "${CMAKE_CURRENT_SOURCE_DIR}/cmake/EmbedBytes.cmake"
+    COMMENT "Embedding the debug font"
+    VERBATIM
+)
+target_sources(FenrirRendererCore PRIVATE "${debug_font_header}")
+target_include_directories(FenrirRendererCore PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/resources/include")
 # FenrirAssets' data types only: its headers, not its library, so the core cannot reach the store or the App.
 target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include")
 # The built-in shader programs, embedded, so the renderer runs with no files beside it.
@@ -70,6 +91,13 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/B
 # MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)
+# Debug drawing (ADR-0025): lines expanded to screen-space quads, solid triangles, and text from the SDF font atlas.
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugLines VERTEX Shaders/Builtin/debug_lines.vert
+                   FRAGMENT Shaders/Builtin/debug.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugTriangles VERTEX Shaders/Builtin/debug_triangles.vert
+                   FRAGMENT Shaders/Builtin/debug.frag EMBED)
+fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugText VERTEX Shaders/Builtin/debug_text.vert
+                   FRAGMENT Shaders/Builtin/debug_text.frag EMBED)
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
@@ -82,7 +110,7 @@ add_library(FenrirRenderer STATIC
 )
 target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
 target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
-                                                                            FenrirWindow)
+                                                                            FenrirWindow FenrirDebugDraw)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)
