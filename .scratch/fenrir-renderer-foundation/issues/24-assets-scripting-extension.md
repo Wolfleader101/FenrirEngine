@@ -12,10 +12,10 @@
 
 **Touches:** `packages/FenrirAssets/Managed/`, `packages/FenrirAssets/Scripting/`, `CMakeLists.txt`, `FenrirScripting.sln`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Extension tests: a C# system loads a mesh by path and by `file#Label`, adds a procedural mesh with computed bounds, and replaces it (revision bumped, seen from C++).
-- [ ] Material edits from C# give the same `TryGet`, `TryGetOverride`, `IsSet` and `Reset` results as the same edits from C++ on a fixture shader; `Clone` copies overrides only.
-- [ ] `Shaders.GetParameter` lists every parameter with its type, default and name.
-- [ ] `AddRenderTarget` makes a pixel-less RGBA8 sRGB image that `ResizeRenderTarget` resizes.
-- [ ] A missing package, a stale handle and a failed load each no-op with the documented return; `AssetHandle<T>` matches the C++ layout.
+- [x] Extension tests: a C# system loads a mesh by path and by `file#Label`, adds a procedural mesh with computed bounds, and replaces it (revision bumped, seen from C++).
+- [x] Material edits from C# give the same `TryGet`, `TryGetOverride`, `IsSet` and `Reset` results as the same edits from C++ on a fixture shader; `Clone` copies overrides only.
+- [x] `Shaders.GetParameter` lists every parameter with its type, default and name.
+- [x] `AddRenderTarget` makes a pixel-less RGBA8 sRGB image that `ResizeRenderTarget` resizes.
+- [x] A missing package, a stale handle and a failed load each no-op with the documented return; `AssetHandle<T>` matches the C++ layout.

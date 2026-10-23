@@ -12,6 +12,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirAssetsScripting defines Assets::ScriptingExtension().
+    struct ScriptingExtension;
 
     /**
      * @brief The owner of the asset store FenrirAssets installs: destroying it frees every asset. Move-only. Destroy
@@ -25,6 +27,22 @@ namespace Fenrir
          * cannot fail, and it adds no systems: assets are loaded, added and freed only when called.
          */
         [[nodiscard]] static Assets Install(App& app, AssetsConfig config = {});
+
+        /**
+         * @brief What the asset store gives C# (ADR-0029): the `Fenrir.Assets` contract, with the native functions
+         * behind its `Assets`, `Materials` and `Shaders` classes (loading, adding and replacing meshes and images,
+         * render targets, the material edits and shader parameters).
+         *
+         * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
+         * asset store, or for a stale or empty handle, they do nothing and return false, zero or the empty handle. In
+         * debug builds each such case is warned about once per process for each place in FenrirAssetsScripting's
+         * native code that notices it, not once per C# call site.
+         *
+         * Defined by the FenrirAssetsScripting library, not FenrirAssets (which never links FenrirScripting), so it
+         * exists only in a build with assets and scripting on. Include "FenrirAssetsScripting/AssetsScripting.hpp" and
+         * link FenrirAssetsScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         Assets(Assets&& other) noexcept;
         Assets& operator=(Assets&& other) noexcept;
