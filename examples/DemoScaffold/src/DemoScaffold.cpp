@@ -323,7 +323,9 @@ namespace FenrirDemo
                 return found;
             }
 
-            // Calls `func(entity, camera)` for every camera in `scene` but the free-fly camera.
+            // Calls `func(entity, camera)` for every camera in `scene` that draws into a window, but the free-fly
+            // camera. Cameras that draw into images (a monitor's) are left alone: the free-fly camera stands in only
+            // for the views of the window, and what an image camera draws must keep changing.
             template <typename Func>
             void ForEachSceneCamera(Fenrir::Scene& scene, Func&& func) const
             {
@@ -335,7 +337,11 @@ namespace FenrirDemo
                         return;
                     }
                     const Fenrir::Entity entity = entities.GetEntity(id);
-                    func(entity, entity.GetComponent<Fenrir::Camera>());
+                    Fenrir::Camera& camera = entity.GetComponent<Fenrir::Camera>();
+                    if (camera.target.Is<Fenrir::WindowTarget>())
+                    {
+                        func(entity, camera);
+                    }
                 });
             }
 
