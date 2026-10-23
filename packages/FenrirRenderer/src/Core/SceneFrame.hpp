@@ -60,8 +60,13 @@ namespace Fenrir::Render
         Math::Mat4 projection{1.0f};
         /** @brief The camera's world position. */
         Math::Vec3 position{0.0f};
-        /** @brief What the Background pass draws where nothing opaque was drawn, linear. */
+        /** @brief What the Background pass draws where nothing opaque was drawn, linear, when `sky` is empty. */
         Colour background = Colour::Black;
+        /**
+         * @brief The Sky cubemap the Background pass draws instead, prepared with PrepareCubemap; empty for the colour.
+         * One not prepared draws `background`.
+         */
+        AssetKey sky;
         /** @brief The render target image it draws into, prepared with PrepareTarget; empty for the window. */
         AssetKey target;
         /** @brief Its viewport in its target's pixels, from the top-left: at least one pixel, inside the target. */

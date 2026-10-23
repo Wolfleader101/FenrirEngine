@@ -28,9 +28,6 @@ namespace Fenrir
         using Render::AssetKey;
         using Render::KeyOf;
 
-        /** @brief What the Background pass draws until the sky (renderer ticket 15): a dark grey, linear. */
-        constexpr Colour BackgroundColour{0.015f, 0.015f, 0.015f, 1.0f};
-
         template <typename T>
         AssetHandle<T> HandleOf(AssetKey key)
         {
@@ -217,6 +214,57 @@ namespace Fenrir
                     scene.ReleaseImage(key);
                 }
             }
+            for (const AssetKey key : scene.CubemapKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleaseCubemap(key);
+                }
+            }
+        }
+
+        /** @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap. */
+        struct SceneSky
+        {
+            Colour colour = ColourSky{}.colour;
+            AssetKey cubemap;
+        };
+
+        /**
+         * @brief The active scene's Sky, its cubemap prepared if it is new or changed. A cubemap that is empty, stale
+         * or not a cubemap with pixels gives the default ColourSky, logged once per handle.
+         */
+        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        {
+            const Sky* sky = scene.GetResource<Sky>();
+            if (sky == nullptr)
+            {
+                return {};
+            }
+            if (sky->Is<ColourSky>())
+            {
+                return {sky->As<ColourSky>().colour, {}};
+            }
+            const AssetHandle<Image> handle = sky->As<CubemapSky>().cubemap;
+            const ImageData* data = store.TryGet(handle);
+            if (data == nullptr || data->shape != ImageShape::Cubemap || data->pixels.empty())
+            {
+                if (state.skyCubemaps.ShouldLog(handle))
+                {
+                    state.app->Logger()->Warn(
+                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey",
+                        handle.IsEmpty()  ? std::string("no cubemap")
+                        : data == nullptr ? std::format("a stale cubemap ({})", handle.index)
+                                          : std::format("image {}, which is not a cubemap with pixels", handle.index));
+                }
+                return {};
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!state.scene->IsCubemapCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
+            }
+            return {ColourSky{}.colour, KeyOf(handle)};
         }
 
         /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
@@ -422,7 +470,8 @@ namespace Fenrir
          * @brief Every enabled camera in the active scene that can draw, as a view, preparing the images they draw
          * into, in the order they draw: by order, then entity id, a tie in one target logged once.
          */
-        std::vector<Render::ViewRequest> ReadViews(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        std::vector<Render::ViewRequest> ReadViews(Detail::RendererState& state, const AssetStore& store, Scene& scene,
+                                                   const SceneSky& sky)
         {
             struct Candidate
             {
@@ -457,9 +506,16 @@ namespace Fenrir
                 view.view = glm::inverse(resolved.world);
                 view.projection = resolved.projection;
                 view.position = Math::Vec3(resolved.world[3]);
-                view.background = camera.background.Is<ColourBackground>()
-                                      ? camera.background.As<ColourBackground>().colour
-                                      : BackgroundColour;
+                // A camera's own colour overrides the scene's Sky for its view.
+                if (camera.background.Is<ColourBackground>())
+                {
+                    view.background = camera.background.As<ColourBackground>().colour;
+                }
+                else
+                {
+                    view.background = sky.colour;
+                    view.sky = sky.cubemap;
+                }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
                 candidates.push_back(candidate);
@@ -546,7 +602,7 @@ namespace Fenrir
                 Scene& scene = app.GetActiveScene();
                 ReleaseStale(*state.scene, *store);
                 frame.lighting = ReadLighting(state, scene);
-                frame.views = ReadViews(state, *store, scene);
+                frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
                 frame.draws = ReadDraws(state, *store, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);

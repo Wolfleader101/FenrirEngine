@@ -167,6 +167,9 @@ namespace Fenrir
          * A path already loaded as this kind of asset is not read again: it gives back the same handle and adds
          * `owner` to the asset's owners. A failure is logged and gives a diagnostic instead of a handle. Images are
          * read from PNG, JPEG (both RGBA8, sRGB) and HDR (RGBA32F, linear).
+         * A cubemap loads from a `.cubemap` file: text naming one face a line, `+X`, `-X`, `+Y`, `-Y`, `+Z` or `-Z`,
+         * then the face's image path relative to the file (`+X right.png`), in any order, with `#` comment lines. Its
+         * six faces must be square images of one size and format.
          *
          * A model loads from glTF, GLB, FBX or OBJ, and its meshes, materials and images load from the same file by
          * label (`scene.gltf#Mesh0`, see Model). Either way the whole file is imported once: the model and every

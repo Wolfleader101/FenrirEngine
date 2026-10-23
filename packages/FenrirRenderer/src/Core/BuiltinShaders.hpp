@@ -16,7 +16,7 @@ namespace Fenrir::Render
         Lit,
         /** @brief `builtin:fallback`: the fallback material's flat magenta. */
         Fallback,
-        /** @brief `builtin:background`: the Background pass's clear colour at depth 0. */
+        /** @brief `builtin:background`: the Background pass at depth 0, a colour or (its CUBEMAP variant) a cubemap. */
         Background,
         /** @brief `builtin:output`: the Output pass, SceneColor clamped into the backbuffer. */
         Output,

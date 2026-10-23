@@ -1,0 +1,4 @@
+Skybox (skybox.cubemap and its six face PNGs), made for FenrirEngine by make_skybox.py in this folder: a procedural
+sky, hills and sun, with no third-party source. It is under the repository's licence (MIT, see LICENSE at the root).
+
+Run `python make_skybox.py [side]` here to write the faces again (512 pixels square by default).

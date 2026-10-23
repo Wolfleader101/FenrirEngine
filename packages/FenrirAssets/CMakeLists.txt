@@ -21,6 +21,8 @@ add_library(FenrirAssets STATIC
     src/AssetStore.cpp
     src/AssetStoreState.hpp
     src/AssetData.cpp
+    src/CubemapLoading.hpp
+    src/CubemapLoading.cpp
     src/Materials.cpp
     src/ModelLoading.cpp
     src/SpawnNodes.cpp

@@ -17,4 +17,10 @@ namespace RendererDemo
      * camera's image target; keys cycle the layout, the minimap's order and the main views' projection.
      */
     [[nodiscard]] FenrirDemo::DemoScene CamerasAndTargets();
+
+    /**
+     * @brief Sky: a plinth of lit shapes under the scene's Sky, the skybox cubemap or a dusk colour, which the camera
+     * can override with a colour of its own; keys switch the sky and the override.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Sky();
 } // namespace RendererDemo

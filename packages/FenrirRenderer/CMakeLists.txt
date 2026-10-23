@@ -64,8 +64,9 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinLit VERTEX Shaders/Builtin/
                    FRAGMENT Shaders/Builtin/lit.frag KEYS ALPHA_MASK EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinFallback VERTEX Shaders/Builtin/mesh.vert
                    FRAGMENT Shaders/Builtin/fallback.frag EMBED)
+# CUBEMAP: the variant that draws a Sky cubemap.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinBackground VERTEX Shaders/Builtin/fullscreen.vert
-                   FRAGMENT Shaders/Builtin/background.frag EMBED)
+                   FRAGMENT Shaders/Builtin/background.frag KEYS CUBEMAP EMBED)
 # MSAA: the variant that resolves a multisampled SceneColor.
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinOutput VERTEX Shaders/Builtin/fullscreen.vert
                    FRAGMENT Shaders/Builtin/output.frag KEYS MSAA EMBED)

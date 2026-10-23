@@ -259,7 +259,7 @@ namespace Fenrir
         };
     };
 
-    /** @brief A camera background that is the scene's own: its Sky (renderer ticket 15), dark grey until then. */
+    /** @brief A camera background that is the scene's own: its Sky. */
     struct SceneBackground
     {
     };
@@ -425,5 +425,120 @@ namespace Fenrir
         Colour colour{0.1f, 0.1f, 0.1f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
+    };
+
+    /** @brief A sky of one colour. */
+    struct ColourSky
+    {
+        /** @brief Linear. A dark grey by default, the sky of a scene with none. */
+        Colour colour{0.015f, 0.015f, 0.015f, 1.0f};
+    };
+
+    /**
+     * @brief A sky drawn from a cubemap image (ImageShape::Cubemap, such as one loaded from a `.cubemap` file), sampled
+     * by the direction each pixel looks along, so it stays put as the camera moves and turns with it.
+     */
+    struct CubemapSky
+    {
+        AssetHandle<Image> cubemap;
+    };
+
+    /** @brief Which kind of sky a Sky holds. */
+    enum class SkyType : std::uint8_t
+    {
+        Colour,
+        Cubemap,
+    };
+
+    /**
+     * @brief What a scene shows where nothing was drawn, a scene resource beside AmbientLight (ADR-0026): exactly one
+     * of ColourSky and CubemapSky, by value, as FenrirPhysics' CollisionShape holds a shape. A scene without one has
+     * the default ColourSky, a dark grey. Each camera whose background is SceneBackground draws it; a ColourBackground
+     * overrides it for that camera's view.
+     *
+     * A cubemap that is empty, stale or not a cubemap with pixels draws the default ColourSky instead, logged once.
+     * Assign a kind to change it (`sky = CubemapSky{cubemap}`); read it through the checked view. Reading it as a kind
+     * it does not hold asserts.
+     */
+    class Sky
+    {
+      public:
+        /** @brief The default ColourSky, a dark grey. */
+        Sky() : Sky(ColourSky{})
+        {
+        }
+
+        /** @brief One colour. Implicit, so it can be assigned where a sky is wanted. */
+        Sky(ColourSky colour) : m_type(SkyType::Colour), m_colour(colour)
+        {
+        }
+
+        /** @brief A cubemap. Implicit, so it can be assigned where a sky is wanted. */
+        Sky(CubemapSky cubemap) : m_type(SkyType::Cubemap), m_cubemap(cubemap)
+        {
+        }
+
+        /** @brief The kind held. */
+        [[nodiscard]] SkyType Type() const
+        {
+            return m_type;
+        }
+
+        /** @brief Whether the sky is a `T` (ColourSky or CubemapSky). */
+        template <typename T>
+        [[nodiscard]] bool Is() const
+        {
+            return m_type == TypeOf<T>();
+        }
+
+        /** @brief The sky as a `T`, to read or edit. Asserts that it is one (Is<T>()). */
+        template <typename T>
+        [[nodiscard]] T& As()
+        {
+            assert(Is<T>() && "Sky::As: the sky is a different kind");
+            return Member<T>(*this);
+        }
+
+        /** @copydoc As */
+        template <typename T>
+        [[nodiscard]] const T& As() const
+        {
+            assert(Is<T>() && "Sky::As: the sky is a different kind");
+            return Member<T>(*this);
+        }
+
+      private:
+        template <typename T>
+        static constexpr SkyType TypeOf()
+        {
+            if constexpr (std::is_same_v<T, ColourSky>)
+            {
+                return SkyType::Colour;
+            }
+            else
+            {
+                static_assert(std::is_same_v<T, CubemapSky>, "a Sky holds ColourSky or CubemapSky");
+                return SkyType::Cubemap;
+            }
+        }
+
+        template <typename T, typename Self>
+        static auto& Member(Self& self)
+        {
+            if constexpr (TypeOf<T>() == SkyType::Colour)
+            {
+                return self.m_colour;
+            }
+            else
+            {
+                return self.m_cubemap;
+            }
+        }
+
+        SkyType m_type;
+        union {
+            ColourSky m_colour;
+            CubemapSky m_cubemap;
+        };
     };
 } // namespace Fenrir

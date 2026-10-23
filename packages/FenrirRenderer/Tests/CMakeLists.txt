@@ -6,8 +6,8 @@ fenrir_add_catch2()
 
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
-                                   Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp DeviceTest.hpp FakeSurface.hpp
-                                   RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
+                                   Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DeviceTest.hpp
+                                   FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
 target_link_libraries(FenrirRendererTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL
@@ -34,7 +34,8 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 # passed. The fixture shaders are built by fenrir_add_shaders and embedded. Labelled gl: Windows CI runs the null
 # tests only, and developers run these on their own GPU.
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
-                                     OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp OpenGL/GlProbe.hpp
+                                     OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
+                                     OpenGL/Sky.cpp OpenGL/GlProbe.hpp
                                      OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
                                      RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)

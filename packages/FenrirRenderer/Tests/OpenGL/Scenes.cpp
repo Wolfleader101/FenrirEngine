@@ -11,7 +11,7 @@ using Fenrir::GlProbe;
 namespace
 {
     constexpr std::uint32_t Size = GlTest::GlScene::Size;
-    // The Background pass's colour until the sky (renderer ticket 15), linear.
+    // The Background pass's colour in a scene with no Sky, linear.
     constexpr GlProbe::Pixel Background{0.015f, 0.015f, 0.015f, 1.0f};
     using GlTest::GlScene;
 } // namespace

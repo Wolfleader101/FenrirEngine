@@ -52,12 +52,12 @@ namespace Fenrir::Render
      * and sorted by a 64-bit key (render stage in the high bits; then pipeline, material and mesh). One render graph
      * holds every view (ADR-0019). Each view gets transient `SceneColor` (linear RGBA16F) and `SceneDepth` (32-bit
      * float, reversed-Z, cleared to 0) at its viewport's size with the configured MSAA samples, and its passes:
-     * `Opaque`, one draw per `Opaque` or `Masked` item, writing depth; `Background`, its clear colour at depth 0;
-     * `Transparent`, when there are `AlphaBlend` or `Additive` items, depth tested without writing, drawn back to front
-     * by the view-space depth of each item's world origin (no order-independent transparency, so intersecting or
-     * nested transparent items can sort wrongly); and `Output`, which resolves SceneColor and clamps it into its
-     * viewport of its render target, the window's backbuffer or an image. The first view into a target clears it to
-     * black. With no view the backbuffer is cleared to black.
+     * `Opaque`, one draw per `Opaque` or `Masked` item, writing depth; `Background` at depth 0, the view's colour or
+     * its Sky cubemap (sampled by the direction each pixel looks along); `Transparent`, when there are `AlphaBlend` or
+     * `Additive` items, depth tested without writing, drawn back to front by the view-space depth of each item's world
+     * origin (no order-independent transparency, so intersecting or nested transparent items can sort wrongly); and
+     * `Output`, which resolves SceneColor and clamps it into its viewport of its render target, the window's backbuffer
+     * or an image. The first view into a target clears it to black. With no view the backbuffer is cleared to black.
      *
      * **Variants** (ADR-0024): the renderer picks the keys. A `Masked` material draws with its shader's `ALPHA_MASK`
      * variant if the shader has the key, its `MaterialData::alphaCutoff` written into the variant's `alphaCutoff` block
@@ -120,6 +120,14 @@ namespace Fenrir::Render
         void PrepareImage(AssetKey key, std::uint32_t revision, const ImageData& image);
         void ReleaseImage(AssetKey key);
 
+        [[nodiscard]] bool IsCubemapCurrent(AssetKey key, std::uint32_t revision) const;
+        /**
+         * @brief A cubemap image with pixels, for a Sky: uploaded as a cube texture with every mip level of each face
+         * made at upload, and sampled by the Background pass's CUBEMAP variant.
+         */
+        void PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image);
+        void ReleaseCubemap(AssetKey key);
+
         [[nodiscard]] bool IsTargetCurrent(AssetKey key, std::uint32_t revision) const;
         /** @brief A render target image: an RGBA8 sRGB texture of `size` that views draw into and materials sample. */
         void PrepareTarget(AssetKey key, std::uint32_t revision, Graphics::PixelSize size);
@@ -128,6 +136,7 @@ namespace Fenrir::Render
         /** @brief The keys with GPU resources, for the facade to release those that went stale. */
         [[nodiscard]] std::vector<AssetKey> TargetKeys() const;
         [[nodiscard]] std::vector<AssetKey> ImageKeys() const;
+        [[nodiscard]] std::vector<AssetKey> CubemapKeys() const;
         [[nodiscard]] std::vector<AssetKey> ShaderKeys() const;
         [[nodiscard]] std::vector<AssetKey> MeshKeys() const;
         [[nodiscard]] std::vector<AssetKey> MaterialKeys() const;
@@ -172,6 +181,14 @@ namespace Fenrir::Render
         {
             std::uint32_t revision = 0;
             Graphics::TextureHandle texture;
+        };
+
+        /** @brief A prepared Sky cubemap: its cube texture, and the Background pass's binding group sampling it. */
+        struct CubemapEntry
+        {
+            std::uint32_t revision = 0;
+            Graphics::TextureHandle texture;
+            Graphics::BindingGroupHandle group;
         };
 
         /** @brief A prepared mesh: its streams back to back in one buffer, and its indices. */
@@ -322,7 +339,8 @@ namespace Fenrir::Render
                                                                     const ShaderVariant* variant,
                                                                     Graphics::BindingGroupLayoutHandle layout,
                                                                     Graphics::TextureFormat colour, bool depthTested,
-                                                                    std::uint32_t samples);
+                                                                    std::uint32_t samples,
+                                                                    Graphics::BindingGroupLayoutHandle viewLayout = {});
         /** @brief A sampler for a material texture parameter's description, shared by equal descriptions. */
         [[nodiscard]] Graphics::SamplerHandle SamplerFor(const SamplerDescription& description);
         /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
@@ -348,6 +366,7 @@ namespace Fenrir::Render
         std::map<AssetKey, MaterialEntry> m_materials;
         std::map<AssetKey, TargetEntry> m_targets;
         std::map<AssetKey, ImageEntry> m_images;
+        std::map<AssetKey, CubemapEntry> m_cubemaps;
         /** @brief The samplers made for material parameters, by description. */
         std::vector<std::pair<SamplerDescription, Graphics::SamplerHandle>> m_samplers;
         std::map<PipelineKey, PipelineEntry> m_pipelines;
@@ -362,14 +381,18 @@ namespace Fenrir::Render
         Graphics::BindingGroupLayoutHandle m_viewLayout;
         Graphics::BindingGroupLayoutHandle m_drawLayout;
         Graphics::BindingGroupLayoutHandle m_backgroundLayout;
+        /** @brief Set 2 of the Background pass's CUBEMAP variant: the Sky cubemap. */
+        Graphics::BindingGroupLayoutHandle m_skyLayout;
         Graphics::BindingGroupLayoutHandle m_outputLayout;
         Graphics::PipelineHandle m_backgroundPipeline;
+        Graphics::PipelineHandle m_skyPipeline;
         Graphics::PipelineHandle m_outputPipeline;
 
         /** @brief The default textures, by DefaultTexture: white, black and the flat normal. */
         std::array<Graphics::TextureHandle, 3> m_defaultTextures{};
         Graphics::SamplerHandle m_defaultSampler;
         Graphics::SamplerHandle m_outputSampler;
+        Graphics::SamplerHandle m_skySampler;
         /** @brief The constant every vertex stream a mesh lacks reads, at stride 0. */
         Graphics::BufferHandle m_defaultStreams;
 
