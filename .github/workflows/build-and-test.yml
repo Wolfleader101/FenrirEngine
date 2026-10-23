@@ -98,8 +98,8 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       # Ninja, and the X11 and Wayland development packages SDL3's video needs (FenrirWindow). With no display on the
-      # runner, FenrirWindow's window tests report skipped. Xvfb and Mesa's llvmpipe give the GL tests a display and an
-      # OpenGL context, and glxinfo reports its version.
+      # runner, FenrirWindow's window tests report skipped. Mesa's llvmpipe gives the GL tests an OpenGL context, and
+      # glxinfo, on Xvfb, reports its version.
       - name: Install Ninja, SDL3's video dependencies and a virtual display
         run: |
           # The runners' own Mesa gives llvmpipe only OpenGL 4.5 core (26.04's Mesa 26.0.8 included), and the kisak-mesa
@@ -137,6 +137,13 @@ jobs:
       - name: Test
         run: ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -LE gl
 
-      # The GL tests on llvmpipe, on a virtual display: verbose, so the log shows they ran rather than skipped.
+      # The GL tests on llvmpipe, through SDL's offscreen video driver over Mesa's EGL, with no X server: under Xvfb,
+      # GLX offers llvmpipe no sRGB-capable visual for the sRGB backbuffer requested ("Couldn't find matching GLX
+      # visual"). The tests draw into offscreen targets, not the backbuffer. Verbose, so the log shows they ran; without
+      # a 4.6 core device they skip, which CTest counts as passing, so the step fails if any did.
       - name: GL tests
-        run: xvfb-run -a ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -L gl -V
+        env:
+          SDL_VIDEO_DRIVER: offscreen
+        run: |
+          ctest --test-dir out/build/${{ matrix.preset }} --output-on-failure -L gl -V | tee gl-tests.txt
+          if grep -q "SKIPPED:" gl-tests.txt; then echo "::error::the GL tests skipped"; exit 1; fi

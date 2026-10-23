@@ -14,7 +14,7 @@ cmake --build out/build/clang-x64-debug
 ctest --test-dir out/build/clang-x64-debug
 ```
 
-CI (`.github/workflows/build-and-test.yml`) runs these steps with the demo apps and without the legacy DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`. `linux-debug` also runs the GL tests (CTest label `gl`: the renderer's and the demo apps' OpenGL smoke runs) on Mesa's llvmpipe under Xvfb; the Windows jobs run the null tests only, the demo apps' null smoke runs among them.
+CI (`.github/workflows/build-and-test.yml`) runs these steps with the demo apps and without the legacy DemoApp: on pull requests for `clang-x64-debug`, `msvc-x64-release` and `linux-debug`, and on pushes to `dotnet-scripting` and `main` for all four clang and MSVC x64 presets and `linux-debug`. `linux-debug` also runs the GL tests (CTest label `gl`: the renderer's GL tests and the demo apps' OpenGL smoke runs) on Mesa's llvmpipe, through SDL's offscreen video driver over EGL; the Windows jobs run the null tests only, the demo apps' null smoke runs among them.
 
 Before opening a PR, build and test `clang-x64-debug` (its CTest run includes each demo app's smoke runs, see
 `examples/DemoScaffold/README.md`), and run the DemoApp smoke run of each scene the change touches

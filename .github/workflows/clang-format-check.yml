@@ -17,3 +17,6 @@ jobs:
           # The clang-format that ships with Visual Studio (19), so local formatting and CI agree.
           clang-format-version: "19"
           check-path: "packages/"
+          # Third-party code under a libs/ directory is never ours to format (the checked-in glad loader, as well as the
+          # submodules), as the pre-commit hook already skips it.
+          exclude-regex: "/libs/"
