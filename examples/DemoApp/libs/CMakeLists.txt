@@ -20,7 +20,10 @@ add_subdirectory(glad)
 add_subdirectory(glfw)
 add_subdirectory(imgui)
 add_subdirectory(imguizmo)
-add_subdirectory(assimp)
+# Another part of the build may have made an assimp target already; two would clash.
+if(NOT TARGET assimp)
+    add_subdirectory(assimp)
+endif()
 add_subdirectory(glaze)
 add_subdirectory(v8)
 

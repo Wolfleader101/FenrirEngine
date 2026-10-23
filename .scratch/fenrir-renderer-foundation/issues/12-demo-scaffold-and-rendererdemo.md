@@ -19,9 +19,12 @@
 
 **Touches:** `examples/DemoScaffold/`, `examples/RendererDemo/`, `examples/assets/`, `examples/CMakeLists.txt`, `CMakeLists.txt`, `README.md`, `.github/workflows/build-and-test.yml`
 
-**Status:** ready-for-agent
+**Status:** resolved
+
+Hand check: RendererDemo opens a window showing the lit cube; the free-fly camera looks with the right mouse button held and flies with WASD, Shift and the wheel; PageDown/PageUp wrap the one-scene list (the scene is entered again); F3 turns the free-fly camera off and on; F1 logs the help (it shows on screen only once ticket 17 draws debug screen text).
+Hand check: the legacy DemoApp still builds with `-DFENRIR_BUILD_LEGACY_DEMOAPP=ON` (its libraries are not in agent worktrees).
 
 - [ ] `FENRIR_DEMO_SMOKE=60 FENRIR_DEMO_BACKEND=null` runs RendererDemo with no errors on every preset, and the GL smoke test passes on Linux llvmpipe; a deliberately logged error makes the smoke run exit non-zero.
-- [ ] CTest lists one RendererDemo test per backend.
+- [x] CTest lists one RendererDemo test per backend.
 - [ ] The legacy DemoApp still builds with `FENRIR_BUILD_LEGACY_DEMOAPP=ON` and is not built by default.
 - [ ] RendererDemo opens a window with the lit cube; the free-fly camera moves and looks; PageUp/PageDown wrap the (one-scene) list; F1 logs the help (checked by hand).

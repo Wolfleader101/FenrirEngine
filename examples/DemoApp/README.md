@@ -4,6 +4,9 @@ A windowed sample app: a renderer, an editor, two backpacks and, with physics on
 some only in C#). It is also the smoke test of C# scripting in a real app (the proof of the scripting package is its headless tests, in
 `packages/FenrirScripting/Tests`).
 
+It is the legacy demo app, built only with `-DFENRIR_BUILD_LEGACY_DEMOAPP=ON` (off by default) until the demo apps on the
+demo scaffold (`examples/DemoScaffold/README.md`) replace it.
+
 ## Scenes and controls
 
 The demo has several scenes, and the editor shows whichever is active. Each feature family gets one F-key, which steps through
@@ -56,7 +59,7 @@ Needs the .NET SDK (the one Iris finds; .NET 10). Scripting is on in the clang p
 `msvc-x64-debug`: they set `FENRIR_ENABLE_SCRIPTING=ON`. Any other configuration defaults it to OFF.
 
 ```bash
-cmake --preset clang-x64-debug
+cmake --preset clang-x64-debug -DFENRIR_BUILD_LEGACY_DEMOAPP=ON
 cmake --build out/build/clang-x64-debug --target DemoApp
 ```
 
