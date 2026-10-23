@@ -48,7 +48,8 @@ With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
   `FENRIR_DEMO_SCRIPT_ASSEMBLY` is not defined.
 - **Scripting** runs the scripts with every installed package's extension (Input, Window, Assets, Renderer,
   DebugDraw) and the scaffold's own, which shares `Fenrir.Demo`: the `CSharpScene` marker, a read-only scene resource, and
-  `DemoSceneClickEvent`, the scene click as a native event. A script assembly that fails to load is logged as an error,
+  `DemoSceneClickEvent`, the scene click as a native event, and then the app's own, `DemoConfig::scriptingExtensions`
+  (ScriptingDemo's `Bob` and `Burst` are the example). A script assembly that fails to load is logged as an error,
   so it fails a smoke run. Hot reload is on, except in a smoke run.
 - **A C# scene** is a `DemoScene` with a nonzero `csharpScene` number and no `spawn`. Each time it is entered its
   FenrirScene gets a `CSharpScene { Scene, Entry }`, `Entry` new for each entry. Its C# systems do nothing unless

@@ -16,9 +16,10 @@ target_link_libraries(FenrirDemoScaffold
 if(FENRIR_ENABLE_SCRIPTING)
     target_sources(FenrirDemoScaffold PRIVATE src/DemoScripting.hpp src/DemoScripting.cpp)
     target_compile_definitions(FenrirDemoScaffold PUBLIC FENRIR_DEMO_SCRIPTING=1)
-    target_link_libraries(FenrirDemoScaffold PRIVATE FenrirScripting FenrirInputScripting FenrirWindowScripting
-                                                     FenrirAssetsScripting FenrirRendererScripting
-                                                     FenrirDebugDrawScripting)
+    # PUBLIC FenrirScripting: DemoConfig carries the app's own extensions.
+    target_link_libraries(FenrirDemoScaffold PUBLIC FenrirScripting
+                                             PRIVATE FenrirInputScripting FenrirWindowScripting FenrirAssetsScripting
+                                                     FenrirRendererScripting FenrirDebugDrawScripting)
 
     set(FENRIR_DEMO_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-demo/contract" CACHE INTERNAL "Where the Fenrir.Demo assembly is built")
     set(fenrir_demo_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Demo")

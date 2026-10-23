@@ -13,6 +13,10 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 
+#ifdef FENRIR_DEMO_SCRIPTING
+#include "FenrirScripting/ScriptingExtension.hpp"
+#endif
+
 // The demo scaffold (GLOSSARY.md): what every demo app is built on. DemoScaffold::Install installs the engine packages
 // a demo app needs and adds the free-fly camera, the scene list, the scene-click event, the help panel and the
 // smoke-run switches. Demo code, not engine code: the engine knows scenes, not demo scenes.
@@ -128,6 +132,13 @@ namespace FenrirDemo
          * app's sources). Empty, or with scripting not built, the app has no C# systems.
          */
         std::filesystem::path scriptAssembly;
+#ifdef FENRIR_DEMO_SCRIPTING
+        /**
+         * @brief The app's own scripting extensions (its components and events shared with C#), which Scripting runs
+         * with after the packages' and the scaffold's. Only with scripting built (FENRIR_DEMO_SCRIPTING).
+         */
+        std::vector<Fenrir::ScriptingExtension> scriptingExtensions;
+#endif
     };
 
     /**
@@ -161,9 +172,9 @@ namespace FenrirDemo
          * before them for any backend but Null, and adds the scaffold's systems. When scripting is built
          * (FENRIR_ENABLE_SCRIPTING) and `config.scriptAssembly` is given, it installs Scripting last, running that
          * assembly with every installed package's scripting extension and the scaffold's own (the Fenrir.Demo
-         * assembly: CSharpScene and DemoSceneClickEvent); a script assembly that fails to load is logged as an error.
-         * The first frame enters the scene FENRIR_DEMO_SCENE names, or the first. A backend that cannot start leaves
-         * the renderer invalid (logged), and Run then returns without running.
+         * assembly: CSharpScene and DemoSceneClickEvent), then `config.scriptingExtensions`; a script assembly that
+         * fails to load is logged as an error. The first frame enters the scene FENRIR_DEMO_SCENE names, or the first.
+         * A backend that cannot start leaves the renderer invalid (logged), and Run then returns without running.
          */
         [[nodiscard]] static DemoScaffold Install(Fenrir::App& app, DemoConfig config);
 
