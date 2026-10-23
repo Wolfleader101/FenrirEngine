@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -725,6 +726,8 @@ namespace FenrirDemo
             // A smoke run is a check of the scripts as built, not an editing session.
             scripting.hotReload = !smoke;
             scripting.extensions = Detail::DemoScriptingExtensions();
+            // The app's own, after the ones they may build on.
+            std::ranges::move(state->config.scriptingExtensions, std::back_inserter(scripting.extensions));
             state->scripting = Fenrir::Scripting::Install(app, std::move(scripting));
         }
 #endif
