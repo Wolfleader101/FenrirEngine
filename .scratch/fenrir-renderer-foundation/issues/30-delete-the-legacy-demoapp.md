@@ -11,7 +11,7 @@
 
 **Touches:** `examples/DemoApp/`, `examples/CMakeLists.txt`, `packages/FenrirCamera/`, `CMakeLists.txt`, `README.md`, `FenrirScripting.sln`, `.gitmodules`, `.scratch/fenrir-renderer/map.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] No `examples/DemoApp`, `packages/FenrirCamera` or `FENRIR_BUILD_LEGACY_DEMOAPP` remains, and a repository search finds no stale reference to them outside history and `.scratch`.
 - [ ] Every preset configures and builds with examples on, and CI's smoke runs for all three demo apps pass on null everywhere and on llvmpipe on Linux.

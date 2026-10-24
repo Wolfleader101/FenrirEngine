@@ -726,7 +726,7 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 
 **Demo app**
 One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
-*Avoid:* DemoApp (the legacy single app, deleted once the demo apps replace it), sample, example (alone).
+*Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
 What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.
