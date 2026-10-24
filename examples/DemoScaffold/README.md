@@ -42,7 +42,8 @@ With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
 
 - **The scripts project**, `<App>.Scripts.csproj` in the directory `SCRIPTS` names, references the contracts and the
   scaffold's shared `Fenrir.Demo` assembly (`Managed/Fenrir.Demo`) with `HintPath`s to the `Fenrir<Name>ContractDir`
-  folders `fenrir_add_demo_app` passes (RendererDemo's `scripts/` is the example). It is built to `scripts/` beside the
+  folders `fenrir_add_demo_app` passes (RendererDemo's `scripts/` is the example). `FenrirPhysicsContractDir` is passed
+  too whenever physics's scripting extension is built, for an app that installs physics itself (PhysicsDemo). It is built to `scripts/` beside the
   executable, with the contracts and what scripting needs at run time, and the app's sources get
   `FENRIR_DEMO_SCRIPT_ASSEMBLY`, its path, for `DemoConfig::scriptAssembly`. Without scripting, `SCRIPTS` is ignored and
   `FENRIR_DEMO_SCRIPT_ASSEMBLY` is not defined.

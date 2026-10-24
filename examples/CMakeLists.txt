@@ -9,6 +9,10 @@ if(FENRIR_BUILD_EXAMPLES AND FENRIR_ENABLE_RENDERER)
     if(FENRIR_ENABLE_SCRIPTING)
         add_subdirectory(ScriptingDemo)
     endif()
+    # The physics scenes need physics; their C# twins come with scripting.
+    if(FENRIR_ENABLE_PHYSICS)
+        add_subdirectory(PhysicsDemo)
+    endif()
 endif()
 
 # The legacy DemoApp, until the demo apps replace it.
