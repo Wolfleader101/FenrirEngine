@@ -272,6 +272,11 @@ namespace Fenrir::Graphics
         CullMode cull = CullMode::Back;
         DepthState depth;
         BlendMode blend = BlendMode::None;
+        /**
+         * @brief Whether an sRGB colour target encodes what is written to it and decodes what it blends with: on for
+         * linear blending (ADR-0027). Off, values pass through and blend as stored, the 2D gamma path.
+         */
+        bool encodeSrgb = true;
         std::vector<TextureFormat> colourFormats;
         /** @brief The depth attachment's format; empty when the pipeline draws with none. */
         std::optional<TextureFormat> depthFormat = TextureFormat::Depth32Float;

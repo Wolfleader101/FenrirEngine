@@ -60,7 +60,7 @@ The dependencies point one way: UI and painter → FenrirDraw2D ← FenrirRender
 - **Empty frames:** a window with no submissions draws no UI.
 - **Bad windows:** a submission to a window the renderer does not draw (ADR-0022: the main window only, for now) is dropped and logged once.
 - **Stage and transform:** the overlay draws in each window's `Overlay` stage, after every view's `Output`. It is orthographic, with `localToClip` mapping the window's logical size to clip space. There is no depth and no culling; those are restrictions of this target, not of FenrirDraw2D.
-- **Debug text on top:** debug screen text and on-screen messages (ADR-0025, ADR-0026) are drawn by the same 2D render feature as a fixed layer above every submitted layer, so a UI never hides engine diagnostics.
+- **Debug text on top:** debug screen text and on-screen messages (ADR-0025, ADR-0026) are drawn by the same 2D render feature as a fixed layer above every submitted layer, so a UI never hides engine diagnostics. *Amended 2026-10-23 (renderer ticket 19):* they are drawn by the debug render feature, in its own `Overlay` pass after the 2D render feature's, which keeps them the fixed top layer; it was the 2D render feature itself.
 - **`builtin:2d`:** a textured, vertex-coloured shader with the ImGui vertex layout (position `vec2`, UV `vec2`, colour RGBA8). Simple UIs need no shader of their own.
 
 ## Colour and alpha

@@ -157,12 +157,13 @@ namespace Fenrir
             return found == nullptr ? std::vector<bool>() : found->writtenMips;
         }
 
-        /** @brief A pipeline's render state: culling, depth test and write, and blending. */
+        /** @brief A pipeline's render state: culling, depth test and write, blending, and sRGB encoding. */
         struct PipelineState
         {
             Graphics::CullMode cull = Graphics::CullMode::Back;
             Graphics::DepthState depth;
             Graphics::BlendMode blend = Graphics::BlendMode::None;
+            bool encodeSrgb = true;
         };
 
         /** @brief The render state a live pipeline was made with; the defaults for a stale one. */
@@ -170,7 +171,8 @@ namespace Fenrir
                                                  Graphics::PipelineHandle pipeline)
         {
             const auto* found = const_cast<Graphics::NullDevice&>(Null(device)).m_pipelines.Find(pipeline);
-            return found == nullptr ? PipelineState{} : PipelineState{found->cull, found->depth, found->blend};
+            return found == nullptr ? PipelineState{}
+                                    : PipelineState{found->cull, found->depth, found->blend, found->encodeSrgb};
         }
 
         /** @brief The description a live texture was made with; the default description for a stale one. */

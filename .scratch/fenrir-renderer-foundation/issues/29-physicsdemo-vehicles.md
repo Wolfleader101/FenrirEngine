@@ -10,8 +10,10 @@
 
 **Touches:** `examples/PhysicsDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs all ten PhysicsDemo scenes on null and GL with no errors, running each vehicle autopilot and printing the legacy log lines.
-- [ ] Each vehicle scene's bodies, keys, readouts and log lines match the legacy scene (checked against the legacy sources).
+Hand check: each vehicle scene behaves as its legacy scene did, following the hand-check lists moved into examples/PhysicsDemo/README.md (Vehicles (C++), Motorcycle (C++), Tank (C++) and Vehicles (C#)): the car, motorcycle and tank drive, the chase camera follows and C frees it, F gets out and back in, the readouts are live, and a connected gamepad drives Vehicles (C++) and Vehicles (C#), unplugging mid-drive leaving nothing stuck.
+
+- [x] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs all ten PhysicsDemo scenes on null and GL with no errors, running each vehicle autopilot and printing the legacy log lines.
+- [x] Each vehicle scene's bodies, keys, readouts and log lines match the legacy scene (checked against the legacy sources).
 - [ ] By hand, the moved vehicles hand-check list passes: the car, motorcycle and tank drive, the chase camera follows and frees, the readouts are live (checked by hand).

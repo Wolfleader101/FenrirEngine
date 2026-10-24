@@ -26,6 +26,8 @@ namespace Fenrir::Render
         DebugTriangles,
         /** @brief `builtin:debug-text`: debug text from the debug font's signed-distance-field atlas. */
         DebugText,
+        /** @brief `builtin:2d`: 2D draw lists on the ImGui vertex layout, textured and vertex-coloured (ADR-0027). */
+        Draw2D,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

@@ -3,6 +3,8 @@
 add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoScaffold.hpp
     src/DemoScaffold.cpp
+    src/ImGuiOverlay.hpp
+    src/ImGuiOverlay.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)
 target_link_libraries(FenrirDemoScaffold
@@ -10,15 +12,21 @@ target_link_libraries(FenrirDemoScaffold
     PRIVATE FenrirWindow FenrirAssets FenrirDebugDraw FenrirLogger
 )
 
+# Dear ImGui (libs/imgui), for the ImGuiOverlay. PUBLIC, so a demo app's scenes make their ImGui windows with ImGui's
+# own functions; no engine package ever links it (ADR-0027).
+add_subdirectory(libs)
+target_link_libraries(FenrirDemoScaffold PUBLIC FenrirDemoImGui FenrirDraw2D)
+
 # With scripting built, the scaffold installs Scripting for an app that has scripts, with every package's extension and
 # its own, whose contract is the shared Fenrir.Demo assembly (Managed/Fenrir.Demo). FENRIR_DEMO_SCRIPTING tells the
 # scaffold's sources, and each app's, that scripting is there.
 if(FENRIR_ENABLE_SCRIPTING)
     target_sources(FenrirDemoScaffold PRIVATE src/DemoScripting.hpp src/DemoScripting.cpp)
     target_compile_definitions(FenrirDemoScaffold PUBLIC FENRIR_DEMO_SCRIPTING=1)
-    target_link_libraries(FenrirDemoScaffold PRIVATE FenrirScripting FenrirInputScripting FenrirWindowScripting
-                                                     FenrirAssetsScripting FenrirRendererScripting
-                                                     FenrirDebugDrawScripting)
+    # PUBLIC FenrirScripting: DemoConfig carries the app's own extensions.
+    target_link_libraries(FenrirDemoScaffold PUBLIC FenrirScripting
+                                             PRIVATE FenrirInputScripting FenrirWindowScripting FenrirAssetsScripting
+                                                     FenrirRendererScripting FenrirDebugDrawScripting)
 
     set(FENRIR_DEMO_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-demo/contract" CACHE INTERNAL "Where the Fenrir.Demo assembly is built")
     set(fenrir_demo_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed/Fenrir.Demo")

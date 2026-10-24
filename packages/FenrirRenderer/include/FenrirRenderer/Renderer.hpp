@@ -94,8 +94,9 @@ namespace Fenrir
          * @brief Turns rendering on for `app`: for OpenGL, requests the main window's graphics surface (an OpenGL 4.6
          * core context, a debug one with `debugValidation`, and an sRGB backbuffer) and starts the backend on it;
          * registers the renderer's built-in shaders in the asset store under `builtin:` names (`builtin:unlit`,
-         * `builtin:lit`, `builtin:fallback`, `builtin:background`, `builtin:output`); and adds the sequential Render
-         * system that draws each frame.
+         * `builtin:lit`, `builtin:fallback`, `builtin:background`, `builtin:output`, the debug drawing programs and
+         * `builtin:2d`); adds the Overlay app resource (ADR-0027), removed when the owner ends; and adds the sequential
+         * Render system that draws each frame.
          *
          * Fails with one logged diagnostic, returning an owner whose IsValid() is false that added no systems, when the
          * app has no AssetStore, when the backend is not `Null` and the app has no valid Window (or the window was
