@@ -18,7 +18,7 @@
 #include "FenrirInput/InputRouter.hpp"
 #include "FenrirInputScripting/InputMappings.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "ScriptInputClaims.hpp"
 
 // How the input events and input claims look to C#: each mapping is checked against its mirror in the Fenrir.Input

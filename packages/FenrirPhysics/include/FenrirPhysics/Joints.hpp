@@ -392,7 +392,8 @@ namespace Fenrir
      * now: `anchor` in each body's local space, through its world matrix. Only an empty `bodyB` is the world, whose
      * frame is `anchor` itself. Computed once, when called; it needs the scene, not a physics world.
      *
-     * A body that is not alive (destroyed, or an empty `bodyA`) gives identity frames, with a warning in debug builds.
+     * A body that is not alive (destroyed, or an empty `bodyA`) gives identity frames. Nothing is logged: it is given
+     * no app to log through, so check the bodies first where a mistake should be told (the scripting extension does).
      */
     [[nodiscard]] JointFrames FrameFromWorld(const Entity& bodyA, const Entity& bodyB, const JointFrame& anchor);
 

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The fixture's C# assembly for the generated defaults test: the contract (generated mirrors and hand-written parts),
+       the generated Defaults class and the SDK stand-ins, loaded by Iris as a component. -->
+  <PropertyGroup>
+    <AssemblyName>Iris.Bindings.Fixture</AssemblyName>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- The generated natives test calls function pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it. -->
+    <Compile Include="../../Fixture/Contract/**/*.cs" Exclude="../../Fixture/Contract/Generated/FixtureNative.cs" />
+    <Compile Include="../../Fixture/Tests/Generated/*.cs" />
+    <Compile Include="../Stubs.cs" />
+  </ItemGroup>
+</Project>

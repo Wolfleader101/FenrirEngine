@@ -16,7 +16,7 @@
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 
 // How these look to C#. The C# structs (scripts/Bobbing.cs, scripts/Controls.cs) must match field for field, or the
 // script assembly refuses to load and says which field is wrong.

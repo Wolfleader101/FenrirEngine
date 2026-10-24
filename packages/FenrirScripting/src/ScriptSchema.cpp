@@ -56,6 +56,21 @@ namespace Fenrir::Detail
             return Succeeded();
         }
 
+        Result ValidateAllSharedStructs(const std::vector<SharedStructRegistration>& registrations,
+                                        const Iris::Component& component)
+        {
+            for (const auto& registration : registrations)
+            {
+                if (auto validated = registration.validate(component); !validated.Succeeded())
+                {
+                    validated.diagnostic = "Shared struct '" + registration.name +
+                                           "' does not match its C# struct: " + validated.diagnostic;
+                    return validated;
+                }
+            }
+            return Succeeded();
+        }
+
         Result ValidateAllResources(const std::vector<ResourceRegistration>& registrations,
                                     const Iris::Component& component)
         {
@@ -162,6 +177,11 @@ namespace Fenrir::Detail
                     return validated;
                 }
                 if (auto validated = ValidateAllEvents(registry.Events(), m_component); !validated.Succeeded())
+                {
+                    return validated;
+                }
+                if (auto validated = ValidateAllSharedStructs(registry.SharedStructs(), m_component);
+                    !validated.Succeeded())
                 {
                     return validated;
                 }
@@ -414,7 +434,7 @@ namespace Fenrir::Detail
 
     // Nothing is registered unless every check passes, so a failure leaves the registry exactly as it was:
     //   1. discover what the script defines, kind by kind, and check it;
-    //   2. check every native component's and event's mapping against its C# struct;
+    //   2. check every native component's, event's and shared struct's mapping against its C# struct;
     //   3. drop what the previous generation left that no longer matches;
     //   4. only then register what the script defines.
     Result Reconcile(App& app, ComponentRegistry& registry, ScriptAssembly& assembly, OwnedScriptData& owned)

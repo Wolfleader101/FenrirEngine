@@ -8,7 +8,8 @@
 # A cache variable, so it works from any directory of the build.
 set(FENRIR_SCRIPTING_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-scripting/contract" CACHE INTERNAL "Where the Fenrir.Scripting SDK is built")
 set(fenrir_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/Managed")
-file(GLOB fenrir_contract_sources CONFIGURE_DEPENDS "${fenrir_managed_dir}/Fenrir.Scripting/*.cs")
+file(GLOB fenrir_contract_sources CONFIGURE_DEPENDS "${fenrir_managed_dir}/Fenrir.Scripting/*.cs"
+    "${fenrir_managed_dir}/Fenrir.Scripting/Generated/*.cs")
 set(fenrir_math_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirMath/Managed/Fenrir.Math")
 file(GLOB fenrir_math_sources CONFIGURE_DEPENDS "${fenrir_math_managed_dir}/*.cs")
 file(GLOB fenrir_generator_sources CONFIGURE_DEPENDS "${fenrir_managed_dir}/Fenrir.Scripting.Generators/*.cs")
@@ -53,7 +54,6 @@ add_library(FenrirScripting STATIC
     src/Queries.cpp
     src/Queries.hpp
     src/ChangeBuffer.hpp
-    src/EngineComponents.cpp
     src/ScriptSchema.cpp
     src/GenerationLifecycle.cpp
     src/ReloadWatcher.cpp
@@ -62,15 +62,35 @@ add_library(FenrirScripting STATIC
     src/ScriptSchema.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
+    include/FenrirScripting/BoundMappings.hpp
     include/FenrirScripting/ComponentRegistry.hpp
-    include/FenrirScripting/EngineMappings.hpp
+    include/FenrirScripting/Generated/FenrirScriptingMappings.hpp
     src/EngineContext.hpp
+    src/Generated/FenrirScriptingRegistration.cpp
     include/FenrirScripting/Scripting.hpp
     include/FenrirScripting/ScriptingExtension.hpp
 )
 
 target_include_directories(FenrirScripting PUBLIC include)
 target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
+
+# The built-in extension's binding (ADR-0042): the engine's components (Transform, Name, Relationship) and the entity
+# link they hold are written once, in FenrirECS's headers (../FenrirECS/api/FenrirECS.api.json, with FenrirMath's vector
+# and quaternion from ../FenrirMath/api/FenrirMath.api.json), and every native function once, as its definition in
+# src/Bindings.cpp, which describe-api's natives mode reads into api/FenrirScripting.natives.json. Iris.Bindings
+# generates the rest from those descriptions and api/FenrirScripting.binding.toml, all committed:
+#   Managed/Fenrir.Scripting/Generated/         the C# mirrors, beside which the contract's own .cs files add behaviour
+#                                               only, and the natives' declarations, Native;
+#   include/FenrirScripting/Generated/          the Iris mappings, which an extension whose types hold the engine's
+#                                               includes;
+#   src/Generated/                              the extension's components, sharedStructs and functions;
+#   Tests/Generated/                            the defaults test and the natives test.
+# After changing a shared type or a native, regenerate both stages:
+#   cmake --build <dir> --target fenrir-describe-api
+#   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api_natives(FenrirScripting api/FenrirScripting.binding.toml)
+iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json
+    ../FenrirMath/api/FenrirMath.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

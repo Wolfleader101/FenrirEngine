@@ -94,7 +94,7 @@ TEST_CASE("The values the renderer's native functions pass have the C++ layout",
     RendererScriptingApp test;
     RequireSameLayout<RendererStats>(test, "RendererStats");
     RequireSameLayout<Math::Ray>(test, "Ray");
-    RequireSameLayout<Math::AABB>(test, "Bounds");
+    RequireSameLayout<Detail::BoundsView>(test, "Bounds");
 }
 
 TEST_CASE("A new MeshRenderer, DirectionalLight and Camera from C# are C++'s, for each union kind's new",

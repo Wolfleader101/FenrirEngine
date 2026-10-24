@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Fenrir.Scripting;
 
@@ -57,17 +56,7 @@ internal static unsafe class EventIds<T> where T : unmanaged, IEvent
         }
     }
 
-    private static int Resolve()
-    {
-        string typeName = typeof(T).FullName ?? typeof(T).Name;
-        Span<byte> name = stackalloc byte[Encoding.UTF8.GetMaxByteCount(Name.Length)];
-        Span<byte> type = stackalloc byte[Encoding.UTF8.GetMaxByteCount(typeName.Length)];
-        int nameLength = Encoding.UTF8.GetBytes(Name, name);
-        int typeLength = Encoding.UTF8.GetBytes(typeName, type);
-        fixed (byte* nameBytes = name)
-        fixed (byte* typeBytes = type)
-            return Native.EventIdOf(nameBytes, nameLength, typeBytes, typeLength);
-    }
+    private static int Resolve() => Native.EventIdOf(Name, typeof(T).FullName ?? typeof(T).Name);
 }
 
 /// <summary>
@@ -79,12 +68,7 @@ public static unsafe class ScriptEvents
     public static void Report<T>() where T : unmanaged, IEvent
     {
         string name = typeof(T).FullName ?? typeof(T).Name;
-        Span<byte> utf8 = stackalloc byte[Encoding.UTF8.GetMaxByteCount(name.Length)];
-        int length = Encoding.UTF8.GetBytes(name, utf8);
-        bool accepted;
-        fixed (byte* bytes = utf8)
-            accepted = Native.RegisterScriptEvent(bytes, length, sizeof(T), ScriptComponents.AlignmentOf<T>());
-        if (!accepted)
+        if (!Native.RegisterScriptEvent(name, sizeof(T), ScriptComponents.AlignmentOf<T>()))
             throw new InvalidOperationException($"The engine did not accept the event {name}: events are reported only while a script assembly loads, and must have a plausible size.");
     }
 }

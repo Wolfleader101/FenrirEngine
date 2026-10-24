@@ -42,6 +42,10 @@ Multi-context repo (presence of `GLOSSARY-MAP.md` at the root):
 
 When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
 
+The words for what packages share with bindings (*API description*, *bound type*, *binding*, *shared struct*) are ADR-0042's
+(`docs/adr/0042-packages-share-plain-data-through-a-generated-api-description.md`): read it before working in
+`tools/describe-api`, a package's `api/` folder or a binding's generator.
+
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
 ## Flag ADR conflicts

@@ -1,5 +1,4 @@
 using System.Reflection;
-using System.Text;
 
 namespace Fenrir.Scripting;
 
@@ -153,15 +152,5 @@ internal static unsafe class ResourceIds<T> where T : unmanaged, IReadOnlyResour
         }
     }
 
-    private static int Resolve()
-    {
-        string typeName = typeof(T).FullName ?? typeof(T).Name;
-        Span<byte> name = stackalloc byte[Encoding.UTF8.GetMaxByteCount(Name.Length)];
-        Span<byte> type = stackalloc byte[Encoding.UTF8.GetMaxByteCount(typeName.Length)];
-        int nameLength = Encoding.UTF8.GetBytes(Name, name);
-        int typeLength = Encoding.UTF8.GetBytes(typeName, type);
-        fixed (byte* nameBytes = name)
-        fixed (byte* typeBytes = type)
-            return Native.ResourceIdOf(nameBytes, nameLength, typeBytes, typeLength);
-    }
+    private static int Resolve() => Native.ResourceIdOf(Name, typeof(T).FullName ?? typeof(T).Name);
 }

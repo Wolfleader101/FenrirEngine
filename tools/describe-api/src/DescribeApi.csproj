@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>describe-api</AssemblyName>
+    <RootNamespace>DescribeApi</RootNamespace>
+    <!-- The libclang and libClangSharp packages pick their native library by runtime identifier: build for the host's.
+         Set here, not in Directory.Build.props, which is read before the SDK defines the host's identifier. -->
+    <RuntimeIdentifier>$(NETCoreSdkRuntimeIdentifier)</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DescribeApi.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- libclang as a header reader; the packages carry the native library, so no LLVM install is needed. -->
+    <PackageReference Include="ClangSharp" Version="20.1.2" />
+    <PackageReference Include="libclang" Version="20.1.2" />
+    <PackageReference Include="Tomlyn" Version="0.19.0" />
+  </ItemGroup>
+</Project>

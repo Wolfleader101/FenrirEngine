@@ -1,0 +1,729 @@
+{
+  "binding": "FenrirScripting",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Log",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Writes `text` to the engine's logger at `level`: 0 Info, 1 Warn, 2 Error. The text is data, never a format string.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "level",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "text",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "TimeDeltaTime",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The length of the frame being run, in seconds.",
+      "returns": {
+        "type": "float",
+        "kind": "f32"
+      },
+      "parameters": []
+    },
+    {
+      "name": "TimeTickRate",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The fixed tick's length, in seconds.",
+      "returns": {
+        "type": "float",
+        "kind": "f32"
+      },
+      "parameters": []
+    },
+    {
+      "name": "EntityIsValid",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Whether the entity is alive in the active scene.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "value",
+          "type": "std::uint32_t",
+          "kind": "u32",
+          "doc": "The engine's full entity value, version bits included."
+        }
+      ]
+    },
+    {
+      "name": "EntityLinkOwner",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The active scene's entity list: the owner a native Entity holds beside its value. EntityLink's conversion from an Entity stores it, so C++ reads the link as an entity of the active scene, and never hands it to a script.",
+      "returns": {
+        "type": "void*",
+        "kind": "pointer",
+        "pointee": "void",
+        "pointeeKind": "void"
+      },
+      "parameters": []
+    },
+    {
+      "name": "EntityWorldTransform",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The entity's world transform (FenrirECS GetWorldTransform), composed through its parents on each call.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when the entity is not alive or has no Transform."
+      },
+      "parameters": [
+        {
+          "name": "value",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        },
+        {
+          "name": "world",
+          "type": "Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The world transform; the default Transform when the entity is not alive or has none."
+        }
+      ]
+    },
+    {
+      "name": "EntitySetWorldTransform",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Sets the entity's Transform so its world transform is `world` (FenrirECS SetWorldTransform). Component data only, so it takes effect at once.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False, touching nothing, when the entity is not alive or has no Transform."
+      },
+      "parameters": [
+        {
+          "name": "value",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        },
+        {
+          "name": "world",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "ComponentIdOf",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The id of the native component registered under `name` for the C# type `typeName` (its full name). An id is good only for the registry generation it was looked up in: a new Scripting has a new registry.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type (so a script cannot claim a native component with a struct of its own)."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "typeName",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "typeLength",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegisterScriptComponent",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A script assembly reports a component type it defines, while it loads.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is loading."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "size",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "alignment",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegistryGeneration",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Which registry ids belong to: it changes every time a registry is created.",
+      "returns": {
+        "type": "std::uint32_t",
+        "kind": "u32"
+      },
+      "parameters": []
+    },
+    {
+      "name": "ComponentGet",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A pointer to the entity's component in the engine's storage, good until the engine next changes its storage.",
+      "returns": {
+        "type": "void*",
+        "kind": "pointer",
+        "pointee": "void",
+        "pointeeKind": "void",
+        "doc": "Null when the entity is not alive or does not have it."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "entity",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "ComponentHas",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Whether the entity is alive and has the component.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "entity",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "EntityCreate",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A new entity, alive and usable at once; it gets its engine components when changes play back.\n\nThe structural changes (this, EntityDestroy, ComponentAdd and ComponentRemove) never touch the engine's storage: each is recorded and played back, in order, when the native code that called into the script gets control back, so a Ref<T> taken before stays valid.",
+      "notRunning": "Fenrir::Entity::Null",
+      "returns": {
+        "type": "std::uint32_t",
+        "kind": "u32",
+        "doc": "The entity's value (uint.MaxValue when there is no active scene)."
+      },
+      "parameters": []
+    },
+    {
+      "name": "EntityDestroy",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records the entity's destruction, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "ComponentAdd",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records adding the component to the entity, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the component is read-only, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "entity",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        },
+        {
+          "name": "value",
+          "type": "const void*",
+          "kind": "pointer",
+          "pointee": "void",
+          "pointeeKind": "void",
+          "const": true,
+          "doc": "The component's bytes, or null for a default one."
+        }
+      ]
+    },
+    {
+      "name": "ComponentRemove",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records removing the component from the entity, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the component is read-only, -4 the engine requires every entity to have it, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "entity",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "ChangesApply",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Plays back the structural changes recorded since the last time. The system runner calls it after each system.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many changes were applied."
+      },
+      "parameters": []
+    },
+    {
+      "name": "ChangesDiscard",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Drops the structural changes recorded since the last time, and destroys the entities they created.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": []
+    },
+    {
+      "name": "EventIdOf",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine owns: the queue C++ SendEvent and EventReader use for a native event.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The id; -1 when there is none, -3 when it is registered for a different C# type."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "typeName",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "typeLength",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "RegisterScriptEvent",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A script assembly reports an event type it defines, while it loads.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when nothing is loading."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "size",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "alignment",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "EventSend",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records an event to send when the system returns (see ChangeBuffer::SendEvent).",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -5 scripting is not running, -6 the event has no queue."
+      },
+      "parameters": [
+        {
+          "name": "event",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "value",
+          "type": "const void*",
+          "kind": "pointer",
+          "pointee": "void",
+          "pointeeKind": "void",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "EventReadAfter",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "One read of a C# EventReader. Readers share no state: each keeps its own cursor in C#. The addresses are good until something is sent to the queue or it swaps.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0, or -1 when there is no such event."
+      },
+      "parameters": [
+        {
+          "name": "event",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "seen",
+          "type": "std::uint64_t*",
+          "kind": "pointer",
+          "pointee": "std::uint64_t",
+          "pointeeKind": "u64",
+          "inOut": true,
+          "doc": "The reader's cursor: how many of the queue's events it has gone past (all ones, the engine's NewReaderCursor, before its first read), moved past what the read yields."
+        },
+        {
+          "name": "view",
+          "type": "Fenrir::Detail::NativeAddress*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Detail::NativeAddress",
+          "pointeeKind": "u64",
+          "inOut": true,
+          "doc": "Five values written: the older part's address and count, the newer part's address and count, and how many events the reader missed."
+        }
+      ]
+    },
+    {
+      "name": "QueryCount",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this call and QueryFill however many entities match; a row is the entity followed by the address of its component for each id, in order.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The count; negative when an id is unknown."
+      },
+      "parameters": [
+        {
+          "name": "ids",
+          "type": "const std::int32_t*",
+          "kind": "pointer",
+          "pointee": "std::int32_t",
+          "pointeeKind": "i32",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "QueryFill",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Writes up to `capacity` rows of the entities that have every component in `ids` (see QueryCount).",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many rows it wrote; negative when an id is unknown."
+      },
+      "parameters": [
+        {
+          "name": "ids",
+          "type": "const std::int32_t*",
+          "kind": "pointer",
+          "pointee": "std::int32_t",
+          "pointeeKind": "i32",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "rows",
+          "type": "Fenrir::Detail::NativeAddress*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Detail::NativeAddress",
+          "pointeeKind": "u64"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ResourceIdOf",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The id of the native resource registered under `name` for the C# type `typeName` (its full name), good only for the registry generation it was looked up in.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "typeName",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "typeLength",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ResourceGet",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A pointer to the resource in the engine's storage (the active scene's, for a scene resource), good until the engine next changes its storage.",
+      "returns": {
+        "type": "void*",
+        "kind": "pointer",
+        "pointee": "void",
+        "pointeeKind": "void",
+        "doc": "Null when there is none now."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ResourceInsert",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records inserting the resource, replacing the one there is, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "value",
+          "type": "const void*",
+          "kind": "pointer",
+          "pointee": "void",
+          "pointeeKind": "void",
+          "const": true,
+          "doc": "The resource's bytes, or null for a default one."
+        }
+      ]
+    },
+    {
+      "name": "ResourceRemove",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records removing the resource, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    }
+  ]
+}

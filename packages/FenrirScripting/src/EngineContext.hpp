@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 
 #include "ChangeBuffer.hpp"
@@ -14,9 +16,14 @@ namespace Fenrir::Detail
     // An event type a script assembly reported while it loaded: a name, a size and an alignment, as for a component.
     using ScriptEventDescription = ScriptComponentDescription;
 
-    // What the engine's native functions act on. Iris calls a native function through a plain function pointer with no
-    // user data, so the running Scripting's context is process-wide state: one Scripting is active at a time, and every
-    // script call happens on the main thread (the thread that runs the App's sequential systems).
+    // An address or count a native function writes into C#'s memory: a native-sized unsigned integer, which C# holds as
+    // nuint (api/FenrirScripting.binding.toml maps this alias).
+    using NativeAddress = std::uintptr_t;
+
+    // What the engine's native functions act on: the built-in extension's extension state. Iris calls a native function
+    // through a plain function pointer with no user data, so which Scripting is running is process-wide state (the
+    // active EngineContext, whose call context every native function receives): one Scripting is active at a time, and
+    // every script call happens on the main thread (the thread that runs the App's sequential systems).
     struct EngineContext
     {
         App* app = nullptr;
@@ -37,21 +44,6 @@ namespace Fenrir::Detail
         std::vector<ScriptEventDescription>* discoveringEvents = nullptr;
     };
 
-    // Scripting's way to make the CallContext its native functions receive, and for the built-in ones to reach the rest
-    // of the state they act on.
-    struct CallContextAccess
-    {
-        [[nodiscard]] static CallContext Make(App& app, EngineContext& engine) noexcept
-        {
-            return CallContext(app, engine);
-        }
-
-        [[nodiscard]] static EngineContext& Engine(const CallContext& context) noexcept
-        {
-            return *context.m_engine;
-        }
-    };
-
     // Makes `context` the active one. False (and nothing changes) if another is already active.
     [[nodiscard]] bool ActivateEngineContext(EngineContext* context) noexcept;
 
@@ -63,8 +55,10 @@ namespace Fenrir::Detail
      * functions (Log, Time, Entity, components, events, queries, changes, resources;
      * "Fenrir.Scripting.Native.<Method>", the methods of the scripting contract's Native class), its components
      * (EngineComponents), and as its shared assemblies `math`, the path of the Fenrir.Math contract, then `contract`,
-     * the path of the scripting contract, which is built on it (ADR-0029).
+     * the path of the scripting contract, which is built on it (ADR-0029). `engine` is its extension state, which every
+     * one of its native functions takes.
      */
     [[nodiscard]] ScriptingExtension BuiltInExtension(const std::filesystem::path& math,
-                                                      const std::filesystem::path& contract);
+                                                      const std::filesystem::path& contract,
+                                                      std::shared_ptr<EngineContext> engine);
 } // namespace Fenrir::Detail
