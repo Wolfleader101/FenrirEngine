@@ -43,6 +43,8 @@ namespace RendererDemo
             float seconds = 0.0f;
             std::uint32_t frames = 0;
             int foreverMarks = 0;
+            // Whether the orbiter's forever circle is drawn: a scene made this frame has no DebugDraw until the next.
+            bool circleDrawn = false;
         };
 
         /** @brief A reversed-Z perspective view-projection (ADR-0026) looking along -Z from `eye`, for a frustum. */
@@ -174,16 +176,20 @@ namespace RendererDemo
                 glm::quatLookAt(glm::normalize(Vec3(-0.4f, -1.0f, -0.5f)), Vec3(0.0f, 1.0f, 0.0f));
             light.AddComponent<Fenrir::DirectionalLight>();
 
-            // Drawn once, kept forever and following the orbiter (relativeTo), so it moves with it and goes with it.
-            if (DebugDraw* draw = scene.GetResource<DebugDraw>())
-            {
-                draw->Circle(Vec3(0.0f), Vec3(0.0f, 1.0f, 0.0f), 0.9f, Colour::FromSrgb(0xF0D040FF),
-                             {.group = "Orbiter",
-                              .duration = DebugDraw::Forever,
-                              .relativeTo = state.orbiter,
-                              .thickness = 3.0f});
-            }
             scene.AddResource<DebugDrawState>(state);
+        }
+
+        /** @brief The orbiter's circle: drawn once, kept forever and following it (relativeTo), so it goes with it. */
+        void DrawOrbiterCircle(DebugDraw& draw, DebugDrawState& state)
+        {
+            if (state.circleDrawn || !state.orbiter.IsValid())
+            {
+                return;
+            }
+            draw.Circle(
+                Vec3(0.0f), Vec3(0.0f, 1.0f, 0.0f), 0.9f, Colour::FromSrgb(0xF0D040FF),
+                {.group = "Orbiter", .duration = DebugDraw::Forever, .relativeTo = state.orbiter, .thickness = 3.0f});
+            state.circleDrawn = true;
         }
 
         void Update(Fenrir::App& app, Fenrir::Scene& scene)
@@ -194,6 +200,7 @@ namespace RendererDemo
             {
                 return;
             }
+            DrawOrbiterCircle(*draw, *state);
             state->seconds += static_cast<float>(app.GetTime().deltaTime);
             ++state->frames;
 
@@ -300,6 +307,17 @@ namespace RendererDemo
         scene.camera.pitch = -0.05f;
         scene.spawn = Spawn;
         scene.update = Update;
+        return scene;
+    }
+
+    FenrirDemo::DemoScene DebugDrawingCSharp()
+    {
+        // The C++ scene's name, keys and camera; C# spawns, draws and runs everything else.
+        FenrirDemo::DemoScene scene = DebugDrawing();
+        scene.name = "Debug draw (C#)";
+        scene.spawn = nullptr;
+        scene.update = nullptr;
+        scene.csharpScene = DebugDrawingCSharpScene;
         return scene;
     }
 } // namespace RendererDemo

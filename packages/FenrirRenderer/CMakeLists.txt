@@ -47,6 +47,8 @@ add_library(FenrirRendererCore STATIC
     src/Core/DebugFeature.cpp
     src/Core/DebugFont.hpp
     src/Core/DebugFont.cpp
+    src/Core/Draw2DFeature.hpp
+    src/Core/Draw2DFeature.cpp
     src/Core/FrameRingBuffer.hpp
     src/Core/FrameRingBuffer.cpp
     src/Core/RenderFeature.hpp
@@ -75,8 +77,10 @@ add_custom_command(
 )
 target_sources(FenrirRendererCore PRIVATE "${debug_font_header}")
 target_include_directories(FenrirRendererCore PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/resources/include")
-# FenrirAssets' data types only: its headers, not its library, so the core cannot reach the store or the App.
-target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include")
+# FenrirAssets' data types only: its headers, not its library, so the core cannot reach the store or the App. The same
+# for FenrirDraw2D's plain data, which the 2D render feature draws.
+target_include_directories(FenrirRendererCore PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirAssets/include"
+                                                     "${CMAKE_CURRENT_SOURCE_DIR}/../FenrirDraw2D/include")
 # The built-in shader programs, embedded, so the renderer runs with no files beside it.
 # ALPHA_MASK: the variant a Masked material draws with (ADR-0024).
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinUnlit VERTEX Shaders/Builtin/mesh.vert
@@ -98,9 +102,14 @@ fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugTriangles VERTEX Shade
                    FRAGMENT Shaders/Builtin/debug.frag EMBED)
 fenrir_add_shaders(FenrirRendererCore PROGRAM BuiltinDebugText VERTEX Shaders/Builtin/debug_text.vert
                    FRAGMENT Shaders/Builtin/debug_text.frag EMBED)
+# builtin:2d (ADR-0027), the 2D render feature's own shader on the ImGui vertex layout. The renderer picks the keys from
+# the 2D pipeline description: INPUT_SRGB (sRGB vertex colours), PREMULTIPLY (PremultipliedAlpha), GAMMA (the gamma path).
+fenrir_add_shaders(FenrirRendererCore PROGRAM Builtin2D VERTEX Shaders/Builtin/2d.vert FRAGMENT Shaders/Builtin/2d.frag
+                   KEYS INPUT_SRGB PREMULTIPLY GAMMA EMBED)
 
 add_library(FenrirRenderer STATIC
     include/FenrirRenderer/Components.hpp
+    include/FenrirRenderer/Overlay.hpp
     include/FenrirRenderer/Renderer.hpp
     include/FenrirRenderer/SpawnModel.hpp
 
@@ -109,7 +118,7 @@ add_library(FenrirRenderer STATIC
     src/Facade/SpawnModel.cpp
 )
 target_include_directories(FenrirRenderer PUBLIC include PRIVATE src)
-target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
+target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirDraw2D FenrirInput FenrirMath PRIVATE FenrirRendererCore FenrirRendererOpenGL
                                                                             FenrirWindow FenrirDebugDraw)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).

@@ -319,4 +319,28 @@ namespace RendererDemo
         scene.update = Update;
         return scene;
     }
+
+    FenrirDemo::DemoScene MeshesAndMaterialsCSharp()
+    {
+        // The C++ scene's name, keys and camera; C# spawns and runs everything else.
+        FenrirDemo::DemoScene scene = MeshesAndMaterials();
+        scene.name = "Meshes and materials (C#)";
+        scene.spawn = nullptr;
+        scene.update = nullptr;
+        scene.csharpScene = MeshesAndMaterialsCSharpScene;
+        return scene;
+    }
+
+    void AddCSharpShaders(Fenrir::App& app)
+    {
+        Fenrir::ShaderData stripes;
+        const auto bytes = std::as_bytes(std::span(Fenrir::Shaders::RendererDemoStripes));
+        stripes.bytes.assign(bytes.begin(), bytes.end());
+        if (app.GetResource<Fenrir::AssetStore>()
+                .AddBuiltin<Fenrir::Shader>(StripesShaderName, std::move(stripes))
+                .IsEmpty())
+        {
+            app.Logger()->Error("RendererDemo: the asset store refused the stripes shader");
+        }
+    }
 } // namespace RendererDemo

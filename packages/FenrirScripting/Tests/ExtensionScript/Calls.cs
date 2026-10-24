@@ -104,6 +104,8 @@ public static class Calls
 
     public static void Rearrange(uint kept, uint doomed, float wind) => Gadgets.Rearrange(new Entity(kept), new Entity(doomed), wind);
 
+    public static uint SpawnUnder(uint parent) => Gadgets.SpawnUnder(new Entity(parent)).Value;
+
     private static string? Message(Action action)
     {
         try

@@ -845,6 +845,11 @@ namespace Fenrir::Render
         return image == m_images.end() ? TextureHandle{} : image->second.texture;
     }
 
+    TextureHandle SceneRenderer::GetDefaultTexture(DefaultTexture texture) const
+    {
+        return m_defaultTextures.at(static_cast<std::size_t>(texture));
+    }
+
     bool SceneRenderer::IsTargetCurrent(AssetKey key, std::uint32_t revision) const
     {
         const auto found = m_targets.find(key);

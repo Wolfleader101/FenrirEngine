@@ -36,9 +36,9 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
   namespace, so write `System.Math` (or `MathF`) for the BCL's.
 - **One active Scripting.** The engine's native functions act on the App of the `Scripting` that is active, so a
   second `Install` while one is alive logs an error and runs without scripts.
-- **The script assembly path** comes from the project: the `scriptAssembly` field of the `.feproj` (DemoApp reads it
-  into `ProjectSettings`). Empty means no scripts, and .NET is not started at all. `examples/DemoApp` is a working example, with
-  its own README on building and running it.
+- **The script assembly path** comes from the app, `ScriptingConfig::scriptAssembly`. Empty means no scripts, and .NET
+  is not started at all. `examples/ScriptingDemo` is a working example, with its own README on building and running it;
+  the demo scaffold passes each demo app's built scripts project (`examples/DemoScaffold/README.md`, "C# scenes").
 - **Shutdown.** Everything Iris owns is released when the app finishes `Run` (a sequential system in the `Exit`
   phase, on the main thread), and again, harmlessly, when the `Scripting` object is destroyed. Destroy it before
   `main` returns.
@@ -649,10 +649,10 @@ the resource is absent (nothing happens, and C# gets `false`, zero or an invalid
 
 ### The change buffer from a native function
 
-A native function may create and destroy entities, add and remove components, and insert and remove resources, but only
-by recording them in the change buffer its call context gives (`context.Changes()`). It is the buffer `Entity.Create`,
-`Add`, `Remove`, `Destroy` and `Resources.Insert` record into, so everything plays back together, in the order it was
-recorded, when the calling system returns:
+A native function may create and destroy entities, parent one under another, add and remove components, and insert and
+remove resources, but only by recording them in the change buffer its call context gives (`context.Changes()`). It is
+the buffer `Entity.Create`, `Add`, `Remove`, `Destroy` and `Resources.Insert` record into, so everything plays back
+together, in the order it was recorded, when the calling system returns:
 
 ```cpp
 std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level)
@@ -667,9 +667,10 @@ std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t leve
 
 - **A created entity is usable at once**: alive, so its id can be returned to C# and given components in the same call. It
   gets its Transform, Name and Relationship at playback, before the changes recorded after it.
-- **Everything else waits**: `DestroyEntity`, `AddComponent` (which replaces a component the entity has),
-  `RemoveComponent`, `InsertSceneResource`, `RemoveSceneResource`, `InsertAppResource` and `RemoveAppResource`. Reads
-  through `context.Entities()` see the state as it is now.
+- **Everything else waits**: `DestroyEntity`, `AddChild` (the child becomes the parent's last child, as
+  `Entity::AddChild` makes it; use it on an entity with no parent, such as one just created), `AddComponent` (which
+  replaces a component the entity has), `RemoveComponent`, `InsertSceneResource`, `RemoveSceneResource`,
+  `InsertAppResource` and `RemoveAppResource`. Reads through `context.Entities()` see the state as it is now.
 - **Any component type**, registered with scripting or not, since native code names its C++ type. A change on an entity
   that is not alive is refused (false); one naming an entity an earlier change destroyed is skipped at playback with a
   warning.

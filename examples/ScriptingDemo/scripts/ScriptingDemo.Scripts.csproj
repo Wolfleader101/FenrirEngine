@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>ScriptingDemo.Scripts</AssemblyName>
+    <RootNamespace>ScriptingDemo.Scripts</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- The C# half of ScriptingDemo's showcase (examples/ScriptingDemo/README.md). fenrir_add_demo_app's SCRIPTS builds it,
+       passing -p:FenrirScriptingSdk=<the SDK folder>/ and the folder of each contract (-p:Fenrir<Name>ContractDir=). The
+       contracts are compile-time only: the host shares its own copies. The showcase needs only Fenrir.Input's, for the key
+       event, and Fenrir.Demo's, which every demo app's scripts reference. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../packages/FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirDemoContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Demo">
+      <HintPath>$(FenrirDemoContractDir)Fenrir.Demo.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirDemoContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../packages/FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../DemoScaffold/Managed/Fenrir.Demo/Fenrir.Demo.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

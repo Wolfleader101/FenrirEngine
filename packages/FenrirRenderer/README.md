@@ -30,7 +30,7 @@ app.Run();
 ## Install and order
 
 - `Renderer::Install(App&, RendererConfig)` returns the move-only `Renderer` owner of the renderer core and the graphics device, and adds the sequential `Render` system.
-- **Install order:** FenrirWindow (for any backend but `Null`), then FenrirAssets, then the Renderer, all before the first frame. `Install` requests the main window's graphics surface (an OpenGL 4.6 core context, a debug one with `debugValidation`, and an sRGB backbuffer with no depth, stencil or MSAA), so the window is made then. It registers the built-in shaders in the asset store: `builtin:unlit`, `builtin:lit`, `builtin:fallback`, `builtin:background` (with a `CUBEMAP` variant for a cubemap `Sky`), `builtin:output`, and the debug drawing programs `builtin:debug-lines`, `builtin:debug-triangles` and `builtin:debug-text`.
+- **Install order:** FenrirWindow (for any backend but `Null`), then FenrirAssets, then the Renderer, all before the first frame. `Install` requests the main window's graphics surface (an OpenGL 4.6 core context, a debug one with `debugValidation`, and an sRGB backbuffer with no depth, stencil or MSAA), so the window is made then. It registers the built-in shaders in the asset store: `builtin:unlit`, `builtin:lit`, `builtin:fallback`, `builtin:background` (with a `CUBEMAP` variant for a cubemap `Sky`), `builtin:output`, and the debug drawing programs `builtin:debug-lines`, `builtin:debug-triangles` and `builtin:debug-text`, and `builtin:2d` for the overlay's 2D draw lists. It adds the `Overlay` app resource, removed when the owner ends.
 - **Teardown in reverse:** destroy the `Renderer` before the `Window`, the `Assets` and the `App`; declaring the owners in install order does this. It waits for the GPU, frees every GPU resource and releases the window's surface.
 - **Failure:** without an `AssetStore`, without a valid `Window` (any backend but `Null`), or when the backend cannot start (no OpenGL 4.6 core context, with SDL's message), `Install` logs one error and returns an owner whose `IsValid()` is false. It adds no systems, and its calls do nothing. It never falls back to the null backend.
 - The `Null` backend needs no window or GPU: it keeps every book a backend keeps and draws nothing, for tests and headless apps. With a window it follows the window's size, else a fixed 1280 x 720.
@@ -51,7 +51,7 @@ All in `Render`, on the main thread (ADR-0019):
 1. Read the main window's pixel size. A minimised or zero-sized window builds, submits and presents nothing, but the frame index still advances.
 2. Read the active scene: every visible `MeshRenderer` (with `GetWorldMatrix` once each), every enabled `Camera` as a view, the first `DirectionalLight` (more are warned about once), the `AmbientLight`, the `Sky`, and the scene's `DebugDraw`, tessellated, when FenrirDebugDraw is installed. Inactive scenes are never read, and nothing is kept between frames.
 3. Prepare: upload each mesh, material and image that is new or has a new revision (an image with every mip level, made at upload; the `Sky`'s cubemap as a cube texture, each face with its mips), and make each render target image's texture, keyed by asset handle and revision, and free the GPU side of each handle that went stale. Pipelines are made the first time a draw needs them (keyed by shader variant, blend mode, culling, vertex streams and sample count) and kept while their shader lives.
-4. Build one render graph for every view: per view `Opaque` (one draw per `Opaque` or `Masked` item, sorted by pipeline, material and mesh, writing reversed-Z depth cleared to 0) → `Background` (at depth 0, filling only what nothing drew: the camera's own colour, or the scene's `Sky`, a colour or a cubemap sampled by the direction each pixel looks along) → `Transparent` (when there are `AlphaBlend` or `Additive` items: depth tested without writing it, back to front by the view-space depth of each item's world origin) → `Debug` (when the scene has debug drawing and the camera's `drawDebug` is on) → `Output` (the linear RGBA16F `SceneColor` resolved, clamped and encoded into the view's viewport of its sRGB target); then, once for the window, `Overlay` (debug screen text and messages). A view whose draws sample an image another view draws runs after it. A window no view draws into is cleared to black, logged once.
+4. Build one render graph for every view: per view `Opaque` (one draw per `Opaque` or `Masked` item, sorted by pipeline, material and mesh, writing reversed-Z depth cleared to 0) → `Background` (at depth 0, filling only what nothing drew: the camera's own colour, or the scene's `Sky`, a colour or a cubemap sampled by the direction each pixel looks along) → `Transparent` (when there are `AlphaBlend` or `Additive` items: depth tested without writing it, back to front by the view-space depth of each item's world origin) → `Debug` (when the scene has debug drawing and the camera's `drawDebug` is on) → `Output` (the linear RGBA16F `SceneColor` resolved, clamped and encoded into the view's viewport of its sRGB target); then, once for the window, `Overlay 2D` (the overlay's 2D draw lists, when there are any) and `Overlay` (debug screen text and messages). A view whose draws sample an image another view draws runs after it. A window no view draws into is cleared to black, logged once.
 5. Record each pass and submit it; then present.
 
 ## Components and resources
@@ -89,6 +89,28 @@ The renderer draws the active scene's `DebugDraw` (FenrirDebugDraw, ADR-0025) wh
 - **Screen text and on-screen messages** draw once, in the window's `Overlay` pass after every view's `Output`, as the overlay's top layer, when a view of the scene draws into the window; views into images get none. Positions and sizes are logical units, scaled by the window's content scale. Messages stack from 8 units in from the window's top-left, newest first.
 - **The font** is JetBrains Mono Regular (`Resources/Fonts/`, SIL Open Font License 1.1, `OFL.txt`), embedded at build time and rasterised at start-up with stb_truetype into one single-channel signed-distance-field atlas that serves every size. It covers printable ASCII and Latin-1; any other character, or a byte that is not UTF-8, draws `?`. Text has a thin dark outline so it reads over light and dark alike.
 
+## The window overlay
+
+Any UI draws over the game through the `Overlay` app resource (`FenrirRenderer/Overlay.hpp`, ADR-0027), filling FenrirDraw2D's plain-data `DrawList2D`s with its own shaders, vertex layouts, textures and scissors:
+
+```cpp
+Fenrir::DrawList2D list;
+Fenrir::PipelineDescription2D pipeline;
+pipeline.shader = store.Load<Fenrir::Shader>("builtin:2d", Fenrir::AssetOwner::App()).handle;
+pipeline.vertexLayout = Fenrir::Vertex2DLayout(); // the ImGui layout: position, UV, RGBA8 colour
+const std::uint32_t index = list.AddPipeline(pipeline);
+// ... AppendVertices, AppendIndices, then a Command2D per draw naming `index`, its indices, textures and scissor
+app.GetResource<Fenrir::Overlay>().Submit(Fenrir::Window::MainWindow(), 0, std::move(list));
+```
+
+- **When:** `Submit(window, layer, list)` any time before `Render`, from any system; the renderer draws the submissions that frame and clears them after it. A window with no submissions draws no UI, and one no camera draws into still gets its overlay over the black.
+- **Order:** layers lowest first, then submission order, then each list's command order, in the window's `Overlay 2D` pass after every view's `Output`. Debug screen text and messages draw above every layer.
+- **The target:** local coordinates are logical units from the window's top-left, Y down (the mouse's units), mapped to clip space over the window's logical size, its pixel size over its content scale. No depth and no culling. A scissor is scaled by the content scale, rounded outwards to whole pixels and clamped to the window.
+- **Pipelines:** each 2D pipeline description becomes a device pipeline the first time it is drawn, cached by value while its shader lives, so equal descriptions share one. Blend modes take ADR-0027's colour and alpha factors: `AlphaBlend` (straight), `PremultipliedAlpha`, `Additive` (colour added, the window's alpha kept) and `Opaque`. Blending is linear and the sRGB backbuffer encodes on write; the `Gamma` blend space turns encoding off so values pass through and blend in sRGB, as stock ImGui assumes, and is allowed only on an 8-bit sRGB target (elsewhere it is logged as an error and draws as `Linear`).
+- **Shaders:** 2D shaders take set 0 from the target (`Fenrir/2D.glsl`: `localToClip`, pixel size, content scale) and set 1 per command, laid out from the shader's reflection: a `MaterialParams` block at binding 0 (its parameter defaults with the command's up to 128 parameter bytes written over its start), then up to 4 textures, slot by slot in binding order. A texture slot's image is prepared as a material's is (a render target image binds its texture); a missing or stale one binds the texture's parameter default. The renderer picks the variant from the description: a shader with the keys gets `INPUT_SRGB` for sRGB vertex colours, `PREMULTIPLY` for `PremultipliedAlpha` and `GAMMA` for the gamma path.
+- **`builtin:2d`:** the vertex colour times the slot-0 texture (white with none), on the ImGui layout. It decodes sRGB vertex colours, treats colours and texels as straight alpha, and premultiplies in linear for `PremultipliedAlpha`. On the gamma path it works in sRGB-encoded values: sRGB colours as given, linear ones encoded, texels (decoded on sampling) encoded again.
+- **Skipped, each reason logged once:** a command with more than 4 texture slots or 128 parameter bytes, or a pipeline index or index range outside its list; a list whose pipeline names a stale shader or one that is not a 2D shader; and a submission to a window the renderer does not draw (only the main window, for now), logged once per window.
+
 ## Spawning models
 
 `SpawnModel(store, scene, model, parent = {})` (`FenrirRenderer/SpawnModel.hpp`) spawns an imported `Model` as drawn entities and returns its root: the store's `SpawnNodes` (an entity per node, under a root named after the file), then a `MeshRenderer` per mesh of each node, the first on the node's entity and each further one on a child entity named after the node (`Body mesh 2`). It needs no `Renderer` installed.
@@ -107,6 +129,19 @@ Computed on call from the camera's world matrix and its target's size now, so us
 - `CameraAt(window, point)`: the highest-order enabled camera whose viewport holds the point (of equal orders, the highest entity id: the one drawn last); a null `Entity` if none.
 
 A stale entity, one with no `Camera`, a camera that draws nothing, a point outside the viewport, or a point behind the camera gives empty. There is no mesh picking.
+
+## The app's renderer
+
+Code that does not hold the owner reaches the renderer installed in an `App` through statics of the same names that take the `App` first: `Renderer::IsInstalled(app)`, `GetWorldBounds(app, entity)`, `Stats(app)`, `ScreenPointToRay(app, camera, point)`, `WorldToScreenPoint(app, camera, point)` and `CameraAt(app, window, point)`. Each answers as the owner's function while the owner `Install` made lives and is valid, and as an invalid owner otherwise. The scripting extension uses them.
+
+## From C#
+
+With `FENRIR_ENABLE_SCRIPTING` on, `FenrirRendererScripting` (`Scripting/`) gives C# the `Fenrir.Renderer` contract (`Managed/Fenrir.Renderer/`, ADR-0029): add `Renderer::ScriptingExtension()` (`FenrirRendererScripting/RendererScripting.hpp`) to `ScriptingConfig::extensions` after Input's and Assets's, whose contracts it builds on, and call `fenrir_deploy_renderer_scripting(<target>)` beside their deploy functions. It needs no `Renderer` installed.
+
+- **Components:** `MeshRenderer`, `Camera` and `DirectionalLight`, writable mirrors of the C++ ones: the same fields in PascalCase, and `new` is C++'s `{}`. `Camera`'s unions are `[TaggedUnion]` structs: `CameraProjection` (`Perspective` or `Orthographic`), `RenderTarget` (`WindowTarget` or `ImageTarget`) and `CameraBackground` (`SceneBackground` or `ColourBackground`); `WindowTarget.Window` is a `Fenrir.Input.WindowId`.
+- **Resources:** `Sky` (`ColourSky` or `CubemapSky`, a union too) and `AmbientLight`, writable scene-resource mirrors: `Resources.Get<Sky>()`, `Resources.Insert(new AmbientLight())`.
+- **`Renderer`** (write `Fenrir.Renderer.Renderer` inside a `Fenrir.*` namespace): `ScreenPointToRay(camera, point, out ray)`, `WorldToScreenPoint(camera, point, out screenPoint)` and `CameraAt(window, point)`; `GetWorldBounds(entity, out bounds)` and `Stats(out stats)`; and `SpawnModel(model)` or `SpawnModel(model, parent)`, which records the tree C++'s `SpawnModel` makes through the change buffer and returns its root, alive at once so the same system can give it components.
+- **No-op rules:** with no renderer (or, for `SpawnModel`, no asset store), an entity that is not alive or has no `Camera`, or an empty or stale model, a function does nothing and returns `false`, zero or `Entity.None`; nothing throws, and a debug build warns once per native call site and reason.
 
 ## Layers
 

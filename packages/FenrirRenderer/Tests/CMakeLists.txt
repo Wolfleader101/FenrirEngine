@@ -7,7 +7,7 @@ fenrir_add_catch2()
 add_executable(FenrirRendererTests PublicHeaders.cpp CoreHeaders.cpp Device.cpp CommandLists.cpp RenderGraph.cpp
                                    FrameRing.cpp Frames.cpp OpenGLStart.cpp Drawing.cpp Preparing.cpp RendererFrames.cpp
                                    Cameras.cpp Picking.cpp Materials.cpp SpawnModel.cpp Sky.cpp DebugFont.cpp
-                                   DebugDrawing.cpp DeviceTest.hpp
+                                   DebugDrawing.cpp Overlay.cpp Draw2D.cpp DeviceTest.hpp DrawLists2D.hpp
                                    FakeSurface.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererTests PRIVATE ../src)
 # The OpenGL backend too, for the cases where it cannot start: they need no GPU.
@@ -19,6 +19,9 @@ fenrir_add_shaders(FenrirRendererTests PROGRAM WrongFrameSet VERTEX fixtures/wro
 # A material shader sampling one texture, for cameras' image targets sampled by materials (ADR-0026).
 fenrir_add_shaders(FenrirRendererTests PROGRAM SampledPicture VERTEX ../Shaders/Builtin/mesh.vert
                    FRAGMENT fixtures/sampled.frag EMBED)
+# A 2D shader with a parameter block in set 1, for 2D commands' parameter bytes (ADR-0027).
+fenrir_add_shaders(FenrirRendererTests PROGRAM Tinted2D VERTEX ../Shaders/Builtin/2d.vert
+                   FRAGMENT fixtures/tinted_2d.frag EMBED)
 # A user's own material shader (ADR-0024), built as any user's is and loaded from the container file it writes, with its
 # own variant key FANCY, which the renderer leaves off.
 fenrir_add_shaders(FenrirRendererTests PROGRAM UserTint VERTEX fixtures/user.vert FRAGMENT fixtures/user.frag KEYS FANCY)
@@ -36,9 +39,9 @@ add_test(NAME FenrirRenderer COMMAND FenrirRendererTests)
 # tests only, and developers run these on their own GPU.
 add_executable(FenrirRendererGlTests OpenGL/Clears.cpp OpenGL/Draws.cpp OpenGL/Validation.cpp OpenGL/Resources.cpp
                                      OpenGL/Vsync.cpp OpenGL/Scenes.cpp OpenGL/Targets.cpp OpenGL/Materials.cpp
-                                     OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/GlProbe.hpp
+                                     OpenGL/Sky.cpp OpenGL/Debug.cpp OpenGL/Overlay.cpp OpenGL/GlProbe.hpp
                                      OpenGL/GlScene.hpp OpenGL/GlTestApp.hpp
-                                     RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
+                                     DrawLists2D.hpp RecordingLogger.hpp RendererProbe.hpp RendererTestApp.hpp)
 target_include_directories(FenrirRendererGlTests PRIVATE . ../src)
 target_link_libraries(FenrirRendererGlTests PRIVATE FenrirRenderer FenrirRendererCore FenrirRendererOpenGL FenrirWindow
                                                     FenrirApp FenrirDebugDraw Catch2::Catch2WithMain)
