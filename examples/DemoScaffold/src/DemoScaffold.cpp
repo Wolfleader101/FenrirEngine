@@ -18,6 +18,7 @@
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirWindow/Window.hpp"
+#include "ImGuiOverlay.hpp"
 
 #ifdef FENRIR_DEMO_SCRIPTING
 #include "DemoScripting.hpp"
@@ -170,6 +171,8 @@ namespace FenrirDemo
             // Last, so it ends first, while the packages its extensions reach are there.
             std::optional<Fenrir::Scripting> scripting;
 #endif
+            // DemoConfig::imguiOverlay: ended first, while the input and the asset store it uses are there.
+            std::optional<ImGuiOverlay> imgui;
 
             // The App's own first scene, kept empty and active between leaving one demo scene and entering the next.
             std::string holderScene;
@@ -606,6 +609,11 @@ namespace FenrirDemo
             // BeforeTicks: the scene list, the help panel, the free-fly camera and the scene click.
             void BeforeTicks()
             {
+                // Before anything makes an ImGui window this frame.
+                if (imgui)
+                {
+                    imgui->BeginFrame();
+                }
                 if (!started)
                 {
                     Start();
@@ -699,6 +707,8 @@ namespace FenrirDemo
             window.title = state->config.appName;
             // A smoke run is a check, not a show: its window is never shown.
             window.visible = !smoke;
+            // ImGui turns text input on where it wants text, with its caret for the IME.
+            window.textInputByDefault = !state->config.imguiOverlay;
             state->window = Fenrir::Window::Install(app, window);
         }
         state->input = Fenrir::Input::Install(app);
@@ -729,6 +739,11 @@ namespace FenrirDemo
         }
 #endif
 
+        if (state->config.imguiOverlay)
+        {
+            state->imgui.emplace(app, state->assets->Store());
+        }
+
         std::weak_ptr<Detail::DemoState> weak = state;
         app.AddSequentialSystem(Fenrir::SchedulePriority::BeforeTicks, [weak](Fenrir::App&) {
             if (const auto locked = weak.lock())
@@ -742,6 +757,16 @@ namespace FenrirDemo
                 locked->Update();
             }
         });
+        if (state->imgui)
+        {
+            // After every scene's Update: what ImGui drew this frame goes to the overlay before Render.
+            app.AddSequentialSystem(Fenrir::SchedulePriority::PostUpdate, [weak](Fenrir::App&) {
+                if (const auto locked = weak.lock(); locked && locked->imgui)
+                {
+                    locked->imgui->EndFrame();
+                }
+            });
+        }
         return DemoScaffold(std::move(state));
     }
 

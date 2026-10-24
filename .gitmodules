@@ -31,3 +31,6 @@
 [submodule "packages/FenrirAssets/libs/ufbx"]
 	path = packages/FenrirAssets/libs/ufbx
 	url = https://github.com/ufbx/ufbx
+[submodule "examples/DemoScaffold/libs/imgui"]
+	path = examples/DemoScaffold/libs/imgui
+	url = https://github.com/ocornut/imgui
