@@ -1,15 +1,19 @@
 #pragma once
 
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "Core/DebugFeature.hpp"
+#include "Core/Draw2DFeature.hpp"
 #include "Core/RendererCore.hpp"
 #include "Core/SceneRenderer.hpp"
 #include "Device/GraphicsSurface.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirRenderer/Overlay.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 
 namespace Fenrir
@@ -91,6 +95,8 @@ namespace Fenrir::Detail
         Render::SceneRenderer* scene = nullptr;
         /** @brief The core's debug render feature, which the core owns. */
         Render::DebugFeature* debug = nullptr;
+        /** @brief The core's 2D render feature, which draws the window overlay; the core owns it. */
+        Render::Draw2DFeature* draw2D = nullptr;
         RendererStats stats;
         /** @brief Seconds of frame time since the first Render. */
         double time = 0.0;
@@ -110,6 +116,8 @@ namespace Fenrir::Detail
         std::set<std::pair<std::uint32_t, std::uint32_t>> loggedImages;
         /** @brief Sky cubemaps that are empty, stale or not cubemaps with pixels. */
         StaleHandleLog skyCubemaps;
+        /** @brief Windows the renderer does not draw that overlay submissions named, by id. */
+        std::set<std::uint32_t> loggedOverlayWindows;
         /** @} */
 
         RendererState() = default;
@@ -119,6 +127,34 @@ namespace Fenrir::Detail
         RendererState& operator=(RendererState&&) = delete;
         /** @brief Frees the GPU side, releases the main window's surface, and removes its InstalledRenderer. */
         ~RendererState();
+    };
+
+    /** @brief How the renderer takes the Overlay's submissions each Render. */
+    struct OverlaySubmissions
+    {
+        /** @brief One submission: the window it names, and its layer and list. */
+        struct Taken
+        {
+            WindowId window;
+            Render::Submission2D submission;
+        };
+
+        /** @brief Every submission made since the last call, in submission order, leaving none. */
+        static std::vector<Taken> Take(Overlay& overlay)
+        {
+            std::vector<Overlay::Submission> submissions;
+            {
+                const std::lock_guard<std::mutex> lock(overlay.m_mutex);
+                submissions.swap(overlay.m_submissions);
+            }
+            std::vector<Taken> taken;
+            taken.reserve(submissions.size());
+            for (Overlay::Submission& submission : submissions)
+            {
+                taken.push_back({submission.window, {submission.layer, std::move(submission.list)}});
+            }
+            return taken;
+        }
     };
 
     /** @brief The app resource through which Renderer's statics find the installed renderer's state. */

@@ -14,8 +14,3 @@ if(FENRIR_BUILD_EXAMPLES AND FENRIR_ENABLE_RENDERER)
         add_subdirectory(PhysicsDemo)
     endif()
 endif()
-
-# The legacy DemoApp, until the demo apps replace it.
-if(FENRIR_BUILD_LEGACY_DEMOAPP)
-    add_subdirectory(DemoApp)
-endif()

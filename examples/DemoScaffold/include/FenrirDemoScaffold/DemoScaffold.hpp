@@ -124,6 +124,13 @@ namespace FenrirDemo
         std::vector<DemoScene> scenes;
         /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
         std::uint32_t msaa = 1;
+        /**
+         * @brief Installs the scaffold's ImGuiOverlay (examples/DemoScaffold/README.md): Dear ImGui over the main
+         * window, drawn on the overlay layer ImGuiOverlayLayer and seeing input before the game. A scene's `update`
+         * then makes ImGui windows with ImGui's own functions (`<imgui.h>`). The window's text input is then on only
+         * where ImGui asks for it (WindowConfig::textInputByDefault is false).
+         */
+        bool imguiOverlay = false;
         /** @brief The smoke-run switches; DemoScaffold reads them from the environment unless given. */
         std::optional<DemoRunOptions> run;
         /**
@@ -140,6 +147,14 @@ namespace FenrirDemo
         std::vector<Fenrir::ScriptingExtension> scriptingExtensions;
 #endif
     };
+
+    /** @brief The overlay layer the ImGuiOverlay draws on; a scene's own 2D draw lists on lower layers draw under it.
+     */
+    inline constexpr std::int32_t ImGuiOverlayLayer = 1000;
+
+    /** @brief The ImGuiOverlay's input router priority: it sees input before routers of lower priority, and the game.
+     */
+    inline constexpr int ImGuiOverlayRouterPriority = 1000;
 
     /**
      * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray, from
