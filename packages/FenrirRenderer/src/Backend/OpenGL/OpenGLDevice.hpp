@@ -160,6 +160,7 @@ namespace Fenrir::Graphics
             CullMode cull = CullMode::Back;
             DepthState depth;
             BlendMode blend = BlendMode::None;
+            bool encodeSrgb = true;
         };
 
         /** @brief A buffer bound for vertices or indices: its GL name and the offset of its first byte. */

@@ -12,7 +12,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 
 ## Implementation tickets
 
-- **Touches**: each implementation ticket has a `**Touches:**` line under `**Blocked by:**`, naming the files or directories it expects to edit (`examples/DemoApp/src/VehicleScene.hpp`, `packages/FenrirPhysics/src/`). The line is for scheduling, so it overrides `/to-tickets`' advice to leave paths out.
+- **Touches**: each implementation ticket has a `**Touches:**` line under `**Blocked by:**`, naming the files or directories it expects to edit (`examples/PhysicsDemo/src/Vehicles.cpp`, `packages/FenrirPhysics/src/`). The line is for scheduling, so it overrides `/to-tickets`' advice to leave paths out.
 - **Stacking**: tickets whose Touches lines share a file are built as a **stack**. Each ticket's branch is cut from the previous ticket's pushed branch, and its PR targets that branch, so each PR shows only its own diff. Only tickets whose Touches lines are disjoint run side by side off the base. Settle the stack's order, respecting every Blocked by line, before starting the first ticket.
 - **Built**: when a spec's last ticket merges, the commit that records it built deletes `.scratch/<feature-slug>/`. If a map charted the spec, its line names that commit, and git history keeps the files.
 

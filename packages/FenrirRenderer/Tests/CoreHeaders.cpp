@@ -4,6 +4,7 @@
 // here.
 #include "Backend/Null/NullDevice.hpp"
 #include "Backend/OpenGL/OpenGLDevice.hpp"
+#include "Core/Draw2DFeature.hpp"
 #include "Core/FrameRingBuffer.hpp"
 #include "Core/RenderFeature.hpp"
 #include "Core/RenderGraph.hpp"

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -199,4 +200,30 @@ TEST_CASE("F1 logs the help: the app, the scene and the scene's keys", "[demo][h
     REQUIRE(test.logged->InfoContains("L rotates the light"));
     INFO("the help lists the scaffold's keys");
     REQUIRE(test.logged->InfoContains("PageDown/PageUp"));
+}
+
+TEST_CASE("A C# scene's FenrirScene holds its CSharpScene marker, with a new entry each time it is entered",
+          "[demo][scenes][csharp]")
+{
+    FenrirDemo::DemoScene csharp = EmptyScene("Twin (C#)");
+    csharp.csharpScene = 7;
+    DemoTestApp test({csharp, EmptyScene("Plain")});
+    test.Frames();
+
+    const FenrirDemo::CSharpScene* first = test.app.GetActiveScene().GetResource<FenrirDemo::CSharpScene>();
+    INFO("the C# scene's FenrirScene holds its marker, naming the scene");
+    REQUIRE(first != nullptr);
+    REQUIRE(first->scene == 7u);
+    const std::uint32_t firstEntry = first->entry;
+
+    test.Tap(Fenrir::Key::PageDown);
+    INFO("a C++ scene's FenrirScene holds no marker");
+    REQUIRE(test.app.GetActiveScene().GetResource<FenrirDemo::CSharpScene>() == nullptr);
+
+    test.Tap(Fenrir::Key::PageDown);
+    const FenrirDemo::CSharpScene* again = test.app.GetActiveScene().GetResource<FenrirDemo::CSharpScene>();
+    INFO("entering the C# scene again marks it with a new entry, so its C# systems spawn it again");
+    REQUIRE(again != nullptr);
+    REQUIRE(again->scene == 7u);
+    REQUIRE(again->entry != firstEntry);
 }

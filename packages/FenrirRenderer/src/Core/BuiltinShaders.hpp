@@ -20,6 +20,14 @@ namespace Fenrir::Render
         Background,
         /** @brief `builtin:output`: the Output pass, SceneColor clamped into the backbuffer. */
         Output,
+        /** @brief `builtin:debug-lines`: debug lines, expanded to screen-space quads of their thickness. */
+        DebugLines,
+        /** @brief `builtin:debug-triangles`: solid debug shapes, alpha-blended. */
+        DebugTriangles,
+        /** @brief `builtin:debug-text`: debug text from the debug font's signed-distance-field atlas. */
+        DebugText,
+        /** @brief `builtin:2d`: 2D draw lists on the ImGui vertex layout, textured and vertex-coloured (ADR-0027). */
+        Draw2D,
     };
 
     /** @brief A built-in program's `builtin:` name and its embedded container's bytes. */

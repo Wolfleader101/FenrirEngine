@@ -282,7 +282,7 @@ TEST_CASE("A rear differential with one wheel destroyed drives the other, with o
                                                                                << " rad/s)");
     REQUIRE(spins[2] > before[2]);
 
-    // Remade, as the DemoApp's 8 does: a new wheel in its place, named in the dead one's place.
+    // Remade, as PhysicsDemo's Vehicles (C++) 8 does: a new wheel in its place, named in the dead one's place.
     Entity remade = AddWheel(test.Entities(), car.chassis, Math::Vec3(-wheelX, wheelY, wheelZ));
     differential.GetComponent<VehicleDifferential>().leftWheel = remade;
     test.Run(0.5);

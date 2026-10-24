@@ -13,11 +13,13 @@
 
 **Touches:** `packages/FenrirRenderer/`, `examples/DemoScaffold/`, `examples/RendererDemo/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Null-backend tests: debug batches reach each view's `Debug` stage with the line and triangle pipelines; on-top items use the no-depth-test pipeline; `drawDebug = false` removes them from that view only; screen text and messages reach each drawn window's `Overlay` once, after everything else; an image-target view gets no screen text.
-- [ ] World text behind the camera is skipped.
-- [ ] The SDF atlas covers ASCII and Latin-1, and an unmapped codepoint draws `?`.
-- [ ] GL pixel probe: a thick on-top line covers a pixel in front of an opaque quad; a depth-tested one behind the quad does not.
-- [ ] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
+Hand check: RendererDemo's "Debug draw" scene, as its README's hand checks list: every shape wire and solid, depth tested (hidden by the wall) and on top (through it); each duration (every frame, T's three seconds, F's forever until X); the groups 1, 2 and 3 hide and show; the axes, box, circle and label `relativeTo` the orbiting sphere follow it; world text faces the screen at a constant size, never hidden and gone behind the camera; screen text and the keyed messages stay put; F1's help panel now shows on screen in every scene; and text stays crisp at a content scale other than 1.
+
+- [x] Null-backend tests: debug batches reach each view's `Debug` stage with the line and triangle pipelines; on-top items use the no-depth-test pipeline; `drawDebug = false` removes them from that view only; screen text and messages reach each drawn window's `Overlay` once, after everything else; an image-target view gets no screen text.
+- [x] World text behind the camera is skipped.
+- [x] The SDF atlas covers ASCII and Latin-1, and an unmapped codepoint draws `?`.
+- [x] GL pixel probe: a thick on-top line covers a pixel in front of an opaque quad; a depth-tested one behind the quad does not.
+- [x] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
 - [ ] Scene 4 by hand: every shape, both depth modes, durations, groups, the orbiting `relativeTo` item, world text, screen text, keyed messages and the F1 panel look right, and text stays crisp at a content scale other than 1 (checked by hand).

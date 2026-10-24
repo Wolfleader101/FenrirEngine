@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 
 // RendererDemo's scenes, in the order of its scene list. Each renderer feature ticket adds its scene here.
@@ -23,4 +25,42 @@ namespace RendererDemo
      * can override with a colour of its own; keys switch the sky and the override.
      */
     [[nodiscard]] FenrirDemo::DemoScene Sky();
+
+    /**
+     * @brief Debug draw: every wire and solid shape, in a depth-tested row behind a wall and an on-top row through it,
+     * with world-text labels; shapes relative to an orbiting sphere; screen text and keyed messages; keys toggle
+     * groups, draw for three seconds, draw forever and clear.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
+
+    /**
+     * @brief Overlay: a raw DrawList2D on the window overlay showing layers, scissors and the four blend modes, and an
+     * ImGui window with a text field and a slider over a spinning cube whose keys and clicks stop while ImGui has the
+     * pointer or the keyboard.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene OverlayScene();
+
+    /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
+    inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
+
+    /**
+     * @brief Meshes and materials (C#): a twin of Meshes and materials, the same scene with the same keys, spawned and
+     * run entirely by C# systems (scripts/MeshesAndMaterials.cs). For an app with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterialsCSharp();
+
+    /** @brief Debug draw (C#)'s number, which its C# systems know it by (scripts/DebugDrawScene.cs). */
+    inline constexpr std::uint32_t DebugDrawingCSharpScene = 2;
+
+    /**
+     * @brief Debug draw (C#): a twin of Debug draw, the same shapes, text and keys, spawned, drawn and run entirely by
+     * C# systems through the Fenrir.DebugDraw facade (scripts/DebugDrawScene.cs). For an app with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene DebugDrawingCSharp();
+
+    /** @brief The name the stripes shader, embedded in the app, has for C#, which cannot load a shader by path. */
+    inline constexpr const char* StripesShaderName = "builtin:renderer-demo-stripes";
+
+    /** @brief Gives the app's asset store the shaders RendererDemo's C# scenes load by name (StripesShaderName). */
+    void AddCSharpShaders(Fenrir::App& app);
 } // namespace RendererDemo

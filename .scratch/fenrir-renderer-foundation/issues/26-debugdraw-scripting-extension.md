@@ -12,10 +12,12 @@
 
 **Touches:** `packages/FenrirDebugDraw/Managed/`, `packages/FenrirDebugDraw/Scripting/`, `packages/FenrirPhysics/Managed/`, `examples/RendererDemo/`, `CMakeLists.txt`, `FenrirScripting.sln`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Extension tests: shapes, text and messages drawn from a C# system appear in the scene's tessellated batches the same as the C++ calls; durations from a C# tick system last until the next tick; groups toggle and clear from C#.
-- [ ] Physics's C# contract exposes `SetDebugDraw(PhysicsDebugCategories)` and nothing else debug-related, and physics scripting tests pass.
-- [ ] A stale `relativeTo` entity no-ops with a debug warning.
-- [ ] `FENRIR_DEMO_SMOKE` runs scene 6b on null and GL with no errors, with scripting on.
+Hand check: RendererDemo's "Debug draw (C#)" looks the same as scene 4, "Debug draw", shape for shape, and its keys (1, 2, 3, T, F, X) do the same (examples/RendererDemo/README.md).
+
+- [x] Extension tests: shapes, text and messages drawn from a C# system appear in the scene's tessellated batches the same as the C++ calls; durations from a C# tick system last until the next tick; groups toggle and clear from C#.
+- [x] Physics's C# contract exposes `SetDebugDraw(PhysicsDebugCategories)` and nothing else debug-related, and physics scripting tests pass.
+- [x] A stale `relativeTo` entity no-ops with a debug warning.
+- [x] `FENRIR_DEMO_SMOKE` runs scene 6b on null and GL with no errors, with scripting on.
 - [ ] Scene 6b by hand: it matches scene 4 (checked by hand).

@@ -14,7 +14,6 @@ option(FENRIR_ENABLE_ASSETS "Build FenrirAssets with cgltf, ufbx and stb (the pa
 option(FENRIR_ENABLE_RENDERER "Build FenrirWindow and SDL3 (the packages/FenrirWindow/libs/SDL submodule), and FenrirRenderer's FenrirShaderCompiler with glslang and SPIRV-Reflect, the renderer core with its graphics device, null backend and OpenGL backend (with the checked-in glad loader), and FenrirRenderer's ECS facade" ON)
 option(FENRIR_BUILD_TESTS "Build the package tests (Catch2: the libs/catch2 submodule, or an installed Catch2 v3)" OFF)
 option(FENRIR_BUILD_EXAMPLES "Build the demo apps on the demo scaffold (examples/; with the renderer only)" ON)
-option(FENRIR_BUILD_LEGACY_DEMOAPP "Build the legacy DemoApp (needs its third-party libraries in examples/DemoApp/libs, which are not submodules)" OFF)
 
 # The renderer draws assets, so it cannot be built without them.
 if(FENRIR_ENABLE_RENDERER AND NOT FENRIR_ENABLE_ASSETS)
@@ -55,7 +54,6 @@ endif()
 
 add_subdirectory(packages/FenrirMath)
 add_subdirectory(packages/FenrirECS)
-add_subdirectory(packages/FenrirCamera)
 add_subdirectory(packages/FenrirTime)
 add_subdirectory(packages/FenrirScheduler)
 add_subdirectory(packages/FenrirLogger)
@@ -67,6 +65,7 @@ add_subdirectory(packages/FenrirInput)
 
 if(FENRIR_ENABLE_ASSETS)
     add_subdirectory(packages/FenrirAssets)
+    add_subdirectory(packages/FenrirDraw2D)
 endif()
 # Always built: it links no library (ADR-0025).
 add_subdirectory(packages/FenrirDebugDraw)
@@ -88,6 +87,10 @@ endif()
 if(FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirInput/Scripting)
 endif()
+# DebugDraw's needs only scripting too (FenrirDebugDraw is always built).
+if(FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirDebugDraw/Scripting)
+endif()
 if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirWindow/Scripting)
 endif()
@@ -95,12 +98,16 @@ endif()
 if(FENRIR_ENABLE_ASSETS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirAssets/Scripting)
 endif()
+# Renderer's builds with the renderer, after Input's and Assets's, whose contracts it uses.
+if(FENRIR_ENABLE_RENDERER AND FENRIR_ENABLE_SCRIPTING)
+    add_subdirectory(packages/FenrirRenderer/Scripting)
+endif()
 
 # Physics's scripting extension needs both, and comes after FenrirScripting (it builds against the scripting SDK).
 if(FENRIR_ENABLE_PHYSICS AND FENRIR_ENABLE_SCRIPTING)
     add_subdirectory(packages/FenrirPhysics/Scripting)
 endif()
 
-if(FENRIR_BUILD_EXAMPLES OR FENRIR_BUILD_LEGACY_DEMOAPP)
+if(FENRIR_BUILD_EXAMPLES)
     add_subdirectory(examples)
 endif()

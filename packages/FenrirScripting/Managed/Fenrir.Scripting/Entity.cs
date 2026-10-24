@@ -8,6 +8,12 @@ public readonly struct Entity : IEquatable<Entity>
 {
     public Entity(uint value) => Value = value;
 
+    /// <summary>
+    /// No entity: what a C++ default <c>Entity</c> is, and what a function that finds or makes none returns. It is never
+    /// valid. <c>default(Entity)</c> is not this: it names entity 0.
+    /// </summary>
+    public static Entity None => new(uint.MaxValue);
+
     /// <summary>The raw EnTT entity value.</summary>
     public uint Value { get; }
 

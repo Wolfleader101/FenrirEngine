@@ -74,9 +74,6 @@ namespace Fenrir::Render
         /** @brief The binding set of the material. */
         constexpr std::uint32_t MaterialSet = 2;
 
-        /** @brief Uniform ranges are bound at multiples of this, the largest alignment GL implementations ask for. */
-        constexpr std::size_t UniformAlignment = 256;
-
         /** @brief One standard vertex stream (`Fenrir/Vertex.glsl`), by location: its name, format and size. */
         struct StreamFormat
         {
@@ -336,11 +333,6 @@ namespace Fenrir::Render
             return std::as_bytes(std::span(&value, 1));
         }
 
-        std::size_t RoundUp(std::size_t size, std::size_t multiple)
-        {
-            return (size + multiple - 1) / multiple * multiple;
-        }
-
         /** @brief The standard vertex locations a variant reads, as bits. */
         std::uint32_t ReadMask(const ShaderVariant& variant)
         {
@@ -534,74 +526,6 @@ namespace Fenrir::Render
             return target.IsEmpty() ? std::string("the window") : std::format("image {}", target.index);
         }
     } // namespace
-
-    // ---- BlockRing ----
-
-    SceneRenderer::BlockRing::BlockRing(GraphicsDevice& device, BindingGroupLayoutHandle layout, bool storage,
-                                        std::size_t slotSize, std::string label)
-        : m_device(device), m_layout(layout), m_storage(storage),
-          m_slotSize(storage ? slotSize : RoundUp(slotSize, UniformAlignment)), m_label(std::move(label))
-    {
-    }
-
-    SceneRenderer::BlockRing::~BlockRing()
-    {
-        DestroyGroups();
-    }
-
-    void SceneRenderer::BlockRing::DestroyGroups()
-    {
-        for (const std::vector<BindingGroupHandle>& copy : m_groups)
-        {
-            for (const BindingGroupHandle group : copy)
-            {
-                m_device.Destroy(group);
-            }
-        }
-        m_groups.clear();
-    }
-
-    void SceneRenderer::BlockRing::Reserve(std::size_t slots)
-    {
-        slots = std::max<std::size_t>(slots, 1);
-        if (m_ring != nullptr && slots <= m_slots)
-        {
-            return;
-        }
-        // Grow by doubling, so a scene that keeps growing remakes its buffers rarely.
-        m_slots = std::max(slots, m_slots * 2);
-        DestroyGroups();
-        m_ring.reset();
-        const BufferUsage usage = m_storage ? BufferUsage::Storage : BufferUsage::Uniform;
-        m_ring = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_slots * m_slotSize, usage}, m_label);
-        for (std::size_t copy = 0; copy < m_ring->CopyCount(); ++copy)
-        {
-            const BufferHandle buffer = m_ring->Current(copy);
-            std::vector<BindingGroupHandle>& groups = m_groups.emplace_back();
-            const std::size_t groupCount = m_storage ? 1 : m_slots;
-            for (std::size_t slot = 0; slot < groupCount; ++slot)
-            {
-                BindingGroupEntry entry;
-                entry.binding = 0;
-                entry.buffer = buffer;
-                entry.offset = m_storage ? 0 : slot * m_slotSize;
-                entry.size = m_storage ? 0 : m_slotSize;
-                groups.push_back(m_device.CreateBindingGroup({m_layout, {entry}}, m_label));
-            }
-        }
-    }
-
-    void SceneRenderer::BlockRing::Write(std::uint64_t frameIndex, std::size_t slot, std::span<const std::byte> bytes)
-    {
-        m_ring->Write(frameIndex, slot * m_slotSize, bytes);
-    }
-
-    BindingGroupHandle SceneRenderer::BlockRing::Group(std::uint64_t frameIndex, std::size_t slot) const
-    {
-        const std::vector<BindingGroupHandle>& copy =
-            m_groups.at(static_cast<std::size_t>(frameIndex % m_groups.size()));
-        return copy.at(m_storage ? 0 : slot);
-    }
 
     // ---- SceneRenderer ----
 
@@ -919,6 +843,11 @@ namespace Fenrir::Render
         }
         const auto image = m_images.find(key);
         return image == m_images.end() ? TextureHandle{} : image->second.texture;
+    }
+
+    TextureHandle SceneRenderer::GetDefaultTexture(DefaultTexture texture) const
+    {
+        return m_defaultTextures.at(static_cast<std::size_t>(texture));
     }
 
     bool SceneRenderer::IsTargetCurrent(AssetKey key, std::uint32_t revision) const
@@ -1525,6 +1454,7 @@ namespace Fenrir::Render
         }
 
         m_stats.draws = 0;
+        m_drawnViews.clear();
         if (m_frame.views.empty())
         {
             AddWindowClear(graph, frame);
@@ -1685,6 +1615,7 @@ namespace Fenrir::Render
             depthDesc.usage = TextureUsage::DepthAttachment;
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, viewGroup});
 
             // Opaque items in draw-list order; transparent ones back to front by the view-space depth of their world
             // origins, the farthest (most negative view z) first.
