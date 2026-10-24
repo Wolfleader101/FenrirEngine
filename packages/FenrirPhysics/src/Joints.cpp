@@ -480,7 +480,7 @@ namespace Fenrir::Detail
     {
         // Every kind draws the same two frames. Shapes of a kind's own (limit arcs, cones) would go here, by kind.
         const auto frame = [&canvas](const JointFrame& local, const Transform* body, const Math::Vec3& scale,
-                                     float length, std::array<std::uint32_t, 3> colours) {
+                                     float length, const std::array<Colour, 3>& colours) {
             // A frame's position follows its body's scale and its rotation does not, as the constraint was made; the
             // world end's frame is already in world space.
             const Math::Vec3 position =
@@ -498,8 +498,9 @@ namespace Fenrir::Detail
             if (!record.HasConstraint())
             {
                 // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
-                constexpr std::array<std::uint32_t, 3> grey = {DebugColour::InactiveJoint, DebugColour::InactiveJoint,
-                                                               DebugColour::InactiveJoint};
+                const std::array<Colour, 3> grey = {PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint};
                 if (BodyOf(joint.bodyA) != nullptr)
                 {
                     const Transform& a = m_poses->Baseline(joint.bodyA.GetId());
@@ -520,13 +521,15 @@ namespace Fenrir::Detail
                 continue; // not expected: Sync drops a constraint before its bodies go
             }
             // A disabled joint, broken or switched off by game code, is dimmed.
-            const auto colour = [&joint](std::uint32_t full) {
-                return joint.enabled ? full : DebugColour::Dimmed(full);
+            const auto colour = [&joint](const Colour& full) {
+                return joint.enabled ? full : PhysicsDebugColour::Dimmed(full);
             };
             frame(joint.frameA, &m_poses->Baseline(joint.bodyA.GetId()), record.scaleA, jointAxisA,
-                  {colour(DebugColour::JointAX), colour(DebugColour::JointAY), colour(DebugColour::JointAZ)});
+                  {colour(PhysicsDebugColour::JointAX), colour(PhysicsDebugColour::JointAY),
+                   colour(PhysicsDebugColour::JointAZ)});
             frame(joint.frameB, toWorld ? nullptr : &m_poses->Baseline(joint.bodyB.GetId()), record.scaleB, jointAxisB,
-                  {colour(DebugColour::JointBX), colour(DebugColour::JointBY), colour(DebugColour::JointBZ)});
+                  {colour(PhysicsDebugColour::JointBX), colour(PhysicsDebugColour::JointBY),
+                   colour(PhysicsDebugColour::JointBZ)});
         }
     }
 } // namespace Fenrir::Detail

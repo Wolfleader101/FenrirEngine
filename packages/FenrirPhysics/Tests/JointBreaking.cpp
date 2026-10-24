@@ -308,10 +308,10 @@ TEST_CASE("Lowering a sleeping joint's threshold wakes its bodies, so it can bre
 
 namespace
 {
-    std::size_t CountColoured(std::span<const DebugLine> lines, std::uint32_t colour)
+    std::size_t CountColoured(std::span<const DrawnLine> lines, const Colour& colour)
     {
         return static_cast<std::size_t>(std::count_if(
-            lines.begin(), lines.end(), [colour](const DebugLine& line) { return line.colour == colour; }));
+            lines.begin(), lines.end(), [colour](const DrawnLine& line) { return SameColour(line.colour, colour); }));
     }
 } // namespace
 
@@ -322,21 +322,21 @@ TEST_CASE("A broken joint's axes are drawn dimmed", "[physics][joints][breaking]
     JointOf(chain.joints[1]).breakForce = 1.0f;
     Breaks breaks;
     breaks.Run(test, tick);
-    World(test).SetDebugDraw(DebugDraw::Joints);
+    World(test).SetDebugDraw(PhysicsDebugCategories::Joints);
     RunUntilBreak(test, breaks, chain.joints[1], 1.0);
     REQUIRE(breaks.events.size() == 1);
 
-    const std::span<const DebugLine> lines = World(test).DebugLines();
-    const std::array<std::uint32_t, 6> colours = {
-        DebugColour::JointAX, DebugColour::JointAY, DebugColour::JointAZ,
-        DebugColour::JointBX, DebugColour::JointBY, DebugColour::JointBZ,
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
+    const std::array<Colour, 6> colours = {
+        PhysicsDebugColour::JointAX, PhysicsDebugColour::JointAY, PhysicsDebugColour::JointAZ,
+        PhysicsDebugColour::JointBX, PhysicsDebugColour::JointBY, PhysicsDebugColour::JointBZ,
     };
     INFO("two joints, two frames each, three axes a frame");
     REQUIRE(lines.size() == 12);
-    for (const std::uint32_t colour : colours)
+    for (std::size_t axis = 0; axis < colours.size(); ++axis)
     {
-        INFO("one axis in colour " << std::hex << colour << " for the whole joint, and one dimmed for the broken one");
-        REQUIRE(CountColoured(lines, colour) == 1);
-        REQUIRE(CountColoured(lines, DebugColour::Dimmed(colour)) == 1);
+        INFO("one axis in colour " << axis << " for the whole joint, and one dimmed for the broken one");
+        REQUIRE(CountColoured(lines, colours[axis]) == 1);
+        REQUIRE(CountColoured(lines, PhysicsDebugColour::Dimmed(colours[axis])) == 1);
     }
 }

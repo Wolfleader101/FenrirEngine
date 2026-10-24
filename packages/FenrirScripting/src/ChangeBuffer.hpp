@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
 #include <vector>
 
 #include "ComponentRegistry.hpp"
@@ -20,6 +21,8 @@ namespace Fenrir::Detail
         RequiredComponent = -4,
         NotActive = -5, // Scripting is not running, so there is no scene to change.
         UnknownEvent = -6,
+        UnknownResource = -7,
+        ReadOnlyResource = -8,
     };
 
     struct ApplyResult
@@ -28,8 +31,9 @@ namespace Fenrir::Detail
         std::size_t skipped = 0;
     };
 
-    // The structural changes a script makes while it runs (create, destroy, add, remove), kept in the order they were
-    // made and played back together when the script returns. Until then the storage does not move, so every Ref<T> a
+    // The structural changes a script makes while it runs (create, destroy, add, remove, insert and remove a resource),
+    // and the ones the native functions it calls record, kept in the order they were made and played back together when
+    // the script returns. Until then the storage does not move, so every Ref<T> a
     // script took stays valid. Reads are never buffered: they see the live state.
     class ChangeBuffer
     {
@@ -51,6 +55,16 @@ namespace Fenrir::Detail
         // queue at playback, so a system never reads its own sends and a view it took stays valid.
         [[nodiscard]] ChangeError SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event,
                                             const void* value);
+
+        // Records inserting the resource `resource` (registration.size bytes of `value`, copied now, or null for a
+        // default one), and removing it. A scene resource is the active scene's at playback.
+        [[nodiscard]] ChangeError InsertResource(const ComponentRegistry& registry, std::int32_t resource,
+                                                 const void* value);
+        [[nodiscard]] ChangeError RemoveResource(const ComponentRegistry& registry, std::int32_t resource);
+
+        // Records a change a native function made through its call context, to run at playback in order with the rest.
+        // It returns false when it could not apply (its entity died first), which playback counts as skipped.
+        void RecordNative(std::function<bool(App&)> change);
 
         // Plays every recorded change back in order and empties the buffer. A change whose entity died in the meantime
         // (an earlier change in the buffer destroyed it) is skipped with a warning, never applied to a reused slot.
@@ -78,6 +92,9 @@ namespace Fenrir::Detail
             Add,
             Remove,
             SendEvent,
+            InsertResource,
+            RemoveResource,
+            Native,
         };
 
         struct Change
@@ -89,7 +106,12 @@ namespace Fenrir::Detail
             std::size_t valueOffset;
         };
 
+        // Copies `size` bytes of `value` to the end of m_values.
+        void AppendValue(const void* value, std::size_t size);
+
         std::vector<Change> m_changes;
         std::vector<std::byte> m_values; // The bytes of every Add that carried a value, back to back.
+        // The changes native functions recorded; a Native change's valueOffset is its index here.
+        std::vector<std::function<bool(App&)>> m_native;
     };
 } // namespace Fenrir::Detail

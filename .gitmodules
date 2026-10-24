@@ -13,3 +13,24 @@
 [submodule "packages/FenrirPhysics/libs/JoltPhysics"]
 	path = packages/FenrirPhysics/libs/JoltPhysics
 	url = https://github.com/jrouwe/JoltPhysics
+[submodule "packages/FenrirAssets/libs/stb"]
+	path = packages/FenrirAssets/libs/stb
+	url = https://github.com/nothings/stb
+[submodule "packages/FenrirWindow/libs/SDL"]
+	path = packages/FenrirWindow/libs/SDL
+	url = https://github.com/libsdl-org/SDL
+[submodule "packages/FenrirRenderer/Tools/ShaderCompiler/libs/glslang"]
+	path = packages/FenrirRenderer/Tools/ShaderCompiler/libs/glslang
+	url = https://github.com/KhronosGroup/glslang
+[submodule "packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect"]
+	path = packages/FenrirRenderer/Tools/ShaderCompiler/libs/SPIRV-Reflect
+	url = https://github.com/KhronosGroup/SPIRV-Reflect
+[submodule "packages/FenrirAssets/libs/cgltf"]
+	path = packages/FenrirAssets/libs/cgltf
+	url = https://github.com/jkuhlmann/cgltf
+[submodule "packages/FenrirAssets/libs/ufbx"]
+	path = packages/FenrirAssets/libs/ufbx
+	url = https://github.com/ufbx/ufbx
+[submodule "examples/DemoScaffold/libs/imgui"]
+	path = examples/DemoScaffold/libs/imgui
+	url = https://github.com/ocornut/imgui

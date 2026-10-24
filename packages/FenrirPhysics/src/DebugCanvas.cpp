@@ -1,7 +1,9 @@
 #include "DebugCanvas.hpp"
 
 #include <cmath>
+#include <cstddef>
 #include <utility>
+#include <vector>
 
 #include "Backend/Primitive.hpp"
 
@@ -49,13 +51,14 @@ namespace Fenrir::Detail
     void LineWriter::Arc(const Math::Vec3& centre, const Math::Vec3& u, const Math::Vec3& v, float radius, float start,
                          float end, int segments) const
     {
-        const auto at = [&](float angle) { return centre + radius * (std::cos(angle) * u + std::sin(angle) * v); };
-        for (int i = 0; i < segments; ++i)
+        std::vector<Math::Vec3> points;
+        points.reserve(static_cast<std::size_t>(segments) + 1);
+        for (int i = 0; i <= segments; ++i)
         {
-            const float a = start + (end - start) * static_cast<float>(i) / static_cast<float>(segments);
-            const float b = start + (end - start) * static_cast<float>(i + 1) / static_cast<float>(segments);
-            (*this)(at(a), at(b));
+            const float angle = start + (end - start) * static_cast<float>(i) / static_cast<float>(segments);
+            points.push_back(Place(centre + radius * (std::cos(angle) * u + std::sin(angle) * v)));
         }
+        m_draw->Polyline(points, false, m_colour, debugLineOptions);
     }
 
     void LineWriter::Box(const Math::Vec3& min, const Math::Vec3& max) const
@@ -81,13 +84,13 @@ namespace Fenrir::Detail
 
     void DebugCanvas::Clear()
     {
-        m_lines.clear();
+        m_draw = nullptr;
         m_shapeEdges.clear();
     }
 
-    void DebugCanvas::Begin()
+    void DebugCanvas::Begin(DebugDraw& draw)
     {
-        m_lines.clear();
+        m_draw = &draw;
         m_used.clear();
     }
 
@@ -96,19 +99,20 @@ namespace Fenrir::Detail
         // Ids are never reused, so the edges of a mesh not drawn this time are never asked for again.
         m_shapeEdges = std::move(m_used);
         m_used.clear();
+        m_draw = nullptr;
     }
 
-    void DebugCanvas::Line(const Math::Vec3& from, const Math::Vec3& to, std::uint32_t colour)
+    void DebugCanvas::Line(const Math::Vec3& from, const Math::Vec3& to, const Colour& colour)
     {
-        m_lines.push_back(DebugLine{from, to, colour});
+        m_draw->Line(from, to, colour, debugLineOptions);
     }
 
-    LineWriter DebugCanvas::Writer(const Math::Vec3& position, const Math::Quat& rotation, std::uint32_t colour)
+    LineWriter DebugCanvas::Writer(const Math::Vec3& position, const Math::Quat& rotation, const Colour& colour)
     {
-        return LineWriter(m_lines, position, rotation, colour);
+        return LineWriter(*m_draw, position, rotation, colour);
     }
 
-    void DebugCanvas::ContactPoint(const Math::Vec3& point, const Math::Vec3& normal, std::uint32_t colour)
+    void DebugCanvas::ContactPoint(const Math::Vec3& point, const Math::Vec3& normal, const Colour& colour)
     {
         const LineWriter write = Writer(point, Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), colour);
         for (const Math::Vec3& axis : {xAxis, yAxis, zAxis})
@@ -119,7 +123,7 @@ namespace Fenrir::Detail
     }
 
     void DebugCanvas::Collider(const CollisionShape& shape, const Transform& pose, const Transform& body,
-                               std::uint32_t colour)
+                               const Colour& colour)
     {
         // At its own world pose: the body's step pose, then the collider's pose in the body.
         const Math::Vec3 position = body.pos + body.rot * pose.pos;
@@ -159,21 +163,21 @@ namespace Fenrir::Detail
         }
     }
 
-    std::uint32_t DebugCanvas::ColliderColour(bool isTrigger, MotionType motionType, bool sleeping)
+    Colour DebugCanvas::ColliderColour(bool isTrigger, MotionType motionType, bool sleeping)
     {
-        std::uint32_t colour = DebugColour::Static;
+        Colour colour = PhysicsDebugColour::Static;
         if (isTrigger)
         {
-            colour = DebugColour::Trigger;
+            colour = PhysicsDebugColour::Trigger;
         }
         else if (motionType == MotionType::Kinematic)
         {
-            colour = DebugColour::Kinematic;
+            colour = PhysicsDebugColour::Kinematic;
         }
         else if (motionType == MotionType::Dynamic)
         {
-            colour = DebugColour::Dynamic;
+            colour = PhysicsDebugColour::Dynamic;
         }
-        return sleeping ? DebugColour::Dimmed(colour) : colour;
+        return sleeping ? PhysicsDebugColour::Dimmed(colour) : colour;
     }
 } // namespace Fenrir::Detail

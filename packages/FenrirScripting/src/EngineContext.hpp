@@ -52,11 +52,13 @@ namespace Fenrir::Detail
 
     /**
      * @brief What the engine itself gives scripting, as the extension every Scripting includes first: its native
-     * functions (Log, Time, Entity, components, events, queries, changes; "Fenrir.Scripting.Native.<Method>", the
-     * methods of the scripting contract's Native class), its components (EngineComponents), and `contract`, the path of
-     * the scripting contract, as its shared assembly. `engine` is its extension state, which every one of its native
-     * functions takes.
+     * functions (Log, Time, Entity, components, events, queries, changes, resources;
+     * "Fenrir.Scripting.Native.<Method>", the methods of the scripting contract's Native class), its components
+     * (EngineComponents), and as its shared assemblies `math`, the path of the Fenrir.Math contract, then `contract`,
+     * the path of the scripting contract, which is built on it (ADR-0029). `engine` is its extension state, which every
+     * one of its native functions takes.
      */
-    [[nodiscard]] ScriptingExtension BuiltInExtension(const std::filesystem::path& contract,
+    [[nodiscard]] ScriptingExtension BuiltInExtension(const std::filesystem::path& math,
+                                                      const std::filesystem::path& contract,
                                                       std::shared_ptr<EngineContext> engine);
 } // namespace Fenrir::Detail

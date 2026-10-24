@@ -6,6 +6,7 @@
 #include "Backend/Backend.hpp"
 #include "BodyComponents.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "PhysicsState.hpp"
 #include "WorldImpl.hpp"
@@ -14,7 +15,8 @@ namespace Fenrir
 {
     namespace
     {
-        // The PostTick system: the active scene's world, made the first time the scene has physics components, steps.
+        // The PostTick system: the active scene's world, made the first time the scene has physics components, steps,
+        // then draws its debug lines into the scene's DebugDraw.
         void StepActiveScene(App& app, Detail::PhysicsState& state)
         {
             Scene& scene = app.GetActiveScene();
@@ -37,7 +39,9 @@ namespace Fenrir
                 world = &PhysicsWorldAccess::Make(
                     scene, std::make_unique<PhysicsWorld::Impl>(entities, settings, state.meshes, *app.Logger()));
             }
-            PhysicsWorldAccess::Of(*world).Step(app, static_cast<float>(app.GetTime().tickRate));
+            PhysicsWorld::Impl& impl = PhysicsWorldAccess::Of(*world);
+            impl.Step(app, static_cast<float>(app.GetTime().tickRate));
+            impl.DrawDebugLines(scene.GetResource<DebugDraw>());
         }
 
         // The BeforeTicks system: the active scene's bodies are back at their true poses before any tick.

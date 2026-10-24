@@ -324,16 +324,16 @@ TEST_CASE("A motorcycle draws each of its wheels' debug lines, as a car does",
     test.Run(1.0);
     REQUIRE(StateOf(bike).wheelsOnGround == 2);
     PhysicsWorld& world = *PhysicsWorld::Of(test.app.GetActiveScene());
-    world.SetDebugDraw(DebugDraw::Vehicles);
+    world.SetDebugDraw(PhysicsDebugCategories::Vehicles);
     test.Run(tick);
-    const auto count = [&world](std::uint32_t colour) {
-        return std::ranges::count_if(world.DebugLines(),
-                                     [colour](const DebugLine& line) { return line.colour == colour; });
+    const auto count = [&test](const Colour& colour) {
+        return std::ranges::count_if(DrawnLines(test.app),
+                                     [colour](const DrawnLine& line) { return SameColour(line.colour, colour); });
     };
     INFO("two wheels' suspensions (3 lines each), circles (33) and contacts (4)");
-    REQUIRE(count(DebugColour::Suspension) == 2 * 3);
-    REQUIRE(count(DebugColour::Wheel) == 2 * 33);
-    REQUIRE(world.DebugLines().size() == 2 * (3 + 33 + 4));
+    REQUIRE(count(PhysicsDebugColour::Suspension) == 2 * 3);
+    REQUIRE(count(PhysicsDebugColour::Wheel) == 2 * 33);
+    REQUIRE(DrawnLines(test.app).size() == 2 * (3 + 33 + 4));
     REQUIRE(test.warnings.empty());
 }
 

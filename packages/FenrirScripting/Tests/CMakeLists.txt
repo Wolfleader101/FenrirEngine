@@ -28,6 +28,10 @@ target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SO
 add_test(NAME FenrirScriptingRules COMMAND FenrirScriptingRulesTests --order decl)
 set_tests_properties(FenrirScriptingRules PROPERTIES TIMEOUT 60)
 
+# Every assembly below is rebuilt when the contracts are, so none runs against types a contract no longer has.
+set(fenrir_contract_files "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll"
+    "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll")
+
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
 # It also compiles the built-in binding's generated tests' C# classes (Generated/): the defaults test reads their new()
@@ -47,7 +51,7 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" -p:FixtureVariant=2
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/fixture-v2-obj/"
     DEPENDS ${fenrir_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.ScriptFixture.csproj"
-        FenrirScriptingContract
+        FenrirScriptingContract ${fenrir_contract_files}
     COMMENT "Building the scripting test fixture assembly (and its version 2)"
     VERBATIM
 )
@@ -62,7 +66,7 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/"
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/bad-reports-obj/"
     DEPENDS ${fenrir_bad_reports_sources} "${CMAKE_CURRENT_SOURCE_DIR}/BadReports/Fenrir.BadReportFixture.csproj"
-        FenrirScriptingContract
+        FenrirScriptingContract ${fenrir_contract_files}
     COMMENT "Building the bad-report test fixture assembly"
     VERBATIM
 )
@@ -87,6 +91,7 @@ add_custom_command(
     DEPENDS ${fenrir_extension_sources} ${fenrir_extension_script_sources}
         "${CMAKE_CURRENT_SOURCE_DIR}/Extension/Fenrir.TestExtension.csproj"
         "${CMAKE_CURRENT_SOURCE_DIR}/ExtensionScript/Fenrir.TestExtensionScript.csproj" FenrirScriptingContract
+        ${fenrir_contract_files}
     COMMENT "Building the test extension's contract and the script assembly that uses it"
     VERBATIM
 )
@@ -161,6 +166,11 @@ fenrir_expect_compile(RelationshipRef CS0315)          # there is no Ref<Relatio
 fenrir_expect_compile(RelationshipAssign CS8331)       # r.Value = ... on a ReadOnlyRef
 fenrir_expect_compile(RelationshipField CS8331)        # r.Parent = ... on a ReadOnlyRef
 fenrir_expect_compile(ReadOnlyViewOfWritable CS8332)   # a writable component through the read-only view
+# Native resources share Ref<T>'s rules, and a read-only one is readable but never writable from C#.
+fenrir_expect_compile(ResourceControl OK)              # get, try-get, insert and remove; read a read-only one
+fenrir_expect_compile(ReadOnlyResourceWrite CS8331)    # clock.Seconds = ... through its ReadOnlyRef
+fenrir_expect_compile(ReadOnlyResourceRef CS0315)      # there is no Ref<T> of a read-only resource
+fenrir_expect_compile(ReadOnlyResourceInsert CS0315)   # nor an insert of one
 # Systems are found at build time, so a mistake is an error there and not a silent no-op when the game runs.
 fenrir_expect_compile(SystemControl OK)
 fenrir_expect_compile(SystemNotASystem FENRIR0010)

@@ -8,6 +8,12 @@ public readonly struct Entity : IEquatable<Entity>
 {
     public Entity(uint value) => Value = value;
 
+    /// <summary>
+    /// No entity: what a C++ default <c>Entity</c> is, and what a function that finds or makes none returns. It is never
+    /// valid. <c>default(Entity)</c> is not this: it names entity 0.
+    /// </summary>
+    public static Entity None => new(uint.MaxValue);
+
     /// <summary>The raw EnTT entity value.</summary>
     public uint Value { get; }
 
@@ -130,6 +136,9 @@ public readonly struct Entity : IEquatable<Entity>
     // The registry id of a native component type, or a clear exception.
     internal static int IdOf<T>() where T : unmanaged, IReadOnlyComponent
     {
+        // A resource meets the component constraints only so that it shares Ref<T>; it never belongs to an entity.
+        if (ComponentIds<T>.IsResource)
+            throw new InvalidOperationException($"{typeof(T).Name} is a resource, not a component: reach it through Resources.");
         int id = ComponentIds<T>.Id;
         if (id == ComponentIds<T>.WrongType)
             throw new InvalidOperationException($"'{ComponentIds<T>.NativeName}' is registered for a different C# type than {typeof(T).FullName}; a native component is reached only through the type the host validated.");

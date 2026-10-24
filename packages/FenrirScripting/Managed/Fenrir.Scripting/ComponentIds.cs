@@ -16,6 +16,9 @@ internal static unsafe class ComponentIds<T> where T : unmanaged, IReadOnlyCompo
     private static bool resolved;
     private static int id;
 
+    /// <summary>Whether the type is a native resource (an <see cref="IReadOnlyResource"/>), which is never a component.</summary>
+    internal static bool IsResource { get; } = typeof(IReadOnlyResource).IsAssignableFrom(typeof(T));
+
     /// <summary>The name in a [NativeComponent] attribute, or null for a component the script defines.</summary>
     internal static string? NativeName { get; } = typeof(T).GetCustomAttribute<NativeComponentAttribute>()?.Name;
 

@@ -555,8 +555,7 @@ namespace Fenrir::Detail
                 continue;
             }
             const bool sleeping = record.motion.motionType != MotionType::Static && m_backend->IsSleeping(record.id);
-            const std::uint32_t colour =
-                DebugCanvas::ColliderColour(record.isTrigger, record.motion.motionType, sleeping);
+            const Colour colour = DebugCanvas::ColliderColour(record.isTrigger, record.motion.motionType, sleeping);
             for (const Part& part : record.parts)
             {
                 if (part.usable)
@@ -581,13 +580,13 @@ namespace Fenrir::Detail
                 if (velocity != Math::Vec3(0.0f))
                 {
                     const Math::Vec3& at = m_poses->Baseline(id).pos;
-                    canvas.Line(at, at + velocitySeconds * velocity, DebugColour::Velocity);
+                    canvas.Line(at, at + velocitySeconds * velocity, PhysicsDebugColour::Velocity);
                 }
             }
             if (bounds)
             {
                 const Math::AABB box = m_backend->Bounds(record.id);
-                canvas.Writer(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), DebugColour::Bounds)
+                canvas.Writer(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), PhysicsDebugColour::Bounds)
                     .Box(box.min, box.max);
             }
         }

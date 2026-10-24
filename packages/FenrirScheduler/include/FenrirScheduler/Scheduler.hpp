@@ -21,8 +21,8 @@ namespace Fenrir
     // schedule should just be an enum
     /**
      * @brief When in the app's life a system runs. A frame runs PreUpdate, BeforeTicks once, then PreTick, Tick and
-     * PostTick once per fixed step (zero or more times), then AfterTicks once (even with no tick), Update and
-     * PostUpdate.
+     * PostTick once per fixed step (zero or more times), then AfterTicks once (even with no tick), Update, PostUpdate
+     * and Render.
      */
     enum class SchedulePriority
     {
@@ -41,6 +41,13 @@ namespace Fenrir
         AfterTicks,
         Update,
         PostUpdate,
+        /**
+         * @brief Once per frame, last: after PostUpdate and before the event queues swap (ADR-0019). It sees the poses
+         * interpolated in AfterTicks and everything written in Update and PostUpdate, C# included. Its systems read
+         * scene state and draw it; writing scene state here is unsupported. Every Render system is sequential, so it
+         * runs on the main thread.
+         */
+        Render,
         // CreateScene,
         // LastUpdate,
         Exit
@@ -76,13 +83,28 @@ namespace Fenrir
         /** @brief A scheduler whose parallel systems run on `workerThreads` worker threads (at least one). */
         explicit Scheduler(std::size_t workerThreads);
 
+        /** @brief Adds systems that run in parallel, on worker threads (see AddSystem). */
         Scheduler& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
+        /** @brief Adds systems that run one after another, on the thread that runs the app (see AddSequentialSystem).
+         */
         Scheduler& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
+        /**
+         * @brief Adds a system that runs in parallel with the phase's other parallel systems, on a worker thread, and
+         * before its sequential ones. Not for systems that touch SDL or the GPU, which must run on the main thread:
+         * add those with AddSequentialSystem. (The init phases run only systems added with AddSystem, one after another
+         * on the app's thread.)
+         */
         Scheduler& AddSystem(SchedulePriority priority, SystemFunc system);
+        /**
+         * @brief Adds a system that runs after the phase's parallel systems, one after another in the order added, on
+         * the thread that runs the app: the main thread. Systems that touch SDL or the GPU (a window's event pump,
+         * input dispatch, which may reach SDL through input routers) and every Render system must be added this way.
+         */
         Scheduler& AddSequentialSystem(SchedulePriority priority, SystemFunc system);
 
-        void Init(App& app);
+        /** @brief Runs one init phase's systems (PreInit, Init or PostInit), in the order added. */
+        void RunInitSystems(App& app, SchedulePriority priority);
         void RunSystems(App& app, SchedulePriority priority);
 
         /** @brief The worker threads parallel systems run on, which other engine work may share. */

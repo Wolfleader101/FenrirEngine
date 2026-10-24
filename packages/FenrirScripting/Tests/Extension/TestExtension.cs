@@ -23,9 +23,44 @@ public static partial class Gadgets
     [NativeFunction]
     public static partial int Label(string text, int number);
 
+    // Creates an entity through the change buffer and gives it a Charge of `level` in the same call; returns it.
+    [NativeFunction]
+    public static partial Entity SpawnCharged(int level);
+
+    // Records, in this order: Charge 1 on `kept`, its removal, Charge 3 on it, destroying `doomed`, Charge 9 on `doomed`
+    // (skipped at playback), and a Weather of `wind` in the active scene.
+    [NativeFunction]
+    public static partial void Rearrange(Entity kept, Entity doomed, float wind);
+
+    // Creates an entity through the change buffer and records parenting it under `parent`; returns it.
+    [NativeFunction]
+    public static partial Entity SpawnUnder(Entity parent);
+
     // Adds to the running total the extension keeps in its extension state, and returns the new total.
     [NativeFunction]
     public static partial int Tally(int by);
+}
+
+/// <summary>A scene resource the test extension gives C#: the native <c>Weather</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Weather")]
+public struct Weather : IResource
+{
+    public float Wind;
+    public int Gusts;
+}
+
+/// <summary>An app resource the test extension gives C#: the native <c>Settings</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Settings")]
+public struct Settings : IResource
+{
+    public int Volume;
+}
+
+/// <summary>A read-only app resource the test extension gives C#: the native <c>Clock</c>.</summary>
+[NativeResource("Fenrir.TestExtension.Clock")]
+public struct Clock : IReadOnlyResource
+{
+    public double Seconds;
 }
 
 /// <summary>A shared struct of the test extension: plain data its natives would take by pointer.</summary>

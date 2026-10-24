@@ -20,7 +20,7 @@ namespace RulesTest
     // Adds the engine's own components to `registry`, as the built-in extension gives them to a Scripting.
     inline void AddEngineComponents(Fenrir::Detail::ComponentRegistry& registry)
     {
-        auto builtIn = Fenrir::Detail::BuiltInExtension({}, std::make_shared<Fenrir::Detail::EngineContext>());
+        auto builtIn = Fenrir::Detail::BuiltInExtension({}, {}, std::make_shared<Fenrir::Detail::EngineContext>());
         for (auto& registration : builtIn.components)
         {
             REQUIRE(registry.Add(std::move(registration)) >= 0);

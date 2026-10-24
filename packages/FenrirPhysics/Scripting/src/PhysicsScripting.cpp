@@ -459,7 +459,7 @@ namespace Fenrir
         }
 
         /**
-         * @brief Chooses the categories of debug lines the world draws: `categories` is DebugDraw's bits.
+         * @brief Chooses the categories of debug lines the world draws: `categories` is PhysicsDebugCategories's bits.
          * @return Whether there was a world.
          */
         bool SetDebugDraw(const CallContext& context, PhysicsScripting& physics, std::uint32_t categories)
@@ -469,7 +469,8 @@ namespace Fenrir
             {
                 return false;
             }
-            world->SetDebugDraw(static_cast<DebugDraw>(categories & static_cast<std::uint32_t>(DebugDraw::All)));
+            world->SetDebugDraw(static_cast<PhysicsDebugCategories>(
+                categories & static_cast<std::uint32_t>(PhysicsDebugCategories::All)));
             return true;
         }
 

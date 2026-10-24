@@ -125,7 +125,7 @@ What a system reads events through: it remembers which events of one kind it has
 A request for every entity that has all of a given set of components, native and C# alike. A C# query yields one row per entity: the `Entity` and a `Ref<T>` per component. The rows are valid until the system returns.
 
 **Structural change**
-Creating or destroying an entity, or adding or removing a component. A structural change made from a C# system takes effect only when that system returns.
+Creating or destroying an entity, parenting one under another (from a native function), adding or removing a component, or inserting or removing a resource from C#. A structural change made from a C# system, or from a native function it calls (through the call context's change buffer), takes effect only when that system returns; an entity created that way is usable at once.
 
 **Script assembly**
 A user's C# assembly holding C# components and systems. The engine loads it as one Iris component, and it reloads as a new generation.
@@ -138,6 +138,10 @@ What a script assembly says it defines when it loads: the C# components and even
 **Scripting contract**
 The shared assembly `Fenrir.Scripting` that every script assembly compiles against. It holds the stable engine API and never reloads.
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
+
+**Math contract**
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types.
+*Avoid:* math library (FenrirMath's functions stay in C++).
 
 **Scripting extension**
 What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-0009): its native functions, its native components, native resources, C++ events and shared structs, its extension state, the shared assemblies that are its C# contract, and the extension stages it hosts. FenrirScripting knows no package beyond its extension. The engine's own scripting API is the *built-in extension*, on the same seam.
@@ -172,7 +176,7 @@ A named point inside a package's own C++ work where C# systems run, declared by 
 *Avoid:* phase (FenrirApp's), hook, callback.
 
 **Native function**
-A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); its C# declaration and its registration are generated from it. In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
+A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); in a generated binding its C# declaration and its registration are generated from it (the extensions of input, window, assets, renderer and debug draw still declare both by hand). In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
 *Avoid:* binding (that is the whole of what a language gets), internal call (the Iris-level term), engine API.
 
 **Native resource**
@@ -198,6 +202,10 @@ Where an entity is in the scene, as opposed to its `Transform`, which is relativ
 **Scene resource**
 State a package keeps in one scene, one value per type, ended with the scene (a scene's physics world is one).
 *Avoid:* singleton, global, scene component (a *component* belongs to an entity).
+
+**App resource**
+State a package keeps for the whole app rather than one scene, one value per type, ended with the App (the input devices and the asset store are ones).
+*Avoid:* singleton, global, app-wide state (informal).
 
 ## FenrirEngine physics
 
@@ -742,7 +750,7 @@ Whoever took a key's, button's or pointer's press: the router that consumed it, 
 
 **Demo app**
 One executable under `examples/` per feature area (RendererDemo, ScriptingDemo, PhysicsDemo, later AnimationDemo), built on the demo scaffold, with an ordered list of scenes; a C++ scene and its C# twin are separate entries. An app may be split further when it outgrows one list. Not a reference for engine code beyond what it shows.
-*Avoid:* DemoApp (the legacy single app, deleted once the demo apps replace it), sample, example (alone).
+*Avoid:* DemoApp (the legacy single app, which the demo apps replaced), sample, example (alone).
 
 **Demo scaffold**
 What every demo app is built on: the `FenrirDemoScaffold` library (`examples/DemoScaffold/`), its `fenrir_add_demo_app` CMake function and its `Fenrir.Demo` C# assembly. It installs the engine packages, and holds the free-fly camera, the scene list, the scene-click event, the help panel, the smoke-run switches and the optional ImGui overlay.

@@ -226,7 +226,7 @@ namespace Fenrir::Detail
             {
                 continue; // an overlap, not a contact
             }
-            canvas.ContactPoint(touch.point, touch.normal, DebugColour::Contact);
+            canvas.ContactPoint(touch.point, touch.normal, PhysicsDebugColour::Contact);
         }
     }
 } // namespace Fenrir::Detail

@@ -5,9 +5,9 @@ namespace Fenrir.Physics;
 // and Aabb from FenrirPhysics's. Each is checked against its native layout whenever a script assembly loads. This file
 // holds what is not shared by layout: the debug-draw categories, which cross as a uint.
 
-/// <summary>Which categories of debug lines a physics world draws. Bit flags.</summary>
+/// <summary>Which categories of debug lines a physics world draws into its scene's debug drawing. Bit flags.</summary>
 [Flags]
-public enum DebugDraw : uint
+public enum PhysicsDebugCategories : uint
 {
     None = 0,
     /// <summary>Each collider's wireframe at its body's pose, coloured by motion type.</summary>

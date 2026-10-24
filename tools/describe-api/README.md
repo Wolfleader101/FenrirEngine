@@ -1,6 +1,6 @@
 # describe-api
 
-Reads the C++ headers a package selects and writes the package's **API description** (ADR-0016): a committed, language-neutral JSON record of the plain-data types it shares with bindings, with each type's layout, field kinds, default values and doc comments, its enums and its tagged unions. A binding's generator reads the description, never the headers, so the package's headers stay the one place a shared type is written by hand. Its second mode describes a binding's native functions from their C++ definitions ("Native functions" below), so a native is written by hand once too.
+Reads the C++ headers a package selects and writes the package's **API description** (ADR-0042): a committed, language-neutral JSON record of the plain-data types it shares with bindings, with each type's layout, field kinds, default values and doc comments, its enums and its tagged unions. A binding's generator reads the description, never the headers, so the package's headers stay the one place a shared type is written by hand. Its second mode describes a binding's native functions from their C++ definitions ("Native functions" below), so a native is written by hand once too.
 
 The tool knows nothing of any binding. It is a .NET console program that uses libclang (the `ClangSharp` and `libclang` NuGet packages, so no LLVM install) to read headers.
 

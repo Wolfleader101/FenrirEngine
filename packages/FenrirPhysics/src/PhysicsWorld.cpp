@@ -134,11 +134,10 @@ namespace Fenrir
         m_joints.Measure();
         m_joints.Break();
 
-        // Events, then the shown poses and the debug lines.
+        // Events, then the shown poses. The debug lines are drawn after, by DrawDebugLines.
         m_contacts.Send(app, m_characters.MoveContacts());
         m_joints.SendBroken(app);
         m_poses.Advance();
-        DrawDebugLines();
     }
 
     void PhysicsWorld::Impl::Restore()
@@ -153,51 +152,46 @@ namespace Fenrir
         m_poses.Blend(fraction);
     }
 
-    void PhysicsWorld::SetDebugDraw(DebugDraw categories)
+    void PhysicsWorld::SetDebugDraw(PhysicsDebugCategories categories)
     {
         m_impl->m_debugDraw = categories;
     }
 
-    DebugDraw PhysicsWorld::DebugDrawCategories() const
+    PhysicsDebugCategories PhysicsWorld::DebugDrawCategories() const
     {
         return m_impl->m_debugDraw;
     }
 
-    std::span<const DebugLine> PhysicsWorld::DebugLines() const
+    void PhysicsWorld::Impl::DrawDebugLines(DebugDraw* draw)
     {
-        return m_impl->m_canvas.Lines();
-    }
-
-    void PhysicsWorld::Impl::DrawDebugLines()
-    {
-        if (m_debugDraw == DebugDraw::None)
+        if (draw == nullptr || m_debugDraw == PhysicsDebugCategories::None)
         {
             m_canvas.Clear();
             return;
         }
-        m_canvas.Begin();
-        if (Includes(m_debugDraw, DebugDraw::Colliders))
+        m_canvas.Begin(*draw);
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Colliders))
         {
             m_bodies.DrawColliders(m_canvas);
         }
-        if (Includes(m_debugDraw, DebugDraw::Joints))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Joints))
         {
             m_joints.Draw(m_canvas);
         }
-        if (Includes(m_debugDraw, DebugDraw::Characters))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Characters))
         {
             m_characters.Draw(m_canvas);
         }
-        if (Includes(m_debugDraw, DebugDraw::Vehicles))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Vehicles))
         {
             m_vehicles.Draw(m_canvas);
         }
-        if (Includes(m_debugDraw, DebugDraw::Contacts))
+        if (Includes(m_debugDraw, PhysicsDebugCategories::Contacts))
         {
             m_contacts.Draw(m_canvas);
         }
-        m_bodies.DrawMotion(m_canvas, Includes(m_debugDraw, DebugDraw::Velocities),
-                            Includes(m_debugDraw, DebugDraw::Bounds));
+        m_bodies.DrawMotion(m_canvas, Includes(m_debugDraw, PhysicsDebugCategories::Velocities),
+                            Includes(m_debugDraw, PhysicsDebugCategories::Bounds));
         m_canvas.End();
     }
 

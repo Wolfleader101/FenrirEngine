@@ -1,0 +1,11 @@
+# The scene's materials, as far as MTL can say them: no unlit, mask or double-sidedness.
+newmtl Painted
+Kd 0.8 0.6 0.4
+d 0.5
+Ke 0.1 0.2 0.3
+Pm 0.25
+Pr 0.75
+map_Kd checker.png
+norm normal.png
+newmtl Glow
+Kd 0 1 0
