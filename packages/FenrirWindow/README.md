@@ -55,9 +55,13 @@ Events, read through `EventReader<T>` (ADR-0012), each name their window:
 - `SetCursorShape(app, window, shape)`: `Arrow`, `Text`, the four resize shapes, `Hand`, `NotAllowed`, or `Hidden`.
 - `ClipboardText(app)` and `SetClipboardText(app, text)`: the system clipboard, as UTF-8.
 - `SetTitle(app, window, title)`.
+- `SetIcon(app, window, width, height, rgba8)`: the icon in the window's title bar and the taskbar, from `width *
+  height` RGBA8 pixels (four bytes each, rows top to bottom; FenrirAssets' `ImageData` pixels as loaded from a PNG).
+  FenrirWindow keeps a copy. It returns false, with one logged error, for a window it does not keep, an empty size,
+  pixels of the wrong size, or when SDL refuses.
 - `RequestClose(app, window)`: does what the window's close button does (the event, and `App::Stop` for the main window with `stopOnMainWindowClose`). False for a window not made.
 
-A title, cursor mode or cursor shape set before the window is made is applied when it is made.
+A title, icon, cursor mode or cursor shape set before the window is made is applied when it is made.
 
 ## The graphics surface
 

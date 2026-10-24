@@ -26,21 +26,27 @@ namespace RendererDemo
         /** @brief The scene's sky and camera, and what the keys have set, kept as a scene resource. */
         struct SkyState
         {
+            /** @brief The generated skybox (examples/assets/skybox). */
             Fenrir::AssetHandle<Fenrir::Image> cubemap;
+            /** @brief Darcy Wilson's skybox, the legacy DemoApp's (examples/assets/skybox-darcy), which C switches to.
+             */
+            Fenrir::AssetHandle<Fenrir::Image> darcyCubemap;
             /** @brief The free-fly camera, whose background O overrides. */
             Fenrir::Entity camera;
             Fenrir::Entity spinner;
             bool cubemapSky = true;
+            bool darcySky = false;
             bool overridden = false;
             float seconds = 0.0f;
         };
 
-        /** @brief The scene's Sky as B has set it: the skybox cubemap, or one dusk colour. */
+        /** @brief The scene's Sky as B and C have set it: a skybox cubemap, generated or Darcy Wilson's, or one dusk
+         * colour. */
         Fenrir::Sky SkyOf(const SkyState& state)
         {
             if (state.cubemapSky)
             {
-                return Fenrir::CubemapSky{state.cubemap};
+                return Fenrir::CubemapSky{state.darcySky ? state.darcyCubemap : state.cubemap};
             }
             return Fenrir::ColourSky{DuskColour};
         }
@@ -56,6 +62,14 @@ namespace RendererDemo
                 app.Logger()->Error("Sky: the skybox did not load from the asset root");
             }
             state.cubemap = cubemap.handle;
+            // Darcy Wilson's, which the legacy DemoApp drew, for C.
+            const Fenrir::LoadResult<Fenrir::Image> darcy =
+                store.Load<Fenrir::Image>("skybox-darcy/skybox.cubemap", scene);
+            if (!darcy.Ok())
+            {
+                app.Logger()->Error("Sky: Darcy Wilson's skybox did not load from the asset root");
+            }
+            state.darcyCubemap = darcy.handle;
 
             // The free-fly camera is the scene's only camera when it is spawned; O overrides its background.
             Fenrir::EntityList& entities = scene.GetEntityList();
@@ -133,6 +147,14 @@ namespace RendererDemo
                 app.Logger()->Info("B: the scene's Sky is {}",
                                    state->cubemapSky ? "the skybox cubemap" : "one dusk colour");
             }
+            if (keyboard.JustPressed(Fenrir::Key::C))
+            {
+                state->darcySky = !state->darcySky;
+                *sky = SkyOf(*state);
+                app.Logger()->Info("C: the skybox cubemap is {}{}",
+                                   state->darcySky ? "Darcy Wilson's" : "the generated one",
+                                   state->cubemapSky ? "" : " (shown once B brings the cubemap back)");
+            }
             if (keyboard.JustPressed(Fenrir::Key::O) && state->camera.IsValid())
             {
                 state->overridden = !state->overridden;
@@ -156,9 +178,9 @@ namespace RendererDemo
         FenrirDemo::DemoScene scene;
         scene.name = "Sky";
         scene.keyHelp =
-            "B: the scene's Sky, the skybox cubemap or a dusk colour. O: the camera's own background, a teal "
-            "colour overriding the Sky, on or off.";
-        scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O};
+            "B: the scene's Sky, the skybox cubemap or a dusk colour. C: the skybox, generated or Darcy Wilson's. O: "
+            "the camera's own background, a teal colour overriding the Sky, on or off.";
+        scene.keys = {Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::B, Fenrir::Key::O, Fenrir::Key::C, Fenrir::Key::C};
         scene.camera.position = {0.0f, 1.5f, 7.0f};
         scene.spawn = Spawn;
         scene.update = Update;

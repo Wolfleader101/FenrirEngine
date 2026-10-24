@@ -29,6 +29,9 @@ return demo.Run();
 FenrirDebugDraw and FenrirRenderer, and adds the scaffold's systems. With scripting built and
 `DemoConfig::scriptAssembly` set, it installs Scripting last (see "C# scenes").
 `DemoConfig::msaa` sets the renderer's MSAA samples (`RendererConfig::msaa`; 1, off, by default).
+`DemoConfig::iconPath` names the window's icon, an RGBA8 PNG or JPEG under the asset root, which the scaffold loads
+through FenrirAssets and gives to `Window::SetIcon`; it is the shared `icons/fenrir.png` by default, and empty keeps
+SDL's default icon. A smoke run's hidden window gets it too.
 `Run()` runs the app and returns the process's exit code. Destroy the `DemoScaffold` before the `App`.
 
 A `DemoScene` is one entry of the app's ordered scene list: a `name`, a one-line `keyHelp`, the `keys` a smoke run
@@ -131,6 +134,11 @@ Shared demo assets live in `examples/assets/`, and an app's own in `examples/<Ap
   specular textures; `backpack/attribution.txt` holds the attribution and the changes made to it.
 - `skybox/skybox.cubemap`: a cubemap of six 512-pixel PNG faces, a procedural sky with hills and a sun, made for the
   engine by `skybox/make_skybox.py` (MIT, as the repository; `skybox/attribution.txt`).
+- `skybox-darcy/skybox.cubemap`: the legacy DemoApp's skybox, six 256-pixel PNG faces by Darcy Wilson, CC0
+  (`skybox-darcy/attribution.txt`). Its `right`, `left`, `top`, `bottom`, `front` and `back` faces are +X, -X, +Y, -Y,
+  +Z and -Z, as the legacy DemoApp mapped them.
+- `icons/fenrir.png`: Fenrir's 512-pixel window icon, the legacy DemoApp's, which every demo app's window shows
+  (`DemoConfig::iconPath`).
 
 The art-deco texture set comes with the scene that uses it.
 

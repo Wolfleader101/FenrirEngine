@@ -62,6 +62,8 @@ spark; `cmake/CheckShowcaseLog.cmake`).
 
 ## Hand checks
 
+- The window shows Fenrir's icon (`examples/assets/icons/fenrir.png`, `DemoConfig::iconPath`) in its title bar and on
+  its taskbar button, not the system's default.
 - ScriptingDemo opens a window on Showcase: the two textured, lit backpacks, one above the other, turning about the Y
   axis in opposite directions; the log says `Spinning 2 entities from C#. Press R to reverse them, Space for sparks.`
 - The upper backpack bobs up and down, and the name above it, `Backpack 2 (bob phase …)`, counts up as it does; the log

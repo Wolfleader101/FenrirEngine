@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -83,6 +85,13 @@ namespace Fenrir
 
         /** @brief Sets `window`'s title (or the title it will be made with). False if SDL refuses. */
         static bool SetTitle(App& app, WindowId window, std::string_view title);
+        /**
+         * @brief Sets `window`'s icon, shown in its title bar and the taskbar (or the icon it will be made with), from
+         * `rgba8`: `width * height` pixels of four bytes (red, green, blue, alpha), rows top to bottom. False, with
+         * one logged error, for a window FenrirWindow does not keep, an empty size, pixels of the wrong size, or if
+         * SDL refuses.
+         */
+        static bool SetIcon(App& app, WindowId window, int width, int height, std::span<const std::byte> rgba8);
         /** @brief Sets how the cursor behaves over `window`. False if SDL refuses. */
         static bool SetCursorMode(App& app, WindowId window, CursorMode mode);
         /** @brief How the cursor behaves over `window`, as last set; Normal for a window FenrirWindow does not keep. */
