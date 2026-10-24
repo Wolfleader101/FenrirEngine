@@ -62,4 +62,32 @@ namespace PhysicsDemo
      * follow camera.
      */
     [[nodiscard]] FenrirDemo::DemoScene CharacterCSharp();
+
+    /**
+     * @brief Vehicles (C++): a car towing a trailer round a track of bumps, a ramp, ice and grass lanes, crates, a
+     * ferry and a parking slope, driven by the keys, a gamepad or an autopilot, with a chase camera; its driver gets
+     * out and walks. Adds its Tick and Update systems to `app`.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Vehicles(Fenrir::App& app);
+
+    /**
+     * @brief Motorcycle (C++): Jolt's sample motorcycle on open tarmac, standing at rest and leaning into turns, with
+     * the chase camera. Adds its Tick and Update systems to `app`.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Motorcycle(Fenrir::App& app);
+
+    /**
+     * @brief Tank (C++): a tank on two tracks of nine wheels each, pivoting on the spot when stopped, on open tarmac
+     * with a row of crates, with the chase camera. Adds its Tick and Update systems to `app`.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene Tank(Fenrir::App& app);
+
+    /** @brief Vehicles (C#)'s number, which its C# systems know it by (scripts/Vehicles.cs). */
+    inline constexpr std::uint32_t VehiclesCSharpScene = 4;
+
+    /**
+     * @brief Vehicles (C#), built and driven entirely by C# (scripts/Vehicles.cs): a car towing a trailer on a track
+     * of its own, with its own chase camera.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene VehiclesCSharp();
 } // namespace PhysicsDemo

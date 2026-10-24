@@ -35,6 +35,12 @@ int main()
     config.scenes.push_back(PhysicsDemo::Character(app, physics));
 #ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
     config.scenes.push_back(PhysicsDemo::CharacterCSharp());
+#endif
+    config.scenes.push_back(PhysicsDemo::Vehicles(app));
+    config.scenes.push_back(PhysicsDemo::Motorcycle(app));
+    config.scenes.push_back(PhysicsDemo::Tank(app));
+#ifdef FENRIR_DEMO_SCRIPT_ASSEMBLY
+    config.scenes.push_back(PhysicsDemo::VehiclesCSharp());
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
     // Physics from C#: the physics components, PhysicsWorld's functions and the Fenrir.Physics contract.
     config.scriptingExtensions = {physics.ScriptingExtension()};

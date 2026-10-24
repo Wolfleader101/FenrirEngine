@@ -9,6 +9,10 @@ fenrir_add_demo_app(PhysicsDemo
         src/Playground.cpp
         src/Joints.cpp
         src/Character.cpp
+        src/VehicleCamera.hpp
+        src/Vehicles.cpp
+        src/Motorcycle.cpp
+        src/Tank.cpp
     SCRIPTS scripts
 )
 target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirAssets FenrirDebugDraw)
@@ -22,9 +26,10 @@ endif()
 # (as FENRIR_DEMO_KEYS presses them), must log the legacy scene's lines for its keys and autopilot
 # (cmake/CheckSceneLog.cmake).
 if(FENRIR_BUILD_TESTS)
-    set(physics_demo_scenes "Playground (C++)" "Joints (C++)" "Character (C++)")
+    set(physics_demo_scenes "Playground (C++)" "Joints (C++)" "Character (C++)" "Vehicles (C++)" "Motorcycle (C++)"
+        "Tank (C++)")
     if(FENRIR_ENABLE_SCRIPTING)
-        list(APPEND physics_demo_scenes "Playground (C#)" "Joints (C#)" "Character (C#)")
+        list(APPEND physics_demo_scenes "Playground (C#)" "Joints (C#)" "Character (C#)" "Vehicles (C#)")
     endif()
     foreach(scene IN LISTS physics_demo_scenes)
         # "Joints (C++)" is PhysicsDemo-JointsCpp-<backend>, "Joints (C#)" PhysicsDemo-JointsCSharp-<backend>.
