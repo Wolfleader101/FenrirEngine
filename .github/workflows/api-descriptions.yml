@@ -47,9 +47,11 @@ jobs:
           restore-keys: nuget-${{ runner.os }}-
 
       # Configuring is enough: fenrir-describe-api reads headers and natives' sources, fenrir-generate-bindings reads descriptions, and
-      # neither builds anything of the engine. Scripting is on because Iris holds the binding generator.
+      # neither builds anything of the engine. Scripting is on because Iris holds the binding generator. The renderer is off:
+      # no package it builds has an API description yet, and on Linux SDL3 would need X11 or Wayland development libraries
+      # just to configure. Turn it on here when FenrirInput, FenrirWindow or FenrirRenderer gains one.
       - name: Configure
-        run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF -DFENRIR_ENABLE_SCRIPTING=ON
+        run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_RENDERER=OFF
 
       - name: Regenerate the descriptions
         run: cmake --build out/describe --target fenrir-describe-api --config Debug
