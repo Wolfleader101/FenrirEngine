@@ -45,9 +45,10 @@ namespace Iris
      * };
      * ```
      *
-     * List every field, in declaration order. A field can be a number, `bool`, `char16_t`, an enum with an
-     * EnumMapping, another mapped struct, or a fixed-size array `T[N]` or `std::array<T, N>` of those (with
-     * `char` and `char8_t` as bytes).
+     * List every field, in declaration order, with IRIS_FIELD, IRIS_FIELD_AS or Field. A field can be a number,
+     * `bool`, `char16_t`, an enum with an EnumMapping, another mapped struct, a fixed-size array `T[N]` or
+     * `std::array<T, N>` of those (with `char` and `char8_t` as bytes), or an opaque pointer. An empty struct has
+     * no fields: `Iris::StructFields()`.
      * The managed side checks the size, field names, order, offsets and types the first time the struct
      * is used with a component; a mismatch, or a managed struct that is not blittable, fails the lookup
      * with a diagnostic and the call never happens.
@@ -223,7 +224,7 @@ namespace Iris
             String = 13,
             Struct = 14,
             Array = 15,   // Only in a KindSpec; on the wire it is combined with the element kind.
-            Pointer = 17, // Only in internal call signatures.
+            Pointer = 17, // Only in internal call signatures, and as an opaque struct field.
             Char = 18,
             Enum = 19,       // On the wire combined with the enum's handle, like Struct.
             InlineArray = 20 // Only as a struct field: the element kind and length are described beside it.
@@ -417,29 +418,6 @@ namespace Iris
                 return ValueKind::UInt8;
             else
                 return KindOf<E>();
-        }
-
-        template <typename Field>
-        constexpr StructFieldInfo MakeField(std::string_view name, std::size_t offset) noexcept
-        {
-            if constexpr (InlineArrayInfo<Field>::value)
-            {
-                using Element = typename InlineArrayInfo<Field>::Element;
-                static_assert(InlineArrayElement<Element>,
-                              "Iris cannot map this array member. An array member can hold bool, a sized integer, "
-                              "char, char8_t, char16_t, float, double, a struct with a StructMapping or an enum "
-                              "with an EnumMapping.");
-                return {name,
-                        offset,
-                        ValueKind::InlineArray,
-                        StructInfoPtr<Element>(),
-                        InlineElementKindOf<Element>(),
-                        InlineArrayInfo<Field>::length};
-            }
-            else
-            {
-                return {name, offset, KindOf<Field>(), StructInfoPtr<Field>()};
-            }
         }
 
         // Each value travels in one 64-bit slot: integers sign- or zero-extended, bool as 0 or 1, and
@@ -664,7 +642,46 @@ namespace Iris
 namespace Iris
 {
     /**
-     * @brief The fields of a StructMapping, from IRIS_FIELD entries.
+     * @brief One field of a mapped struct, declared by its C++ type and byte offset: `Iris::Field<float>("X", 0)`.
+     *
+     * Nothing names the member, so this maps a private member or one of a type the mapping cannot reach, as a
+     * generated mapping does. `name` is the managed field's name and `offset` the member's byte offset in the C++
+     * struct. `T` can be anything a StructMapping field can be, or any pointer type: a pointer is opaque, eight
+     * bytes that cross unchanged and are never read through, and the managed field is `nint`, `nuint`, `long` or
+     * `ulong`. IRIS_FIELD and IRIS_FIELD_AS give the same result for a member they can name.
+     */
+    template <typename T>
+    constexpr Detail::StructFieldInfo Field(std::string_view name, std::size_t offset) noexcept
+    {
+        using Detail::ValueKind;
+        if constexpr (std::is_pointer_v<T>)
+        {
+            static_assert(sizeof(T) == 8, "Iris maps a pointer field as 8 bytes, so it needs a 64-bit build.");
+            return {name, offset, ValueKind::Pointer, nullptr};
+        }
+        else if constexpr (Detail::InlineArrayInfo<T>::value)
+        {
+            using Element = typename Detail::InlineArrayInfo<T>::Element;
+            static_assert(Detail::InlineArrayElement<Element>,
+                          "Iris cannot map this array member. An array member can hold bool, a sized integer, "
+                          "char, char8_t, char16_t, float, double, a struct with a StructMapping or an enum "
+                          "with an EnumMapping.");
+            return {name,
+                    offset,
+                    ValueKind::InlineArray,
+                    Detail::StructInfoPtr<Element>(),
+                    Detail::InlineElementKindOf<Element>(),
+                    Detail::InlineArrayInfo<T>::length};
+        }
+        else
+        {
+            return {name, offset, Detail::KindOf<T>(), Detail::StructInfoPtr<T>()};
+        }
+    }
+
+    /**
+     * @brief The fields of a StructMapping, from Field or IRIS_FIELD entries. With none, the mapping is of an empty
+     * struct (one byte on both sides), which the managed side checks has no fields.
      */
     template <typename... Fields>
     constexpr std::array<Detail::StructFieldInfo, sizeof...(Fields)> StructFields(Fields... fields) noexcept
@@ -674,9 +691,9 @@ namespace Iris
 } // namespace Iris
 
 /// One field of a mapped struct: `IRIS_FIELD(Vec3, X)`. The managed field has the same name as the C++ member.
-#define IRIS_FIELD(Type, member) ::Iris::Detail::MakeField<decltype(Type::member)>(#member, offsetof(Type, member))
+#define IRIS_FIELD(Type, member) ::Iris::Field<decltype(Type::member)>(#member, offsetof(Type, member))
 
 /// One field of a mapped struct whose managed name differs from the C++ member's: `IRIS_FIELD_AS(Transform, pos,
 /// "Position")`. Fields are matched by position, then checked by name, so the name is what the managed struct calls it.
 #define IRIS_FIELD_AS(Type, member, managedName) \
-    ::Iris::Detail::MakeField<decltype(Type::member)>(managedName, offsetof(Type, member))
+    ::Iris::Field<decltype(Type::member)>(managedName, offsetof(Type, member))

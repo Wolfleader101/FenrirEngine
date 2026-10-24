@@ -7,7 +7,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 #include <algorithm>
@@ -76,7 +76,8 @@ struct Iris::StructMapping<TestNative::FloatHealth>
         Iris::StructFields(IRIS_FIELD(TestNative::FloatHealth, Current), IRIS_FIELD(TestNative::FloatHealth, Max));
 };
 
-// A component with an Entity field, as a joint names its bodies, and the stand-in that maps it to the fixture's Tether.
+// A component with an Entity field, as a joint names its bodies, mapped to the fixture's Tether. Entity maps to the
+// contract's EntityLink through the built-in binding's generated mapping.
 namespace TestNative
 {
     struct Tether
@@ -84,20 +85,14 @@ namespace TestNative
         Fenrir::Entity target;
         std::int32_t length = 0;
     };
-
-    struct TetherView
-    {
-        Fenrir::Detail::EntityLinkView target;
-        std::int32_t length;
-    };
 } // namespace TestNative
 
 template <>
-struct Iris::StructMapping<TestNative::TetherView>
+struct Iris::StructMapping<TestNative::Tether>
 {
     static constexpr std::string_view typeName = "Fenrir.ScriptFixture.Tether";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::TetherView, target, "Target"),
-                                                      IRIS_FIELD_AS(TestNative::TetherView, length, "Length"));
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(TestNative::Tether, target, "Target"),
+                                                      IRIS_FIELD_AS(TestNative::Tether, length, "Length"));
 };
 
 // A component holding a tagged union, shaped like FenrirPhysics's Collider and CollisionShape: a private tag and
@@ -464,7 +459,53 @@ namespace TestExtension
         (void)changes.AddChild(parent, child);
         return child;
     }
+
+    // The test extension's extension state: a running total its Tally native adds to.
+    struct Tally
+    {
+        std::int32_t total = 0;
+    };
+
+    // A state of another type, which Tally does not take.
+    struct Other
+    {
+    };
+
+    std::int32_t AddToTally(const Fenrir::CallContext&, Tally& tally, std::int32_t by)
+    {
+        tally.total += by;
+        return tally.total;
+    }
+
+    // The test extension's shared struct, and a mapping of its C# mirror that has drifted: its first field renamed.
+    struct Reading
+    {
+        std::int32_t Count;
+        float Weight;
+    };
+
+    struct DriftedReading
+    {
+        std::int32_t Amount;
+        float Weight;
+    };
 } // namespace TestExtension
+
+template <>
+struct Iris::StructMapping<TestExtension::Reading>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Reading";
+    static constexpr auto fields =
+        Iris::StructFields(IRIS_FIELD(TestExtension::Reading, Count), IRIS_FIELD(TestExtension::Reading, Weight));
+};
+
+template <>
+struct Iris::StructMapping<TestExtension::DriftedReading>
+{
+    static constexpr std::string_view typeName = "Fenrir.TestExtension.Reading";
+    static constexpr auto fields = Iris::StructFields(IRIS_FIELD(TestExtension::DriftedReading, Amount),
+                                                      IRIS_FIELD(TestExtension::DriftedReading, Weight));
+};
 
 template <>
 struct Iris::StructMapping<TestExtension::Charge>
@@ -1165,7 +1206,7 @@ namespace
         ExpectTheMirrorMatches<Detail::Mat4View>(*component, "Fenrir.Math.Matrix4x4");
         ExpectTheMirrorMatches<Colour>(*component, "Fenrir.Math.Colour");
         ExpectTheMirrorMatches<Math::Ray>(*component, "Fenrir.Math.Ray");
-        ExpectTheMirrorMatches<Math::AABB>(*component, "Fenrir.Math.Bounds");
+        ExpectTheMirrorMatches<Detail::BoundsView>(*component, "Fenrir.Math.Bounds");
         // Transform stays in the scripting contract, built from Fenrir.Math's Vector3 and Quaternion.
         ExpectTheMirrorMatches<Transform>(*component, "Fenrir.Scripting.Transform");
     }
@@ -1785,7 +1826,7 @@ namespace
 
     ComponentRegistration TetherComponent()
     {
-        return MakeComponent<TestNative::Tether, TestNative::TetherView>("Test.Tether");
+        return MakeComponent<TestNative::Tether>("Test.Tether");
     }
 
     void AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp()
@@ -4126,8 +4167,10 @@ namespace
         return CallIn<Result>(ExtensionCallsType, scripting, method, arguments...);
     }
 
-    // The test extension, as an engine package would describe what it gives scripting.
-    ScriptingExtension TheTestExtension()
+    // The test extension, as an engine package would describe what it gives scripting, carrying `tally` as its
+    // extension state (none if it is null).
+    ScriptingExtension TheTestExtension(
+        std::shared_ptr<TestExtension::Tally> tally = std::make_shared<TestExtension::Tally>())
     {
         ScriptingExtension extension;
         extension.name = "test extension";
@@ -4141,14 +4184,20 @@ namespace
             NativeFunction::Make<&TestExtension::SpawnCharged>("Fenrir.TestExtension.Gadgets.SpawnCharged"),
             NativeFunction::Make<&TestExtension::Rearrange>("Fenrir.TestExtension.Gadgets.Rearrange"),
             NativeFunction::Make<&TestExtension::SpawnUnder>("Fenrir.TestExtension.Gadgets.SpawnUnder"),
+            NativeFunction::Make<&TestExtension::AddToTally>("Fenrir.TestExtension.Gadgets.Tally"),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
+        extension.sharedStructs = {MakeSharedStruct<TestExtension::Reading>("Fenrir.TestExtension.Reading")};
         extension.resources = {
             MakeSceneResource<TestExtension::Weather>("Fenrir.TestExtension.Weather"),
             MakeAppResource<TestExtension::Settings>("Fenrir.TestExtension.Settings"),
             MakeReadOnlyAppResource<TestExtension::Clock>("Fenrir.TestExtension.Clock"),
         };
+        if (tally != nullptr)
+        {
+            extension.SetState(std::move(tally));
+        }
         return extension;
     }
 
@@ -4362,6 +4411,125 @@ namespace
         {
             INFO("The app did not keep running after the failed install");
             REQUIRE(headless.FramesRun() == Frames);
+        }
+    }
+
+    void ANativeFunctionReceivesTheStateItsExtensionWasGiven()
+    {
+        HeadlessApp headless;
+        const auto tally = std::make_shared<TestExtension::Tally>();
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(tally)}));
+        {
+            INFO("The script assembly using the stateful extension did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("Adding 5 to a fresh tally through C# did not give 5");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Tally", std::int32_t{5}) == 5);
+        }
+        {
+            INFO("The native function did not add to the object SetState was given");
+            REQUIRE(tally->total == 5);
+        }
+        tally->total = 100;
+        {
+            INFO("The native function did not see a change made to the object SetState was given");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Tally", std::int32_t{1}) == 101);
+        }
+    }
+
+    void AStatelessNativeFunctionOfAStatefulExtensionStillWorks()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("The script assembly using the stateful extension did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        {
+            INFO("A stateless native function of an extension carrying a state did not add 20 and 22");
+            REQUIRE(ExtensionCall<std::int32_t>(scripting, "Add", std::int32_t{20}, std::int32_t{22}) == 42);
+        }
+    }
+
+    void ANativeFunctionTakingAStateItsExtensionLacksFailsInstallAndNamesIt()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(nullptr)}));
+        {
+            INFO("Scripts ran although a native function takes a state its extension does not carry");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the function and its state type, say the extension carries none and say the "
+                 "app runs without scripts");
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Fenrir.TestExtension.Gadgets.Tally'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "carries none"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "running without scripts"));
+        }
+    }
+
+    void ANativeFunctionTakingAStateOfAnotherTypeFailsInstallAndNamesBothTypes()
+    {
+        HeadlessApp headless;
+        auto extension = TheTestExtension(nullptr);
+        extension.SetState(std::make_shared<TestExtension::Other>());
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({std::move(extension)}));
+        {
+            INFO("Scripts ran although a native function takes a state of another type than its extension's");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            // The state types are spelled by type_index::name(), which GCC and Clang mangle ("...5OtherE"), so only
+            // the type's own name is looked for.
+            INFO("The failure did not name the function and both state types");
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Fenrir.TestExtension.Gadgets.Tally'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Other"));
+        }
+    }
+
+    void ASharedStructWhoseCSharpMirrorDriftedFailsTheLoadAndNamesIt()
+    {
+        HeadlessApp headless;
+        auto extension = TheTestExtension();
+        extension.sharedStructs = {MakeSharedStruct<TestExtension::DriftedReading>("Fenrir.TestExtension.Reading")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({std::move(extension)}));
+        {
+            INFO("Scripts ran although a shared struct's C# mirror does not match its mapping");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not name the shared struct and the drifted field, and say the app runs without "
+                 "scripts");
+            REQUIRE(
+                headless.Logger().Contains(Testing::LogLevel::Error, "Shared struct 'Fenrir.TestExtension.Reading'"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Amount"));
+            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "running without scripts"));
+        }
+        headless.Run(Frames);
+        {
+            INFO("The app did not keep running after the failed load");
+            REQUIRE(headless.FramesRun() == Frames);
+        }
+    }
+
+    void ASharedStructCannotTakeAComponentsName()
+    {
+        HeadlessApp headless;
+        auto extension = TheTestExtension();
+        extension.sharedStructs = {MakeSharedStruct<TestExtension::Reading>("Fenrir.TestExtension.Charge")};
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({std::move(extension)}));
+        {
+            INFO("Scripts ran although a shared struct took a component's name");
+            REQUIRE(!scripting.HasScripts());
+        }
+        {
+            INFO("The failure did not say a shared struct of the extension has a duplicate name");
+            REQUIRE(headless.Logger().Contains(
+                Testing::LogLevel::Error,
+                "a shared struct in extension 'test extension' has an empty or duplicate name"));
         }
     }
 
@@ -5114,6 +5282,36 @@ TEST_CASE("a native function whose signature differs from its C# field fails Ins
 TEST_CASE("two extensions declaring one native function fail Install and name both", "[scripting]")
 {
     TwoExtensionsDeclaringOneNativeFunctionFailInstallAndNameBoth();
+}
+
+TEST_CASE("a native function receives the state its extension was given", "[scripting]")
+{
+    ANativeFunctionReceivesTheStateItsExtensionWasGiven();
+}
+
+TEST_CASE("a stateless native function of a stateful extension still works", "[scripting]")
+{
+    AStatelessNativeFunctionOfAStatefulExtensionStillWorks();
+}
+
+TEST_CASE("a native function taking a state its extension lacks fails Install and names it", "[scripting]")
+{
+    ANativeFunctionTakingAStateItsExtensionLacksFailsInstallAndNamesIt();
+}
+
+TEST_CASE("a native function taking a state of another type fails Install and names both types", "[scripting]")
+{
+    ANativeFunctionTakingAStateOfAnotherTypeFailsInstallAndNamesBothTypes();
+}
+
+TEST_CASE("a shared struct whose C# mirror drifted fails the load and names it", "[scripting]")
+{
+    ASharedStructWhoseCSharpMirrorDriftedFailsTheLoadAndNamesIt();
+}
+
+TEST_CASE("a shared struct cannot take a component's name", "[scripting]")
+{
+    ASharedStructCannotTakeAComponentsName();
 }
 
 TEST_CASE("the binding name of a native function follows one rule", "[scripting]")

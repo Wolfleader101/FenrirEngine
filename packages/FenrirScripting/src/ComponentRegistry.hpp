@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "FenrirScripting/ComponentRegistry.hpp"
@@ -161,6 +162,24 @@ namespace Fenrir::Detail
             return m_events;
         }
 
+        // Shared structs: native only, with no ids, kept so each load checks them against their C# structs. False (and
+        // nothing added) if the name is empty or a shared struct already has it.
+        bool AddSharedStruct(SharedStructRegistration registration)
+        {
+            if (registration.name.empty() || m_sharedStructNames.contains(registration.name))
+            {
+                return false;
+            }
+            m_sharedStructNames.insert(registration.name);
+            m_sharedStructs.push_back(std::move(registration));
+            return true;
+        }
+
+        [[nodiscard]] const std::vector<SharedStructRegistration>& SharedStructs() const noexcept
+        {
+            return m_sharedStructs;
+        }
+
         // Resources: a third table with its own ids, under the same generation. Only extensions register them, so a
         // reload never changes it.
 
@@ -252,13 +271,9 @@ namespace Fenrir::Detail
         std::unordered_map<std::string, std::int32_t> m_ids;
         std::vector<EventRegistration> m_events;
         std::unordered_map<std::string, std::int32_t> m_eventIds;
+        std::vector<SharedStructRegistration> m_sharedStructs;
+        std::unordered_set<std::string> m_sharedStructNames;
         std::vector<ResourceRegistration> m_resources;
         std::unordered_map<std::string, std::int32_t> m_resourceIds;
     };
-
-    /**
-     * @brief The components the engine itself gives C#, for the built-in extension: Transform, Name and Relationship
-     * (read-only), all required.
-     */
-    [[nodiscard]] std::vector<ComponentRegistration> EngineComponents();
 } // namespace Fenrir::Detail

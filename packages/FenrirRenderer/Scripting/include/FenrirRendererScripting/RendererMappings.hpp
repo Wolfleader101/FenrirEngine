@@ -15,7 +15,7 @@
 #include "FenrirInputScripting/InputMappings.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 
 namespace Fenrir::Detail
 {

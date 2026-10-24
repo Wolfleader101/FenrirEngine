@@ -2,15 +2,11 @@ using System.Text;
 
 namespace Fenrir.Scripting;
 
-/// <summary>An entity's name: the engine's <c>Fenrir::Name</c>, a fixed 256-byte UTF-8 buffer shared with native code.</summary>
-[NativeComponent("Fenrir.Name")]
-public unsafe struct Name : IComponent
+/// <remarks>Read and write it as a string with <see cref="GetText"/> and <see cref="SetText"/>, rather than its bytes.</remarks>
+public unsafe partial struct Name
 {
     /// <summary>Bytes in the buffer, including the terminator.</summary>
     public const int Capacity = 256;
-
-    /// <summary>The bytes, zero-terminated. Use <see cref="GetText"/> and <see cref="SetText"/>.</summary>
-    public fixed byte Text[Capacity];
 
     /// <summary>The name as a string.</summary>
     public readonly string GetText()

@@ -10,11 +10,15 @@ namespace Fenrir.Physics;
 /// </summary>
 /// <remarks>
 /// Nothing here throws. When the active scene has no physics world yet (one is made the first tick it has a body), the
-/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero: with
-/// no world, <see cref="MoveCast"/> returns <c>false</c>, <see cref="Penetrations"/> 0 and <see cref="Depenetrate"/> a
-/// zero offset. In a debug build of the engine a warning is logged once per process for each place in the engine's
-/// native code that noticed (not once per C# call site). Like every native function, none of these makes a structural
-/// change: forces are queued for the next step, and queries and motion tests read the world as the last step left it.
+/// entity has no body, or a collision mesh was released, a function does nothing and returns <c>false</c> or zero, and
+/// what it gives back through an <c>out</c> parameter is its default: with no world, <see cref="MoveCast"/> returns
+/// <c>false</c>, <see cref="Penetrations"/> 0 and <see cref="Depenetrate"/> a zero offset. Collision meshes are made and
+/// released through the active scene's world too, so with no world <see cref="CreateCollisionMesh"/> gives the none
+/// handle and <see cref="ReleaseCollisionMesh"/> returns <c>false</c>: make meshes once a scene has a body. In a debug
+/// build of the engine a warning is logged once for each place in the engine's native code that noticed and each
+/// reason (not once per C# call site), for as long as scripting runs. Like every native function, none of these makes a
+/// structural change: forces are queued for the next step, and queries and motion tests read the world as the last
+/// step left it.
 /// <para>
 /// <see cref="GetJointState"/> reads the zeroed state with no physics world or on an entity with no Joint, with that
 /// warning. It also reads zeroed, with no extra warning, for an inactive joint (physics already warns once each time one
@@ -48,10 +52,9 @@ public static class PhysicsWorld
     /// </summary>
     /// <returns>Whether it hit a body; <paramref name="hit"/> is default when it did not.</returns>
     public static bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,
-                               QueryFilter? filter = null)
+                               QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
-        return PhysicsNative.Raycast(in origin, in direction, maxDistance, in chosen, out hit);
+        return PhysicsNative.Raycast(in origin, in direction, maxDistance, in filter, out hit);
     }
 
     /// <summary>
@@ -59,11 +62,10 @@ public static class PhysicsWorld
     /// many it wrote. When there are more hits than the span holds, the nearest ones are written.
     /// </summary>
     public static unsafe int RaycastAll(Vector3 origin, Vector3 direction, float maxDistance, Span<RaycastHit> hits,
-                                        QueryFilter? filter = null)
+                                        QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
         fixed (RaycastHit* first = hits)
-            return PhysicsNative.RaycastAll(in origin, in direction, maxDistance, in chosen, first, hits.Length);
+            return PhysicsNative.RaycastAll(in origin, in direction, maxDistance, in filter, first, hits.Length);
     }
 
     /// <summary>
@@ -73,10 +75,9 @@ public static class PhysicsWorld
     /// </summary>
     /// <returns>Whether it touched a body; <paramref name="hit"/> is default when it did not.</returns>
     public static bool ShapeCast(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
-                                 out ShapeCastHit hit, QueryFilter? filter = null)
+                                 out ShapeCastHit hit, QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
-        return PhysicsNative.ShapeCast(in shape, in pose, in direction, maxDistance, in chosen, out hit);
+        return PhysicsNative.ShapeCast(in shape, in pose, in direction, maxDistance, in filter, out hit);
     }
 
     /// <summary>
@@ -84,11 +85,10 @@ public static class PhysicsWorld
     /// returns how many it wrote. When there are more hits than the span holds, the nearest ones are written.
     /// </summary>
     public static unsafe int ShapeCastAll(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
-                                          Span<ShapeCastHit> hits, QueryFilter? filter = null)
+                                          Span<ShapeCastHit> hits, QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
         fixed (ShapeCastHit* first = hits)
-            return PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, in chosen, first, hits.Length);
+            return PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, in filter, first, hits.Length);
     }
 
     /// <summary>
@@ -108,21 +108,19 @@ public static class PhysicsWorld
     /// </remarks>
     /// <returns>Whether something blocks the motion; <paramref name="hit"/> is default when nothing does.</returns>
     public static bool MoveCast(CollisionShape shape, Transform pose, Vector3 motion, out MoveCastHit hit,
-                                QueryFilter? filter = null)
+                                QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
-        return PhysicsNative.MoveCast(in shape, in pose, in motion, in chosen, out hit);
+        return PhysicsNative.MoveCast(in shape, in pose, in motion, in filter, out hit);
     }
 
     /// <summary>
     /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
     /// overlaps to <paramref name="hits"/>, each with its body, and returns how many it wrote, stopping when the span is full.
     /// </summary>
-    public static unsafe int Overlap(CollisionShape shape, Transform pose, Span<OverlapHit> hits, QueryFilter? filter = null)
+    public static unsafe int Overlap(CollisionShape shape, Transform pose, Span<OverlapHit> hits, QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
         fixed (OverlapHit* first = hits)
-            return PhysicsNative.Overlap(in shape, in pose, in chosen, first, hits.Length);
+            return PhysicsNative.Overlap(in shape, in pose, in filter, first, hits.Length);
     }
 
     /// <summary>
@@ -133,11 +131,10 @@ public static class PhysicsWorld
     /// finds nothing. Filter like a body as for <see cref="MoveCast"/>.
     /// </summary>
     public static unsafe int Penetrations(CollisionShape shape, Transform pose, Span<PenetrationHit> hits,
-                                          QueryFilter? filter = null)
+                                          QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
         fixed (PenetrationHit* first = hits)
-            return PhysicsNative.Penetrations(in shape, in pose, in chosen, first, hits.Length);
+            return PhysicsNative.Penetrations(in shape, in pose, in filter, first, hits.Length);
     }
 
     /// <summary>
@@ -147,10 +144,9 @@ public static class PhysicsWorld
     /// something once moved: check with <see cref="Penetrations"/> when that matters. A triangle-mesh shape
     /// (<see cref="MeshShape"/>) finds nothing. Filter like a body as for <see cref="MoveCast"/>.
     /// </summary>
-    public static Vector3 Depenetrate(CollisionShape shape, Transform pose, QueryFilter? filter = null)
+    public static Vector3 Depenetrate(CollisionShape shape, Transform pose, QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
-        PhysicsNative.Depenetrate(in shape, in pose, in chosen, out Vector3 offset);
+        PhysicsNative.Depenetrate(in shape, in pose, in filter, out Vector3 offset);
         return offset;
     }
 
@@ -158,11 +154,10 @@ public static class PhysicsWorld
     /// Writes the colliders containing <paramref name="point"/> to <paramref name="hits"/>, each with its body, and returns
     /// how many it wrote, stopping when the span is full.
     /// </summary>
-    public static unsafe int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter? filter = null)
+    public static unsafe int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter filter = default)
     {
-        QueryFilter chosen = filter ?? new QueryFilter();
         fixed (OverlapHit* first = hits)
-            return PhysicsNative.OverlapPoint(in point, in chosen, first, hits.Length);
+            return PhysicsNative.OverlapPoint(in point, in filter, first, hits.Length);
     }
 
     /// <summary>
@@ -243,92 +238,4 @@ public static class PhysicsWorld
     /// </summary>
     /// <returns>Whether the mesh was alive.</returns>
     public static bool ReleaseCollisionMesh(CollisionMesh mesh) => PhysicsNative.ReleaseCollisionMesh(mesh.Id);
-}
-
-// The native functions behind PhysicsWorld, each named "Fenrir.Physics.PhysicsNative.<Method>" in FenrirPhysicsScripting's
-// extension. The generator writes each body and the field the host binds; sharing the contract fails if a method has no
-// C++ function or a different signature. Internal: PhysicsWorld is what scripts call.
-internal static unsafe partial class PhysicsNative
-{
-    [NativeFunction]
-    public static partial bool AddForce(Entity entity, in Vector3 force);
-
-    [NativeFunction]
-    public static partial bool AddImpulse(Entity entity, in Vector3 impulse);
-
-    [NativeFunction]
-    public static partial bool AddTorque(Entity entity, in Vector3 torque);
-
-    [NativeFunction]
-    public static partial bool AddAngularImpulse(Entity entity, in Vector3 impulse);
-
-    [NativeFunction]
-    public static partial bool Raycast(in Vector3 origin, in Vector3 direction, float maxDistance, in QueryFilter filter,
-                                       out RaycastHit hit);
-
-    // The all-hit queries write at most `capacity` hits from `hits` on and return how many they wrote.
-    [NativeFunction]
-    public static partial int RaycastAll(in Vector3 origin, in Vector3 direction, float maxDistance, in QueryFilter filter,
-                                         RaycastHit* hits, int capacity);
-
-    [NativeFunction]
-    public static partial bool ShapeCast(in CollisionShape shape, in Transform pose, in Vector3 direction, float maxDistance,
-                                         in QueryFilter filter, out ShapeCastHit hit);
-
-    [NativeFunction]
-    public static partial int ShapeCastAll(in CollisionShape shape, in Transform pose, in Vector3 direction,
-                                           float maxDistance, in QueryFilter filter, ShapeCastHit* hits, int capacity);
-
-    [NativeFunction]
-    public static partial bool MoveCast(in CollisionShape shape, in Transform pose, in Vector3 motion,
-                                        in QueryFilter filter, out MoveCastHit hit);
-
-    [NativeFunction]
-    public static partial int Overlap(in CollisionShape shape, in Transform pose, in QueryFilter filter, OverlapHit* hits,
-                                      int capacity);
-
-    [NativeFunction]
-    public static partial int Penetrations(in CollisionShape shape, in Transform pose, in QueryFilter filter,
-                                           PenetrationHit* hits, int capacity);
-
-    // Writes zero when there is no world.
-    [NativeFunction]
-    public static partial bool Depenetrate(in CollisionShape shape, in Transform pose, in QueryFilter filter,
-                                           out Vector3 offset);
-
-    [NativeFunction]
-    public static partial int OverlapPoint(in Vector3 point, in QueryFilter filter, OverlapHit* hits, int capacity);
-
-    [NativeFunction]
-    public static partial int ContactsOf(Entity body, Contact* contacts, int capacity);
-
-    [NativeFunction]
-    public static partial bool IsSleeping(Entity body);
-
-    [NativeFunction]
-    public static partial bool Bounds(Entity body, out Aabb bounds);
-
-    [NativeFunction]
-    public static partial bool Gravity(out Vector3 gravity);
-
-    [NativeFunction]
-    public static partial bool SetGravity(in Vector3 gravity);
-
-    [NativeFunction]
-    public static partial bool SetDebugDraw(uint categories);
-
-    // The mesh's id, 0 for none. `indices` may be null when `indexCount` is 0.
-    [NativeFunction]
-    public static partial ulong CreateCollisionMesh(Vector3* vertices, int vertexCount, uint* indices, int indexCount);
-
-    [NativeFunction]
-    public static partial bool ReleaseCollisionMesh(ulong mesh);
-
-    // Joint.FrameFromWorld: an empty bodyB (uint.MaxValue) is the world. Needs only the active scene.
-    [NativeFunction]
-    public static partial void FrameFromWorld(Entity bodyA, Entity bodyB, in JointFrame anchor, out JointFrames frames);
-
-    // Writes the zeroed state when it reads nothing.
-    [NativeFunction]
-    public static partial void GetJointState(Entity joint, out JointState state);
 }

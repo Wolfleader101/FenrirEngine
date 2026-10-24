@@ -3,9 +3,9 @@
 // C++ calls the fixture's static methods through Iris, as the system runner calls scripts, and checks what the engine
 // saw.
 
+#include "BoundMappings.hpp"
 #include "HeadlessApp.hpp"
-#include "JointStateMapping.hpp"
-#include "QueryMirrors.hpp"
+#include "PhysicsScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -35,9 +35,9 @@
 #include "FenrirPhysics/Characters.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/Joints.hpp"
+#include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "FenrirPhysicsScripting/PhysicsScripting.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
 using namespace Fenrir;
@@ -45,115 +45,10 @@ using Catch::Approx;
 
 namespace
 {
-    std::filesystem::path FromEnvironment(const char* name)
-    {
-        const char* value = std::getenv(name);
-        if (value == nullptr)
-        {
-            std::cerr << "Set " << name << " (CTest does): the physics scripting tests need the fixture assembly.\n";
-            return {};
-        }
-        return std::filesystem::absolute(value);
-    }
-
-    const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_PHYSICS_FIXTURE");
-
-    constexpr double Tick = Testing::HeadlessApp::FrameDelta;
-
     const Math::Quat Identity(1.0f, 0.0f, 0.0f, 0.0f);
 
-    // Physics with interpolation off, so a body's Transform after a whole-tick frame is its latest step pose.
-    PhysicsConfig StepPosesOnly()
-    {
-        PhysicsConfig config;
-        config.interpolate = false;
-        return config;
-    }
-
-    // An App with debug drawing and physics installed and scripting running the fixture with physics's extension.
-    // Members end in reverse order: scripting, then physics, then debug drawing, then the app.
-    struct PhysicsScriptingApp
-    {
-        PhysicsScriptingApp()
-            : debugDrawing(DebugDrawing::Install(headless.Get())),
-              physics(Physics::Install(headless.Get(), StepPosesOnly())),
-              scripting(Scripting::Install(headless.Get(), Config(physics)))
-        {
-            INFO("The fixture did not load with physics's extension");
-            REQUIRE(scripting.HasScripts());
-        }
-
-        static ScriptingConfig Config(const Physics& physics)
-        {
-            ScriptingConfig config;
-            config.scriptAssembly = fixture;
-            config.hotReload = false;
-            config.extensions = {physics.ScriptingExtension()};
-            return config;
-        }
-
-        Testing::HeadlessApp headless;
-        DebugDrawing debugDrawing;
-        Physics physics;
-        Scripting scripting;
-
-        EntityList& Entities()
-        {
-            return headless.Get().GetActiveScene().GetEntityList();
-        }
-
-        // An entity with only the engine's components, at `position`.
-        std::uint32_t Place(const Math::Vec3& position)
-        {
-            Entity entity = Entities().CreateEntity();
-            entity.GetComponent<Transform>() = Transform(position, Identity, Math::Vec3(1.0f));
-            return entity.GetId();
-        }
-
-        void Run(int frames)
-        {
-            for (int frame = 0; frame < frames; ++frame)
-            {
-                headless.Get().RunFrame(Tick);
-            }
-        }
-
-        // Plays back the structural changes the fixture recorded, as the system runner does after a system.
-        void ApplyChanges()
-        {
-            ScriptingProbe::ApplyChanges(scripting);
-        }
-
-        // Calls a static method of a type in the fixture through Iris.
-        template <typename Result, typename... Args>
-        Result Call(const char* typeName, const char* method, Args... arguments)
-        {
-            auto* component = ScriptingProbe::Component(scripting);
-            {
-                INFO("There is no loaded script assembly");
-                REQUIRE(component != nullptr);
-            }
-            const auto type = component->FindType(typeName);
-            {
-                INFO(std::string("The fixture type was not found: ") + type.diagnostic);
-                REQUIRE(type.Succeeded());
-            }
-            const auto handle = type.value->FindMethod<Result(Args...)>(method);
-            {
-                INFO(std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
-                REQUIRE(handle.Succeeded());
-            }
-            const auto result = handle.value->Invoke(arguments...);
-            {
-                INFO(std::string("The fixture method ") + method + " failed: " + result.diagnostic);
-                REQUIRE(result.Succeeded());
-            }
-            if constexpr (!std::is_void_v<Result>)
-            {
-                return *result.value;
-            }
-        }
-    };
+    using Testing::PhysicsScriptingApp;
+    using Testing::StepPosesOnly;
 
     constexpr const char* BodiesType = "Fenrir.PhysicsScriptFixture.Bodies";
 } // namespace
@@ -174,12 +69,6 @@ TEST_CASE("A script makes an entity a body with a shape set by value, and it fal
         INFO("The collider's shape is not the sphere of radius 0.25 the script assigned");
         REQUIRE(collider->shape.Is<SphereShape>());
         REQUIRE(collider->shape.As<SphereShape>().radius == 0.25f);
-    }
-    {
-        const RigidBody& body = test.Entities().GetEntity(entity).GetComponent<RigidBody>();
-        INFO("The script's new RigidBody does not have the C++ defaults (dynamic, 1 kg)");
-        REQUIRE(body.motionType == MotionType::Dynamic);
-        REQUIRE(body.mass == 1.0f);
     }
 
     test.Run(30);
@@ -440,6 +329,10 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicl
 TEST_CASE("A collision mesh made from C# spans is usable by a collider, and released once", "[physics][scripting]")
 {
     PhysicsScriptingApp test;
+    // Meshes are made through the active scene's world, so the scene needs one first.
+    AddStaticBox(test, Math::Vec3(0.0f, -50.0f, 0.0f));
+    test.Run(1);
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) != nullptr);
     const auto mesh = test.Call<std::uint64_t>(WorldType, "MakeGroundMesh");
     {
         INFO("Cooking a valid mesh from C# gave the none handle");
@@ -553,19 +446,49 @@ TEST_CASE("On an entity without a body, functions from C# do nothing and return 
 #endif
 }
 
-TEST_CASE("Collision meshes from C# do nothing once the Physics owner is gone", "[physics][scripting]")
+TEST_CASE("With no physics world, collision meshes from C# give the none handle and false, warning once each in debug",
+          "[physics][scripting]")
 {
     PhysicsScriptingApp test;
+    // No frame has run with a body in the scene, so there is no physics world.
+    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
+
+    for (int call = 0; call < 2; ++call)
     {
-        // Moved out and destroyed: the owner whose extension the scripts were given ends while scripting runs.
+        {
+            INFO("Cooking a mesh with no world should give the none handle, not throw");
+            REQUIRE(test.Call<std::uint64_t>(WorldType, "MakeGroundMesh") == 0);
+        }
+        {
+            INFO("Releasing a mesh with no world should return false");
+            REQUIRE_FALSE(test.Call<bool>(WorldType, "ReleaseMesh", std::uint64_t{1}));
+        }
+    }
+#ifndef NDEBUG
+    {
+        INFO("A debug build should warn once for each, not on every call, that it had no world");
+        REQUIRE(WarningsAbout(test, "CreateCollisionMesh: the active scene has no physics world") == 1);
+        REQUIRE(WarningsAbout(test, "ReleaseCollisionMesh: the active scene has no physics world") == 1);
+    }
+#endif
+}
+
+TEST_CASE("Once the Physics owner is gone, collision meshes from C# give the none handle and false",
+          "[physics][scripting]")
+{
+    PhysicsScriptingApp test;
+    AddStaticBox(test, Math::Vec3(0.0f, -5.0f, 0.0f));
+    test.Run(1);
+    {
+        // Moved out and destroyed while scripting runs: it ends every scene's world, and its meshes with them.
         Physics ended = std::move(test.physics);
     }
     {
-        INFO("Cooking a mesh with no owner should give the none handle, not throw");
+        INFO("Cooking a mesh with the owner gone should give the none handle, not throw");
         REQUIRE(test.Call<std::uint64_t>(WorldType, "MakeGroundMesh") == 0);
     }
     {
-        INFO("Releasing a mesh with no owner should return false");
+        INFO("Releasing a mesh with the owner gone should return false");
         REQUIRE_FALSE(test.Call<bool>(WorldType, "ReleaseMesh", std::uint64_t{1}));
     }
 }
@@ -793,10 +716,10 @@ namespace
     // ContactBegin as a native side that drifted from the C# mirror would map it: RelativeSpeed has the wrong type.
     struct DriftedContactBegin
     {
-        Detail::EntityLinkView bodyA;
-        Detail::EntityLinkView bodyB;
-        Detail::EntityLinkView colliderA;
-        Detail::EntityLinkView colliderB;
+        Entity bodyA;
+        Entity bodyB;
+        Entity colliderA;
+        Entity colliderB;
         Math::Vec3 point;
         Math::Vec3 normal;
         std::int32_t relativeSpeed;
@@ -820,7 +743,7 @@ TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted 
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<EventRegistration>& events = config.extensions[0].events;
     {
         INFO("Physics's extension should share the contact and trigger events and JointBroken with C#");
@@ -849,71 +772,6 @@ namespace
 {
     constexpr const char* JointsType = "Fenrir.PhysicsScriptFixture.Joints";
 
-    bool Same(const JointSpring& a, const JointSpring& b)
-    {
-        return a.frequency == b.frequency && a.damping == b.damping;
-    }
-
-    bool Same(const JointLimits& a, const JointLimits& b)
-    {
-        return a.enabled == b.enabled && a.min == b.min && a.max == b.max && Same(a.spring, b.spring);
-    }
-
-    bool Same(const JointMotor& a, const JointMotor& b)
-    {
-        return a.mode == b.mode && a.targetVelocity == b.targetVelocity && a.targetPosition == b.targetPosition &&
-               a.maxForce == b.maxForce && Same(a.spring, b.spring);
-    }
-
-    bool Same(const SwingTwistMotor& a, const SwingTwistMotor& b)
-    {
-        return a.mode == b.mode && a.targetRotation == b.targetRotation &&
-               a.targetAngularVelocity == b.targetAngularVelocity && a.maxTorque == b.maxTorque &&
-               Same(a.spring, b.spring);
-    }
-
-    bool Same(const JointFrame& a, const JointFrame& b)
-    {
-        return a.position == b.position && a.rotation == b.rotation;
-    }
-
-    // Whether two kinds are the same kind with the same settings.
-    bool Same(const JointKind& a, const JointKind& b)
-    {
-        if (a.Type() != b.Type())
-        {
-            return false;
-        }
-        switch (a.Type())
-        {
-        case JointType::Fixed:
-        case JointType::Ball:
-            return true;
-        case JointType::Distance: {
-            const auto& x = a.As<DistanceJoint>();
-            const auto& y = b.As<DistanceJoint>();
-            return x.minDistance == y.minDistance && x.maxDistance == y.maxDistance && Same(x.spring, y.spring);
-        }
-        case JointType::Hinge: {
-            const auto& x = a.As<HingeJoint>();
-            const auto& y = b.As<HingeJoint>();
-            return Same(x.limits, y.limits) && Same(x.motor, y.motor) && x.friction == y.friction;
-        }
-        case JointType::Slider: {
-            const auto& x = a.As<SliderJoint>();
-            const auto& y = b.As<SliderJoint>();
-            return Same(x.limits, y.limits) && Same(x.motor, y.motor) && x.friction == y.friction;
-        }
-        case JointType::SwingTwist: {
-            const auto& x = a.As<SwingTwistJoint>();
-            const auto& y = b.As<SwingTwistJoint>();
-            return x.swingYLimit == y.swingYLimit && x.swingZLimit == y.swingZLimit && x.twistMin == y.twistMin &&
-                   x.twistMax == y.twistMax && x.friction == y.friction && Same(x.motor, y.motor);
-        }
-        }
-        return false;
-    }
-
     const Joint& JointOn(PhysicsScriptingApp& test, std::uint32_t entity)
     {
         Entity holder = test.Entities().GetEntity(entity);
@@ -938,47 +796,6 @@ namespace
         return joint.GetId();
     }
 } // namespace
-
-TEST_CASE("A new Joint from C# has C++'s defaults, for its own kind and every kind's new",
-          "[physics][scripting][joints]")
-{
-    PhysicsScriptingApp test;
-    const std::pair<int, JointKind> kinds[] = {
-        {-1, JointKind()}, {0, FixedJoint{}},  {1, BallJoint{}},       {2, DistanceJoint{}},
-        {3, HingeJoint{}}, {4, SliderJoint{}}, {5, SwingTwistJoint{}},
-    };
-    for (const auto& [number, kind] : kinds)
-    {
-        const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
-        test.Call<void>(JointsType, "AddNewJoint", entity, number);
-        test.ApplyChanges();
-
-        const Joint& joint = JointOn(test, entity);
-        const Joint expected{};
-        INFO("For C# kind number " << number << " (-1 is the Joint's own new kind)");
-        {
-            INFO("New, both links should be empty, as C++'s default Entity is");
-            REQUIRE(joint.bodyA == Entity());
-            REQUIRE(joint.bodyB == Entity());
-        }
-        {
-            INFO("New, both frames should be the identity, as in C++");
-            REQUIRE(Same(joint.frameA, expected.frameA));
-            REQUIRE(Same(joint.frameB, expected.frameB));
-        }
-        {
-            INFO("New, the joint should be enabled, not collide its bodies and never break, as in C++");
-            REQUIRE(joint.enabled);
-            REQUIRE_FALSE(joint.collideConnected);
-            REQUIRE(joint.breakForce == std::numeric_limits<float>::infinity());
-            REQUIRE(joint.breakTorque == std::numeric_limits<float>::infinity());
-        }
-        {
-            INFO("The kind and every setting should be C++'s new one of that kind");
-            REQUIRE(Same(joint.kind, kind));
-        }
-    }
-}
 
 TEST_CASE("A C# system makes two bodies and a hinge between them in one call, and the hinge holds after playback",
           "[physics][scripting][joints]")
@@ -1019,7 +836,8 @@ TEST_CASE("C# assigns a joint's kind and edits its motor through the hinge view,
         REQUIRE(motor.mode == JointMotorMode::Velocity);
         REQUIRE(motor.targetVelocity == 2.0f);
         REQUIRE(motor.maxForce == std::numeric_limits<float>::infinity());
-        REQUIRE(Same(motor.spring, JointMotor{}.spring));
+        REQUIRE(motor.spring.frequency == JointMotor{}.spring.frequency);
+        REQUIRE(motor.spring.damping == JointMotor{}.spring.damping);
     }
     test.Run(30);
     {
@@ -1119,6 +937,13 @@ TEST_CASE("FrameFromWorld from C# matches C++ under a scaled, turned parent, and
         INFO("A destroyed bodyB is not the world: C# should get identity frames, as C++ does");
         REQUIRE(CSharpGave(test, JointFrames{}));
     }
+#ifndef NDEBUG
+    {
+        test.Call<void>(JointsType, "FrameFromWorld", body, other, x, y, z, w, qx, qy, qz);
+        INFO("A debug build should warn once, not on every call, that bodyB is not alive");
+        REQUIRE(WarningsAbout(test, "FrameFromWorld: bodyB is not alive") == 1);
+    }
+#endif
 }
 
 TEST_CASE("A default(Joint) from C# names no body of this scene, so it holds nothing and does not crash",
@@ -1170,8 +995,8 @@ namespace
     // Joint as a native side that drifted from the C# mirror would map it: its kind is raw bytes, not the tagged union.
     struct DriftedJoint
     {
-        Detail::EntityLinkView bodyA;
-        Detail::EntityLinkView bodyB;
+        Entity bodyA;
+        Entity bodyB;
         DriftedFrame frameA;
         DriftedFrame frameB;
         std::uint8_t kind[sizeof(JointKind)];
@@ -1207,7 +1032,7 @@ TEST_CASE("The Joint mirror is checked as scripts load, and a drifted one fails 
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     const auto joint = std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
         return component.name == "Fenrir.Physics.Joint";
@@ -1254,43 +1079,7 @@ namespace
         return values;
     }
 
-    // JointState as a native side that drifted from the C# mirror would map it: position has the wrong type.
-    struct DriftedJointState
-    {
-        Math::Vec3 force;
-        Math::Vec3 torque;
-        DriftedFrame relative;
-        std::int32_t position;
-    };
 } // namespace
-
-template <>
-struct Iris::StructMapping<DriftedJointState>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.JointState";
-    static constexpr auto fields = Iris::StructFields(
-        IRIS_FIELD_AS(DriftedJointState, force, "Force"), IRIS_FIELD_AS(DriftedJointState, torque, "Torque"),
-        IRIS_FIELD_AS(DriftedJointState, relative, "Relative"), IRIS_FIELD_AS(DriftedJointState, position, "Position"));
-};
-
-TEST_CASE("The JointState mirror matches its native layout, and a drifted one is refused naming the field",
-          "[physics][scripting][joints]")
-{
-    PhysicsScriptingApp test;
-    const Iris::Component* component = ScriptingProbe::Component(test.scripting);
-    REQUIRE(component != nullptr);
-    {
-        const auto checked = component->ValidateStruct<JointState>();
-        INFO("The C# JointState should match the native one: " << checked.diagnostic);
-        REQUIRE(checked.Succeeded());
-    }
-    {
-        const auto drifted = component->ValidateStruct<DriftedJointState>();
-        INFO("A JointState mapping that disagrees with the C# mirror should be refused, naming the field");
-        REQUIRE_FALSE(drifted.Succeeded());
-        REQUIRE(drifted.diagnostic.find("'Position'") != std::string::npos);
-    }
-}
 
 TEST_CASE("GetJointState from C# reads a hinge's angle, load and pose, as C++ does", "[physics][scripting][joints]")
 {
@@ -1434,29 +1223,6 @@ TEST_CASE("A C# system reads one JointBroken when a joint breaks, and writing En
         REQUIRE(cpp.events.size() == 1);
         REQUIRE(test.Call<int>(EventsType, "JointBrokenCount") == 1);
         REQUIRE(test.Call<bool>(JointsType, "IsEnabled", joint));
-    }
-}
-
-TEST_CASE("The QueryFilter, MoveCastHit and PenetrationHit mirrors match their native layouts",
-          "[physics][scripting][motion]")
-{
-    PhysicsScriptingApp test;
-    const Iris::Component* component = ScriptingProbe::Component(test.scripting);
-    REQUIRE(component != nullptr);
-    {
-        const auto checked = component->ValidateStruct<Detail::ScriptQueryFilter>();
-        INFO("The C# QueryFilter, Layers included, should match the native mirror: " << checked.diagnostic);
-        REQUIRE(checked.Succeeded());
-    }
-    {
-        const auto checked = component->ValidateStruct<Detail::ScriptMoveCastHit>();
-        INFO("The C# MoveCastHit should match the native mirror: " << checked.diagnostic);
-        REQUIRE(checked.Succeeded());
-    }
-    {
-        const auto checked = component->ValidateStruct<Detail::ScriptPenetrationHit>();
-        INFO("The C# PenetrationHit should match the native mirror: " << checked.diagnostic);
-        REQUIRE(checked.Succeeded());
     }
 }
 
@@ -1684,38 +1450,6 @@ namespace
     }
 } // namespace
 
-TEST_CASE("A new CharacterBody from C# has C++'s defaults, its ground links empty", "[physics][scripting][characters]")
-{
-    PhysicsScriptingApp test;
-    const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
-    test.Call<void>(CharactersType, "AddNewCharacter", entity);
-    test.ApplyChanges();
-
-    const CharacterBody& body = CharacterOn(test, entity);
-    const CharacterBody expected{};
-    {
-        INFO("New, the settings should be C++'s: still, 45 degrees, 0.4 m steps, 0.5 m snap, 100 N, 70 kg");
-        REQUIRE(body.velocity == expected.velocity);
-        REQUIRE(body.maxSlope == expected.maxSlope);
-        REQUIRE(body.stepHeight == expected.stepHeight);
-        REQUIRE(body.floorSnap == expected.floorSnap);
-        REQUIRE(body.pushForce == expected.pushForce);
-        REQUIRE(body.mass == expected.mass);
-    }
-    {
-        INFO("New, the character should stop on slopes, interpolate and be enabled, as in C++");
-        REQUIRE(body.stopOnSlope == expected.stopOnSlope);
-        REQUIRE(body.interpolate == expected.interpolate);
-        REQUIRE(body.enabled == expected.enabled);
-    }
-    {
-        INFO("New, the state should be CharacterState{}: in the air, both ground links empty Entities, all zero");
-        REQUIRE(body.state.groundBody == Entity());
-        REQUIRE(body.state.groundCollider == Entity());
-        REQUIRE(IsNew(body.state));
-    }
-}
-
 namespace
 {
     // CharacterBody as a native side that drifted from the C# mirror would map it: its state is raw bytes.
@@ -1752,7 +1486,7 @@ TEST_CASE("The CharacterBody mirror is checked as scripts load, and a drifted on
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     const auto character =
         std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
@@ -1943,74 +1677,6 @@ namespace
         return holder.GetComponent<T>();
     }
 
-    bool Same(const VehicleInput& a, const VehicleInput& b)
-    {
-        return a.forward == b.forward && a.steer == b.steer && a.brake == b.brake && a.handbrake == b.handbrake &&
-               a.leftTrack == b.leftTrack && a.rightTrack == b.rightTrack && a.gear == b.gear && a.clutch == b.clutch;
-    }
-
-    bool Same(const VehicleEngine& a, const VehicleEngine& b)
-    {
-        return a.maxTorque == b.maxTorque && a.minRpm == b.minRpm && a.maxRpm == b.maxRpm &&
-               a.peakTorqueRpm == b.peakTorqueRpm && a.torqueAtMinRpm == b.torqueAtMinRpm &&
-               a.torqueAtMaxRpm == b.torqueAtMaxRpm && a.inertia == b.inertia && a.angularDamping == b.angularDamping;
-    }
-
-    bool Same(const VehicleTransmission& a, const VehicleTransmission& b)
-    {
-        return a.mode == b.mode && a.gearCount == b.gearCount && a.firstGear == b.firstGear && a.topGear == b.topGear &&
-               a.reverseGear == b.reverseGear && a.shiftUpRpm == b.shiftUpRpm && a.shiftDownRpm == b.shiftDownRpm &&
-               a.switchTime == b.switchTime && a.clutchReleaseTime == b.clutchReleaseTime &&
-               a.switchLatency == b.switchLatency && a.clutchStrength == b.clutchStrength;
-    }
-
-    bool Same(const VehicleTrack& a, const VehicleTrack& b)
-    {
-        return a.inertia == b.inertia && a.angularDamping == b.angularDamping && a.maxBrakeTorque == b.maxBrakeTorque &&
-               a.differentialRatio == b.differentialRatio && a.longitudinalFriction == b.longitudinalFriction &&
-               a.lateralFriction == b.lateralFriction;
-    }
-
-    bool Same(const VehicleTyre& a, const VehicleTyre& b)
-    {
-        return a.peakSlip == b.peakSlip && a.peakFriction == b.peakFriction && a.slideSlip == b.slideSlip &&
-               a.slideFriction == b.slideFriction;
-    }
-
-    // Whether two kinds are the same kind with the same settings.
-    bool Same(const VehicleKind& a, const VehicleKind& b)
-    {
-        if (a.Type() != b.Type())
-        {
-            return false;
-        }
-        switch (a.Type())
-        {
-        case VehicleType::Wheeled: {
-            const auto& x = a.As<WheeledVehicle>();
-            const auto& y = b.As<WheeledVehicle>();
-            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
-                   x.limitedSlipRatio == y.limitedSlipRatio;
-        }
-        case VehicleType::Motorcycle: {
-            const auto& x = a.As<MotorcycleVehicle>();
-            const auto& y = b.As<MotorcycleVehicle>();
-            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) &&
-                   x.limitedSlipRatio == y.limitedSlipRatio && x.lean.enabled == y.lean.enabled &&
-                   x.lean.maxAngle == y.lean.maxAngle && x.lean.limitSteering == y.lean.limitSteering;
-        }
-        case VehicleType::Tracked: {
-            const auto& x = a.As<TrackedVehicle>();
-            const auto& y = b.As<TrackedVehicle>();
-            return Same(x.engine, y.engine) && Same(x.transmission, y.transmission) && Same(x.left, y.left) &&
-                   Same(x.right, y.right);
-        }
-        case VehicleType::Trailer:
-            return true;
-        }
-        return false;
-    }
-
     // Whether `state` is VehicleState{}, field by field.
     bool IsNew(const VehicleState& state)
     {
@@ -2021,18 +1687,6 @@ namespace
                state.leftTrackSpeed == fresh.leftTrackSpeed && state.rightTrackSpeed == fresh.rightTrackSpeed;
     }
 
-    // Whether `state` is VehicleWheelState{}, field by field.
-    bool IsNew(const VehicleWheelState& state)
-    {
-        const VehicleWheelState fresh{};
-        return state.onGround == fresh.onGround && state.groundBody == fresh.groundBody &&
-               state.groundCollider == fresh.groundCollider && state.contactPoint == fresh.contactPoint &&
-               state.contactNormal == fresh.contactNormal && state.groundVelocity == fresh.groundVelocity &&
-               state.compression == fresh.compression && state.suspensionForce == fresh.suspensionForce &&
-               state.longitudinalSlip == fresh.longitudinalSlip && state.lateralSlip == fresh.lateralSlip &&
-               state.angularVelocity == fresh.angularVelocity && state.steerAngle == fresh.steerAngle;
-    }
-
     // A static floor 200 m across whose top is at y = 0.
     std::uint32_t AddFloor(PhysicsScriptingApp& test)
     {
@@ -2041,100 +1695,6 @@ namespace
         return floor;
     }
 } // namespace
-
-TEST_CASE("A new Vehicle from C# has C++'s defaults, for its own kind and every kind's new",
-          "[physics][scripting][vehicles]")
-{
-    PhysicsScriptingApp test;
-    const std::pair<int, VehicleKind> kinds[] = {
-        {-1, VehicleKind()},   {0, WheeledVehicle{}}, {1, MotorcycleVehicle{}},
-        {2, TrackedVehicle{}}, {3, TrailerVehicle{}},
-    };
-    for (const auto& [number, kind] : kinds)
-    {
-        const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
-        test.Call<void>(VehiclesType, "AddNewVehicle", entity, number);
-        test.ApplyChanges();
-
-        const Vehicle& vehicle = VehicleComponentOn<Vehicle>(test, entity);
-        const Vehicle expected{};
-        INFO("For C# kind number " << number << " (-1 is the Vehicle's own new kind, a wheeled one)");
-        {
-            INFO("The kind and every setting should be C++'s new one of that kind");
-            REQUIRE(Same(vehicle.kind, kind));
-        }
-        {
-            INFO("New, the input, probe, tilt limit (pi) and switch should be C++'s");
-            REQUIRE(Same(vehicle.input, expected.input));
-            REQUIRE(vehicle.probe == VehicleProbe::Cylinder);
-            REQUIRE(vehicle.maxTilt == std::numbers::pi_v<float>);
-            REQUIRE(vehicle.enabled);
-        }
-        {
-            INFO("New, the state should be VehicleState{}");
-            REQUIRE(IsNew(vehicle.state));
-        }
-    }
-}
-
-TEST_CASE("A new VehicleWheel, VehicleDifferential and VehicleAntiRollBar from C# have C++'s defaults, links empty",
-          "[physics][scripting][vehicles]")
-{
-    PhysicsScriptingApp test;
-    const std::uint32_t wheelEntity = test.Place(Math::Vec3(0.0f));
-    const std::uint32_t differentialEntity = test.Place(Math::Vec3(0.0f));
-    const std::uint32_t barEntity = test.Place(Math::Vec3(0.0f));
-    test.Call<void>(VehiclesType, "AddNewWheel", wheelEntity);
-    test.Call<void>(VehiclesType, "AddNewDifferential", differentialEntity);
-    test.Call<void>(VehiclesType, "AddNewAntiRollBar", barEntity);
-    test.ApplyChanges();
-
-    {
-        const VehicleWheel& wheel = VehicleComponentOn<VehicleWheel>(test, wheelEntity);
-        const VehicleWheel expected{};
-        INFO("New, the wheel should name no vehicle and have every C++ setting");
-        REQUIRE(wheel.vehicle == Entity());
-        REQUIRE(wheel.position == expected.position);
-        REQUIRE(wheel.track == expected.track);
-        REQUIRE(wheel.radius == expected.radius);
-        REQUIRE(wheel.width == expected.width);
-        REQUIRE(wheel.inertia == expected.inertia);
-        REQUIRE(wheel.angularDamping == expected.angularDamping);
-        REQUIRE(wheel.caster == expected.caster);
-        REQUIRE(wheel.camber == expected.camber);
-        REQUIRE(wheel.toe == expected.toe);
-        REQUIRE(wheel.suspension.travel == expected.suspension.travel);
-        REQUIRE(Same(wheel.suspension.spring, expected.suspension.spring));
-        REQUIRE(wheel.suspension.preload == expected.suspension.preload);
-        REQUIRE(wheel.maxSteerAngle == expected.maxSteerAngle);
-        REQUIRE(wheel.maxBrakeTorque == expected.maxBrakeTorque);
-        REQUIRE(wheel.maxHandbrakeTorque == expected.maxHandbrakeTorque);
-        REQUIRE(Same(wheel.longitudinal, expected.longitudinal));
-        REQUIRE(Same(wheel.lateral, expected.lateral));
-        INFO("New, its state should be VehicleWheelState{}, both ground links empty Entities");
-        REQUIRE(wheel.state.groundBody == Entity());
-        REQUIRE(wheel.state.groundCollider == Entity());
-        REQUIRE(IsNew(wheel.state));
-    }
-    {
-        const VehicleDifferential& differential = VehicleComponentOn<VehicleDifferential>(test, differentialEntity);
-        const VehicleDifferential expected{};
-        INFO("New, the differential should name no wheels and have C++'s settings");
-        REQUIRE(differential.leftWheel == Entity());
-        REQUIRE(differential.rightWheel == Entity());
-        REQUIRE(differential.ratio == expected.ratio);
-        REQUIRE(differential.leftRightSplit == expected.leftRightSplit);
-        REQUIRE(differential.limitedSlipRatio == expected.limitedSlipRatio);
-        REQUIRE(differential.torqueShare == expected.torqueShare);
-    }
-    {
-        const VehicleAntiRollBar& bar = VehicleComponentOn<VehicleAntiRollBar>(test, barEntity);
-        INFO("New, the anti-roll bar should name no wheels, at C++'s stiffness");
-        REQUIRE(bar.leftWheel == Entity());
-        REQUIRE(bar.rightWheel == Entity());
-        REQUIRE(bar.stiffness == VehicleAntiRollBar{}.stiffness);
-    }
-}
 
 namespace
 {
@@ -2168,7 +1728,7 @@ TEST_CASE("The four vehicle mirrors are shared with C#, and a drifted Vehicle fa
 {
     Testing::HeadlessApp headless;
     Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config(physics);
+    ScriptingConfig config = PhysicsScriptingApp::Config();
     std::vector<ComponentRegistration>& components = config.extensions[0].components;
     for (const std::string_view name : {"Fenrir.Physics.Vehicle", "Fenrir.Physics.VehicleWheel",
                                         "Fenrir.Physics.VehicleDifferential", "Fenrir.Physics.VehicleAntiRollBar"})

@@ -1,21 +1,23 @@
 // Joints (ADR-0013): FrameFromWorld, and a physics world's joints, kept in step with the Joint components. Knows the
 // ECS, not Jolt: it talks to Backend::World.
 
-#include "FenrirPhysics/Joints.hpp"
+#include "Joints.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <numbers>
 #include <set>
 #include <span>
 #include <string>
 
+#include "DebugCanvas.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirLogger/ILogger.hpp"
-#include "PhysicsState.hpp"
+#include "OutOfRange.hpp"
+#include "Poses.hpp"
 #include "Same.hpp"
-#include "WorldImpl.hpp"
 
 namespace Fenrir
 {
@@ -99,6 +101,10 @@ namespace Fenrir
                    SameLiveSettings(a.kind, b.kind);
         }
 
+        // The length of a joint frame's axes: frameA's long, frameB's short, so both show where they coincide.
+        constexpr float jointAxisA = 0.5f;
+        constexpr float jointAxisB = 0.25f;
+
         // Only an empty entity is the world: a destroyed one is not.
         bool IsWorld(const Entity& body)
         {
@@ -142,16 +148,18 @@ namespace Fenrir
         {
           public:
             Corrector(std::uint32_t entity, std::uint32_t& warned, ILogger& logger, float maxFrequency)
-                : m_entity(entity), m_warned(&warned), m_logger(&logger), m_maxFrequency(maxFrequency)
+                : m_check("Joint", entity, warned, logger, Detail::OutOfRange::Lifetime::PerComponent),
+                  m_maxFrequency(maxFrequency)
             {
             }
 
             [[nodiscard]] Joint Corrected(const Joint& joint)
             {
                 Joint corrected = joint;
-                NotNegative(corrected.breakForce, NegativeBreakThreshold, "a negative break threshold is treated as 0");
-                NotNegative(corrected.breakTorque, NegativeBreakThreshold,
-                            "a negative break threshold is treated as 0");
+                m_check.NotNegative(corrected.breakForce, NegativeBreakThreshold,
+                                    "a negative break threshold is treated as 0");
+                m_check.NotNegative(corrected.breakTorque, NegativeBreakThreshold,
+                                    "a negative break threshold is treated as 0");
                 switch (corrected.kind.Type())
                 {
                 case JointType::Distance:
@@ -173,33 +181,14 @@ namespace Fenrir
             }
 
           private:
-            void Warn(Problem problem, const char* message)
-            {
-                if ((*m_warned & problem) != 0)
-                {
-                    return;
-                }
-                *m_warned |= problem;
-                m_logger->Warn("The Joint on entity " + std::to_string(m_entity) + ": " + message);
-            }
-
-            void NotNegative(float& value, Problem problem, const char* message)
-            {
-                if (value < 0.0f)
-                {
-                    value = 0.0f;
-                    Warn(problem, message);
-                }
-            }
-
             void Correct(JointSpring& spring)
             {
-                NotNegative(spring.frequency, NegativeFrequency, "a negative spring frequency is treated as 0");
-                NotNegative(spring.damping, NegativeDamping, "a negative damping ratio is treated as 0");
+                m_check.NotNegative(spring.frequency, NegativeFrequency, "a negative spring frequency is treated as 0");
+                m_check.NotNegative(spring.damping, NegativeDamping, "a negative damping ratio is treated as 0");
                 if (spring.frequency > m_maxFrequency)
                 {
                     spring.frequency = m_maxFrequency;
-                    Warn(FrequencyTooHigh, "a spring frequency above half the tick rate is lowered to it");
+                    m_check.Warn(FrequencyTooHigh, "a spring frequency above half the tick rate is lowered to it");
                 }
             }
 
@@ -214,22 +203,12 @@ namespace Fenrir
                 const float low = std::min({min, max, 0.0f});
                 max = std::max({min, max, 0.0f});
                 min = low;
-                Warn(problem, message);
-            }
-
-            // Moves `value` into [low, high], warning if it was outside.
-            void Within(float& value, float low, float high, Problem problem, const char* message)
-            {
-                if (value < low || value > high)
-                {
-                    value = std::clamp(value, low, high);
-                    Warn(problem, message);
-                }
+                m_check.Warn(problem, message);
             }
 
             void WithinHalfTurn(float& angle, Problem problem, const char* message)
             {
-                Within(angle, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, problem, message);
+                m_check.Within(angle, -std::numbers::pi_v<float>, std::numbers::pi_v<float>, problem, message);
             }
 
             // A hinge's or a slider's limits, and the motor they hold. A hinge's limits lie within a half turn.
@@ -248,7 +227,7 @@ namespace Fenrir
                                    "lowered to it");
                 }
                 Correct(motor.spring);
-                NotNegative(motor.maxForce, NegativeForce, "a negative motor force is treated as 0");
+                m_check.NotNegative(motor.maxForce, NegativeForce, "a negative motor force is treated as 0");
                 // Silently: a target beyond a limit is where a motor drives a door shut against its frame.
                 if (limits.enabled)
                 {
@@ -259,32 +238,33 @@ namespace Fenrir
             void Correct(DistanceJoint& distance)
             {
                 Correct(distance.spring);
-                NotNegative(distance.minDistance, NegativeMinDistance, "a negative minimum distance is raised to 0");
+                m_check.NotNegative(distance.minDistance, NegativeMinDistance,
+                                    "a negative minimum distance is raised to 0");
                 if (distance.maxDistance < distance.minDistance)
                 {
                     distance.maxDistance = distance.minDistance;
-                    Warn(MaxBelowMinDistance, "a maximum distance below the minimum is raised to it");
+                    m_check.Warn(MaxBelowMinDistance, "a maximum distance below the minimum is raised to it");
                 }
             }
 
             void Correct(HingeJoint& hinge)
             {
                 Correct(hinge.limits, hinge.motor, true);
-                NotNegative(hinge.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(hinge.friction, NegativeFriction, "a negative friction is treated as 0");
             }
 
             void Correct(SliderJoint& slider)
             {
                 Correct(slider.limits, slider.motor, false);
-                NotNegative(slider.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(slider.friction, NegativeFriction, "a negative friction is treated as 0");
             }
 
             void Correct(SwingTwistJoint& swingTwist)
             {
                 for (float* cone : {&swingTwist.swingYLimit, &swingTwist.swingZLimit})
                 {
-                    Within(*cone, 0.0f, std::numbers::pi_v<float>, ConeOutOfRange,
-                           "a swing limit outside 0 to a half turn is moved into it");
+                    m_check.Within(*cone, 0.0f, std::numbers::pi_v<float>, ConeOutOfRange,
+                                   "a swing limit outside 0 to a half turn is moved into it");
                 }
                 WithinHalfTurn(swingTwist.twistMin, TwistBeyondHalfTurn,
                                "twist limits beyond a half turn are "
@@ -294,14 +274,13 @@ namespace Fenrir
                                "lowered to it");
                 HoldRestPose(swingTwist.twistMin, swingTwist.twistMax, TwistExcludesRestPose,
                              "a twist range excluding the rest pose is widened to take it in");
-                NotNegative(swingTwist.friction, NegativeFriction, "a negative friction is treated as 0");
+                m_check.NotNegative(swingTwist.friction, NegativeFriction, "a negative friction is treated as 0");
                 Correct(swingTwist.motor.spring);
-                NotNegative(swingTwist.motor.maxTorque, NegativeForce, "a negative motor torque is treated as 0");
+                m_check.NotNegative(swingTwist.motor.maxTorque, NegativeForce,
+                                    "a negative motor torque is treated as 0");
             }
 
-            std::uint32_t m_entity;
-            std::uint32_t* m_warned;
-            ILogger* m_logger;
+            Detail::OutOfRange m_check;
             float m_maxFrequency;
         };
     } // namespace
@@ -311,16 +290,26 @@ namespace Fenrir
         const bool toWorld = IsWorld(bodyB);
         if (!bodyA.IsValid() || (!toWorld && !bodyB.IsValid()))
         {
-#ifndef NDEBUG
-            WarnThroughInstalledApp(std::string("FrameFromWorld: ") + (bodyA.IsValid() ? "bodyB" : "bodyA") +
-                                    " is not alive, so it gives identity frames");
-#endif
             return JointFrames{};
         }
         return JointFrames{LocalTo(bodyA, anchor), toWorld ? anchor : LocalTo(bodyB, anchor)};
     }
+} // namespace Fenrir
 
-    const PhysicsWorld::Impl::Record* PhysicsWorld::Impl::JointBodyOf(const Entity& body) const
+namespace Fenrir::Detail
+{
+    Joints::Joints(EntityList& entities, ILogger& logger, Backend::World& backend, const Bodies& bodies,
+                   const Poses& poses)
+        : m_entities(&entities), m_logger(&logger), m_backend(&backend), m_bodies(&bodies), m_poses(&poses),
+          m_jointEntities(entities, ComponentType::Native<Joint>()),
+          m_inactive(logger, [](std::uint32_t entity, const std::string& why) {
+              return "The Joint on entity " + std::to_string(entity) + " is inactive: " + why +
+                     ". It does nothing until both its bodies are body entities of its scene.";
+          })
+    {
+    }
+
+    const Bodies::Body* Joints::BodyOf(const Entity& body) const
     {
         // A handle from another scene's list names a different entity with the same id.
         if (!body.IsValid() || body != m_entities->HandleOf(body.GetId()))
@@ -328,15 +317,15 @@ namespace Fenrir
             return nullptr;
         }
         // Keyed by the body's own entity, so a compound body's child collider names no body.
-        const auto it = m_bodies.find(body.GetId());
-        if (it == m_bodies.end() || !it->second.Active() || it->second.isTrigger)
+        const Bodies::Body* found = m_bodies->BodyOf(body.GetId());
+        if (found == nullptr || !found->Active() || found->isTrigger)
         {
             return nullptr;
         }
-        return &it->second;
+        return found;
     }
 
-    std::string PhysicsWorld::Impl::WhyInactive(const Joint& joint) const
+    std::string Joints::WhyInactive(const Joint& joint) const
     {
         if (IsWorld(joint.bodyA))
         {
@@ -355,7 +344,7 @@ namespace Fenrir
             {
                 return std::string(name) + " is in another scene";
             }
-            if (IsCharacterCollider(body.GetId()))
+            if (IsCharacterCollider(body))
             {
                 return std::string(name) + " (entity " + std::to_string(body.GetId()) +
                        ") is a character body, which a joint cannot join";
@@ -365,31 +354,24 @@ namespace Fenrir
                    "could make";
         };
         // The side whose body is missing: bodyA's if both are.
-        return JointBodyOf(joint.bodyA) != nullptr ? why(joint.bodyB, "bodyB") : why(joint.bodyA, "bodyA");
+        return BodyOf(joint.bodyA) != nullptr ? why(joint.bodyB, "bodyB") : why(joint.bodyA, "bodyA");
     }
 
-    void PhysicsWorld::Impl::DrainJoints()
+    void Joints::Drain()
     {
-        for (const ComponentChange& change : m_jointWatch.Drain())
+        for (const std::uint32_t entity : m_jointEntities.Drain())
         {
             // Removed, or removed and added again: rebuilt from what the entity has now, as a body is.
-            if (const auto it = m_joints.find(change.entity); it != m_joints.end())
+            if (const auto it = m_joints.find(entity); it != m_joints.end())
             {
-                DropConstraint(change.entity, it->second);
+                DropConstraint(entity, it->second);
                 m_joints.erase(it);
             }
-            if (m_entities->HasEntity(change.entity) && m_entities->GetEntity(change.entity).HasComponent<Joint>())
-            {
-                m_jointEntities.insert(change.entity);
-            }
-            else
-            {
-                m_jointEntities.erase(change.entity);
-            }
+            m_inactive.Forget(entity);
         }
     }
 
-    void PhysicsWorld::Impl::RemoveJointsOf(std::span<const Backend::BodyId> bodies)
+    void Joints::DropOn(std::span<const Backend::BodyId> bodies)
     {
         for (const Backend::BodyId body : bodies)
         {
@@ -407,9 +389,9 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc)
+    void Joints::MakeConstraint(std::uint32_t entity, JointRecord& record, const Backend::JointDesc& desc)
     {
-        record.id = m_backend.CreateJoint(desc);
+        record.id = m_backend->CreateJoint(desc);
         record.bodyA = desc.bodyA;
         record.bodyB = desc.bodyB;
         m_jointsOfBody[desc.bodyA.value].insert(entity);
@@ -419,13 +401,13 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::DropConstraint(std::uint32_t entity, JointRecord& record)
+    void Joints::DropConstraint(std::uint32_t entity, JointRecord& record)
     {
         if (!record.HasConstraint())
         {
             return;
         }
-        m_backend.DestroyJoint(record.id);
+        m_backend->DestroyJoint(record.id);
         record.id = Backend::JointId{};
         for (const Backend::BodyId body : {record.bodyA, record.bodyB})
         {
@@ -437,37 +419,31 @@ namespace Fenrir
         }
     }
 
-    void PhysicsWorld::Impl::SyncJoints(float dt)
+    void Joints::Sync(float dt)
     {
         // A spring faster than half the tick rate cannot be stepped.
         const float maxFrequency = 0.5f / dt;
-        for (const std::uint32_t entity : m_jointEntities)
+        for (const std::uint32_t entity : m_jointEntities.Entities())
         {
             const Joint& joint = m_entities->GetEntity(entity).GetComponent<Joint>();
             JointRecord& record = m_joints[entity];
 
-            const Record* a = JointBodyOf(joint.bodyA);
+            const Bodies::Body* a = BodyOf(joint.bodyA);
             const bool toWorld = IsWorld(joint.bodyB);
-            const Record* b = toWorld ? nullptr : JointBodyOf(joint.bodyB);
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
             if (a == nullptr || (!toWorld && (b == nullptr || b == a)))
             {
                 // Inactive: it names no pair of made body entities, and has no constraint until it does. Dropping it
                 // wakes the body left.
-                if (!record.inactive)
-                {
-                    m_logger->Warn("The Joint on entity " + std::to_string(entity) +
-                                   " is inactive: " + WhyInactive(joint) +
-                                   ". It does nothing until both its bodies are body entities of its scene.");
-                    record.inactive = true;
-                }
+                m_inactive.Report(entity, WhyInactive(joint));
                 DropConstraint(entity, record);
                 record.applied = joint;
                 continue;
             }
-            record.inactive = false;
+            m_inactive.Report(entity, {});
 
-            const Math::Vec3 scaleA = a->world.scale;
-            const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : b->world.scale;
+            const Math::Vec3 scaleA = m_poses->Baseline(joint.bodyA.GetId()).scale;
+            const Math::Vec3 scaleB = toWorld ? Math::Vec3(1.0f) : m_poses->Baseline(joint.bodyB.GetId()).scale;
             // A frame's place on its body follows the body's scale, so a scale change moves it, as a frame edit does.
             const bool recreate = !record.HasConstraint() || joint.kind.Type() != record.applied.kind.Type() ||
                                   joint.bodyA != record.applied.bodyA || joint.bodyB != record.applied.bodyB ||
@@ -494,9 +470,66 @@ namespace Fenrir
             else if (!SameLive(joint, record.applied))
             {
                 const Joint corrected = Corrector(entity, record.warned, *m_logger, maxFrequency).Corrected(joint);
-                m_backend.UpdateJoint(record.id, corrected.kind, joint.enabled, joint.collideConnected);
+                m_backend->UpdateJoint(record.id, corrected.kind, joint.enabled, joint.collideConnected);
                 record.applied = joint;
             }
         }
     }
-} // namespace Fenrir
+
+    void Joints::Draw(DebugCanvas& canvas) const
+    {
+        // Every kind draws the same two frames. Shapes of a kind's own (limit arcs, cones) would go here, by kind.
+        const auto frame = [&canvas](const JointFrame& local, const Transform* body, const Math::Vec3& scale,
+                                     float length, const std::array<Colour, 3>& colours) {
+            // A frame's position follows its body's scale and its rotation does not, as the constraint was made; the
+            // world end's frame is already in world space.
+            const Math::Vec3 position =
+                body == nullptr ? local.position : body->pos + body->rot * (local.position * scale);
+            const Math::Quat rotation = body == nullptr ? local.rotation : body->rot * local.rotation;
+            const std::array<Math::Vec3, 3> axes = {xAxis, yAxis, zAxis};
+            for (std::size_t i = 0; i < axes.size(); ++i)
+            {
+                canvas.Writer(position, rotation, colours[i])(Math::Vec3(0.0f), length * axes[i]);
+            }
+        };
+        for (const auto& [entity, record] : m_joints)
+        {
+            const Joint& joint = record.applied;
+            if (!record.HasConstraint())
+            {
+                // Inactive: each frame whose body is still a body, in grey. Never the world's: nothing holds it there.
+                const std::array<Colour, 3> grey = {PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint,
+                                                    PhysicsDebugColour::InactiveJoint};
+                if (BodyOf(joint.bodyA) != nullptr)
+                {
+                    const Transform& a = m_poses->Baseline(joint.bodyA.GetId());
+                    frame(joint.frameA, &a, a.scale, jointAxisA, grey);
+                }
+                if (BodyOf(joint.bodyB) != nullptr)
+                {
+                    const Transform& b = m_poses->Baseline(joint.bodyB.GetId());
+                    frame(joint.frameB, &b, b.scale, jointAxisB, grey);
+                }
+                continue;
+            }
+            const Bodies::Body* a = BodyOf(joint.bodyA);
+            const bool toWorld = joint.bodyB == Entity();
+            const Bodies::Body* b = toWorld ? nullptr : BodyOf(joint.bodyB);
+            if (a == nullptr || (!toWorld && b == nullptr))
+            {
+                continue; // not expected: Sync drops a constraint before its bodies go
+            }
+            // A disabled joint, broken or switched off by game code, is dimmed.
+            const auto colour = [&joint](const Colour& full) {
+                return joint.enabled ? full : PhysicsDebugColour::Dimmed(full);
+            };
+            frame(joint.frameA, &m_poses->Baseline(joint.bodyA.GetId()), record.scaleA, jointAxisA,
+                  {colour(PhysicsDebugColour::JointAX), colour(PhysicsDebugColour::JointAY),
+                   colour(PhysicsDebugColour::JointAZ)});
+            frame(joint.frameB, toWorld ? nullptr : &m_poses->Baseline(joint.bodyB.GetId()), record.scaleB, jointAxisB,
+                  {colour(PhysicsDebugColour::JointBX), colour(PhysicsDebugColour::JointBY),
+                   colour(PhysicsDebugColour::JointBZ)});
+        }
+    }
+} // namespace Fenrir::Detail

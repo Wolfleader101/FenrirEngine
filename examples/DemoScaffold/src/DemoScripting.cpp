@@ -9,7 +9,7 @@
 #include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirRendererScripting/RendererScripting.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/EngineMappings.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirWindowScripting/WindowScripting.hpp"
 
 // How the scaffold's types look to C#: each mapping is checked against its mirror in the Fenrir.Demo assembly

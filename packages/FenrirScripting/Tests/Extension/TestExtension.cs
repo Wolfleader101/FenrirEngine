@@ -35,6 +35,10 @@ public static partial class Gadgets
     // Creates an entity through the change buffer and records parenting it under `parent`; returns it.
     [NativeFunction]
     public static partial Entity SpawnUnder(Entity parent);
+
+    // Adds to the running total the extension keeps in its extension state, and returns the new total.
+    [NativeFunction]
+    public static partial int Tally(int by);
 }
 
 /// <summary>A scene resource the test extension gives C#: the native <c>Weather</c>.</summary>
@@ -57,6 +61,13 @@ public struct Settings : IResource
 public struct Clock : IReadOnlyResource
 {
     public double Seconds;
+}
+
+/// <summary>A shared struct of the test extension: plain data its natives would take by pointer.</summary>
+public struct Reading
+{
+    public int Count;
+    public float Weight;
 }
 
 /// <summary>A component the test extension gives C#: the native <c>Charge</c>.</summary>

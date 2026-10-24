@@ -1,9 +1,13 @@
 # The headless scripting tests: an App with no window runs a few frames around a fixture script assembly.
 add_executable(FenrirScriptingTests
     ScriptingTests.cpp
+    FixtureApp.hpp
     HeadlessApp.hpp
     ScriptingProbe.hpp
+    Generated/FenrirScriptingDefaultsTests.cpp
+    Generated/FenrirScriptingNativesTests.cpp
 )
+target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
@@ -30,7 +34,10 @@ set(fenrir_contract_files "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll
 
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the built-in binding's generated tests' C# classes (Generated/): the defaults test reads their new()
+# values, and the natives test calls each native through them.
+file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 # Built twice, in one command so the two builds never run side by side: the fixture, and "version 2" of it (the same sources
 # with VARIANT2 defined), which the reload tests copy over the first while an app is running.
 set(fenrir_fixture_v2_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture-v2")

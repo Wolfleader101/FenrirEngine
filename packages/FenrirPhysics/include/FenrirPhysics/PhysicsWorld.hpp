@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -213,6 +214,18 @@ namespace Fenrir
          * body then.
          */
         void AddAngularImpulse(const Entity& entity, const Math::Vec3& impulse);
+
+        /**
+         * @brief Cooks a collision mesh, as Physics::CreateCollisionMesh does: the meshes are the Physics owner's and
+         * are shared by every world, so a mesh made here is usable by a collider in any scene. A world only reaches
+         * them, for a C++ system or a script that holds a world and not the owner.
+         */
+        [[nodiscard]] CollisionMesh CreateCollisionMesh(std::span<const Math::Vec3> vertices,
+                                                        std::span<const std::uint32_t> indices);
+
+        /** @brief Releases a collision mesh, as Physics::ReleaseCollisionMesh does, whichever world or the owner made
+         * it. */
+        bool ReleaseCollisionMesh(CollisionMesh mesh);
 
         /** @brief The world's gravity, in metres per second squared. A new world starts with PhysicsConfig::gravity. */
         [[nodiscard]] Math::Vec3 Gravity() const;

@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace Fenrir.Scripting;
 
@@ -34,12 +33,7 @@ public static unsafe class ScriptComponents
     public static void Report<T>() where T : unmanaged, IComponent
     {
         string name = typeof(T).FullName ?? typeof(T).Name;
-        Span<byte> utf8 = stackalloc byte[Encoding.UTF8.GetMaxByteCount(name.Length)];
-        int length = Encoding.UTF8.GetBytes(name, utf8);
-        bool accepted;
-        fixed (byte* bytes = utf8)
-            accepted = Native.RegisterScriptComponent(bytes, length, Unsafe.SizeOf<T>(), AlignmentOf<T>());
-        if (!accepted)
+        if (!Native.RegisterScriptComponent(name, Unsafe.SizeOf<T>(), AlignmentOf<T>()))
             throw new InvalidOperationException($"The engine did not accept the component {name}: components are reported only while a script assembly loads, and must have a plausible size.");
     }
 }
