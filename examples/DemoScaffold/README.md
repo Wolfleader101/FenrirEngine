@@ -55,6 +55,32 @@ With `FENRIR_ENABLE_SCRIPTING` on, an app can run C# scenes:
   `CSharpScene.IsActive(number, out entry)`, and spawn the scene when `entry` is one they have not seen; the scene's
   assets and entities go with its FenrirScene, as a C++ scene's do.
 
+## The ImGui overlay
+
+`DemoConfig::imguiOverlay = true` installs the scaffold's `ImGuiOverlay` (ADR-0027): Dear ImGui over the main window,
+for demo panels. Dear ImGui is the `libs/imgui` submodule (tag v1.92.9b), built here as the static `FenrirDemoImGui`
+with the spec's local overrides (`libs/CMakeLists.txt`), and linked only by the scaffold; it reaches a demo app through
+the scaffold, never through an engine package. A scene makes ImGui windows from its `update` with ImGui's own functions
+(`#include <imgui.h>`): the scaffold starts ImGui's frame in `BeforeTicks` and ends it in `PostUpdate`.
+
+- **Input:** an input router of priority `ImGuiOverlayRouterPriority`. ImGui gets keys, text, the mouse and the wheel,
+  and takes what it wants, judged by its previous frame: a click, a press or the wheel over an ImGui window, keys while
+  a widget is active (a text field, a slider being dragged), and text while a text field is. A drag that began on ImGui
+  is its alone, motion included. Every press ImGui does not take is the game's; ImGui sees it as a click away from its
+  windows, so clicking the scene takes the keyboard back from a text field. While the game holds a mouse button (the
+  free-fly camera's look) ImGui sees neither the pointer nor the wheel.
+- **Input claims,** published each frame: `pointer` (over an ImGui window), `pointerCapture` (an ImGui drag),
+  `keyboardFocus` (a widget is active, which cancels the scene's held keys) and `textInput` with the text field's caret,
+  where FenrirWindow puts the IME. With the overlay on, the window's text input is on only where ImGui claims it
+  (`WindowConfig::textInputByDefault` is false).
+- **Drawing:** ImGui's draw data becomes one `DrawList2D` a frame on `builtin:2d`: the ImGui vertex layout, sRGB vertex
+  colours, straight `AlphaBlend` and linear blending, with ImGui's clip rectangles as scissors, submitted to the main
+  window on overlay layer `ImGuiOverlayLayer` (1000), so a scene's own 2D lists on lower layers draw under it, and debug
+  text over it. ImGui's textures, its font atlas among them, are `ImageData` assets owned by the app, replaced whole when
+  ImGui changes them. ImGui lays out in logical units, and rasterises its fonts at the window's content scale.
+- **Platform:** the clipboard and the cursor shape through FenrirWindow (the cursor is left alone while it is captured).
+  Nothing is saved between runs (no `imgui.ini`).
+
 ## Keys
 
 | Key | What it does |
@@ -110,4 +136,4 @@ The art-deco texture set comes with the scene that uses it.
 
 `FenrirDemoScaffoldTests` (CTest `FenrirDemoScaffold`) runs a demo app on the null backend with no window, its input
 fed through FenrirInput's feed and the App driven one frame at a time, or run as a smoke run: the scene list, the free-
-fly camera, the scene click, the help and the smoke runs.
+fly camera, the scene click, the help, the smoke runs and the ImGui overlay taking input from the scene.

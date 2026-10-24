@@ -33,6 +33,13 @@ namespace RendererDemo
      */
     [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
 
+    /**
+     * @brief Overlay: a raw DrawList2D on the window overlay showing layers, scissors and the four blend modes, and an
+     * ImGui window with a text field and a slider over a spinning cube whose keys and clicks stop while ImGui has the
+     * pointer or the keyboard.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene OverlayScene();
+
     /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
     inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
 

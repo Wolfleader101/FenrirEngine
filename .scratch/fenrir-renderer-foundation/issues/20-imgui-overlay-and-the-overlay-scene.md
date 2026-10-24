@@ -10,8 +10,13 @@
 
 **Touches:** `examples/DemoScaffold/`, `examples/RendererDemo/`, `.gitmodules`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] A scaffold test (null backend, input feed): with the ImGui window under the pointer a click is consumed and does not reach the scene's click event; typing into a focused field claims `textInput` and the scene's keys see nothing; focusing ImGui while a scene key is held cancels it.
-- [ ] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
+Hand check: Overlay (`FENRIR_DEMO_SCENE=Overlay`), on the window: the raw draw list's layers (blue under green under red), scissors (the solid top-left quarter is the quad's red top, so the scissor is not flipped; the yellow strip's middle third) and blend modes (AlphaBlend and Premultiplied alike, Additive brightening the black stripes, Opaque solid) look right, as examples/RendererDemo/README.md lists. (Checked once by screenshot at 100% scale.)
+Hand check: the "Overlay" ImGui window draws over the scene in ImGui's colours with crisp text, also at 150% display scale; debug text and the F1 help draw over it.
+Hand check: clicking, typing and dragging in ImGui never reach the scene: no scene click is counted, Space and C typed into the Label field neither pause the spin nor change the colour, and dragging the slider or right-dragging in the window never moves the free-fly camera; clicking the scene gives the keys back. (Clicking and typing checked once with synthetic input.)
+Hand check: in the Label field, Ctrl+C/X/V go through the system clipboard; the cursor is an I-beam over the field and a resize arrow on the window's edges and corner; an IME's candidate window opens at the field's caret.
+
+- [x] A scaffold test (null backend, input feed): with the ImGui window under the pointer a click is consumed and does not reach the scene's click event; typing into a focused field claims `textInput` and the scene's keys see nothing; focusing ImGui while a scene key is held cancels it.
+- [x] `FENRIR_DEMO_SMOKE` runs the scene with its keys on null and GL with no errors.
 - [ ] Scene 5 by hand: ImGui renders with correct colours and crisp text at the content scale; the raw list's layers, scissors and blend modes look right; typing, clipboard and cursor shapes work; the scene ignores input ImGui took (checked by hand).

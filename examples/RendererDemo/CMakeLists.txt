@@ -7,6 +7,7 @@ fenrir_add_demo_app(RendererDemo
         src/CamerasAndTargets.cpp
         src/Sky.cpp
         src/DebugDrawScene.cpp
+        src/OverlayScene.cpp
     SCRIPTS scripts
 )
 # "Debug draw" draws into its scene's DebugDraw.
