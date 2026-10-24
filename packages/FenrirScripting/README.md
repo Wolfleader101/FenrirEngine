@@ -111,7 +111,7 @@ remove, count and query it) and says how to check its layout against the C# stru
 | `Fenrir.Name` | `Name` (`Text`, a fixed UTF-8 buffer of 256 bytes) | `Fenrir::Name` | read and write |
 | `Fenrir.Relationship` | `Relationship` (`Parent`, `FirstChild`, `NextSibling`, `PrevSibling`) | `Fenrir::Relationship` | **read only** |
 
-They are the built-in extension's, and generated like any package's (ADR-0016): each is written once, in FenrirECS's
+They are the built-in extension's, and generated like any package's (ADR-0042): each is written once, in FenrirECS's
 headers, and its C# mirror, mapping and registration come from FenrirECS's API description (see "Adding to the engine's
 own API").
 
@@ -744,7 +744,7 @@ shares its name with another in its type (FENRIR0024), returns a string (FENRIR0
 (FENRIR0026). Your friendly API calls the declared method like any other, and adds behaviour (such as turning error codes
 into exceptions) only where it wants.
 
-An extension with a generated binding (ADR-0016) writes only step 1: `tools/describe-api --natives` reads its C++
+An extension with a generated binding (ADR-0042) writes only step 1: `tools/describe-api --natives` reads its C++
 natives into a natives description, and `Iris.Bindings` generates steps 2 and 3 from it, in one order (its README,
 "Natives"). The C++ function then needs external linkage, outside an anonymous namespace, since the generated
 registration names it from another file. In its doc, `@param[out]` makes a pointer an `out` parameter, `@param[in,out]` a
@@ -760,7 +760,7 @@ carries the engine's components (Transform, Name and Relationship, all required)
 `Fenrir.Math` and then the `Fenrir.Scripting` contract built on it. It is always the first extension, so the engine's
 components take their names before any other extension's, and the two contracts are shared before any other.
 
-It is a generated binding (ADR-0016), as FenrirPhysics's is: `api/FenrirScripting.binding.toml` binds FenrirECS's and
+It is a generated binding (ADR-0042), as FenrirPhysics's is: `api/FenrirScripting.binding.toml` binds FenrirECS's and
 FenrirMath's API descriptions (`packages/FenrirECS/api`, `packages/FenrirMath/api`) and the natives description
 `api/FenrirScripting.natives.json`, which describe-api reads from `src/Bindings.cpp`. From them `Iris.Bindings` writes the
 contract's mirrors and `Native` class (`Managed/Fenrir.Scripting/Generated`), the mappings

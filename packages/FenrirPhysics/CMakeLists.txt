@@ -57,7 +57,7 @@ target_link_libraries(FenrirPhysics PUBLIC FenrirApp FenrirScene FenrirECS Fenri
 
 target_include_directories(FenrirPhysics PUBLIC include PRIVATE src)
 
-# The package's API description, api/FenrirPhysics.api.json (ADR-0016): its artefact whether or not scripting is built.
+# The package's API description, api/FenrirPhysics.api.json (ADR-0042): its artefact whether or not scripting is built.
 fenrir_describe_api(FenrirPhysics api/FenrirPhysics.api.toml)
 
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).

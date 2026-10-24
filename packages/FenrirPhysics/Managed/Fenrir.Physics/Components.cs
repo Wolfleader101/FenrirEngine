@@ -4,7 +4,7 @@ using Fenrir.Scripting;
 namespace Fenrir.Physics;
 
 // The hand-written parts of FenrirPhysics's components (FenrirPhysics/Components.hpp). Every field, default and doc is in
-// the generated mirror (Generated/, from the C++ header: ADR-0016); these parts add behaviour and what a C# caller needs
+// the generated mirror (Generated/, from the C++ header: ADR-0042); these parts add behaviour and what a C# caller needs
 // beyond the C++ documentation. Each mirror is checked against its native layout whenever a script assembly loads, so a
 // drift between the two fails the load and names the field. Edits take effect as they do in C++ (physics finds them by
 // comparing, each tick). Each has the C++ defaults when made with `new`; `default` is all zero bytes, as in any struct.

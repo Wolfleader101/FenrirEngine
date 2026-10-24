@@ -1,4 +1,4 @@
-# API descriptions (ADR-0016): tools/describe-api reads a package's selected headers and writes the committed
+# API descriptions (ADR-0042): tools/describe-api reads a package's selected headers and writes the committed
 # <Package>.api.json beside its selection. The ordinary build never runs it: `cmake --build <dir> --target
 # fenrir-describe-api` rebuilds the tool and regenerates every package's description, and CI fails on a dirty tree.
 #

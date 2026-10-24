@@ -74,7 +74,7 @@ add_library(FenrirScripting STATIC
 target_include_directories(FenrirScripting PUBLIC include)
 target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 
-# The built-in extension's binding (ADR-0016): the engine's components (Transform, Name, Relationship) and the entity
+# The built-in extension's binding (ADR-0042): the engine's components (Transform, Name, Relationship) and the entity
 # link they hold are written once, in FenrirECS's headers (../FenrirECS/api/FenrirECS.api.json, with FenrirMath's vector
 # and quaternion from ../FenrirMath/api/FenrirMath.api.json), and every native function once, as its definition in
 # src/Bindings.cpp, which describe-api's natives mode reads into api/FenrirScripting.natives.json. Iris.Bindings

@@ -1,4 +1,4 @@
-# FenrirPhysics's C# binding (ADR-0016, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirPhysics.api.json
+# FenrirPhysics's C# binding (ADR-0042, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirPhysics.api.json
 # and this binding's own FenrirPhysicsScripting.api.json bound to the Fenrir.Physics contract and this extension. Paths
 # are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they
 # are committed.

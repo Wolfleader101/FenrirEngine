@@ -50,7 +50,7 @@ add_library(FenrirPhysicsScripting STATIC
 target_include_directories(FenrirPhysicsScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScripting)
 
-# The binding (ADR-0016): every physics component, event and shared struct is written once, in its C++ header, and
+# The binding (ADR-0042): every physics component, event and shared struct is written once, in its C++ header, and
 # every native function once, as its definition in src/PhysicsScripting.cpp, which describe-api's natives mode reads
 # into api/FenrirPhysics.natives.json. Iris.Bindings generates the rest from those descriptions and
 # api/FenrirPhysics.binding.toml, all committed:

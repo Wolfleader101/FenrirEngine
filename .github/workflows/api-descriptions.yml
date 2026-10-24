@@ -1,6 +1,6 @@
 name: API descriptions
 
-# Regenerates every committed API description (ADR-0016, tools/describe-api/README.md) and every binding generated from
+# Regenerates every committed API description (ADR-0042, tools/describe-api/README.md) and every binding generated from
 # them (packages/Iris/Tools/Iris.Bindings/README.md), and fails when that leaves the tree dirty: a header change was
 # committed without its regenerated description, or a description without its regenerated binding. Both runners, because
 # both are the same bytes on every platform. It also runs the binding generator's own tests.
