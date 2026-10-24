@@ -99,7 +99,8 @@ namespace Fenrir::Render
      *
      * **The window**, when a view of the scene draws into it, gets one `Overlay` pass after every view's Output: screen
      * text at its logical position and the on-screen messages stacked newest first from the top-left, both scaled by
-     * the content scale, as the top layer. Views into images get none.
+     * the content scale, as the top layer: the facade adds this feature after the 2D render feature, so this pass
+     * follows its `Overlay 2D` pass. Views into images get none.
      *
      * Text is drawn from the DebugFont's signed-distance-field atlas. With nothing to draw, no pass is added.
      */

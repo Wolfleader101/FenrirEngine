@@ -91,6 +91,105 @@ elseif(SCENE STREQUAL "Character (C#)")
         "F: dash"
         "K: half into the test wall at .*: [0-9]+ penetrations?"
     )
+elseif(SCENE STREQUAL "Vehicles (C++)")
+    set(keys 332)
+    set(expected
+        "Physics debug lines: vehicles"
+        "P: autopilot: driving the track"
+        "Autopilot: waypoint [0-9]+ reached"
+        "Autopilot: parked with the handbrake for 5 s"
+        "L \\(tick [0-9]+\\): car .* m/s, .* RPM, gear"
+        "  trailer .* m/s, [0-9] wheels on ground, brake"
+        "  wheel 3: on ground"
+        "P: autopilot off"
+        "C: camera free: it stays where it is \\(F3 flies the free-fly camera\\), the arrows drive"
+        "C: the camera chases the car"
+        "1: soft springs, 1\\.15 Hz"
+        "1: stock springs, 1\\.5 Hz"
+        "2: big wheels, 0\\.45 m"
+        "2: stock wheels, 0\\.3 m"
+        "4: the car is off: a plain rolling box"
+        "4: the car is on again, built fresh"
+        "5: the car is not interpolated"
+        "5: the car is interpolated, its wheels with it"
+        "7: tilt limited to 60 degrees"
+        "7: tilt limit off"
+        "9: the chassis is kinematic: the car is inactive"
+        "9: the chassis is dynamic: the car starts again at idle in neutral"
+        # Physics's one warning for 9, and its one for 8.
+        "The Vehicle on entity [0-9]+ is inactive: its RigidBody is kinematic"
+        "The VehicleDifferential on entity [0-9]+ names entity [0-9]+, whose wheel has died"
+        "T: the car and its trailer are back at the start"
+        "8: the rear-left wheel is gone"
+        "8: the rear-left wheel is back, driven again"
+        "M: Manual gearbox: E/Q shift, Shift holds the clutch"
+        "E: gear [0-9]"
+        "Q: gear [0-9]"
+        "M: Automatic gearbox"
+        "K: the car is kicked over"
+        "R: the car is righted, 1 m up, its trailer behind it"
+        "F: the driver gets out beside the door"
+        "F: the driver gets in and drives the car"
+    )
+elseif(SCENE STREQUAL "Motorcycle (C++)")
+    set(keys 53)
+    set(expected
+        "Physics debug lines: vehicles"
+        "P: autopilot: riding the loop"
+        "Autopilot: point [0-9]+ reached"
+        "L: motorcycle .* m/s, .* RPM, gear .*, lean"
+        "  front wheel: on ground"
+        "3: max lean 45 -> 20 degrees, a rebuild"
+        "3: max lean 20 -> 45 degrees, a rebuild"
+        "P: autopilot off"
+        "6: the lean controller is off: the motorcycle falls over"
+        "6: the lean controller is on"
+        "T: the motorcycle stands at the start"
+        "C: camera free: it stays where it is \\(F3 flies the free-fly camera\\), the arrows ride"
+        "C: the camera chases the motorcycle"
+        "5: the motorcycle is not interpolated"
+        "5: the motorcycle is interpolated, its lean and wheels with it"
+    )
+elseif(SCENE STREQUAL "Tank (C++)")
+    set(keys 51)
+    set(expected
+        "Physics debug lines: vehicles"
+        "P: autopilot: driving the loop"
+        "Autopilot: point [0-9]+ reached"
+        "L: tank .* m/s, .* RPM, gear .*, tracks"
+        "  left driven wheel: on ground"
+        "3: the tracks' grip is 1, a live edit: they slip, and it crawls"
+        "3: the tracks' grip is 4, a live edit"
+        "P: autopilot off"
+        "T: the tank is back at the start"
+        "C: camera free: it stays where it is \\(F3 flies the free-fly camera\\), the arrows drive"
+        "C: the camera chases the tank"
+        "5: the tank is not interpolated"
+        "5: the tank is interpolated, its wheels with it"
+    )
+elseif(SCENE STREQUAL "Vehicles (C#)")
+    set(keys 63)
+    set(expected
+        "Vehicles \\(C#\\): C# built a track of bumps, a ramp and a grass patch, a car .* and its trailer .* on a ball joint\\."
+        "P: autopilot: driving the track"
+        "Autopilot: waypoint [0-9]+ reached"
+        "L \\(tick [0-9]+\\): car .* m/s, .* RPM, gear"
+        "  wheel 3: on ground"
+        "P: autopilot off: the car brakes to a stop until you drive"
+        "C: camera free: it stays where it is \\(F3 flies the free-fly camera\\), the arrows drive"
+        "C: the camera chases the car"
+        "V: the vehicles' debug lines are on"
+        "V: debug lines off"
+        "U: the trailer is a wheeled car now, and pushes"
+        "U: the trailer is a trailer again"
+        "M: Manual gearbox: E/Q shift, Shift holds the clutch"
+        "E: gear [0-9]"
+        "Q: gear [0-9]"
+        "M: Automatic gearbox"
+        "K: the car is kicked over"
+        "R: the car is upright again at"
+        "T: the car and its trailer are back at the start"
+    )
 else()
     message(FATAL_ERROR "CheckSceneLog.cmake: no lines for the scene \"${SCENE}\"")
 endif()

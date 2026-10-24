@@ -36,9 +36,9 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
   namespace, so write `System.Math` (or `MathF`) for the BCL's.
 - **One active Scripting.** The engine's native functions act on the App of the `Scripting` that is active, so a
   second `Install` while one is alive logs an error and runs without scripts.
-- **The script assembly path** comes from the project: the `scriptAssembly` field of the `.feproj` (DemoApp reads it
-  into `ProjectSettings`). Empty means no scripts, and .NET is not started at all. `examples/DemoApp` is a working example, with
-  its own README on building and running it.
+- **The script assembly path** comes from the app, `ScriptingConfig::scriptAssembly`. Empty means no scripts, and .NET
+  is not started at all. `examples/ScriptingDemo` is a working example, with its own README on building and running it;
+  the demo scaffold passes each demo app's built scripts project (`examples/DemoScaffold/README.md`, "C# scenes").
 - **Shutdown.** Everything Iris owns is released when the app finishes `Run` (a sequential system in the `Exit`
   phase, on the main thread), and again, harmlessly, when the `Scripting` object is destroyed. Destroy it before
   `main` returns.

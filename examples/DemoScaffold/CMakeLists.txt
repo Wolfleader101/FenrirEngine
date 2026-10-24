@@ -3,12 +3,19 @@
 add_library(FenrirDemoScaffold STATIC
     include/FenrirDemoScaffold/DemoScaffold.hpp
     src/DemoScaffold.cpp
+    src/ImGuiOverlay.hpp
+    src/ImGuiOverlay.cpp
 )
 target_include_directories(FenrirDemoScaffold PUBLIC include)
 target_link_libraries(FenrirDemoScaffold
     PUBLIC FenrirApp FenrirRenderer FenrirInput FenrirMath FenrirECS
     PRIVATE FenrirWindow FenrirAssets FenrirDebugDraw FenrirLogger
 )
+
+# Dear ImGui (libs/imgui), for the ImGuiOverlay. PUBLIC, so a demo app's scenes make their ImGui windows with ImGui's
+# own functions; no engine package ever links it (ADR-0027).
+add_subdirectory(libs)
+target_link_libraries(FenrirDemoScaffold PUBLIC FenrirDemoImGui FenrirDraw2D)
 
 # With scripting built, the scaffold installs Scripting for an app that has scripts, with every package's extension and
 # its own, whose contract is the shared Fenrir.Demo assembly (Managed/Fenrir.Demo). FENRIR_DEMO_SCRIPTING tells the

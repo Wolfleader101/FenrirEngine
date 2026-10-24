@@ -7,6 +7,7 @@
 #include <iterator>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -120,7 +121,8 @@ namespace Fenrir
          * its mips. Anything else (a cubemap, or an image with no pixels that is not a render target) is released and
          * logged once, and the material binds its parameter's default texture there.
          */
-        void PrepareSampledImage(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle)
+        void PrepareSampledImage(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle,
+                                 std::string_view sampler = "a material")
         {
             Render::SceneRenderer& scene = *state.scene;
             const ImageData* data = store.TryGet(handle);
@@ -135,9 +137,9 @@ namespace Fenrir
                 scene.ReleaseImage(KeyOf(handle));
                 if (data != nullptr && state.loggedImages.insert({handle.index, handle.generation}).second)
                 {
-                    state.app->Logger()->Warn("FenrirRenderer: a material samples image {}, which is {}, so it gets "
-                                              "its parameter's default texture there",
-                                              handle.index,
+                    state.app->Logger()->Warn("FenrirRenderer: {} samples image {}, which is {}, so it gets its "
+                                              "parameter's default texture there",
+                                              sampler, handle.index,
                                               data->shape != ImageShape::Flat
                                                   ? "a cubemap"
                                                   : "neither a render target nor an image with pixels");
@@ -179,7 +181,7 @@ namespace Fenrir
         }
 
         /** @brief Frees the GPU side of every asset whose handle went stale (ADR-0023). */
-        void ReleaseStale(Render::SceneRenderer& scene, const AssetStore& store)
+        void ReleaseStale(Render::SceneRenderer& scene, Render::Draw2DFeature& draw2D, const AssetStore& store)
         {
             for (const AssetKey key : scene.MaterialKeys())
             {
@@ -200,6 +202,13 @@ namespace Fenrir
                 if (!store.IsValid(HandleOf<Shader>(key)))
                 {
                     scene.ReleaseShader(key);
+                }
+            }
+            for (const AssetKey key : draw2D.ShaderKeys())
+            {
+                if (!store.IsValid(HandleOf<Shader>(key)))
+                {
+                    draw2D.ReleaseShader(key);
                 }
             }
             for (const AssetKey key : scene.TargetKeys())
@@ -653,6 +662,70 @@ namespace Fenrir
             return frame;
         }
 
+        /**
+         * @brief The Overlay's submissions this frame (ADR-0027), taken so it starts the next frame empty, with the
+         * shaders and images they name prepared. A submission to a window other than the main window is dropped, logged
+         * once per window. With `draw` false (a minimised window, or no store) they are only taken.
+         */
+        Render::OverlayFrame ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
+        {
+            Render::OverlayFrame frame;
+            Overlay* overlay = state.app->TryGetResource<Overlay>();
+            if (overlay == nullptr)
+            {
+                return frame;
+            }
+            std::vector<Detail::OverlaySubmissions::Taken> taken = Detail::OverlaySubmissions::Take(*overlay);
+            if (!draw || store == nullptr)
+            {
+                return frame;
+            }
+            for (Detail::OverlaySubmissions::Taken& submission : taken)
+            {
+                if (submission.window != Window::MainWindow())
+                {
+                    if (state.loggedOverlayWindows.insert(submission.window.value).second)
+                    {
+                        state.app->Logger()->Warn(
+                            "FenrirRenderer: a 2D draw list was submitted to the overlay of window "
+                            "{}, which the renderer does not draw (only the main window), so it "
+                            "is dropped",
+                            submission.window.value);
+                    }
+                    continue;
+                }
+                const DrawList2D& list = submission.submission.list;
+                for (const PipelineDescription2D& pipeline : list.pipelines)
+                {
+                    const ShaderData* data = store->TryGet(pipeline.shader);
+                    if (data == nullptr)
+                    {
+                        continue;
+                    }
+                    const std::uint32_t revision = store->Revision(pipeline.shader);
+                    if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
+                    {
+                        state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
+                    }
+                }
+                for (const Command2D& command : list.commands)
+                {
+                    for (const TextureSlot2D& slot : command.textures)
+                    {
+                        if (!slot.image.IsEmpty())
+                        {
+                            PrepareSampledImage(state, *store, slot.image, "a 2D draw list");
+                        }
+                    }
+                }
+                frame.submissions.push_back(std::move(submission.submission));
+            }
+            frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
+                                     ? Window::ContentScale(*state.app, Window::MainWindow())
+                                     : 1.0f;
+            return frame;
+        }
+
         /** @brief One Render: the steps of ADR-0019, all on the main thread. */
         void RenderActiveScene(App& app, Detail::RendererState& state)
         {
@@ -665,7 +738,7 @@ namespace Fenrir
             if (!size.IsEmpty() && store != nullptr)
             {
                 Scene& scene = app.GetActiveScene();
-                ReleaseStale(*state.scene, *store);
+                ReleaseStale(*state.scene, *state.draw2D, *store);
                 frame.lighting = ReadLighting(state, scene);
                 frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
                 frame.draws = ReadDraws(state, *store, scene);
@@ -684,6 +757,7 @@ namespace Fenrir
             }
             state.scene->SetFrame(std::move(frame));
             state.debug->SetFrame(std::move(debug));
+            state.draw2D->SetFrame(ReadOverlay(state, store, !size.IsEmpty()));
 
             const Render::FrameReport report = state.core->RenderFrame();
             for (const std::string& error : report.errors)
@@ -807,6 +881,7 @@ namespace Fenrir
             if (installed != nullptr && installed->state.expired())
             {
                 app->RemoveResource<InstalledRenderer>();
+                app->RemoveResource<Overlay>();
             }
         }
     } // namespace Detail
@@ -867,10 +942,15 @@ namespace Fenrir
         auto scene =
             std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
         state->scene = scene.get();
+        // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
+        // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
+        auto draw2D = std::make_unique<Render::Draw2DFeature>(state->core->Device(), *app.Logger(), *scene);
+        state->draw2D = draw2D.get();
         // Debug drawing goes into the views the scene renderer drew, so it is added after it.
         auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);
         state->debug = debug.get();
         state->core->AddFeature(std::move(scene));
+        state->core->AddFeature(std::move(draw2D));
         state->core->AddFeature(std::move(debug));
 
         const Graphics::Vsync wanted = ToDevice(config.vsync);
@@ -885,6 +965,7 @@ namespace Fenrir
                                     }
                                 });
         app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
+        app.AddResource<Overlay>();
         return Renderer(std::move(state));
     }
 
