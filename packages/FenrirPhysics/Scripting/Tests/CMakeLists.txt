@@ -20,7 +20,7 @@ fenrir_deploy_scripting(FenrirPhysicsScriptingTests)
 fenrir_deploy_physics_scripting(FenrirPhysicsScriptingTests)
 
 # The fixture script assembly: compiled against the scripting SDK and the Fenrir.Physics contract, neither copied (the
-# host shares its own copies).
+# host shares its own copies), and rebuilt when either is.
 set(fenrir_physics_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
 # It also compiles the generated tests' C# classes (Generated/): the defaults test reads their new() values, and the
 # natives test calls the natives through them.
@@ -33,7 +33,8 @@ add_custom_command(
         "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" "-p:FenrirPhysicsContractDir=${FENRIR_PHYSICS_CONTRACT_DIR}/"
         "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/fixture-obj/"
     DEPENDS ${fenrir_physics_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.PhysicsScriptFixture.csproj"
-        FenrirPhysicsContract
+        FenrirPhysicsContract "${FENRIR_PHYSICS_CONTRACT_DIR}/Fenrir.Physics.dll"
+        "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll" "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
     COMMENT "Building the physics scripting test fixture assembly"
     VERBATIM
 )

@@ -34,19 +34,19 @@ namespace Fenrir::Detail
         constexpr float suspensionTick = 0.08f;
 
         // A wheel's contact colour: the worse of its two slips against its tyres'.
-        std::uint32_t GripColour(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
+        Colour GripColour(const Backend::VehicleWheelDesc& wheel, const Backend::VehicleWheelRead& read)
         {
             const float along = std::abs(read.longitudinalSlip);
             const float across = std::abs(read.lateralSlip);
             if (along > wheel.longitudinal.slideSlip || across > wheel.lateral.slideSlip)
             {
-                return DebugColour::PastSlideSlip;
+                return PhysicsDebugColour::PastSlideSlip;
             }
             if (along > wheel.longitudinal.peakSlip || across > wheel.lateral.peakSlip)
             {
-                return DebugColour::PastPeakSlip;
+                return PhysicsDebugColour::PastPeakSlip;
             }
-            return DebugColour::Gripping;
+            return PhysicsDebugColour::Gripping;
         }
     } // namespace
 
@@ -696,7 +696,7 @@ namespace Fenrir::Detail
 
                 // The suspension in the chassis's axes: from the top of its travel down to full extension, with a
                 // cross-tick across it at the wheel's centre, in the axes of the wheel's mount.
-                const LineWriter suspension = canvas.Writer(body.pos, body.rot, DebugColour::Suspension);
+                const LineWriter suspension = canvas.Writer(body.pos, body.rot, PhysicsDebugColour::Suspension);
                 suspension(given.position + given.steeringAxis * given.suspension.travel, given.position);
                 for (const Math::Vec3& axis : {xAxis, zAxis})
                 {
@@ -706,7 +706,7 @@ namespace Fenrir::Detail
 
                 // The wheel in its own plane, Y and Z about its axle X, with a spoke up its Y.
                 const LineWriter rim =
-                    canvas.Writer(body.pos + body.rot * pose.pos, body.rot * pose.rot, DebugColour::Wheel);
+                    canvas.Writer(body.pos + body.rot * pose.pos, body.rot * pose.rot, PhysicsDebugColour::Wheel);
                 const float radius = given.radius;
                 rim.Arc(Math::Vec3(0.0f), yAxis, zAxis, radius, 0.0f, 2.0f * pi, circleSegments);
                 rim(Math::Vec3(0.0f), radius * yAxis);

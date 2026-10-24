@@ -1,8 +1,10 @@
 #pragma once
 
-// What the physics tests share: an App with no console output, and helpers that build bodies and run frames.
+// What the physics tests share: an App with no console output, helpers that build bodies and run frames, and the
+// debug lines the active scene's DebugDraw shows.
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -10,6 +12,8 @@
 #include <vector>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
 #include "FenrirPhysics/Physics.hpp"
@@ -80,8 +84,8 @@ namespace PhysicsTest
     }
 
     /**
-     * An App with physics installed, by default with interpolation off (StepPosesOnly), so tests read step poses. The
-     * members end in reverse order: physics before the app.
+     * An App with debug drawing and physics installed, by default with interpolation off (StepPosesOnly), so tests
+     * read step poses. The members end in reverse order: physics, then debug drawing, before the app.
      */
     struct PhysicsApp
     {
@@ -93,7 +97,7 @@ namespace PhysicsTest
         explicit PhysicsApp(const Fenrir::PhysicsConfig& config,
                             std::size_t workerThreads = std::thread::hardware_concurrency())
             : app(std::make_unique<SilentLogger>(&warnings, &errors), workerThreads),
-              physics(Fenrir::Physics::Install(app, config))
+              debugDrawing(Fenrir::DebugDrawing::Install(app)), physics(Fenrir::Physics::Install(app, config))
         {
         }
 
@@ -102,6 +106,7 @@ namespace PhysicsTest
         /** Every error logged, in order. */
         std::vector<std::string> errors;
         Fenrir::App app;
+        Fenrir::DebugDrawing debugDrawing;
         Fenrir::Physics physics;
 
         Fenrir::EntityList& Entities()
@@ -119,6 +124,36 @@ namespace PhysicsTest
             }
         }
     };
+
+    /** One line the active scene's DebugDraw shows: physics's debug lines, as a renderer would read them. */
+    struct DrawnLine
+    {
+        Fenrir::Math::Vec3 from;
+        Fenrir::Math::Vec3 to;
+        Fenrir::Colour colour;
+    };
+
+    /** The lines of the active scene's DebugDraw now: every line batch of every shown group, in order. */
+    inline std::vector<DrawnLine> DrawnLines(Fenrir::App& app)
+    {
+        std::vector<DrawnLine> lines;
+        const Fenrir::DebugBatches batches = app.GetActiveScene().GetResource<Fenrir::DebugDraw>()->Tessellate();
+        for (const Fenrir::DebugLineBatch& batch : batches.lines)
+        {
+            for (std::size_t i = 0; i + 1 < batch.vertices.size(); i += 2)
+            {
+                lines.push_back({batch.vertices[i].position, batch.vertices[i + 1].position, batch.vertices[i].colour});
+            }
+        }
+        return lines;
+    }
+
+    /** Whether two colours are the same: physics draws each of its colours from one constant, so exactly. */
+    inline bool SameColour(const Fenrir::Colour& a, const Fenrir::Colour& b)
+    {
+        const std::equal_to<float> same;
+        return same(a.r, b.r) && same(a.g, b.g) && same(a.b, b.b) && same(a.a, b.a);
+    }
 
     inline Fenrir::Entity Place(Fenrir::EntityList& entities, const Fenrir::Math::Vec3& position,
                                 const Fenrir::Math::Vec3& scale = Fenrir::Math::Vec3(1.0f))

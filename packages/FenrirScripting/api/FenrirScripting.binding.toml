@@ -1,4 +1,4 @@
-# The built-in extension's C# binding (ADR-0016, packages/Iris/Tools/Iris.Bindings/README.md): FenrirECS's and
+# The built-in extension's C# binding (ADR-0042, packages/Iris/Tools/Iris.Bindings/README.md): FenrirECS's and
 # FenrirMath's descriptions bound to the Fenrir.Scripting contract and the extension every Scripting includes first.
 # Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
 # below; they are committed.
@@ -9,6 +9,8 @@ registered-namespace = "Fenrir"
 [csharp]
 contract = "../Managed/Fenrir.Scripting"
 generated = "../Managed/Fenrir.Scripting/Generated"
+# The engine's math types are the Fenrir.Math contract's (ADR-0029), which this contract is built on.
+usings = ["Fenrir.Math"]
 component-attribute = "NativeComponent"
 component-interface = "IComponent"
 read-only-component-interface = "IReadOnlyComponent"

@@ -1,28 +1,27 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
-#include "FenrirMath/Math.hpp"
+#include "FenrirMath/Colour.hpp"
 
 namespace Fenrir
 {
     /**
-     * @brief One line of a physics world's debug drawing, in world space: plain data any renderer can draw
-     * (PhysicsWorld::DebugLines).
+     * @brief The debug group a physics world draws its debug lines into, in its scene's DebugDraw (FenrirDebugDraw,
+     * ADR-0025): hide it there to hide physics's lines without stopping them being drawn.
      */
-    struct DebugLine
-    {
-        Math::Vec3 from = Math::Vec3(0.0f);
-        Math::Vec3 to = Math::Vec3(0.0f);
-        /** @brief Packed as 0xRRGGBBAA: red in the highest byte, alpha in the lowest. One of DebugColour's. */
-        std::uint32_t colour = 0;
-    };
+    inline constexpr std::string_view PhysicsDebugGroup = "Physics";
 
-    /** @brief Which categories of debug lines a physics world draws (PhysicsWorld::SetDebugDraw). Bit flags. */
-    enum class DebugDraw : std::uint32_t
+    /**
+     * @brief Which categories of debug lines a physics world draws (PhysicsWorld::SetDebugDraw). Bit flags. After each
+     * step, the world draws the categories chosen into its scene's DebugDraw, in the PhysicsDebugGroup, with duration
+     * 0: each step's lines last until the next tick.
+     */
+    enum class PhysicsDebugCategories : std::uint32_t
     {
         None = 0,
-        /** @brief Each collider's wireframe at its body's pose, coloured by motion type (DebugColour). */
+        /** @brief Each collider's wireframe at its body's pose, coloured by motion type (PhysicsDebugColour). */
         Colliders = 1u << 0,
         /** @brief Each contact between solid bodies: a small cross at its point and a short line along its normal. */
         Contacts = 1u << 1,
@@ -54,73 +53,76 @@ namespace Fenrir
     };
 
     /** @brief The categories in `a` or `b`. */
-    [[nodiscard]] constexpr DebugDraw operator|(DebugDraw a, DebugDraw b)
+    [[nodiscard]] constexpr PhysicsDebugCategories operator|(PhysicsDebugCategories a, PhysicsDebugCategories b)
     {
-        return static_cast<DebugDraw>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
+        return static_cast<PhysicsDebugCategories>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
     }
 
     /** @brief The categories in both `a` and `b`. */
-    [[nodiscard]] constexpr DebugDraw operator&(DebugDraw a, DebugDraw b)
+    [[nodiscard]] constexpr PhysicsDebugCategories operator&(PhysicsDebugCategories a, PhysicsDebugCategories b)
     {
-        return static_cast<DebugDraw>(static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));
+        return static_cast<PhysicsDebugCategories>(static_cast<std::uint32_t>(a) & static_cast<std::uint32_t>(b));
     }
 
     /** @brief Whether `categories` includes any of `wanted`. */
-    [[nodiscard]] constexpr bool Includes(DebugDraw categories, DebugDraw wanted)
+    [[nodiscard]] constexpr bool Includes(PhysicsDebugCategories categories, PhysicsDebugCategories wanted)
     {
-        return (categories & wanted) != DebugDraw::None;
+        return (categories & wanted) != PhysicsDebugCategories::None;
     }
 
-    /** @brief The fixed colours of debug lines, packed as DebugLine::colour is. */
-    namespace DebugColour
+    /** @brief The fixed colours of a physics world's debug lines, written in sRGB. */
+    namespace PhysicsDebugColour
     {
         /** @brief A static body's collider. */
-        inline constexpr std::uint32_t Static = 0x9E9E9EFFu;
+        inline const Colour Static = Colour::FromSrgb(0x9E9E9EFFu);
         /** @brief A kinematic body's collider. */
-        inline constexpr std::uint32_t Kinematic = 0x4DA6FFFFu;
+        inline const Colour Kinematic = Colour::FromSrgb(0x4DA6FFFFu);
         /** @brief A dynamic body's collider. */
-        inline constexpr std::uint32_t Dynamic = 0x4DE64DFFu;
+        inline const Colour Dynamic = Colour::FromSrgb(0x4DE64DFFu);
         /** @brief A trigger's collider, whatever body it is on. */
-        inline constexpr std::uint32_t Trigger = 0xFF66E6FFu;
+        inline const Colour Trigger = Colour::FromSrgb(0xFF66E6FFu);
         /** @brief A contact's point and normal. */
-        inline constexpr std::uint32_t Contact = 0xFF3333FFu;
+        inline const Colour Contact = Colour::FromSrgb(0xFF3333FFu);
         /** @brief A body's velocity. */
-        inline constexpr std::uint32_t Velocity = 0xFFE633FFu;
+        inline const Colour Velocity = Colour::FromSrgb(0xFFE633FFu);
         /** @brief A body's bounding box. */
-        inline constexpr std::uint32_t Bounds = 0xFF9933FFu;
+        inline const Colour Bounds = Colour::FromSrgb(0xFF9933FFu);
         /** @brief A joint's frameA: its X axis (red), Y axis (green) and Z axis (blue). */
-        inline constexpr std::uint32_t JointAX = 0xE6194BFFu;
-        inline constexpr std::uint32_t JointAY = 0x3CB44BFFu;
-        inline constexpr std::uint32_t JointAZ = 0x4363D8FFu;
+        inline const Colour JointAX = Colour::FromSrgb(0xE6194BFFu);
+        inline const Colour JointAY = Colour::FromSrgb(0x3CB44BFFu);
+        inline const Colour JointAZ = Colour::FromSrgb(0x4363D8FFu);
         /** @brief A joint's frameB: its X axis (pink), Y axis (yellow) and Z axis (cyan). */
-        inline constexpr std::uint32_t JointBX = 0xFF99CCFFu;
-        inline constexpr std::uint32_t JointBY = 0xFFFF4DFFu;
-        inline constexpr std::uint32_t JointBZ = 0x4DFFFFFFu;
+        inline const Colour JointBX = Colour::FromSrgb(0xFF99CCFFu);
+        inline const Colour JointBY = Colour::FromSrgb(0xFFFF4DFFu);
+        inline const Colour JointBZ = Colour::FromSrgb(0x4DFFFFFFu);
         /** @brief Every axis of an inactive joint's frames, drawn only on its bodies that are still bodies. */
-        inline constexpr std::uint32_t InactiveJoint = 0x6B6B6BFFu;
+        inline const Colour InactiveJoint = Colour::FromSrgb(0x6B6B6BFFu);
         /** @brief A character's shape in use. */
-        inline constexpr std::uint32_t Character = 0xF2F2F2FFu;
+        inline const Colour Character = Colour::FromSrgb(0xF2F2F2FFu);
         /** @brief A character's ground normal on walkable ground (GroundState::OnGround). */
-        inline constexpr std::uint32_t Ground = 0x33E6B3FFu;
+        inline const Colour Ground = Colour::FromSrgb(0x33E6B3FFu);
         /** @brief A character's ground normal on ground too steep to walk (GroundState::OnSteepGround). */
-        inline constexpr std::uint32_t SteepGround = 0xB366FFFFu;
+        inline const Colour SteepGround = Colour::FromSrgb(0xB366FFFFu);
         /** @brief A vehicle wheel's suspension and its cross-tick. */
-        inline constexpr std::uint32_t Suspension = 0x8C8CFFFFu;
+        inline const Colour Suspension = Colour::FromSrgb(0x8C8CFFFFu);
         /** @brief A vehicle wheel's circle and spoke. */
-        inline constexpr std::uint32_t Wheel = 0xD9B380FFu;
+        inline const Colour Wheel = Colour::FromSrgb(0xD9B380FFu);
         /** @brief A vehicle wheel's contact while both its slips are within its tyres' `peakSlip`. */
-        inline constexpr std::uint32_t Gripping = 0x33FF33FFu;
+        inline const Colour Gripping = Colour::FromSrgb(0x33FF33FFu);
         /** @brief A vehicle wheel's contact while either slip is past its tyre's `peakSlip`, and neither past its
          * `slideSlip`. */
-        inline constexpr std::uint32_t PastPeakSlip = 0xFFC21AFFu;
+        inline const Colour PastPeakSlip = Colour::FromSrgb(0xFFC21AFFu);
         /** @brief A vehicle wheel's contact while either slip is past its tyre's `slideSlip`. */
-        inline constexpr std::uint32_t PastSlideSlip = 0xFF1A8CFFu;
+        inline const Colour PastSlideSlip = Colour::FromSrgb(0xFF1A8CFFu);
 
-        /** @brief A sleeping body's collider colour, or a disabled joint's axis colour: `colour` at half brightness,
-         * alpha unchanged. */
-        [[nodiscard]] constexpr std::uint32_t Dimmed(std::uint32_t colour)
+        /**
+         * @brief A sleeping body's collider colour, or a disabled joint's axis colour: `colour` at half brightness as
+         * sRGB counts it, so each channel scaled by mid grey's linear value (Colour::Grey), alpha unchanged.
+         */
+        [[nodiscard]] inline Colour Dimmed(const Colour& colour)
         {
-            return ((colour >> 1u) & 0x7F7F7F00u) | (colour & 0xFFu);
+            const float half = Colour::Grey.r;
+            return {colour.r * half, colour.g * half, colour.b * half, colour.a};
         }
-    } // namespace DebugColour
+    } // namespace PhysicsDebugColour
 } // namespace Fenrir

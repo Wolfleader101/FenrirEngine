@@ -8,9 +8,11 @@
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 // The engine side of the built-in extension's native functions, the contract's Native class: plain functions over C
 // types, called with the call context of the running Scripting, where pointers and lengths arrive exactly as the C#
@@ -364,6 +366,57 @@ namespace Fenrir::ScriptingNatives
                                      std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)), rows,
                                      capacity);
     }
+
+    /**
+     * @brief The id of the native resource registered under `name` for the C# type `typeName` (its full name), good
+     * only for the registry generation it was looked up in.
+     * @return The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type.
+     * @notrunning -1
+     */
+    std::int32_t ResourceIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
+                              const char* typeName, std::int32_t typeLength)
+    {
+        if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
+        {
+            return -1;
+        }
+        return engine.components->ResolveResource(std::string_view(name, static_cast<std::size_t>(length)),
+                                                  std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+    }
+
+    /**
+     * @brief A pointer to the resource in the engine's storage (the active scene's, for a scene resource), good until
+     * the engine next changes its storage.
+     * @return Null when there is none now.
+     */
+    void* ResourceGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id)
+    {
+        const auto* resource = engine.components->GetResource(id);
+        return resource == nullptr ? nullptr : resource->find(context.GetApp());
+    }
+
+    /**
+     * @brief Records inserting the resource, replacing the one there is, for playback.
+     * @param value The resource's bytes, or null for a default one.
+     * @return 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5
+     * scripting is not running.
+     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     */
+    std::int32_t ResourceInsert(const CallContext&, Detail::EngineContext& engine, std::int32_t id, const void* value)
+    {
+        return static_cast<std::int32_t>(engine.changes->InsertResource(*engine.components, id, value));
+    }
+
+    /**
+     * @brief Records removing the resource, for playback.
+     * @return 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5
+     * scripting is not running.
+     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     */
+    std::int32_t ResourceRemove(const CallContext&, Detail::EngineContext& engine, std::int32_t id)
+    {
+        return static_cast<std::int32_t>(engine.changes->RemoveResource(*engine.components, id));
+    }
 } // namespace Fenrir::ScriptingNatives
 
 namespace Fenrir::Generated
@@ -398,7 +451,8 @@ namespace Fenrir::Detail
         activeContext.compare_exchange_strong(expected, nullptr);
     }
 
-    ScriptingExtension BuiltInExtension(const std::filesystem::path& contract, std::shared_ptr<EngineContext> engine)
+    ScriptingExtension BuiltInExtension(const std::filesystem::path& math, const std::filesystem::path& contract,
+                                        std::shared_ptr<EngineContext> engine)
     {
         ScriptingExtension extension;
         extension.name = "built-in";
@@ -410,7 +464,72 @@ namespace Fenrir::Detail
             component.required = true;
         }
         extension.SetState(std::move(engine));
-        extension.sharedAssemblies = {contract};
+        // Fenrir.Math first: the scripting contract and every package's contract may refer to it.
+        extension.sharedAssemblies = {math, contract};
         return extension;
     }
 } // namespace Fenrir::Detail
+
+namespace Fenrir
+{
+    ChangeBuffer CallContext::Changes() const noexcept
+    {
+        return ChangeBuffer(*m_app, *m_changes);
+    }
+
+    std::uint32_t ChangeBuffer::CreateEntity() const
+    {
+        return m_changes->Create(m_app->GetActiveScene().GetEntityList());
+    }
+
+    bool ChangeBuffer::DestroyEntity(std::uint32_t entity) const
+    {
+        return m_changes->Destroy(m_app->GetActiveScene().GetEntityList(), entity) == Detail::ChangeError::None;
+    }
+
+    bool ChangeBuffer::RecordOn(std::uint32_t entity, std::function<void(Entity&)> change) const
+    {
+        if (!m_app->GetActiveScene().GetEntityList().HasEntity(entity))
+        {
+            return false;
+        }
+        m_changes->RecordNative([entity, apply = std::move(change)](App& app) {
+            EntityList& entities = app.GetActiveScene().GetEntityList();
+            if (!entities.HasEntity(entity))
+            {
+                return false;
+            }
+            Entity target = entities.GetEntity(entity);
+            apply(target);
+            return true;
+        });
+        return true;
+    }
+
+    bool ChangeBuffer::AddChild(std::uint32_t parent, std::uint32_t child) const
+    {
+        EntityList& entities = m_app->GetActiveScene().GetEntityList();
+        if (!entities.HasEntity(parent) || !entities.HasEntity(child))
+        {
+            return false;
+        }
+        m_changes->RecordNative([parent, child](App& app) {
+            EntityList& live = app.GetActiveScene().GetEntityList();
+            if (!live.HasEntity(parent) || !live.HasEntity(child))
+            {
+                return false;
+            }
+            live.GetEntity(parent).AddChild(live.GetEntity(child));
+            return true;
+        });
+        return true;
+    }
+
+    void ChangeBuffer::Record(std::function<void(App&)> change) const
+    {
+        m_changes->RecordNative([apply = std::move(change)](App& app) {
+            apply(app);
+            return true;
+        });
+    }
+} // namespace Fenrir

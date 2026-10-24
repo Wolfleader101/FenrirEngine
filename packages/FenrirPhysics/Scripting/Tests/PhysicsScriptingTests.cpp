@@ -28,6 +28,8 @@
 #include <utility>
 #include <vector>
 
+#include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirPhysics/Characters.hpp"
@@ -293,8 +295,10 @@ TEST_CASE("C# chooses the debug lines a world draws", "[physics][scripting]")
     const PhysicsWorld* world = PhysicsWorld::Of(test.headless.Get().GetActiveScene());
     REQUIRE(world != nullptr);
     INFO("The world should draw its colliders, and only them, after C# chose them");
-    REQUIRE(world->DebugDrawCategories() == DebugDraw::Colliders);
-    REQUIRE_FALSE(world->DebugLines().empty());
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Colliders);
+    const DebugDraw* draw = test.headless.Get().GetActiveScene().GetResource<DebugDraw>();
+    REQUIRE(draw != nullptr);
+    REQUIRE_FALSE(draw->Tessellate().lines.empty());
 }
 
 TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicles included", "[physics][scripting]")
@@ -307,19 +311,19 @@ TEST_CASE("C#'s debug-draw categories match C++'s, joints, characters and vehicl
 
     REQUIRE(test.Call<bool>(WorldType, "DrawJoints"));
     INFO("C#'s Joints is C++'s Joints");
-    REQUIRE(world->DebugDrawCategories() == DebugDraw::Joints);
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Joints);
 
     REQUIRE(test.Call<bool>(WorldType, "DrawCharacters"));
     INFO("C#'s Characters is C++'s Characters");
-    REQUIRE(world->DebugDrawCategories() == DebugDraw::Characters);
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Characters);
 
     REQUIRE(test.Call<bool>(WorldType, "DrawVehicles"));
     INFO("C#'s Vehicles is C++'s Vehicles");
-    REQUIRE(world->DebugDrawCategories() == DebugDraw::Vehicles);
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::Vehicles);
 
     REQUIRE(test.Call<bool>(WorldType, "DrawAll"));
     INFO("C#'s All is C++'s All: every category, joints, characters and vehicles included");
-    REQUIRE(world->DebugDrawCategories() == DebugDraw::All);
+    REQUIRE(world->DebugDrawCategories() == PhysicsDebugCategories::All);
 }
 
 TEST_CASE("A collision mesh made from C# spans is usable by a collider, and released once", "[physics][scripting]")

@@ -34,6 +34,10 @@ namespace Fenrir::ScriptingNatives
     std::int32_t EventReadAfter(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t event, std::uint64_t* seen, Fenrir::Detail::NativeAddress* view);
     std::int32_t QueryCount(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const std::int32_t* ids, std::int32_t count);
     std::int32_t QueryFill(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const std::int32_t* ids, std::int32_t count, Fenrir::Detail::NativeAddress* rows, std::int32_t capacity);
+    std::int32_t ResourceIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength);
+    void* ResourceGet(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id);
+    std::int32_t ResourceInsert(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, const void* value);
+    std::int32_t ResourceRemove(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id);
 } // namespace Fenrir::ScriptingNatives
 
 namespace Fenrir::Generated
@@ -76,6 +80,10 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EventReadAfter>("Fenrir.Scripting.Native.EventReadAfter", -1),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::QueryCount>("Fenrir.Scripting.Native.QueryCount", -1),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::QueryFill>("Fenrir.Scripting.Native.QueryFill", -1),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ResourceIdOf>("Fenrir.Scripting.Native.ResourceIdOf", -1),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ResourceGet>("Fenrir.Scripting.Native.ResourceGet"),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ResourceInsert>("Fenrir.Scripting.Native.ResourceInsert", static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)),
+            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ResourceRemove>("Fenrir.Scripting.Native.ResourceRemove", static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)),
         };
     }
 } // namespace Fenrir::Generated

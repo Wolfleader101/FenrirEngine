@@ -203,4 +203,135 @@ namespace Fenrir
         registration.readOnly = true;
         return registration;
     }
+
+    /** @brief Where a native resource lives: in each scene (C# reaches the active scene's) or once in the App. */
+    enum class ResourceScope
+    {
+        Scene,
+        App,
+    };
+
+    /**
+     * @brief One native resource the engine exposes to C# by name (ADR-0029): a plain-data scene or app resource that
+     * C# reaches through `Resources.Get<T>()` as a Ref into the engine's storage. Its C# struct carries
+     * `[NativeResource("...")]` with the same name.
+     *
+     * Described by MakeSceneResource, MakeAppResource or their read-only variants and listed in the `resources` of the
+     * ScriptingExtension that gives it. A resource with behaviour (an input device, debug drawing) is not one: C# gets
+     * a facade of native functions instead. Copying one is cheap.
+     */
+    struct ResourceRegistration
+    {
+        /** The name C#'s [NativeResource("...")] attribute uses. Unique across every extension's resources. */
+        std::string name;
+
+        /** The full name of the C# struct this resource is validated against; C# gets it only through that type. */
+        std::string typeName;
+
+        /** Whether each scene has one (C# reaches the active scene's) or the App has one. */
+        ResourceScope scope = ResourceScope::Scene;
+
+        /** True if scripts may only read it: they get a ReadOnlyRef, and cannot insert or remove it. */
+        bool readOnly = false;
+
+        /** Size in bytes of the resource, which the C# struct must match. */
+        std::size_t size = 0;
+
+        /** The resource in `app` (the active scene's, for a scene resource), or null when there is none now. */
+        std::function<void*(App& app)> find;
+
+        /**
+         * Makes a default resource in `app` (in the active scene, for a scene resource), replacing any there is, and
+         * returns it. Called only when changes play back.
+         */
+        std::function<void*(App& app)> insert;
+
+        /** Removes the resource from `app` (from the active scene, for a scene resource); nothing if there is none. */
+        std::function<void(App& app)> remove;
+
+        /** Checks the C# struct against the resource's Iris StructMapping in a loaded script assembly. */
+        std::function<Iris::CallResult<void>(const Iris::Component&)> validate;
+    };
+
+    namespace Detail
+    {
+        // What every Make...Resource shares: the checks on `T` and its mapping, and how to reach `T` in its scope.
+        template <typename T, typename Mapping>
+        [[nodiscard]] ResourceRegistration MakeResource(std::string name, ResourceScope scope, bool readOnly)
+        {
+            static_assert(std::is_default_constructible_v<T>,
+                          "A resource scripts can insert must be default constructible.");
+            static_assert(sizeof(Mapping) == sizeof(T) && alignof(Mapping) == alignof(T),
+                          "The mapping must have the size and alignment of the resource it stands for.");
+            static_assert(
+                Iris::StructValue<Mapping>,
+                "The mapping needs an Iris::StructMapping and must be trivially copyable standard-layout data.");
+            ResourceRegistration registration;
+            registration.name = std::move(name);
+            registration.typeName = std::string(Iris::StructMapping<Mapping>::typeName);
+            registration.scope = scope;
+            registration.readOnly = readOnly;
+            registration.size = sizeof(T);
+            if (scope == ResourceScope::Scene)
+            {
+                registration.find = [](App& app) -> void* { return app.GetActiveScene().GetResource<T>(); };
+                registration.insert = [](App& app) -> void* { return &app.GetActiveScene().AddResource<T>(); };
+                registration.remove = [](App& app) { app.GetActiveScene().RemoveResource<T>(); };
+            }
+            else
+            {
+                registration.find = [](App& app) -> void* { return app.TryGetResource<T>(); };
+                registration.insert = [](App& app) -> void* { return &app.AddResource<T>(); };
+                registration.remove = [](App& app) { app.RemoveResource<T>(); };
+            }
+            registration.validate = [](const Iris::Component& component) {
+                return component.ValidateStruct<Mapping>();
+            };
+            return registration;
+        }
+    } // namespace Detail
+
+    /**
+     * @brief Registers the scene resource `T` (one per scene, Scene::GetResource) under `name`, mirrored by the C#
+     * struct that `Mapping`'s Iris::StructMapping names. C# reads and writes the active scene's resource in place, and
+     * may insert and remove it. `T` must be trivially copyable (C# writes it as bytes) and default constructible; see
+     * MakeComponent for `Mapping`.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] ResourceRegistration MakeSceneResource(std::string name)
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "A resource scripts write is written as bytes.");
+        return Detail::MakeResource<T, Mapping>(std::move(name), ResourceScope::Scene, false);
+    }
+
+    /**
+     * @brief Registers the scene resource `T` for reading only: C# gets a ReadOnlyRef and cannot insert or remove it.
+     * Otherwise as MakeSceneResource.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] ResourceRegistration MakeReadOnlySceneResource(std::string name)
+    {
+        return Detail::MakeResource<T, Mapping>(std::move(name), ResourceScope::Scene, true);
+    }
+
+    /**
+     * @brief Registers the app resource `T` (one per App, App::TryGetResource) under `name`. Otherwise as
+     * MakeSceneResource.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] ResourceRegistration MakeAppResource(std::string name)
+    {
+        static_assert(std::is_trivially_copyable_v<T>, "A resource scripts write is written as bytes.");
+        return Detail::MakeResource<T, Mapping>(std::move(name), ResourceScope::App, false);
+    }
+
+    /**
+     * @brief Registers the app resource `T` for reading only: C# gets a ReadOnlyRef and cannot insert or remove it.
+     * Otherwise as MakeAppResource.
+     */
+    template <typename T, typename Mapping = T>
+    [[nodiscard]] ResourceRegistration MakeReadOnlyAppResource(std::string name)
+    {
+        return Detail::MakeResource<T, Mapping>(std::move(name), ResourceScope::App, true);
+    }
 } // namespace Fenrir

@@ -613,6 +613,117 @@
           "kind": "i32"
         }
       ]
+    },
+    {
+      "name": "ResourceIdOf",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "The id of the native resource registered under `name` for the C# type `typeName` (its full name), good only for the registry generation it was looked up in.",
+      "notRunning": "-1",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type."
+      },
+      "parameters": [
+        {
+          "name": "name",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "typeName",
+          "type": "const char*",
+          "kind": "pointer",
+          "pointee": "char",
+          "pointeeKind": "i8",
+          "const": true
+        },
+        {
+          "name": "typeLength",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ResourceGet",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "A pointer to the resource in the engine's storage (the active scene's, for a scene resource), good until the engine next changes its storage.",
+      "returns": {
+        "type": "void*",
+        "kind": "pointer",
+        "pointee": "void",
+        "pointeeKind": "void",
+        "doc": "Null when there is none now."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ResourceInsert",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records inserting the resource, replacing the one there is, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "value",
+          "type": "const void*",
+          "kind": "pointer",
+          "pointee": "void",
+          "pointeeKind": "void",
+          "const": true,
+          "doc": "The resource's bytes, or null for a default one."
+        }
+      ]
+    },
+    {
+      "name": "ResourceRemove",
+      "namespace": "Fenrir::ScriptingNatives",
+      "source": "../src/Bindings.cpp",
+      "state": "Fenrir::Detail::EngineContext",
+      "doc": "Records removing the resource, for playback.",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+      },
+      "parameters": [
+        {
+          "name": "id",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
     }
   ]
 }

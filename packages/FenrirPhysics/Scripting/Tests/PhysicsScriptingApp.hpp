@@ -1,8 +1,8 @@
 #pragma once
 
 // The physics scripting tests' harness, shared by PhysicsScriptingTests.cpp and the generated defaults test
-// (Generated/FenrirPhysicsDefaultsTests.cpp): an App with no window, physics installed and scripting running the
-// physics fixture script assembly with physics's extension.
+// (Generated/FenrirPhysicsDefaultsTests.cpp): an App with no window, debug drawing and physics installed and scripting
+// running the physics fixture script assembly with physics's extension.
 
 #include "HeadlessApp.hpp"
 #include "ScriptingProbe.hpp"
@@ -16,6 +16,7 @@
 #include <string>
 #include <type_traits>
 
+#include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirPhysics/Physics.hpp"
@@ -49,13 +50,14 @@ namespace Fenrir::Testing
     }
 
     /**
-     * @brief An App with physics installed and scripting running the fixture with physics's extension. Members end in
-     * reverse order: scripting, then physics, then the app.
+     * @brief An App with debug drawing and physics installed and scripting running the fixture with physics's
+     * extension. Members end in reverse order: scripting, then physics, then debug drawing, then the app.
      */
     struct PhysicsScriptingApp
     {
         PhysicsScriptingApp()
-            : physics(Physics::Install(headless.Get(), StepPosesOnly())),
+            : debugDrawing(DebugDrawing::Install(headless.Get())),
+              physics(Physics::Install(headless.Get(), StepPosesOnly())),
               scripting(Scripting::Install(headless.Get(), Config()))
         {
             INFO("The fixture did not load with physics's extension");
@@ -72,6 +74,7 @@ namespace Fenrir::Testing
         }
 
         HeadlessApp headless;
+        DebugDrawing debugDrawing;
         Physics physics;
         Scripting scripting;
 

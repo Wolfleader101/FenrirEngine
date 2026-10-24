@@ -2,7 +2,7 @@ Status: ready-for-agent
 
 # FenrirRenderer animation: skeletons, clips, blending, GPU skinning, bone attachments and ragdoll handover, with C# and a demo app
 
-Origin: the FenrirRenderer wayfinder map (`.scratch/fenrir-renderer/map.md`). This spec collapses the map's animation tickets (24, 26–34 and 62) into one buildable plan on top of the foundation spec (`.scratch/fenrir-renderer-foundation/spec.md`), which it cites rather than restates. The hard-to-reverse calls are recorded in ADRs:
+Origin: the FenrirRenderer wayfinder map (`.scratch/fenrir-renderer/map.md`). This spec collapses the map's animation tickets (24, 26–34 and 62) into one buildable plan on top of the foundation spec (`.scratch/fenrir-renderer-foundation/spec.md`, built and removed: read it with `git show 28d8f69:.scratch/fenrir-renderer-foundation/spec.md`), which it cites rather than restates. The hard-to-reverse calls are recorded in ADRs:
 
 | ADR | Decision |
 |---|---|
@@ -625,7 +625,7 @@ A new **AnimationDemo** app shows each feature in its own scene, with C# twins o
 - **Decision history:**
   - the wayfinder map `.scratch/fenrir-renderer/map.md` and its tickets 07, 24, 26–34 and 62;
   - ADR-0028, ADR-0031, ADR-0033 to ADR-0040, and ADR-0041 (new);
-  - the foundation spec `.scratch/fenrir-renderer-foundation/spec.md`.
+  - the foundation spec `.scratch/fenrir-renderer-foundation/spec.md` (in history up to 28d8f69).
 - **Settled while writing this spec** (2026-10-22, by the user):
   - **Owner name:** FenrirSkeleton's owner and facade is `Skeletons`, so the foundation's `AssetHandle<Skeleton>` keeps its short name. Masks follow the rule too: `AssetHandle<BoneMask>` resolves to `BoneMaskData`.
   - **C# pose copies are split by name:** `ReadLocals` (final), `ReadBaseLocals` (base, with an optional `PoseKind`) and `ReadModel`. `PoseKind` keeps only ADR-0040's meaning, `Render` or `Simulation`.

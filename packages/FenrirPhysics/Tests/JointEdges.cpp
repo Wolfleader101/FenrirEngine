@@ -297,18 +297,18 @@ TEST_CASE("An inactive joint excludes no collisions", "[physics][joints][inactiv
 
 namespace
 {
-    std::size_t CountColoured(std::span<const DebugLine> lines, std::uint32_t colour)
+    std::size_t CountColoured(std::span<const DrawnLine> lines, const Colour& colour)
     {
         return static_cast<std::size_t>(
-            std::ranges::count_if(lines, [colour](const DebugLine& line) { return line.colour == colour; }));
+            std::ranges::count_if(lines, [colour](const DrawnLine& line) { return SameColour(line.colour, colour); }));
     }
 
     /** The lines of `lines` that start within a millimetre of `from`. */
-    std::vector<DebugLine> LinesFrom(std::span<const DebugLine> lines, const Math::Vec3& from)
+    std::vector<DrawnLine> LinesFrom(std::span<const DrawnLine> lines, const Math::Vec3& from)
     {
-        std::vector<DebugLine> found;
+        std::vector<DrawnLine> found;
         std::ranges::copy_if(lines, std::back_inserter(found),
-                             [&from](const DebugLine& line) { return Math::Magnitude(line.from - from) < 1.0e-3f; });
+                             [&from](const DrawnLine& line) { return Math::Magnitude(line.from - from) < 1.0e-3f; });
         return found;
     }
 
@@ -326,24 +326,24 @@ TEST_CASE("An inactive joint draws only the frames on its surviving bodies, in g
     PhysicsApp test;
     const Chain chain = MakeChain(test.Entities(), 3);
     test.Run(0.5);
-    World(test).SetDebugDraw(DebugDraw::Joints);
+    World(test).SetDebugDraw(PhysicsDebugCategories::Joints);
 
     test.Entities().DestroyEntity(chain.links[1]);
     test.Run(0.2);
 
-    const std::span<const DebugLine> lines = World(test).DebugLines();
+    const std::vector<DrawnLine> lines = DrawnLines(test.app);
     INFO("the top joint draws its two frames in colour, and each joint naming the destroyed link one frame in grey");
     REQUIRE(lines.size() == 12);
-    REQUIRE(CountColoured(lines, DebugColour::InactiveJoint) == 6);
+    REQUIRE(CountColoured(lines, PhysicsDebugColour::InactiveJoint) == 6);
     for (const auto& [where, at] : {std::pair("the top link's bottom", FaceOf(chain.links[0], -1.0f)),
                                     std::pair("the bottom link's top", FaceOf(chain.links[2], 1.0f))})
     {
-        const std::vector<DebugLine> frame = LinesFrom(lines, at);
+        const std::vector<DrawnLine> frame = LinesFrom(lines, at);
         INFO("a grey frame is drawn on " << where << ", where the destroyed link was joined");
         REQUIRE(frame.size() == 3);
-        for (const DebugLine& line : frame)
+        for (const DrawnLine& line : frame)
         {
-            REQUIRE(line.colour == DebugColour::InactiveJoint);
+            REQUIRE(SameColour(line.colour, PhysicsDebugColour::InactiveJoint));
         }
     }
 }

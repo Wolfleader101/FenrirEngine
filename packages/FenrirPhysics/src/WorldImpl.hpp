@@ -12,6 +12,7 @@
 #include "Characters.hpp"
 #include "Contacts.hpp"
 #include "DebugCanvas.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirPhysics/Events.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirScene/Scene.hpp"
@@ -39,6 +40,13 @@ namespace Fenrir
          * overloaded joints, and send the step's contact, trigger and JointBroken events to `app`.
          */
         void Step(App& app, float dt);
+
+        /**
+         * @brief After Step: draws the debug lines of the categories switched on, from the world as the step left it,
+         * into `draw` (its scene's DebugDraw, or null when debug drawing is not installed, and then nothing is drawn),
+         * in the PhysicsDebugGroup with duration 0. Each module draws its own, in a fixed order.
+         */
+        void DrawDebugLines(DebugDraw* draw);
 
         /** @brief Calls `func` for each contact of `entity`'s body touching now. */
         void ForEachContact(const Entity& entity, const std::function<void(const Contact&)>& func) const;
@@ -90,10 +98,6 @@ namespace Fenrir
             return m_bodies;
         }
 
-        /** @brief Debug lines, remade after each step from the categories switched on, if any: each module draws its
-         * own, in a fixed order. */
-        void DrawDebugLines();
-
         /** @brief The backend's form of a query's filter: its ignored body resolved as ResolveBody does, and a handle
          * to an entity no longer alive ignoring nothing. */
         [[nodiscard]] Backend::QueryFilter ToBackend(const QueryFilter& filter) const;
@@ -109,8 +113,8 @@ namespace Fenrir
         Detail::Characters m_characters;
         Detail::Vehicles m_vehicles;
 
-        // The debug lines switched on, and those the last step made.
-        DebugDraw m_debugDraw = DebugDraw::None;
+        // The categories of debug lines switched on, and what they are drawn through.
+        PhysicsDebugCategories m_debugDraw = PhysicsDebugCategories::None;
         Detail::DebugCanvas m_canvas;
     };
 

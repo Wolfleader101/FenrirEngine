@@ -1,0 +1,7 @@
+# The faces in another order, which the face names put right.
+-Z nz.png
++Z pz.png
+-Y ny.png
++Y py.png
+-X nx.png
++X px.png

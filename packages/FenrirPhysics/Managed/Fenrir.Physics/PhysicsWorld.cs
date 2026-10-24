@@ -1,3 +1,4 @@
+using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Physics;
@@ -207,9 +208,13 @@ public static class PhysicsWorld
         set => PhysicsNative.SetGravity(in value);
     }
 
-    /// <summary>Chooses which categories of debug lines the world draws, from the next step on.</summary>
+    /// <summary>
+    /// Chooses which categories of debug lines the world draws, from the next step on, into its scene's debug drawing in
+    /// the <c>Physics</c> group. This is physics's only debug call: show, hide or clear that group, and draw shapes of
+    /// your own, with <c>Fenrir.DebugDraw</c>'s <c>DebugDraw</c>.
+    /// </summary>
     /// <returns>Whether there was a world to draw them.</returns>
-    public static bool SetDebugDraw(DebugDraw categories) => PhysicsNative.SetDebugDraw((uint)categories);
+    public static bool SetDebugDraw(PhysicsDebugCategories categories) => PhysicsNative.SetDebugDraw((uint)categories);
 
     /// <summary>
     /// Cooks a collision mesh from <paramref name="vertices"/> and, for <see cref="MeshShape"/>, the triangles

@@ -1,18 +1,19 @@
 #pragma once
 
-// What a physics world's debug lines are drawn on: the lines a step makes, the line helpers and colours the features
-// share, and the edges of the hulls and meshes drawn, asked of the backend once per collision mesh while it is drawn.
-// Never through the backend's own debug renderer, so the lines look the same whatever the backend. Private to the
-// FenrirPhysics package.
+// What a physics world's debug lines are drawn through: the scene's DebugDraw (ADR-0025) a step's lines go into, in the
+// PhysicsDebugGroup with duration 0, the line helpers and colours the features share, and the edges of the hulls and
+// meshes drawn, asked of the backend once per collision mesh while it is drawn. Never through the backend's own debug
+// renderer, so the lines look the same whatever the backend. Private to the FenrirPhysics package.
 
 #include <cstdint>
 #include <map>
 #include <numbers>
-#include <span>
 #include <vector>
 
 #include "Backend/Backend.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
+#include "FenrirMath/Colour.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/DebugLines.hpp"
 
@@ -28,23 +29,25 @@ namespace Fenrir::Detail
     inline const Math::Vec3 yAxis(0.0f, 1.0f, 0.0f);
     inline const Math::Vec3 zAxis(0.0f, 0.0f, 1.0f);
 
-    // Adds lines through a pose: points given in the shape's own space come out in world space.
+    // How every debug line is drawn: in the Physics group, with duration 0, so a step's lines last until the next tick.
+    inline const ShapeOptions debugLineOptions{.group = PhysicsDebugGroup};
+
+    // Draws lines through a pose: points given in the shape's own space come out in world space.
     class LineWriter
     {
       public:
-        LineWriter(std::vector<DebugLine>& lines, const Math::Vec3& position, const Math::Quat& rotation,
-                   std::uint32_t colour)
-            : m_lines(&lines), m_position(position), m_rotation(rotation), m_colour(colour)
+        LineWriter(DebugDraw& draw, const Math::Vec3& position, const Math::Quat& rotation, const Colour& colour)
+            : m_draw(&draw), m_position(position), m_rotation(rotation), m_colour(colour)
         {
         }
 
         void operator()(const Math::Vec3& from, const Math::Vec3& to) const
         {
-            m_lines->push_back(DebugLine{Place(from), Place(to), m_colour});
+            m_draw->Line(Place(from), Place(to), m_colour, debugLineOptions);
         }
 
         /** @brief A circle of `radius` about `centre`, in the plane of the unit axes `u` and `v`, from `start` to `end`
-         * radians. */
+         * radians: `segments` lines, drawn as one polyline. */
         void Arc(const Math::Vec3& centre, const Math::Vec3& u, const Math::Vec3& v, float radius, float start,
                  float end, int segments) const;
 
@@ -57,10 +60,10 @@ namespace Fenrir::Detail
             return m_position + m_rotation * point;
         }
 
-        std::vector<DebugLine>* m_lines;
+        DebugDraw* m_draw;
         Math::Vec3 m_position;
         Math::Quat m_rotation;
-        std::uint32_t m_colour;
+        Colour m_colour;
     };
 
     class DebugCanvas
@@ -69,33 +72,28 @@ namespace Fenrir::Detail
         /** @brief A canvas asking `backend` for the edges of the hulls and meshes it draws. */
         explicit DebugCanvas(Backend::World& backend);
 
-        /** @brief With no category on: no lines, and no shape edges kept. */
+        /** @brief With no category on, or nothing to draw into: no shape edges kept. */
         void Clear();
-        /** @brief Before a step's lines: the last step's go. */
-        void Begin();
+        /** @brief Before a step's lines: they are drawn into `draw` until End. */
+        void Begin(DebugDraw& draw);
         /** @brief After a step's lines: keeps the edges of the hulls and meshes drawn this time, and forgets the rest.
          */
         void End();
 
-        [[nodiscard]] std::span<const DebugLine> Lines() const
-        {
-            return m_lines;
-        }
-
-        /** @brief Adds a line from `from` to `to`, in world space. */
-        void Line(const Math::Vec3& from, const Math::Vec3& to, std::uint32_t colour);
+        /** @brief Draws a line from `from` to `to`, in world space. */
+        void Line(const Math::Vec3& from, const Math::Vec3& to, const Colour& colour);
 
         /** @brief A writer of lines through the pose at `position` and `rotation`. */
-        [[nodiscard]] LineWriter Writer(const Math::Vec3& position, const Math::Quat& rotation, std::uint32_t colour);
+        [[nodiscard]] LineWriter Writer(const Math::Vec3& position, const Math::Quat& rotation, const Colour& colour);
 
         /** @brief A contact point: a small cross at `point` and its normal out from it. */
-        void ContactPoint(const Math::Vec3& point, const Math::Vec3& normal, std::uint32_t colour);
+        void ContactPoint(const Math::Vec3& point, const Math::Vec3& normal, const Colour& colour);
 
         /** @brief A collider of `shape`, at its pose `pose` in a body whose step pose is `body`. */
-        void Collider(const CollisionShape& shape, const Transform& pose, const Transform& body, std::uint32_t colour);
+        void Collider(const CollisionShape& shape, const Transform& pose, const Transform& body, const Colour& colour);
 
         /** @brief A collider's colour: by its body's kind, dimmed while it sleeps. */
-        [[nodiscard]] static std::uint32_t ColliderColour(bool isTrigger, MotionType motionType, bool sleeping);
+        [[nodiscard]] static Colour ColliderColour(bool isTrigger, MotionType motionType, bool sleeping);
 
       private:
         struct ShapeEdgesKey
@@ -107,7 +105,8 @@ namespace Fenrir::Detail
         };
 
         Backend::World* m_backend;
-        std::vector<DebugLine> m_lines;
+        // What a step's lines are drawn into, between Begin and End.
+        DebugDraw* m_draw = nullptr;
         // The edges of the hulls and meshes drawn by the last step, and by this one so far, in their own space before
         // scale, as pairs of ends.
         std::map<ShapeEdgesKey, std::vector<Math::Vec3>> m_shapeEdges;

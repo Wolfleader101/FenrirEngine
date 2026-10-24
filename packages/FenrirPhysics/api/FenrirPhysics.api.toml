@@ -1,4 +1,4 @@
-# FenrirPhysics's selection (ADR-0016, tools/describe-api/README.md): the headers to read, relative to this file, and
+# FenrirPhysics's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
 # each type the package shares with bindings, with its role. The shapes, joint kinds, vehicle kinds, their tagged unions
 # and enums are described because the types below hold them.
 headers = [

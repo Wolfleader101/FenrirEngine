@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using Fenrir.Math;
 using Fenrir.Scripting;
 using Fenrir.Physics;
 

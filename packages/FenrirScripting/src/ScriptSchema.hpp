@@ -83,10 +83,11 @@ namespace Fenrir::Detail
         [[nodiscard]] virtual std::string Fingerprint(const ScriptComponentDescription& description) = 0;
 
         /**
-         * @brief Checks every native component, event and shared struct in `registry` against its C# struct in this
-         * assembly.
+         * @brief Checks every native component, event, shared struct and resource in `registry` against its C# struct
+         * in this assembly.
          *
-         * @return success, or a diagnostic naming the component, event or shared struct and the first mismatching field
+         * @return success, or a diagnostic naming the component, event, shared struct or resource and the first
+         * mismatching field
          */
         [[nodiscard]] virtual Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) = 0;
     };
@@ -95,7 +96,7 @@ namespace Fenrir::Detail
      * @brief Everything that must hold before a freshly loaded script assembly is kept, and then the keeping.
      *
      * It either commits the whole load or changes nothing: what the assembly defines is discovered and checked, every
-     * native component, event and shared struct is checked against its C# struct, and only then is what the previous
+     * native component, event, shared struct and resource is checked against its C# struct, and only then is what the
      * generation left in the ECS and the App compared with this one's definitions (unchanged data stays, anything else
      * goes with a warning) and the new definitions registered.
      *

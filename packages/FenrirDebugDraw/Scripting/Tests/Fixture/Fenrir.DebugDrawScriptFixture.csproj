@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that draws debug shapes and text from C#. The build passes -p:FenrirScriptingSdk=<the SDK folder>/
+       and -p:FenrirDebugDrawContractDir=<the folder holding Fenrir.DebugDraw.dll>/. The contract is compile-time only: the
+       host shares its own copy. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirDebugDrawContractDir)' != ''">
+    <Reference Include="Fenrir.DebugDraw">
+      <HintPath>$(FenrirDebugDrawContractDir)Fenrir.DebugDraw.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folder, the contract comes from its source project. -->
+  <ItemGroup Condition="'$(FenrirDebugDrawContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../Managed/Fenrir.DebugDraw/Fenrir.DebugDraw.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

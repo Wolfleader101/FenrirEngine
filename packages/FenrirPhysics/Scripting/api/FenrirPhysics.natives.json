@@ -713,7 +713,7 @@
       "namespace": "Fenrir::PhysicsNatives",
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
-      "doc": "Chooses the categories of debug lines the world draws: `categories` is DebugDraw's bits.",
+      "doc": "Chooses the categories of debug lines the world draws: `categories` is PhysicsDebugCategories's bits.",
       "returns": {
         "type": "bool",
         "kind": "bool",

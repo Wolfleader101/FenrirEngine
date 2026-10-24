@@ -274,19 +274,19 @@ namespace Fenrir::Detail
         {
             // The shape it has, not the Collider's: while a shape edit waits, that is the one bodies and queries see.
             canvas.Collider(record.shape, Transform(Math::Vec3(0.0f), Math::Quat(1.0f, 0.0f, 0.0f, 0.0f), record.scale),
-                            m_poses->Baseline(id), DebugColour::Character);
+                            m_poses->Baseline(id), PhysicsDebugColour::Character);
 
             const Backend::CharacterMoved& moved = record.moved;
             if (moved.ground == GroundState::OnGround || moved.ground == GroundState::OnSteepGround)
             {
-                const std::uint32_t colour =
-                    moved.ground == GroundState::OnGround ? DebugColour::Ground : DebugColour::SteepGround;
+                const Colour& colour = moved.ground == GroundState::OnGround ? PhysicsDebugColour::Ground
+                                                                             : PhysicsDebugColour::SteepGround;
                 canvas.Line(moved.groundPoint, moved.groundPoint + groundNormal * moved.groundNormal, colour);
             }
             if (moved.movedVelocity != Math::Vec3(0.0f))
             {
                 const Math::Vec3& at = m_poses->Baseline(id).pos;
-                canvas.Line(at, at + velocitySeconds * moved.movedVelocity, DebugColour::Velocity);
+                canvas.Line(at, at + velocitySeconds * moved.movedVelocity, PhysicsDebugColour::Velocity);
             }
         }
     }
