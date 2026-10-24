@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- A script assembly that uses the renderer from C#. The build passes -p:FenrirScriptingSdk=<the SDK folder>/ and the
+       folders holding Fenrir.Input.dll, Fenrir.Assets.dll and Fenrir.Renderer.dll (-p:FenrirInputContractDir=...,
+       -p:FenrirAssetsContractDir=... and -p:FenrirRendererContractDir=...). The contracts are compile-time only: the host
+       shares its own copies. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup Condition="'$(FenrirRendererContractDir)' != ''">
+    <Reference Include="Fenrir.Input">
+      <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Assets">
+      <HintPath>$(FenrirAssetsContractDir)Fenrir.Assets.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Fenrir.Renderer">
+      <HintPath>$(FenrirRendererContractDir)Fenrir.Renderer.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+  <!-- In an editor, which passes no folders, the contracts come from their source projects. -->
+  <ItemGroup Condition="'$(FenrirRendererContractDir)' == ''">
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../Managed/Fenrir.Renderer/Fenrir.Renderer.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../../FenrirInput/Managed/Fenrir.Input/Fenrir.Input.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)../../../../FenrirAssets/Managed/Fenrir.Assets/Fenrir.Assets.csproj">
+      <Private>false</Private>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

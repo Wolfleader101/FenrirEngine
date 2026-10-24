@@ -1,0 +1,16 @@
+# The physics binding's own selection (ADR-0042, tools/describe-api/README.md): the types its natives take by pointer in
+# the form C# holds them, with each entity as a C# Entity's 32-bit value rather than FenrirPhysics's Entity. The binding
+# (FenrirPhysics.binding.toml) binds these in place of FenrirPhysics's own query types.
+headers = ["../src/ScriptQueries.hpp"]
+
+[types]
+"Fenrir::ScriptQueries::QueryFilter" = "shared-struct"
+"Fenrir::ScriptQueries::RaycastHit" = "shared-struct"
+"Fenrir::ScriptQueries::ShapeCastHit" = "shared-struct"
+"Fenrir::ScriptQueries::MoveCastHit" = "shared-struct"
+"Fenrir::ScriptQueries::PenetrationHit" = "shared-struct"
+"Fenrir::ScriptQueries::OverlapHit" = "shared-struct"
+"Fenrir::ScriptQueries::Contact" = "shared-struct"
+
+"Fenrir::ScriptQueries::EntityValue" = "bound-type"
+"Fenrir::Math::Vec3" = "bound-type"

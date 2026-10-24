@@ -1,0 +1,859 @@
+{
+  "binding": "FenrirPhysics",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "AddForce",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Pushes the entity's body with `force` (newtons, world space) for the next step only.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "force",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddImpulse",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next step.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "impulse",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddTorque",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Twists the entity's body with `torque` (newton metres, world space) for the next step only.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "torque",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "AddAngularImpulse",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Changes the angular velocity of the entity's body by `impulse` over its moment of inertia.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "impulse",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "Raycast",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The nearest body a ray hits (PhysicsWorld::Raycast).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it hit a body."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "direction",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "maxDistance",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hit",
+          "type": "Fenrir::ScriptQueries::RaycastHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::RaycastHit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "Where it hit; the default when it did not."
+        }
+      ]
+    },
+    {
+      "name": "RaycastAll",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes a ray's hits to `hits`, nearest first (PhysicsWorld::RaycastAll).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "direction",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "maxDistance",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fenrir::ScriptQueries::RaycastHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::RaycastHit",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` hits."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ShapeCast",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The first body a swept shape touches (PhysicsWorld::ShapeCast).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it touched a body."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "direction",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "maxDistance",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hit",
+          "type": "Fenrir::ScriptQueries::ShapeCastHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::ShapeCastHit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "Where it touched; the default when it did not."
+        }
+      ]
+    },
+    {
+      "name": "ShapeCastAll",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes a shape cast's hits to `hits`, nearest first (PhysicsWorld::ShapeCastAll).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "direction",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "maxDistance",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fenrir::ScriptQueries::ShapeCastHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::ShapeCastHit",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` hits."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "MoveCast",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "How far a shape can move along `motion` and stay clear (PhysicsWorld::MoveCast).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether something blocks the motion."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "motion",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hit",
+          "type": "Fenrir::ScriptQueries::MoveCastHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::MoveCastHit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "What blocks it; the default when nothing does."
+        }
+      ]
+    },
+    {
+      "name": "Overlap",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes the colliders a shape overlaps to `hits` (PhysicsWorld::Overlap).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fenrir::ScriptQueries::OverlapHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::OverlapHit",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` hits."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "Penetrations",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes the colliders a shape overlaps to `hits`, deepest first, with the way out of each (PhysicsWorld::Penetrations).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fenrir::ScriptQueries::PenetrationHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::PenetrationHit",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` hits."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "Depenetrate",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The offset that moves a shape out of everything it overlaps (PhysicsWorld::Depenetrate).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a world to ask."
+      },
+      "parameters": [
+        {
+          "name": "shape",
+          "type": "const Fenrir::CollisionShape*",
+          "kind": "pointer",
+          "pointee": "Fenrir::CollisionShape",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pose",
+          "type": "const Fenrir::Transform*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Transform",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "offset",
+          "type": "Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The offset; zero when there is no world."
+        }
+      ]
+    },
+    {
+      "name": "OverlapPoint",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes the colliders containing `point` to `hits` (PhysicsWorld::OverlapPoint).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "filter",
+          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hits",
+          "type": "Fenrir::ScriptQueries::OverlapHit*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::OverlapHit",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` hits."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ContactsOf",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Writes the contacts the body entity `body` has now to `contacts` (PhysicsWorld::ForEachContact).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many it wrote."
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "contacts",
+          "type": "Fenrir::ScriptQueries::Contact*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptQueries::Contact",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` contacts."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "IsSleeping",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Whether the body of `body` is asleep: false with no world or no body.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "Bounds",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The world-space box around the body of `body` (PhysicsWorld::Bounds).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the entity has a body."
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "bounds",
+          "type": "Fenrir::Math::AABB*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::AABB",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The box; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "Gravity",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The world's gravity.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a world."
+      },
+      "parameters": [
+        {
+          "name": "gravity",
+          "type": "Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The gravity, in metres per second squared; zero with no world."
+        }
+      ]
+    },
+    {
+      "name": "SetGravity",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Sets the world's gravity from the next step on, waking its bodies.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a world."
+      },
+      "parameters": [
+        {
+          "name": "gravity",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetDebugDraw",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Chooses the categories of debug lines the world draws: `categories` is PhysicsDebugCategories's bits.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was a world."
+      },
+      "parameters": [
+        {
+          "name": "categories",
+          "type": "std::uint32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "CreateCollisionMesh",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Cooks a collision mesh through the active scene's world (PhysicsWorld::CreateCollisionMesh).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The mesh's id, 0 for none."
+      },
+      "parameters": [
+        {
+          "name": "vertices",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "vertexCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "indices",
+          "type": "const std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32",
+          "const": true,
+          "doc": "May be null when `indexCount` is 0."
+        },
+        {
+          "name": "indexCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "ReleaseCollisionMesh",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "Releases the collision mesh whose id is `mesh` (PhysicsWorld::ReleaseCollisionMesh).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the mesh was alive."
+      },
+      "parameters": [
+        {
+          "name": "mesh",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "FrameFromWorld",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "C++'s FrameFromWorld, once the bodies it needs are alive (C++'s gives identity frames without a word, having no app to warn through); identity frames, warning once, if not. Needs no physics world.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "bodyA",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "bodyB",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32",
+          "doc": "The empty value (uint.MaxValue in C#) is the world; any other names an entity of the active scene."
+        },
+        {
+          "name": "anchor",
+          "type": "const Fenrir::JointFrame*",
+          "kind": "pointer",
+          "pointee": "Fenrir::JointFrame",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "frames",
+          "type": "Fenrir::JointFrames*",
+          "kind": "pointer",
+          "pointee": "Fenrir::JointFrames",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The joint's frames; identity frames when a body is not alive."
+        }
+      ]
+    },
+    {
+      "name": "GetJointState",
+      "namespace": "Fenrir::PhysicsNatives",
+      "source": "../src/PhysicsScripting.cpp",
+      "state": "Fenrir::PhysicsScripting",
+      "doc": "The world's reading of the joint on `joint` (PhysicsWorld::GetJointState). An inactive or unstepped joint reads zeroed from the world itself, which already warns about an inactive one.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "joint",
+          "type": "Fenrir::ScriptQueries::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "state",
+          "type": "Fenrir::JointState*",
+          "kind": "pointer",
+          "pointee": "Fenrir::JointState",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The reading; the zeroed state (warning once) with no world or no Joint."
+        }
+      ]
+    }
+  ]
+}

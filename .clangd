@@ -1,0 +1,3 @@
+# Where clangd finds how each file is compiled. Configure once (cmake --preset clang-x64-debug) to create it.
+CompileFlags:
+  CompilationDatabase: out/build/clang-x64-debug

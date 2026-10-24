@@ -1,10 +1,12 @@
 #pragma once
 
 #include <format>
-#include <string>
+#include <memory>
+#include <string_view>
 
 namespace Fenrir
 {
+
     /**
      * @brief Interface for logging
      *
@@ -15,55 +17,69 @@ namespace Fenrir
         virtual ~ILogger() = default;
 
         template <typename... Args>
-        void Log(const std::string& format, Args&&... args);
+        void Log(std::string_view format, Args&&... args);
 
         template <typename... Args>
-        void Info(const std::string& format, Args&&... args);
+        void Info(std::string_view format, Args&&... args);
 
         template <typename... Args>
-        void Warn(const std::string& format, Args&&... args);
+        void Warn(std::string_view format, Args&&... args);
 
         template <typename... Args>
-        void Error(const std::string& format, Args&&... args);
+        void Error(std::string_view format, Args&&... args);
 
         template <typename... Args>
-        void Fatal(const std::string& format, Args&&... args);
+        void Fatal(std::string_view format, Args&&... args);
+
+        /**
+         * @brief Add a logger to the console logger, this are used to log to multiple places, and equivalent to sinks
+         *
+         * @param logger the logger to add
+         */
+        virtual void AddLogger(std::shared_ptr<ILogger> logger) = 0;
+
+        /**
+         * @brief Remove a logger from the console logger
+         *
+         * @param logger the logger to remove
+         */
+        virtual void RemoveLogger(std::shared_ptr<ILogger> logger) = 0;
 
       protected:
-        virtual void LogImpl(const std::string& message) = 0;
-        virtual void InfoImpl(const std::string& message) = 0;
-        virtual void WarnImpl(const std::string& message) = 0;
-        virtual void ErrorImpl(const std::string& message) = 0;
-        virtual void FatalImpl(const std::string& message) = 0;
+        virtual void LogImpl(std::string_view message) = 0;
+        virtual void InfoImpl(std::string_view message) = 0;
+        virtual void WarnImpl(std::string_view message) = 0;
+        virtual void ErrorImpl(std::string_view message) = 0;
+        virtual void FatalImpl(std::string_view message) = 0;
     };
 
     template <typename... Args>
-    void ILogger::Log(const std::string& format, Args&&... args)
+    void ILogger::Log(std::string_view format, Args&&... args)
     {
-        LogImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
+        LogImpl(std::vformat(format, std::make_format_args(args...)));
     }
 
     template <typename... Args>
-    void ILogger::Info(const std::string& format, Args&&... args)
+    void ILogger::Info(std::string_view format, Args&&... args)
     {
-        InfoImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
+        InfoImpl(std::vformat(format, std::make_format_args(args...)));
     }
 
     template <typename... Args>
-    void ILogger::Warn(const std::string& format, Args&&... args)
+    void ILogger::Warn(std::string_view format, Args&&... args)
     {
-        WarnImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
+        WarnImpl(std::vformat(format, std::make_format_args(args...)));
     }
 
     template <typename... Args>
-    void ILogger::Error(const std::string& format, Args&&... args)
+    void ILogger::Error(std::string_view format, Args&&... args)
     {
-        ErrorImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
+        ErrorImpl(std::vformat(format, std::make_format_args(args...)));
     }
 
     template <typename... Args>
-    void ILogger::Fatal(const std::string& format, Args&&... args)
+    void ILogger::Fatal(std::string_view format, Args&&... args)
     {
-        FatalImpl(std::vformat(format, std::make_format_args(std::forward<Args>(args)...)));
+        FatalImpl(std::vformat(format, std::make_format_args(args...)));
     }
 } // namespace Fenrir

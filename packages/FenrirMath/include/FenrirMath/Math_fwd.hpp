@@ -17,4 +17,16 @@ namespace Fenrir::Math
     using Mat3 = glm::mat3;
     using Mat4 = glm::mat4;
     using Quat = glm::quat;
-}
+
+    struct AABB
+    {
+        Vec3 min;
+        Vec3 max;
+
+        AABB() = default;
+        AABB(const Vec3& min, const Vec3& max) : min(min), max(max)
+        {
+        }
+    };
+
+} // namespace Fenrir::Math

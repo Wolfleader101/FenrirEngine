@@ -7,12 +7,119 @@
 #include "FenrirScheduler/Scheduler.hpp"
 #include "FenrirTime/Time.hpp"
 
+#include <algorithm>
+#include <cassert>
+#include <cstddef>
+#include <cstring>
+#include <iterator>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <typeindex>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace Fenrir
 {
+
+    /**
+     * @brief The cursor of a reader that has not read yet. Its first read starts at the oldest event the queue still
+     * holds and reports no misses: events sent before the reader existed are not ones it missed.
+     */
+    inline constexpr std::size_t NewReaderCursor = static_cast<std::size_t>(-1);
+
+    /**
+     * @brief What one type-erased read through a cursor yields (IEventQueue::ReadRawAfter): the events sent since the
+     * previous read, oldest first, as up to two arrays of EventSize()-byte elements in the queue's buffers (nothing is
+     * copied). Valid until the queue is next sent to or swapped. The byte form of EventRange.
+     */
+    struct RawEventRange
+    {
+        const void* older = nullptr;
+        std::size_t olderCount = 0;
+        const void* newer = nullptr;
+        std::size_t newerCount = 0;
+        /** @brief How many events were dropped before the reader got to them (it went two swaps without reading). */
+        std::size_t missed = 0;
+
+        [[nodiscard]] std::size_t Count() const noexcept
+        {
+            return olderCount + newerCount;
+        }
+    };
+
+    namespace Detail
+    {
+        /**
+         * @brief Where a queue's two buffers sit in the count of every event it was ever sent, and the arithmetic of
+         * reading them through a cursor. Shared by EventQueue<T> and the App's queues of events known only by their
+         * layout, so both rotate and read alike.
+         */
+        class EventCursor
+        {
+          public:
+            /** @brief What one read through a cursor yields: how many events to skip at the start of each buffer, and
+             * how many were dropped before the reader got to them. */
+            struct Read
+            {
+                std::size_t olderSkip = 0;
+                std::size_t newerSkip = 0;
+                std::size_t missed = 0;
+            };
+
+            /** @brief The buffers swapped: the current one, holding `currentCount` events, became the older one. */
+            void Swap(std::size_t currentCount) noexcept
+            {
+                const std::size_t sent = m_currentStart + currentCount;
+                m_previousStart = m_currentStart;
+                m_currentStart = sent;
+            }
+
+            /**
+             * @brief Reads the events sent after the first `seen` (NewReaderCursor for a reader that has not read)
+             * from buffers holding `previousCount` and `currentCount` events, and moves `seen` past them.
+             */
+            [[nodiscard]] Read ReadAfter(std::size_t& seen, std::size_t previousCount,
+                                         std::size_t currentCount) const noexcept
+            {
+                if (seen == NewReaderCursor)
+                {
+                    seen = m_previousStart;
+                }
+                const std::size_t from = std::max(seen, m_previousStart);
+                Read read;
+                read.olderSkip = std::min(from - m_previousStart, previousCount);
+                read.newerSkip = std::min(from > m_currentStart ? from - m_currentStart : 0, currentCount);
+                read.missed = m_previousStart > seen ? m_previousStart - seen : 0;
+                seen = m_currentStart + currentCount;
+                return read;
+            }
+
+          private:
+            // How many events were sent to the queue before the first event of each buffer.
+            std::size_t m_previousStart = 0;
+            std::size_t m_currentStart = 0;
+        };
+
+        /**
+         * @brief Sends an event by calling `send`: now, or, from a system the scheduler runs in parallel, after its
+         * batch (SendBuffer). Every send to an App's event queues goes through it.
+         */
+        template <typename Send>
+        void SendOrHold(Send&& send)
+        {
+            if (SendBuffer* buffer = SendBuffer::OfThisThread())
+            {
+                buffer->Add(std::forward<Send>(send));
+                return;
+            }
+            send();
+        }
+    } // namespace Detail
 
     /**
      * @brief Interface for event queues
@@ -28,10 +135,168 @@ namespace Fenrir
 
       public:
         /**
-         * @brief update the event queue
-         *
+         * @brief Swaps the two buffers, dropping the older one's events. The App does this at the end of each frame
+         * that ran a tick.
          */
-        virtual void Update() = 0;
+        virtual void Swap() = 0;
+
+        /**
+         * @name Type-erased access
+         * For code that knows an event by its name and layout rather than its C++ type (scripting). A queue of events
+         * that are not trivially copyable has an EventSize() of zero and cannot be used this way.
+         * @{
+         */
+
+        /** @brief Bytes in one event, or zero if the events cannot be copied byte by byte. */
+        [[nodiscard]] virtual std::size_t EventSize() const noexcept = 0;
+
+        /** @brief Alignment of one event. */
+        [[nodiscard]] virtual std::size_t EventAlignment() const noexcept = 0;
+
+        /** @brief Copies one event (EventSize() bytes) into the queue's current frame. False if the queue has no byte
+         * size. From a system the scheduler runs in parallel, the copy is held and sent after the batch, as
+         * App::SendEvent does. */
+        virtual bool SendRaw(const void* event) = 0;
+
+        /**
+         * @brief The events sent after the first `seen` this queue was ever sent, oldest first; moves `seen` past them.
+         * The cursor of an EventReader, for code that knows the event only by its layout: the caller keeps `seen` (one
+         * per reader, starting at NewReaderCursor), so readers never share state. An empty range if the queue has no
+         * byte size.
+         */
+        [[nodiscard]] virtual RawEventRange ReadRawAfter(std::size_t& seen) const = 0;
+        /** @} */
+    };
+
+    /**
+     * @brief The events one read of an EventReader yields: those sent since its previous read, oldest first, as up to
+     * two ranges into the queue's buffers (nothing is copied). Valid until the queue is next sent to or swapped, so
+     * for the rest of the system that read it unless that system sends events of the same type.
+     *
+     * @tparam TEvent the type of event
+     */
+    template <typename TEvent>
+    class EventRange
+    {
+      public:
+        /** @brief Walks the older range, then the newer one. */
+        class Iterator
+        {
+          public:
+            using iterator_category = std::forward_iterator_tag;
+            using value_type = TEvent;
+            using difference_type = std::ptrdiff_t;
+            using pointer = const TEvent*;
+            using reference = const TEvent&;
+
+            Iterator() = default;
+            Iterator(const TEvent* at, const TEvent* end, const TEvent* next, const TEvent* nextEnd)
+                : m_at(at), m_end(end), m_next(next), m_nextEnd(nextEnd)
+            {
+                SkipEmpty();
+            }
+
+            reference operator*() const
+            {
+                return *m_at;
+            }
+            pointer operator->() const
+            {
+                return m_at;
+            }
+            Iterator& operator++()
+            {
+                ++m_at;
+                SkipEmpty();
+                return *this;
+            }
+            Iterator operator++(int)
+            {
+                Iterator before = *this;
+                ++*this;
+                return before;
+            }
+            friend bool operator==(const Iterator& a, const Iterator& b)
+            {
+                return a.m_at == b.m_at;
+            }
+
+          private:
+            const TEvent* m_at = nullptr;
+            const TEvent* m_end = nullptr;
+            const TEvent* m_next = nullptr;
+            const TEvent* m_nextEnd = nullptr;
+
+            // At the end of the first range, carry on into the second.
+            void SkipEmpty()
+            {
+                if (m_at == m_end && m_next != m_nextEnd)
+                {
+                    m_at = m_next;
+                    m_end = m_nextEnd;
+                    m_next = m_nextEnd;
+                }
+            }
+        };
+
+        EventRange() = default;
+        EventRange(std::span<const TEvent> older, std::span<const TEvent> newer, std::size_t missed)
+            : m_older(older), m_newer(newer), m_missed(missed)
+        {
+        }
+
+        /** @brief The first event, the oldest. */
+        [[nodiscard]] Iterator begin() const
+        {
+            return {m_older.data(), m_older.data() + m_older.size(), m_newer.data(), m_newer.data() + m_newer.size()};
+        }
+        /** @brief Past the last event, the newest. */
+        [[nodiscard]] Iterator end() const
+        {
+            const TEvent* last = m_newer.data() + m_newer.size();
+            if (m_newer.empty())
+            {
+                last = m_older.data() + m_older.size();
+            }
+            return {last, last, last, last};
+        }
+
+        /** @brief How many events the read yielded. */
+        [[nodiscard]] std::size_t size() const noexcept
+        {
+            return m_older.size() + m_newer.size();
+        }
+        /** @brief Whether the read yielded no events. */
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return size() == 0;
+        }
+
+        /**
+         * @brief How many events were dropped before the reader got to them: it went two swaps without reading. Zero
+         * for a reader that reads at least once per swap.
+         */
+        [[nodiscard]] std::size_t Missed() const noexcept
+        {
+            return m_missed;
+        }
+
+        /** @brief The part of the events in the older of the queue's buffers: the oldest of them. */
+        [[nodiscard]] std::span<const TEvent> Older() const noexcept
+        {
+            return m_older;
+        }
+
+        /** @brief The part of the events in the newer of the queue's buffers, after those in Older(). */
+        [[nodiscard]] std::span<const TEvent> Newer() const noexcept
+        {
+            return m_newer;
+        }
+
+      private:
+        std::span<const TEvent> m_older;
+        std::span<const TEvent> m_newer;
+        std::size_t m_missed = 0;
     };
 
     /**
@@ -53,37 +318,74 @@ namespace Fenrir
             currentBuffer.push_back(event);
         }
 
-        /**
-         * @brief Update the event queue
-         *
-         */
-        void Update() override
+        void Swap() override
         {
-            // clear the buffer that is two frames old
+            // clear the older buffer, then swap: current becomes previous, and previous becomes the new current
+            cursor.Swap(currentBuffer.size());
             previousBuffer.clear();
-
-            // swap the buffers: current becomes previous, and previous becomes the new current
             std::swap(currentBuffer, previousBuffer);
         }
 
         /**
-         * @brief Read the events from the queue
-         *
-         * @return const std::vector<TEvent>& the events
+         * @brief The events sent after the first `seen` this queue was ever sent, oldest first; moves `seen` past
+         * them. The cursor of an EventReader; NewReaderCursor for one that has not read yet.
          */
-        const std::vector<TEvent>& ReadEvents() const
+        EventRange<TEvent> ReadAfter(std::size_t& seen) const
         {
-            // combine both current and previous buffers for reading
-            combinedBuffer.clear();
-            combinedBuffer.insert(combinedBuffer.end(), previousBuffer.begin(), previousBuffer.end());
-            combinedBuffer.insert(combinedBuffer.end(), currentBuffer.begin(), currentBuffer.end());
-            return combinedBuffer;
+            const Detail::EventCursor::Read read = cursor.ReadAfter(seen, previousBuffer.size(), currentBuffer.size());
+            return {std::span<const TEvent>(previousBuffer).subspan(read.olderSkip),
+                    std::span<const TEvent>(currentBuffer).subspan(read.newerSkip), read.missed};
+        }
+
+        // Events that can be copied as bytes (and so sent and read by code that knows only their layout).
+        static constexpr bool ByteCopyable =
+            std::is_trivially_copyable_v<TEvent> && std::is_default_constructible_v<TEvent>;
+
+        [[nodiscard]] std::size_t EventSize() const noexcept override
+        {
+            return ByteCopyable ? sizeof(TEvent) : 0;
+        }
+
+        [[nodiscard]] std::size_t EventAlignment() const noexcept override
+        {
+            return alignof(TEvent);
+        }
+
+        bool SendRaw(const void* event) override
+        {
+            if constexpr (ByteCopyable)
+            {
+                TEvent copy;
+                std::memcpy(&copy, event, sizeof(TEvent));
+                Detail::SendOrHold([this, copy] { Send(copy); });
+                return true;
+            }
+            else
+            {
+                (void)event;
+                return false;
+            }
+        }
+
+        [[nodiscard]] RawEventRange ReadRawAfter(std::size_t& seen) const override
+        {
+            if constexpr (ByteCopyable)
+            {
+                const EventRange<TEvent> events = ReadAfter(seen);
+                return {events.Older().data(), events.Older().size(), events.Newer().data(), events.Newer().size(),
+                        events.Missed()};
+            }
+            else
+            {
+                (void)seen;
+                return {};
+            }
         }
 
       private:
         std::vector<TEvent> currentBuffer;
         std::vector<TEvent> previousBuffer;
-        mutable std::vector<TEvent> combinedBuffer; // marked as mutable because ReadEvents() is const
+        Detail::EventCursor cursor;
     };
 
     /**
@@ -92,6 +394,13 @@ namespace Fenrir
      * This class is responsible for running the update loop and managing the scheduler
      * It is also responsible for setup of all of the modular engine systems passed in, and handling all events
      *
+     * **Packages.** An engine package is turned on with `X::Install(App&, XConfig)`, which adds its systems and returns
+     * a move-only owner the app keeps, destroyed before the App. State the package keeps for the whole app (input
+     * devices, the asset store, a window's state) is an app resource (AddResource), and state it keeps per scene is a
+     * scene resource; the owner holds the App and reaches its state through it, so the owner can be moved. When a
+     * package cannot start, `Install` logs one diagnostic saying why and returns an owner whose `IsValid()` is false:
+     * it has added no systems and its calls do nothing, so the app keeps running without that package. FenrirPhysics
+     * and FenrirScripting predate this and keep their own shapes (`Scripting::IsRunning`).
      */
     class App
     {
@@ -104,7 +413,22 @@ namespace Fenrir
         App(std::unique_ptr<ILogger> logger);
 
         /**
-         * @brief Add systems to the scheduler that run in parallel
+         * @brief Construct a new App object whose parallel systems run on `workerThreads` worker threads (at least
+         * one), rather than one per hardware thread
+         *
+         * @param logger the logger to use
+         * @param workerThreads the number of worker threads
+         */
+        App(std::unique_ptr<ILogger> logger, std::size_t workerThreads);
+
+        /** @brief The worker threads parallel systems run on, shared with engine work such as physics. */
+        [[nodiscard]] ThreadPool& GetThreadPool() noexcept
+        {
+            return m_scheduler.GetThreadPool();
+        }
+
+        /**
+         * @brief Add systems to the scheduler that run in parallel, on worker threads (see AddSystem)
          *
          * @param priority the priority of the systems
          * @param systems the system functions
@@ -113,7 +437,8 @@ namespace Fenrir
         App& AddSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         /**
-         * @brief Add systems to the scheduler that run sequentially
+         * @brief Add systems to the scheduler that run sequentially, on the thread that runs the app (see
+         * AddSequentialSystem)
          *
          * @param priority the priority of the systems
          * @param systems the system functions
@@ -122,13 +447,89 @@ namespace Fenrir
         App& AddSequentialSystems(SchedulePriority priority, std::initializer_list<SystemFunc> systems);
 
         /**
-         * @brief Add a system to the scheduler
+         * @brief Add a system to the scheduler that runs in parallel with the phase's other parallel systems, on a
+         * worker thread. Not for systems that touch SDL or the GPU, which must run on the main thread: add those with
+         * AddSequentialSystem. (The init phases run only systems added this way, one after another on the app's
+         * thread.)
          *
          * @param priority the priority of the system
          * @param system the system function
          * @return App& the app
          */
         App& AddSystem(SchedulePriority priority, SystemFunc system);
+
+        /**
+         * @brief Add a system to the scheduler that runs after the phase's parallel systems, one after another in the
+         * order added, on the thread that runs the app (Run or RunFrame's caller): the main thread. Systems that touch
+         * SDL or the GPU (a window's event pump, input dispatch, which may reach SDL through input routers) and every
+         * Render system must be added this way.
+         *
+         * @param priority the priority of the system
+         * @param system the system function
+         * @return App& the app
+         */
+        App& AddSequentialSystem(SchedulePriority priority, SystemFunc system);
+
+        /**
+         * @brief The app's resource of type `T`: state a package keeps for the whole app, one value per type. The app
+         * must have one (TryGetResource asks).
+         */
+        template <typename T>
+        [[nodiscard]] T& GetResource()
+        {
+            T* resource = TryGetResource<T>();
+            assert(resource != nullptr && "App::GetResource: the app has no resource of this type");
+            return *resource;
+        }
+
+        /** @copydoc GetResource */
+        template <typename T>
+        [[nodiscard]] const T& GetResource() const
+        {
+            const T* resource = TryGetResource<T>();
+            assert(resource != nullptr && "App::GetResource: the app has no resource of this type");
+            return *resource;
+        }
+
+        /**
+         * @brief The app's resource of type `T`, or null if it has none. The pointer stays valid until the resource is
+         * replaced or removed, or the App ends.
+         */
+        template <typename T>
+        [[nodiscard]] T* TryGetResource()
+        {
+            const auto it = m_resources.find(std::type_index(typeid(T)));
+            return it == m_resources.end() ? nullptr : static_cast<T*>(it->second.get());
+        }
+
+        /** @copydoc TryGetResource */
+        template <typename T>
+        [[nodiscard]] const T* TryGetResource() const
+        {
+            const auto it = m_resources.find(std::type_index(typeid(T)));
+            return it == m_resources.end() ? nullptr : static_cast<const T*>(it->second.get());
+        }
+
+        /**
+         * @brief Constructs the app's resource of type `T` from `args`, replacing (and destroying) any it already had.
+         * The new resource is constructed before the old one is destroyed. It is destroyed when the App ends, before
+         * its scenes. Add and remove resources outside parallel systems; any system may get them.
+         */
+        template <typename T, typename... Args>
+        T& AddResource(Args&&... args)
+        {
+            ResourcePtr resource(new T(std::forward<Args>(args)...), &DestroyResource<T>);
+            T& added = *static_cast<T*>(resource.get());
+            m_resources.insert_or_assign(std::type_index(typeid(T)), std::move(resource));
+            return added;
+        }
+
+        /** @brief Destroys the app's resource of type `T`. Does nothing if the app has none. */
+        template <typename T>
+        void RemoveResource()
+        {
+            m_resources.erase(std::type_index(typeid(T)));
+        }
 
         /**
          * @brief Get the Logger object
@@ -144,13 +545,41 @@ namespace Fenrir
         void Run();
 
         /**
+         * @brief Runs one frame as if `deltaTime` seconds had passed: adds it to the accumulator and runs the fixed
+         * step as many times as that covers. Reads no clock, so a test can drive the app deterministically. The first
+         * frame (from here or from Run) runs the PreInit, Init and PostInit phases first; later frames do not.
+         */
+        void RunFrame(double deltaTime);
+
+        /**
+         * @brief Runs the Exit phase. Run does this when it stops; code that drives the app with RunFrame calls it
+         * when it is done with the app.
+         */
+        void RunExit();
+
+        /**
          * @brief Stop the app
          *
          */
         void Stop();
 
         /**
-         * @brief Send an event to the event queue
+         * @brief True until Stop is called. Code that drives the app with RunFrame loops while it is, as Run does.
+         */
+        [[nodiscard]] bool IsRunning() const;
+
+        /**
+         * @brief The phase whose systems are running, init phases and Exit included; empty outside Run, RunFrame and
+         * RunExit. It is set before a phase's first system starts and constant until its last one ends, so its parallel
+         * and sequential systems all read the same value. With Time's frameCount and tickCount, it lets a package
+         * answer by the caller's phase (input edges since the last tick or frame) whatever order packages were
+         * installed in.
+         */
+        [[nodiscard]] std::optional<SchedulePriority> CurrentPhase() const;
+
+        /**
+         * @brief Send an event to the event queue. From a system added with AddSystems (run in parallel), the event is
+         * held until the system's batch has run, then sent in the order the systems were registered.
          *
          * @tparam TEvent the type of event
          * @param event the event
@@ -159,13 +588,27 @@ namespace Fenrir
         void SendEvent(const TEvent& event);
 
         /**
-         * @brief Read the events from the queue
-         *
-         * @tparam TEvent the type of event
-         * @return const std::vector<TEvent>& the events
+         * @brief Gives the queue of `TEvent` a name, so code that only knows the name can reach the same queue
+         * (FindEventQueue). `SendEvent<TEvent>` and the named queue are one queue. False if the name is already given
+         * to a different queue. Naming the same queue twice is fine.
          */
         template <typename TEvent>
-        const std::vector<TEvent>& ReadEvents() const;
+        bool NameEvent(std::string name);
+
+        /**
+         * @brief The queue called `name`, or null. Its events are read and sent as bytes (see IEventQueue).
+         */
+        [[nodiscard]] IEventQueue* FindEventQueue(std::string_view name) const;
+
+        /**
+         * @brief Makes a queue of events that have no C++ type: `size` bytes each, aligned to `alignment` (at most 16),
+         * with the same double buffering as every other queue. Null if the name is taken or the size or alignment is
+         * unusable.
+         */
+        IEventQueue* CreateEventQueue(std::string name, std::size_t size, std::size_t alignment);
+
+        /** @brief Removes a queue made by CreateEventQueue, and its name. False if there is none by that name. */
+        bool RemoveEventQueue(std::string_view name);
 
         /**
          * @brief Get the Time object
@@ -180,26 +623,74 @@ namespace Fenrir
 
         Scene& CreateScene(const std::string& name);
 
+        /**
+         * @brief Destroys the scene with this name. Other scenes stay where they are, and the active scene stays
+         * active. Destroying the active scene is refused with a logged error: change the active scene first.
+         */
         void DestroyScene(const std::string& name);
 
         Scene& GetScene(const std::string& name);
+
+        /**
+         * @brief Calls `func(Scene&)` for every scene, active or not. For code that must reach all the entities there
+         * are (a component type that stops existing), not for per-frame work.
+         */
+        template <typename Func>
+        void ForEachScene(Func&& func)
+        {
+            for (const std::unique_ptr<Scene>& scene : m_scenes)
+            {
+                func(*scene);
+            }
+        }
 
       private:
         Time m_time;
         Scheduler m_scheduler;
         std::unique_ptr<ILogger> m_logger;
         bool m_running = true;
+        bool m_initialized = false;
+        // The queues swap only once a tick has run since they last did, so tick readers never miss an event.
+        bool m_tickedSinceSwap = false;
+        std::optional<SchedulePriority> m_phase;
 
-        std::vector<Scene> m_scenes;
+        // One heap allocation per scene, so creating or destroying a scene never moves another: Entity handles and
+        // references to a scene stay valid.
+        std::vector<std::unique_ptr<Scene>> m_scenes;
         size_t activeSceneIndex = 0;
+
+        // Guards the maps of queues below (not the queues): parallel systems look queues up and create them.
+        mutable std::mutex m_eventQueuesMutex;
 
         // this is mutable because GetEventQueue() is const
         mutable std::unordered_map<std::type_index, std::unique_ptr<IEventQueue>> m_eventQueues;
 
-        /**
-         * @brief Update the event queues
-         *
-         */
+        // Queues known by name: typed queues given a name (owned above) and byte queues made by CreateEventQueue (owned
+        // below).
+        std::unordered_map<std::string, IEventQueue*> m_namedEventQueues;
+        std::unordered_map<std::string, std::unique_ptr<IEventQueue>> m_byteEventQueues;
+
+        // The deleter is chosen where the type is known, so the app stores resources of any type without knowing it.
+        using ResourcePtr = std::unique_ptr<void, void (*)(void*)>;
+
+        template <typename T>
+        static void DestroyResource(void* resource)
+        {
+            delete static_cast<T*>(resource);
+        }
+
+        // Declared last so resources, which may refer to the app's scenes, queues, workers and logger, end first.
+        std::unordered_map<std::type_index, ResourcePtr> m_resources;
+
+        bool BindEventName(std::string name, IEventQueue* queue);
+
+        /** @brief Runs the init phases, the first time only. */
+        void InitOnce();
+
+        /** @brief Runs one phase's systems, as the current phase. */
+        void RunPhase(SchedulePriority phase);
+
+        /** @brief Swaps every event queue's buffers if a tick ran since the last swap. */
         void UpdateEvents();
 
         /**
@@ -210,24 +701,53 @@ namespace Fenrir
          */
         template <typename TEvent>
         EventQueue<TEvent>& GetEventQueue() const;
+
+        template <typename TEvent>
+        friend class EventReader;
+    };
+
+    /**
+     * @brief What a system reads events of one type through: it remembers which events it has already seen, so each
+     * reaches it once, including events sent after it last ran (ADR-0012). A system owns its readers, as a member or
+     * captured in its lambda; readers are never shared between systems.
+     *
+     * @tparam TEvent the type of event
+     */
+    template <typename TEvent>
+    class EventReader
+    {
+      public:
+        /**
+         * @brief The events of this type sent since this reader last read, oldest first. Each Read moves past what it
+         * yields, so the next Read yields only newer events.
+         */
+        EventRange<TEvent> Read(const App& app)
+        {
+            return app.GetEventQueue<TEvent>().ReadAfter(m_seen);
+        }
+
+      private:
+        std::size_t m_seen = NewReaderCursor;
     };
 
     template <typename TEvent>
     void App::SendEvent(const TEvent& event)
     {
-        GetEventQueue<TEvent>().Send(event);
+        EventQueue<TEvent>& queue = GetEventQueue<TEvent>();
+        Detail::SendOrHold([&queue, event] { queue.Send(event); });
     }
 
     template <typename TEvent>
-    const std::vector<TEvent>& App::ReadEvents() const
+    bool App::NameEvent(std::string name)
     {
-        return GetEventQueue<TEvent>().ReadEvents();
+        return BindEventName(std::move(name), &GetEventQueue<TEvent>());
     }
 
     template <typename TEvent>
     EventQueue<TEvent>& App::GetEventQueue() const
     {
         auto type = std::type_index(typeid(TEvent));
+        const std::lock_guard lock(m_eventQueuesMutex);
         auto it = m_eventQueues.find(type);
         if (it == m_eventQueues.end())
         {

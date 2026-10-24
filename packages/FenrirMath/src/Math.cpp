@@ -1,6 +1,10 @@
 #include "FenrirMath/Math.hpp"
 
+#include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/euler_angles.hpp>
+#include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/norm.hpp>
 
 namespace Fenrir::Math
@@ -283,9 +287,26 @@ namespace Fenrir::Math
         return glm::value_ptr(m);
     }
 
+    float* AsArray(Mat4& m)
+    {
+        return glm::value_ptr(m);
+    }
+
     const float* AsArray(const Quat& q)
     {
         return glm::value_ptr(q);
+    }
+
+    Mat4 MakeMat4(const float* arr)
+    {
+        return glm::make_mat4(arr);
+    }
+
+    void Decompose(const Mat4& mat, Vec3& pos, Quat& rotation, Vec3& scale)
+    {
+        glm::vec3 skew;
+        glm::vec4 perspective;
+        glm::decompose(mat, scale, rotation, pos, skew, perspective);
     }
 
     float Cos(const float val)
@@ -351,5 +372,62 @@ namespace Fenrir::Math
     Quat Conjugate(const Quat& quat)
     {
         return glm::conjugate(quat);
+    }
+
+    bool RayAABBIntersect(const Ray& ray, const AABB& aabb, const Mat4& transformMatrix)
+    {
+        Vec3 minWorld = MultiplyPoint(aabb.min, transformMatrix);
+        Vec3 maxWorld = MultiplyPoint(aabb.max, transformMatrix);
+
+        Vec3 invDir;
+        invDir.x = 1.0f / (ray.dir.x == 0.0f ? EPSILON : ray.dir.x);
+        invDir.y = 1.0f / (ray.dir.y == 0.0f ? EPSILON : ray.dir.y);
+        invDir.z = 1.0f / (ray.dir.z == 0.0f ? EPSILON : ray.dir.z);
+
+        float t1 = (minWorld.x - ray.origin.x) * invDir.x;
+        float t2 = (maxWorld.x - ray.origin.x) * invDir.x;
+        float t3 = (minWorld.y - ray.origin.y) * invDir.y;
+        float t4 = (maxWorld.y - ray.origin.y) * invDir.y;
+        float t5 = (minWorld.z - ray.origin.z) * invDir.z;
+        float t6 = (maxWorld.z - ray.origin.z) * invDir.z;
+
+        float tmin = std::max(std::max(std::min(t1, t2), std::min(t3, t4)), std::min(t5, t6));
+        float tmax = std::min(std::min(std::max(t1, t2), std::max(t3, t4)), std::max(t5, t6));
+
+        if (tmax < 0 || tmin > tmax)
+            return false;
+
+        return true;
+    }
+
+    float CalculateDistance(const Fenrir::Math::Vec3& rayOrigin, const AABB& aabb,
+                            const Fenrir::Math::Mat4& transformMatrix)
+    {
+        Vec3 minWorld = MultiplyPoint(aabb.min, transformMatrix);
+        Vec3 maxWorld = MultiplyPoint(aabb.max, transformMatrix);
+
+        Vec3 clampedOrigin = glm::clamp(rayOrigin, minWorld, maxWorld);
+
+        return Distance(clampedOrigin, rayOrigin);
+    }
+
+    Mat4 EulerToMat4(const Vec3& vec)
+    {
+        return glm::eulerAngleXYZ(vec.x, vec.y, vec.z);
+    }
+
+    Quat Mat4ToQuat(const Mat4& mat)
+    {
+        return glm::quat_cast(mat);
+    }
+
+    Mat4 QuatToMat4(const Quat& quat)
+    {
+        return glm::mat4_cast(quat);
+    }
+
+    Vec3 EulerFromMat4(const Mat4& mat)
+    {
+        return glm::eulerAngles(glm::quat_cast(mat));
     }
 } // namespace Fenrir::Math

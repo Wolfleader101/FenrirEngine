@@ -1,0 +1,191 @@
+using System.Reflection;
+using System.Runtime.InteropServices;
+
+namespace Fenrir.Scripting;
+
+/// <summary>
+/// Marks a struct as an event: plain unmanaged data one system sends and others read, each through an
+/// <see cref="EventReader{T}"/> of its own that yields each event once. A struct that only C# defines needs nothing else; the
+/// build reports it to the engine when the script loads.
+/// </summary>
+public interface IEvent
+{
+}
+
+/// <summary>
+/// Says this struct mirrors a C++ event the engine registered under <see cref="Name"/>. The engine checks the layout against
+/// the C++ type when the script loads, and C++ and C# then share one queue.
+/// </summary>
+[AttributeUsage(AttributeTargets.Struct, AllowMultiple = false, Inherited = false)]
+public sealed class NativeEventAttribute : Attribute
+{
+    public NativeEventAttribute(string name) => Name = name;
+
+    public string Name { get; }
+}
+
+// The registry id of an event type, looked up by name and remembered while the registry it came from is current.
+internal static unsafe class EventIds<T> where T : unmanaged, IEvent
+{
+    private static uint generation;
+    private static bool resolved;
+    private static int id;
+
+    internal static string? NativeName { get; } = typeof(T).GetCustomAttribute<NativeEventAttribute>()?.Name;
+
+    internal static string Name { get; } = NativeName ?? typeof(T).FullName ?? typeof(T).Name;
+
+    internal static int Id
+    {
+        get
+        {
+            uint current = Native.RegistryGeneration();
+            if (!resolved || generation != current)
+            {
+                id = Resolve();
+                generation = current;
+                resolved = true;
+            }
+            if (id == -3)
+                throw new InvalidOperationException($"'{Name}' is registered for a different C# type than {typeof(T).FullName}; a native event is reached only through the type the host validated.");
+            if (id < 0)
+                throw new InvalidOperationException(NativeName != null
+                    ? $"The engine has no event registered as '{NativeName}' (for {typeof(T).Name})."
+                    : $"The engine does not know {typeof(T).Name}: an event a script defines is registered when its assembly loads, and only if the script project uses the Fenrir scripting SDK.");
+            return id;
+        }
+    }
+
+    private static int Resolve() => Native.EventIdOf(Name, typeof(T).FullName ?? typeof(T).Name);
+}
+
+/// <summary>
+/// How a script assembly tells the engine which events it defines. The Fenrir.Scripting source generator writes a table that
+/// calls <see cref="Report{T}"/> once for every C#-only <see cref="IEvent"/>; scripts do not call it themselves.
+/// </summary>
+public static unsafe class ScriptEvents
+{
+    public static void Report<T>() where T : unmanaged, IEvent
+    {
+        string name = typeof(T).FullName ?? typeof(T).Name;
+        if (!Native.RegisterScriptEvent(name, sizeof(T), ScriptComponents.AlignmentOf<T>()))
+            throw new InvalidOperationException($"The engine did not accept the event {name}: events are reported only while a script assembly loads, and must have a plausible size.");
+    }
+}
+
+/// <summary>
+/// What a system reads events of one type through. It remembers which events it has already yielded, so each event reaches it
+/// once, including events sent after it last ran: the same guarantee a C++ <c>EventReader</c> gives, and independent of every
+/// other reader of the queue, C# or C++. A system keeps its readers in fields (one per event type it reads), never shares them
+/// with other systems, and reads with <c>foreach (var e in reader.Read())</c>. A new reader's first read (a system added
+/// late, or one made by a reload) starts at the oldest event the queue still holds and reports nothing missed.
+/// </summary>
+public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
+{
+    // How many events of the queue's whole history this reader has gone past (the engine's cursor). All ones until the first
+    // read: the engine's NewReaderCursor.
+    private ulong seen = ulong.MaxValue;
+
+    /// <summary>
+    /// The events sent since this reader last read, oldest first. Each read moves past what it yields, so the next yields only
+    /// newer events. Sends made by the running system are not among them until it returns.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
+    public EventRange<T> Read()
+    {
+        // older data, older count, newer data, newer count, missed
+        nuint* view = stackalloc nuint[5];
+        int id = EventIds<T>.Id;
+        int code;
+        fixed (ulong* cursor = &seen)
+            code = Native.EventReadAfter(id, cursor, view);
+        if (code != 0)
+            throw new InvalidOperationException($"Cannot read {typeof(T).Name}: the engine has no queue for it.");
+        return new EventRange<T>((T*)view[0], (int)view[1], (T*)view[2], (int)view[3], (int)view[4]);
+    }
+}
+
+/// <summary>
+/// The events one <see cref="EventReader{T}.Read"/> yielded, oldest first. It points into the engine's queue (nothing is
+/// copied), so it is a <c>ref struct</c> good for the system that read it: sends wait until the system returns, so it stays
+/// valid that long.
+/// </summary>
+public readonly unsafe ref struct EventRange<T> where T : unmanaged, IEvent
+{
+    private readonly T* older;
+    private readonly int olderCount;
+    private readonly T* newer;
+
+    internal EventRange(T* older, int olderCount, T* newer, int newerCount, int missed)
+    {
+        this.older = older;
+        this.olderCount = olderCount;
+        this.newer = newer;
+        Count = olderCount + newerCount;
+        Missed = missed;
+    }
+
+    /// <summary>How many events the read yielded.</summary>
+    public int Count { get; }
+
+    /// <summary>
+    /// How many events were dropped before the reader got to them, because it went two of the queue's swaps without reading.
+    /// Zero for a reader that reads every frame.
+    /// </summary>
+    public int Missed { get; }
+
+    /// <summary>The event at <paramref name="index"/>, oldest first.</summary>
+    public ref readonly T this[int index]
+    {
+        get
+        {
+            if ((uint)index >= (uint)Count)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            return ref index < olderCount ? ref older[index] : ref newer[index - olderCount];
+        }
+    }
+
+    public Enumerator GetEnumerator() => new(this);
+
+    public ref struct Enumerator
+    {
+        private readonly EventRange<T> range;
+        private int index;
+
+        internal Enumerator(EventRange<T> range)
+        {
+            this.range = range;
+            index = -1;
+        }
+
+        /// <summary>The current event, by readonly reference (a <c>var</c> loop variable copies it).</summary>
+        public readonly ref readonly T Current => ref range[index];
+
+        public bool MoveNext() => ++index < range.Count;
+    }
+}
+
+public readonly partial struct SystemContext
+{
+    /// <summary>Sending events. Reading is through an <see cref="EventReader{T}"/> field.</summary>
+    public EventsView Events => default;
+
+    public readonly unsafe struct EventsView
+    {
+        /// <summary>
+        /// Sends an event. It reaches the queue when the system returns, so the systems after it read it this frame and the
+        /// sender's own readers read it the next time they read.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
+        public void Send<T>(in T value) where T : unmanaged, IEvent
+        {
+            int code;
+            fixed (T* pointer = &value)
+                code = Native.EventSend(EventIds<T>.Id, pointer);
+            if (code != 0)
+                throw new InvalidOperationException(code == -6
+                    ? $"Cannot send {typeof(T).Name}: the engine has no queue for it."
+                    : $"Cannot send {typeof(T).Name}: the engine refused it (code {code}).");
+        }
+    }
+}

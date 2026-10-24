@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- A second build of this component (-p:IrisFixtureVersion=B) behaves observably differently, for reload checks. -->
+    <DefineConstants Condition="'$(IrisFixtureVersion)' == 'B'">$(DefineConstants);FIXTURE_B</DefineConstants>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Dependency/Iris.Examples.Dependency.csproj" />
+    <!-- Deployed privately on purpose: a host that shares the contract must still bind to its copy. -->
+    <ProjectReference Include="../Contracts/Iris.Examples.Contracts.csproj" />
+    <!-- Compile against the resident bridge, but do not deploy a private copy. -->
+    <ProjectReference Include="../../../Managed/Iris.Bridge/Iris.Bridge.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

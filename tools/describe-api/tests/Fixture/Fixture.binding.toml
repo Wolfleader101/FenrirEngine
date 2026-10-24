@@ -1,0 +1,5 @@
+# The natives mode's part of a binding's configuration: the tool reads [natives] `sources` and `context` and ignores the
+# rest, which is the binding's (Iris keeps the whole configuration in packages/Iris/Tools/Iris.Bindings/tests/Fixture).
+[natives]
+sources = ["Natives.cpp"]
+context = "Host::CallContext"

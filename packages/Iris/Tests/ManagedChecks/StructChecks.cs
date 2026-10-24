@@ -1,0 +1,241 @@
+using System;
+using System.Text;
+using Iris.Bridge;
+
+// Blittable structs through the real RegisterStruct / FindMethod / InvokeMethod / member exports.
+static unsafe class StructChecks
+{
+    private const string Component = "Iris.Examples.Component.";
+    private const int Float = (int)ValueKind.Float, Double = (int)ValueKind.Double, Int32 = (int)ValueKind.Int32, UInt8 = (int)ValueKind.UInt8, Int8 = (int)ValueKind.Int8, UInt16 = (int)ValueKind.UInt16;
+    private const int StructKind = (int)ValueKind.Struct;
+
+    private static void Check(bool condition, string message)
+    {
+        if (!condition) throw new Exception(message);
+    }
+
+    private static string Text(byte[] storage, int written) => new UTF8Encoding(false, true).GetString(storage, 0, written);
+
+    private static int Register(ulong token, string description, out ulong id, out string diagnostic)
+    {
+        delegate* unmanaged[Cdecl]<ulong, byte*, int, ulong*, byte*, int, int*, int*, int> register = &Bootstrap.RegisterStruct;
+        byte[] bytes = Encoding.UTF8.GetBytes(description), storage = new byte[4096];
+        fixed (byte* text = bytes, diagnosticPointer = storage)
+        {
+            ulong value = 99;
+            int written = 99, truncated = 99;
+            int status = register(token, text, bytes.Length, &value, diagnosticPointer, storage.Length, &written, &truncated);
+            Check(status == 0 || value == 0, "A failed registration published a handle");
+            id = value;
+            diagnostic = Text(storage, written);
+            return status;
+        }
+    }
+
+    private const string Vec3 = Component + "Vec3";
+
+    private static string Vec3Description(string first = "X", string second = "Y", int size = 12, int secondOffset = 4) =>
+        $"{Vec3}|{size}\n{first}|0|{Float}|\n{second}|{secondOffset}|{Float}|\nZ|8|{Float}|";
+
+    private static ulong Registered(ulong token, string description)
+    {
+        Check(Register(token, description, out ulong id, out string diagnostic) == 0 && id != 0, "Registration failed: " + diagnostic);
+        return id;
+    }
+
+    private static int KindOf(ulong id) => ValueKinds.StructKind(id);
+
+    private static ulong TypeId(ulong token, string name)
+    {
+        Check(ComponentRegistry.TryFindType(token, name, out ulong id) == ComponentRegistry.FindResult.Found, "Type lookup failed: " + name);
+        return id;
+    }
+
+    private static ulong Method(ulong token, ulong type, string name, int returnKind, params int[] parameters)
+    {
+        Check(ComponentRegistry.TryFindMethod(token, type, name, returnKind, parameters, true, out ulong id) == ComponentRegistry.FindResult.Found, "Method lookup failed: " + name);
+        return id;
+    }
+
+    private static ulong[] Vec(ulong token, ulong method, float ax, float ay, float az, float bx, float by, float bz, out float[] result)
+    {
+        float[] left = { ax, ay, az }, right = { bx, by, bz };
+        fixed (float* l = left, r = right)
+        {
+            Check(ComponentRegistry.TryInvokeMethod(token, method, new[] { (ulong)l, (ulong)r }, out ulong block), "Invocation failed");
+            result = new float[3];
+            for (int index = 0; index < 3; ++index) result[index] = ((float*)block)[index];
+            ValueCodec.FreeString(block);
+        }
+        return Array.Empty<ulong>();
+    }
+
+    internal static void Run(string componentPath)
+    {
+        string path = System.IO.Path.GetFullPath(componentPath);
+        ulong token = ComponentRegistry.Load(path), other = ComponentRegistry.Load(path);
+        try
+        {
+            // A matching mapping registers, and registering again returns the same handle.
+            ulong vec3 = Registered(token, Vec3Description());
+            Check(Registered(token, Vec3Description()) == vec3, "Registering again created another handle");
+            Check(Registered(other, Vec3Description()) != 0, "A second component could not register the same struct");
+
+            // Mismatches are diagnosed and nothing is registered.
+            Check(Register(token, Vec3Description(size: 24), out ulong none, out string sizeProblem) == 1 && none == 0 && sizeProblem.Contains("12") && sizeProblem.Contains("24"),
+                  "A size mismatch was accepted or undiagnosed: " + sizeProblem);
+            Check(Register(token, Vec3Description(first: "Y", second: "X"), out none, out string orderProblem) == 1 && orderProblem.Contains("order"),
+                  "A field-order mismatch was accepted or undiagnosed: " + orderProblem);
+            Check(Register(token, Vec3Description(secondOffset: 8), out none, out string offsetProblem) == 1 && offsetProblem.Contains("offset"),
+                  "An offset mismatch was accepted or undiagnosed: " + offsetProblem);
+            Check(Register(token, $"{Vec3}|12\nX|0|{Double}|\nY|4|{Float}|\nZ|8|{Float}|", out none, out string typeProblem) == 1 && typeProblem.Contains("type"),
+                  "A field type mismatch was accepted or undiagnosed: " + typeProblem);
+            Check(Register(token, $"{Vec3}|12\nX|0|{Float}|\nY|4|{Float}|", out none, out string countProblem) == 1 && countProblem.Contains("fields"),
+                  "A field count mismatch was accepted or undiagnosed: " + countProblem);
+
+            // Non-blittable and unusable types are rejected with a reason.
+            Check(Register(token, $"{Component}WithBool|8\nFlag|0|1|\nValue|4|{Int32}|", out none, out string boolProblem) == 0 && none != 0,
+                  "A struct with a bool was rejected: " + boolProblem);
+            Check(Register(token, $"{Component}WithBool|8\nFlag|0|{Int32}|\nValue|4|{Int32}|", out none, out string boolKind) == 1 && boolKind.Contains("Flag"),
+                  "A bool field declared as an int was accepted: " + boolKind);
+            Check(Register(token, $"{Component}WithText|8\nName|0|{Int32}|", out none, out string textProblem) == 1 && textProblem.Contains("blittable"),
+                  "A struct with a reference was accepted: " + textProblem);
+            Check(Register(token, $"{Component}Counter|4\nValue|0|{Int32}|", out none, out string classProblem) == 1 && classProblem.Contains("not a struct"),
+                  "A class was accepted as a struct: " + classProblem);
+            Check(Register(token, $"{Component}Missing|4\nValue|0|{Int32}|", out none, out _) == 6, "A missing struct was not NotFound");
+            Check(Register(token, "garbage", out none, out _) == 1, "A malformed description was accepted");
+            Check(Register(0, Vec3Description(), out none, out _) == 5 && Register(token + 1000, Vec3Description(), out none, out _) == 5, "An unknown component was accepted");
+
+            // Nested structs must be registered first, and are checked against the field's real type.
+            string pose = $"{Component}Pose|40\nPosition|0|{StructKind}|{Vec3}\nScale|12|{StructKind}|{Vec3}\nWeight|24|{Double}|\nFlags|32|{UInt8}|";
+            Check(Register(other, $"{Component}Pose|40\nPosition|0|{StructKind}|{Vec3}\nScale|12|{StructKind}|{Vec3}\nWeight|24|{Double}|\nFlags|32|{UInt8}|", out ulong poseId, out string nestedProblem) == 0,
+                  "Nested registration failed: " + nestedProblem);
+            Check(Register(token, pose.Replace("Position|0|14|" + Vec3, "Position|0|14|" + Component + "Pose"), out none, out string wrongNested) == 1 && wrongNested.Contains("Position"),
+                  "A nested field with the wrong struct was accepted: " + wrongNested);
+            ulong poseOnToken = Registered(token, pose);
+
+            // Enums are one line: "TypeName|size|underlyingKind". The underlying type, the size and the kind of
+            // type are all checked.
+            const int Bool = (int)ValueKind.Bool, Char = (int)ValueKind.Char, Enum = (int)ValueKind.Enum, InlineArray = (int)ValueKind.InlineArray;
+            string gear = Component + "Gear", shade = Component + "Shade", setting = Component + "Setting", label = Component + "Label";
+            Check(Register(token, $"{gear}|4|{Int32}", out none, out string enumProblem) == 0 && none != 0, "A matching enum was rejected: " + enumProblem);
+            Check(Register(token, $"{gear}|8|8", out none, out string underlyingProblem) == 1 && none == 0 && underlyingProblem.Contains("underlying"),
+                  "An enum with the wrong underlying type was accepted: " + underlyingProblem);
+            Check(Register(token, $"{gear}|2|{Int32}", out none, out string enumSizeProblem) == 1 && enumSizeProblem.Contains("bytes"),
+                  "An enum with the wrong size was accepted: " + enumSizeProblem);
+            Check(Register(token, $"{Vec3}|4|{Int32}", out none, out string notEnum) == 1 && notEnum.Contains("not an enum"),
+                  "A struct was accepted as an enum: " + notEnum);
+            Check(Register(token, $"{gear}|4", out none, out string notStruct) == 1 && notStruct.Contains("not a struct"),
+                  "An enum was accepted as a struct: " + notStruct);
+            Check(Register(token, $"{Component}Missing|4|{Int32}", out none, out _) == 6, "A missing enum was not NotFound");
+            Check(Register(token, $"{gear}|4|x", out none, out _) == 1, "A malformed enum description was accepted");
+
+            // An enum field names its enum, which must be registered first.
+            string settingText = $"{setting}|12\nCurrent|0|{Enum}|{gear}\nTint|4|{Enum}|{shade}\nLocked|5|{Bool}|\nLevel|8|{Int32}|";
+            Check(Register(other, settingText, out none, out string unregistered) == 1 && unregistered.Contains("Current"),
+                  "An enum field with an unregistered enum was accepted: " + unregistered);
+            Registered(token, $"{shade}|1|{UInt8}");
+            Registered(token, settingText);
+            Check(Register(token, settingText.Replace($"Current|0|{Enum}|{gear}", $"Current|0|{Enum}|{shade}"), out none, out string wrongEnum) == 1 && wrongEnum.Contains("Current"),
+                  "An enum field naming the wrong enum was accepted: " + wrongEnum);
+            Check(Register(token, settingText.Replace($"Current|0|{Enum}|{gear}", $"Current|0|{Int32}|"), out none, out string enumAsInt) == 1 && enumAsInt.Contains("Current"),
+                  "An enum field declared as its integer was accepted: " + enumAsInt);
+            Check(Register(token, settingText.Replace($"Locked|5|{Bool}|", $"Locked|5|{UInt8}|"), out none, out string boolAsByte) == 1 && boolAsByte.Contains("Locked"),
+                  "A bool field declared as a byte was accepted: " + boolAsByte);
+
+            // A fixed-size array field is six parts: "name|offset|20|elementTypeName|elementKind|length".
+            string labelText = $"{label}|28\nId|0|{Int32}|\nText|4|{InlineArray}||{UInt8}|16\nWide|20|{InlineArray}||{Char}|4";
+            Registered(token, labelText);
+            Check(Register(token, labelText.Replace($"{UInt8}|16", $"{UInt8}|15"), out none, out string lengthProblem) == 1 && lengthProblem.Contains("Text") && lengthProblem.Contains("16") && lengthProblem.Contains("15"),
+                  "An array of the wrong length was accepted: " + lengthProblem);
+            Check(Register(token, labelText.Replace($"{InlineArray}||{UInt8}|16", $"{InlineArray}||{Int8}|16"), out none, out string elementProblem) == 1 && elementProblem.Contains("Text"),
+                  "An array of the wrong element type was accepted: " + elementProblem);
+            Check(Register(token, labelText.Replace($"Text|4|{InlineArray}||{UInt8}|16", $"Text|4|{UInt8}|"), out none, out string scalarProblem) == 1 && scalarProblem.Contains("Text"),
+                  "A scalar was accepted where the managed field is an array: " + scalarProblem);
+            Check(Register(token, labelText.Replace($"Text|4|{InlineArray}||{UInt8}|16", $"Text|4|{InlineArray}|"), out none, out _) == 1,
+                  "A malformed array field was accepted");
+            Check(Register(token, labelText.Replace($"Id|0|{Int32}|", $"Id|0|{InlineArray}||{Int32}|1"), out none, out string arrayAsScalar) == 1 && arrayAsScalar.Contains("Id"),
+                  "An array was accepted where the managed field is a scalar: " + arrayAsScalar);
+            Check(Register(token, labelText.Replace($"Wide|20|{InlineArray}||{Char}|4", $"Wide|20|{InlineArray}||{UInt16}|4"), out none, out string charProblem) == 1 && charProblem.Contains("Wide"),
+                  "An array of ushort was accepted for a fixed buffer of char: " + charProblem);
+
+            // Static calls with struct arguments and returns, nested structs and explicit layout.
+            ulong structs = TypeId(token, Component + "Structs");
+            int vecKind = KindOf(vec3);
+            ulong add = Method(token, structs, "Add", vecKind, vecKind, vecKind);
+            Vec(token, add, 1, 2, 3, 10, 20, 30, out float[] sum);
+            Check(sum[0] == 11 && sum[1] == 22 && sum[2] == 33, "A struct did not round-trip through a call");
+            ulong dot = Method(token, structs, "Dot", Float, vecKind, vecKind);
+            float[] a = { 1, 2, 3 }, b = { 4, 5, 6 };
+            fixed (float* ap = a, bp = b)
+            {
+                Check(ComponentRegistry.TryInvokeMethod(token, dot, new[] { (ulong)ap, (ulong)bp }, out ulong dotResult) && BitConverter.UInt32BitsToSingle((uint)dotResult) == 32,
+                      "A struct argument was not read correctly");
+            }
+            Check(ComponentRegistry.TryFindMethod(token, structs, "Add", vecKind, new[] { vecKind }, true, out _) == ComponentRegistry.FindResult.NotFound,
+                  "A struct signature matched by count alone");
+            Check(ComponentRegistry.TryFindMethod(token, structs, "Add", Float, new[] { vecKind, vecKind }, true, out _) == ComponentRegistry.FindResult.NotFound,
+                  "A struct return matched a float return");
+            Check(ComponentRegistry.TryFindMethod(token, structs, "Dot", Float, new[] { Float, Float }, true, out _) == ComponentRegistry.FindResult.NotFound,
+                  "A float parameter matched a struct parameter");
+
+            // Unknown or foreign struct handles are argument errors, not crashes.
+            bool threw = false;
+            try { ComponentRegistry.TryFindMethod(token, structs, "Add", KindOf(9999), new[] { vecKind, vecKind }, true, out _); }
+            catch (BridgeArgumentException) { threw = true; }
+            Check(threw, "An unknown struct handle was accepted");
+
+            // A struct handle from another component, or unknown, is an argument error even when nothing else matches.
+            foreach (int foreign in new[] { KindOf(poseId), KindOf(9999) })
+            {
+                threw = false;
+                try { ComponentRegistry.TryFindMethod(token, structs, "NoSuchMethod", Float, new[] { Int32, foreign }, true, out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound in a method lookup");
+                threw = false;
+                try { ComponentRegistry.TryCreateObject(token, TypeId(token, Component + "Counter"), new[] { foreign, foreign, foreign }, new ulong[3], out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound for a constructor");
+                threw = false;
+                try { ComponentRegistry.TryFindMember(token, TypeId(token, Component + "Body"), "NoSuchMember", 0, foreign, out _); }
+                catch (BridgeArgumentException) { threw = true; }
+                Check(threw, "A foreign struct handle was quietly NotFound for a member");
+            }
+
+            // Null struct arguments are rejected.
+            threw = false;
+            try { ComponentRegistry.TryInvokeMethod(token, add, new ulong[] { 0, 0 }, out _); }
+            catch (BridgeArgumentException) { threw = true; }
+            Check(threw, "A null struct argument was accepted");
+
+            // Fields and properties of struct type.
+            ulong body = TypeId(token, Component + "Body");
+            Check(ComponentRegistry.TryCreateObject(token, body, Array.Empty<int>(), ReadOnlySpan<ulong>.Empty, out ulong bodyObject) == ComponentRegistry.CreateResult.Created, "Body construction failed");
+            foreach ((string name, int kind) in new[] { ("Position", 0), ("Velocity", 1) })
+            {
+                Check(ComponentRegistry.TryFindMember(token, body, name, kind, vecKind, out ulong member) == ComponentRegistry.FindResult.Found, "Struct member lookup failed: " + name);
+                float[] value = { 1.5f, -2, 3 };
+                fixed (float* v = value)
+                {
+                    Check(ComponentRegistry.TrySetMemberValue(token, member, bodyObject, (ulong)v), "Struct set failed: " + name);
+                }
+                Check(ComponentRegistry.TryGetMemberValue(token, member, bodyObject, out ulong block), "Struct get failed: " + name);
+                Check(((float*)block)[0] == 1.5f && ((float*)block)[1] == -2 && ((float*)block)[2] == 3, "A struct member did not round-trip: " + name);
+                ValueCodec.FreeString(block);
+            }
+            Check(ComponentRegistry.TryFindMember(token, body, "Position", 0, Float, out _) == ComponentRegistry.FindResult.NotFound, "A struct field matched a float");
+
+            // A released component's struct kinds stop working.
+            ComponentRegistry.TryRelease(other, force: true);
+            Check(Register(other, Vec3Description(), out none, out _) == 5, "A released component accepted a registration");
+            Check(poseId != 0 && poseOnToken != 0, "Nested structs did not register");
+        }
+        finally
+        {
+            ComponentRegistry.TryRelease(token, force: true);
+            ComponentRegistry.ForgetUnload(token);
+            ComponentRegistry.ForgetUnload(other);
+        }
+        Console.WriteLine("Structs: mappings are validated against the managed type, mismatches and non-blittable types are diagnosed, and structs round-trip through calls and members.");
+    }
+}

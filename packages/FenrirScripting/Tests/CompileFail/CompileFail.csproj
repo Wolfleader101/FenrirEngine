@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputType>Library</OutputType>
+    <!-- Only the shared component and the one case named by -p:Case=<Name> are compiled. -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)../../Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup>
+    <Compile Include="Component.cs;$(Case).cs" />
+    <!-- A case that needs a second file of its own (a type declared in two files) names it <Case>Other.cs. -->
+    <Compile Include="$(Case)Other.cs" Condition="Exists('$(Case)Other.cs')" />
+  </ItemGroup>
+</Project>

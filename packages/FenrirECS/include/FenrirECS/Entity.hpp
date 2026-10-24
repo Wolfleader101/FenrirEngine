@@ -8,6 +8,7 @@
 
 namespace Fenrir
 {
+
     /**
      * @brief Entity class that is used to interact with the entity list. This forms the basis of the ECS
      *
@@ -28,6 +29,24 @@ namespace Fenrir
          * @param entityList The entity list that the entity belongs to
          */
         Entity(uint32_t id, EntityList* entityList);
+
+        /**
+         * @brief Compare two entities
+         *
+         * @param other The other entity to compare to
+         * @return true if the entities are the same
+         * @return false if the entities are not the same
+         */
+        bool operator==(const Entity& other) const;
+
+        /**
+         * @brief Compare two entities
+         *
+         * @param other The other entity to compare to
+         * @return true if the entities are not the same
+         * @return false if the entities are the same
+         */
+        bool operator!=(const Entity& other) const;
 
         /**
          * @brief Add a component to the entity. If the component already exists it wont add it
@@ -85,12 +104,38 @@ namespace Fenrir
         uint32_t GetId() const;
 
         /**
-         * @brief Check if the entity is valid
+         * @brief Check if the entity is valid: alive in its entity list. An entity with no entity list (a zeroed
+         * EntityLink written from a script) is not valid.
          *
          * @return true if the entity is valid
          * @return false if the entity is not valid
          */
         bool IsValid() const;
+
+        /**
+         * @brief Iterate over all the children of the entity and call the function on them
+         *
+         * @tparam Func The type of function to call
+         * @param func The function to call
+         */
+        template <typename Func>
+        void ForEachChild(Func&& func) const;
+
+        /**
+         * @brief Add a child to the entity
+         *
+         * @param child The child to add
+         */
+        void AddChild(Entity child) const;
+
+        /**
+         * @brief Remove a child from the entity
+         *
+         * @param child The child to remove
+         */
+        void RemoveChild(Entity child) const;
+
+        static uint32_t Null;
 
       private:
         entt::entity m_entityId = entt::null;
@@ -98,6 +143,25 @@ namespace Fenrir
         EntityList* m_entityList = nullptr;
 
         friend class EntityList;
+    };
+
+    // this needs to be here because it needs to know about entity
+    /**
+     * @brief Where an entity sits in the hierarchy: its parent, its first child and its siblings, each the empty
+     * Entity when there is none. Every entity has one, and the entity list keeps the links consistent.
+     */
+    struct Relationship
+    {
+        Relationship() = default;
+
+        /** @brief The entity's parent. */
+        Entity parent = Entity();
+        /** @brief The first of its children; the rest follow through each child's nextSibling. */
+        Entity firstChild = Entity();
+        /** @brief The next child of its parent. */
+        Entity nextSibling = Entity();
+        /** @brief The previous child of its parent. */
+        Entity prevSibling = Entity();
     };
 
     template <typename T, typename... Args>
@@ -142,5 +206,23 @@ namespace Fenrir
     bool Entity::HasAnyComponent() const
     {
         return m_entityList->m_registry.any_of<T...>(m_entityId);
+    }
+
+    template <typename Func>
+    void Entity::ForEachChild(Func&& func) const
+    {
+        Relationship& relationship = GetComponent<Relationship>();
+
+        if (relationship.firstChild.IsValid())
+        {
+            auto child = relationship.firstChild;
+
+            while (child.IsValid())
+            {
+                func(child);
+
+                child = child.GetComponent<Relationship>().nextSibling;
+            }
+        }
     }
 } // namespace Fenrir

@@ -1,0 +1,23 @@
+# FenrirECS's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
+# type the package shares with bindings, with its role.
+headers = [
+    "../include/FenrirECS/DefaultComponents.hpp",
+    "../include/FenrirECS/Entity.hpp",
+]
+
+# Name keeps its buffer private, and Entity its value and entity list, but their layouts are shared all the same: a
+# binding holds the same bytes.
+private-members = ["Fenrir::Name", "Fenrir::Entity"]
+
+[types]
+# The components every entity has.
+"Fenrir::Transform" = "component"
+"Fenrir::Name" = "component"
+"Fenrir::Relationship" = "component"
+
+# An entity named inside a component or event: its value, then its entity list.
+"Fenrir::Entity" = "shared-struct"
+
+# FenrirMath's vector and quaternion, which Transform holds (FenrirMath.api.toml).
+"Fenrir::Math::Vec3" = "bound-type"
+"Fenrir::Math::Quat" = "bound-type"

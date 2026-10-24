@@ -1,0 +1,73 @@
+name: API descriptions
+
+# Regenerates every committed API description (ADR-0042, tools/describe-api/README.md) and every binding generated from
+# them (packages/Iris/Tools/Iris.Bindings/README.md), and fails when that leaves the tree dirty: a header change was
+# committed without its regenerated description, or a description without its regenerated binding. Both runners, because
+# both are the same bytes on every platform. It also runs the binding generator's own tests.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dotnet-scripting
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_VERSION: 10.0.x
+
+jobs:
+  describe:
+    name: Descriptions and bindings up to date (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/*.props', '**/*.targets') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      # Configuring is enough: fenrir-describe-api reads headers and natives' sources, fenrir-generate-bindings reads descriptions, and
+      # neither builds anything of the engine. Scripting is on because Iris holds the binding generator. The renderer is off:
+      # no package it builds has an API description yet, and on Linux SDL3 would need X11 or Wayland development libraries
+      # just to configure. Turn it on here when FenrirInput, FenrirWindow or FenrirRenderer gains one.
+      - name: Configure
+        run: cmake -S . -B out/describe -DFENRIR_BUILD_EXAMPLES=OFF -DFENRIR_ENABLE_SCRIPTING=ON -DFENRIR_ENABLE_RENDERER=OFF
+
+      - name: Regenerate the descriptions
+        run: cmake --build out/describe --target fenrir-describe-api --config Debug
+
+      - name: Regenerate the bindings
+        run: cmake --build out/describe --target fenrir-generate-bindings --config Debug
+
+      - name: Fail on a dirty tree
+        shell: bash
+        run: |
+          git add --intent-to-add --all
+          if ! git diff --exit-code; then
+            echo "::error::The committed API descriptions or bindings are stale. Run 'cmake --build <build-dir> --target fenrir-describe-api', then '--target fenrir-generate-bindings', and commit the result."
+            exit 1
+          fi
+
+      # After the check, so nothing the tests build can count as a change.
+      - name: Test the binding generator
+        run: dotnet test packages/Iris/Tools/Iris.Bindings/tests/Iris.Bindings.Tests.csproj --nologo

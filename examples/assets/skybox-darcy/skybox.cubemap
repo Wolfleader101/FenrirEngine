@@ -1,0 +1,8 @@
+# Darcy Wilson's skybox (attribution.txt), the legacy DemoApp's sky: six faces, each a face name and its image
+# (AssetStore::Load reads this file as one cubemap image). The legacy DemoApp mapped the faces the same way.
++X right.png
+-X left.png
++Y top.png
+-Y bottom.png
++Z front.png
+-Z back.png

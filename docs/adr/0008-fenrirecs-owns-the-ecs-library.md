@@ -1,0 +1,37 @@
+---
+status: accepted
+---
+
+# FenrirECS owns the ECS library; other packages use only its API
+
+The engine's ECS is built on EnTT, but EnTT is an implementation detail of `FenrirECS`. We may swap it for another library, or write our own, and when we do, code in other packages (scripting, the editor, the renderer) should not need editing. So code outside `FenrirECS` uses `EntityList`, `Entity` and the types `FenrirECS` defines for the purpose, and does not name EnTT types, call its registry, or build its storages.
+
+This came up when scripting needed storage for components that exist only at run time (a script defines them in C#, so they have no C++ type). The first design added a public `EntityList::GetRegistry()` and had `FenrirScripting` build an EnTT storage itself. That put EnTT types in a public header of another package and handed out the raw registry. It was committed, and is replaced by this design before anything else was built on it.
+
+What `FenrirECS` provides instead, with no EnTT type in any signature:
+
+- `DynamicComponentType`: a name, a size and an alignment. `EntityList` stores components of such a type (zeroed on add, removed with the entity, in pages that never move).
+- `ComponentType`, native (`ComponentType::Native<T>()`) or dynamic (`ComponentType::Dynamic(DynamicComponentType)`): one value naming a component type whatever its kind. `EntityList` takes it in `Get`, `Has`, `Add`, `Remove`, `Count` (constant time), `Clear`, and `ForEachWith(types, func)` ("every entity that has all of these"). This is how code outside the ECS reaches, and queries, a component it knows only at run time. (It replaced the first design's `ComponentSelector`, `CountOf` and per-operation `*Dynamic` methods, which split every caller into a native path and a dynamic one.)
+- The byte storage (`ByteStorage`) lives in `FenrirECS/src` and is private to it. It also defends the registry: a dynamic type's storage id is a hash, so before touching anything under that id the ECS checks that the storage is its own and belongs to that type's name. A collision with another dynamic name, or with a native storage, is refused instead of corrupting memory.
+
+## What this does and does not buy
+
+Be precise about it, because the goal is easy to overstate.
+
+- **Source:** code outside `FenrirECS` that follows the rule never names EnTT, so replacing the library means rewriting `FenrirECS` and not editing that code. A CTest in the scripting package (`ScriptingDoesNotUseEnTT`) enforces it for that package by scanning its source text.
+- **Compilation:** it does not remove the dependency from the build. `FenrirECS`'s public headers still include EnTT, because `Entity` and `EntityList` have templates built on it (`GetComponent<T>`, `View`, `Group`, `ForEach`) that are instantiated in the callers' translation units, and so is `ComponentType::Native<T>()`. Other packages therefore still compile against EnTT's headers, and would need recompiling (not editing) after a swap. The guard cannot see that, since it reads text.
+- **What would remove it:** redesigning `Entity` and `EntityList` around type-erased component access, so the headers need no library. That is a larger change, and a separate decision.
+- **Not yet following the rule:** the DemoApp includes `<entt/container/dense_map.hpp>` in `Material.hpp` and uses `View`/`Group` in the renderer. They predate this decision and are not changed by it.
+
+## Cost
+
+- Native components are untouched: their storage, and how `Entity::GetComponent<T>` and the engine's own views reach it, are exactly as they were.
+- A query visits each matching entity through one indirect call (a function pointer and a context), which cannot be inlined across the library boundary. That is the price of keeping the callable out of `FenrirECS`'s translation unit; a hot loop that needs it gone should fill a buffer in one call (the scripting queries will).
+- Building a query costs one lookup per component type to find its storage (a function pointer for a native type, a lookup by id for a dynamic one), plus the allocation EnTT's own runtime view makes. Component types are made once and reused.
+- An operation through a `ComponentType` is one out-of-line call into `FenrirECS` plus that storage lookup, for either kind. Native components' typed operations (`GetComponent<T>` and the rest) are unchanged.
+- For a native type, any `ComponentType` operation or query may create its (empty) storage if the list has none, as asking EnTT for a view of it does. A dynamic type's storage is created only by adding one.
+
+## Consequences
+
+- A feature that needs the ECS to do something it cannot yet do adds a method to `FenrirECS`; the other package calls it. It does not reach for the registry.
+- `FenrirECS` has its own test target (`FenrirECSTests`, Catch2, built with `FENRIR_BUILD_TESTS`), which drives `EntityList`'s dynamic components and mixed queries through its public interface with no .NET. The scripting package's tests still exercise the same behaviour from C#.

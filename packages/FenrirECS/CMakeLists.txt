@@ -6,6 +6,21 @@ add_library(FenrirECS STATIC
     src/EntityList.cpp
 
     include/FenrirECS/DefaultComponents.hpp
+
+    include/FenrirECS/WorldTransform.hpp
+    src/WorldTransform.cpp
+
+    include/FenrirECS/ComponentType.hpp
+
+    include/FenrirECS/ComponentWatch.hpp
+    src/ComponentWatch.cpp
+
+    include/FenrirECS/TrackedComponents.hpp
+    src/TrackedComponents.cpp
+
+    include/FenrirECS/DynamicComponent.hpp
+    src/DynamicComponent.cpp
+    src/ByteStorage.hpp
 )
 
 add_subdirectory(libs)
@@ -13,3 +28,10 @@ add_subdirectory(libs)
 target_link_libraries(FenrirECS PUBLIC FenrirMath)
 
 target_include_directories(FenrirECS PUBLIC include)
+# Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON, which needs the libs/catch2 submodule at the repository root (git submodule update --init).
+if(FENRIR_BUILD_TESTS)
+    add_subdirectory(Tests)
+endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirECS.api.json.
+fenrir_describe_api(FenrirECS api/FenrirECS.api.toml)

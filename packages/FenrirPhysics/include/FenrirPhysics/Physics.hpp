@@ -1,0 +1,115 @@
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <span>
+#include <vector>
+
+#include "FenrirMath/Math.hpp"
+#include "FenrirPhysics/CollisionLayers.hpp"
+#include "FenrirPhysics/Components.hpp"
+#include "FenrirPhysics/PhysicsWorld.hpp"
+
+namespace Fenrir
+{
+    class App;
+
+    namespace Detail
+    {
+        /** @brief What Physics::Install set up. Defined in FenrirPhysics's private headers; nothing else can use it.
+         */
+        struct PhysicsState;
+    } // namespace Detail
+
+    /** @brief How Physics::Install sets physics up for an app. */
+    struct PhysicsConfig
+    {
+        /** @brief The gravity each new physics world starts with, in metres per second squared. */
+        Math::Vec3 gravity = Math::Vec3(0.0f, -9.81f, 0.0f);
+        /** @brief The most bodies each world holds at once. A body beyond it is not made, and that is logged. */
+        std::uint32_t maxBodies = 65536;
+        /** @brief The most pairs of bodies whose bounds overlap that each world tracks in a step. Pairs beyond it are
+         * ignored for that step, and that is logged. */
+        std::uint32_t maxBodyPairs = 65536;
+        /** @brief The most contacts each world resolves in a step. Contacts beyond it are ignored for that step, and
+         * that is logged. */
+        std::uint32_t maxContacts = 10240;
+        /** @brief Names for the collision layers, layer `i` named by `collisionLayers[i]` (at most 32), each with a
+         * default mask. Optional: CollisionFilter takes plain bits whether or not a layer is named. */
+        std::vector<CollisionLayer> collisionLayers;
+        /**
+         * @brief Whether a step spreads its work over the App's worker threads, or runs on the thread that runs the App
+         * alone. Results are the same either way.
+         */
+        bool useWorkerThreads = true;
+        /** @brief Whether bodies, characters and vehicles' wheels are interpolated between ticks
+         * (RigidBody::interpolate, CharacterBody::interpolate). Off: every one is shown at its step poses only. */
+        bool interpolate = true;
+    };
+
+    /**
+     * @brief The owner of what Physics::Install set up: the physics backend's process-wide state and the systems that
+     * step each scene's physics world. Move-only.
+     *
+     * Destroying it first removes every scene's physics world, then tears down the backend; the systems it installed
+     * then do nothing. Destroy it before the App, and keep it alive while the App runs.
+     *
+     * It also holds the collision meshes, which every world shares and reaches (PhysicsWorld::CreateCollisionMesh), so
+     * code that holds a world needs nothing of the owner. Physics's scripting extension is such code: it is made by
+     * PhysicsScriptingExtension() in the FenrirPhysicsScripting library and acts on the active scene's world.
+     */
+    class Physics
+    {
+      public:
+        /**
+         * @brief Turns physics on for `app`. Each scene gets its own physics world the first time it runs as the active
+         * scene with a RigidBody or Collider in it. In `PostTick`, the active scene's world brings its bodies up to
+         * date with their components and world transforms, steps once by `Time::tickRate`, and writes dynamic bodies'
+         * poses and velocities back. Inactive scenes' worlds do not step. A world's capacities are those in `config`
+         * when the world is made, fixed for its life. In `AfterTicks` it writes each interpolated body's and
+         * character's blended pose into its `Transform`, and in `BeforeTicks` restores the true pose. The parts of a
+         * `Transform` game code changed in between are kept: for a body a teleport, for a character a teleport if its
+         * position changed and a turn if only its rotation did.
+         */
+        [[nodiscard]] static Physics Install(App& app, PhysicsConfig config = {});
+
+        /**
+         * @brief Cooks a collision mesh from `vertices` and, for MeshShape, the triangles `indices` lists (three per
+         * triangle, counter-clockwise seen from the front). Copies what it needs, so the spans need not outlive the
+         * call. Loading the data from a model or file is the caller's job.
+         *
+         * Meshes are shared by every scene's world, which reach the same meshes through
+         * PhysicsWorld::CreateCollisionMesh and PhysicsWorld::ReleaseCollisionMesh. Each kind of shape is cooked once,
+         * the first time a collider of that kind uses the mesh, and shared by every collider that refers to it in every
+         * scene. Logs an error and returns the default handle (no mesh) when there are no vertices, the indices are not
+         * whole triangles, or an index is out of range. Indices may be empty for a mesh used only as a hull.
+         */
+        [[nodiscard]] CollisionMesh CreateCollisionMesh(std::span<const Math::Vec3> vertices,
+                                                        std::span<const std::uint32_t> indices);
+
+        /**
+         * @brief Releases a collision mesh made by CreateCollisionMesh. Its memory is freed once no body uses it. A
+         * collider still referring to it has its body removed from the simulation at the next tick, with a warning: it
+         * neither moves nor collides until it is given another shape. Releasing a mesh that is not alive warns and
+         * returns false.
+         */
+        bool ReleaseCollisionMesh(CollisionMesh mesh);
+
+        Physics(Physics&& other) noexcept;
+        Physics& operator=(Physics&& other) noexcept;
+        Physics(const Physics&) = delete;
+        Physics& operator=(const Physics&) = delete;
+        ~Physics();
+
+        /** @brief The collision layers named in the PhysicsConfig given to Install. */
+        [[nodiscard]] const CollisionLayers& Layers() const;
+
+      private:
+        explicit Physics(std::shared_ptr<Detail::PhysicsState> state);
+
+        void Shutdown() noexcept;
+
+        // Shared with the installed systems, which hold it weakly: once the owner is gone they do nothing.
+        std::shared_ptr<Detail::PhysicsState> m_state;
+    };
+} // namespace Fenrir

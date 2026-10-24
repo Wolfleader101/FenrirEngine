@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <OutputType>Library</OutputType>
+    <!-- Only the one case named by -p:Case=<Name> is compiled, against the scripting SDK and the Fenrir.Physics contract
+         (-p:FenrirPhysicsContractDir=<the folder holding Fenrir.Physics.dll>/). -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup>
+    <Compile Include="$(Case).cs" />
+    <Reference Include="Fenrir.Physics">
+      <HintPath>$(FenrirPhysicsContractDir)Fenrir.Physics.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

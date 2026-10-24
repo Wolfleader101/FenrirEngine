@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Analyzers and generators load inside the compiler, which only guarantees netstandard2.0. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsRoslynComponent>true</IsRoslynComponent>
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <AssemblyName>Fenrir.Scripting.Generators</AssemblyName>
+    <RootNamespace>Fenrir.Scripting.Generators</RootNamespace>
+    <!-- The compiler supplies Roslyn; nothing but this assembly is deployed. -->
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+    <!-- Release tracking files and message wording are for published analyzer packages; this generator ships in-tree. -->
+    <NoWarn>$(NoWarn);RS1032;RS2008</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

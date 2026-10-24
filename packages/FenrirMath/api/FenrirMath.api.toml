@@ -1,0 +1,8 @@
+# FenrirMath's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
+# type the package shares with bindings, with its role. Its vector and quaternion are glm's, which every binding has its
+# own of, so they are bound types: described by layout only.
+headers = ["../include/FenrirMath/Math.hpp"]
+
+[types]
+"Fenrir::Math::Vec3" = "bound-type"
+"Fenrir::Math::Quat" = "bound-type"

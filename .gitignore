@@ -454,3 +454,6 @@ FodyWeavers.xsd
 out/
 
 .vscode/
+# Claude Code local files (skills are tracked in .claude/skills; .agents/skills is a symlink to them)
+.claude/settings.local.json
+.claude/worktrees/

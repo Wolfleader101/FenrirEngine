@@ -1,0 +1,23 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+
+# The bridge assembly, its runtime configuration and dependency manifest.
+set_and_check(IRIS_BRIDGE_DIR "@PACKAGE_IRIS_INSTALL_BRIDGE_DIR@")
+
+# nethost, which the static Iris library links against.
+if(NOT TARGET Iris::Nethost)
+    add_library(Iris::Nethost SHARED IMPORTED)
+    set_target_properties(Iris::Nethost PROPERTIES
+        IMPORTED_LOCATION "@PACKAGE_IRIS_INSTALL_NETHOST_RUNTIME@")
+    if(WIN32)
+        set_target_properties(Iris::Nethost PROPERTIES
+            IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@IRIS_INSTALL_NETHOST_IMPLIB@")
+    endif()
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/IrisTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/IrisDeploy.cmake")
+
+check_required_components(Iris)

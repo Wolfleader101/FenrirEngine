@@ -5,35 +5,71 @@
 
 namespace Fenrir
 {
-    ConsoleLogger::ConsoleLogger() : m_logger()
+    ConsoleLogger::ConsoleLogger() : m_logger(), m_loggers()
     {
         m_logger = spdlog::stdout_color_mt("FENRIR");
-        m_logger->set_pattern("%^[%T] %n: %v%$");
+        m_logger->set_pattern("%^[%T] %v%$");
         m_logger->set_level(spdlog::level::trace);
     }
 
-    void ConsoleLogger::LogImpl(const std::string& message)
+    void ConsoleLogger::LogImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::trace, message);
+
+        for (auto& logger : m_loggers)
+        {
+            logger->Log(message);
+        }
     }
 
-    void ConsoleLogger::InfoImpl(const std::string& message)
+    void ConsoleLogger::InfoImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::info, message);
+
+        for (auto& logger : m_loggers)
+        {
+            logger->Info(message);
+        }
     }
 
-    void ConsoleLogger::WarnImpl(const std::string& message)
+    void ConsoleLogger::WarnImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::warn, message);
+
+        for (auto& logger : m_loggers)
+        {
+            logger->Warn(message);
+        }
     }
 
-    void ConsoleLogger::ErrorImpl(const std::string& message)
+    void ConsoleLogger::ErrorImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::err, message);
+
+        for (auto& logger : m_loggers)
+        {
+            logger->Error(message);
+        }
     }
 
-    void ConsoleLogger::FatalImpl(const std::string& message)
+    void ConsoleLogger::FatalImpl(std::string_view message)
     {
         m_logger->log(spdlog::level::critical, message);
+
+        for (auto& logger : m_loggers)
+        {
+            logger->Fatal(message);
+        }
     }
+
+    void ConsoleLogger::AddLogger(std::shared_ptr<ILogger> logger)
+    {
+        m_loggers.push_back(logger);
+    }
+
+    void ConsoleLogger::RemoveLogger(std::shared_ptr<ILogger> logger)
+    {
+        m_loggers.erase(std::remove(m_loggers.begin(), m_loggers.end(), logger), m_loggers.end());
+    }
+
 } // namespace Fenrir
