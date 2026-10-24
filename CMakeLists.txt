@@ -67,6 +67,7 @@ add_subdirectory(packages/FenrirInput)
 
 if(FENRIR_ENABLE_ASSETS)
     add_subdirectory(packages/FenrirAssets)
+    add_subdirectory(packages/FenrirDraw2D)
 endif()
 # Always built: it links no library (ADR-0025).
 add_subdirectory(packages/FenrirDebugDraw)

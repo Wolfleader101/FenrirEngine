@@ -72,7 +72,7 @@ namespace Fenrir::Graphics
     PipelineResult NullDevice::CreatePipeline(const PipelineDesc& desc, std::string_view label)
     {
         // Any shader container is accepted: there is nothing to compile it for.
-        NullPipeline pipeline{std::string(label), desc.samples, {}, desc.cull, desc.depth, desc.blend};
+        NullPipeline pipeline{std::string(label), desc.samples, {}, desc.cull, desc.depth, desc.blend, desc.encodeSrgb};
         if (desc.shader != nullptr)
         {
             pipeline.keys = desc.shader->keys;

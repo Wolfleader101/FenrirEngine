@@ -186,6 +186,17 @@ namespace Fenrir::Render
             return m_samples;
         }
 
+        /** @name Sampling, for render features that sample images as materials do
+         * @{
+         */
+        /** @brief The texture the image or render target `key` is prepared as; empty if it is neither. */
+        [[nodiscard]] Graphics::TextureHandle SampledTexture(AssetKey key) const;
+        /** @brief The renderer's 1x1 default texture `texture`. */
+        [[nodiscard]] Graphics::TextureHandle GetDefaultTexture(DefaultTexture texture) const;
+        /** @brief A sampler for a texture's description, shared by equal descriptions. */
+        [[nodiscard]] Graphics::SamplerHandle SamplerFor(const SamplerDescription& description);
+        /** @} */
+
       private:
         friend struct Fenrir::RendererProbe;
 
@@ -330,16 +341,12 @@ namespace Fenrir::Render
                          const std::vector<Graphics::BindingGroupHandle>& groups, const std::vector<std::size_t>& order,
                          Graphics::BindingGroupHandle frameGroup, Graphics::BindingGroupHandle viewGroup,
                          Graphics::BindingGroupHandle drawGroup, Graphics::PixelRect viewport) const;
-        /** @brief The texture the image or render target `key` is prepared as; empty if it is neither. */
-        [[nodiscard]] Graphics::TextureHandle SampledTexture(AssetKey key) const;
         [[nodiscard]] Graphics::PipelineHandle MakeInternalPipeline(const ShaderContainer& container,
                                                                     const ShaderVariant* variant,
                                                                     Graphics::BindingGroupLayoutHandle layout,
                                                                     Graphics::TextureFormat colour, bool depthTested,
                                                                     std::uint32_t samples,
                                                                     Graphics::BindingGroupLayoutHandle viewLayout = {});
-        /** @brief A sampler for a material texture parameter's description, shared by equal descriptions. */
-        [[nodiscard]] Graphics::SamplerHandle SamplerFor(const SamplerDescription& description);
         /** @brief The material's group with the sampled targets in `replaced` bound to their defaults instead. */
         [[nodiscard]] Graphics::BindingGroupHandle GroupWithout(MaterialEntry& material,
                                                                 const std::vector<AssetKey>& replaced);
