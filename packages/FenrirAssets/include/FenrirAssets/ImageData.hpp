@@ -30,7 +30,10 @@ namespace Fenrir
     enum class ImageShape : std::uint8_t
     {
         Flat,
-        /** @brief Six square faces of one size, for a sky: +X, -X, +Y, -Y, +Z, -Z. */
+        /**
+         * @brief Six square faces of one size, for a sky: +X, -X, +Y, -Y, +Z, -Z, each laid out as GL and D3D lay out a
+         * cubemap's faces (seen from inside, a face's top row is up). Loaded from a `.cubemap` file (AssetStore::Load).
+         */
         Cubemap,
     };
 

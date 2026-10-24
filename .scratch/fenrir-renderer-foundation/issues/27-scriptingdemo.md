@@ -11,8 +11,9 @@
 
 **Touches:** `examples/ScriptingDemo/`, `examples/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
+Hand check: ScriptingDemo's Showcase behaves as the legacy scripting demo did, each row of the table in `examples/ScriptingDemo/README.md` checked (its "Hand checks" list): the backpacks spin, Backpack 2 bobs with its name counting the phase, R reverses the spin, Space bursts five sparks that burn out, and hot reload, editing `scripts/Spin.cs` while the demo runs and building `ScriptingDemoDeployScripts`, keeps the spin angles.
 
-- [ ] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs "Showcase" on null and GL with no errors and the legacy log lines (the key event, `Burst`, `Expired`).
-- [ ] Every behaviour in the legacy README table is present (checked against the legacy scripts).
+- [x] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs "Showcase" on null and GL with no errors and the legacy log lines (the key event, `Burst`, `Expired`).
+- [x] Every behaviour in the legacy README table is present (checked against the legacy scripts).
 - [ ] By hand: the backpacks spin and bob, sparks burst on `Space`, `R` and hot reload work as in the legacy demo (checked by hand).

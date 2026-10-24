@@ -7,6 +7,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirDebugDrawScripting defines DebugDrawing::ScriptingExtension().
+    struct ScriptingExtension;
 
     /**
      * @brief The owner of what DebugDrawing::Install set up: each scene's DebugDraw and the expiry system. Move-only.
@@ -25,6 +27,22 @@ namespace Fenrir
          * batch ends, in registration order, through the scheduler's per-system send buffers. It cannot fail.
          */
         [[nodiscard]] static DebugDrawing Install(App& app);
+
+        /**
+         * @brief FenrirDebugDraw's scripting extension (ADR-0029): the Fenrir.DebugDraw contract, whose static
+         * `DebugDraw` facade makes every DebugDraw call from C# into the active scene's DebugDraw. Add it to
+         * ScriptingConfig::extensions.
+         *
+         * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
+         * DebugDraw in the active scene (debug drawing not installed), or a `relativeTo` entity that is not alive, they
+         * draw nothing and IsGroupShown is false. In debug builds each such case is warned about once per process for
+         * each place in FenrirDebugDrawScripting's native code that notices it, not once per C# call site.
+         *
+         * Defined by the FenrirDebugDrawScripting library, not FenrirDebugDraw (which never links FenrirScripting), so
+         * it exists only in a build with scripting on. Include "FenrirDebugDrawScripting/DebugDrawScripting.hpp" and
+         * link FenrirDebugDrawScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
         DebugDrawing(DebugDrawing&& other) noexcept;
         DebugDrawing& operator=(DebugDrawing&& other) noexcept;

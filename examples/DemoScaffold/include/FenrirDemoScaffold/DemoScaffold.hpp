@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -11,6 +12,10 @@
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+
+#ifdef FENRIR_DEMO_SCRIPTING
+#include "FenrirScripting/ScriptingExtension.hpp"
+#endif
 
 // The demo scaffold (GLOSSARY.md): what every demo app is built on. DemoScaffold::Install installs the engine packages
 // a demo app needs and adds the free-fly camera, the scene list, the scene-click event, the help panel and the
@@ -61,6 +66,25 @@ namespace FenrirDemo
         std::function<void(Fenrir::App& app, Fenrir::Scene& scene)> spawn;
         /** @brief Runs once a frame while the scene is active, in Update, on the main thread. Optional. */
         std::function<void(Fenrir::App& app, Fenrir::Scene& scene)> update;
+        /**
+         * @brief Nonzero marks a C# scene, spawned and run by the app's C# systems, which know it by this number: each
+         * time it is entered its FenrirScene gets a CSharpScene resource holding it, and the systems run only while
+         * that is the active scene's (`CSharpScene.IsActive` in the Fenrir.Demo assembly). Unique in the app.
+         */
+        std::uint32_t csharpScene = 0;
+    };
+
+    /**
+     * @brief The marker a C# scene's FenrirScene holds (DemoScene::csharpScene), a scene resource C# reads as
+     * `Fenrir.Demo.CSharpScene`: which C# scene it is, and which entry, so that its systems run only while it is active
+     * and spawn it once each time it is entered.
+     */
+    struct CSharpScene
+    {
+        /** @brief The scene's DemoScene::csharpScene. */
+        std::uint32_t scene = 0;
+        /** @brief Counts the app's scene entries: a new value each time any scene is entered. */
+        std::uint32_t entry = 0;
     };
 
     /** @brief The smoke-run switches, read from the environment by FromEnvironment (examples/DemoScaffold/README.md).
@@ -100,9 +124,37 @@ namespace FenrirDemo
         std::vector<DemoScene> scenes;
         /** @brief The renderer's MSAA samples per pixel (RendererConfig::msaa); 1 is off. */
         std::uint32_t msaa = 1;
+        /**
+         * @brief Installs the scaffold's ImGuiOverlay (examples/DemoScaffold/README.md): Dear ImGui over the main
+         * window, drawn on the overlay layer ImGuiOverlayLayer and seeing input before the game. A scene's `update`
+         * then makes ImGui windows with ImGui's own functions (`<imgui.h>`). The window's text input is then on only
+         * where ImGui asks for it (WindowConfig::textInputByDefault is false).
+         */
+        bool imguiOverlay = false;
         /** @brief The smoke-run switches; DemoScaffold reads them from the environment unless given. */
         std::optional<DemoRunOptions> run;
+        /**
+         * @brief The app's C# script assembly, relative to the executable's directory (fenrir_add_demo_app's SCRIPTS
+         * builds it to `scripts/<app>.Scripts.dll`, and defines FENRIR_DEMO_SCRIPT_ASSEMBLY to that path for the
+         * app's sources). Empty, or with scripting not built, the app has no C# systems.
+         */
+        std::filesystem::path scriptAssembly;
+#ifdef FENRIR_DEMO_SCRIPTING
+        /**
+         * @brief The app's own scripting extensions (its components and events shared with C#), which Scripting runs
+         * with after the packages' and the scaffold's. Only with scripting built (FENRIR_DEMO_SCRIPTING).
+         */
+        std::vector<Fenrir::ScriptingExtension> scriptingExtensions;
+#endif
     };
+
+    /** @brief The overlay layer the ImGuiOverlay draws on; a scene's own 2D draw lists on lower layers draw under it.
+     */
+    inline constexpr std::int32_t ImGuiOverlayLayer = 1000;
+
+    /** @brief The ImGuiOverlay's input router priority: it sees input before routers of lower priority, and the game.
+     */
+    inline constexpr int ImGuiOverlayRouterPriority = 1000;
 
     /**
      * @brief Sent when the scene is left-clicked (without the right mouse button held): the ray, from
@@ -132,9 +184,12 @@ namespace FenrirDemo
       public:
         /**
          * @brief Installs Input, Assets, DebugDrawing and the Renderer on `config.run`'s backend, and FenrirWindow
-         * before them for any backend but Null, and adds the scaffold's systems. The first frame enters the scene
-         * FENRIR_DEMO_SCENE names, or the first. A backend that cannot start leaves the renderer invalid (logged), and
-         * Run then returns without running.
+         * before them for any backend but Null, and adds the scaffold's systems. When scripting is built
+         * (FENRIR_ENABLE_SCRIPTING) and `config.scriptAssembly` is given, it installs Scripting last, running that
+         * assembly with every installed package's scripting extension and the scaffold's own (the Fenrir.Demo
+         * assembly: CSharpScene and DemoSceneClickEvent), then `config.scriptingExtensions`; a script assembly that
+         * fails to load is logged as an error. The first frame enters the scene FENRIR_DEMO_SCENE names, or the first.
+         * A backend that cannot start leaves the renderer invalid (logged), and Run then returns without running.
          */
         [[nodiscard]] static DemoScaffold Install(Fenrir::App& app, DemoConfig config);
 

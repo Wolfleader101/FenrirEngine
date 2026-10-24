@@ -455,6 +455,15 @@ namespace TestExtension
         (void)changes.AddComponent(doomed, Charge{9});
         changes.InsertSceneResource(Weather{wind, 4});
     }
+
+    // Creates an entity and records parenting it under `parent`; a dead parent records no parenting.
+    static std::uint32_t SpawnUnder(const Fenrir::CallContext& context, std::uint32_t parent)
+    {
+        const auto changes = context.Changes();
+        const std::uint32_t child = changes.CreateEntity();
+        (void)changes.AddChild(parent, child);
+        return child;
+    }
 } // namespace TestExtension
 
 template <>
@@ -4131,6 +4140,7 @@ namespace
             NativeFunction::Make<&TestExtension::Label>("Fenrir.TestExtension.Gadgets.Label"),
             NativeFunction::Make<&TestExtension::SpawnCharged>("Fenrir.TestExtension.Gadgets.SpawnCharged"),
             NativeFunction::Make<&TestExtension::Rearrange>("Fenrir.TestExtension.Gadgets.Rearrange"),
+            NativeFunction::Make<&TestExtension::SpawnUnder>("Fenrir.TestExtension.Gadgets.SpawnUnder"),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
@@ -4659,6 +4669,41 @@ namespace
         }
     }
 
+    void ANativeFunctionParentsAnEntityAtPlayback()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const Entity parent = entities.CreateEntity();
+        const Entity older = entities.CreateEntity();
+        parent.AddChild(older);
+
+        const auto child = ExtensionCall<std::uint32_t>(scripting, "SpawnUnder", parent.GetId());
+        {
+            INFO("The parenting reached the hierarchy before playback");
+            REQUIRE(parent.GetComponent<Relationship>().firstChild == older);
+            REQUIRE(!older.GetComponent<Relationship>().nextSibling.IsValid());
+        }
+        const auto summary = ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("Creating the entity and parenting it were not both played back");
+            REQUIRE((summary.applied == 2 && summary.skipped == 0));
+        }
+        {
+            INFO("The created entity is not the parent's last child after playback");
+            REQUIRE(entities.GetEntity(child).GetComponent<Relationship>().parent == parent);
+            REQUIRE(older.GetComponent<Relationship>().nextSibling.GetId() == child);
+        }
+
+        const std::uint32_t dead = entities.CreateEntity().GetId();
+        entities.DestroyEntity(dead);
+        const auto orphan = ExtensionCall<std::uint32_t>(scripting, "SpawnUnder", dead);
+        const auto refused = ScriptingProbe::ApplyChanges(scripting);
+        INFO("Parenting under an entity that is not alive was recorded, or the orphan has a parent");
+        REQUIRE((refused.applied == 1 && refused.skipped == 0));
+        REQUIRE(!entities.GetEntity(orphan).GetComponent<Relationship>().parent.IsValid());
+    }
+
 } // namespace
 
 TEST_CASE("the fixture loads, frames run and Iris's messages reach the engine logger", "[scripting]")
@@ -5179,4 +5224,9 @@ TEST_CASE("a native function creates an entity that is usable at once", "[script
 TEST_CASE("a native function's changes play back in order after the call", "[scripting]")
 {
     ANativeFunctionsChangesPlayBackInOrderAfterTheCall();
+}
+
+TEST_CASE("a native function parents an entity under another at playback", "[scripting]")
+{
+    ANativeFunctionParentsAnEntityAtPlayback();
 }

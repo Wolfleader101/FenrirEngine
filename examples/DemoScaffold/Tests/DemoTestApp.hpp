@@ -120,8 +120,9 @@ namespace DemoScaffoldTests
         Fenrir::App app{std::make_unique<RecordingLogger>(logged), 2};
         FenrirDemo::DemoScaffold demo;
 
-        explicit DemoTestApp(std::vector<FenrirDemo::DemoScene> scenes, FenrirDemo::DemoRunOptions run = NullRun())
-            : demo(Install(app, std::move(scenes), std::move(run)))
+        explicit DemoTestApp(std::vector<FenrirDemo::DemoScene> scenes, FenrirDemo::DemoRunOptions run = NullRun(),
+                             bool imguiOverlay = false)
+            : demo(Install(app, std::move(scenes), std::move(run), imguiOverlay))
         {
         }
 
@@ -158,12 +159,13 @@ namespace DemoScaffoldTests
 
       private:
         static FenrirDemo::DemoScaffold Install(Fenrir::App& app, std::vector<FenrirDemo::DemoScene> scenes,
-                                                FenrirDemo::DemoRunOptions run)
+                                                FenrirDemo::DemoRunOptions run, bool imguiOverlay)
         {
             FenrirDemo::DemoConfig config;
             config.appName = "TestDemo";
             config.scenes = std::move(scenes);
             config.run = std::move(run);
+            config.imguiOverlay = imguiOverlay;
             return FenrirDemo::DemoScaffold::Install(app, std::move(config));
         }
     };

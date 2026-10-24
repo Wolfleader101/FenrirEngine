@@ -5,6 +5,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstdlib>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -18,6 +19,12 @@
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirWindow/Window.hpp"
+#include "ImGuiOverlay.hpp"
+
+#ifdef FENRIR_DEMO_SCRIPTING
+#include "DemoScripting.hpp"
+#include "FenrirScripting/Scripting.hpp"
+#endif
 
 namespace FenrirDemo
 {
@@ -161,11 +168,19 @@ namespace FenrirDemo
             std::optional<Fenrir::Assets> assets;
             std::optional<Fenrir::DebugDrawing> debugDrawing;
             std::optional<Fenrir::Renderer> renderer;
+#ifdef FENRIR_DEMO_SCRIPTING
+            // Last, so it ends first, while the packages its extensions reach are there.
+            std::optional<Fenrir::Scripting> scripting;
+#endif
+            // DemoConfig::imguiOverlay: ended first, while the input and the asset store it uses are there.
+            std::optional<ImGuiOverlay> imgui;
 
             // The App's own first scene, kept empty and active between leaving one demo scene and entering the next.
             std::string holderScene;
             bool started = false;
             std::optional<std::size_t> current;
+            // Scene entries so far, which a C# scene's CSharpScene marker carries.
+            std::uint32_t entries = 0;
 
             Fenrir::Entity freeFly;
             bool freeFlyOn = true;
@@ -292,6 +307,11 @@ namespace FenrirDemo
                 framesInScene = 0;
                 secondsActive = 0.0;
                 keysPressed = 0;
+                ++entries;
+                if (demoScene.csharpScene != 0)
+                {
+                    scene.AddResource<CSharpScene>(CSharpScene{demoScene.csharpScene, entries});
+                }
 
                 // The free-fly camera first, so the scene can find it.
                 Fenrir::EntityList& entities = scene.GetEntityList();
@@ -433,14 +453,36 @@ namespace FenrirDemo
                 {
                     return;
                 }
-                // Debug screen text, which the renderer draws from renderer ticket 17 on.
+                // Debug screen text, in the window's bottom-left corner, clear of the on-screen messages the renderer
+                // stacks from its top-left.
                 if (auto* draw = app->GetActiveScene().GetResource<Fenrir::DebugDraw>())
                 {
-                    float y = 16.0f;
-                    for (const std::string& line : HelpLines())
+                    constexpr float margin = 16.0f;
+                    constexpr float lineHeight = 20.0f;
+                    // Long lines wrap at a word, so the panel fits a window of the default size.
+                    constexpr std::size_t widest = 100;
+                    std::vector<std::string> lines;
+                    for (std::string line : HelpLines())
                     {
-                        draw->ScreenText({16.0f, y}, line, Fenrir::Colour::White);
-                        y += 20.0f;
+                        while (line.size() > widest)
+                        {
+                            const std::size_t space = line.rfind(' ', widest);
+                            // Past the indent of a wrapped line, or a word longer than a line is cut.
+                            const bool atWord = space != std::string::npos && space > 2;
+                            const std::size_t cut = atWord ? space : widest;
+                            lines.push_back(line.substr(0, cut));
+                            line.erase(0, atWord ? cut + 1 : cut);
+                            line.insert(0, "  ");
+                        }
+                        lines.push_back(line);
+                    }
+                    const float height =
+                        static_cast<float>(Fenrir::Window::LogicalSize(*app, Fenrir::Window::MainWindow()).height);
+                    float y = std::max(margin, height - margin - lineHeight * static_cast<float>(lines.size()));
+                    for (const std::string& line : lines)
+                    {
+                        draw->ScreenText({margin, y}, line, Fenrir::Colour::White);
+                        y += lineHeight;
                     }
                 }
             }
@@ -568,6 +610,11 @@ namespace FenrirDemo
             // BeforeTicks: the scene list, the help panel, the free-fly camera and the scene click.
             void BeforeTicks()
             {
+                // Before anything makes an ImGui window this frame.
+                if (imgui)
+                {
+                    imgui->BeginFrame();
+                }
                 if (!started)
                 {
                     Start();
@@ -661,6 +708,8 @@ namespace FenrirDemo
             window.title = state->config.appName;
             // A smoke run is a check, not a show: its window is never shown.
             window.visible = !smoke;
+            // ImGui turns text input on where it wants text, with its caret for the IME.
+            window.textInputByDefault = !state->config.imguiOverlay;
             state->window = Fenrir::Window::Install(app, window);
         }
         state->input = Fenrir::Input::Install(app);
@@ -677,6 +726,26 @@ namespace FenrirDemo
             renderer.vsync = Fenrir::Vsync::Off;
         }
         state->renderer = Fenrir::Renderer::Install(app, renderer);
+#ifdef FENRIR_DEMO_SCRIPTING
+        if (!state->config.scriptAssembly.empty())
+        {
+            Fenrir::ScriptingConfig scripting;
+            // The asset store's root is the default, `assets` beside the executable, so its parent is the
+            // executable's directory, where fenrir_add_demo_app puts the scripts.
+            scripting.scriptAssembly = state->assets->Store().Root().parent_path() / state->config.scriptAssembly;
+            // A smoke run is a check of the scripts as built, not an editing session.
+            scripting.hotReload = !smoke;
+            scripting.extensions = Detail::DemoScriptingExtensions();
+            // The app's own, after the ones they may build on.
+            std::ranges::move(state->config.scriptingExtensions, std::back_inserter(scripting.extensions));
+            state->scripting = Fenrir::Scripting::Install(app, std::move(scripting));
+        }
+#endif
+
+        if (state->config.imguiOverlay)
+        {
+            state->imgui.emplace(app, state->assets->Store());
+        }
 
         std::weak_ptr<Detail::DemoState> weak = state;
         app.AddSequentialSystem(Fenrir::SchedulePriority::BeforeTicks, [weak](Fenrir::App&) {
@@ -691,6 +760,16 @@ namespace FenrirDemo
                 locked->Update();
             }
         });
+        if (state->imgui)
+        {
+            // After every scene's Update: what ImGui drew this frame goes to the overlay before Render.
+            app.AddSequentialSystem(Fenrir::SchedulePriority::PostUpdate, [weak](Fenrir::App&) {
+                if (const auto locked = weak.lock(); locked && locked->imgui)
+                {
+                    locked->imgui->EndFrame();
+                }
+            });
+        }
         return DemoScaffold(std::move(state));
     }
 

@@ -74,9 +74,6 @@ namespace Fenrir::Render
         /** @brief The binding set of the material. */
         constexpr std::uint32_t MaterialSet = 2;
 
-        /** @brief Uniform ranges are bound at multiples of this, the largest alignment GL implementations ask for. */
-        constexpr std::size_t UniformAlignment = 256;
-
         /** @brief One standard vertex stream (`Fenrir/Vertex.glsl`), by location: its name, format and size. */
         struct StreamFormat
         {
@@ -307,15 +304,33 @@ namespace Fenrir::Render
             return next;
         }
 
+        /**
+         * @brief Writes one layer of `texture` (a cube face, else 0) from `pixels`, `width` x `height`, and every mip
+         * level below it, each made from the one above (ADR-0024: mips are made at upload).
+         */
+        void WriteWithMips(GraphicsDevice& device, TextureHandle texture, std::uint32_t layer, std::uint32_t mipLevels,
+                           std::span<const std::byte> pixels, std::uint32_t width, std::uint32_t height,
+                           const TexelCodec& codec)
+        {
+            std::vector<std::byte> level;
+            std::span<const std::byte> current = pixels;
+            for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
+            {
+                if (mip > 0)
+                {
+                    level = Downsample(current, width, height, codec);
+                    current = level;
+                    width = std::max(1u, width / 2);
+                    height = std::max(1u, height / 2);
+                }
+                device.WriteTexture(texture, mip, layer, current);
+            }
+        }
+
         template <typename T>
         std::span<const std::byte> BytesOf(const T& value)
         {
             return std::as_bytes(std::span(&value, 1));
-        }
-
-        std::size_t RoundUp(std::size_t size, std::size_t multiple)
-        {
-            return (size + multiple - 1) / multiple * multiple;
         }
 
         /** @brief The standard vertex locations a variant reads, as bits. */
@@ -512,74 +527,6 @@ namespace Fenrir::Render
         }
     } // namespace
 
-    // ---- BlockRing ----
-
-    SceneRenderer::BlockRing::BlockRing(GraphicsDevice& device, BindingGroupLayoutHandle layout, bool storage,
-                                        std::size_t slotSize, std::string label)
-        : m_device(device), m_layout(layout), m_storage(storage),
-          m_slotSize(storage ? slotSize : RoundUp(slotSize, UniformAlignment)), m_label(std::move(label))
-    {
-    }
-
-    SceneRenderer::BlockRing::~BlockRing()
-    {
-        DestroyGroups();
-    }
-
-    void SceneRenderer::BlockRing::DestroyGroups()
-    {
-        for (const std::vector<BindingGroupHandle>& copy : m_groups)
-        {
-            for (const BindingGroupHandle group : copy)
-            {
-                m_device.Destroy(group);
-            }
-        }
-        m_groups.clear();
-    }
-
-    void SceneRenderer::BlockRing::Reserve(std::size_t slots)
-    {
-        slots = std::max<std::size_t>(slots, 1);
-        if (m_ring != nullptr && slots <= m_slots)
-        {
-            return;
-        }
-        // Grow by doubling, so a scene that keeps growing remakes its buffers rarely.
-        m_slots = std::max(slots, m_slots * 2);
-        DestroyGroups();
-        m_ring.reset();
-        const BufferUsage usage = m_storage ? BufferUsage::Storage : BufferUsage::Uniform;
-        m_ring = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_slots * m_slotSize, usage}, m_label);
-        for (std::size_t copy = 0; copy < m_ring->CopyCount(); ++copy)
-        {
-            const BufferHandle buffer = m_ring->Current(copy);
-            std::vector<BindingGroupHandle>& groups = m_groups.emplace_back();
-            const std::size_t groupCount = m_storage ? 1 : m_slots;
-            for (std::size_t slot = 0; slot < groupCount; ++slot)
-            {
-                BindingGroupEntry entry;
-                entry.binding = 0;
-                entry.buffer = buffer;
-                entry.offset = m_storage ? 0 : slot * m_slotSize;
-                entry.size = m_storage ? 0 : m_slotSize;
-                groups.push_back(m_device.CreateBindingGroup({m_layout, {entry}}, m_label));
-            }
-        }
-    }
-
-    void SceneRenderer::BlockRing::Write(std::uint64_t frameIndex, std::size_t slot, std::span<const std::byte> bytes)
-    {
-        m_ring->Write(frameIndex, slot * m_slotSize, bytes);
-    }
-
-    BindingGroupHandle SceneRenderer::BlockRing::Group(std::uint64_t frameIndex, std::size_t slot) const
-    {
-        const std::vector<BindingGroupHandle>& copy =
-            m_groups.at(static_cast<std::size_t>(frameIndex % m_groups.size()));
-        return copy.at(m_storage ? 0 : slot);
-    }
-
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
@@ -612,6 +559,8 @@ namespace Fenrir::Render
         clamp.addressV = AddressMode::ClampToEdge;
         clamp.addressW = AddressMode::ClampToEdge;
         m_outputSampler = m_device.CreateSampler(clamp, "Output sampler");
+        // Clamped, so a face's edge does not wrap round to its opposite edge, and trilinear across the mips.
+        m_skySampler = m_device.CreateSampler(clamp, "Sky sampler");
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -636,6 +585,13 @@ namespace Fenrir::Render
         }
         m_backgroundPipeline = MakeInternalPipeline(m_background, BaseVariant(m_background), m_backgroundLayout,
                                                     TextureFormat::Rgba16Float, true, m_samples);
+        constexpr std::array<std::string_view, 1> cubemap{"CUBEMAP"};
+        if (const ShaderVariant* variant = m_background.FindVariant(cubemap))
+        {
+            m_skyLayout = MaterialLayoutOf(*variant);
+            m_skyPipeline = MakeInternalPipeline(m_background, variant, m_skyLayout, TextureFormat::Rgba16Float, true,
+                                                 m_samples, m_viewLayout);
+        }
         // With MSAA, Output reads every sample of SceneColor and averages them: the resolve.
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
         const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
@@ -667,6 +623,11 @@ namespace Fenrir::Render
         {
             m_device.Destroy(image.texture);
         }
+        for (auto& [key, cubemap] : m_cubemaps)
+        {
+            m_device.Destroy(cubemap.group);
+            m_device.Destroy(cubemap.texture);
+        }
         for (auto& [desc, sampler] : m_samplers)
         {
             m_device.Destroy(sampler);
@@ -692,8 +653,10 @@ namespace Fenrir::Render
         m_drawBlocks.reset();
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
+        m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_backgroundLayout);
+        m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
         m_device.Destroy(m_frameLayout);
         m_device.Destroy(m_viewLayout);
@@ -704,6 +667,7 @@ namespace Fenrir::Render
         }
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
+        m_device.Destroy(m_skySampler);
         m_device.Destroy(m_defaultStreams);
     }
 
@@ -731,11 +695,13 @@ namespace Fenrir::Render
 
     PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container, const ShaderVariant* variant,
                                                        BindingGroupLayoutHandle layout, TextureFormat colour,
-                                                       bool depthTested, std::uint32_t samples)
+                                                       bool depthTested, std::uint32_t samples,
+                                                       BindingGroupLayoutHandle viewLayout)
     {
         PipelineDesc desc;
         desc.shader = variant;
         desc.samples = samples;
+        desc.sets.at(1) = viewLayout;
         desc.sets.at(MaterialSet) = layout;
         desc.cull = CullMode::None;
         desc.colourFormats = {colour};
@@ -788,23 +754,8 @@ namespace Fenrir::Render
         desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
         entry.texture = m_device.CreateTexture(desc, "Material image");
 
-        // Every mip level, each made from the one above (ADR-0024: mips are made at upload).
-        const TexelCodec codec = CodecOf(image);
-        std::vector<std::byte> level;
-        std::span<const std::byte> current = image.pixels;
-        std::uint32_t width = image.width;
-        std::uint32_t height = image.height;
-        for (std::uint32_t mip = 0; mip < desc.mipLevels; ++mip)
-        {
-            if (mip > 0)
-            {
-                level = Downsample(current, width, height, codec);
-                current = level;
-                width = std::max(1u, width / 2);
-                height = std::max(1u, height / 2);
-            }
-            m_device.WriteTexture(entry.texture, mip, 0, current);
-        }
+        WriteWithMips(m_device, entry.texture, 0, desc.mipLevels, image.pixels, image.width, image.height,
+                      CodecOf(image));
         ++m_stats.uploads;
     }
 
@@ -828,6 +779,62 @@ namespace Fenrir::Render
         return keys;
     }
 
+    bool SceneRenderer::IsCubemapCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_cubemaps.find(key);
+        return found != m_cubemaps.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image)
+    {
+        ReleaseCubemap(key);
+        CubemapEntry& entry = m_cubemaps[key];
+        entry.revision = revision;
+        TextureDesc desc;
+        desc.kind = TextureKind::Cube;
+        desc.format = TextureFormatOf(image);
+        desc.width = image.width;
+        desc.height = image.height;
+        desc.mipLevels = MipCount(image.width, image.height);
+        desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        entry.texture = m_device.CreateTexture(desc, "Sky cubemap");
+        const TexelCodec codec = CodecOf(image);
+        const std::size_t faceBytes = std::size_t{image.width} * image.height * codec.bytes;
+        for (std::uint32_t face = 0; face < 6; ++face)
+        {
+            WriteWithMips(m_device, entry.texture, face, desc.mipLevels,
+                          std::span(image.pixels).subspan(face * faceBytes, faceBytes), image.width, image.height,
+                          codec);
+        }
+        BindingGroupEntry binding;
+        binding.binding = 0;
+        binding.texture = entry.texture;
+        binding.sampler = m_skySampler;
+        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleaseCubemap(AssetKey key)
+    {
+        const auto found = m_cubemaps.find(key);
+        if (found != m_cubemaps.end())
+        {
+            m_device.Destroy(found->second.group);
+            m_device.Destroy(found->second.texture);
+            m_cubemaps.erase(found);
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::CubemapKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_cubemaps)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
     TextureHandle SceneRenderer::SampledTexture(AssetKey key) const
     {
         if (const auto target = m_targets.find(key); target != m_targets.end())
@@ -836,6 +843,11 @@ namespace Fenrir::Render
         }
         const auto image = m_images.find(key);
         return image == m_images.end() ? TextureHandle{} : image->second.texture;
+    }
+
+    TextureHandle SceneRenderer::GetDefaultTexture(DefaultTexture texture) const
+    {
+        return m_defaultTextures.at(static_cast<std::size_t>(texture));
     }
 
     bool SceneRenderer::IsTargetCurrent(AssetKey key, std::uint32_t revision) const
@@ -1442,6 +1454,7 @@ namespace Fenrir::Render
         }
 
         m_stats.draws = 0;
+        m_drawnViews.clear();
         if (m_frame.views.empty())
         {
             AddWindowClear(graph, frame);
@@ -1568,7 +1581,14 @@ namespace Fenrir::Render
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
             const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
-            const BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
+            // The Sky cubemap's pipeline and group, when the view draws one that is prepared; else its colour's.
+            BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
+            PipelineHandle backgroundPipeline = m_backgroundPipeline;
+            if (const auto sky = m_cubemaps.find(request.sky); sky != m_cubemaps.end() && !m_skyPipeline.IsEmpty())
+            {
+                backgroundGroup = sky->second.group;
+                backgroundPipeline = m_skyPipeline;
+            }
 
             // Each draw's material group in this view, with the images it may not sample replaced.
             auto groups = std::make_shared<std::vector<BindingGroupHandle>>();
@@ -1595,6 +1615,7 @@ namespace Fenrir::Render
             depthDesc.usage = TextureUsage::DepthAttachment;
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, viewGroup});
 
             // Opaque items in draw-list order; transparent ones back to front by the view-space depth of their world
             // origins, the farthest (most negative view z) first.
@@ -1651,10 +1672,11 @@ namespace Fenrir::Render
                     pass.ColourAttachment(sceneColour, LoadOp::Load);
                     pass.DepthReadOnly(sceneDepth);
                 },
-                [this, backgroundGroup, viewport](PassContext& context) {
+                [backgroundPipeline, backgroundGroup, viewGroup, viewport](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(viewport);
-                    encoder.SetPipeline(m_backgroundPipeline);
+                    encoder.SetPipeline(backgroundPipeline);
+                    encoder.SetBindingGroup(1, viewGroup);
                     encoder.SetBindingGroup(MaterialSet, backgroundGroup);
                     encoder.Draw({.vertexCount = 3});
                 });

@@ -29,8 +29,8 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
-        constexpr std::array<GLenum, 5> internalFormats{GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F,
-                                                        GL_RGBA32F};
+        constexpr std::array<GLenum, 6> internalFormats{
+            GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F, GL_RGBA32F, GL_R8};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -41,12 +41,13 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 5> uploadFormats{{
+        constexpr std::array<UploadFormat, 6> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
             {GL_DEPTH_COMPONENT, GL_FLOAT, 4},
             {GL_RGBA, GL_FLOAT, 16},
+            {GL_RED, GL_UNSIGNED_BYTE, 1},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
@@ -489,6 +490,7 @@ namespace Fenrir::Graphics
         pipeline.cull = desc.cull;
         pipeline.depth = desc.depth;
         pipeline.blend = desc.blend;
+        pipeline.encodeSrgb = desc.encodeSrgb;
         gl.CreateVertexArrays(1, &pipeline.vertexArray);
         for (std::size_t slot = 0; slot < desc.vertexBuffers.size(); ++slot)
         {
@@ -758,6 +760,8 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
+        // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
+        m_gl->Enable(GL_FRAMEBUFFER_SRGB);
         m_gl->PopDebugGroup();
         m_replay = ReplayState{};
     }
@@ -808,6 +812,14 @@ namespace Fenrir::Graphics
         else
         {
             gl.Disable(GL_BLEND);
+        }
+        if (pipeline->encodeSrgb)
+        {
+            gl.Enable(GL_FRAMEBUFFER_SRGB);
+        }
+        else
+        {
+            gl.Disable(GL_FRAMEBUFFER_SRGB);
         }
     }
 

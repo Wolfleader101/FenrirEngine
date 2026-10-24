@@ -426,6 +426,25 @@ namespace Fenrir
         return true;
     }
 
+    bool ChangeBuffer::AddChild(std::uint32_t parent, std::uint32_t child) const
+    {
+        EntityList& entities = m_app->GetActiveScene().GetEntityList();
+        if (!entities.HasEntity(parent) || !entities.HasEntity(child))
+        {
+            return false;
+        }
+        m_changes->RecordNative([parent, child](App& app) {
+            EntityList& live = app.GetActiveScene().GetEntityList();
+            if (!live.HasEntity(parent) || !live.HasEntity(child))
+            {
+                return false;
+            }
+            live.GetEntity(parent).AddChild(live.GetEntity(child));
+            return true;
+        });
+        return true;
+    }
+
     void ChangeBuffer::Record(std::function<void(App&)> change) const
     {
         m_changes->RecordNative([apply = std::move(change)](App& app) {

@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Version is part of the contract: the host shares one copy, and a script compiled against a newer minor fails to load. -->
+    <Version>0.1.0</Version>
+    <AssemblyName>Fenrir.DebugDraw</AssemblyName>
+    <RootNamespace>Fenrir.DebugDraw</RootNamespace>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+  <!-- FenrirDebugDraw's scripting contract (ADR-0025, ADR-0029): the DebugDraw facade over the native functions
+       FenrirDebugDrawScripting gives C#, with its options. Built against the scripting SDK (for the generators and
+       Fenrir.Math); CMake passes -p:FenrirScriptingSdk=<the SDK folder>/. The host shares it with every script load. -->
+  <Import Project="$(MSBuildThisFileDirectory)../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+</Project>
