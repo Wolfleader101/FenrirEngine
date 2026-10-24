@@ -153,6 +153,32 @@ namespace FenrirDemo
         return options;
     }
 
+    namespace
+    {
+        // Gives the main window the RGBA8 image at `path` as its icon (DemoConfig::iconPath). The pixels are copied, so
+        // the image is unloaded again. A load that fails is logged by the store.
+        void SetWindowIcon(Fenrir::App& app, Fenrir::AssetStore& store, const std::string& path)
+        {
+            const Fenrir::LoadResult<Fenrir::Image> loaded = store.Load<Fenrir::Image>(path, Fenrir::AssetOwner::App());
+            if (!loaded.Ok())
+            {
+                return;
+            }
+            const Fenrir::ImageData* icon = store.TryGet(loaded.handle);
+            if (icon == nullptr || icon->format != Fenrir::ImageFormat::RGBA8 ||
+                icon->shape != Fenrir::ImageShape::Flat)
+            {
+                app.Logger()->Error("The window icon {} is not one RGBA8 picture (a PNG or JPEG)", path);
+            }
+            else
+            {
+                Fenrir::Window::SetIcon(app, Fenrir::Window::MainWindow(), static_cast<int>(icon->width),
+                                        static_cast<int>(icon->height), icon->pixels);
+            }
+            store.Unload(loaded.handle);
+        }
+    } // namespace
+
     namespace Detail
     {
         struct DemoState
@@ -715,6 +741,10 @@ namespace FenrirDemo
         state->input = Fenrir::Input::Install(app);
         state->assets = Fenrir::Assets::Install(app);
         state->debugDrawing = Fenrir::DebugDrawing::Install(app);
+        if (state->window && state->window->IsValid() && !state->config.iconPath.empty())
+        {
+            SetWindowIcon(app, state->assets->Store(), state->config.iconPath);
+        }
 
         Fenrir::RendererConfig renderer;
         renderer.backend = run.backend;

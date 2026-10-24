@@ -140,6 +140,22 @@ namespace Fenrir
             return (shown ? SDL_ShowCursor() : SDL_HideCursor()) && applied;
         }
 
+        // Gives a made window's kept icon to SDL, which copies it. False if SDL refuses.
+        bool ApplyIcon(WindowRecord& window)
+        {
+            constexpr int bytesPerPixel = 4;
+            SDL_Surface* surface =
+                SDL_CreateSurfaceFrom(window.iconSize.width, window.iconSize.height, SDL_PIXELFORMAT_RGBA32,
+                                      window.iconPixels.data(), window.iconSize.width * bytesPerPixel);
+            if (surface == nullptr)
+            {
+                return false;
+            }
+            const bool applied = SDL_SetWindowIcon(window.sdl, surface);
+            SDL_DestroySurface(surface);
+            return applied;
+        }
+
         // Reads a made window's sizes and state from SDL. True if its logical size, pixel size or content scale
         // changed.
         bool ReadWindow(WindowRecord& window)
@@ -200,7 +216,7 @@ namespace Fenrir
         }
 
         // Makes a window's SDL window, with `apiFlag` for its graphics surface (none for a plain window), and puts
-        // what was asked of it before (title, cursor, text input) into effect.
+        // what was asked of it before (title, icon, cursor, text input) into effect.
         bool MakeWindow(WindowState& state, WindowRecord& window, SDL_WindowFlags apiFlag)
         {
             SDL_WindowFlags flags = apiFlag | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
@@ -215,6 +231,11 @@ namespace Fenrir
                 return false;
             }
             ReadWindow(window);
+            if (!window.iconPixels.empty() && !ApplyIcon(window))
+            {
+                state.app->Logger()->Error("FenrirWindow: window {} was made without the icon set for it: {}",
+                                           window.id.value, SDL_GetError());
+            }
             if (window.cursorMode != CursorMode::Normal || window.cursorShape != CursorShape::Arrow)
             {
                 ApplyCursor(state, window);
@@ -424,6 +445,39 @@ namespace Fenrir
         }
         record->title = std::string(title);
         return record->sdl == nullptr || SDL_SetWindowTitle(record->sdl, record->title.c_str());
+    }
+
+    bool Window::SetIcon(App& app, WindowId window, int width, int height, std::span<const std::byte> rgba8)
+    {
+        WindowState* state = Detail::FindWindowState(app);
+        if (state == nullptr)
+        {
+            return false;
+        }
+        WindowRecord* record = state->Find(window);
+        if (record == nullptr)
+        {
+            app.Logger()->Error("FenrirWindow: SetIcon names window {}, which FenrirWindow does not keep",
+                                window.value);
+            return false;
+        }
+        constexpr std::size_t bytesPerPixel = 4;
+        if (width <= 0 || height <= 0 ||
+            rgba8.size() != static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * bytesPerPixel)
+        {
+            app.Logger()->Error("FenrirWindow: SetIcon for window {} was given {} bytes for {} x {} pixels; an icon is "
+                                "at least 1 x 1, with 4 bytes a pixel",
+                                window.value, rgba8.size(), width, height);
+            return false;
+        }
+        record->iconSize = {width, height};
+        record->iconPixels.assign(rgba8.begin(), rgba8.end());
+        if (record->sdl != nullptr && !ApplyIcon(*record))
+        {
+            app.Logger()->Error("FenrirWindow: SDL refused the icon for window {}: {}", window.value, SDL_GetError());
+            return false;
+        }
+        return true;
     }
 
     bool Window::SetCursorMode(App& app, WindowId window, CursorMode mode)

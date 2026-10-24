@@ -21,8 +21,9 @@ namespace RendererDemo
     [[nodiscard]] FenrirDemo::DemoScene CamerasAndTargets();
 
     /**
-     * @brief Sky: a plinth of lit shapes under the scene's Sky, the skybox cubemap or a dusk colour, which the camera
-     * can override with a colour of its own; keys switch the sky and the override.
+     * @brief Sky: a plinth of lit shapes under the scene's Sky, a skybox cubemap (generated, or Darcy Wilson's from the
+     * legacy DemoApp) or a dusk colour, which the camera can override with a colour of its own; keys switch the sky,
+     * the skybox and the override.
      */
     [[nodiscard]] FenrirDemo::DemoScene Sky();
 

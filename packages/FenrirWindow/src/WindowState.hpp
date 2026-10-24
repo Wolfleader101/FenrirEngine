@@ -25,6 +25,9 @@ namespace Fenrir
             WindowSize requestedSize;
             CursorMode cursorMode = CursorMode::Normal;
             CursorShape cursorShape = CursorShape::Arrow;
+            /** @brief The icon last set: RGBA8 pixels of `iconSize`, rows top to bottom; empty for SDL's default. */
+            WindowSize iconSize;
+            std::vector<std::byte> iconPixels;
 
             SDL_Window* sdl = nullptr;
             /** @brief The graphics surface, while held: today always an OpenGL context. */

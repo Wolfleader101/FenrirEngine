@@ -118,6 +118,11 @@ namespace FenrirDemo
     {
         /** @brief The app's name: the window's title and the help panel's first line. */
         std::string appName = "Demo";
+        /**
+         * @brief The window's icon, an RGBA8 image (PNG or JPEG) loaded through the asset store, relative to its root:
+         * by default Fenrir's icon from the shared assets (examples/assets/icons). Empty keeps SDL's default icon.
+         */
+        std::string iconPath = "icons/fenrir.png";
         /** @brief What F2 does in this app, one line for the help panel; empty when F2 does nothing. */
         std::string appKeyHelp;
         /** @brief The ordered scene list; PageDown and PageUp step through it, wrapping. */

@@ -57,6 +57,8 @@ Moved from the legacy DemoApp's physics tickets 29 (joints), 39 (characters) and
 rewritten for the scene list. Ticket 48's vehicle lines follow the scenes as they were built: the motorcycle and the tank
 have scenes of their own, so there is no Tab, and the driver gets in only the car. Check each scene as its legacy scene behaved.
 
+- **Icon:** the window shows Fenrir's icon (`examples/assets/icons/fenrir.png`, `DemoConfig::iconPath`) in its title
+  bar and on its taskbar button, not the system's default.
 - **Switching and smoke runs:**
   - PageDown steps Playground (C++) → Playground (C#) → Joints (C++) → Joints (C#) → Character (C++) → Character (C#) →
     Vehicles (C++) → Motorcycle (C++) → Tank (C++) → Vehicles (C#), and F1 shows each scene's keys.
