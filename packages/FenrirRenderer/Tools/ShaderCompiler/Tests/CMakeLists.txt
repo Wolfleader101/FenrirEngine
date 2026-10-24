@@ -44,8 +44,8 @@ fenrir_shader_build_fails(LooseUniform plain.vert errors/loose_uniform.frag
     "errors/loose_uniform.frag:4: 'non-opaque uniforms outside a block'")
 fenrir_shader_build_fails(NoLocation plain.vert errors/no_location.frag
     "errors/no_location.frag:4: 'location' : SPIR-V requires location")
-fenrir_shader_build_fails(BindingPastFour plain.vert errors/binding_past_four.frag
-    "errors/binding_past_four.frag: error: 'picture' is at binding 4 of set 2")
+fenrir_shader_build_fails(FiveTexturesInASet plain.vert errors/five_textures.frag
+    "errors/five_textures.frag: error: 'fifth' is texture 5 of set 2, but a set holds at most 4 bindings of a kind")
 fenrir_shader_build_fails(PragmaUnknownMember plain.vert errors/pragma_unknown.frag
     "errors/pragma_unknown.frag:8: error: unknown member: 'tnit'")
 fenrir_shader_build_fails(PragmaMalformed plain.vert errors/pragma_malformed.frag

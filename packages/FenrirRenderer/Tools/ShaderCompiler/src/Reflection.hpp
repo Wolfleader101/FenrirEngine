@@ -28,7 +28,8 @@ namespace Fenrir::ShaderCompiler
 
     /**
      * @brief Reflects one stage's SPIR-V. A resource kind the engine does not bind (a storage image, a separate
-     * sampler...) and a binding past ShaderBindingsPerSet are reported against `file`.
+     * sampler...) is reported against `file`. How many bindings of a kind a set holds is checked once the program's
+     * stages are merged.
      */
     StageReflection ReflectStage(ShaderStage stage, const std::vector<std::uint32_t>& spirv, const std::string& file,
                                  Diagnostics& diagnostics);

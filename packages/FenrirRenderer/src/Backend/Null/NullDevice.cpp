@@ -51,7 +51,7 @@ namespace Fenrir::Graphics
 
     TextureHandle NullDevice::CreateTexture(const TextureDesc& desc, std::string_view label)
     {
-        return m_textures.Add({desc, std::string(label)});
+        return m_textures.Add({desc, std::string(label), {}});
     }
 
     SamplerHandle NullDevice::CreateSampler(const SamplerDesc&, std::string_view)
@@ -72,7 +72,7 @@ namespace Fenrir::Graphics
     PipelineResult NullDevice::CreatePipeline(const PipelineDesc& desc, std::string_view label)
     {
         // Any shader container is accepted: there is nothing to compile it for.
-        NullPipeline pipeline{std::string(label), desc.samples, {}};
+        NullPipeline pipeline{std::string(label), desc.samples, {}, desc.cull, desc.depth, desc.blend, desc.encodeSrgb};
         if (desc.shader != nullptr)
         {
             pipeline.keys = desc.shader->keys;
@@ -96,9 +96,20 @@ namespace Fenrir::Graphics
         return true;
     }
 
-    bool NullDevice::WriteTexture(TextureHandle texture, std::uint32_t, std::uint32_t, std::span<const std::byte>)
+    bool NullDevice::WriteTexture(TextureHandle texture, std::uint32_t mipLevel, std::uint32_t,
+                                  std::span<const std::byte>)
     {
-        return m_textures.IsLive(texture);
+        NullTexture* found = m_textures.Find(texture);
+        if (found == nullptr)
+        {
+            return false;
+        }
+        if (found->writtenMips.size() <= mipLevel)
+        {
+            found->writtenMips.resize(mipLevel + 1, false);
+        }
+        found->writtenMips[mipLevel] = true;
+        return true;
     }
 
     bool NullDevice::Destroy(BufferHandle buffer)

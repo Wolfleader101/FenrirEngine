@@ -4,7 +4,11 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "FenrirShaders/Builtin2D.hpp"
 #include "FenrirShaders/BuiltinBackground.hpp"
+#include "FenrirShaders/BuiltinDebugLines.hpp"
+#include "FenrirShaders/BuiltinDebugText.hpp"
+#include "FenrirShaders/BuiltinDebugTriangles.hpp"
 #include "FenrirShaders/BuiltinFallback.hpp"
 #include "FenrirShaders/BuiltinLit.hpp"
 #include "FenrirShaders/BuiltinOutput.hpp"
@@ -20,14 +24,18 @@ namespace Fenrir::Render
             return std::as_bytes(std::span<const std::uint8_t, N>(embedded));
         }
 
-        const std::array<BuiltinShader, 5>& Table()
+        const std::array<BuiltinShader, 9>& Table()
         {
-            static const std::array<BuiltinShader, 5> table{{
+            static const std::array<BuiltinShader, 9> table{{
                 {BuiltinProgram::Unlit, "builtin:unlit", BytesOf(Shaders::BuiltinUnlit)},
                 {BuiltinProgram::Lit, "builtin:lit", BytesOf(Shaders::BuiltinLit)},
                 {BuiltinProgram::Fallback, "builtin:fallback", BytesOf(Shaders::BuiltinFallback)},
                 {BuiltinProgram::Background, "builtin:background", BytesOf(Shaders::BuiltinBackground)},
                 {BuiltinProgram::Output, "builtin:output", BytesOf(Shaders::BuiltinOutput)},
+                {BuiltinProgram::DebugLines, "builtin:debug-lines", BytesOf(Shaders::BuiltinDebugLines)},
+                {BuiltinProgram::DebugTriangles, "builtin:debug-triangles", BytesOf(Shaders::BuiltinDebugTriangles)},
+                {BuiltinProgram::DebugText, "builtin:debug-text", BytesOf(Shaders::BuiltinDebugText)},
+                {BuiltinProgram::Draw2D, "builtin:2d", BytesOf(Shaders::Builtin2D)},
             }};
             return table;
         }

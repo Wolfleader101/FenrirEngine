@@ -31,6 +31,10 @@ public static partial class Gadgets
     // (skipped at playback), and a Weather of `wind` in the active scene.
     [NativeFunction]
     public static partial void Rearrange(Entity kept, Entity doomed, float wind);
+
+    // Creates an entity through the change buffer and records parenting it under `parent`; returns it.
+    [NativeFunction]
+    public static partial Entity SpawnUnder(Entity parent);
 }
 
 /// <summary>A scene resource the test extension gives C#: the native <c>Weather</c>.</summary>

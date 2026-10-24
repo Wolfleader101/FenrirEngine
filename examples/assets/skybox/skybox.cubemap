@@ -1,0 +1,8 @@
+# The demo apps' sky: six faces, each a face name and its image (AssetStore::Load reads this file as one
+# cubemap image). make_skybox.py writes the faces.
++X px.png
+-X nx.png
++Y py.png
+-Y ny.png
++Z pz.png
+-Z nz.png

@@ -2,6 +2,8 @@
 // uploads on a new revision, and GPU resources freed when a handle goes stale.
 
 #include <cmath>
+#include <map>
+#include <string>
 #include <vector>
 
 #include <catch2/catch_test_macros.hpp>
@@ -126,5 +128,21 @@ TEST_CASE("The built-in shaders are registered under builtin: names at install",
     INFO("builtin:lit's parameters are the spec's, with their defaults");
     const auto lit = test.Builtin("builtin:lit");
     REQUIRE(test.Store().TryGetFloat(test.Material("builtin:lit"), "roughness").value_or(0.0f) == 0.5f);
-    REQUIRE(test.Store().GetShaderParameters(lit).size() == 4);
+    std::map<std::string, Fenrir::ShaderParameter> parameters;
+    for (const Fenrir::ShaderParameter& parameter : test.Store().GetShaderParameters(lit))
+    {
+        parameters.emplace(parameter.name, parameter);
+    }
+    // The spec's eight, and the ALPHA_MASK variant's alphaCutoff, which the renderer writes for a Masked material.
+    REQUIRE(parameters.size() == 9);
+    for (const char* name : {"baseColour", "emissive", "metallic", "roughness", "alphaCutoff"})
+    {
+        INFO(name << " is a parameter");
+        REQUIRE(parameters.contains(name));
+    }
+    INFO("the textures default to white, white, the flat normal and white (emissive multiplies its texture)");
+    REQUIRE(parameters.at("baseColourTexture").texture == Fenrir::DefaultTexture::White);
+    REQUIRE(parameters.at("metallicRoughnessTexture").texture == Fenrir::DefaultTexture::White);
+    REQUIRE(parameters.at("normalTexture").texture == Fenrir::DefaultTexture::Normal);
+    REQUIRE(parameters.at("emissiveTexture").texture == Fenrir::DefaultTexture::White);
 }

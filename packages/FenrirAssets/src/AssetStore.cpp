@@ -24,6 +24,7 @@
 #endif
 
 #include "AssetStoreState.hpp"
+#include "CubemapLoading.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/Model.hpp"
 #include "FenrirAssets/ShaderData.hpp"
@@ -377,7 +378,9 @@ namespace Fenrir
         {
             return fail(LoadFailure::ImportFailed, "the file could not be read");
         }
-        Detail::ImageImport imported = Detail::ImportImage(bytes);
+        Detail::ImageImport imported = Detail::IsCubemapFile(resolved.file)
+                                           ? Detail::ImportCubemapFile(resolved.file, bytes)
+                                           : Detail::ImportImage(bytes);
         if (!imported.image)
         {
             return fail(LoadFailure::ImportFailed, std::move(imported.error));

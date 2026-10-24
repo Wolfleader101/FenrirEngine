@@ -129,6 +129,8 @@ namespace Fenrir::Graphics
         {
             std::vector<BindingGroupEntry> entries;
             std::vector<ShaderBindingKind> kinds;
+            /** @brief Each entry's index among its layout's bindings of its kind, for GlBindingOf. */
+            std::vector<std::uint32_t> indicesInKind;
         };
 
         /** @brief The code of one program: the GL SPIR-V of its vertex and fragment stages. */
@@ -158,6 +160,7 @@ namespace Fenrir::Graphics
             CullMode cull = CullMode::Back;
             DepthState depth;
             BlendMode blend = BlendMode::None;
+            bool encodeSrgb = true;
         };
 
         /** @brief A buffer bound for vertices or indices: its GL name and the offset of its first byte. */

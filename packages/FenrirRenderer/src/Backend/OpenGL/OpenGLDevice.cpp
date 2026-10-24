@@ -29,7 +29,8 @@ namespace Fenrir::Graphics
         }
 
         /** @brief GL's internal format for each TextureFormat. */
-        constexpr std::array<GLenum, 4> internalFormats{GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F};
+        constexpr std::array<GLenum, 6> internalFormats{
+            GL_RGBA8, GL_SRGB8_ALPHA8, GL_RGBA16F, GL_DEPTH_COMPONENT32F, GL_RGBA32F, GL_R8};
 
         /** @brief How WriteTexture's tightly packed texels of a format are laid out for GL. */
         struct UploadFormat
@@ -40,11 +41,13 @@ namespace Fenrir::Graphics
         };
 
         /** @brief The upload layout of each TextureFormat. */
-        constexpr std::array<UploadFormat, 4> uploadFormats{{
+        constexpr std::array<UploadFormat, 6> uploadFormats{{
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_UNSIGNED_BYTE, 4},
             {GL_RGBA, GL_HALF_FLOAT, 8},
             {GL_DEPTH_COMPONENT, GL_FLOAT, 4},
+            {GL_RGBA, GL_FLOAT, 16},
+            {GL_RED, GL_UNSIGNED_BYTE, 1},
         }};
 
         /** @brief GL's wrap mode for each AddressMode. */
@@ -95,7 +98,7 @@ namespace Fenrir::Graphics
             {false, GL_ONE, GL_ZERO, GL_ONE, GL_ZERO},
             {true, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA},
             {true, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA},
-            {true, GL_ONE, GL_ONE, GL_ONE, GL_ONE},
+            {true, GL_ONE, GL_ONE, GL_ZERO, GL_ONE},
         }};
 
         /** @brief Each Vsync mode's name, for the log. */
@@ -356,7 +359,10 @@ namespace Fenrir::Graphics
         gl.SamplerParameteri(sampler, GL_TEXTURE_WRAP_R, wrapModes.at(IndexOf(desc.addressW)));
         if (desc.maxAnisotropy > 1.0f)
         {
-            gl.SamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, desc.maxAnisotropy);
+            // Clamped to what the device has (GL 4.6 guarantees at least 16).
+            GLfloat most = 1.0f;
+            gl.GetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &most);
+            gl.SamplerParameterf(sampler, GL_TEXTURE_MAX_ANISOTROPY, std::min(desc.maxAnisotropy, most));
         }
         if (!label.empty())
         {
@@ -392,6 +398,10 @@ namespace Fenrir::Graphics
                 return {};
             }
             group.kinds.push_back(found->kind);
+            group.indicesInKind.push_back(
+                static_cast<std::uint32_t>(std::ranges::count_if(layout->entries, [&](const BindingLayoutEntry& other) {
+                    return other.kind == found->kind && other.binding < entry.binding;
+                })));
         }
         return m_groups.Add(std::move(group));
     }
@@ -480,6 +490,7 @@ namespace Fenrir::Graphics
         pipeline.cull = desc.cull;
         pipeline.depth = desc.depth;
         pipeline.blend = desc.blend;
+        pipeline.encodeSrgb = desc.encodeSrgb;
         gl.CreateVertexArrays(1, &pipeline.vertexArray);
         for (std::size_t slot = 0; slot < desc.vertexBuffers.size(); ++slot)
         {
@@ -728,6 +739,18 @@ namespace Fenrir::Graphics
             gl.DepthMask(GL_TRUE);
             gl.ClearNamedFramebufferfv(framebuffer, GL_DEPTH, 0, &pass.depth->clear);
         }
+        else if (pass.depth)
+        {
+            // A pass that tests a depth buffer drawn by an earlier pass, with other views' passes between them:
+            // NVIDIA's early depth test can then take a stale picture of the buffer (the cleared one) and pass
+            // fragments behind what is stored. An empty clear, scissored to nothing, makes the driver take the buffer
+            // up again; it changes no pixel.
+            gl.Enable(GL_SCISSOR_TEST);
+            gl.Scissor(0, 0, 0, 0);
+            gl.DepthMask(GL_TRUE);
+            gl.Clear(GL_DEPTH_BUFFER_BIT);
+            gl.Disable(GL_SCISSOR_TEST);
+        }
     }
 
     void OpenGLDevice::Execute(const CmdEndPass&)
@@ -737,6 +760,8 @@ namespace Fenrir::Graphics
             m_replay.skipping = false;
             return;
         }
+        // A pipeline on the gamma path turned encoding off; every pass, and its clears, starts with it on.
+        m_gl->Enable(GL_FRAMEBUFFER_SRGB);
         m_gl->PopDebugGroup();
         m_replay = ReplayState{};
     }
@@ -788,6 +813,14 @@ namespace Fenrir::Graphics
         {
             gl.Disable(GL_BLEND);
         }
+        if (pipeline->encodeSrgb)
+        {
+            gl.Enable(GL_FRAMEBUFFER_SRGB);
+        }
+        else
+        {
+            gl.Disable(GL_FRAMEBUFFER_SRGB);
+        }
     }
 
     void OpenGLDevice::Execute(const CmdSetBindingGroup& command)
@@ -804,7 +837,7 @@ namespace Fenrir::Graphics
         {
             const BindingGroupEntry& entry = group->entries[i];
             // As FenrirShaderCompiler flattened the GL copy's bindings (spike lesson 2).
-            const GLuint unit = GlBindingOf(command.set, entry.binding);
+            const GLuint unit = GlBindingOf(command.set, group->indicesInKind[i]);
             if (group->kinds[i] == ShaderBindingKind::Texture)
             {
                 const GlTexture* texture = m_textures.Find(entry.texture);

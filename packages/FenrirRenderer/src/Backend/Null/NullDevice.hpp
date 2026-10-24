@@ -18,9 +18,9 @@ namespace Fenrir::Graphics
     /**
      * @brief The null backend (ADR-0016): every handle and book a backend keeps, no window, context or GPU, and nothing
      * drawn. It keeps the CommandLists submitted since the frame began, every stale handle a submitted command named,
-     * each buffer's bytes, each binding group's bindings, each texture's description, each pipeline's sample count and
-     * variant keys, and the labels of buffers, textures, groups and pipelines, for
-     * RendererProbe to read.
+     * each buffer's bytes, each binding group's bindings, each texture's description and written mip levels, each
+     * pipeline's sample count, variant keys and render state, and the labels of buffers, textures, groups and
+     * pipelines, for RendererProbe to read.
      */
     class NullDevice final : public GraphicsDevice
     {
@@ -87,19 +87,25 @@ namespace Fenrir::Graphics
             std::string label;
         };
 
-        /** @brief A texture's description and label, for RendererProbe. */
+        /** @brief A texture's description and label, and which of its mip levels were written, for RendererProbe. */
         struct NullTexture
         {
             TextureDesc desc;
             std::string label;
+            /** @brief By mip level: whether WriteTexture wrote it (any layer). */
+            std::vector<bool> writtenMips;
         };
 
-        /** @brief A pipeline's label, sample count and shader variant keys, for RendererProbe. */
+        /** @brief A pipeline's label, sample count, shader variant keys and render state, for RendererProbe. */
         struct NullPipeline
         {
             std::string label;
             std::uint32_t samples = 1;
             std::vector<std::string> keys;
+            CullMode cull = CullMode::Back;
+            DepthState depth;
+            BlendMode blend = BlendMode::None;
+            bool encodeSrgb = true;
         };
 
         void CheckLive(bool live, const char* what);

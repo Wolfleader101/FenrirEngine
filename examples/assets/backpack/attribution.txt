@@ -1,0 +1,7 @@
+Survival Guitar Backpack (Low Poly), by Berk Gedik
+https://sketchfab.com/3d-models/survival-guitar-backpack-low-poly-799f8c4511f84fab8c3f12887f7e6b36
+Licensed under Creative Commons Attribution 4.0 International (CC BY 4.0): https://creativecommons.org/licenses/by/4.0/
+
+Changes: material assignment modified by Joey de Vries (LearnOpenGL) for easier loading in OpenGL, with albedo renamed
+diffuse and metallic renamed specular. These files are the same as the deleted legacy DemoApp's copy; this copy leaves
+out its unreferenced ao.jpg and roughness.jpg.

@@ -9,6 +9,7 @@
 layout(location = 0) out vec3 vWorldPosition;
 layout(location = 1) out vec3 vNormal;
 layout(location = 2) out vec4 vColour;
+layout(location = 3) out vec2 vUv;
 
 void main()
 {
@@ -17,5 +18,6 @@ void main()
     vWorldPosition = world.xyz;
     vNormal = mat3(item.normal) * inNormal;
     vColour = inColour;
+    vUv = inUv0;
     gl_Position = view.viewProjection * world;
 }

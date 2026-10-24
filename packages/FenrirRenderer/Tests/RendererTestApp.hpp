@@ -72,6 +72,29 @@ namespace RendererTest
         return mesh;
     }
 
+    /** @brief Quad(size, z) with UV0 too: (0, 0) at its top-left corner and (1, 1) at its bottom-right. */
+    inline Fenrir::MeshData TexturedQuad(float size = 1.0f, float z = 0.0f)
+    {
+        Fenrir::MeshData mesh = Quad(size, z);
+        mesh.uv0 = {{0.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 0.0f}, {0.0f, 0.0f}};
+        return mesh;
+    }
+
+    /** @brief An RGBA8 image of `width` x `height` with the given pixels, four bytes each, top row first. */
+    inline Fenrir::ImageData Picture(std::uint32_t width, std::uint32_t height, std::vector<std::uint8_t> rgba,
+                                     Fenrir::ColourSpace space = Fenrir::ColourSpace::Srgb)
+    {
+        Fenrir::ImageData image;
+        image.width = width;
+        image.height = height;
+        image.colourSpace = space;
+        for (const std::uint8_t value : rgba)
+        {
+            image.pixels.push_back(std::byte{value});
+        }
+        return image;
+    }
+
     /** @brief One indexed draw recorded in a pass, with what was bound for it. */
     struct RecordedDraw
     {
@@ -361,6 +384,46 @@ namespace RendererTest
                 if (entry.binding == 0)
                 {
                     return Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
+                }
+            }
+            return {};
+        }
+
+        /**
+         * @brief The world position of the item a draw drew: column 3 of the world matrix in its record of the draw
+         * buffer (set 3, binding 0; 128 bytes a record, `Fenrir/Draw.glsl`).
+         */
+        [[nodiscard]] Fenrir::Math::Vec3 DrawPosition(const RecordedDraw& draw) const
+        {
+            for (const Fenrir::Graphics::BindingGroupEntry& entry :
+                 Fenrir::RendererProbe::Entries(Device(), draw.groups.at(3)))
+            {
+                if (entry.binding == 0)
+                {
+                    const std::vector<std::byte> bytes = Fenrir::RendererProbe::Bytes(Device(), entry.buffer);
+                    const std::size_t at = std::size_t{draw.draw.firstInstance} * 128 + 48;
+                    return {FloatAt(bytes, at), FloatAt(bytes, at + 4), FloatAt(bytes, at + 8)};
+                }
+            }
+            return Fenrir::Math::Vec3(0.0f);
+        }
+
+        /** @brief An image asset owned by the app. */
+        [[nodiscard]] Fenrir::AssetHandle<Fenrir::Image> Image(Fenrir::ImageData data)
+        {
+            return Store().Add<Fenrir::Image>(std::move(data), Fenrir::AssetOwner::App());
+        }
+
+        /** @brief What a draw bound at set 2 binding `binding`: a texture and its sampler, or a block's buffer. */
+        [[nodiscard]] Fenrir::Graphics::BindingGroupEntry MaterialBinding(const RecordedDraw& draw,
+                                                                          std::uint32_t binding) const
+        {
+            for (const Fenrir::Graphics::BindingGroupEntry& entry :
+                 Fenrir::RendererProbe::Entries(Device(), draw.groups.at(2)))
+            {
+                if (entry.binding == binding)
+                {
+                    return entry;
                 }
             }
             return {};

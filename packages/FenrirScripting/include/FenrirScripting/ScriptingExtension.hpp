@@ -31,7 +31,8 @@ namespace Fenrir
 
     /**
      * @brief The change buffer, as a native function records into it (from CallContext::Changes): the structural
-     * changes (creating and destroying entities, adding and removing components, inserting and removing resources) that
+     * changes (creating and destroying entities, parenting them, adding and removing components, inserting and removing
+     * resources) that
      * the engine's own entity functions record for C#, in one ordered list with theirs.
      *
      * Nothing here touches the storage when it is called. A created entity is alive at once, so its id can be returned
@@ -67,6 +68,13 @@ namespace Fenrir
         {
             return RecordOn(entity, [](Entity& target) { target.RemoveComponent<T>(); });
         }
+
+        /**
+         * @brief Makes `child` the last child of `parent` at playback (Entity::AddChild), as C++ parents an entity it
+         * has just made: for a `child` with no parent, such as one CreateEntity made. False, recording nothing, if
+         * either is not alive now; skipped at playback if either has died since.
+         */
+        bool AddChild(std::uint32_t parent, std::uint32_t child) const;
 
         /** @brief Makes `value` the active scene's `T` at playback (Scene::AddResource), replacing the one it has. */
         template <typename T>

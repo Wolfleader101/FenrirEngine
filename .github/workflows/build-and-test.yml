@@ -2,8 +2,7 @@ name: Build and test
 
 # Builds the engine and runs its tests (README.md, "Building and testing") with every CMakePresets.json preset CI can run.
 # The demo apps are built (FENRIR_BUILD_EXAMPLES=ON), and their CTest smoke runs run with the tests: on the null backend
-# everywhere, and on OpenGL (label gl) in the Linux GL step. The legacy DemoApp is left out (FENRIR_BUILD_LEGACY_DEMOAPP is
-# off by default): its third-party libraries in examples/DemoApp/libs are not submodules.
+# everywhere, and on OpenGL (label gl) in the Linux GL step.
 
 on:
   pull_request:

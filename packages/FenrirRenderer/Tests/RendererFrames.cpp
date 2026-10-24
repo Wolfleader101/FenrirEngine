@@ -144,3 +144,58 @@ TEST_CASE("Installing without FenrirAssets gives an invalid owner", "[renderer][
     REQUIRE_FALSE(renderer.IsValid());
     REQUIRE(messages->errors.size() == 1);
 }
+
+TEST_CASE("The App's renderer answers as its owner does, for code that does not hold the owner",
+          "[renderer][facade][installed]")
+{
+    RendererTestApp test;
+    Fenrir::Entity camera = test.AddCamera({0.0f, 1.0f, 5.0f});
+    Fenrir::Entity cube = test.AddMeshRenderer(test.Mesh(RendererTest::Cube()), test.Material());
+    cube.GetComponent<Fenrir::Transform>().pos = {1.0f, 2.0f, 3.0f};
+    test.Frame();
+
+    INFO("the app has a renderer installed");
+    REQUIRE(Fenrir::Renderer::IsInstalled(test.app));
+    INFO("its stats are the last frame's: one draw");
+    REQUIRE(Fenrir::Renderer::Stats(test.app).draws == 1);
+    INFO("a cube moved to (1, 2, 3) spans (0.5, 1.5, 2.5) to (1.5, 2.5, 3.5)");
+    const auto bounds = Fenrir::Renderer::GetWorldBounds(test.app, cube);
+    REQUIRE(bounds.has_value());
+    REQUIRE(bounds->min == Fenrir::Math::Vec3(0.5f, 1.5f, 2.5f));
+    INFO("the ray through the window's centre leaves the camera along -Z");
+    const auto ray = Fenrir::Renderer::ScreenPointToRay(test.app, camera, {640.0f, 360.0f});
+    REQUIRE(ray.has_value());
+    REQUIRE(ray->origin == Fenrir::Math::Vec3(0.0f, 1.0f, 5.0f));
+    INFO("a point straight ahead of the camera shows at the window's centre");
+    const auto point = Fenrir::Renderer::WorldToScreenPoint(test.app, camera, {0.0f, 1.0f, 0.0f});
+    REQUIRE(point.has_value());
+    REQUIRE(glm::length(*point - Fenrir::Math::Vec2(640.0f, 360.0f)) < 1e-2f);
+    INFO("the camera at the window's centre is the one camera");
+    REQUIRE(Fenrir::Renderer::CameraAt(test.app, Fenrir::WindowId{1}, {640.0f, 360.0f}) == camera);
+}
+
+TEST_CASE("An App with no renderer, or whose owner has ended, answers as an invalid owner",
+          "[renderer][facade][installed]")
+{
+    auto messages = std::make_shared<RendererTest::LoggedMessages>();
+    Fenrir::App app(std::make_unique<RendererTest::RecordingLogger>(messages), 1);
+    Fenrir::Assets assets = Fenrir::Assets::Install(app);
+    Fenrir::Entity camera = app.GetActiveScene().GetEntityList().CreateEntity();
+    camera.AddComponent<Fenrir::Camera>();
+
+    INFO("with none installed, nothing answers");
+    REQUIRE_FALSE(Fenrir::Renderer::IsInstalled(app));
+    REQUIRE_FALSE(Fenrir::Renderer::ScreenPointToRay(app, camera, {640.0f, 360.0f}).has_value());
+    REQUIRE_FALSE(Fenrir::Renderer::CameraAt(app, Fenrir::WindowId{1}, {640.0f, 360.0f}).IsValid());
+
+    {
+        const Fenrir::Renderer renderer = Fenrir::Renderer::Install(app, RendererTest::NullBackend());
+        INFO("while its owner lives, the app's renderer answers");
+        REQUIRE(Fenrir::Renderer::IsInstalled(app));
+        REQUIRE(Fenrir::Renderer::ScreenPointToRay(app, camera, {640.0f, 360.0f}).has_value());
+    }
+    INFO("once its owner has ended, nothing answers");
+    REQUIRE_FALSE(Fenrir::Renderer::IsInstalled(app));
+    REQUIRE_FALSE(Fenrir::Renderer::ScreenPointToRay(app, camera, {640.0f, 360.0f}).has_value());
+    REQUIRE(Fenrir::Renderer::Stats(app).draws == 0);
+}

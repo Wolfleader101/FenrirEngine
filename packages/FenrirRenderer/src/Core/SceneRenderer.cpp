@@ -8,6 +8,8 @@
 #include <type_traits>
 #include <variant>
 
+#include <glm/gtc/packing.hpp>
+
 #include "Core/BuiltinShaders.hpp"
 #include "FenrirLogger/ILogger.hpp"
 
@@ -72,9 +74,6 @@ namespace Fenrir::Render
         /** @brief The binding set of the material. */
         constexpr std::uint32_t MaterialSet = 2;
 
-        /** @brief Uniform ranges are bound at multiples of this, the largest alignment GL implementations ask for. */
-        constexpr std::size_t UniformAlignment = 256;
-
         /** @brief One standard vertex stream (`Fenrir/Vertex.glsl`), by location: its name, format and size. */
         struct StreamFormat
         {
@@ -100,16 +99,238 @@ namespace Fenrir::Render
                                                        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f, 1.0f};
 
         constexpr std::uint8_t OpaqueStage = static_cast<std::uint8_t>(RenderStage::Opaque);
+        constexpr std::uint8_t TransparentStage = static_cast<std::uint8_t>(RenderStage::Transparent);
+
+        /** @brief The variant key the renderer sets for a `Masked` material (ADR-0024). */
+        constexpr std::string_view AlphaMaskKey = "ALPHA_MASK";
+        /** @brief The block member a `Masked` material's alpha cutoff is written into. */
+        constexpr std::string_view AlphaCutoffMember = "alphaCutoff";
+
+        /** @brief Whether a material of `mode` draws in the Transparent pass, blended and without writing depth. */
+        constexpr bool IsTransparent(Fenrir::BlendMode mode) noexcept
+        {
+            return mode == Fenrir::BlendMode::AlphaBlend || mode == Fenrir::BlendMode::Additive;
+        }
+
+        /** @brief How the device blends a material of `mode`. */
+        constexpr Graphics::BlendMode DeviceBlendOf(Fenrir::BlendMode mode) noexcept
+        {
+            if (mode == Fenrir::BlendMode::AlphaBlend)
+            {
+                return Graphics::BlendMode::Alpha;
+            }
+            return mode == Fenrir::BlendMode::Additive ? Graphics::BlendMode::Additive : Graphics::BlendMode::None;
+        }
+
+        /** @brief How many mip levels a full chain for an image of `width` x `height` has, down to 1 x 1. */
+        std::uint32_t MipCount(std::uint32_t width, std::uint32_t height)
+        {
+            std::uint32_t levels = 1;
+            for (std::uint32_t side = std::max(width, height); side > 1; side /= 2)
+            {
+                ++levels;
+            }
+            return levels;
+        }
+
+        /** @brief The device format an image is uploaded as: its own format, sRGB-decoded on sampling if it is sRGB. */
+        TextureFormat TextureFormatOf(const ImageData& image)
+        {
+            if (image.format == ImageFormat::RGBA16F)
+            {
+                return TextureFormat::Rgba16Float;
+            }
+            if (image.format == ImageFormat::RGBA32F)
+            {
+                return TextureFormat::Rgba32Float;
+            }
+            return image.colourSpace == ColourSpace::Srgb ? TextureFormat::Rgba8Srgb : TextureFormat::Rgba8Unorm;
+        }
+
+        /** @brief Reads and writes one texel of an image format as four linear floats, for making mips. */
+        struct TexelCodec
+        {
+            std::size_t bytes = 4;
+            void (*read)(std::span<const std::byte> texel, std::array<float, 4>& out) = nullptr;
+            void (*write)(const std::array<float, 4>& in, std::span<std::byte> texel) = nullptr;
+        };
+
+        /** @brief sRGB-encoded bytes to linear values, by byte. */
+        const std::array<float, 256>& SrgbToLinear()
+        {
+            static const std::array<float, 256> table = [] {
+                std::array<float, 256> made{};
+                for (std::size_t i = 0; i < made.size(); ++i)
+                {
+                    const float c = static_cast<float>(i) / 255.0f;
+                    made.at(i) = c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+                }
+                return made;
+            }();
+            return table;
+        }
+
+        /** @brief Linear values, in 4096 steps over [0, 1], to sRGB-encoded bytes. */
+        const std::array<std::uint8_t, 4096>& LinearToSrgb()
+        {
+            static const std::array<std::uint8_t, 4096> table = [] {
+                std::array<std::uint8_t, 4096> made{};
+                for (std::size_t i = 0; i < made.size(); ++i)
+                {
+                    const float l = static_cast<float>(i) / 4095.0f;
+                    const float c = l <= 0.0031308f ? l * 12.92f : 1.055f * std::pow(l, 1.0f / 2.4f) - 0.055f;
+                    made.at(i) = static_cast<std::uint8_t>(std::lround(std::clamp(c, 0.0f, 1.0f) * 255.0f));
+                }
+                return made;
+            }();
+            return table;
+        }
+
+        std::uint8_t ToByte(float value)
+        {
+            return static_cast<std::uint8_t>(std::lround(std::clamp(value, 0.0f, 1.0f) * 255.0f));
+        }
+
+        /** @brief The codec of an image's pixels: colours are averaged as linear values, so sRGB mips keep brightness.
+         */
+        TexelCodec CodecOf(const ImageData& image)
+        {
+            TexelCodec codec;
+            codec.bytes = BytesPerPixel(image.format);
+            if (image.format == ImageFormat::RGBA32F)
+            {
+                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
+                    std::memcpy(out.data(), texel.data(), sizeof(float) * 4);
+                };
+                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
+                    std::memcpy(texel.data(), in.data(), sizeof(float) * 4);
+                };
+            }
+            else if (image.format == ImageFormat::RGBA16F)
+            {
+                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
+                    std::array<std::uint16_t, 4> halves{};
+                    std::memcpy(halves.data(), texel.data(), sizeof(halves));
+                    for (std::size_t c = 0; c < 4; ++c)
+                    {
+                        out.at(c) = glm::unpackHalf1x16(halves.at(c));
+                    }
+                };
+                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
+                    std::array<std::uint16_t, 4> halves{};
+                    for (std::size_t c = 0; c < 4; ++c)
+                    {
+                        halves.at(c) = glm::packHalf1x16(in.at(c));
+                    }
+                    std::memcpy(texel.data(), halves.data(), sizeof(halves));
+                };
+            }
+            else if (image.colourSpace == ColourSpace::Srgb)
+            {
+                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
+                    const std::span<const std::byte> bytes = texel;
+                    for (std::size_t c = 0; c < 3; ++c)
+                    {
+                        out.at(c) = SrgbToLinear().at(static_cast<std::size_t>(bytes[c]));
+                    }
+                    out[3] = static_cast<float>(bytes[3]) / 255.0f;
+                };
+                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
+                    const std::span<std::byte> bytes = texel;
+                    for (std::size_t c = 0; c < 3; ++c)
+                    {
+                        const auto step =
+                            static_cast<std::size_t>(std::lround(std::clamp(in.at(c), 0.0f, 1.0f) * 4095.0f));
+                        bytes[c] = std::byte{LinearToSrgb().at(step)};
+                    }
+                    bytes[3] = std::byte{ToByte(in[3])};
+                };
+            }
+            else
+            {
+                codec.read = [](std::span<const std::byte> texel, std::array<float, 4>& out) {
+                    const std::span<const std::byte> bytes = texel;
+                    for (std::size_t c = 0; c < 4; ++c)
+                    {
+                        out.at(c) = static_cast<float>(bytes[c]) / 255.0f;
+                    }
+                };
+                codec.write = [](const std::array<float, 4>& in, std::span<std::byte> texel) {
+                    const std::span<std::byte> bytes = texel;
+                    for (std::size_t c = 0; c < 4; ++c)
+                    {
+                        bytes[c] = std::byte{ToByte(in.at(c))};
+                    }
+                };
+            }
+            return codec;
+        }
+
+        /**
+         * @brief The next mip level of a `width` x `height` level: each texel the average of the 2 x 2 texels above it
+         * (an odd last row or column is left out, and a side of 1 stays 1).
+         */
+        std::vector<std::byte> Downsample(std::span<const std::byte> level, std::uint32_t width, std::uint32_t height,
+                                          const TexelCodec& codec)
+        {
+            const std::uint32_t nextWidth = std::max(1u, width / 2);
+            const std::uint32_t nextHeight = std::max(1u, height / 2);
+            std::vector<std::byte> next(std::size_t{nextWidth} * nextHeight * codec.bytes);
+            std::array<float, 4> texel{};
+            for (std::uint32_t y = 0; y < nextHeight; ++y)
+            {
+                for (std::uint32_t x = 0; x < nextWidth; ++x)
+                {
+                    std::array<float, 4> sum{};
+                    for (const std::uint32_t sy : {std::min(2 * y, height - 1), std::min(2 * y + 1, height - 1)})
+                    {
+                        for (const std::uint32_t sx : {std::min(2 * x, width - 1), std::min(2 * x + 1, width - 1)})
+                        {
+                            codec.read(level.subspan((std::size_t{sy} * width + sx) * codec.bytes, codec.bytes), texel);
+                            for (std::size_t c = 0; c < 4; ++c)
+                            {
+                                sum.at(c) += texel.at(c);
+                            }
+                        }
+                    }
+                    for (float& channel : sum)
+                    {
+                        channel *= 0.25f;
+                    }
+                    codec.write(sum,
+                                std::span(next).subspan((std::size_t{y} * nextWidth + x) * codec.bytes, codec.bytes));
+                }
+            }
+            return next;
+        }
+
+        /**
+         * @brief Writes one layer of `texture` (a cube face, else 0) from `pixels`, `width` x `height`, and every mip
+         * level below it, each made from the one above (ADR-0024: mips are made at upload).
+         */
+        void WriteWithMips(GraphicsDevice& device, TextureHandle texture, std::uint32_t layer, std::uint32_t mipLevels,
+                           std::span<const std::byte> pixels, std::uint32_t width, std::uint32_t height,
+                           const TexelCodec& codec)
+        {
+            std::vector<std::byte> level;
+            std::span<const std::byte> current = pixels;
+            for (std::uint32_t mip = 0; mip < mipLevels; ++mip)
+            {
+                if (mip > 0)
+                {
+                    level = Downsample(current, width, height, codec);
+                    current = level;
+                    width = std::max(1u, width / 2);
+                    height = std::max(1u, height / 2);
+                }
+                device.WriteTexture(texture, mip, layer, current);
+            }
+        }
 
         template <typename T>
         std::span<const std::byte> BytesOf(const T& value)
         {
             return std::as_bytes(std::span(&value, 1));
-        }
-
-        std::size_t RoundUp(std::size_t size, std::size_t multiple)
-        {
-            return (size + multiple - 1) / multiple * multiple;
         }
 
         /** @brief The standard vertex locations a variant reads, as bits. */
@@ -228,6 +449,19 @@ namespace Fenrir::Render
             }
         }
 
+        /** @brief Writes a `Masked` material's alpha cutoff into the variant's `alphaCutoff` float member, if it has
+         * one. */
+        void WriteAlphaCutoff(const ShaderVariant& variant, float cutoff, std::vector<std::byte>& block)
+        {
+            const auto member = std::find_if(variant.materialMembers.begin(), variant.materialMembers.end(),
+                                             [](const ShaderBlockMember& m) { return m.name == AlphaCutoffMember; });
+            if (member != variant.materialMembers.end() && member->type == ShaderValueType::Float &&
+                member->offset + sizeof(float) <= block.size())
+            {
+                std::memcpy(std::span(block).subspan(member->offset).data(), &cutoff, sizeof(float));
+            }
+        }
+
         ShaderContainer ReadBuiltin(BuiltinProgram program, ILogger& logger)
         {
             ShaderContainerResult read = ReadShaderContainer(GetBuiltinShader(program).bytes);
@@ -293,74 +527,6 @@ namespace Fenrir::Render
         }
     } // namespace
 
-    // ---- BlockRing ----
-
-    SceneRenderer::BlockRing::BlockRing(GraphicsDevice& device, BindingGroupLayoutHandle layout, bool storage,
-                                        std::size_t slotSize, std::string label)
-        : m_device(device), m_layout(layout), m_storage(storage),
-          m_slotSize(storage ? slotSize : RoundUp(slotSize, UniformAlignment)), m_label(std::move(label))
-    {
-    }
-
-    SceneRenderer::BlockRing::~BlockRing()
-    {
-        DestroyGroups();
-    }
-
-    void SceneRenderer::BlockRing::DestroyGroups()
-    {
-        for (const std::vector<BindingGroupHandle>& copy : m_groups)
-        {
-            for (const BindingGroupHandle group : copy)
-            {
-                m_device.Destroy(group);
-            }
-        }
-        m_groups.clear();
-    }
-
-    void SceneRenderer::BlockRing::Reserve(std::size_t slots)
-    {
-        slots = std::max<std::size_t>(slots, 1);
-        if (m_ring != nullptr && slots <= m_slots)
-        {
-            return;
-        }
-        // Grow by doubling, so a scene that keeps growing remakes its buffers rarely.
-        m_slots = std::max(slots, m_slots * 2);
-        DestroyGroups();
-        m_ring.reset();
-        const BufferUsage usage = m_storage ? BufferUsage::Storage : BufferUsage::Uniform;
-        m_ring = std::make_unique<FrameRingBuffer>(m_device, BufferDesc{m_slots * m_slotSize, usage}, m_label);
-        for (std::size_t copy = 0; copy < m_ring->CopyCount(); ++copy)
-        {
-            const BufferHandle buffer = m_ring->Current(copy);
-            std::vector<BindingGroupHandle>& groups = m_groups.emplace_back();
-            const std::size_t groupCount = m_storage ? 1 : m_slots;
-            for (std::size_t slot = 0; slot < groupCount; ++slot)
-            {
-                BindingGroupEntry entry;
-                entry.binding = 0;
-                entry.buffer = buffer;
-                entry.offset = m_storage ? 0 : slot * m_slotSize;
-                entry.size = m_storage ? 0 : m_slotSize;
-                groups.push_back(m_device.CreateBindingGroup({m_layout, {entry}}, m_label));
-            }
-        }
-    }
-
-    void SceneRenderer::BlockRing::Write(std::uint64_t frameIndex, std::size_t slot, std::span<const std::byte> bytes)
-    {
-        m_ring->Write(frameIndex, slot * m_slotSize, bytes);
-    }
-
-    BindingGroupHandle SceneRenderer::BlockRing::Group(std::uint64_t frameIndex, std::size_t slot) const
-    {
-        const std::vector<BindingGroupHandle>& copy =
-            m_groups.at(static_cast<std::size_t>(frameIndex % m_groups.size()));
-        return copy.at(m_storage ? 0 : slot);
-    }
-
     // ---- SceneRenderer ----
 
     SceneRenderer::SceneRenderer(GraphicsDevice& device, ILogger& logger, std::uint32_t samples)
@@ -393,6 +559,8 @@ namespace Fenrir::Render
         clamp.addressV = AddressMode::ClampToEdge;
         clamp.addressW = AddressMode::ClampToEdge;
         m_outputSampler = m_device.CreateSampler(clamp, "Output sampler");
+        // Clamped, so a face's edge does not wrap round to its opposite edge, and trilinear across the mips.
+        m_skySampler = m_device.CreateSampler(clamp, "Sky sampler");
         m_defaultStreams = m_device.CreateBuffer({sizeof(DefaultStreams), BufferUsage::Vertex},
                                                  std::as_bytes(std::span(DefaultStreams)), "Default vertex streams");
 
@@ -401,6 +569,7 @@ namespace Fenrir::Render
         if (m_fallback.variant != nullptr)
         {
             m_fallback.materialLayout = MaterialLayoutOf(*m_fallback.variant);
+            m_fallback.variants.push_back({m_fallback.variant, m_fallback.materialLayout});
         }
         m_fallback.id = 0;
 
@@ -416,6 +585,13 @@ namespace Fenrir::Render
         }
         m_backgroundPipeline = MakeInternalPipeline(m_background, BaseVariant(m_background), m_backgroundLayout,
                                                     TextureFormat::Rgba16Float, true, m_samples);
+        constexpr std::array<std::string_view, 1> cubemap{"CUBEMAP"};
+        if (const ShaderVariant* variant = m_background.FindVariant(cubemap))
+        {
+            m_skyLayout = MaterialLayoutOf(*variant);
+            m_skyPipeline = MakeInternalPipeline(m_background, variant, m_skyLayout, TextureFormat::Rgba16Float, true,
+                                                 m_samples, m_viewLayout);
+        }
         // With MSAA, Output reads every sample of SceneColor and averages them: the resolve.
         constexpr std::array<std::string_view, 1> msaa{"MSAA"};
         const ShaderVariant* output = m_samples > 1 ? m_output.FindVariant(msaa) : BaseVariant(m_output);
@@ -443,6 +619,15 @@ namespace Fenrir::Render
         {
             m_device.Destroy(target.texture);
         }
+        for (auto& [key, image] : m_images)
+        {
+            m_device.Destroy(image.texture);
+        }
+        for (auto& [key, cubemap] : m_cubemaps)
+        {
+            m_device.Destroy(cubemap.group);
+            m_device.Destroy(cubemap.texture);
+        }
         for (auto& [desc, sampler] : m_samplers)
         {
             m_device.Destroy(sampler);
@@ -453,7 +638,10 @@ namespace Fenrir::Render
         }
         for (auto& [key, shader] : m_shaders)
         {
-            m_device.Destroy(shader.materialLayout);
+            for (const VariantEntry& variant : shader.variants)
+            {
+                m_device.Destroy(variant.materialLayout);
+            }
         }
         for (auto& [texture, group] : m_outputGroups)
         {
@@ -465,8 +653,10 @@ namespace Fenrir::Render
         m_drawBlocks.reset();
         m_device.Destroy(m_fallback.materialLayout);
         m_device.Destroy(m_backgroundPipeline);
+        m_device.Destroy(m_skyPipeline);
         m_device.Destroy(m_outputPipeline);
         m_device.Destroy(m_backgroundLayout);
+        m_device.Destroy(m_skyLayout);
         m_device.Destroy(m_outputLayout);
         m_device.Destroy(m_frameLayout);
         m_device.Destroy(m_viewLayout);
@@ -477,6 +667,7 @@ namespace Fenrir::Render
         }
         m_device.Destroy(m_defaultSampler);
         m_device.Destroy(m_outputSampler);
+        m_device.Destroy(m_skySampler);
         m_device.Destroy(m_defaultStreams);
     }
 
@@ -504,11 +695,13 @@ namespace Fenrir::Render
 
     PipelineHandle SceneRenderer::MakeInternalPipeline(const ShaderContainer& container, const ShaderVariant* variant,
                                                        BindingGroupLayoutHandle layout, TextureFormat colour,
-                                                       bool depthTested, std::uint32_t samples)
+                                                       bool depthTested, std::uint32_t samples,
+                                                       BindingGroupLayoutHandle viewLayout)
     {
         PipelineDesc desc;
         desc.shader = variant;
         desc.samples = samples;
+        desc.sets.at(1) = viewLayout;
         desc.sets.at(MaterialSet) = layout;
         desc.cull = CullMode::None;
         desc.colourFormats = {colour};
@@ -541,6 +734,121 @@ namespace Fenrir::Render
     }
 
     // ---- Prepare ----
+
+    bool SceneRenderer::IsImageCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_images.find(key);
+        return found != m_images.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareImage(AssetKey key, std::uint32_t revision, const ImageData& image)
+    {
+        ReleaseImage(key);
+        ImageEntry& entry = m_images[key];
+        entry.revision = revision;
+        TextureDesc desc;
+        desc.format = TextureFormatOf(image);
+        desc.width = image.width;
+        desc.height = image.height;
+        desc.mipLevels = MipCount(image.width, image.height);
+        desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        entry.texture = m_device.CreateTexture(desc, "Material image");
+
+        WriteWithMips(m_device, entry.texture, 0, desc.mipLevels, image.pixels, image.width, image.height,
+                      CodecOf(image));
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleaseImage(AssetKey key)
+    {
+        const auto found = m_images.find(key);
+        if (found != m_images.end())
+        {
+            m_device.Destroy(found->second.texture);
+            m_images.erase(found);
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::ImageKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_images)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    bool SceneRenderer::IsCubemapCurrent(AssetKey key, std::uint32_t revision) const
+    {
+        const auto found = m_cubemaps.find(key);
+        return found != m_cubemaps.end() && found->second.revision == revision;
+    }
+
+    void SceneRenderer::PrepareCubemap(AssetKey key, std::uint32_t revision, const ImageData& image)
+    {
+        ReleaseCubemap(key);
+        CubemapEntry& entry = m_cubemaps[key];
+        entry.revision = revision;
+        TextureDesc desc;
+        desc.kind = TextureKind::Cube;
+        desc.format = TextureFormatOf(image);
+        desc.width = image.width;
+        desc.height = image.height;
+        desc.mipLevels = MipCount(image.width, image.height);
+        desc.usage = TextureUsage::Sampled | TextureUsage::CopyDestination;
+        entry.texture = m_device.CreateTexture(desc, "Sky cubemap");
+        const TexelCodec codec = CodecOf(image);
+        const std::size_t faceBytes = std::size_t{image.width} * image.height * codec.bytes;
+        for (std::uint32_t face = 0; face < 6; ++face)
+        {
+            WriteWithMips(m_device, entry.texture, face, desc.mipLevels,
+                          std::span(image.pixels).subspan(face * faceBytes, faceBytes), image.width, image.height,
+                          codec);
+        }
+        BindingGroupEntry binding;
+        binding.binding = 0;
+        binding.texture = entry.texture;
+        binding.sampler = m_skySampler;
+        entry.group = m_device.CreateBindingGroup({m_skyLayout, {binding}}, "Sky");
+        ++m_stats.uploads;
+    }
+
+    void SceneRenderer::ReleaseCubemap(AssetKey key)
+    {
+        const auto found = m_cubemaps.find(key);
+        if (found != m_cubemaps.end())
+        {
+            m_device.Destroy(found->second.group);
+            m_device.Destroy(found->second.texture);
+            m_cubemaps.erase(found);
+        }
+    }
+
+    std::vector<AssetKey> SceneRenderer::CubemapKeys() const
+    {
+        std::vector<AssetKey> keys;
+        for (const auto& [key, entry] : m_cubemaps)
+        {
+            keys.push_back(key);
+        }
+        return keys;
+    }
+
+    TextureHandle SceneRenderer::SampledTexture(AssetKey key) const
+    {
+        if (const auto target = m_targets.find(key); target != m_targets.end())
+        {
+            return target->second.texture;
+        }
+        const auto image = m_images.find(key);
+        return image == m_images.end() ? TextureHandle{} : image->second.texture;
+    }
+
+    TextureHandle SceneRenderer::GetDefaultTexture(DefaultTexture texture) const
+    {
+        return m_defaultTextures.at(static_cast<std::size_t>(texture));
+    }
 
     bool SceneRenderer::IsTargetCurrent(AssetKey key, std::uint32_t revision) const
     {
@@ -606,9 +914,13 @@ namespace Fenrir::Render
         {
             entry.container = std::move(*read.container);
             entry.variant = BaseVariant(entry.container);
-            if (entry.variant != nullptr)
+            for (const ShaderVariant& variant : entry.container.variants)
             {
-                entry.materialLayout = MaterialLayoutOf(*entry.variant);
+                entry.variants.push_back({&variant, MaterialLayoutOf(variant)});
+                if (&variant == entry.variant)
+                {
+                    entry.materialLayout = entry.variants.back().materialLayout;
+                }
             }
         }
     }
@@ -635,7 +947,10 @@ namespace Fenrir::Render
             }
         }
         DestroyPipelinesOf(shader);
-        m_device.Destroy(shader.materialLayout);
+        for (const VariantEntry& variant : shader.variants)
+        {
+            m_device.Destroy(variant.materialLayout);
+        }
         m_shaders.erase(found);
     }
 
@@ -728,11 +1043,9 @@ namespace Fenrir::Render
         {
             return false;
         }
-        // A render target it samples was made, remade at a new size or released since.
-        return std::all_of(material.images.begin(), material.images.end(), [this](const SampledImage& image) {
-            const auto target = m_targets.find(image.image);
-            return (target == m_targets.end() ? TextureHandle{} : target->second.texture) == image.bound;
-        });
+        // An image or render target it samples was made, remade (a new revision or size) or released since.
+        return std::all_of(material.images.begin(), material.images.end(),
+                           [this](const SampledImage& image) { return SampledTexture(image.image) == image.bound; });
     }
 
     void SceneRenderer::PrepareMaterial(AssetKey key, std::uint32_t revision, const MaterialData& material)
@@ -742,6 +1055,7 @@ namespace Fenrir::Render
         entry.revision = revision;
         entry.id = NextId();
         entry.doubleSided = material.doubleSided;
+        entry.blendMode = material.blendMode;
         entry.shaderKey = KeyOf(material.shader);
         const auto shader = m_shaders.find(entry.shaderKey);
         entry.shader = shader == m_shaders.end() ? nullptr : &shader->second;
@@ -751,7 +1065,18 @@ namespace Fenrir::Render
             // Drawn as the fallback material, which has no material group.
             return;
         }
-        const ShaderVariant& variant = *shader->second.variant;
+        // The renderer picks the keys (ADR-0024): ALPHA_MASK for a Masked material, if the shader has it; a user
+        // shader's own keys stay off.
+        const bool masked = material.blendMode == Fenrir::BlendMode::Masked;
+        const std::array<std::string_view, 1> maskKeys{AlphaMaskKey};
+        const ShaderVariant* picked = entry.shader->container.FindVariant(
+            masked ? std::span<const std::string_view>(maskKeys) : std::span<const std::string_view>());
+        const auto variantEntry =
+            std::find_if(entry.shader->variants.begin(), entry.shader->variants.end(), [&](const VariantEntry& v) {
+                return v.variant == (picked != nullptr ? picked : entry.shader->variant);
+            });
+        entry.variant = &*variantEntry;
+        const ShaderVariant& variant = *entry.variant->variant;
 
         std::vector<BindingGroupEntry> bindings;
         for (const ShaderBinding& binding : variant.bindings)
@@ -764,39 +1089,48 @@ namespace Fenrir::Render
             bound.binding = binding.binding;
             if (binding.kind == ShaderBindingKind::Texture)
             {
+                // A texture left unset, or naming an image that is not prepared, binds its parameter's default texture
+                // (ADR-0024) instead of adding a key.
                 const TextureHandle fallback =
                     m_defaultTextures.at(static_cast<std::size_t>(DefaultTextureOf(variant, binding.name)));
                 bound.texture = fallback;
                 bound.sampler = m_defaultSampler;
-                // A render target image binds its texture (ADR-0026). Other images are uploaded from renderer ticket
-                // 13; until then they bind the default.
                 const auto value = material.overrides.find(binding.name);
                 const MaterialTexture* texture =
                     value == material.overrides.end() ? nullptr : std::get_if<MaterialTexture>(&value->second);
+                if (texture != nullptr)
+                {
+                    bound.sampler = SamplerFor(texture->sampler);
+                }
                 if (texture != nullptr && !texture->image.IsEmpty())
                 {
-                    SampledImage image{bindings.size(), KeyOf(texture->image), {}, fallback};
-                    if (const auto target = m_targets.find(image.image); target != m_targets.end())
+                    // A render target image binds its texture (ADR-0026); an image with pixels its uploaded texture.
+                    SampledImage image{bindings.size(), KeyOf(texture->image), SampledTexture(KeyOf(texture->image)),
+                                       fallback};
+                    if (!image.bound.IsEmpty())
                     {
-                        image.bound = target->second.texture;
                         bound.texture = image.bound;
-                        bound.sampler = SamplerFor(texture->sampler);
                     }
                     entry.images.push_back(image);
                 }
             }
             else if (variant.materialBlockBinding == binding.binding && !variant.defaultBlock.empty())
             {
-                // The default block image, then the material's overrides over it (ADR-0024).
+                // The default block image, then the material's overrides over it (ADR-0024), and a Masked material's
+                // alpha cutoff over those.
                 std::vector<std::byte> block = variant.defaultBlock;
                 WriteOverrides(variant, material, block);
+                if (masked)
+                {
+                    WriteAlphaCutoff(variant, material.alphaCutoff, block);
+                }
                 entry.block = m_device.CreateBuffer({block.size(), BufferUsage::Uniform}, block, "Material block");
                 bound.buffer = entry.block;
                 ++m_stats.uploads;
             }
             bindings.push_back(bound);
         }
-        entry.layout = shader->second.materialLayout;
+        entry.layout = entry.variant->materialLayout;
         entry.bindings = bindings;
         if (!entry.layout.IsEmpty())
         {
@@ -903,10 +1237,11 @@ namespace Fenrir::Render
         return stats;
     }
 
-    const SceneRenderer::PipelineEntry& SceneRenderer::MeshPipeline(const ShaderEntry& shader, const MeshEntry& mesh,
-                                                                    bool doubleSided)
+    const SceneRenderer::PipelineEntry& SceneRenderer::MeshPipeline(const ShaderEntry& shader,
+                                                                    const VariantEntry& variant, const MeshEntry& mesh,
+                                                                    Fenrir::BlendMode blend, bool doubleSided)
     {
-        const std::uint32_t read = shader.variant != nullptr ? ReadMask(*shader.variant) : 0;
+        const std::uint32_t read = variant.variant != nullptr ? ReadMask(*variant.variant) : 0;
         std::uint32_t present = 0;
         for (std::uint32_t location = 0; location < Streams.size(); ++location)
         {
@@ -915,7 +1250,7 @@ namespace Fenrir::Render
                 present |= 1u << location;
             }
         }
-        const PipelineKey key{&shader, read & present, doubleSided, m_samples};
+        const PipelineKey key{&shader, variant.variant, read & present, blend, doubleSided, m_samples};
         if (const auto found = m_pipelines.find(key); found != m_pipelines.end())
         {
             return found->second;
@@ -923,16 +1258,16 @@ namespace Fenrir::Render
 
         PipelineEntry& entry = m_pipelines[key];
         entry.id = NextId();
-        if (shader.variant == nullptr)
+        if (variant.variant == nullptr)
         {
             entry.failure = "it has no variant to draw";
             return entry;
         }
-        entry.failure = CheckFixedSets(*shader.variant);
+        entry.failure = CheckFixedSets(*variant.variant);
         PipelineDesc desc;
-        desc.shader = shader.variant;
-        desc.sets = {m_frameLayout, m_viewLayout, shader.materialLayout, m_drawLayout};
-        for (const ShaderVertexInput& input : shader.variant->vertexInputs)
+        desc.shader = variant.variant;
+        desc.sets = {m_frameLayout, m_viewLayout, variant.materialLayout, m_drawLayout};
+        for (const ShaderVertexInput& input : variant.variant->vertexInputs)
         {
             if (input.location >= Streams.size())
             {
@@ -947,7 +1282,11 @@ namespace Fenrir::Render
                 {has ? static_cast<std::uint32_t>(stream.size) : 0u, {{input.location, stream.format, 0}}});
             entry.locations.push_back(input.location);
         }
+        // The render state (ADR-0024): Opaque and Masked write depth; AlphaBlend and Additive blend without writing it.
+        // Depth is always tested, greater-or-equal for reversed-Z, and doubleSided turns culling off.
         desc.cull = doubleSided ? CullMode::None : CullMode::Back;
+        desc.depth.write = !IsTransparent(blend);
+        desc.blend = DeviceBlendOf(blend);
         desc.colourFormats = {TextureFormat::Rgba16Float};
         desc.samples = m_samples;
         if (entry.failure.empty())
@@ -978,33 +1317,32 @@ namespace Fenrir::Render
             }
             const auto material = m_materials.find(request.material);
             MaterialEntry* found = material == m_materials.end() ? nullptr : &material->second;
-            const ShaderEntry* shader =
-                found != nullptr && found->shader != nullptr && found->shader->variant != nullptr ? found->shader
-                                                                                                  : &m_fallback;
+            const bool usable = found != nullptr && found->variant != nullptr;
+            const ShaderEntry* shader = usable ? found->shader : &m_fallback;
+            const VariantEntry* variant = usable ? found->variant : &m_fallback.variants.front();
+            Fenrir::BlendMode blend = usable ? found->blendMode : Fenrir::BlendMode::Opaque;
             const PipelineEntry* pipeline =
-                &MeshPipeline(*shader, mesh->second, found != nullptr && found->doubleSided);
+                &MeshPipeline(*shader, *variant, mesh->second, blend, usable && found->doubleSided);
             if (pipeline->pipeline.IsEmpty() && shader != &m_fallback)
             {
                 shader = &m_fallback;
-                pipeline = &MeshPipeline(m_fallback, mesh->second, false);
+                variant = &m_fallback.variants.front();
+                blend = Fenrir::BlendMode::Opaque;
+                pipeline = &MeshPipeline(m_fallback, *variant, mesh->second, blend, false);
             }
             if (pipeline->pipeline.IsEmpty())
             {
                 continue;
             }
 
-            if (shader->variant != nullptr)
+            for (const ShaderVertexInput& input : variant->variant->vertexInputs)
             {
-                for (const ShaderVertexInput& input : shader->variant->vertexInputs)
+                if (input.location < Streams.size() && !mesh->second.streams.at(input.location).has_value() &&
+                    m_loggedStreams.insert({request.mesh, input.location}).second)
                 {
-                    if (input.location < Streams.size() && !mesh->second.streams.at(input.location).has_value() &&
-                        m_loggedStreams.insert({request.mesh, input.location}).second)
-                    {
-                        const StreamFormat& stream = Streams.at(input.location);
-                        m_logger.Warn("FenrirRenderer: mesh {} has no {}, which shader '{}' reads; it is drawn with "
-                                      "{}",
-                                      request.mesh.index, stream.name, shader->container.name, stream.defaultName);
-                    }
+                    const StreamFormat& stream = Streams.at(input.location);
+                    m_logger.Warn("FenrirRenderer: mesh {} has no {}, which shader '{}' reads; it is drawn with {}",
+                                  request.mesh.index, stream.name, shader->container.name, stream.defaultName);
                 }
             }
 
@@ -1014,14 +1352,63 @@ namespace Fenrir::Render
             draw.material = fallback ? nullptr : found;
             draw.mesh = &mesh->second;
             draw.world = request.world;
+            draw.transparent = IsTransparent(blend);
+            const std::uint64_t stage = draw.transparent ? TransparentStage : OpaqueStage;
             const std::uint64_t materialId = fallback ? 0 : found->id;
-            draw.sortKey = (std::uint64_t{OpaqueStage} << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
+            draw.sortKey = (stage << 56u) | ((std::uint64_t{pipeline->id} & 0xFFFFu) << 40u) |
                            ((materialId & 0xFFFFFu) << 20u) | (std::uint64_t{mesh->second.id} & 0xFFFFFu);
             draws.push_back(draw);
         }
         std::stable_sort(draws.begin(), draws.end(),
                          [](const ResolvedDraw& a, const ResolvedDraw& b) { return a.sortKey < b.sortKey; });
         return draws;
+    }
+
+    void SceneRenderer::RecordDraws(PassEncoder& encoder, const std::vector<ResolvedDraw>& draws,
+                                    const std::vector<BindingGroupHandle>& groups,
+                                    const std::vector<std::size_t>& order, BindingGroupHandle frameGroup,
+                                    BindingGroupHandle viewGroup, BindingGroupHandle drawGroup,
+                                    PixelRect viewport) const
+    {
+        encoder.SetViewport(viewport);
+        const PipelineEntry* current = nullptr;
+        BindingGroupHandle material;
+        for (const std::size_t i : order)
+        {
+            const ResolvedDraw& draw = draws[i];
+            const BindingGroupHandle group = groups[i];
+            const bool newPipeline = draw.pipeline != current;
+            if (newPipeline)
+            {
+                current = draw.pipeline;
+                encoder.SetPipeline(current->pipeline);
+                encoder.SetBindingGroup(0, frameGroup);
+                encoder.SetBindingGroup(1, viewGroup);
+                encoder.SetBindingGroup(3, drawGroup);
+            }
+            if (!group.IsEmpty() && (newPipeline || group != material))
+            {
+                encoder.SetBindingGroup(MaterialSet, group);
+            }
+            material = group;
+            for (std::size_t slot = 0; slot < current->locations.size(); ++slot)
+            {
+                const std::uint32_t location = current->locations[slot];
+                const std::optional<std::size_t>& offset = draw.mesh->streams.at(location);
+                if (offset.has_value())
+                {
+                    encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), draw.mesh->vertices, *offset);
+                }
+                else
+                {
+                    encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), m_defaultStreams,
+                                            Streams.at(location).defaultOffset);
+                }
+            }
+            encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
+            // Each item reads its own record of the draw buffer, by its place in the draw list.
+            encoder.DrawIndexed({.indexCount = draw.mesh->indexCount, .firstInstance = static_cast<std::uint32_t>(i)});
+        }
     }
 
     BindingGroupHandle SceneRenderer::OutputGroup(TextureHandle sceneColour)
@@ -1067,6 +1454,7 @@ namespace Fenrir::Render
         }
 
         m_stats.draws = 0;
+        m_drawnViews.clear();
         if (m_frame.views.empty())
         {
             AddWindowClear(graph, frame);
@@ -1193,7 +1581,14 @@ namespace Fenrir::Render
                 Math::Vec4(request.background.r, request.background.g, request.background.b, request.background.a)};
             m_backgroundBlocks->Write(frameIndex, v, BytesOf(backgroundBlock));
             const BindingGroupHandle viewGroup = m_viewBlocks->Group(frameIndex, v);
-            const BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
+            // The Sky cubemap's pipeline and group, when the view draws one that is prepared; else its colour's.
+            BindingGroupHandle backgroundGroup = m_backgroundBlocks->Group(frameIndex, v);
+            PipelineHandle backgroundPipeline = m_backgroundPipeline;
+            if (const auto sky = m_cubemaps.find(request.sky); sky != m_cubemaps.end() && !m_skyPipeline.IsEmpty())
+            {
+                backgroundGroup = sky->second.group;
+                backgroundPipeline = m_skyPipeline;
+            }
 
             // Each draw's material group in this view, with the images it may not sample replaced.
             auto groups = std::make_shared<std::vector<BindingGroupHandle>>();
@@ -1220,6 +1615,21 @@ namespace Fenrir::Render
             depthDesc.usage = TextureUsage::DepthAttachment;
             const GraphResource sceneColour = graph.CreateTexture("SceneColor", colourDesc);
             const GraphResource sceneDepth = graph.CreateTexture("SceneDepth", depthDesc);
+            m_drawnViews.push_back({v, sceneColour, sceneDepth, viewGroup});
+
+            // Opaque items in draw-list order; transparent ones back to front by the view-space depth of their world
+            // origins, the farthest (most negative view z) first.
+            auto opaque = std::make_shared<std::vector<std::size_t>>();
+            auto transparent = std::make_shared<std::vector<std::size_t>>();
+            std::vector<float> depth(draws->size(), 0.0f);
+            for (std::size_t i = 0; i < draws->size(); ++i)
+            {
+                const ResolvedDraw& draw = (*draws)[i];
+                (draw.transparent ? *transparent : *opaque).push_back(i);
+                depth[i] = (request.view * draw.world[3]).z;
+            }
+            std::stable_sort(transparent->begin(), transparent->end(),
+                             [&](std::size_t a, std::size_t b) { return depth[a] < depth[b]; });
 
             graph.AddPass(
                 "Opaque", RenderStage::Opaque, QueueKind::Graphics,
@@ -1231,48 +1641,29 @@ namespace Fenrir::Render
                         pass.Sample(image);
                     }
                 },
-                [this, draws, groups, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
-                    PassEncoder& encoder = context.Encoder();
-                    encoder.SetViewport(viewport);
-                    const PipelineEntry* current = nullptr;
-                    BindingGroupHandle material;
-                    for (std::size_t i = 0; i < draws->size(); ++i)
-                    {
-                        const ResolvedDraw& draw = (*draws)[i];
-                        const BindingGroupHandle group = (*groups)[i];
-                        const bool newPipeline = draw.pipeline != current;
-                        if (newPipeline)
-                        {
-                            current = draw.pipeline;
-                            encoder.SetPipeline(current->pipeline);
-                            encoder.SetBindingGroup(0, frameGroup);
-                            encoder.SetBindingGroup(1, viewGroup);
-                            encoder.SetBindingGroup(3, drawGroup);
-                        }
-                        if (!group.IsEmpty() && (newPipeline || group != material))
-                        {
-                            encoder.SetBindingGroup(MaterialSet, group);
-                        }
-                        material = group;
-                        for (std::size_t slot = 0; slot < current->locations.size(); ++slot)
-                        {
-                            const std::uint32_t location = current->locations[slot];
-                            const std::optional<std::size_t>& offset = draw.mesh->streams.at(location);
-                            if (offset.has_value())
-                            {
-                                encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), draw.mesh->vertices, *offset);
-                            }
-                            else
-                            {
-                                encoder.SetVertexBuffer(static_cast<std::uint32_t>(slot), m_defaultStreams,
-                                                        Streams.at(location).defaultOffset);
-                            }
-                        }
-                        encoder.SetIndexBuffer(draw.mesh->indices, IndexFormat::UInt32);
-                        encoder.DrawIndexed(
-                            {.indexCount = draw.mesh->indexCount, .firstInstance = static_cast<std::uint32_t>(i)});
-                    }
+                [this, draws, groups, opaque, frameGroup, viewGroup, drawGroup, viewport](PassContext& context) {
+                    RecordDraws(context.Encoder(), *draws, *groups, *opaque, frameGroup, viewGroup, drawGroup,
+                                viewport);
                 });
+            if (!transparent->empty())
+            {
+                // Depth tested against the opaque items, without writing it (ADR-0024).
+                graph.AddPass(
+                    "Transparent", RenderStage::Transparent, QueueKind::Graphics,
+                    [=](PassBuilder& pass) {
+                        pass.ColourAttachment(sceneColour, LoadOp::Load);
+                        pass.DepthReadOnly(sceneDepth);
+                        for (const GraphResource image : samples)
+                        {
+                            pass.Sample(image);
+                        }
+                    },
+                    [this, draws, groups, transparent, frameGroup, viewGroup, drawGroup,
+                     viewport](PassContext& context) {
+                        RecordDraws(context.Encoder(), *draws, *groups, *transparent, frameGroup, viewGroup, drawGroup,
+                                    viewport);
+                    });
+            }
             m_stats.draws += static_cast<std::uint32_t>(draws->size());
 
             graph.AddPass(
@@ -1281,10 +1672,11 @@ namespace Fenrir::Render
                     pass.ColourAttachment(sceneColour, LoadOp::Load);
                     pass.DepthReadOnly(sceneDepth);
                 },
-                [this, backgroundGroup, viewport](PassContext& context) {
+                [backgroundPipeline, backgroundGroup, viewGroup, viewport](PassContext& context) {
                     PassEncoder& encoder = context.Encoder();
                     encoder.SetViewport(viewport);
-                    encoder.SetPipeline(m_backgroundPipeline);
+                    encoder.SetPipeline(backgroundPipeline);
+                    encoder.SetBindingGroup(1, viewGroup);
                     encoder.SetBindingGroup(MaterialSet, backgroundGroup);
                     encoder.Draw({.vertexCount = 3});
                 });

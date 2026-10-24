@@ -4,8 +4,10 @@
 #include <array>
 #include <cmath>
 #include <format>
+#include <iterator>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "Backend/OpenGL/OpenGLDevice.hpp"
@@ -14,6 +16,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/ImageData.hpp"
 #include "FenrirAssets/ShaderData.hpp"
+#include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/ComponentType.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -27,9 +30,6 @@ namespace Fenrir
     {
         using Render::AssetKey;
         using Render::KeyOf;
-
-        /** @brief What the Background pass draws until the sky (renderer ticket 15): a dark grey, linear. */
-        constexpr Colour BackgroundColour{0.015f, 0.015f, 0.015f, 1.0f};
 
         template <typename T>
         AssetHandle<T> HandleOf(AssetKey key)
@@ -106,6 +106,8 @@ namespace Fenrir
                 scene.ReleaseTarget(KeyOf(handle));
                 return false;
             }
+            // An image replaced by a render target has no pixels to upload any more.
+            scene.ReleaseImage(KeyOf(handle));
             const std::uint32_t revision = store.Revision(handle);
             if (!scene.IsTargetCurrent(KeyOf(handle), revision))
             {
@@ -114,22 +116,60 @@ namespace Fenrir
             return true;
         }
 
-        bool PrepareMaterial(Render::SceneRenderer& scene, const AssetStore& store, AssetHandle<Material> handle)
+        /**
+         * @brief Prepares an image a material samples: a render target as one, a flat image with pixels uploaded with
+         * its mips. Anything else (a cubemap, or an image with no pixels that is not a render target) is released and
+         * logged once, and the material binds its parameter's default texture there.
+         */
+        void PrepareSampledImage(Detail::RendererState& state, const AssetStore& store, AssetHandle<Image> handle,
+                                 std::string_view sampler = "a material")
         {
+            Render::SceneRenderer& scene = *state.scene;
+            const ImageData* data = store.TryGet(handle);
+            if (data != nullptr && IsRenderTarget(*data))
+            {
+                PrepareTarget(scene, store, handle);
+                return;
+            }
+            scene.ReleaseTarget(KeyOf(handle));
+            if (data == nullptr || data->shape != ImageShape::Flat || data->pixels.empty())
+            {
+                scene.ReleaseImage(KeyOf(handle));
+                if (data != nullptr && state.loggedImages.insert({handle.index, handle.generation}).second)
+                {
+                    state.app->Logger()->Warn("FenrirRenderer: {} samples image {}, which is {}, so it gets its "
+                                              "parameter's default texture there",
+                                              sampler, handle.index,
+                                              data->shape != ImageShape::Flat
+                                                  ? "a cubemap"
+                                                  : "neither a render target nor an image with pixels");
+                }
+                return;
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!scene.IsImageCurrent(KeyOf(handle), revision))
+            {
+                scene.PrepareImage(KeyOf(handle), revision, *data);
+            }
+        }
+
+        bool PrepareMaterial(Detail::RendererState& state, const AssetStore& store, AssetHandle<Material> handle)
+        {
+            Render::SceneRenderer& scene = *state.scene;
             const MaterialData* data = store.TryGet(handle);
             if (data == nullptr)
             {
                 return false;
             }
-            // Its shader first: the material's block is laid out from the shader's reflection. Then the render target
-            // images it samples, whose textures it binds.
+            // Its shader first: the material's block is laid out from the shader's reflection. Then the images and
+            // render target images it samples, whose textures it binds.
             PrepareShader(scene, store, data->shader);
             for (const auto& [name, value] : data->overrides)
             {
                 const auto* texture = std::get_if<MaterialTexture>(&value);
                 if (texture != nullptr && !texture->image.IsEmpty())
                 {
-                    PrepareTarget(scene, store, texture->image);
+                    PrepareSampledImage(state, store, texture->image);
                 }
             }
             const std::uint32_t revision = store.Revision(handle);
@@ -141,7 +181,7 @@ namespace Fenrir
         }
 
         /** @brief Frees the GPU side of every asset whose handle went stale (ADR-0023). */
-        void ReleaseStale(Render::SceneRenderer& scene, const AssetStore& store)
+        void ReleaseStale(Render::SceneRenderer& scene, Render::Draw2DFeature& draw2D, const AssetStore& store)
         {
             for (const AssetKey key : scene.MaterialKeys())
             {
@@ -164,6 +204,13 @@ namespace Fenrir
                     scene.ReleaseShader(key);
                 }
             }
+            for (const AssetKey key : draw2D.ShaderKeys())
+            {
+                if (!store.IsValid(HandleOf<Shader>(key)))
+                {
+                    draw2D.ReleaseShader(key);
+                }
+            }
             for (const AssetKey key : scene.TargetKeys())
             {
                 if (!store.IsValid(HandleOf<Image>(key)))
@@ -171,6 +218,64 @@ namespace Fenrir
                     scene.ReleaseTarget(key);
                 }
             }
+            for (const AssetKey key : scene.ImageKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleaseImage(key);
+                }
+            }
+            for (const AssetKey key : scene.CubemapKeys())
+            {
+                if (!store.IsValid(HandleOf<Image>(key)))
+                {
+                    scene.ReleaseCubemap(key);
+                }
+            }
+        }
+
+        /** @brief What a view on the scene's background draws: the Sky's colour, or its prepared cubemap. */
+        struct SceneSky
+        {
+            Colour colour = ColourSky{}.colour;
+            AssetKey cubemap;
+        };
+
+        /**
+         * @brief The active scene's Sky, its cubemap prepared if it is new or changed. A cubemap that is empty, stale
+         * or not a cubemap with pixels gives the default ColourSky, logged once per handle.
+         */
+        SceneSky ReadSky(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        {
+            const Sky* sky = scene.GetResource<Sky>();
+            if (sky == nullptr)
+            {
+                return {};
+            }
+            if (sky->Is<ColourSky>())
+            {
+                return {sky->As<ColourSky>().colour, {}};
+            }
+            const AssetHandle<Image> handle = sky->As<CubemapSky>().cubemap;
+            const ImageData* data = store.TryGet(handle);
+            if (data == nullptr || data->shape != ImageShape::Cubemap || data->pixels.empty())
+            {
+                if (state.skyCubemaps.ShouldLog(handle))
+                {
+                    state.app->Logger()->Warn(
+                        "FenrirRenderer: the active scene's Sky names {}, so it is drawn dark grey",
+                        handle.IsEmpty()  ? std::string("no cubemap")
+                        : data == nullptr ? std::format("a stale cubemap ({})", handle.index)
+                                          : std::format("image {}, which is not a cubemap with pixels", handle.index));
+                }
+                return {};
+            }
+            const std::uint32_t revision = store.Revision(handle);
+            if (!state.scene->IsCubemapCurrent(KeyOf(handle), revision))
+            {
+                state.scene->PrepareCubemap(KeyOf(handle), revision, *data);
+            }
+            return {ColourSky{}.colour, KeyOf(handle)};
         }
 
         /** @brief The active scene's light: the first DirectionalLight, warned once if there are more, and ambient. */
@@ -376,7 +481,8 @@ namespace Fenrir
          * @brief Every enabled camera in the active scene that can draw, as a view, preparing the images they draw
          * into, in the order they draw: by order, then entity id, a tie in one target logged once.
          */
-        std::vector<Render::ViewRequest> ReadViews(Detail::RendererState& state, const AssetStore& store, Scene& scene)
+        std::vector<Render::ViewRequest> ReadViews(Detail::RendererState& state, const AssetStore& store, Scene& scene,
+                                                   const SceneSky& sky)
         {
             struct Candidate
             {
@@ -411,11 +517,19 @@ namespace Fenrir
                 view.view = glm::inverse(resolved.world);
                 view.projection = resolved.projection;
                 view.position = Math::Vec3(resolved.world[3]);
-                view.background = camera.background.Is<ColourBackground>()
-                                      ? camera.background.As<ColourBackground>().colour
-                                      : BackgroundColour;
+                // A camera's own colour overrides the scene's Sky for its view.
+                if (camera.background.Is<ColourBackground>())
+                {
+                    view.background = camera.background.As<ColourBackground>().colour;
+                }
+                else
+                {
+                    view.background = sky.colour;
+                    view.sky = sky.cubemap;
+                }
                 view.target = KeyOf(resolved.image);
                 view.viewport = resolved.pixels;
+                view.drawDebug = camera.drawDebug;
                 candidates.push_back(candidate);
             });
 
@@ -471,7 +585,7 @@ namespace Fenrir
                 }
                 Render::DrawRequest draw;
                 draw.mesh = KeyOf(renderer.mesh);
-                if (PrepareMaterial(*state.scene, store, renderer.material))
+                if (PrepareMaterial(state, store, renderer.material))
                 {
                     draw.material = KeyOf(renderer.material);
                 }
@@ -487,6 +601,131 @@ namespace Fenrir
             return draws;
         }
 
+        /** @brief The core's copy of a FenrirDebugDraw vertex. */
+        Render::DebugShapeVertex ToCore(const DebugVertex& vertex)
+        {
+            return {vertex.position, vertex.colour};
+        }
+
+        Render::DebugDepth ToCore(DepthMode depth)
+        {
+            return depth == DepthMode::OnTop ? Render::DebugDepth::OnTop : Render::DebugDepth::Tested;
+        }
+
+        /**
+         * @brief The active scene's debug drawing this frame (ADR-0025), tessellated by its DebugDraw and copied into
+         * the core's plain data; empty when the scene has no DebugDraw.
+         */
+        Render::DebugFrame ReadDebug(Detail::RendererState& state, Scene& scene)
+        {
+            Render::DebugFrame frame;
+            const DebugDraw* draw = scene.GetResource<DebugDraw>();
+            if (draw == nullptr)
+            {
+                return frame;
+            }
+            const DebugBatches batches = draw->Tessellate();
+            for (const DebugLineBatch& batch : batches.lines)
+            {
+                Render::DebugLines& lines = frame.lines.emplace_back();
+                lines.depth = ToCore(batch.depth);
+                lines.thickness = batch.thickness;
+                std::transform(batch.vertices.begin(), batch.vertices.end(), std::back_inserter(lines.vertices),
+                               [](const DebugVertex& v) { return ToCore(v); });
+            }
+            for (const DebugTriangleBatch& batch : batches.triangles)
+            {
+                Render::DebugTriangles& triangles = frame.triangles.emplace_back();
+                triangles.depth = ToCore(batch.depth);
+                std::transform(batch.vertices.begin(), batch.vertices.end(), std::back_inserter(triangles.vertices),
+                               [](const DebugVertex& v) { return ToCore(v); });
+            }
+            for (const DebugTextRun& run : batches.texts)
+            {
+                const Render::DebugText text{run.text, run.position, run.size, run.colour};
+                if (run.space == DebugTextSpace::World)
+                {
+                    frame.worldTexts.push_back(text);
+                }
+                else if (run.space == DebugTextSpace::Message)
+                {
+                    frame.messages.push_back(text);
+                }
+                else
+                {
+                    frame.screenTexts.push_back(text);
+                }
+            }
+            frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
+                                     ? Window::ContentScale(*state.app, Window::MainWindow())
+                                     : 1.0f;
+            return frame;
+        }
+
+        /**
+         * @brief The Overlay's submissions this frame (ADR-0027), taken so it starts the next frame empty, with the
+         * shaders and images they name prepared. A submission to a window other than the main window is dropped, logged
+         * once per window. With `draw` false (a minimised window, or no store) they are only taken.
+         */
+        Render::OverlayFrame ReadOverlay(Detail::RendererState& state, const AssetStore* store, bool draw)
+        {
+            Render::OverlayFrame frame;
+            Overlay* overlay = state.app->TryGetResource<Overlay>();
+            if (overlay == nullptr)
+            {
+                return frame;
+            }
+            std::vector<Detail::OverlaySubmissions::Taken> taken = Detail::OverlaySubmissions::Take(*overlay);
+            if (!draw || store == nullptr)
+            {
+                return frame;
+            }
+            for (Detail::OverlaySubmissions::Taken& submission : taken)
+            {
+                if (submission.window != Window::MainWindow())
+                {
+                    if (state.loggedOverlayWindows.insert(submission.window.value).second)
+                    {
+                        state.app->Logger()->Warn(
+                            "FenrirRenderer: a 2D draw list was submitted to the overlay of window "
+                            "{}, which the renderer does not draw (only the main window), so it "
+                            "is dropped",
+                            submission.window.value);
+                    }
+                    continue;
+                }
+                const DrawList2D& list = submission.submission.list;
+                for (const PipelineDescription2D& pipeline : list.pipelines)
+                {
+                    const ShaderData* data = store->TryGet(pipeline.shader);
+                    if (data == nullptr)
+                    {
+                        continue;
+                    }
+                    const std::uint32_t revision = store->Revision(pipeline.shader);
+                    if (!state.draw2D->IsShaderCurrent(KeyOf(pipeline.shader), revision))
+                    {
+                        state.draw2D->PrepareShader(KeyOf(pipeline.shader), revision, *data);
+                    }
+                }
+                for (const Command2D& command : list.commands)
+                {
+                    for (const TextureSlot2D& slot : command.textures)
+                    {
+                        if (!slot.image.IsEmpty())
+                        {
+                            PrepareSampledImage(state, *store, slot.image, "a 2D draw list");
+                        }
+                    }
+                }
+                frame.submissions.push_back(std::move(submission.submission));
+            }
+            frame.contentScale = Window::Exists(*state.app, Window::MainWindow())
+                                     ? Window::ContentScale(*state.app, Window::MainWindow())
+                                     : 1.0f;
+            return frame;
+        }
+
         /** @brief One Render: the steps of ADR-0019, all on the main thread. */
         void RenderActiveScene(App& app, Detail::RendererState& state)
         {
@@ -495,13 +734,15 @@ namespace Fenrir
             // Read the window size first: a minimised window builds nothing, but the frame index still advances.
             const Graphics::PixelSize size = state.surface->GetPixelSize();
             Render::SceneFrame frame;
+            Render::DebugFrame debug;
             if (!size.IsEmpty() && store != nullptr)
             {
                 Scene& scene = app.GetActiveScene();
-                ReleaseStale(*state.scene, *store);
+                ReleaseStale(*state.scene, *state.draw2D, *store);
                 frame.lighting = ReadLighting(state, scene);
-                frame.views = ReadViews(state, *store, scene);
+                frame.views = ReadViews(state, *store, scene, ReadSky(state, *store, scene));
                 frame.draws = ReadDraws(state, *store, scene);
+                debug = ReadDebug(state, scene);
                 frame.time = static_cast<float>(state.time);
                 frame.deltaTime = static_cast<float>(app.GetTime().deltaTime);
                 const bool windowDrawn =
@@ -515,6 +756,8 @@ namespace Fenrir
                 }
             }
             state.scene->SetFrame(std::move(frame));
+            state.debug->SetFrame(std::move(debug));
+            state.draw2D->SetFrame(ReadOverlay(state, store, !size.IsEmpty()));
 
             const Render::FrameReport report = state.core->RenderFrame();
             for (const std::string& error : report.errors)
@@ -633,6 +876,13 @@ namespace Fenrir
             {
                 Window::ReleaseSurface(*app, Window::MainWindow());
             }
+            // Only this state's resource: a later Install's must stay.
+            const InstalledRenderer* installed = app == nullptr ? nullptr : app->TryGetResource<InstalledRenderer>();
+            if (installed != nullptr && installed->state.expired())
+            {
+                app->RemoveResource<InstalledRenderer>();
+                app->RemoveResource<Overlay>();
+            }
         }
     } // namespace Detail
 
@@ -692,7 +942,16 @@ namespace Fenrir
         auto scene =
             std::make_unique<Render::SceneRenderer>(state->core->Device(), *app.Logger(), SupportedMsaa(app, config));
         state->scene = scene.get();
+        // The window overlay's 2D draw lists sample the images the scene renderer prepares. Its Overlay pass is added
+        // before the debug feature's, so debug screen text draws above every overlay layer (ADR-0027).
+        auto draw2D = std::make_unique<Render::Draw2DFeature>(state->core->Device(), *app.Logger(), *scene);
+        state->draw2D = draw2D.get();
+        // Debug drawing goes into the views the scene renderer drew, so it is added after it.
+        auto debug = std::make_unique<Render::DebugFeature>(state->core->Device(), *app.Logger(), *scene);
+        state->debug = debug.get();
         state->core->AddFeature(std::move(scene));
+        state->core->AddFeature(std::move(draw2D));
+        state->core->AddFeature(std::move(debug));
 
         const Graphics::Vsync wanted = ToDevice(config.vsync);
         state->core->Device().SetVsync(wanted);
@@ -705,6 +964,8 @@ namespace Fenrir
                                         RenderActiveScene(running, *current);
                                     }
                                 });
+        app.AddResource<Detail::InstalledRenderer>(Detail::InstalledRenderer{state});
+        app.AddResource<Overlay>();
         return Renderer(std::move(state));
     }
 
@@ -873,4 +1134,47 @@ namespace Fenrir
         return found;
     }
 
+    namespace
+    {
+        /**
+         * @brief A second handle on `app`'s installed renderer state, for one call of a static: it shares the owner's
+         * state, so it answers as the owner does, and ending it ends nothing while the owner lives. Invalid when the
+         * app has no live owner.
+         */
+        std::shared_ptr<Detail::RendererState> InstalledState(App& app)
+        {
+            const Detail::InstalledRenderer* installed = app.TryGetResource<Detail::InstalledRenderer>();
+            return installed == nullptr ? nullptr : installed->state.lock();
+        }
+    } // namespace
+
+    bool Renderer::IsInstalled(App& app)
+    {
+        return InstalledState(app) != nullptr;
+    }
+
+    std::optional<Math::AABB> Renderer::GetWorldBounds(App& app, const Entity& entity)
+    {
+        return Renderer(InstalledState(app)).GetWorldBounds(entity);
+    }
+
+    RendererStats Renderer::Stats(App& app)
+    {
+        return Renderer(InstalledState(app)).Stats();
+    }
+
+    std::optional<Math::Ray> Renderer::ScreenPointToRay(App& app, const Entity& camera, Math::Vec2 point)
+    {
+        return Renderer(InstalledState(app)).ScreenPointToRay(camera, point);
+    }
+
+    std::optional<Math::Vec2> Renderer::WorldToScreenPoint(App& app, const Entity& camera, Math::Vec3 point)
+    {
+        return Renderer(InstalledState(app)).WorldToScreenPoint(camera, point);
+    }
+
+    Entity Renderer::CameraAt(App& app, WindowId window, Math::Vec2 point)
+    {
+        return Renderer(InstalledState(app)).CameraAt(window, point);
+    }
 } // namespace Fenrir
