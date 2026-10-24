@@ -33,6 +33,13 @@ namespace RendererDemo
      */
     [[nodiscard]] FenrirDemo::DemoScene DebugDrawing();
 
+    /**
+     * @brief Overlay: a raw DrawList2D on the window overlay showing layers, scissors and the four blend modes, and an
+     * ImGui window with a text field and a slider over a spinning cube whose keys and clicks stop while ImGui has the
+     * pointer or the keyboard.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene OverlayScene();
+
     /** @brief Meshes and materials (C#)'s number, which its C# systems know it by (scripts/MeshesAndMaterials.cs). */
     inline constexpr std::uint32_t MeshesAndMaterialsCSharpScene = 1;
 
@@ -41,6 +48,15 @@ namespace RendererDemo
      * run entirely by C# systems (scripts/MeshesAndMaterials.cs). For an app with scripting.
      */
     [[nodiscard]] FenrirDemo::DemoScene MeshesAndMaterialsCSharp();
+
+    /** @brief Debug draw (C#)'s number, which its C# systems know it by (scripts/DebugDrawScene.cs). */
+    inline constexpr std::uint32_t DebugDrawingCSharpScene = 2;
+
+    /**
+     * @brief Debug draw (C#): a twin of Debug draw, the same shapes, text and keys, spawned, drawn and run entirely by
+     * C# systems through the Fenrir.DebugDraw facade (scripts/DebugDrawScene.cs). For an app with scripting.
+     */
+    [[nodiscard]] FenrirDemo::DemoScene DebugDrawingCSharp();
 
     /** @brief The name the stripes shader, embedded in the app, has for C#, which cannot load a shader by path. */
     inline constexpr const char* StripesShaderName = "builtin:renderer-demo-stripes";

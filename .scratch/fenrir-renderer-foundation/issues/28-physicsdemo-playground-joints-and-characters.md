@@ -14,9 +14,11 @@
 
 **Touches:** `examples/PhysicsDemo/`, `examples/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs all six scenes on null and GL with no errors, printing the legacy scenes' log lines and running their autopilots.
-- [ ] Each scene's bodies, keys and log lines match the legacy scene (checked against the legacy sources).
-- [ ] F2 cycles the debug categories, shown through FenrirDebugDraw.
+Hand check: each scene behaves as its legacy scene did, following the hand-check lists moved into examples/PhysicsDemo/README.md (Playground, Joints and Character, in C++ and C#), including the left-click raycast in Playground (C#), the trigger zone's tint swap and the screen-text readouts.
+
+- [x] `FENRIR_DEMO_SMOKE` with `FENRIR_DEMO_KEYS=1` runs all six scenes on null and GL with no errors, printing the legacy scenes' log lines and running their autopilots.
+- [x] Each scene's bodies, keys and log lines match the legacy scene (checked against the legacy sources).
+- [x] F2 cycles the debug categories, shown through FenrirDebugDraw.
 - [ ] By hand, the moved hand-check lists for Playground, Joints and Character pass in both languages, including the left-click raycast, the trigger pad's tint and the gamepad (checked by hand).

@@ -4,6 +4,7 @@
 #include <utility>
 
 #include "FenrirAssetsScripting/AssetsScripting.hpp"
+#include "FenrirDebugDrawScripting/DebugDrawScripting.hpp"
 #include "FenrirDemoScaffold/DemoScaffold.hpp"
 #include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirRendererScripting/RendererScripting.hpp"
@@ -40,7 +41,8 @@ namespace FenrirDemo::Detail
         scaffold.sharedAssemblies = {"Fenrir.Demo.dll"};
         scaffold.resources = {Fenrir::MakeReadOnlySceneResource<CSharpScene>("Fenrir.Demo.CSharpScene")};
         scaffold.events = {Fenrir::MakeEvent<DemoSceneClickEvent>("Fenrir.Demo.DemoSceneClickEvent")};
-        return {Fenrir::Input::ScriptingExtension(), Fenrir::Window::ScriptingExtension(),
-                Fenrir::Assets::ScriptingExtension(), Fenrir::Renderer::ScriptingExtension(), std::move(scaffold)};
+        return {Fenrir::Input::ScriptingExtension(),        Fenrir::Window::ScriptingExtension(),
+                Fenrir::Assets::ScriptingExtension(),       Fenrir::Renderer::ScriptingExtension(),
+                Fenrir::DebugDrawing::ScriptingExtension(), std::move(scaffold)};
     }
 } // namespace FenrirDemo::Detail
