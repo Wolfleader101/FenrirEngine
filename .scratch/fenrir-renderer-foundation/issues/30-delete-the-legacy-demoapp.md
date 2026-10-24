@@ -14,5 +14,5 @@
 **Status:** resolved
 
 - [x] No `examples/DemoApp`, `packages/FenrirCamera` or `FENRIR_BUILD_LEGACY_DEMOAPP` remains, and a repository search finds no stale reference to them outside history and `.scratch`.
-- [ ] Every preset configures and builds with examples on, and CI's smoke runs for all three demo apps pass on null everywhere and on llvmpipe on Linux.
+- [x] Every preset configures and builds with examples on, and CI's smoke runs for all three demo apps pass on null everywhere and on llvmpipe on Linux.
 - [x] The README's PR smoke-run line names the new apps and switches.
