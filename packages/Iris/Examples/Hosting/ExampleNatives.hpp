@@ -104,6 +104,64 @@ namespace Iris::Examples
         return static_cast<char16_t>(value + 1);
     }
 
+    // An enum crosses by value as its underlying integer, which the managed field declares: an int for Gear, a byte
+    // for Shade, as the managed enums of the same names have.
+    enum class Gear : std::int32_t
+    {
+        Off = 0,
+        On = 1,
+        Auto = 7
+    };
+    enum class Shade : std::uint8_t
+    {
+        Dark = 1,
+        Light = 2
+    };
+    inline Gear NextGear(Gear gear)
+    {
+        switch (gear)
+        {
+        case Gear::Off:
+            return Gear::On;
+        case Gear::On:
+            return Gear::Auto;
+        default:
+            return Gear::Off;
+        }
+    }
+    inline Shade Invert(Shade shade)
+    {
+        return shade == Shade::Dark ? Shade::Light : Shade::Dark;
+    }
+
+    // A wrapper crosses by value as its one field (see the Iris::WrapperOf specialization below); the managed field
+    // declares a uint.
+    struct Ticket
+    {
+        std::uint32_t number;
+    };
+    inline Ticket Advance(Ticket ticket, Gear by)
+    {
+        return Ticket{ticket.number + static_cast<std::uint32_t>(by)};
+    }
+} // namespace Iris::Examples
+
+template <>
+struct Iris::WrapperOf<Iris::Examples::Ticket>
+{
+    using Value = std::uint32_t;
+    static Iris::Examples::Ticket From(Value number)
+    {
+        return Iris::Examples::Ticket{number};
+    }
+    static Value To(Iris::Examples::Ticket ticket)
+    {
+        return ticket.number;
+    }
+};
+
+namespace Iris::Examples
+{
     // Registers every function; returns the first failure, or a success.
     [[nodiscard]] inline Iris::CallResult<void> RegisterNatives()
     {
@@ -121,6 +179,9 @@ namespace Iris::Examples
             Iris::RegisterInternalCall<&Negate>(prefix + "Negate"),
             Iris::RegisterInternalCall<&NextChar>(prefix + "NextChar"),
             Iris::RegisterInternalCall<&LeakStopped>(prefix + "LeakStopped"),
+            Iris::RegisterInternalCall<&NextGear>(prefix + "NextGear"),
+            Iris::RegisterInternalCall<&Invert>(prefix + "Invert"),
+            Iris::RegisterInternalCall<&Advance>(prefix + "Advance"),
             Iris::RegisterInternalCall<&Triple>("Iris.Examples.Contracts.SharedNatives.Triple"),
         };
         for (auto& result : results)

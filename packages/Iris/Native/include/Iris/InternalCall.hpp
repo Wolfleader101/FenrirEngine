@@ -4,6 +4,7 @@
 #include "Method.hpp"
 
 #include <array>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -21,6 +22,31 @@
 
 namespace Iris
 {
+    /**
+     * @brief Makes a struct of one field a wrapper: a native function takes and returns it by value, and it crosses
+     * as its field. Specialize it for the struct, naming the field's type and converting both ways:
+     *
+     * ```cpp
+     * struct WindowId { std::uint32_t value; };
+     *
+     * template <>
+     * struct Iris::WrapperOf<WindowId>
+     * {
+     *     using Value = std::uint32_t;
+     *     static WindowId From(Value value) { return WindowId{value}; }
+     *     static Value To(WindowId id) { return id.value; }
+     * };
+     * ```
+     *
+     * `Value` is anything that crosses as one value: a sized integer, `float`, `double`, `bool`, `char16_t`, an enum or
+     * a pointer. The managed field declares that value. `From` and `To` run inside the boundary, so an exception from
+     * either is stopped like one from the function. Unspecialized, a struct crosses only by pointer.
+     */
+    template <typename T>
+    struct WrapperOf
+    {
+    };
+
     // Not API: what the public templates need to talk to the bridge, including its wire format. It can change in
     // any release, so always build against the headers of the library you link.
     namespace Detail
@@ -37,13 +63,33 @@ namespace Iris
         // with a length), so the function was not called.
         void ReportRefusedInternalCallString() noexcept;
 
+        // An enum crosses as its underlying integer.
         template <typename T>
-        concept InternalCallResultType = std::is_void_v<T> || std::is_pointer_v<T> || PrimitiveValue<T>;
+        concept InternalCallEnum = std::is_enum_v<T> && PrimitiveValue<std::underlying_type_t<T>>;
+
+        // What crosses as one value, and so what a wrapper's field can be.
+        template <typename T>
+        concept InternalCallScalar = std::is_pointer_v<T> || PrimitiveValue<T> || InternalCallEnum<T>;
+
+        // A struct with a WrapperOf specialization, which crosses as its field.
+        template <typename T>
+        concept InternalCallWrapper =
+            std::is_class_v<T> && requires(const T& wrapper, const typename WrapperOf<T>::Value& value) {
+                { WrapperOf<T>::From(value) } -> std::same_as<T>;
+                { WrapperOf<T>::To(wrapper) } -> std::same_as<typename WrapperOf<T>::Value>;
+            } && InternalCallScalar<typename WrapperOf<T>::Value>;
+
+        template <typename T>
+        concept InternalCallResultType = std::is_void_v<T> || InternalCallScalar<T> || InternalCallWrapper<T>;
 
         // A parameter can also be a std::string_view: UTF-8 bytes, valid for the call.
         template <typename T>
         concept InternalCallParameterType =
-            std::is_pointer_v<T> || PrimitiveValue<T> || std::is_same_v<T, std::string_view>;
+            InternalCallScalar<T> || InternalCallWrapper<T> || std::is_same_v<T, std::string_view>;
+
+        // A struct that would cross by value without being a wrapper.
+        template <typename T>
+        concept UnwrappedStruct = std::is_class_v<T> && !InternalCallWrapper<T> && !std::is_same_v<T, std::string_view>;
 
         template <typename T>
             requires(InternalCallResultType<T> || InternalCallParameterType<T>)
@@ -55,6 +101,10 @@ namespace Iris
                 return ValueKind::Pointer;
             else if constexpr (std::is_same_v<T, std::string_view>)
                 return ValueKind::String;
+            else if constexpr (InternalCallWrapper<T>)
+                return InternalKindOf<typename WrapperOf<T>::Value>();
+            else if constexpr (std::is_enum_v<T>)
+                return KindOf<std::underlying_type_t<T>>();
             else
                 return KindOf<T>();
         }
@@ -140,6 +190,85 @@ namespace Iris
             }
         };
 
+        // An enum crosses as its underlying integer.
+        template <InternalCallEnum T>
+        struct WireOf<T>
+        {
+            using Type = TypeList<std::underlying_type_t<T>>;
+            static constexpr std::size_t count = 1;
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr bool Valid(const Wire&) noexcept
+            {
+                return true;
+            }
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr T From(const Wire& wire) noexcept
+            {
+                return static_cast<T>(std::get<Offset>(wire));
+            }
+        };
+
+        // A wrapper crosses as its field, and WrapperOf builds it from that.
+        template <InternalCallWrapper T>
+        struct WireOf<T>
+        {
+            using Field = WireOf<typename WrapperOf<T>::Value>;
+            using Type = typename Field::Type;
+            static constexpr std::size_t count = Field::count;
+
+            template <std::size_t Offset, typename Wire>
+            static constexpr bool Valid(const Wire& wire) noexcept
+            {
+                return Field::template Valid<Offset>(wire);
+            }
+
+            template <std::size_t Offset, typename Wire>
+            static T From(const Wire& wire)
+            {
+                return WrapperOf<T>::From(Field::template From<Offset>(wire));
+            }
+        };
+
+        // How a result crosses: its wire type and the conversion to it. Most results cross as themselves.
+        template <typename T>
+        struct WireResultOf
+        {
+            using Type = T;
+
+            static constexpr T To(T value) noexcept
+            {
+                return value;
+            }
+        };
+        template <>
+        struct WireResultOf<void>
+        {
+            using Type = void;
+        };
+        template <InternalCallEnum T>
+        struct WireResultOf<T>
+        {
+            using Type = std::underlying_type_t<T>;
+
+            static constexpr Type To(T value) noexcept
+            {
+                return static_cast<Type>(value);
+            }
+        };
+        template <InternalCallWrapper T>
+        struct WireResultOf<T>
+        {
+            using Field = WireResultOf<typename WrapperOf<T>::Value>;
+            using Type = typename Field::Type;
+
+            static Type To(const T& value)
+            {
+                return Field::To(WrapperOf<T>::To(value));
+            }
+        };
+
         // Where each parameter starts among the wire parameters.
         template <typename... Args>
         constexpr std::array<std::size_t, sizeof...(Args)> WireOffsets() noexcept
@@ -151,22 +280,24 @@ namespace Iris
             return offsets;
         }
 
-        // The function managed code actually calls, over the wire parameters. It refuses a string it cannot turn into
-        // a std::string_view, runs `Function`, and turns a C++ exception into a logged error and a value-initialized
-        // result, so nothing unwinds through managed frames.
+        // The function managed code actually calls, over the wire parameters and the wire result. It refuses a string
+        // it cannot turn into a std::string_view, runs `Function`, and turns a C++ exception into a logged error and a
+        // value-initialized wire result, so nothing unwinds through managed frames.
         template <auto Function, typename R, typename Args, typename Wire>
         struct InternalCallThunk;
         template <auto Function, typename R, typename... Args, typename... Wire>
         struct InternalCallThunk<Function, R, TypeList<Args...>, TypeList<Wire...>>
         {
-            static R IRIS_INTERNAL_CALL Call(Wire... wire) noexcept
+            using Result = typename WireResultOf<R>::Type;
+
+            static Result IRIS_INTERNAL_CALL Call(Wire... wire) noexcept
             {
                 return Run(std::tuple<Wire...>(wire...), std::index_sequence_for<Args...>{});
             }
 
           private:
             template <std::size_t... Index>
-            static R Run(const std::tuple<Wire...>& wire, std::index_sequence<Index...>) noexcept
+            static Result Run(const std::tuple<Wire...>& wire, std::index_sequence<Index...>) noexcept
             {
                 constexpr auto offsets = WireOffsets<Args...>();
                 if (!(WireOf<Args>::template Valid<offsets[Index]>(wire) && ...))
@@ -183,7 +314,7 @@ namespace Iris
                     }
                     else
                     {
-                        return Function(WireOf<Args>::template From<offsets[Index]>(wire)...);
+                        return WireResultOf<R>::To(Function(WireOf<Args>::template From<offsets[Index]>(wire)...));
                     }
                 }
                 catch (const std::exception& exception)
@@ -197,24 +328,35 @@ namespace Iris
                 return Default();
             }
 
-            static R Default() noexcept
+            static Result Default() noexcept
             {
-                if constexpr (!std::is_void_v<R>)
+                if constexpr (!std::is_void_v<Result>)
                 {
-                    return R{};
+                    return Result{};
                 }
             }
         };
 
         template <auto Function, typename R, typename... Args>
-            requires(InternalCallResultType<R> && (InternalCallParameterType<Args> && ...))
         CallResult<void> RegisterInternalCallImpl(std::string_view name, std::type_identity<R(Args...)>)
         {
-            using Wire = typename ConcatTypes<typename WireOf<Args>::Type...>::Type;
-            const std::array<ValueKind, sizeof...(Args)> kinds = {InternalKindOf<Args>()...};
-            return RegisterInternalCallRaw(
-                name, InternalKindOf<R>(), std::span<const ValueKind>(kinds),
-                reinterpret_cast<void*>(&InternalCallThunk<Function, R, TypeList<Args...>, Wire>::Call));
+            constexpr bool unwrapped = UnwrappedStruct<R> || (UnwrappedStruct<Args> || ...);
+            constexpr bool supported = InternalCallResultType<R> && (InternalCallParameterType<Args> && ...);
+            static_assert(!unwrapped, "Iris passes a struct to or from a native function by value only as a wrapper: "
+                                      "take a pointer to it, or specialize Iris::WrapperOf for a struct of one field");
+            static_assert(unwrapped || supported, "Iris cannot pass this C++ type to or from a native function");
+            if constexpr (supported)
+            {
+                using Wire = typename ConcatTypes<typename WireOf<Args>::Type...>::Type;
+                const std::array<ValueKind, sizeof...(Args)> kinds = {InternalKindOf<Args>()...};
+                return RegisterInternalCallRaw(
+                    name, InternalKindOf<R>(), std::span<const ValueKind>(kinds),
+                    reinterpret_cast<void*>(&InternalCallThunk<Function, R, TypeList<Args...>, Wire>::Call));
+            }
+            else
+            {
+                return {};
+            }
         }
     } // namespace Detail
 
@@ -231,9 +373,11 @@ namespace Iris
      * ```
      *
      * The signature is taken from the function. Parameters and the result are void, sized integers,
-     * `float`, `double`, `bool` (one byte), `char16_t` (a managed `char`) or pointers. A `bool` or `char16_t`
-     * needs `[assembly: DisableRuntimeMarshalling]` on the component, or its load fails. A struct crosses as a
-     * pointer to it, valid for the call only.
+     * `float`, `double`, `bool` (one byte), `char16_t` (a managed `char`), pointers, enums or wrappers. A `bool` or
+     * `char16_t` needs `[assembly: DisableRuntimeMarshalling]` on the component, or its load fails. An enum crosses as
+     * its underlying integer, which the managed field declares. A wrapper, a struct of one field with an
+     * Iris::WrapperOf specialization, crosses as that field, which the managed field declares. Any other struct
+     * crosses as a pointer to it, valid for the call only; by value it does not compile.
      *
      * A parameter (never the result) can also be a `std::string_view`: UTF-8 bytes, valid for the call only, and
      * not checked for being valid UTF-8. The managed field declares it as two parameters, a `byte*` to the bytes and
@@ -260,8 +404,8 @@ namespace Iris
      *
      * A C++ exception that escapes `Function` is caught at the boundary and never unwinds through managed
      * frames. It is reported as an Error through the log sink, and managed code receives a
-     * value-initialized result (zero, or null for a pointer). Functions are called on managed threads and
-     * must be thread-safe if components run on several.
+     * value-initialized result (zero, or null for a pointer; for a wrapper, a zero field). Functions are called on
+     * managed threads and must be thread-safe if components run on several.
      */
     template <auto Function>
         requires(std::is_pointer_v<decltype(Function)> && std::is_function_v<std::remove_pointer_t<decltype(Function)>>)

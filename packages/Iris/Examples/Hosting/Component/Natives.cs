@@ -20,6 +20,11 @@ public static unsafe class Natives
     public static delegate* unmanaged[Cdecl]<bool, bool> Negate;
     public static delegate* unmanaged[Cdecl]<char, char> NextChar;
     public static delegate* unmanaged[Cdecl]<bool> LeakStopped;
+    // A native enum parameter or result: its underlying integer (Gear's is an int, Shade's a byte).
+    public static delegate* unmanaged[Cdecl]<int, int> NextGear;
+    public static delegate* unmanaged[Cdecl]<byte, byte> Invert;
+    // A native wrapper, a struct of one field, is that field: here a ticket's number, before a Gear.
+    public static delegate* unmanaged[Cdecl]<uint, int, uint> Advance;
 
     public static int CallAdd(int left, int right) => Add(left, right);
     public static double CallHalf(double value) => Half(value);
@@ -29,6 +34,9 @@ public static unsafe class Natives
     public static bool CallNegate(bool value) => Negate(value);
     public static char CallNextChar(char value) => NextChar(value);
     public static bool CallLeakStopped() => LeakStopped();
+    public static Gear CallNextGear(Gear gear) => (Gear)NextGear((int)gear);
+    public static Shade CallInvert(Shade shade) => (Shade)Invert((byte)shade);
+    public static uint CallAdvance(uint ticket, Gear by) => Advance(ticket, (int)by);
 
     // Reaches the shared contract's native function; only bound when the host shares the contract.
     public static int CallSharedTriple(int value) => Iris.Examples.Contracts.SharedNatives.CallTriple(value);

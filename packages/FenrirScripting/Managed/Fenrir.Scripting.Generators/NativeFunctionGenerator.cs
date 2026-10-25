@@ -11,9 +11,16 @@ namespace Fenrir.Scripting.Generators;
 /// <summary>
 /// Writes the body of every <c>[NativeFunction]</c> method, and the unmanaged function pointer field the host binds for it
 /// (<c>__native_Method</c> in the same type, the binding-name rule FenrirScripting's <c>NativeFunction::BindingNameFor</c>
-/// also implements). The body turns the arguments into what crosses (a string into UTF-8 bytes and a length, an
-/// <c>Entity</c> into its value, an <c>in</c>/<c>ref</c>/<c>out</c> struct into a pointer) and calls the field.
+/// also implements). The body turns the arguments into what crosses (a string into UTF-8 bytes and a length, an enum into
+/// its underlying integer, a wrapper such as <c>Entity</c> into its one member, an <c>in</c>/<c>ref</c>/<c>out</c> struct
+/// into a pointer), calls the field, and turns its result back.
 /// </summary>
+/// <remarks>
+/// A wrapper is an unmanaged struct whose only instance field is a field, or an auto-property's backing field, of a
+/// number, bool, char, pointer or enum, which the declaring type can read. A wrapper result is built with a constructor
+/// taking that member's type if the declaring type can call one, and otherwise with an object initializer setting the
+/// member if it can set it; a wrapper with neither is refused as a result.
+/// </remarks>
 /// <remarks>
 /// A declaration it refuses still gets a body (one that throws), so the build reports the FENRIR error and not also a
 /// partial method without an implementation. The exception is a native function inside a type that is not partial, where
@@ -26,7 +33,6 @@ namespace Fenrir.Scripting.Generators;
 public sealed class NativeFunctionGenerator : IIncrementalGenerator
 {
     private const string AttributeName = "Fenrir.Scripting.NativeFunctionAttribute";
-    private const string EntityName = "Fenrir.Scripting.Entity";
     private const string FieldPrefix = "__native_";
 
     // Text up to this many UTF-8 bytes is encoded on the stack (as Log does), longer text into a new array.
@@ -48,7 +54,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor StringResult = Error("FENRIR0025", "A native function cannot return a string",
         "Native function '{0}' returns a string, which cannot cross from C++: return a length and fill a buffer instead");
     private static readonly DiagnosticDescriptor Unsupported = Error("FENRIR0026", "A type cannot cross to a native function",
-        "Native function '{0}' uses '{1}' ({2}), which cannot cross: use a number, bool, char, pointer, Entity, a string parameter, or an in/ref/out unmanaged struct");
+        "Native function '{0}' uses '{1}' ({2}), which cannot cross: use a number, bool, char, pointer, enum, a wrapper (a struct of one such field or auto-property, as Entity is), a string parameter, or an in/ref/out unmanaged struct");
 
     private static DiagnosticDescriptor Error(string id, string title, string message) =>
         new(id, title, message, "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);
@@ -131,6 +137,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         if (attributed.TargetSymbol is not IMethodSymbol method)
             return null;
         INamedTypeSymbol type = method.ContainingType;
+        Compilation compilation = attributed.SemanticModel.Compilation;
         List<INamedTypeSymbol> chain = ContainerChain(type);
         string name = method.Name;
         string display = $"{type.ToDisplayString()}.{name}";
@@ -198,15 +205,10 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
                 arguments.Add(local);
                 arguments.Add(local + "Count");
             }
-            else if (IsEntity(parameterType))
+            else if (ByValue(parameterType, compilation, type) is Crossing crossing)
             {
-                fieldTypes.Add("uint");
-                arguments.Add(p + ".Value");
-            }
-            else if (PassesThrough(parameterType) is string passed)
-            {
-                fieldTypes.Add(passed);
-                arguments.Add(p);
+                fieldTypes.Add(crossing.FieldType);
+                arguments.Add(crossing.Argument(p));
             }
             else
             {
@@ -231,15 +233,10 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         {
             return Refused(Refuse(StringResult, at, display));
         }
-        else if (IsEntity(result))
+        else if (ByValue(result, compilation, type) is { Result: not null } crossing)
         {
-            fieldResult = "uint";
-            statement = $"return new global::{EntityName}({call});";
-        }
-        else if (PassesThrough(result) is string passed)
-        {
-            fieldResult = passed;
-            statement = $"return {call};";
+            fieldResult = crossing.FieldType;
+            statement = $"return {crossing.Result(call)};";
         }
         else
         {
@@ -307,7 +304,82 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         (type is INamedTypeSymbol named && named.OriginalDefinition.ToDisplayString() == "System.ReadOnlySpan<T>" &&
          named.TypeArguments[0].SpecialType == SpecialType.System_Char);
 
-    private static bool IsEntity(ITypeSymbol type) => type.ToDisplayString() == EntityName;
+    // How a value crosses by value: the field's type for it, what an argument becomes, and what a result is built from the
+    // field's (null when it cannot be a result).
+    private sealed class Crossing
+    {
+        public Crossing(string fieldType, Func<string, string> argument, Func<string, string>? result)
+        {
+            FieldType = fieldType;
+            Argument = argument;
+            Result = result;
+        }
+
+        public string FieldType { get; }
+        public Func<string, string> Argument { get; }
+        public Func<string, string>? Result { get; }
+    }
+
+    // A value that crosses as itself, an enum as its underlying integer, or a wrapper as its member; or null. `within` is the
+    // type the generated body is in, which must be able to read the wrapper's member and build the wrapper.
+    private static Crossing? ByValue(ITypeSymbol type, Compilation compilation, INamedTypeSymbol within)
+    {
+        if (Scalar(type) is Crossing scalar)
+            return scalar;
+        if (WrapperMember(type, compilation, within) is not (ISymbol member, ITypeSymbol memberType) ||
+            Scalar(memberType) is not Crossing field)
+            return null;
+        string wrapper = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        string name = SyntaxFacts.GetKeywordKind(member.Name) != SyntaxKind.None ? "@" + member.Name : member.Name;
+        Func<string, string>? build = null;
+        if (type is INamedTypeSymbol named && named.InstanceConstructors.Any(constructor =>
+                constructor.Parameters.Length == 1 && constructor.Parameters[0].RefKind == RefKind.None &&
+                SymbolEqualityComparer.Default.Equals(constructor.Parameters[0].Type, memberType) &&
+                compilation.IsSymbolAccessibleWithin(constructor, within)))
+            build = call => $"new {wrapper}({field.Result!(call)})";
+        else if (member is IFieldSymbol { IsReadOnly: false } ||
+                 member is IPropertySymbol { SetMethod: IMethodSymbol setter } && compilation.IsSymbolAccessibleWithin(setter, within))
+            build = call => $"new {wrapper} {{ {name} = {field.Result!(call)} }}";
+        return new Crossing(field.FieldType, value => field.Argument(value + "." + name), build);
+    }
+
+    // A value that crosses as itself, or an enum as its underlying integer; or null.
+    private static Crossing? Scalar(ITypeSymbol type)
+    {
+        if (PassesThrough(type) is string passed)
+            return new Crossing(passed, static value => value, static call => call);
+        if (type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType: INamedTypeSymbol underlying })
+        {
+            string enumType = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string integer = underlying.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return new Crossing(integer, value => $"({integer}){value}", call => $"({enumType}){call}");
+        }
+        return null;
+    }
+
+    // The member a wrapper crosses as, and its type: the only instance field of an unmanaged struct, or the auto-property
+    // whose backing field it is, when `within` can read it. Null for any other type.
+    private static (ISymbol Member, ITypeSymbol Type)? WrapperMember(ITypeSymbol type, Compilation compilation, INamedTypeSymbol within)
+    {
+        if (type is not INamedTypeSymbol { TypeKind: TypeKind.Struct, IsRefLikeType: false } named || !named.IsUnmanagedType)
+            return null;
+        IFieldSymbol[] fields = named.GetMembers().OfType<IFieldSymbol>().Where(static field => !field.IsStatic && !field.IsConst).ToArray();
+        if (fields.Length != 1 || fields[0].IsFixedSizeBuffer)
+            return null;
+        IFieldSymbol only = fields[0];
+        // A backing field is named "<Property>k__BackingField"; from source it also names its property.
+        const string backing = ">k__BackingField";
+        IPropertySymbol? property = only.AssociatedSymbol as IPropertySymbol ??
+            (only.Name.StartsWith("<", StringComparison.Ordinal) && only.Name.EndsWith(backing, StringComparison.Ordinal)
+                ? named.GetMembers(only.Name.Substring(1, only.Name.Length - 1 - backing.Length)).OfType<IPropertySymbol>().FirstOrDefault()
+                : null);
+        if (property != null)
+            return !property.IsStatic && property.Parameters.Length == 0 && property.GetMethod is IMethodSymbol getter &&
+                   compilation.IsSymbolAccessibleWithin(getter, within)
+                ? (property, property.Type)
+                : null;
+        return !only.IsImplicitlyDeclared && compilation.IsSymbolAccessibleWithin(only, within) ? (only, only.Type) : null;
+    }
 
     // The field type of a value that crosses as itself, or null.
     private static string? PassesThrough(ITypeSymbol type)

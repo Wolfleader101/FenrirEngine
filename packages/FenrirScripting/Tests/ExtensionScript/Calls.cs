@@ -24,6 +24,10 @@ public static class Calls
 
     public static int Tally(int by) => Gadgets.Tally(by);
 
+    public static byte TurnRight(byte heading) => (byte)Gadgets.TurnRight((Heading)heading);
+
+    public static ushort Retag(ushort code, byte by) => Gadgets.Retag(new Tag { Code = code }, (Heading)by).Code;
+
     public static int ChargeLevel(uint entity) => new Entity(entity).Get<Charge>().Value.Level;
 
     // Native resources, read and written through Resources.

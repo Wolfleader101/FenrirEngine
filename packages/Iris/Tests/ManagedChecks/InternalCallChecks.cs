@@ -7,7 +7,7 @@ using Iris.Bridge;
 static unsafe class InternalCallChecks
 {
     private const string Natives = "Iris.Examples.Component.Natives.";
-    private const int Void = (int)ValueKind.Void, Bool = (int)ValueKind.Bool, Char = (int)ValueKind.Char, Int32 = (int)ValueKind.Int32, Int64 = (int)ValueKind.Int64, UInt8 = (int)ValueKind.UInt8, Double = (int)ValueKind.Double, String = (int)ValueKind.String, Pointer = (int)ValueKind.Pointer;
+    private const int Void = (int)ValueKind.Void, Bool = (int)ValueKind.Bool, Char = (int)ValueKind.Char, Int32 = (int)ValueKind.Int32, UInt32 = (int)ValueKind.UInt32, Int64 = (int)ValueKind.Int64, UInt8 = (int)ValueKind.UInt8, Double = (int)ValueKind.Double, String = (int)ValueKind.String, Pointer = (int)ValueKind.Pointer;
     private static int recorded;
 
     private static void Check(bool condition, string message)
@@ -40,6 +40,13 @@ static unsafe class InternalCallChecks
     private static byte LeakStopped() => 1;
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static int Triple(int value) => value * 3;
+    // A native enum and a native wrapper cross as integers, so the check's own functions take those.
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static int NextGear(int gear) => gear;
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static byte Invert(byte shade) => shade;
+    [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+    private static uint Advance(uint ticket, int by) => ticket + (uint)by;
 
     [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
     private static void Ignore(byte value) { }
@@ -61,6 +68,9 @@ static unsafe class InternalCallChecks
         Register("Negate", Bool, new[] { Bool }, (delegate* unmanaged[Cdecl]<byte, byte>)&Negate);
         Register("NextChar", Char, new[] { Char }, (delegate* unmanaged[Cdecl]<ushort, ushort>)&NextChar);
         Register("LeakStopped", Bool, Array.Empty<int>(), (delegate* unmanaged[Cdecl]<byte>)&LeakStopped);
+        Register("NextGear", Int32, new[] { Int32 }, (delegate* unmanaged[Cdecl]<int, int>)&NextGear);
+        Register("Invert", UInt8, new[] { UInt8 }, (delegate* unmanaged[Cdecl]<byte, byte>)&Invert);
+        Register("Advance", UInt32, new[] { UInt32, Int32 }, (delegate* unmanaged[Cdecl]<uint, int, uint>)&Advance);
         InternalCalls.Register("Iris.Examples.Contracts.SharedNatives.Triple", Int32, new[] { Int32 }, (IntPtr)(delegate* unmanaged[Cdecl]<int, int>)&Triple);
     }
 
@@ -96,7 +106,7 @@ static unsafe class InternalCallChecks
         try
         {
             string unbound = LoadFailure(path);
-            Check(unbound.Contains("12 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
+            Check(unbound.Contains("15 internal call(s)") && unbound.Contains(Natives + "Add") && unbound.Contains(Natives + "Record") && unbound.Contains("no internal call is registered"),
                   "Unbound fields were not diagnosed: " + unbound);
             Check(ComponentRegistry.TrackingCount == before, "A failed load left a registration");
 

@@ -3393,6 +3393,38 @@ namespace
         }
     }
 
+    // The managed fields declare the integers (see Natives.cs), so the component loading at all shows the kinds agree.
+    static_assert(Iris::Detail::InternalKindOf<Examples::Gear>() == Iris::Detail::ValueKind::Int32);
+    static_assert(Iris::Detail::InternalKindOf<Examples::Shade>() == Iris::Detail::ValueKind::UInt8);
+    static_assert(Iris::Detail::InternalKindOf<Examples::Ticket>() == Iris::Detail::ValueKind::UInt32);
+
+    TEST_CASE("an enum and a wrapper cross an internal call by value, as parameters and results", "[.components]")
+    {
+        auto host = StartHost(checkArguments);
+        const auto component = Load(*host, checkArguments.component);
+        const auto natives = *component.FindType(NativesType).value;
+        using Fixture::Gear;
+        using Fixture::Shade;
+        const auto nextGear = natives.FindMethod<Gear(Gear)>("CallNextGear");
+        {
+            INFO("An int-wide enum did not cross to the native function and back");
+            REQUIRE((nextGear.Succeeded() && nextGear.value->Invoke(Gear::Off).value == Gear::On &&
+                     nextGear.value->Invoke(Gear::On).value == Gear::Auto &&
+                     nextGear.value->Invoke(Gear::Auto).value == Gear::Off));
+        }
+        const auto invert = natives.FindMethod<Shade(Shade)>("CallInvert");
+        {
+            INFO("A byte-wide enum did not cross to the native function and back");
+            REQUIRE((invert.Succeeded() && invert.value->Invoke(Shade::Dark).value == Shade::Light &&
+                     invert.value->Invoke(Shade::Light).value == Shade::Dark));
+        }
+        const auto advance = natives.FindMethod<std::uint32_t(std::uint32_t, Gear)>("CallAdvance");
+        {
+            INFO("A wrapper and an enum did not both arrive, or the wrapper result did not come back (40 + 7 is 47)");
+            REQUIRE((advance.Succeeded() && advance.value->Invoke(40U, Gear::Auto).value == 47U));
+        }
+    }
+
     TEST_CASE("a C++ exception in an internal call is stopped at the boundary", "[.components]")
     {
         SinkGuard guard(checkArguments);
@@ -4161,7 +4193,7 @@ namespace
         {
             INFO("Unbound internal calls were not diagnosed: " + missing.diagnostic);
             REQUIRE((missing.status == CallStatus::InvalidArgument && !missing.value &&
-                     missing.diagnostic.find("12 internal call(s)") != std::string::npos &&
+                     missing.diagnostic.find("15 internal call(s)") != std::string::npos &&
                      missing.diagnostic.find("Iris.Examples.Component.Natives.Add") != std::string::npos &&
                      missing.diagnostic.find("no internal call is registered") != std::string::npos));
         }
