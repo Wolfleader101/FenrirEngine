@@ -1,0 +1,87 @@
+# FenrirAssets's C# binding (ADR-0042, ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirAssets.api.json
+# and this binding's own FenrirAssetsScripting.api.json bound to the Fenrir.Assets contract and this extension. Paths are
+# relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they are
+# committed.
+namespace = "Fenrir.Assets"
+# Named so the bindings that use this one (FenrirRenderer's, whose components hold asset handles) can read them.
+descriptions = ["../../api/FenrirAssets.api.json", "FenrirAssetsScripting.api.json"]
+# FenrirMath's colour is the math binding's: named as Fenrir.Math's, never mirrored here.
+uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# Described only for the enums it holds (ScriptAssets.hpp).
+exclude = ["Fenrir::ScriptAssetEnums"]
+
+[csharp]
+contract = "../../Managed/Fenrir.Assets"
+generated = "../../Managed/Fenrir.Assets/Generated"
+usings = ["Fenrir.Math", "Fenrir.Scripting"]
+# None of these is used: the contract has no components or events.
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+
+[cpp]
+# On the include path, for the bindings that use this one.
+mappings = "../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+includes = [
+    "FenrirAssets/AssetHandle.hpp",
+    "FenrirAssets/MaterialData.hpp",
+    "FenrirAssets/ShaderContainer.hpp",
+    "FenrirAssetsScripting/ScriptAssets.hpp",
+    # The handles' mappings, written by hand, and glm's.
+    "FenrirAssetsScripting/AssetMappings.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirAssetsRegistration.cpp"
+includes = [
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state.
+    "AssetsScriptingState.hpp",
+]
+function = "Fenrir::Generated::RegisterAssets"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+
+[tests]
+cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirAssetsDefaults.cs"
+class = "AssetsScriptFixture.Defaults"
+includes = ["AssetsScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "AssetsScriptingTests::AssetsScriptingApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[assets][scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirAssetsNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirAssetsNatives.cs"
+natives-class = "AssetsScriptFixture.Natives"
+
+[bound-types]
+"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
+"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Fenrir::Math::Vec4" = { type = "Vector4", constructor = ["x", "y", "z", "w"] }
+# Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp): default is the empty handle, all zero.
+"Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>" }
+"Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>" }
+"Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>" }
+"Fenrir::AssetHandle<Fenrir::Shader>" = { type = "AssetHandle<Shader>" }
+"Fenrir::AssetHandle<Fenrir::Model>" = { type = "AssetHandle<Model>" }
+
+[names]
+"Fenrir::ScriptShaderParameter" = "ShaderParameter"
+"Fenrir::ScriptAssetOwner" = "AssetOwner"
+
+# The native functions behind Assets, Materials and Shaders: tools/describe-api's natives mode reads every function in
+# `sources` taking `context` first (with the extension's state second) into FenrirAssets.natives.json, and this binding
+# generates from it their C# declarations, the AssetsNative class the three facades call, and their registration.
+[natives]
+sources = ["../src/AssetsScripting.cpp"]
+context = "Fenrir::CallContext"
+class = "AssetsNative"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"

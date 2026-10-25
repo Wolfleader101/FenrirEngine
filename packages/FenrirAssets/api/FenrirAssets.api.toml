@@ -1,0 +1,17 @@
+# FenrirAssets's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
+# each type the package shares with bindings, with its role. The sampler's wrap and filter enums are described because
+# the sampler holds them.
+headers = ["../include/FenrirAssets/AssetHandle.hpp", "../include/FenrirAssets/MaterialData.hpp"]
+
+[types]
+# What the material natives take and give through pointers.
+"Fenrir::SamplerDescription" = "shared-struct"
+"Fenrir::MaterialTexture" = "shared-struct"
+
+# Asset handles: every binding has its own handle type, so each is recorded by layout only (describe-api instantiates
+# the specialisations, which the headers never do).
+"Fenrir::AssetHandle<Fenrir::Mesh>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Image>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Material>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Shader>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Model>" = "bound-type"

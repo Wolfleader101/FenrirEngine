@@ -14,10 +14,12 @@ add_executable(FenrirAssetsScriptingTests
     Shaders.cpp
     NoOps.cpp
     Shapes.cpp
+    Generated/FenrirAssetsDefaultsTests.cpp
+    Generated/FenrirAssetsNativesTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-target_include_directories(FenrirAssetsScriptingTests PRIVATE "${fenrir_scripting_tests_dir}")
+target_include_directories(FenrirAssetsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}")
 target_link_libraries(FenrirAssetsScriptingTests PRIVATE FenrirAssetsScripting Catch2::Catch2WithMain)
 target_compile_definitions(FenrirAssetsScriptingTests PRIVATE
     FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")
@@ -31,7 +33,10 @@ fenrir_deploy_assets_scripting(FenrirAssetsScriptingTests)
 # The fixture script assembly: compiled against the scripting SDK and the Fenrir.Assets contract, neither copied (the host
 # shares its own copies), and rebuilt when either is.
 set(fenrir_assets_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_assets_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the generated tests' C# classes (Generated/): the defaults test reads their new() values, and the
+# natives test calls the natives through them.
+file(GLOB fenrir_assets_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${fenrir_assets_fixture_dir}/Fenrir.AssetsScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.AssetsScriptFixture.csproj"

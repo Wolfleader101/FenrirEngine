@@ -1,0 +1,264 @@
+{
+  "package": "FenrirAssetsScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::BlendMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a material's pixels combine with what is behind them. It picks the render stage and whether depth is written (ADR-0024).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Opaque",
+          "value": 0,
+          "doc": "Drawn over what is behind, writing depth."
+        },
+        {
+          "name": "Masked",
+          "value": 1,
+          "doc": "Opaque, but a pixel whose alpha is below the material's `alphaCutoff` is discarded."
+        },
+        {
+          "name": "AlphaBlend",
+          "value": 2,
+          "doc": "Mixed with what is behind by its alpha, without writing depth."
+        },
+        {
+          "name": "Additive",
+          "value": 3,
+          "doc": "Added to what is behind, without writing depth."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::DefaultTexture",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which of the renderer's 1x1 default textures a texture parameter binds when a material sets none.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "White",
+          "value": 0
+        },
+        {
+          "name": "Black",
+          "value": 1
+        },
+        {
+          "name": "Normal",
+          "value": 2,
+          "doc": "The flat tangent-space normal (0.5, 0.5, 1), linear."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Detail::AssetKind",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Each kind of asset the store holds, one slot table per kind.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Mesh",
+          "value": 0
+        },
+        {
+          "name": "Image",
+          "value": 1
+        },
+        {
+          "name": "Material",
+          "value": 2
+        },
+        {
+          "name": "Shader",
+          "value": 3
+        },
+        {
+          "name": "Model",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Vec4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::ScriptAssetOwner",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Who an asset is loaded or added for. It lives until its last owner ends, or until it is unloaded; naming an owner twice is the same as naming it once.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Scene",
+          "value": 0,
+          "doc": "The active scene: the asset is released when that scene is destroyed."
+        },
+        {
+          "name": "App",
+          "value": 1,
+          "doc": "The app: the asset lives as long as the asset store."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptAssetEnums",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 3,
+      "alignment": 1,
+      "doc": "Holds the enums the natives take by value that no shared struct holds, only so that they are described: describe-api describes an enum through a field that uses it. The binding excludes this struct, so C# has its enums and not it.",
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::Detail::AssetKind",
+          "default": "Mesh"
+        },
+        {
+          "name": "owner",
+          "offset": 1,
+          "kind": "enum",
+          "type": "Fenrir::ScriptAssetOwner",
+          "default": "Scene"
+        },
+        {
+          "name": "blendMode",
+          "offset": 2,
+          "kind": "enum",
+          "type": "Fenrir::BlendMode",
+          "default": "Opaque"
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ShaderParameterType",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "The type of a material parameter: a `float` to `vec4` member of `MaterialParams`, or a texture.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Float",
+          "value": 0
+        },
+        {
+          "name": "Vector2",
+          "value": 1
+        },
+        {
+          "name": "Vector3",
+          "value": 2
+        },
+        {
+          "name": "Vector4",
+          "value": 3
+        },
+        {
+          "name": "Texture",
+          "value": 4
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptShaderParameter",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "One material parameter of a shader, with its parameter default: FenrirAssets's ShaderParameter without its name, which `Shaders.GetParameter` writes to a span.",
+      "fields": [
+        {
+          "name": "type",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::ShaderParameterType",
+          "default": "Float"
+        },
+        {
+          "name": "value",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec4",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 0
+          },
+          "doc": "A number parameter's default: one value per component, the rest zero. Unused for a texture."
+        },
+        {
+          "name": "texture",
+          "offset": 20,
+          "kind": "enum",
+          "type": "Fenrir::DefaultTexture",
+          "default": "White",
+          "doc": "A texture parameter's default. Unused for a number."
+        }
+      ]
+    }
+  ]
+}
