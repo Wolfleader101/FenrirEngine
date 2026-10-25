@@ -1,23 +1,10 @@
 namespace Fenrir.Math;
 
-/// <summary>
-/// A colour as linear red, green, blue and alpha, laid out exactly like FenrirMath's <c>Fenrir::Colour</c>. As in C++,
-/// <c>new Colour()</c> is opaque white; <c>default</c> is all zeroes, transparent black. Colours written as sRGB hex
-/// values are converted when made (<see cref="FromSrgb"/>).
-/// </summary>
-public struct Colour : IEquatable<Colour>
+// The behaviour of the generated Colour (Generated/Colour.cs, from FenrirMath's Fenrir::Colour): linear red, green, blue
+// and alpha. As in C++, new Colour() is opaque white; default is all zeroes, transparent black. Colours written as sRGB
+// hex values are converted when made (FromSrgb).
+public partial struct Colour : IEquatable<Colour>
 {
-    public float R, G, B, A;
-
-    /// <summary>Opaque white, as a default constructed <c>Fenrir::Colour</c> is.</summary>
-    public Colour()
-    {
-        R = 1;
-        G = 1;
-        B = 1;
-        A = 1;
-    }
-
     public Colour(float r, float g, float b, float a = 1)
     {
         R = r;

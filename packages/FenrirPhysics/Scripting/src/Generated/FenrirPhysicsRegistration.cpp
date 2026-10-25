@@ -68,7 +68,6 @@ namespace Fenrir::Generated
             Fenrir::MakeSharedStruct<Fenrir::JointFrame>("Fenrir.Physics.JointFrame"),
             Fenrir::MakeSharedStruct<Fenrir::JointFrames>("Fenrir.Physics.JointFrames"),
             Fenrir::MakeSharedStruct<Fenrir::JointState>("Fenrir.Physics.JointState"),
-            Fenrir::MakeSharedStruct<Fenrir::Math::AABB>("Fenrir.Physics.Aabb"),
             Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::Contact>("Fenrir.Physics.Contact"),
             Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::MoveCastHit>("Fenrir.Physics.MoveCastHit"),
             Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::OverlapHit>("Fenrir.Physics.OverlapHit"),

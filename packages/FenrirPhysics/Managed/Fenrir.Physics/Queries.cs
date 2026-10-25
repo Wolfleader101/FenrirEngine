@@ -2,8 +2,9 @@ namespace Fenrir.Physics;
 
 // What PhysicsWorld's queries take and give is generated (Generated/): QueryFilter, the hits and Contact from the
 // binding's own description of them as C# holds them (Scripting/src/ScriptQueries.hpp, each entity a 32-bit Entity),
-// and Aabb from FenrirPhysics's. Each is checked against its native layout whenever a script assembly loads. This file
-// holds what is not shared by layout: the debug-draw categories, which cross as a uint.
+// and checked against its native layout whenever a script assembly loads; the box a body's bounds fill is Fenrir.Math's
+// Bounds, the math binding's. This file holds what is not shared by layout: the debug-draw categories, which cross as a
+// uint.
 
 /// <summary>Which categories of debug lines a physics world draws into its scene's debug drawing. Bit flags.</summary>
 [Flags]

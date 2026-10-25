@@ -138,7 +138,8 @@ itself and binds from that description.
 mirrors that this binding's descriptions also describe (another package's type a field holds, which a description records
 as `nested`) is that binding's: this binding names it by that binding's C# name, adds a `using` of its namespace to the
 mirrors and natives that name it, includes its mappings header (by a path relative to this one's) in this one's mappings,
-and gives it no mirror, mapping, registration or test of its own. Its member and enumerator names in defaults are that
+and gives it no mirror, mapping, registration or test of its own. This binding's description may select it too, with
+the role the used binding's gives it (a struct a native here fills through a pointer, say), or hold it as `nested`. Its member and enumerator names in defaults are that
 binding's too. Bound types are not mirrored, so each binding still names its own in `[bound-types]`.
 
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
@@ -222,7 +223,8 @@ a `read-only` entry that is not a component or resource, a `by-hand` entry that 
 list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
 not a number kind, `descriptions` that differ from the command line's, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
-`[bound-types]` or selects itself, or that is described with another layout, and
+`[bound-types]` or selects with another role than the used binding's description does, or that is described with
+another layout, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, or a `[natives] class`
 that is also a mirror's name.
 

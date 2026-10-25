@@ -20,7 +20,6 @@ public static class Defaults
     public static global::Fenrir.Physics.JointBroken JointBroken() => new();
     public static global::Fenrir.Physics.JointFrames JointFrames() => new();
     public static global::Fenrir.Physics.JointState JointState() => new();
-    public static global::Fenrir.Physics.Aabb Aabb() => new();
     public static global::Fenrir.Physics.PhysicsMaterial PhysicsMaterial() => new();
     public static global::Fenrir.Physics.RigidBody RigidBody() => new();
     public static global::Fenrir.Physics.Trigger Trigger() => new();

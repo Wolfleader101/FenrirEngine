@@ -3,6 +3,8 @@
 # are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they
 # are committed.
 namespace = "Fenrir.Physics"
+# FenrirMath's colour, ray and box are the math binding's: named as Fenrir.Math's, never mirrored here.
+uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
 
 # FenrirPhysics's query types hold a Fenrir::Entity, which C# holds as a 32-bit Entity: FenrirPhysicsScripting.api.json
 # describes them in that form (src/ScriptQueries.hpp), the natives convert, and these are bound from there instead.
@@ -80,9 +82,6 @@ natives-class = "Fenrir.PhysicsScriptFixture.Natives"
 # A default Entity names no entity, which C#'s new EntityLink() (all zero) does not say.
 "Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None" }
 "Fenrir::ScriptQueries::EntityValue" = { type = "Entity", constructor = ["value"] }
-
-[names]
-"Fenrir::Math::AABB" = "Aabb"
 
 [nouns]
 "Fenrir::CollisionShape" = "shape"

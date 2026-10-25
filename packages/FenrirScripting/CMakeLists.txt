@@ -64,6 +64,7 @@ add_library(FenrirScripting STATIC
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp
     include/FenrirScripting/ComponentRegistry.hpp
+    include/FenrirScripting/Generated/FenrirMathMappings.hpp
     include/FenrirScripting/Generated/FenrirScriptingMappings.hpp
     src/EngineContext.hpp
     src/Generated/FenrirScriptingRegistration.cpp
@@ -76,7 +77,7 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 
 # The built-in extension's binding (ADR-0042): the engine's components (Transform, Name, Relationship) and the entity
 # link they hold are written once, in FenrirECS's headers (../FenrirECS/api/FenrirECS.api.json, with FenrirMath's vector
-# and quaternion from ../FenrirMath/api/FenrirMath.api.json), and every native function once, as its definition in
+# and quaternion as bound types), and every native function once, as its definition in
 # src/Bindings.cpp, which describe-api's natives mode reads into api/FenrirScripting.natives.json. Iris.Bindings
 # generates the rest from those descriptions and api/FenrirScripting.binding.toml, all committed:
 #   Managed/Fenrir.Scripting/Generated/         the C# mirrors, beside which the contract's own .cs files add behaviour
@@ -89,8 +90,9 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings
 fenrir_describe_api_natives(FenrirScripting api/FenrirScripting.binding.toml)
-iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json
-    ../FenrirMath/api/FenrirMath.api.json)
+iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json)
+# FenrirMath's binding: the Fenrir.Math contract's colour, ray and box, which every other binding uses (ADR-0043).
+iris_generate_binding(FenrirMath api/FenrirMath.binding.toml ../FenrirMath/api/FenrirMath.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

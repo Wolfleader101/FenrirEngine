@@ -111,7 +111,7 @@ internal static unsafe partial class PhysicsNative
     /// <param name="bounds">The box; the default when there is none.</param>
     /// <returns>Whether the entity has a body.</returns>
     [NativeFunction]
-    public static partial bool Bounds(Entity body, out Aabb bounds);
+    public static partial bool Bounds(Entity body, out Bounds bounds);
 
     /// <summary>The world's gravity.</summary>
     /// <param name="gravity">The gravity, in metres per second squared; zero with no world.</param>
