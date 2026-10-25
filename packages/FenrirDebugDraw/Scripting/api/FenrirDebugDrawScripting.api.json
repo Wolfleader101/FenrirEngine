@@ -1,0 +1,203 @@
+{
+  "package": "FenrirDebugDrawScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::DepthMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Whether a shape is hidden behind what is in front of it.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Tested",
+          "value": 0,
+          "doc": "Tested against the scene's depth, so geometry in front hides it (the default)."
+        },
+        {
+          "name": "OnTop",
+          "value": 1,
+          "doc": "Drawn over everything, never hidden."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::AABB",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "min",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {}
+        },
+        {
+          "name": "max",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Mat4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 64,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Quat",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::ScriptOptions::EntityValue",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A C# Entity: an entity's 32-bit value alone."
+    },
+    {
+      "name": "Fenrir::ScriptOptions::ShapeOptions",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 20,
+      "alignment": 4,
+      "doc": "A ShapeOptions without its group, as a native takes it.",
+      "fields": [
+        {
+          "name": "duration",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How long the item is kept, as ShapeOptions.Duration."
+        },
+        {
+          "name": "relativeTo",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptOptions::EntityValue",
+          "default": {
+            "value": 4294967295
+          },
+          "doc": "The entity the positions are relative to, or Entity.None (Entity::Null)."
+        },
+        {
+          "name": "thickness",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Line thickness in pixels."
+        },
+        {
+          "name": "depth",
+          "offset": 12,
+          "kind": "enum",
+          "type": "Fenrir::DepthMode",
+          "default": "Tested",
+          "doc": "Whether the shape is depth tested or drawn on top."
+        },
+        {
+          "name": "segments",
+          "offset": 16,
+          "kind": "i32",
+          "default": 24,
+          "doc": "How many straight segments make a full circle of a round shape."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::ScriptOptions::TextOptions",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A TextOptions without its group, as a native takes it.",
+      "fields": [
+        {
+          "name": "duration",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0,
+          "doc": "How long the item is kept, as TextOptions.Duration."
+        },
+        {
+          "name": "relativeTo",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::ScriptOptions::EntityValue",
+          "default": {
+            "value": 4294967295
+          },
+          "doc": "The entity the item is relative to, or Entity.None (Entity::Null)."
+        },
+        {
+          "name": "size",
+          "offset": 8,
+          "kind": "f32",
+          "default": 16,
+          "doc": "The height of the text in pixels."
+        }
+      ]
+    }
+  ]
+}

@@ -14,8 +14,9 @@
 // DebugDraw.
 //
 // A native function that does nothing (no DebugDraw in the active scene, a relativeTo entity that is not alive) warns
-// in debug builds "once per call site": once per process for each place in this library's native code that notices it
-// (its std::source_location) and each reason, however many C# call sites or scripts reach it.
+// in debug builds "once per call site": once for each place in this library's native code that notices it (its
+// std::source_location) and each reason, however many C# call sites or scripts reach it. The record is the extension's
+// state, so it lasts as long as the Scripting given the extension.
 
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
