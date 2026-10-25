@@ -11,6 +11,10 @@
        -p:FenrirAssetsContractDir=... and -p:FenrirRendererContractDir=...). The contracts are compile-time only: the host
        shares its own copies. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
+  <ItemGroup>
+    <!-- The generated defaults and natives tests' C# halves (../Generated, from Scripting/api/FenrirRenderer.binding.toml). -->
+    <Compile Include="../Generated/*.cs" />
+  </ItemGroup>
   <ItemGroup Condition="'$(FenrirRendererContractDir)' != ''">
     <Reference Include="Fenrir.Input">
       <HintPath>$(FenrirInputContractDir)Fenrir.Input.dll</HintPath>

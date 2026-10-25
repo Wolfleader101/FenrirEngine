@@ -125,3 +125,7 @@ target_link_libraries(FenrirRenderer PUBLIC FenrirAssets FenrirDraw2D FenrirInpu
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirRenderer.api.json,
+# which FenrirRendererScripting's binding binds.
+fenrir_describe_api(FenrirRenderer api/FenrirRenderer.api.toml)

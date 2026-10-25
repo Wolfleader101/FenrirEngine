@@ -8,7 +8,7 @@
 #include <cstring>
 #include <string>
 
-#include "FenrirRendererScripting/RendererMappings.hpp"
+#include "FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
 #include "RendererScriptingApp.hpp"
 
 using namespace Fenrir;

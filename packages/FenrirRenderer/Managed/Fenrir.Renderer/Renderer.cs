@@ -5,16 +5,9 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;
 
-/// <summary>What the renderer did in its last drawn frame (ADR-0023): FenrirRenderer's <c>RendererStats</c>.</summary>
-public struct RendererStats
-{
-    /// <summary>Draws of MeshRenderers, one per item per view.</summary>
-    public uint Draws;
-    /// <summary>Render passes run.</summary>
-    public uint Passes;
-    /// <summary>Assets uploaded to the GPU by the prepare step: a mesh, or a material's parameter block.</summary>
-    public uint Uploads;
-}
+// The renderer's components (MeshRenderer, Camera and its unions, DirectionalLight), its scene resources (AmbientLight, Sky),
+// RendererStats and RendererNative are generated from FenrirRenderer's headers and Scripting/src/RendererScripting.cpp
+// (Generated/). This file holds the facade over the natives.
 
 /// <summary>
 /// The renderer from C#: picking, bounds, stats and spawning models, as FenrirRenderer's <c>Renderer</c> and
@@ -47,7 +40,7 @@ public static class Renderer
     /// The camera drawn last at <paramref name="point"/> of <paramref name="window"/>: the highest-order enabled camera in the
     /// active scene whose viewport holds it. <see cref="Entity.None"/> if there is none.
     /// </summary>
-    public static Entity CameraAt(WindowId window, Vector2 point) => RendererNative.CameraAt(window.Value, in point);
+    public static Entity CameraAt(WindowId window, Vector2 point) => new(RendererNative.CameraAt(window, in point));
 
     /// <summary>The box around <paramref name="entity"/>'s drawn mesh in world space, now.</summary>
     /// <returns>Whether there is one: false if it has no <see cref="MeshRenderer"/> or its mesh does not resolve.</returns>
@@ -72,28 +65,5 @@ public static class Renderer
     /// <see cref="Entity.None"/>. A parent that is not alive spawns nothing.
     /// </summary>
     public static Entity SpawnModel(AssetHandle<Model> model, Entity parent) =>
-        RendererNative.SpawnModel(model.Index, model.Generation, parent);
-}
-
-// The native functions FenrirRendererScripting gives C#, each named "Fenrir.Renderer.RendererNative.<Method>". Values go in
-// and out through pointers, and a model handle as its index and generation.
-internal static unsafe partial class RendererNative
-{
-    [NativeFunction]
-    public static partial bool ScreenPointToRay(Entity camera, in Vector2 point, out Ray ray);
-
-    [NativeFunction]
-    public static partial bool WorldToScreenPoint(Entity camera, in Vector3 point, out Vector2 screenPoint);
-
-    [NativeFunction]
-    public static partial Entity CameraAt(uint window, in Vector2 point);
-
-    [NativeFunction]
-    public static partial bool GetWorldBounds(Entity entity, out Bounds bounds);
-
-    [NativeFunction]
-    public static partial bool Stats(out RendererStats stats);
-
-    [NativeFunction]
-    public static partial Entity SpawnModel(uint modelIndex, uint modelGeneration, Entity parent);
+        new(RendererNative.SpawnModel(((ulong)model.Generation << 32) | model.Index, parent));
 }
