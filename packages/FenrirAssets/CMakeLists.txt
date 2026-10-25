@@ -39,6 +39,9 @@ target_link_libraries(FenrirAssets PUBLIC FenrirApp FenrirScene FenrirMath Fenri
 
 target_include_directories(FenrirAssets PUBLIC include PRIVATE src)
 
+# The package's API description, api/FenrirAssets.api.json (ADR-0042): its artefact whether or not scripting is built.
+fenrir_describe_api(FenrirAssets api/FenrirAssets.api.toml)
+
 # Tests that use Catch2: only with -DFENRIR_BUILD_TESTS=ON (see the root CMakeLists.txt).
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

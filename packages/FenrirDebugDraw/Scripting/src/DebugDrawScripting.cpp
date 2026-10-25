@@ -1,125 +1,31 @@
 #include "FenrirDebugDrawScripting/DebugDrawScripting.hpp"
 
+#include <cstddef>
 #include <cstdint>
-#include <mutex>
-#include <optional>
-#include <set>
-#include <source_location>
+#include <memory>
 #include <span>
-#include <string>
 #include <string_view>
-#include <tuple>
-#include <type_traits>
 
-#include "FenrirApp/App.hpp"
+#include "DebugDrawScriptingState.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
-#include "FenrirECS/Entity.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
-#include "FenrirScene/Scene.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
+#include "ScriptOptions.hpp"
+
+// Everything C# sees of debug drawing besides its facade is generated (api/FenrirDebugDraw.binding.toml): the options'
+// mappings, checked against the Fenrir.DebugDraw contract whenever a script assembly loads, and from the native
+// functions below (described into api/FenrirDebugDraw.natives.json) their C# declarations, DebugDrawNative, and this
+// registration of them all.
+namespace Fenrir::Generated
+{
+    void RegisterDebugDraw(ScriptingExtension& extension);
+} // namespace Fenrir::Generated
 
 namespace Fenrir
 {
     namespace
     {
-        // ShapeOptions and TextOptions as C# passes them (Fenrir.DebugDraw's NativeShapeOptions and
-        // NativeTextOptions), without the group, which comes as text of its own. The entity is its 32-bit value, and
-        // the depth mode is widened to 32 bits so neither side has padding to agree on.
-        struct ScriptShapeOptions
-        {
-            float duration;
-            std::uint32_t relativeTo;
-            float thickness;
-            std::uint32_t depth;
-            std::int32_t segments;
-        };
-        static_assert(std::is_standard_layout_v<ScriptShapeOptions> && sizeof(ScriptShapeOptions) == 20,
-                      "ScriptShapeOptions must match Fenrir.DebugDraw's NativeShapeOptions");
-
-        struct ScriptTextOptions
-        {
-            float duration;
-            std::uint32_t relativeTo;
-            float size;
-        };
-        static_assert(std::is_standard_layout_v<ScriptTextOptions> && sizeof(ScriptTextOptions) == 12,
-                      "ScriptTextOptions must match Fenrir.DebugDraw's NativeTextOptions");
-
-        // A warning logged once for each place in this file that notices a call doing nothing, and each reason, in
-        // debug builds only.
-        void WarnOnce(const CallContext& context, const std::string& message, std::source_location where)
-        {
-#ifndef NDEBUG
-            static std::mutex mutex;
-            static std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[debug draw scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
-        }
-
-        // Where a call draws: the active scene's DebugDraw, and the relativeTo entity C# named (a null Entity for
-        // none).
-        struct Target
-        {
-            DebugDraw* draw;
-            Entity relativeTo;
-
-            [[nodiscard]] ShapeOptions Shape(const ScriptShapeOptions& options, std::string_view group) const
-            {
-                return {.group = group,
-                        .duration = options.duration,
-                        .relativeTo = relativeTo,
-                        .thickness = options.thickness,
-                        .depth = options.depth == static_cast<std::uint32_t>(DepthMode::OnTop) ? DepthMode::OnTop
-                                                                                               : DepthMode::Tested,
-                        .segments = options.segments};
-            }
-
-            [[nodiscard]] TextOptions Text(const ScriptTextOptions& options, std::string_view group) const
-            {
-                return {.group = group, .duration = options.duration, .relativeTo = relativeTo, .size = options.size};
-            }
-        };
-
-        // The active scene's DebugDraw and the entity `relativeTo` (Entity::Null for none), unless the scene has no
-        // DebugDraw or the entity is not alive: then nothing is drawn, and the caller's call site warns once.
-        std::optional<Target> TargetFor(const CallContext& context, std::string_view function,
-                                        std::uint32_t relativeTo = Entity::Null,
-                                        std::source_location where = std::source_location::current())
-        {
-            DebugDraw* draw = context.GetApp().GetActiveScene().GetResource<DebugDraw>();
-            if (draw == nullptr)
-            {
-                WarnOnce(context,
-                         std::string(function) + ": the active scene has no DebugDraw (FenrirDebugDraw is not "
-                                                 "installed), so it draws nothing",
-                         where);
-                return std::nullopt;
-            }
-            if (relativeTo == Entity::Null)
-            {
-                return Target{draw, Entity()};
-            }
-            EntityList& entities = context.Entities();
-            if (!entities.HasEntity(relativeTo))
-            {
-                WarnOnce(context, std::string(function) + ": the relativeTo entity is not alive, so it draws nothing",
-                         where);
-                return std::nullopt;
-            }
-            return Target{draw, entities.GetEntity(relativeTo)};
-        }
-
         // The `count` points from `first` C# passed for a span; empty for none.
         std::span<const Math::Vec3> Points(const Math::Vec3* first, std::int32_t count)
         {
@@ -137,329 +43,359 @@ namespace Fenrir
 #pragma clang diagnostic pop
 #endif
         }
-
-        // The native functions, named apart from DebugDraw's own functions. Each is the DebugDraw call of its name.
-        namespace Native
-        {
-            using Opts = ScriptShapeOptions;
-
-            void Line(const CallContext& context, const Math::Vec3* from, const Math::Vec3* to, const Colour* colour,
-                      const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Line", options->relativeTo))
-                {
-                    target->draw->Line(*from, *to, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Ray(const CallContext& context, const Math::Vec3* origin, const Math::Vec3* direction,
-                     const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Ray", options->relativeTo))
-                {
-                    target->draw->Ray(*origin, *direction, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Arrow(const CallContext& context, const Math::Vec3* from, const Math::Vec3* to, float headLength,
-                       const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Arrow", options->relativeTo))
-                {
-                    target->draw->Arrow(*from, *to, headLength, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Polyline(const CallContext& context, const Math::Vec3* points, std::int32_t count, bool closed,
-                          const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Polyline", options->relativeTo))
-                {
-                    target->draw->Polyline(Points(points, count), closed, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Point(const CallContext& context, const Math::Vec3* position, float pixelSize, const Colour* colour,
-                       const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Point", options->relativeTo))
-                {
-                    target->draw->Point(*position, pixelSize, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Box(const CallContext& context, const Math::AABB* box, const Colour* colour, const Opts* options,
-                     std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Box", options->relativeTo))
-                {
-                    target->draw->Box(*box, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void OrientedBox(const CallContext& context, const Math::Vec3* centre, const Math::Vec3* halfExtents,
-                             const Math::Quat* rotation, const Colour* colour, const Opts* options,
-                             std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Box", options->relativeTo))
-                {
-                    target->draw->Box(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Sphere(const CallContext& context, const Math::Vec3* centre, float radius, const Colour* colour,
-                        const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Sphere", options->relativeTo))
-                {
-                    target->draw->Sphere(*centre, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Capsule(const CallContext& context, const Math::Vec3* from, const Math::Vec3* to, float radius,
-                         const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Capsule", options->relativeTo))
-                {
-                    target->draw->Capsule(*from, *to, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Cylinder(const CallContext& context, const Math::Vec3* from, const Math::Vec3* to, float radius,
-                          const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Cylinder", options->relativeTo))
-                {
-                    target->draw->Cylinder(*from, *to, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Cone(const CallContext& context, const Math::Vec3* apex, const Math::Vec3* baseCentre, float radius,
-                      const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Cone", options->relativeTo))
-                {
-                    target->draw->Cone(*apex, *baseCentre, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Circle(const CallContext& context, const Math::Vec3* centre, const Math::Vec3* normal, float radius,
-                        const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Circle", options->relativeTo))
-                {
-                    target->draw->Circle(*centre, *normal, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Arc(const CallContext& context, const Math::Vec3* centre, const Math::Vec3* normal,
-                     const Math::Vec3* start, float angle, const Colour* colour, const Opts* options,
-                     std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Arc", options->relativeTo))
-                {
-                    target->draw->Arc(*centre, *normal, *start, angle, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Plane(const CallContext& context, const Math::Vec3* point, const Math::Vec3* normal, float halfSize,
-                       const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Plane", options->relativeTo))
-                {
-                    target->draw->Plane(*point, *normal, halfSize, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Grid(const CallContext& context, const Math::Vec3* centre, const Math::Quat* rotation,
-                      std::int32_t cells, float cellSize, const Colour* colour, const Opts* options,
-                      std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Grid", options->relativeTo))
-                {
-                    target->draw->Grid(*centre, *rotation, cells, cellSize, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Axes(const CallContext& context, const Math::Mat4* transform, float length, const Opts* options,
-                      std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Axes", options->relativeTo))
-                {
-                    target->draw->Axes(*transform, length, target->Shape(*options, group));
-                }
-            }
-
-            void Frustum(const CallContext& context, const Math::Mat4* viewProjection, const Colour* colour,
-                         const Opts* options, std::string_view group, float farDepth)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Frustum", options->relativeTo))
-                {
-                    target->draw->Frustum(*viewProjection, *colour, target->Shape(*options, group), farDepth);
-                }
-            }
-
-            void SolidBox(const CallContext& context, const Math::AABB* box, const Colour* colour, const Opts* options,
-                          std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
-                {
-                    target->draw->SolidBox(*box, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void SolidOrientedBox(const CallContext& context, const Math::Vec3* centre, const Math::Vec3* halfExtents,
-                                  const Math::Quat* rotation, const Colour* colour, const Opts* options,
-                                  std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
-                {
-                    target->draw->SolidBox(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void SolidSphere(const CallContext& context, const Math::Vec3* centre, float radius, const Colour* colour,
-                             const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.SolidSphere", options->relativeTo))
-                {
-                    target->draw->SolidSphere(*centre, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void SolidCapsule(const CallContext& context, const Math::Vec3* from, const Math::Vec3* to, float radius,
-                              const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.SolidCapsule", options->relativeTo))
-                {
-                    target->draw->SolidCapsule(*from, *to, radius, *colour, target->Shape(*options, group));
-                }
-            }
-
-            void Triangles(const CallContext& context, const Math::Vec3* vertices, std::int32_t count,
-                           const Colour* colour, const Opts* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Triangles", options->relativeTo))
-                {
-                    target->draw->Triangles(Points(vertices, count), *colour, target->Shape(*options, group));
-                }
-            }
-
-            void ScreenText(const CallContext& context, const Math::Vec2* position, std::string_view text,
-                            const Colour* colour, const ScriptTextOptions* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.ScreenText", options->relativeTo))
-                {
-                    target->draw->ScreenText(*position, text, *colour, target->Text(*options, group));
-                }
-            }
-
-            void Message(const CallContext& context, std::string_view text, const Colour* colour,
-                         const ScriptTextOptions* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Message", options->relativeTo))
-                {
-                    target->draw->Message(text, *colour, target->Text(*options, group));
-                }
-            }
-
-            void KeyedMessage(const CallContext& context, std::int64_t key, std::string_view text, const Colour* colour,
-                              const ScriptTextOptions* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Message", options->relativeTo))
-                {
-                    target->draw->Message(key, text, *colour, target->Text(*options, group));
-                }
-            }
-
-            void WorldText(const CallContext& context, const Math::Vec3* position, std::string_view text,
-                           const Colour* colour, const ScriptTextOptions* options, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.WorldText", options->relativeTo))
-                {
-                    target->draw->WorldText(*position, text, *colour, target->Text(*options, group));
-                }
-            }
-
-            void ShowGroup(const CallContext& context, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.ShowGroup"))
-                {
-                    target->draw->ShowGroup(group);
-                }
-            }
-
-            void HideGroup(const CallContext& context, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.HideGroup"))
-                {
-                    target->draw->HideGroup(group);
-                }
-            }
-
-            bool IsGroupShown(const CallContext& context, std::string_view group)
-            {
-                const auto target = TargetFor(context, "DebugDraw.IsGroupShown");
-                return target && target->draw->IsGroupShown(group);
-            }
-
-            void Clear(const CallContext& context)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Clear"))
-                {
-                    target->draw->Clear();
-                }
-            }
-
-            void ClearGroup(const CallContext& context, std::string_view group)
-            {
-                if (const auto target = TargetFor(context, "DebugDraw.Clear"))
-                {
-                    target->draw->Clear(group);
-                }
-            }
-        } // namespace Native
     } // namespace
+
+    // The native functions, named apart from DebugDraw's own functions. Each is the DebugDraw call of its name on the
+    // active scene's DebugDraw, with the options as C# passes them (ScriptOptions.hpp) and the group as text of its
+    // own.
+    namespace DebugDrawNatives
+    {
+        /** @brief A line from `from` to `to` (DebugDraw.Line). */
+        void Line(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* from,
+                  const Math::Vec3* to, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                  std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Line", options->relativeTo))
+            {
+                target->draw->Line(*from, *to, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A line from `origin` along `direction`, as long as it is (DebugDraw.Ray). */
+        void Ray(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* origin,
+                 const Math::Vec3* direction, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                 std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Ray", options->relativeTo))
+            {
+                target->draw->Ray(*origin, *direction, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A line from `from` to `to` with a head `headLength` long at `to` (DebugDraw.Arrow). */
+        void Arrow(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* from,
+                   const Math::Vec3* to, float headLength, const Colour* colour,
+                   const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Arrow", options->relativeTo))
+            {
+                target->draw->Arrow(*from, *to, headLength, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /**
+         * @brief Lines joining the `count` points from `points` in order, and the last back to the first when `closed`
+         * (DebugDraw.Polyline).
+         */
+        void Polyline(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* points,
+                      std::int32_t count, bool closed, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                      std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Polyline", options->relativeTo))
+            {
+                target->draw->Polyline(Points(points, count), closed, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A dot at `position`, `pixelSize` pixels across (DebugDraw.Point). */
+        void Point(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* position,
+                   float pixelSize, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                   std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Point", options->relativeTo))
+            {
+                target->draw->Point(*position, pixelSize, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief The twelve edges of an axis-aligned box (DebugDraw.Box). */
+        void Box(const CallContext& context, DebugDrawScripting& debugDraw, const Math::AABB* box, const Colour* colour,
+                 const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Box", options->relativeTo))
+            {
+                target->draw->Box(*box, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief The twelve edges of a box `halfExtents` from `centre`, turned by `rotation` (DebugDraw.Box). */
+        void OrientedBox(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                         const Math::Vec3* halfExtents, const Math::Quat* rotation, const Colour* colour,
+                         const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Box", options->relativeTo))
+            {
+                target->draw->Box(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief Three circles of a sphere (DebugDraw.Sphere). */
+        void Sphere(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre, float radius,
+                    const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Sphere", options->relativeTo))
+            {
+                target->draw->Sphere(*centre, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A capsule round the segment from `from` to `to` (DebugDraw.Capsule). */
+        void Capsule(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* from,
+                     const Math::Vec3* to, float radius, const Colour* colour,
+                     const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Capsule", options->relativeTo))
+            {
+                target->draw->Capsule(*from, *to, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A cylinder round the segment from `from` to `to` (DebugDraw.Cylinder). */
+        void Cylinder(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* from,
+                      const Math::Vec3* to, float radius, const Colour* colour,
+                      const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Cylinder", options->relativeTo))
+            {
+                target->draw->Cylinder(*from, *to, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A cone from `apex` to a circular base round `baseCentre` (DebugDraw.Cone). */
+        void Cone(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* apex,
+                  const Math::Vec3* baseCentre, float radius, const Colour* colour,
+                  const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Cone", options->relativeTo))
+            {
+                target->draw->Cone(*apex, *baseCentre, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A circle round `centre` in the plane square to `normal` (DebugDraw.Circle). */
+        void Circle(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                    const Math::Vec3* normal, float radius, const Colour* colour,
+                    const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Circle", options->relativeTo))
+            {
+                target->draw->Circle(*centre, *normal, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /**
+         * @brief Part of a circle round `centre`, from `centre + start`, turning `angle` radians about `normal`
+         * (DebugDraw.Arc).
+         */
+        void Arc(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                 const Math::Vec3* normal, const Math::Vec3* start, float angle, const Colour* colour,
+                 const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Arc", options->relativeTo))
+            {
+                target->draw->Arc(*centre, *normal, *start, angle, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A square `halfSize` from `point`, square to `normal`, and its normal (DebugDraw.Plane). */
+        void Plane(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* point,
+                   const Math::Vec3* normal, float halfSize, const Colour* colour,
+                   const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Plane", options->relativeTo))
+            {
+                target->draw->Plane(*point, *normal, halfSize, *colour, target->Shape(*options, group));
+            }
+        }
+
+        // `cellSize` comes before `cells`, unlike in DebugDraw::Grid: to the binding, a pointer followed by a 32-bit
+        // integer is a span.
+        /**
+         * @brief A grid of `cells` by `cells` squares, `cellSize` across, centred on `centre` and turned by `rotation`
+         * (DebugDraw.Grid).
+         */
+        void Grid(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                  const Math::Quat* rotation, float cellSize, std::int32_t cells, const Colour* colour,
+                  const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Grid", options->relativeTo))
+            {
+                target->draw->Grid(*centre, *rotation, cells, cellSize, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief The frame of `transform`: its axes, `length` long (DebugDraw.Axes). */
+        void Axes(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Mat4* transform, float length,
+                  const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Axes", options->relativeTo))
+            {
+                target->draw->Axes(*transform, length, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief The edges of the volume `viewProjection` sees, out to `farDepth` (DebugDraw.Frustum). */
+        void Frustum(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Mat4* viewProjection,
+                     const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group,
+                     float farDepth)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Frustum", options->relativeTo))
+            {
+                target->draw->Frustum(*viewProjection, *colour, target->Shape(*options, group), farDepth);
+            }
+        }
+
+        /** @brief A solid axis-aligned box (DebugDraw.SolidBox). */
+        void SolidBox(const CallContext& context, DebugDrawScripting& debugDraw, const Math::AABB* box,
+                      const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
+            {
+                target->draw->SolidBox(*box, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A solid box `halfExtents` from `centre`, turned by `rotation` (DebugDraw.SolidBox). */
+        void SolidOrientedBox(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                              const Math::Vec3* halfExtents, const Math::Quat* rotation, const Colour* colour,
+                              const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
+            {
+                target->draw->SolidBox(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A solid sphere (DebugDraw.SolidSphere). */
+        void SolidSphere(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
+                         float radius, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                         std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidSphere", options->relativeTo))
+            {
+                target->draw->SolidSphere(*centre, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief A solid capsule round the segment from `from` to `to` (DebugDraw.SolidCapsule). */
+        void SolidCapsule(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* from,
+                          const Math::Vec3* to, float radius, const Colour* colour,
+                          const ScriptOptions::ShapeOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidCapsule", options->relativeTo))
+            {
+                target->draw->SolidCapsule(*from, *to, radius, *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief The `count` vertices from `vertices` as triangles, every three one (DebugDraw.Triangles). */
+        void Triangles(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* vertices,
+                       std::int32_t count, const Colour* colour, const ScriptOptions::ShapeOptions* options,
+                       std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Triangles", options->relativeTo))
+            {
+                target->draw->Triangles(Points(vertices, count), *colour, target->Shape(*options, group));
+            }
+        }
+
+        /** @brief Text at a pixel position in each window showing the scene (DebugDraw.ScreenText). */
+        void ScreenText(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec2* position,
+                        std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
+                        std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.ScreenText", options->relativeTo))
+            {
+                target->draw->ScreenText(*position, text, *colour, target->Text(*options, group));
+            }
+        }
+
+        /** @brief An on-screen message (DebugDraw.Message). */
+        void Message(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view text,
+                     const Colour* colour, const ScriptOptions::TextOptions* options, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Message", options->relativeTo))
+            {
+                target->draw->Message(text, *colour, target->Text(*options, group));
+            }
+        }
+
+        /** @brief An on-screen message under `key`, replacing the message under the same key (DebugDraw.Message). */
+        void KeyedMessage(const CallContext& context, DebugDrawScripting& debugDraw, std::int64_t key,
+                          std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
+                          std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Message", options->relativeTo))
+            {
+                target->draw->Message(key, text, *colour, target->Text(*options, group));
+            }
+        }
+
+        /** @brief Text at a point in the world, facing the screen (DebugDraw.WorldText). */
+        void WorldText(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* position,
+                       std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
+                       std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.WorldText", options->relativeTo))
+            {
+                target->draw->WorldText(*position, text, *colour, target->Text(*options, group));
+            }
+        }
+
+        /** @brief Shows the group's items (DebugDraw.ShowGroup). */
+        void ShowGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.ShowGroup"))
+            {
+                target->draw->ShowGroup(group);
+            }
+        }
+
+        /** @brief Hides the group's items (DebugDraw.HideGroup). */
+        void HideGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.HideGroup"))
+            {
+                target->draw->HideGroup(group);
+            }
+        }
+
+        /**
+         * @brief Whether the group's items are shown; false with no DebugDraw in the active scene
+         * (DebugDraw.IsGroupShown).
+         */
+        bool IsGroupShown(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
+        {
+            const auto target = debugDraw.TargetFor(context, "DebugDraw.IsGroupShown");
+            return target && target->draw->IsGroupShown(group);
+        }
+
+        /** @brief Drops every item (DebugDraw.Clear). */
+        void Clear(const CallContext& context, DebugDrawScripting& debugDraw)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Clear"))
+            {
+                target->draw->Clear();
+            }
+        }
+
+        /** @brief Drops the group's items (DebugDraw.Clear). */
+        void ClearGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
+        {
+            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Clear"))
+            {
+                target->draw->Clear(group);
+            }
+        }
+    } // namespace DebugDrawNatives
 
     Fenrir::ScriptingExtension DebugDrawing::ScriptingExtension()
     {
-        const std::string prefix = "Fenrir.DebugDraw.DebugDrawNative.";
         Fenrir::ScriptingExtension extension;
         extension.name = "FenrirDebugDraw";
+        extension.SetState(std::make_shared<DebugDrawScripting>());
         extension.sharedAssemblies = {"Fenrir.DebugDraw.dll"};
-        extension.functions = {
-            NativeFunction::Make<&Native::Line>(prefix + "Line"),
-            NativeFunction::Make<&Native::Ray>(prefix + "Ray"),
-            NativeFunction::Make<&Native::Arrow>(prefix + "Arrow"),
-            NativeFunction::Make<&Native::Polyline>(prefix + "Polyline"),
-            NativeFunction::Make<&Native::Point>(prefix + "Point"),
-            NativeFunction::Make<&Native::Box>(prefix + "Box"),
-            NativeFunction::Make<&Native::OrientedBox>(prefix + "OrientedBox"),
-            NativeFunction::Make<&Native::Sphere>(prefix + "Sphere"),
-            NativeFunction::Make<&Native::Capsule>(prefix + "Capsule"),
-            NativeFunction::Make<&Native::Cylinder>(prefix + "Cylinder"),
-            NativeFunction::Make<&Native::Cone>(prefix + "Cone"),
-            NativeFunction::Make<&Native::Circle>(prefix + "Circle"),
-            NativeFunction::Make<&Native::Arc>(prefix + "Arc"),
-            NativeFunction::Make<&Native::Plane>(prefix + "Plane"),
-            NativeFunction::Make<&Native::Grid>(prefix + "Grid"),
-            NativeFunction::Make<&Native::Axes>(prefix + "Axes"),
-            NativeFunction::Make<&Native::Frustum>(prefix + "Frustum"),
-            NativeFunction::Make<&Native::SolidBox>(prefix + "SolidBox"),
-            NativeFunction::Make<&Native::SolidOrientedBox>(prefix + "SolidOrientedBox"),
-            NativeFunction::Make<&Native::SolidSphere>(prefix + "SolidSphere"),
-            NativeFunction::Make<&Native::SolidCapsule>(prefix + "SolidCapsule"),
-            NativeFunction::Make<&Native::Triangles>(prefix + "Triangles"),
-            NativeFunction::Make<&Native::ScreenText>(prefix + "ScreenText"),
-            NativeFunction::Make<&Native::Message>(prefix + "Message"),
-            NativeFunction::Make<&Native::KeyedMessage>(prefix + "KeyedMessage"),
-            NativeFunction::Make<&Native::WorldText>(prefix + "WorldText"),
-            NativeFunction::Make<&Native::ShowGroup>(prefix + "ShowGroup"),
-            NativeFunction::Make<&Native::HideGroup>(prefix + "HideGroup"),
-            NativeFunction::Make<&Native::IsGroupShown>(prefix + "IsGroupShown"),
-            NativeFunction::Make<&Native::Clear>(prefix + "Clear"),
-            NativeFunction::Make<&Native::ClearGroup>(prefix + "ClearGroup"),
-        };
+        Generated::RegisterDebugDraw(extension);
         return extension;
     }
 } // namespace Fenrir

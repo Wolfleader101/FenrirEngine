@@ -16,8 +16,8 @@ namespace Fenrir.DebugDraw;
 /// <para>
 /// Nothing here throws. With no debug drawing in the active scene (FenrirDebugDraw not installed) or a
 /// <see cref="ShapeOptions.RelativeTo"/> entity that is not alive, a call draws nothing, and
-/// <see cref="IsGroupShown"/> returns false. In a debug build of the engine a warning is logged once per process for each
-/// place in the engine's native code that noticed and each reason (not once per C# call site).
+/// <see cref="IsGroupShown"/> returns false. In a debug build of the engine a warning is logged once for each place in
+/// the engine's native code that noticed and each reason (not once per C# call site).
 /// </para>
 /// </remarks>
 public static unsafe class DebugDraw
@@ -136,7 +136,7 @@ public static unsafe class DebugDraw
     public static void Grid(Vector3 centre, Quaternion rotation, int cells, float cellSize, Colour colour, ShapeOptions? options = null)
     {
         NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Grid(in centre, in rotation, cells, cellSize, in colour, in native, group);
+        DebugDrawNative.Grid(in centre, in rotation, cellSize, cells, in colour, in native, group);
     }
 
     /// <summary>The frame of <paramref name="transform"/>: its X, Y and Z axes, <paramref name="length"/> long, in red, green and blue.</summary>
@@ -254,120 +254,4 @@ public static unsafe class DebugDraw
         group = chosen.Group ?? "Default";
         return new NativeTextOptions(in chosen);
     }
-}
-
-// The native functions FenrirDebugDrawScripting gives C#, each named "Fenrir.DebugDraw.DebugDrawNative.<Method>". Values go
-// in through pointers, a span as its first element and length, and text as UTF-8.
-internal static unsafe partial class DebugDrawNative
-{
-    [NativeFunction]
-    public static partial void Line(in Vector3 from, in Vector3 to, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Ray(in Vector3 origin, in Vector3 direction, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Arrow(in Vector3 from, in Vector3 to, float headLength, in Colour colour, in NativeShapeOptions options,
-                                     ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Polyline(Vector3* points, int count, bool closed, in Colour colour, in NativeShapeOptions options,
-                                        ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Point(in Vector3 position, float pixelSize, in Colour colour, in NativeShapeOptions options,
-                                     ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Box(in Bounds box, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void OrientedBox(in Vector3 centre, in Vector3 halfExtents, in Quaternion rotation, in Colour colour,
-                                           in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Sphere(in Vector3 centre, float radius, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Capsule(in Vector3 from, in Vector3 to, float radius, in Colour colour, in NativeShapeOptions options,
-                                       ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Cylinder(in Vector3 from, in Vector3 to, float radius, in Colour colour, in NativeShapeOptions options,
-                                        ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Cone(in Vector3 apex, in Vector3 baseCentre, float radius, in Colour colour, in NativeShapeOptions options,
-                                    ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Circle(in Vector3 centre, in Vector3 normal, float radius, in Colour colour, in NativeShapeOptions options,
-                                      ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Arc(in Vector3 centre, in Vector3 normal, in Vector3 start, float angle, in Colour colour,
-                                   in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Plane(in Vector3 point, in Vector3 normal, float halfSize, in Colour colour, in NativeShapeOptions options,
-                                     ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Grid(in Vector3 centre, in Quaternion rotation, int cells, float cellSize, in Colour colour,
-                                    in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Axes(in Matrix4x4 transform, float length, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Frustum(in Matrix4x4 viewProjection, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group,
-                                       float farDepth);
-
-    [NativeFunction]
-    public static partial void SolidBox(in Bounds box, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void SolidOrientedBox(in Vector3 centre, in Vector3 halfExtents, in Quaternion rotation, in Colour colour,
-                                                in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void SolidSphere(in Vector3 centre, float radius, in Colour colour, in NativeShapeOptions options,
-                                           ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void SolidCapsule(in Vector3 from, in Vector3 to, float radius, in Colour colour, in NativeShapeOptions options,
-                                            ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Triangles(Vector3* vertices, int count, in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void ScreenText(in Vector2 position, ReadOnlySpan<char> text, in Colour colour, in NativeTextOptions options,
-                                          ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Message(ReadOnlySpan<char> text, in Colour colour, in NativeTextOptions options, ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void KeyedMessage(long key, ReadOnlySpan<char> text, in Colour colour, in NativeTextOptions options,
-                                            ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void WorldText(in Vector3 position, ReadOnlySpan<char> text, in Colour colour, in NativeTextOptions options,
-                                         ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void ShowGroup(ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void HideGroup(ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial bool IsGroupShown(ReadOnlySpan<char> group);
-
-    [NativeFunction]
-    public static partial void Clear();
-
-    [NativeFunction]
-    public static partial void ClearGroup(ReadOnlySpan<char> group);
 }

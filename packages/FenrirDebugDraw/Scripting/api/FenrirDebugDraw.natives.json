@@ -1,0 +1,1401 @@
+{
+  "binding": "FenrirDebugDraw",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Line",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A line from `from` to `to` (DebugDraw.Line).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "from",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "to",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Ray",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A line from `origin` along `direction`, as long as it is (DebugDraw.Ray).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "direction",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Arrow",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A line from `from` to `to` with a head `headLength` long at `to` (DebugDraw.Arrow).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "from",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "to",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "headLength",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Polyline",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Lines joining the `count` points from `points` in order, and the last back to the first when `closed` (DebugDraw.Polyline).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "points",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "closed",
+          "type": "bool",
+          "kind": "bool"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Point",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A dot at `position`, `pixelSize` pixels across (DebugDraw.Point).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "position",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "pixelSize",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Box",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "The twelve edges of an axis-aligned box (DebugDraw.Box).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "box",
+          "type": "const Fenrir::Math::AABB*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::AABB",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "OrientedBox",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "The twelve edges of a box `halfExtents` from `centre`, turned by `rotation` (DebugDraw.Box).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "halfExtents",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rotation",
+          "type": "const Fenrir::Math::Quat*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Quat",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Sphere",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Three circles of a sphere (DebugDraw.Sphere).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Capsule",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A capsule round the segment from `from` to `to` (DebugDraw.Capsule).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "from",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "to",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Cylinder",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A cylinder round the segment from `from` to `to` (DebugDraw.Cylinder).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "from",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "to",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Cone",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A cone from `apex` to a circular base round `baseCentre` (DebugDraw.Cone).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "apex",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "baseCentre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Circle",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A circle round `centre` in the plane square to `normal` (DebugDraw.Circle).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "normal",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Arc",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Part of a circle round `centre`, from `centre + start`, turning `angle` radians about `normal` (DebugDraw.Arc).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "normal",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "start",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "angle",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Plane",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A square `halfSize` from `point`, square to `normal`, and its normal (DebugDraw.Plane).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "normal",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "halfSize",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Grid",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A grid of `cells` by `cells` squares, `cellSize` across, centred on `centre` and turned by `rotation` (DebugDraw.Grid).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rotation",
+          "type": "const Fenrir::Math::Quat*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Quat",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "cellSize",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "cells",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Axes",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "The frame of `transform`: its axes, `length` long (DebugDraw.Axes).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "transform",
+          "type": "const Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "length",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Frustum",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "The edges of the volume `viewProjection` sees, out to `farDepth` (DebugDraw.Frustum).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "viewProjection",
+          "type": "const Fenrir::Math::Mat4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Mat4",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "farDepth",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "SolidBox",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A solid axis-aligned box (DebugDraw.SolidBox).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "box",
+          "type": "const Fenrir::Math::AABB*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::AABB",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "SolidOrientedBox",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A solid box `halfExtents` from `centre`, turned by `rotation` (DebugDraw.SolidBox).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "halfExtents",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "rotation",
+          "type": "const Fenrir::Math::Quat*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Quat",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "SolidSphere",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A solid sphere (DebugDraw.SolidSphere).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "centre",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "SolidCapsule",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "A solid capsule round the segment from `from` to `to` (DebugDraw.SolidCapsule).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "from",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "to",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "radius",
+          "type": "float",
+          "kind": "f32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Triangles",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "The `count` vertices from `vertices` as triangles, every three one (DebugDraw.Triangles).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "vertices",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "count",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::ShapeOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::ShapeOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "ScreenText",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Text at a pixel position in each window showing the scene (DebugDraw.ScreenText).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "position",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::TextOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::TextOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Message",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "An on-screen message (DebugDraw.Message).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::TextOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::TextOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "KeyedMessage",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "An on-screen message under `key`, replacing the message under the same key (DebugDraw.Message).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "key",
+          "type": "std::int64_t",
+          "kind": "i64"
+        },
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::TextOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::TextOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "WorldText",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Text at a point in the world, facing the screen (DebugDraw.WorldText).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "position",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "colour",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "options",
+          "type": "const Fenrir::ScriptOptions::TextOptions*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptOptions::TextOptions",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "ShowGroup",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Shows the group's items (DebugDraw.ShowGroup).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "HideGroup",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Hides the group's items (DebugDraw.HideGroup).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "IsGroupShown",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Whether the group's items are shown; false with no DebugDraw in the active scene (DebugDraw.IsGroupShown).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Clear",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Drops every item (DebugDraw.Clear).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": []
+    },
+    {
+      "name": "ClearGroup",
+      "namespace": "Fenrir::DebugDrawNatives",
+      "source": "../src/DebugDrawScripting.cpp",
+      "state": "Fenrir::DebugDrawScripting",
+      "doc": "Drops the group's items (DebugDraw.Clear).",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "group",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    }
+  ]
+}
