@@ -1,0 +1,22 @@
+# 04: Port `Fenrir.Input` and `Fenrir.Window` onto the generated pipeline
+
+**What to build:** Input's and Window's mirrors, mappings, native declarations and registrations are generated; their facades are hand-written over typed natives; `InputClaims` crosses as a described copy with a hand-written refreshing registration (spec: "Each port"; ADR-0043, ADR-0044).
+
+- **FenrirInput selection** (`packages/FenrirInput/api/FenrirInput.api.toml`, headers `InputTypes.hpp`, `InputEvents.hpp`): the nine events as `event` (`TextEvent`'s `char32_t` is a `u32` now, so `Detail::TextEventLayout` goes); `WindowId` and `GamepadId` as `shared-struct` (one field each: wrappers). The enums (`Key`, `Scancode`, `KeyModifiers`, `MouseButton`, `GamepadButton`, `GamepadAxis`) are described because the events hold them; their `Count` enumerators are mirrored (today's hand-written enums leave them out: the ticket either keeps them, documented as sizes, or asks describe-api to honour a `@hidden` doc command, which is the one generator change this ticket may make).
+- **Binding-owned selection** (`packages/FenrirInput/Scripting/api/FenrirInputScripting.api.toml`, header `src/ScriptInputClaims.hpp`): `Detail::ScriptInputClaims` as `app-resource`, with `ScriptWindowClaims`, `WindowInputClaims` and `CaretRect` described through it. `[names]` registers it as `Fenrir.Input.InputClaims`; it is in `read-only` and `by-hand`; the hand-written C# indexer and `For(window)` stay as a partial part.
+- **FenrirInput binding** (`FenrirInput.binding.toml`): `readonly-events = true`; `[uses]` the math binding; `[natives] sources = ["../src/InputScripting.cpp"]`, class `InputNative`; `[registration]` into `src/Generated/FenrirInputRegistration.cpp`; `[tests]` into the extension's test target. `Iris::WrapperOf<WindowId>` and `<GamepadId>` specialised in `InputMappings.hpp`, which keeps nothing else (`[uses]` includes the generated header).
+- **Input natives:** each takes `Key`, `Scancode`, `MouseButton`, `GamepadId`, `GamepadButton`, `GamepadAxis` as the C++ API does; `KeyModifiers()` returns the enum; outputs carry `@param[out]`; the warn-once record moves to an `InputScripting` state class (`SetState`). `Input::ScriptingExtension()` becomes `name`, `SetState`, `sharedAssemblies`, `Generated::RegisterInput(extension)`, then `extension.resources.push_back(InputClaimsResource())`.
+- **FenrirWindow selection** (`packages/FenrirWindow/api/FenrirWindow.api.toml`, header `Window.hpp` or where the events and `WindowSize`, `CursorMode`, `CursorShape` live): the two events as `event`, `WindowSize` as `shared-struct`. Binding: `[uses]` input's and math's bindings (for `WindowId`); natives take `WindowId`, `CursorMode`, `CursorShape` and `std::string_view`; `GetClipboard`'s `char16_t*` + capacity is already a span. State class `WindowScripting`.
+- **Facades:** `Keyboard`, `Mouse`, `Gamepads`, `Window` rewritten over the generated classes: casts and `.Value` gone, overloads, properties and `Window.Main` kept, remarks kept. `WindowId` and `GamepadId` keep equality and `ToString` as partial parts.
+- **Deleted:** hand-written `Events.cs`, `Types.cs` enums and ids as fields, `InputClaims.cs` fields, `InputNative`/`WindowNative` declarations, `InputMappings.hpp`'s `IRIS_FIELD` mappings, `Utf16.hpp` only if the ticket finds it unused, the `extension.functions`/`.events` lists.
+
+**Blocked by:** 03 (`Fenrir.Math` through a math binding, and physics's `Aabb` becomes `Bounds`)
+
+**Touches:** `packages/FenrirInput/api/`, `packages/FenrirInput/Managed/`, `packages/FenrirInput/Scripting/`, `packages/FenrirWindow/api/`, `packages/FenrirWindow/Managed/`, `packages/FenrirWindow/Scripting/`
+
+**Status:** ready-for-agent
+
+- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` leave the tree clean; no `IRIS_FIELD`, `[NativeFunction]` or `NativeFunction::Make` remains under either package.
+- [ ] The existing input and window extension tests pass unchanged in behaviour (fed keys per phase, mouse, gamepads, `InputClaims`, hidden-window clipboard, no-op rules with one debug warning per native call site through the state's record).
+- [ ] The generated defaults and natives tests run in both test targets; `TextEvent` arrives with its codepoint through the described event.
+- [ ] A script reads `Keyboard.JustPressed(Key.Space)`, `Window.Size(Window.Main)` and `Resources.TryGetReadOnly<InputClaims>` exactly as before.

@@ -1,0 +1,36 @@
+---
+status: accepted
+---
+
+# Native resources and facades move onto the generated API pipeline
+
+ADR-0029 gave scripting extensions native resources (`Sky`, `AmbientLight`, `InputClaims`) and facades (`Keyboard`, `Window`, `DebugDraw`) before ADR-0042 made C# contracts generated. Since the merge, five extensions (input, window, assets, renderer, debug draw) and the `Fenrir.Math` assembly are hand-written beside physics's generated one: their mirrors, Iris mappings, native declarations and registration lists are each spelled on both sides, which is the duplication ADR-0042 removed. This ADR settles how each of ADR-0029's shapes is expressed in the generated pipeline, so every extension uses it the same way.
+
+We decided:
+
+- **A native resource is a role in the API description.** The selection gives a type the role `scene-resource` or `app-resource`; the description records it. Whether a package keeps a value per scene or per App is the package's fact, so it is recorded once, in the package, and never restated by a binding. Read-only stays a binding decision, as it is for components: the binding's `read-only` list covers resources too, picking the read-only registration and the `readonly struct` mirror. The generated mirror carries `[NativeResource("Namespace.Type")]` and the resource interface, the generated registration lists it with `MakeSceneResource` or `MakeAppResource`, and the defaults test covers it (C#'s `Resources.Insert` makes `new T()`, which must equal `T{}`). A resource that is also a tagged union (`Sky`) gets both: the resource attribute on the union mirror.
+- **A resource C# cannot read in place crosses as a binding-owned plain-data copy.** `InputClaims` keeps its windows in a vector, so C# reads `ScriptInputClaims`, a fixed-size copy refreshed each time C# gets it. The copy is described from the binding's own selection (as physics's `ScriptQueries.hpp` is), so its mirror, mapping and defaults test are generated; only its registration, which refreshes the copy, stays hand-written, named in the binding's `by-hand` list so the generated registration leaves it out and the extension appends it. Nothing in the engine's `InputClaims` changes for a binding.
+- **A facade stays hand-written C# over generated natives.** ADR-0029's rule is unchanged: a resource whose data is its API is mirrored, and a resource with methods is a facade. What changes is what the facade is written over: the `<Package>Native` class and its registration are generated from the natives (ADR-0044 makes them typed, so the facade keeps no casts), and the facade holds only what a description cannot say: overloads, generic methods (`Assets.Load<T>`), properties over output parameters (`Mouse.Position`), constants (`Window.Main`), and a real conversion (DebugDraw's options). Generating facades would need a second description of C# conveniences, restating the natives.
+- **A binding's private plain data is described and mirrored `internal`.** DebugDraw's `ShapeOptions` holds a `string? Group`, which no mirror can hold, so its natives take `ScriptShapeOptions`, the options without the group, with the group as text of its own. Those structs are described from the binding's selection and mirrored `internal` through the binding's `internal-structs` list, so the public API shows one options type and the wire type is still generated.
+- **`Fenrir.Math` is three generated mirrors and five bound types.** `Colour`, `Ray` and `AABB` (as `Bounds`) are FenrirMath's own plain structs: its description records them as shared structs, and a math binding, configured beside the built-in binding's, generates their mirrors into `Fenrir.Math/Generated` and their mappings into a generated header, with operators and conversions as hand-written partial parts. glm's `vec2`, `vec3`, `vec4`, `quat` and `mat4` stay bound types, as ADR-0042 made the first two: glm lays its members out as anonymous unions, which the description cannot record, and every binding has its own vector anyway. `Fenrir.Math` is still pure managed code with no native functions (ADR-0029); a generated mirror is managed code too.
+- **`Math::AABB` has one C# type, `Fenrir.Math.Bounds`.** Physics's generated `Aabb` goes: physics names `Bounds` for `Math::AABB` as it names `Vector3` for `Vec3`, and the `BoundsView` stand-in that existed because a C++ type has one Iris mapping is deleted. Scripts that wrote `Aabb` write `Bounds`.
+- **Each ported extension takes extension state.** ADR-0009's amendment asks that a native reach its package only through the call context and its extension's state; the five extensions kept a per-process warn-once record. Each port moves that record into a state class its natives take second, as physics does.
+
+## Considered options
+
+- **One `resource` role with the scope in the binding.** Rejected: every binding would restate whether the package keeps the value per scene or per App.
+- **A refresh hook in the generator** for `InputClaims`, so the generated registration's `find` calls a named function. Rejected for one case: a list of names left to hand-written code costs the generator nothing, and the one registration that is different is written where it differs.
+- **`InputClaims` as a facade** (`InputClaims.For(window)` as natives). Rejected: it changes the C# API and breaks ADR-0029's rule for a resource whose data is its API.
+- **A fixed-size `InputClaims` in FenrirInput.** Rejected: the engine's type would change to suit a binding, which ADR-0042 rules out.
+- **Generated facades**, from a `public` flag and nicer names. Rejected: the overloads, generics and conversions that make a facade worth having cannot be described without a second description of them.
+- **Every math type a bound type**, `Fenrir.Math` wholly hand-written. Rejected: `Colour`, `Ray` and `AABB` are plain structs the description can record, and a hand-written mirror of a describable type is what ADR-0042 removed.
+- **Every math type generated**, glm's included. Rejected: the description cannot read glm's anonymous unions (`GLM_FORCE_XYZW_ONLY` plains the vectors but not the quaternion), and a vector is the bound type's reason to exist.
+- **Two C# box types kept**, physics's `Aabb` beside `Bounds`. Rejected: one C++ type, two C# names, and a stand-in mapping to keep them apart.
+
+## Consequences
+
+- ADR-0029 is amended: its resource section gains the description roles and the copy rule, its math section records the math binding and the end of `Aabb`, and its facade rule names what stays hand-written.
+- describe-api gains the two resource roles; Iris.Bindings gains resource mirrors and registration, `read-only` over resources, `internal-structs` and `by-hand`. Both are generator work ahead of the ports.
+- The five hand-written extensions are ported one at a time, each becoming a selection, a binding configuration and generated outputs beside a hand-written facade and extension state. `Fenrir.Math` is ported first, since the others name `Bounds`.
+- A game's `Aabb` becomes `Bounds`; nothing else a script wrote changes name.
+- `GLOSSARY.md` gains *facade* and the two roles, and the glossary's note that five extensions declare natives by hand is removed when the last port lands.
