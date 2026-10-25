@@ -55,6 +55,8 @@ internal sealed class Describer
         var directory = Path.GetDirectoryName(m_selection.Path)!;
         var mainPath = Path.Combine(directory, m_selection.Package + ".describe-api.cpp").Replace('\\', '/');
         var source = string.Concat(m_selection.Headers.Select(header => $"#include \"{header.Replace('\\', '/')}\"\n")) +
+                     string.Concat(m_selection.Types.Select(type => type.Key).Where(IsSpecialisation)
+                                       .Select(name => $"using {SpecialisationAlias(name)} = ::{name};\n")) +
                      string.Concat(m_instantiate.Select(name => $"static_assert(sizeof(::{name}) > 0);\n"));
 
         using var index = CXIndex.Create();
@@ -178,7 +180,11 @@ internal sealed class Describer
 
     private void Select(TranslationUnitDecl root, string name, Role role)
     {
-        var found = Find(root.Decls, name.Split("::"), 0).FirstOrDefault();
+        // A class template's specialisation (`Ns::Handle<Ns::Mesh>`) is found through the alias the main source declares
+        // for it, since its argument list does not split into scopes.
+        var found = IsSpecialisation(name)
+                        ? Find(root.Decls, [SpecialisationAlias(name)], 0).FirstOrDefault()
+                        : Find(root.Decls, name.Split("::"), 0).FirstOrDefault();
         if (found is null)
         {
             m_errors.Add($"{m_selection.Path}: error: {name}: no type of that name in the selected headers");
@@ -212,7 +218,7 @@ internal sealed class Describer
         }
 
         Register(canonical, name, role, decl, null);
-        if (found is TypedefNameDecl && role == Role.BoundType)
+        if (found is TypedefNameDecl && role == Role.BoundType && !IsSpecialisation(name))
         {
             // A bound type is often an alias: its own comment, if any, is the one the selection named.
             m_aliasDocs[name] = found;
@@ -220,6 +226,13 @@ internal sealed class Describer
     }
 
     private readonly Dictionary<string, Decl> m_aliasDocs = new(StringComparer.Ordinal);
+
+    // Whether a selected name is a class template's specialisation, which the selection spells with its arguments.
+    private static bool IsSpecialisation(string name) => name.Contains('<', StringComparison.Ordinal);
+
+    // The alias the main source declares for a selected specialisation, unique by its place in the selection.
+    private string SpecialisationAlias(string name) =>
+        $"FenrirDescribeApiSelected{m_selection.Types.Select(type => type.Key).ToList().IndexOf(name)}";
 
     private static IEnumerable<Decl> Find(IEnumerable<Decl> decls, string[] parts, int i)
     {

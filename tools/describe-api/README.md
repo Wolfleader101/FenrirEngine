@@ -37,6 +37,8 @@ A selected component, event, resource or shared struct with private data members
 private-members = ["MyPackage::Hit"]
 ```
 
+A bound type may be a class template's specialisation, named by an alias (`"Math::Quat"`) or with its arguments (`"MyPackage::Handle<MyPackage::Mesh>"`); the tool instantiates one the headers never do to read its layout.
+
 Types a selected type's fields use (nested structs, tagged unions, enums) are described too, without being listed. A type the fields use that is neither plain data nor a selected bound type fails the tool. The selection says nothing binding-specific: names, namespaces and type mappings for a language belong to its binding.
 
 ## The description

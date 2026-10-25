@@ -3,121 +3,42 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <mutex>
+#include <memory>
 #include <optional>
-#include <set>
 #include <source_location>
 #include <span>
 #include <string>
 #include <string_view>
-#include <tuple>
 #include <utility>
 #include <vector>
 
-#include "FenrirApp/App.hpp"
-#include "FenrirAssetsScripting/AssetMappings.hpp"
+#include "AssetsScriptingState.hpp"
+#include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirMath/Colour.hpp"
+
+// Everything C# sees of assets but the handles is generated (api/FenrirAssets.binding.toml): the shared structs' and
+// enums' mappings, checked against the Fenrir.Assets contract whenever a script assembly loads, and from the native
+// functions below (described into api/FenrirAssets.natives.json) their C# declarations, AssetsNative, and this
+// registration of them all.
+namespace Fenrir::Generated
+{
+    void RegisterAssets(ScriptingExtension& extension);
+} // namespace Fenrir::Generated
 
 namespace Fenrir
 {
     namespace
     {
-        // A warning logged once for each place in this file that notices a call doing nothing, and each reason, in
-        // debug builds only.
-        void WarnOnce(const CallContext& context, const std::string& message,
-                      std::source_location where = std::source_location::current())
-        {
-#ifndef NDEBUG
-            static std::mutex mutex;
-            static std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[assets scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
-        }
-
-        // A handle crosses to and from C# as one number: the generation in the high half, the index in the low (C#'s
-        // AssetHandle<T>.Bits).
-        template <typename T>
-        AssetHandle<T> Unpack(std::uint64_t bits) noexcept
-        {
-            return {static_cast<std::uint32_t>(bits), static_cast<std::uint32_t>(bits >> 32u)};
-        }
-
-        template <typename T>
-        std::uint64_t Pack(AssetHandle<T> handle) noexcept
-        {
-            return (std::uint64_t{handle.generation} << 32u) | handle.index;
-        }
-
-        // The app's asset store; warns once for the caller's call site if there is none.
-        AssetStore* StoreFor(const CallContext& context, std::string_view function,
-                             std::source_location where = std::source_location::current())
-        {
-            if (AssetStore* store = context.GetApp().TryGetResource<AssetStore>())
-            {
-                return store;
-            }
-            WarnOnce(context,
-                     std::string(function) + ": the app has no asset store (FenrirAssets is not installed), so it "
-                                             "does nothing",
-                     where);
-            return nullptr;
-        }
-
-        // The asset store, if `bits` names a live asset of kind `T` in it; warns once for the caller's call site if
-        // not.
-        template <typename T>
-        AssetStore* Resolve(const CallContext& context, std::uint64_t bits, std::string_view function,
-                            std::source_location where = std::source_location::current())
-        {
-            AssetStore* store = StoreFor(context, function, where);
-            if (store == nullptr || store->IsValid(Unpack<T>(bits)))
-            {
-                return store;
-            }
-            WarnOnce(context,
-                     std::string(function) + ": the " + std::string(Detail::AssetTraits<T>::name) +
-                         " handle is empty or stale, so it does nothing",
-                     where);
-            return nullptr;
-        }
-
-        // The owner C#'s AssetOwner names: the active scene or the app. Warns once if it names neither.
-        std::optional<AssetOwner> OwnerOf(const CallContext& context, std::uint8_t owner, std::string_view function,
-                                          std::source_location where = std::source_location::current())
-        {
-            if (owner == 0)
-            {
-                return AssetOwner(context.GetApp().GetActiveScene());
-            }
-            if (owner == 1)
-            {
-                return AssetOwner::App();
-            }
-            WarnOnce(context, std::string(function) + ": no such asset owner, so it does nothing", where);
-            return std::nullopt;
-        }
-
         // `count` values from `first` on, or nothing (with a warning) for a negative count or a null pointer with
         // values.
         template <typename T>
-        std::optional<std::vector<T>> Copy(const CallContext& context, const T* first, std::int32_t count,
-                                           std::string_view function,
+        std::optional<std::vector<T>> Copy(AssetsScripting& assets, const CallContext& context, const T* first,
+                                           std::int32_t count, std::string_view function,
                                            std::source_location where = std::source_location::current())
         {
             if (count < 0 || (first == nullptr && count > 0))
             {
-                WarnOnce(context, std::string(function) + ": a span is unusable, so it does nothing", where);
+                assets.WarnOnce(context, std::string(function) + ": a span is unusable, so it does nothing", where);
                 return std::nullopt;
             }
             // C# passes a span as its first element and its length, so the bounds are only as good as C#'s.
@@ -132,17 +53,18 @@ namespace Fenrir
             return std::vector<T>(values.begin(), values.end());
         }
 
-        // A mesh from C#'s spans, drawn with one material: one submesh over every index.
-        std::optional<MeshData> MeshFrom(const CallContext& context, const Math::Vec3* positions,
-                                         std::int32_t positionCount, const Math::Vec3* normals,
-                                         std::int32_t normalCount, const Math::Vec2* uvs, std::int32_t uvCount,
-                                         const std::uint32_t* indices, std::int32_t indexCount,
+        // A mesh from C#'s spans, drawn with one material: one submesh over every index. Takes the state first, so
+        // describe-api does not read it as a native.
+        std::optional<MeshData> MeshFrom(AssetsScripting& assets, const CallContext& context,
+                                         const Math::Vec3* positions, std::int32_t positionCount,
+                                         const Math::Vec3* normals, std::int32_t normalCount, const Math::Vec2* uvs,
+                                         std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount,
                                          std::string_view function)
         {
-            auto positionValues = Copy(context, positions, positionCount, function);
-            auto normalValues = Copy(context, normals, normalCount, function);
-            auto uvValues = Copy(context, uvs, uvCount, function);
-            auto indexValues = Copy(context, indices, indexCount, function);
+            auto positionValues = Copy(assets, context, positions, positionCount, function);
+            auto normalValues = Copy(assets, context, normals, normalCount, function);
+            auto uvValues = Copy(assets, context, uvs, uvCount, function);
+            auto indexValues = Copy(assets, context, indices, indexCount, function);
             if (!positionValues || !normalValues || !uvValues || !indexValues)
             {
                 return std::nullopt;
@@ -158,18 +80,19 @@ namespace Fenrir
 
         // An RGBA8 sRGB image of this size with `rgba8`'s bytes, or none as a render target; nothing (with a warning)
         // for a side under one pixel or an unusable span. Whether the bytes fit the size is the store's check.
-        std::optional<ImageData> ImageFrom(const CallContext& context, std::int32_t width, std::int32_t height,
-                                           const std::uint8_t* rgba8, std::int32_t byteCount, std::string_view function,
+        std::optional<ImageData> ImageFrom(AssetsScripting& assets, const CallContext& context, std::int32_t width,
+                                           std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount,
+                                           std::string_view function,
                                            std::source_location where = std::source_location::current())
         {
             if (width < 1 || height < 1)
             {
-                WarnOnce(context,
-                         std::string(function) + ": an image is at least one pixel each way, so it does nothing",
-                         where);
+                assets.WarnOnce(context,
+                                std::string(function) + ": an image is at least one pixel each way, so it does nothing",
+                                where);
                 return std::nullopt;
             }
-            auto bytes = Copy(context, rgba8, byteCount, function, where);
+            auto bytes = Copy(assets, context, rgba8, byteCount, function, where);
             if (!bytes)
             {
                 return std::nullopt;
@@ -187,402 +110,591 @@ namespace Fenrir
 
         // Calls `action` with the asset kind C# names (an AssetKind<T>.Value), or warns once and gives `otherwise`.
         template <typename Result, typename Action>
-        Result ForKind(const CallContext& context, std::uint8_t kind, std::string_view function, Result otherwise,
-                       Action&& action, std::source_location where = std::source_location::current())
+        Result ForKind(AssetsScripting& assets, const CallContext& context, Detail::AssetKind kind,
+                       std::string_view function, Result otherwise, Action&& action,
+                       std::source_location where = std::source_location::current())
         {
             // Not a switch: `kind` comes from C#, so it may be none of the enumerators.
-            if (kind == static_cast<std::uint8_t>(Detail::AssetKind::Mesh))
+            if (kind == Detail::AssetKind::Mesh)
             {
                 return action(AssetHandle<Mesh>{});
             }
-            if (kind == static_cast<std::uint8_t>(Detail::AssetKind::Image))
+            if (kind == Detail::AssetKind::Image)
             {
                 return action(AssetHandle<Image>{});
             }
-            if (kind == static_cast<std::uint8_t>(Detail::AssetKind::Material))
+            if (kind == Detail::AssetKind::Material)
             {
                 return action(AssetHandle<Material>{});
             }
-            if (kind == static_cast<std::uint8_t>(Detail::AssetKind::Shader))
+            if (kind == Detail::AssetKind::Shader)
             {
                 return action(AssetHandle<Shader>{});
             }
-            if (kind == static_cast<std::uint8_t>(Detail::AssetKind::Model))
+            if (kind == Detail::AssetKind::Model)
             {
                 return action(AssetHandle<Model>{});
             }
-            WarnOnce(context,
-                     std::string(function) + ": the handle's type is not Mesh, Image, Material, Shader or Model, so "
-                                             "it does nothing",
-                     where);
+            assets.WarnOnce(context,
+                            std::string(function) + ": the handle's type is not Mesh, Image, Material, Shader or "
+                                                    "Model, so it does nothing",
+                            where);
             return otherwise;
         }
 
-        // Writes `value` through `out` if there is one, and says whether there was.
-        template <typename V, typename Out>
-        bool Write(const std::optional<V>& value, Out* out)
+        // One material read: writes the default `Out{}` to `out`, then what `read` gives for a live material, if it
+        // gives anything, and says whether it did. Warns once per call site for a stale material.
+        template <typename Out, typename Read>
+        bool ReadInto(AssetsScripting& assets, const CallContext& context, std::uint64_t material, Out* out,
+                      std::string_view function, Read&& read,
+                      std::source_location where = std::source_location::current())
         {
-            if (value.has_value() && out != nullptr)
+            if (out == nullptr)
             {
-                *out = static_cast<Out>(*value);
-                return true;
+                return false;
             }
-            return false;
+            *out = Out{};
+            AssetStore* store = assets.Resolve<Material>(context, material, function, where);
+            if (store == nullptr)
+            {
+                return false;
+            }
+            const std::optional<Out> value = read(*store, AssetsScripting::Unpack<Material>(material));
+            if (!value)
+            {
+                return false;
+            }
+            *out = *value;
+            return true;
+        }
+    } // namespace
+
+    // The native functions behind Fenrir.Assets's Assets, Materials and Shaders, each named as C# calls it.
+    // tools/describe-api reads them from this file, in this order, and Iris.Bindings generates their C# declarations
+    // (Fenrir.Assets.AssetsNative) and their registration from that. A handle crosses as its packed bits (C#'s
+    // AssetHandle<T>.Bits) and a kind as FenrirAssets's Detail::AssetKind; text as a view; spans as a pointer and a
+    // count. Each returns doing nothing (false, zero or the empty handle) with no asset store, a stale or empty handle,
+    // or an unusable argument, having written its output's default first. Not in an anonymous namespace: the generated
+    // registration names them from another file.
+    namespace AssetsNatives
+    {
+        /**
+         * @brief Loads the asset of `kind` at `path` for `owner` (AssetStore::Load).
+         * @return The asset's handle, or the empty handle if the load failed (the store logs why).
+         */
+        std::uint64_t Load(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind,
+                           std::string_view path, ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.StoreFor(context, "Assets.Load");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Assets.Load") : std::nullopt;
+            if (!assetOwner)
+            {
+                return 0;
+            }
+            return ForKind(assets, context, kind, "Assets.Load", std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
+                return AssetsScripting::Pack(store->Load<T>(path, *assetOwner).handle);
+            });
         }
 
-        // The native functions, named apart from the store's own functions.
-        namespace Native
+        /**
+         * @brief Frees the asset of `kind` now, whoever owns it.
+         * @return Whether the handle named a live asset.
+         */
+        bool Unload(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind, std::uint64_t handle)
         {
-            std::uint64_t Load(const CallContext& context, std::uint8_t kind, std::string_view path, std::uint8_t owner)
+            return ForKind(assets, context, kind, "Assets.Unload", false, [&]<typename T>(AssetHandle<T>) {
+                AssetStore* store = assets.Resolve<T>(context, handle, "Assets.Unload");
+                return store != nullptr && store->Unload(AssetsScripting::Unpack<T>(handle));
+            });
+        }
+
+        /** @brief Whether `handle` names a live asset of `kind`. */
+        bool IsValid(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind, std::uint64_t handle)
+        {
+            AssetStore* store = assets.StoreFor(context, "Assets.IsValid");
+            return store != nullptr &&
+                   ForKind(assets, context, kind, "Assets.IsValid", false, [&]<typename T>(AssetHandle<T>) {
+                       return store->IsValid(AssetsScripting::Unpack<T>(handle));
+                   });
+        }
+
+        /**
+         * @brief Adds a mesh of these vertex streams and triangles for `owner`, drawn with one material.
+         * @return The mesh, or the empty handle if the store refused it.
+         */
+        std::uint64_t AddMesh(const CallContext& context, AssetsScripting& assets, const Math::Vec3* positions,
+                              std::int32_t positionCount, const Math::Vec3* normals, std::int32_t normalCount,
+                              const Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices,
+                              std::int32_t indexCount, ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.StoreFor(context, "Assets.AddMesh");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Assets.AddMesh") : std::nullopt;
+            if (!assetOwner)
             {
-                AssetStore* store = StoreFor(context, "Assets.Load");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Assets.Load") : std::nullopt;
-                if (!assetOwner)
-                {
-                    return 0;
-                }
-                // A failed load is logged by the store, with its reason.
-                return ForKind(context, kind, "Assets.Load", std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
-                    return Pack(store->Load<T>(path, *assetOwner).handle);
-                });
+                return 0;
             }
+            std::optional<MeshData> mesh = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
+                                                    uvs, uvCount, indices, indexCount, "Assets.AddMesh");
+            return mesh ? AssetsScripting::Pack(store->Add<Mesh>(std::move(*mesh), *assetOwner)) : 0;
+        }
 
-            bool Unload(const CallContext& context, std::uint8_t kind, std::uint64_t handle)
+        /**
+         * @brief Swaps the mesh's data for these streams and triangles.
+         * @return Whether it was replaced.
+         */
+        bool ReplaceMesh(const CallContext& context, AssetsScripting& assets, std::uint64_t mesh,
+                         const Math::Vec3* positions, std::int32_t positionCount, const Math::Vec3* normals,
+                         std::int32_t normalCount, const Math::Vec2* uvs, std::int32_t uvCount,
+                         const std::uint32_t* indices, std::int32_t indexCount)
+        {
+            AssetStore* store = assets.Resolve<Mesh>(context, mesh, "Assets.ReplaceMesh");
+            if (store == nullptr)
             {
-                return ForKind(context, kind, "Assets.Unload", false, [&]<typename T>(AssetHandle<T>) {
-                    AssetStore* store = Resolve<T>(context, handle, "Assets.Unload");
-                    return store != nullptr && store->Unload(Unpack<T>(handle));
-                });
+                return false;
             }
+            std::optional<MeshData> data = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
+                                                    uvs, uvCount, indices, indexCount, "Assets.ReplaceMesh");
+            return data && store->Replace(AssetsScripting::Unpack<Mesh>(mesh), std::move(*data));
+        }
 
-            bool IsValid(const CallContext& context, std::uint8_t kind, std::uint64_t handle)
+        /**
+         * @brief Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels.
+         * @return The image, or the empty handle if either side is under one pixel.
+         */
+        std::uint64_t AddRenderTarget(const CallContext& context, AssetsScripting& assets, std::int32_t width,
+                                      std::int32_t height, ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.StoreFor(context, "Assets.AddRenderTarget");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Assets.AddRenderTarget") : std::nullopt;
+            if (!assetOwner)
             {
-                AssetStore* store = StoreFor(context, "Assets.IsValid");
-                return store != nullptr &&
-                       ForKind(context, kind, "Assets.IsValid", false,
-                               [&]<typename T>(AssetHandle<T>) { return store->IsValid(Unpack<T>(handle)); });
+                return 0;
             }
+            std::optional<ImageData> image =
+                ImageFrom(assets, context, width, height, nullptr, 0, "Assets.AddRenderTarget");
+            return image ? AssetsScripting::Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+        }
 
-            std::uint64_t AddMesh(const CallContext& context, const Math::Vec3* positions, std::int32_t positionCount,
-                                  const Math::Vec3* normals, std::int32_t normalCount, const Math::Vec2* uvs,
-                                  std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount,
-                                  std::uint8_t owner)
+        /**
+         * @brief Gives the render target a new size.
+         * @return Whether it was resized.
+         */
+        bool ResizeRenderTarget(const CallContext& context, AssetsScripting& assets, std::uint64_t image,
+                                std::int32_t width, std::int32_t height)
+        {
+            AssetStore* store = assets.Resolve<Image>(context, image, "Assets.ResizeRenderTarget");
+            if (store == nullptr)
             {
-                AssetStore* store = StoreFor(context, "Assets.AddMesh");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Assets.AddMesh") : std::nullopt;
-                if (!assetOwner)
-                {
-                    return 0;
-                }
-                std::optional<MeshData> mesh = MeshFrom(context, positions, positionCount, normals, normalCount, uvs,
-                                                        uvCount, indices, indexCount, "Assets.AddMesh");
-                return mesh ? Pack(store->Add<Mesh>(std::move(*mesh), *assetOwner)) : 0;
+                return false;
             }
-
-            bool ReplaceMesh(const CallContext& context, std::uint64_t handle, const Math::Vec3* positions,
-                             std::int32_t positionCount, const Math::Vec3* normals, std::int32_t normalCount,
-                             const Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices,
-                             std::int32_t indexCount)
+            if (!store->TryGet(AssetsScripting::Unpack<Image>(image))->pixels.empty())
             {
-                AssetStore* store = Resolve<Mesh>(context, handle, "Assets.ReplaceMesh");
-                if (store == nullptr)
-                {
-                    return false;
-                }
-                std::optional<MeshData> mesh = MeshFrom(context, positions, positionCount, normals, normalCount, uvs,
-                                                        uvCount, indices, indexCount, "Assets.ReplaceMesh");
-                return mesh && store->Replace(Unpack<Mesh>(handle), std::move(*mesh));
+                assets.WarnOnce(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render "
+                                         "target and it does nothing");
+                return false;
             }
+            std::optional<ImageData> data =
+                ImageFrom(assets, context, width, height, nullptr, 0, "Assets.ResizeRenderTarget");
+            return data && store->Replace(AssetsScripting::Unpack<Image>(image), std::move(*data));
+        }
 
-            std::uint64_t AddRenderTarget(const CallContext& context, std::int32_t width, std::int32_t height,
-                                          std::uint8_t owner)
+        /**
+         * @brief Adds an RGBA8 sRGB image of this size from `rgba8` for `owner`.
+         * @return The image, or the empty handle if the store refused it.
+         */
+        std::uint64_t AddImage(const CallContext& context, AssetsScripting& assets, std::int32_t width,
+                               std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount,
+                               ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.StoreFor(context, "Assets.AddImage");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Assets.AddImage") : std::nullopt;
+            if (!assetOwner)
             {
-                AssetStore* store = StoreFor(context, "Assets.AddRenderTarget");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Assets.AddRenderTarget") : std::nullopt;
-                if (!assetOwner)
-                {
-                    return 0;
-                }
-                std::optional<ImageData> image =
-                    ImageFrom(context, width, height, nullptr, 0, "Assets.AddRenderTarget");
-                return image ? Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+                return 0;
             }
+            std::optional<ImageData> image =
+                ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.AddImage");
+            return image ? AssetsScripting::Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+        }
 
-            bool ResizeRenderTarget(const CallContext& context, std::uint64_t handle, std::int32_t width,
-                                    std::int32_t height)
+        /**
+         * @brief Swaps the image's data for an RGBA8 sRGB image from `rgba8`.
+         * @return Whether it was replaced.
+         */
+        bool ReplaceImage(const CallContext& context, AssetsScripting& assets, std::uint64_t image, std::int32_t width,
+                          std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount)
+        {
+            AssetStore* store = assets.Resolve<Image>(context, image, "Assets.ReplaceImage");
+            if (store == nullptr)
             {
-                AssetStore* store = Resolve<Image>(context, handle, "Assets.ResizeRenderTarget");
-                if (store == nullptr)
-                {
-                    return false;
-                }
-                if (!store->TryGet(Unpack<Image>(handle))->pixels.empty())
-                {
-                    WarnOnce(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render target "
-                                      "and it does nothing");
-                    return false;
-                }
-                std::optional<ImageData> image =
-                    ImageFrom(context, width, height, nullptr, 0, "Assets.ResizeRenderTarget");
-                return image && store->Replace(Unpack<Image>(handle), std::move(*image));
+                return false;
             }
+            std::optional<ImageData> data =
+                ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.ReplaceImage");
+            return data && store->Replace(AssetsScripting::Unpack<Image>(image), std::move(*data));
+        }
 
-            std::uint64_t AddImage(const CallContext& context, std::int32_t width, std::int32_t height,
-                                   const std::uint8_t* rgba8, std::int32_t byteCount, std::uint8_t owner)
+        /**
+         * @brief A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial).
+         * @return The material, or the empty handle if the shader does not resolve.
+         */
+        std::uint64_t CreateMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t shader,
+                                     ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.Resolve<Shader>(context, shader, "Materials.Create");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Materials.Create") : std::nullopt;
+            return assetOwner ? AssetsScripting::Pack(
+                                    store->CreateMaterial(AssetsScripting::Unpack<Shader>(shader), *assetOwner))
+                              : 0;
+        }
+
+        /**
+         * @brief A copy of `material` for `owner` (AssetStore::CloneMaterial).
+         * @return The clone, or the empty handle if the material does not resolve.
+         */
+        std::uint64_t CloneMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                    ScriptAssetOwner owner)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Clone");
+            const std::optional<AssetOwner> assetOwner =
+                store ? assets.OwnerOf(context, owner, "Materials.Clone") : std::nullopt;
+            return assetOwner ? AssetsScripting::Pack(
+                                    store->CloneMaterial(AssetsScripting::Unpack<Material>(material), *assetOwner))
+                              : 0;
+        }
+
+        /** @brief Sets a `float` parameter (AssetStore::SetFloat). */
+        bool SetFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                      std::string_view name, float value)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetFloat");
+            return store != nullptr && store->SetFloat(AssetsScripting::Unpack<Material>(material), name, value);
+        }
+
+        /** @brief Sets a `vec2` parameter (AssetStore::SetVector2). */
+        bool SetVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                        std::string_view name, const Math::Vec2* value)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector2");
+            return store != nullptr && value != nullptr &&
+                   store->SetVector2(AssetsScripting::Unpack<Material>(material), name, *value);
+        }
+
+        /** @brief Sets a `vec3` parameter (AssetStore::SetVector3). */
+        bool SetVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                        std::string_view name, const Math::Vec3* value)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector3");
+            return store != nullptr && value != nullptr &&
+                   store->SetVector3(AssetsScripting::Unpack<Material>(material), name, *value);
+        }
+
+        /** @brief Sets a `vec4` parameter (AssetStore::SetVector4). */
+        bool SetVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                        std::string_view name, const Math::Vec4* value)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector4");
+            return store != nullptr && value != nullptr &&
+                   store->SetVector4(AssetsScripting::Unpack<Material>(material), name, *value);
+        }
+
+        /** @brief Sets a `vec4` parameter to a colour (AssetStore::SetColour). */
+        bool SetColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                       std::string_view name, const Colour* value)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetColour");
+            return store != nullptr && value != nullptr &&
+                   store->SetColour(AssetsScripting::Unpack<Material>(material), name, *value);
+        }
+
+        /** @brief Sets a texture parameter to `image`, read with `sampler` (AssetStore::SetTexture). */
+        bool SetTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                        std::string_view name, std::uint64_t image, const SamplerDescription* sampler)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetTexture");
+            return store != nullptr && sampler != nullptr &&
+                   store->SetTexture(AssetsScripting::Unpack<Material>(material), name,
+                                     AssetsScripting::Unpack<Image>(image), *sampler);
+        }
+
+        /** @brief Sets how the material's pixels combine with what is behind them (AssetStore::SetBlendMode). */
+        bool SetBlendMode(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                          BlendMode blendMode)
+        {
+            // `blendMode` comes from C#, so it may be none of the enumerators.
+            if (blendMode > BlendMode::Additive)
             {
-                AssetStore* store = StoreFor(context, "Assets.AddImage");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Assets.AddImage") : std::nullopt;
-                if (!assetOwner)
-                {
-                    return 0;
-                }
-                std::optional<ImageData> image = ImageFrom(context, width, height, rgba8, byteCount, "Assets.AddImage");
-                return image ? Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+                assets.WarnOnce(context, "Materials.SetBlendMode: no such blend mode, so it does nothing");
+                return false;
             }
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetBlendMode");
+            return store != nullptr && store->SetBlendMode(AssetsScripting::Unpack<Material>(material), blendMode);
+        }
 
-            bool ReplaceImage(const CallContext& context, std::uint64_t handle, std::int32_t width, std::int32_t height,
-                              const std::uint8_t* rgba8, std::int32_t byteCount)
+        /** @brief Sets the alpha below which a masked material discards a pixel (AssetStore::SetAlphaCutoff). */
+        bool SetAlphaCutoff(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                            float alphaCutoff)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetAlphaCutoff");
+            return store != nullptr && store->SetAlphaCutoff(AssetsScripting::Unpack<Material>(material), alphaCutoff);
+        }
+
+        /** @brief Sets whether both faces of the material are drawn (AssetStore::SetDoubleSided). */
+        bool SetDoubleSided(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                            bool doubleSided)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetDoubleSided");
+            return store != nullptr && store->SetDoubleSided(AssetsScripting::Unpack<Material>(material), doubleSided);
+        }
+
+        /**
+         * @brief Reads a `float` parameter's effective value (AssetStore::TryGetFloat).
+         * @param[out] value The value; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                         std::string_view name, float* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetFloat",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetFloat(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads a `vec2` parameter's effective value (AssetStore::TryGetVector2).
+         * @param[out] value The value; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                           std::string_view name, Math::Vec2* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetVector2",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetVector2(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads a `vec3` parameter's effective value (AssetStore::TryGetVector3).
+         * @param[out] value The value; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                           std::string_view name, Math::Vec3* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetVector3",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetVector3(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads a `vec4` parameter's effective value (AssetStore::TryGetVector4).
+         * @param[out] value The value; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                           std::string_view name, Math::Vec4* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetVector4",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetVector4(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads a `vec4` parameter's effective value as a colour (AssetStore::TryGetColour).
+         * @param[out] value The value; the default (white) when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                          std::string_view name, Colour* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetColour",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetColour(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads a texture parameter's effective value (AssetStore::TryGetTexture).
+         * @param[out] value The value; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                           std::string_view name, MaterialTexture* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetTexture",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetTexture(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own `float` override (AssetStore::TryGetOverrideFloat).
+         * @param[out] value The override; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                 std::string_view name, float* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideFloat",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideFloat(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own `vec2` override (AssetStore::TryGetOverrideVector2).
+         * @param[out] value The override; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                   std::string_view name, Math::Vec2* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector2",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideVector2(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own `vec3` override (AssetStore::TryGetOverrideVector3).
+         * @param[out] value The override; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                   std::string_view name, Math::Vec3* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector3",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideVector3(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own `vec4` override (AssetStore::TryGetOverrideVector4).
+         * @param[out] value The override; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                   std::string_view name, Math::Vec4* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector4",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideVector4(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own `vec4` override as a colour (AssetStore::TryGetOverrideColour).
+         * @param[out] value The override; the default (white) when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                  std::string_view name, Colour* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideColour",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideColour(handle, name);
+                            });
+        }
+
+        /**
+         * @brief Reads the material's own texture override (AssetStore::TryGetOverrideTexture).
+         * @param[out] value The override; the default when there is none.
+         * @return Whether there was one.
+         */
+        bool TryGetOverrideTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
+                                   std::string_view name, MaterialTexture* value)
+        {
+            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideTexture",
+                            [name](const AssetStore& store, AssetHandle<Material> handle) {
+                                return store.TryGetOverrideTexture(handle, name);
+                            });
+        }
+
+        /** @brief Whether the material has an override of the parameter (AssetStore::IsSet). */
+        bool IsSet(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.IsSet");
+            return store != nullptr && store->IsSet(AssetsScripting::Unpack<Material>(material), name);
+        }
+
+        /**
+         * @brief Removes the material's override of the parameter (AssetStore::Reset).
+         * @return Whether there was one to remove.
+         */
+        bool Reset(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
+        {
+            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Reset");
+            return store != nullptr && store->Reset(AssetsScripting::Unpack<Material>(material), name);
+        }
+
+        /** @brief How many material parameters the shader has (AssetStore::GetShaderParameters). */
+        std::int32_t GetShaderParameterCount(const CallContext& context, AssetsScripting& assets, std::uint64_t shader)
+        {
+            AssetStore* store = assets.Resolve<Shader>(context, shader, "Shaders.GetParameterCount");
+            return store != nullptr ? static_cast<std::int32_t>(
+                                          store->GetShaderParameters(AssetsScripting::Unpack<Shader>(shader)).size())
+                                    : 0;
+        }
+
+        /**
+         * @brief Reads parameter `index` of the shader: its type and default, and as much of its name as `capacity`
+         * chars from `name` on hold.
+         * @param[out] parameter The parameter without its name; the default when there is none.
+         * @return The name's whole length in chars, or zero if there is no such parameter.
+         */
+        std::int32_t GetShaderParameter(const CallContext& context, AssetsScripting& assets, std::uint64_t shader,
+                                        std::int32_t index, ScriptShaderParameter* parameter, char16_t* name,
+                                        std::int32_t capacity)
+        {
+            if (parameter != nullptr)
             {
-                AssetStore* store = Resolve<Image>(context, handle, "Assets.ReplaceImage");
-                if (store == nullptr)
-                {
-                    return false;
-                }
-                std::optional<ImageData> image =
-                    ImageFrom(context, width, height, rgba8, byteCount, "Assets.ReplaceImage");
-                return image && store->Replace(Unpack<Image>(handle), std::move(*image));
+                *parameter = ScriptShaderParameter{};
             }
-
-            std::uint64_t CreateMaterial(const CallContext& context, std::uint64_t shader, std::uint8_t owner)
+            AssetStore* store = assets.Resolve<Shader>(context, shader, "Shaders.GetParameter");
+            if (store == nullptr)
             {
-                AssetStore* store = Resolve<Shader>(context, shader, "Materials.Create");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Materials.Create") : std::nullopt;
-                return assetOwner ? Pack(store->CreateMaterial(Unpack<Shader>(shader), *assetOwner)) : 0;
+                return 0;
             }
-
-            std::uint64_t CloneMaterial(const CallContext& context, std::uint64_t material, std::uint8_t owner)
+            const std::span<const ShaderParameter> parameters =
+                store->GetShaderParameters(AssetsScripting::Unpack<Shader>(shader));
+            if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
             {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.Clone");
-                const std::optional<AssetOwner> assetOwner =
-                    store ? OwnerOf(context, owner, "Materials.Clone") : std::nullopt;
-                return assetOwner ? Pack(store->CloneMaterial(Unpack<Material>(material), *assetOwner)) : 0;
+                assets.WarnOnce(context, "Shaders.GetParameter: the shader has no parameter at that index, so it does "
+                                         "nothing");
+                return 0;
             }
-
-            bool SetFloat(const CallContext& context, std::uint64_t material, std::string_view name, float value)
+            const ShaderParameter& found = parameters[static_cast<std::size_t>(index)];
+            if (parameter != nullptr)
             {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetFloat");
-                return store != nullptr && store->SetFloat(Unpack<Material>(material), name, value);
+                *parameter = {
+                    found.type, {found.value[0], found.value[1], found.value[2], found.value[3]}, found.texture};
             }
-
-            bool SetVector2(const CallContext& context, std::uint64_t material, std::string_view name,
-                            const Math::Vec2* value)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetVector2");
-                return store != nullptr && value != nullptr &&
-                       store->SetVector2(Unpack<Material>(material), name, *value);
-            }
-
-            bool SetVector3(const CallContext& context, std::uint64_t material, std::string_view name,
-                            const Math::Vec3* value)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetVector3");
-                return store != nullptr && value != nullptr &&
-                       store->SetVector3(Unpack<Material>(material), name, *value);
-            }
-
-            bool SetVector4(const CallContext& context, std::uint64_t material, std::string_view name,
-                            const Math::Vec4* value)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetVector4");
-                return store != nullptr && value != nullptr &&
-                       store->SetVector4(Unpack<Material>(material), name, *value);
-            }
-
-            bool SetColour(const CallContext& context, std::uint64_t material, std::string_view name,
-                           const Colour* value)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetColour");
-                return store != nullptr && value != nullptr &&
-                       store->SetColour(Unpack<Material>(material), name, *value);
-            }
-
-            bool SetTexture(const CallContext& context, std::uint64_t material, std::string_view name,
-                            std::uint64_t image, const SamplerDescription* sampler)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetTexture");
-                return store != nullptr && sampler != nullptr &&
-                       store->SetTexture(Unpack<Material>(material), name, Unpack<Image>(image), *sampler);
-            }
-
-            bool SetBlendMode(const CallContext& context, std::uint64_t material, std::uint8_t blendMode)
-            {
-                if (blendMode > static_cast<std::uint8_t>(BlendMode::Additive))
-                {
-                    WarnOnce(context, "Materials.SetBlendMode: no such blend mode, so it does nothing");
-                    return false;
-                }
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetBlendMode");
-                return store != nullptr &&
-                       store->SetBlendMode(Unpack<Material>(material), static_cast<BlendMode>(blendMode));
-            }
-
-            bool SetAlphaCutoff(const CallContext& context, std::uint64_t material, float alphaCutoff)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetAlphaCutoff");
-                return store != nullptr && store->SetAlphaCutoff(Unpack<Material>(material), alphaCutoff);
-            }
-
-            bool SetDoubleSided(const CallContext& context, std::uint64_t material, bool doubleSided)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.SetDoubleSided");
-                return store != nullptr && store->SetDoubleSided(Unpack<Material>(material), doubleSided);
-            }
-
-            // One read native function: writes what `read` gives for a live material to `out`, if it gives anything.
-            // C# zeroes `out` before the call, so a read that finds nothing leaves it zero (not, say, a Colour's
-            // white). Warns once per `function` for a stale material.
-            template <typename Out, typename Read>
-            bool ReadInto(const CallContext& context, std::uint64_t material, Out* out, std::string_view function,
-                          Read&& read, std::source_location where = std::source_location::current())
-            {
-                AssetStore* store = Resolve<Material>(context, material, function, where);
-                return store != nullptr && Write(read(*store, Unpack<Material>(material)), out);
-            }
-
-// Each pair of TryGet and TryGetOverride natives for one value type: `Type` is the C++ type C# writes into, `Name` the
-// store function's suffix.
-#define FENRIR_MATERIAL_READS(Name, Type)                                                                           \
-    bool TryGet##Name(const CallContext& context, std::uint64_t material, std::string_view name, Type* out)         \
-    {                                                                                                               \
-        return ReadInto(context, material, out, "Materials.TryGet" #Name,                                           \
-                        [name](const AssetStore& store, AssetHandle<Material> handle) {                             \
-                            return store.TryGet##Name(handle, name);                                                \
-                        });                                                                                         \
-    }                                                                                                               \
-    bool TryGetOverride##Name(const CallContext& context, std::uint64_t material, std::string_view name, Type* out) \
-    {                                                                                                               \
-        return ReadInto(context, material, out, "Materials.TryGetOverride" #Name,                                   \
-                        [name](const AssetStore& store, AssetHandle<Material> handle) {                             \
-                            return store.TryGetOverride##Name(handle, name);                                        \
-                        });                                                                                         \
-    }
-
-            FENRIR_MATERIAL_READS(Float, float)
-            FENRIR_MATERIAL_READS(Vector2, Math::Vec2)
-            FENRIR_MATERIAL_READS(Vector3, Math::Vec3)
-            FENRIR_MATERIAL_READS(Vector4, Math::Vec4)
-            FENRIR_MATERIAL_READS(Colour, Colour)
-            FENRIR_MATERIAL_READS(Texture, MaterialTexture)
-#undef FENRIR_MATERIAL_READS
-
-            bool IsSet(const CallContext& context, std::uint64_t material, std::string_view name)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.IsSet");
-                return store != nullptr && store->IsSet(Unpack<Material>(material), name);
-            }
-
-            bool Reset(const CallContext& context, std::uint64_t material, std::string_view name)
-            {
-                AssetStore* store = Resolve<Material>(context, material, "Materials.Reset");
-                return store != nullptr && store->Reset(Unpack<Material>(material), name);
-            }
-
-            std::int32_t GetParameterCount(const CallContext& context, std::uint64_t shader)
-            {
-                AssetStore* store = Resolve<Shader>(context, shader, "Shaders.GetParameterCount");
-                return store != nullptr
-                           ? static_cast<std::int32_t>(store->GetShaderParameters(Unpack<Shader>(shader)).size())
-                           : 0;
-            }
-
-            std::int32_t GetParameter(const CallContext& context, std::uint64_t shader, std::int32_t index,
-                                      ScriptShaderParameter* parameter, char16_t* name, std::int32_t capacity)
-            {
-                if (parameter != nullptr)
-                {
-                    *parameter = ScriptShaderParameter{};
-                }
-                AssetStore* store = Resolve<Shader>(context, shader, "Shaders.GetParameter");
-                if (store == nullptr)
-                {
-                    return 0;
-                }
-                const std::span<const ShaderParameter> parameters = store->GetShaderParameters(Unpack<Shader>(shader));
-                if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
-                {
-                    WarnOnce(context, "Shaders.GetParameter: the shader has no parameter at that index, so it does "
-                                      "nothing");
-                    return 0;
-                }
-                const ShaderParameter& found = parameters[static_cast<std::size_t>(index)];
-                if (parameter != nullptr)
-                {
-                    *parameter = {
-                        found.type, {found.value[0], found.value[1], found.value[2], found.value[3]}, found.texture};
-                }
-                // GLSL names are ASCII, so each byte is one UTF-16 char.
-                const std::size_t room = name == nullptr || capacity < 0 ? 0 : static_cast<std::size_t>(capacity);
-                const std::string_view copied = std::string_view(found.name).substr(0, room);
-                std::transform(copied.begin(), copied.end(), name,
-                               [](char c) { return static_cast<char16_t>(static_cast<unsigned char>(c)); });
-                return static_cast<std::int32_t>(found.name.size());
-            }
-        } // namespace Native
-    } // namespace
+            // GLSL names are ASCII, so each byte is one UTF-16 char.
+            const std::size_t room = name == nullptr || capacity < 0 ? 0 : static_cast<std::size_t>(capacity);
+            const std::string_view copied = std::string_view(found.name).substr(0, room);
+            std::transform(copied.begin(), copied.end(), name,
+                           [](char c) { return static_cast<char16_t>(static_cast<unsigned char>(c)); });
+            return static_cast<std::int32_t>(found.name.size());
+        }
+    } // namespace AssetsNatives
 
     Fenrir::ScriptingExtension Assets::ScriptingExtension()
     {
-        const std::string assets = "Fenrir.Assets.AssetsNative.";
-        const std::string materials = "Fenrir.Assets.MaterialsNative.";
-        const std::string shaders = "Fenrir.Assets.ShadersNative.";
         Fenrir::ScriptingExtension extension;
         extension.name = "FenrirAssets";
+        extension.SetState(std::make_shared<AssetsScripting>());
         extension.sharedAssemblies = {"Fenrir.Assets.dll"};
-        extension.functions = {
-            NativeFunction::Make<&Native::Load>(assets + "Load"),
-            NativeFunction::Make<&Native::Unload>(assets + "Unload"),
-            NativeFunction::Make<&Native::IsValid>(assets + "IsValid"),
-            NativeFunction::Make<&Native::AddMesh>(assets + "AddMesh"),
-            NativeFunction::Make<&Native::ReplaceMesh>(assets + "ReplaceMesh"),
-            NativeFunction::Make<&Native::AddRenderTarget>(assets + "AddRenderTarget"),
-            NativeFunction::Make<&Native::ResizeRenderTarget>(assets + "ResizeRenderTarget"),
-            NativeFunction::Make<&Native::AddImage>(assets + "AddImage"),
-            NativeFunction::Make<&Native::ReplaceImage>(assets + "ReplaceImage"),
-
-            NativeFunction::Make<&Native::CreateMaterial>(materials + "Create"),
-            NativeFunction::Make<&Native::CloneMaterial>(materials + "Clone"),
-            NativeFunction::Make<&Native::SetFloat>(materials + "SetFloat"),
-            NativeFunction::Make<&Native::SetVector2>(materials + "SetVector2"),
-            NativeFunction::Make<&Native::SetVector3>(materials + "SetVector3"),
-            NativeFunction::Make<&Native::SetVector4>(materials + "SetVector4"),
-            NativeFunction::Make<&Native::SetColour>(materials + "SetColour"),
-            NativeFunction::Make<&Native::SetTexture>(materials + "SetTexture"),
-            NativeFunction::Make<&Native::SetBlendMode>(materials + "SetBlendMode"),
-            NativeFunction::Make<&Native::SetAlphaCutoff>(materials + "SetAlphaCutoff"),
-            NativeFunction::Make<&Native::SetDoubleSided>(materials + "SetDoubleSided"),
-            NativeFunction::Make<&Native::TryGetFloat>(materials + "TryGetFloat"),
-            NativeFunction::Make<&Native::TryGetVector2>(materials + "TryGetVector2"),
-            NativeFunction::Make<&Native::TryGetVector3>(materials + "TryGetVector3"),
-            NativeFunction::Make<&Native::TryGetVector4>(materials + "TryGetVector4"),
-            NativeFunction::Make<&Native::TryGetColour>(materials + "TryGetColour"),
-            NativeFunction::Make<&Native::TryGetTexture>(materials + "TryGetTexture"),
-            NativeFunction::Make<&Native::TryGetOverrideFloat>(materials + "TryGetOverrideFloat"),
-            NativeFunction::Make<&Native::TryGetOverrideVector2>(materials + "TryGetOverrideVector2"),
-            NativeFunction::Make<&Native::TryGetOverrideVector3>(materials + "TryGetOverrideVector3"),
-            NativeFunction::Make<&Native::TryGetOverrideVector4>(materials + "TryGetOverrideVector4"),
-            NativeFunction::Make<&Native::TryGetOverrideColour>(materials + "TryGetOverrideColour"),
-            NativeFunction::Make<&Native::TryGetOverrideTexture>(materials + "TryGetOverrideTexture"),
-            NativeFunction::Make<&Native::IsSet>(materials + "IsSet"),
-            NativeFunction::Make<&Native::Reset>(materials + "Reset"),
-
-            NativeFunction::Make<&Native::GetParameterCount>(shaders + "GetParameterCount"),
-            NativeFunction::Make<&Native::GetParameter>(shaders + "GetParameter"),
-        };
+        Generated::RegisterAssets(extension);
         return extension;
     }
 } // namespace Fenrir

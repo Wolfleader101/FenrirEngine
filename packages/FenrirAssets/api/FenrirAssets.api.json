@@ -1,0 +1,158 @@
+{
+  "package": "FenrirAssets",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Image>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Material>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Mesh>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Model>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::AssetHandle<Fenrir::Shader>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "Names one asset of kind `T` (`Mesh`, `Image`, `Material`, `Shader` or `Model`) in the asset store: a slot index plus the generation the slot had when the asset was made (ADR-0021). Plain data that keeps nothing alive, so components hold it and C# receives it as a value. Once the asset is freed the slot's generation moves on and the handle is stale: it no longer resolves, and users skip it. A default-made handle is empty and never resolves."
+    },
+    {
+      "name": "Fenrir::SamplerFilter",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How a texture is filtered between its pixels and its mips.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Nearest",
+          "value": 0,
+          "doc": "The nearest pixel of the nearest mip."
+        },
+        {
+          "name": "Bilinear",
+          "value": 1,
+          "doc": "Linear between pixels, from the nearest mip."
+        },
+        {
+          "name": "Trilinear",
+          "value": 2,
+          "doc": "Linear between pixels and between mips."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SamplerWrap",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "What a texture does with coordinates outside [0, 1].",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Repeat",
+          "value": 0
+        },
+        {
+          "name": "MirroredRepeat",
+          "value": 1
+        },
+        {
+          "name": "ClampToEdge",
+          "value": 2
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::SamplerDescription",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "How a texture parameter is sampled (ADR-0024): its wrap along each axis, filter and anisotropy. The renderer core shares one sampler between parameters with equal descriptions. Default made, it is the spec's default sampler: repeat, trilinear, anisotropy 8.",
+      "fields": [
+        {
+          "name": "wrapU",
+          "offset": 0,
+          "kind": "enum",
+          "type": "Fenrir::SamplerWrap",
+          "default": "Repeat",
+          "doc": "The wrap across the texture's width, the U coordinate (glTF's S)."
+        },
+        {
+          "name": "wrapV",
+          "offset": 1,
+          "kind": "enum",
+          "type": "Fenrir::SamplerWrap",
+          "default": "Repeat",
+          "doc": "The wrap down the texture's height, the V coordinate (glTF's T)."
+        },
+        {
+          "name": "filter",
+          "offset": 2,
+          "kind": "enum",
+          "type": "Fenrir::SamplerFilter",
+          "default": "Trilinear"
+        },
+        {
+          "name": "anisotropy",
+          "offset": 4,
+          "kind": "u32",
+          "default": 8,
+          "doc": "The most anisotropic filtering taken, 1 for none. The renderer clamps it to what the device has."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::MaterialTexture",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A texture parameter's value: an image and the sampler it is read with. An empty image stands for the shader's default texture (`white`, `black` or `normal`, from GetShaderParameters), which the renderer binds.",
+      "fields": [
+        {
+          "name": "image",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::AssetHandle<Fenrir::Image>",
+          "default": {}
+        },
+        {
+          "name": "sampler",
+          "offset": 8,
+          "kind": "struct",
+          "type": "Fenrir::SamplerDescription",
+          "default": {}
+        }
+      ]
+    }
+  ]
+}

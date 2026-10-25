@@ -18,4 +18,6 @@ private-members = ["Fixture::Tag"]
 "Fixture::Quat" = "bound-type"
 "Fixture::Handle" = "bound-type"
 "Fixture::Size" = "bound-type"
+# A specialisation named with its arguments, which no alias names and nothing instantiates.
+"Fixture::Pair<double>" = "bound-type"
 "Fixture::Ticket" = "bound-type"

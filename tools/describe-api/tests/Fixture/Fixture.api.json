@@ -621,6 +621,14 @@
       ]
     },
     {
+      "name": "Fixture::Pair<double>",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
+      "alignment": 8,
+      "doc": "A pair of values, as a class template."
+    },
+    {
       "name": "Fixture::Size",
       "category": "bound-type",
       "role": "bound-type",

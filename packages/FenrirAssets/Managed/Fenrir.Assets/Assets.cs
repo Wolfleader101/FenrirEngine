@@ -1,5 +1,4 @@
 using Fenrir.Math;
-using Fenrir.Scripting;
 
 namespace Fenrir.Assets;
 
@@ -14,8 +13,8 @@ namespace Fenrir.Assets;
 /// <para>
 /// Nothing here throws. With no asset store in the app (FenrirAssets not installed), a stale or empty handle, or an
 /// argument C++ refuses, a function does nothing and returns <c>false</c> or the empty handle. A load that fails returns the
-/// empty handle, and the store logs why. In a debug build of the engine a warning is logged once per process for each place
-/// in the engine's native code that noticed (not once per C# call site).
+/// empty handle, and the store logs why. In a debug build of the engine a warning is logged once per scripting install for
+/// each place in the engine's native code that noticed (not once per C# call site).
 /// </para>
 /// </remarks>
 public static class Assets
@@ -27,7 +26,7 @@ public static class Assets
     /// </summary>
     /// <returns>The asset, or the empty handle if the load failed (logged with its reason).</returns>
     public static AssetHandle<T> Load<T>(ReadOnlySpan<char> path, AssetOwner owner = AssetOwner.Scene) where T : class =>
-        AssetHandle<T>.FromBits(AssetsNative.Load(AssetKind<T>.Value, path, (byte)owner));
+        AssetHandle<T>.FromBits(AssetsNative.Load(AssetKind<T>.Value, path, owner));
 
     /// <summary>Frees the asset now, whoever owns it: every handle to it becomes stale.</summary>
     /// <returns>Whether the handle named a live asset.</returns>
@@ -53,7 +52,7 @@ public static class Assets
         fixed (Vector2* firstUv = uvs)
         fixed (uint* firstIndex = indices)
             return AssetHandle<Mesh>.FromBits(AssetsNative.AddMesh(firstPosition, positions.Length, firstNormal, normals.Length,
-                                                                   firstUv, uvs.Length, firstIndex, indices.Length, (byte)owner));
+                                                                   firstUv, uvs.Length, firstIndex, indices.Length, owner));
     }
 
     /// <summary>
@@ -78,7 +77,7 @@ public static class Assets
     /// </summary>
     /// <returns>The image, or the empty handle if either side is under one pixel.</returns>
     public static AssetHandle<Image> AddRenderTarget(int width, int height, AssetOwner owner = AssetOwner.Scene) =>
-        AssetHandle<Image>.FromBits(AssetsNative.AddRenderTarget(width, height, (byte)owner));
+        AssetHandle<Image>.FromBits(AssetsNative.AddRenderTarget(width, height, owner));
 
     /// <summary>Gives the render target <paramref name="image"/> a new size, bumping its revision.</summary>
     /// <returns>
@@ -97,7 +96,7 @@ public static class Assets
                                                      AssetOwner owner = AssetOwner.Scene)
     {
         fixed (byte* first = rgba8)
-            return AssetHandle<Image>.FromBits(AssetsNative.AddImage(width, height, first, rgba8.Length, (byte)owner));
+            return AssetHandle<Image>.FromBits(AssetsNative.AddImage(width, height, first, rgba8.Length, owner));
     }
 
     /// <summary>
@@ -110,39 +109,4 @@ public static class Assets
         fixed (byte* first = rgba8)
             return AssetsNative.ReplaceImage(image.Bits, width, height, first, rgba8.Length);
     }
-}
-
-// The native functions behind Assets, each named "Fenrir.Assets.AssetsNative.<Method>" in FenrirAssetsScripting's extension.
-// A handle crosses as its bits (AssetHandle<T>.Bits) and its kind as FenrirAssets' Detail::AssetKind; an owner as its
-// AssetOwner value; spans as a pointer and a count.
-internal static unsafe partial class AssetsNative
-{
-    [NativeFunction]
-    public static partial ulong Load(byte kind, ReadOnlySpan<char> path, byte owner);
-
-    [NativeFunction]
-    public static partial bool Unload(byte kind, ulong handle);
-
-    [NativeFunction]
-    public static partial bool IsValid(byte kind, ulong handle);
-
-    [NativeFunction]
-    public static partial ulong AddMesh(Vector3* positions, int positionCount, Vector3* normals, int normalCount, Vector2* uvs,
-                                        int uvCount, uint* indices, int indexCount, byte owner);
-
-    [NativeFunction]
-    public static partial bool ReplaceMesh(ulong mesh, Vector3* positions, int positionCount, Vector3* normals, int normalCount,
-                                           Vector2* uvs, int uvCount, uint* indices, int indexCount);
-
-    [NativeFunction]
-    public static partial ulong AddRenderTarget(int width, int height, byte owner);
-
-    [NativeFunction]
-    public static partial bool ResizeRenderTarget(ulong image, int width, int height);
-
-    [NativeFunction]
-    public static partial ulong AddImage(int width, int height, byte* rgba8, int byteCount, byte owner);
-
-    [NativeFunction]
-    public static partial bool ReplaceImage(ulong image, int width, int height, byte* rgba8, int byteCount);
 }
