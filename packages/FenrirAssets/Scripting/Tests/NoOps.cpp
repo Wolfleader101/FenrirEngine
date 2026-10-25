@@ -2,9 +2,9 @@
 // and every Fenrir.Assets function does nothing and returns false, zero or the empty handle, with out values zeroed;
 // a stale handle does the same. Nothing throws, and a debug build warns once per native call site.
 //
-// A native call site warns once per process, so these tests run in a process of their own (CTest's
-// FenrirAssetsScripting-NoOps), in declaration order (--order decl): the empty-handle case reaches the call sites the
-// stale-handle case counts warnings at, so it comes after.
+// A native call site warns once per Scripting given the extension (its state keeps the record), so each case counts
+// its own warnings. They still run in a process of their own (CTest's FenrirAssetsScripting-NoOps), in declaration
+// order (--order decl), as they did when the record was per process.
 
 #include <catch2/catch_test_macros.hpp>
 

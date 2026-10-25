@@ -87,28 +87,17 @@ public struct AssetHandle<T> : IEquatable<AssetHandle<T>> where T : class
     internal static AssetHandle<T> FromBits(ulong bits) => new((uint)bits, (uint)(bits >> 32));
 }
 
-/// <summary>
-/// Who an asset is loaded or added for. It lives until its last owner ends, or until it is unloaded; naming an owner
-/// twice is the same as naming it once.
-/// </summary>
-public enum AssetOwner : byte
-{
-    /// <summary>The active scene: the asset is released when that scene is destroyed.</summary>
-    Scene,
-    /// <summary>The app: the asset lives as long as the asset store.</summary>
-    App,
-}
-
-// The number each asset kind crosses to a native function as: FenrirAssets' Detail::AssetKind.
+// The kind each asset name crosses to a native function as: FenrirAssets' Detail::AssetKind, generated as AssetKind.
 internal static class AssetKind<T> where T : class
 {
-    internal const byte Unknown = 255;
+    // No kind of asset: the natives warn and do nothing.
+    internal const AssetKind Unknown = (AssetKind)255;
 
-    internal static readonly byte Value =
-        typeof(T) == typeof(Mesh) ? (byte)0 :
-        typeof(T) == typeof(Image) ? (byte)1 :
-        typeof(T) == typeof(Material) ? (byte)2 :
-        typeof(T) == typeof(Shader) ? (byte)3 :
-        typeof(T) == typeof(Model) ? (byte)4 :
+    internal static readonly AssetKind Value =
+        typeof(T) == typeof(Mesh) ? AssetKind.Mesh :
+        typeof(T) == typeof(Image) ? AssetKind.Image :
+        typeof(T) == typeof(Material) ? AssetKind.Material :
+        typeof(T) == typeof(Shader) ? AssetKind.Shader :
+        typeof(T) == typeof(Model) ? AssetKind.Model :
         Unknown;
 }

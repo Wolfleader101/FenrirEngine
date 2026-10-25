@@ -1,0 +1,1177 @@
+{
+  "binding": "FenrirAssets",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Load",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Loads the asset of `kind` at `path` for `owner` (AssetStore::Load).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The asset's handle, or the empty handle if the load failed (the store logs why)."
+      },
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "Fenrir::Detail::AssetKind",
+          "kind": "enum"
+        },
+        {
+          "name": "path",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "Unload",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Frees the asset of `kind` now, whoever owns it.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the handle named a live asset."
+      },
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "Fenrir::Detail::AssetKind",
+          "kind": "enum"
+        },
+        {
+          "name": "handle",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "IsValid",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Whether `handle` names a live asset of `kind`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "kind",
+          "type": "Fenrir::Detail::AssetKind",
+          "kind": "enum"
+        },
+        {
+          "name": "handle",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "AddMesh",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Adds a mesh of these vertex streams and triangles for `owner`, drawn with one material.",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The mesh, or the empty handle if the store refused it."
+      },
+      "parameters": [
+        {
+          "name": "positions",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "positionCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "normals",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "normalCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "uvs",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "uvCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "indices",
+          "type": "const std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32",
+          "const": true
+        },
+        {
+          "name": "indexCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ReplaceMesh",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Swaps the mesh's data for these streams and triangles.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was replaced."
+      },
+      "parameters": [
+        {
+          "name": "mesh",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "positions",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "positionCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "normals",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "normalCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "uvs",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "uvCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "indices",
+          "type": "const std::uint32_t*",
+          "kind": "pointer",
+          "pointee": "std::uint32_t",
+          "pointeeKind": "u32",
+          "const": true
+        },
+        {
+          "name": "indexCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "AddRenderTarget",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels.",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The image, or the empty handle if either side is under one pixel."
+      },
+      "parameters": [
+        {
+          "name": "width",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "height",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ResizeRenderTarget",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Gives the render target a new size.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was resized."
+      },
+      "parameters": [
+        {
+          "name": "image",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "width",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "height",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "AddImage",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Adds an RGBA8 sRGB image of this size from `rgba8` for `owner`.",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The image, or the empty handle if the store refused it."
+      },
+      "parameters": [
+        {
+          "name": "width",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "height",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "rgba8",
+          "type": "const std::uint8_t*",
+          "kind": "pointer",
+          "pointee": "std::uint8_t",
+          "pointeeKind": "u8",
+          "const": true
+        },
+        {
+          "name": "byteCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ReplaceImage",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Swaps the image's data for an RGBA8 sRGB image from `rgba8`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was replaced."
+      },
+      "parameters": [
+        {
+          "name": "image",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "width",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "height",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "rgba8",
+          "type": "const std::uint8_t*",
+          "kind": "pointer",
+          "pointee": "std::uint8_t",
+          "pointeeKind": "u8",
+          "const": true
+        },
+        {
+          "name": "byteCount",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "CreateMaterial",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The material, or the empty handle if the shader does not resolve."
+      },
+      "parameters": [
+        {
+          "name": "shader",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "CloneMaterial",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "A copy of `material` for `owner` (AssetStore::CloneMaterial).",
+      "returns": {
+        "type": "std::uint64_t",
+        "kind": "u64",
+        "doc": "The clone, or the empty handle if the material does not resolve."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "owner",
+          "type": "Fenrir::ScriptAssetOwner",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "SetFloat",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a `float` parameter (AssetStore::SetFloat).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "SetVector2",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a `vec2` parameter (AssetStore::SetVector2).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetVector3",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a `vec3` parameter (AssetStore::SetVector3).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetVector4",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a `vec4` parameter (AssetStore::SetVector4).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "const Fenrir::Math::Vec4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec4",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetColour",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a `vec4` parameter to a colour (AssetStore::SetColour).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "const Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetTexture",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets a texture parameter to `image`, read with `sampler` (AssetStore::SetTexture).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "image",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "sampler",
+          "type": "const Fenrir::SamplerDescription*",
+          "kind": "pointer",
+          "pointee": "Fenrir::SamplerDescription",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "SetBlendMode",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets how the material's pixels combine with what is behind them (AssetStore::SetBlendMode).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "blendMode",
+          "type": "Fenrir::BlendMode",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "SetAlphaCutoff",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets the alpha below which a masked material discards a pixel (AssetStore::SetAlphaCutoff).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "alphaCutoff",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
+    },
+    {
+      "name": "SetDoubleSided",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Sets whether both faces of the material are drawn (AssetStore::SetDoubleSided).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "doubleSided",
+          "type": "bool",
+          "kind": "bool"
+        }
+      ]
+    },
+    {
+      "name": "TryGetFloat",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a `float` parameter's effective value (AssetStore::TryGetFloat).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "float*",
+          "kind": "pointer",
+          "pointee": "float",
+          "pointeeKind": "f32",
+          "output": true,
+          "doc": "The value; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetVector2",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a `vec2` parameter's effective value (AssetStore::TryGetVector2).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The value; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetVector3",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a `vec3` parameter's effective value (AssetStore::TryGetVector3).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The value; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetVector4",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a `vec4` parameter's effective value (AssetStore::TryGetVector4).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The value; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetColour",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a `vec4` parameter's effective value as a colour (AssetStore::TryGetColour).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The value; the default (white) when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetTexture",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads a texture parameter's effective value (AssetStore::TryGetTexture).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::MaterialTexture*",
+          "kind": "pointer",
+          "pointee": "Fenrir::MaterialTexture",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The value; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideFloat",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own `float` override (AssetStore::TryGetOverrideFloat).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "float*",
+          "kind": "pointer",
+          "pointee": "float",
+          "pointeeKind": "f32",
+          "output": true,
+          "doc": "The override; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideVector2",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own `vec2` override (AssetStore::TryGetOverrideVector2).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The override; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideVector3",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own `vec3` override (AssetStore::TryGetOverrideVector3).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The override; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideVector4",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own `vec4` override (AssetStore::TryGetOverrideVector4).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Math::Vec4*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec4",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The override; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideColour",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own `vec4` override as a colour (AssetStore::TryGetOverrideColour).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::Colour*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Colour",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The override; the default (white) when there is none."
+        }
+      ]
+    },
+    {
+      "name": "TryGetOverrideTexture",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads the material's own texture override (AssetStore::TryGetOverrideTexture).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "value",
+          "type": "Fenrir::MaterialTexture*",
+          "kind": "pointer",
+          "pointee": "Fenrir::MaterialTexture",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The override; the default when there is none."
+        }
+      ]
+    },
+    {
+      "name": "IsSet",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Whether the material has an override of the parameter (AssetStore::IsSet).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "Reset",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Removes the material's override of the parameter (AssetStore::Reset).",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there was one to remove."
+      },
+      "parameters": [
+        {
+          "name": "material",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "name",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "GetShaderParameterCount",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "How many material parameters the shader has (AssetStore::GetShaderParameters).",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32"
+      },
+      "parameters": [
+        {
+          "name": "shader",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        }
+      ]
+    },
+    {
+      "name": "GetShaderParameter",
+      "namespace": "Fenrir::AssetsNatives",
+      "source": "../src/AssetsScripting.cpp",
+      "state": "Fenrir::AssetsScripting",
+      "doc": "Reads parameter `index` of the shader: its type and default, and as much of its name as `capacity` chars from `name` on hold.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "The name's whole length in chars, or zero if there is no such parameter."
+      },
+      "parameters": [
+        {
+          "name": "shader",
+          "type": "std::uint64_t",
+          "kind": "u64"
+        },
+        {
+          "name": "index",
+          "type": "std::int32_t",
+          "kind": "i32"
+        },
+        {
+          "name": "parameter",
+          "type": "Fenrir::ScriptShaderParameter*",
+          "kind": "pointer",
+          "pointee": "Fenrir::ScriptShaderParameter",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The parameter without its name; the default when there is none."
+        },
+        {
+          "name": "name",
+          "type": "char16_t*",
+          "kind": "pointer",
+          "pointee": "char16_t",
+          "pointeeKind": "char16"
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    }
+  ]
+}

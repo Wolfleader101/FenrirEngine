@@ -1,7 +1,7 @@
-// The C# mirrors' shapes (spec seam 7: each extension's layouts): AssetHandle<T> for every asset kind, and the values
-// the native functions read and write through pointers (SamplerDescription, MaterialTexture, ShaderParameter), are laid
-// out as C++'s, checked field by field, offsets and nested enums included, by the mappings another package's extension
-// uses for its components (AssetMappings.hpp).
+// The C# handles' shape (spec seam 7: each extension's layouts): AssetHandle<T> for every asset kind is laid out as
+// C++'s, checked field by field by the hand-written mappings another package's binding uses for its components
+// (AssetMappings.hpp). The generated mirrors (SamplerDescription, MaterialTexture, ShaderParameter) are checked by the
+// generated defaults test (Generated/FenrirAssetsDefaultsTests.cpp) and whenever the extension registers them.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,12 +32,4 @@ TEST_CASE("AssetHandle<T> has the C++ layout for every asset kind", "[assets][sc
     RequireSameLayout<AssetHandle<Material>>(test, "AssetHandle<Material>");
     RequireSameLayout<AssetHandle<Shader>>(test, "AssetHandle<Shader>");
     RequireSameLayout<AssetHandle<Model>>(test, "AssetHandle<Model>");
-}
-
-TEST_CASE("The sampler, texture value and shader parameter C# passes have the C++ layout", "[assets][scripting]")
-{
-    AssetsScriptingApp test;
-    RequireSameLayout<SamplerDescription>(test, "SamplerDescription");
-    RequireSameLayout<MaterialTexture>(test, "MaterialTexture");
-    RequireSameLayout<ScriptShaderParameter>(test, "ShaderParameter");
 }
