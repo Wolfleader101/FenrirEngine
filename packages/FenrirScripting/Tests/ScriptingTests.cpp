@@ -1242,10 +1242,10 @@ namespace
         ExpectTheMirrorMatches<glm::vec3>(*component, "Fenrir.Math.Vector3");
         ExpectTheMirrorMatches<glm::vec4>(*component, "Fenrir.Math.Vector4");
         ExpectTheMirrorMatches<glm::quat>(*component, "Fenrir.Math.Quaternion");
-        ExpectTheMirrorMatches<Detail::Mat4View>(*component, "Fenrir.Math.Matrix4x4");
+        ExpectTheMirrorMatches<Math::Mat4>(*component, "Fenrir.Math.Matrix4x4");
         ExpectTheMirrorMatches<Colour>(*component, "Fenrir.Math.Colour");
         ExpectTheMirrorMatches<Math::Ray>(*component, "Fenrir.Math.Ray");
-        ExpectTheMirrorMatches<Detail::BoundsView>(*component, "Fenrir.Math.Bounds");
+        ExpectTheMirrorMatches<Math::AABB>(*component, "Fenrir.Math.Bounds");
         // Transform stays in the scripting contract, built from Fenrir.Math's Vector3 and Quaternion.
         ExpectTheMirrorMatches<Transform>(*component, "Fenrir.Scripting.Transform");
     }
@@ -1260,8 +1260,7 @@ namespace
         }
         // A translation by (1, 2, 3) in glm's column-major matrix: the translation is the fourth column.
         const Math::Mat4 translation = Math::Translate(Math::Mat4(1.0F), Math::Vec3(1.0F, 2.0F, 3.0F));
-        Detail::Mat4View matrix{};
-        std::memcpy(&matrix, &translation, sizeof(matrix));
+        const Math::Mat4 matrix = translation;
         {
             INFO("C# did not read the translation in the fourth column");
             REQUIRE(Maths<float>(scripting, "MatrixElement", matrix, 3, 0) == 1.0F);
@@ -1278,7 +1277,7 @@ namespace
         }
         {
             INFO("C#'s Matrix4x4.Identity was not the identity C++ makes");
-            const auto identity = Maths<Detail::Mat4View>(scripting, "Identity");
+            const auto identity = Maths<Math::Mat4>(scripting, "Identity");
             const Math::Mat4 expected(1.0F);
             REQUIRE(std::memcmp(&identity, &expected, sizeof(identity)) == 0);
         }

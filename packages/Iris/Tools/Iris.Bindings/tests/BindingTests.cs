@@ -557,7 +557,8 @@ public sealed class BindingTests
     [Theory]
     [InlineData("UsedAndExcluded", "Fixture::Spring is mirrored by the binding it uses, ", "but exclude names it too")]
     [InlineData("UsedAndBound", "Fixture::Spring is mirrored by the binding it uses, ", "but [bound-types] names it too")]
-    [InlineData("UsedAndSelected", "Fixture::Spring is mirrored by the binding it uses, ", "but Fixture.api.json selects it as its own")]
+    [InlineData("UsedAndSelected", "Fixture::Spring is mirrored by the binding it uses, ",
+                "but Fixture.api.json selects it as a component and Common.api.json as a shared struct: select it as one")]
     [InlineData("UsedWithAnotherLayout", "Fixture::Spring is mirrored by the binding it uses, ", "which describes it with another layout")]
     [InlineData("UsedTwice", "Fixture::Spring is mirrored by the binding it uses, ", "use the type from one of them")]
     [InlineData("UsesMissing", "uses ", "Missing.binding.toml, which does not exist")]
@@ -616,7 +617,7 @@ public sealed class BindingTests
             switch (problem)
             {
                 case "UsedAndSelected":
-                    Type(root, "Fixture::Spring")["role"] = "shared-struct";
+                    Type(root, "Fixture::Spring")["role"] = "component";
                     break;
                 case "UsedWithAnotherLayout":
                     Type(root, "Fixture::Spring")["alignment"] = 8;

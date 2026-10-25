@@ -1,0 +1,46 @@
+# FenrirMath's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): FenrirMath's description bound to the
+# Fenrir.Math contract. Its colour, ray and box are generated here; the glm types stay bound types, written by hand in the
+# contract and mapped in FenrirScripting/BoundMappings.hpp. Every other binding names these mirrors through `uses`, so a
+# math type has one C# type and one mapping. Paths are relative to this file. `cmake --build <dir> --target
+# fenrir-generate-bindings` regenerates every output below; they are committed.
+namespace = "Fenrir.Math"
+# Named so the bindings that use this one can read them.
+descriptions = ["../../FenrirMath/api/FenrirMath.api.json"]
+
+[csharp]
+contract = "../../FenrirMath/Managed/Fenrir.Math"
+generated = "../../FenrirMath/Managed/Fenrir.Math/Generated"
+# None of these is used: the contract has no components or events, and references no scripting.
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+
+[cpp]
+mappings = "../include/FenrirScripting/Generated/FenrirMathMappings.hpp"
+includes = ["FenrirMath/Colour.hpp", "FenrirMath/Math.hpp", "FenrirScripting/BoundMappings.hpp"]
+
+# No registration: the built-in extension shares the Fenrir.Math assembly. The defaults test runs in the built-in
+# binding's fixture.
+[tests]
+cpp = "../Tests/Generated/FenrirMathDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirMathDefaults.cs"
+class = "Fenrir.ScriptFixture.MathDefaults"
+includes = ["FixtureApp.hpp", "ScriptingProbe.hpp"]
+setup = "Fenrir::Testing::FixtureApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[scripting][bindings]"
+
+[bound-types]
+"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
+"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Fenrir::Math::Vec4" = { type = "Vector4", constructor = ["x", "y", "z", "w"] }
+# glm stores w first; C#'s constructor takes it last.
+"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
+"Fenrir::Math::Mat4" = { type = "Matrix4x4" }
+
+[names]
+"Fenrir::Math::AABB" = "Bounds"
+"Fenrir::Math::Ray::dir" = "Direction"

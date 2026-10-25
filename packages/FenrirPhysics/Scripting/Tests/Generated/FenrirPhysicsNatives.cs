@@ -50,8 +50,8 @@ public static unsafe class Natives
 
     public static bool Bounds()
     {
-        Aabb output0 = Junk<Aabb>();
-        ((delegate* unmanaged[Cdecl]<uint, Aabb*, byte>)Bound("Bounds"))(0, &output0);
+        Bounds output0 = Junk<Bounds>();
+        ((delegate* unmanaged[Cdecl]<uint, Bounds*, byte>)Bound("Bounds"))(0, &output0);
         return IsNew(output0);
     }
 

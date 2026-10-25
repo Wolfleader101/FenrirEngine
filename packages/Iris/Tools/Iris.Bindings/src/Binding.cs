@@ -469,10 +469,13 @@ internal sealed class Binding
                         "a used type is that binding's, so name it in neither");
                 }
 
-                if (type.Role is not (Role.Nested or Role.None))
+                // Selected here as it is there (a pointee a native fills, say), it is still that binding's; selected as
+                // something else, one of the two descriptions is wrong.
+                if (type.Role is not (Role.Nested or Role.None) && type.Role != mirrored.Role)
                 {
                     throw new BindingException(
-                        $"{where}, but {Path.GetFileName(type.Source)} selects it as its own: select it in one package");
+                        $"{where}, but {Path.GetFileName(type.Source)} selects it as a {RoleName(type.Role)} and " +
+                        $"{Path.GetFileName(mirrored.Source)} as a {RoleName(mirrored.Role)}: select it as one");
                 }
 
                 if (type.Category != mirrored.Category || type.Size != mirrored.Size || type.Alignment != mirrored.Alignment)
@@ -486,6 +489,15 @@ internal sealed class Binding
             }
         }
     }
+
+    private static string RoleName(Role role) => role switch
+    {
+        Role.SharedStruct => "shared struct",
+        Role.SceneResource => "scene resource",
+        Role.AppResource => "app resource",
+        Role.BoundType => "bound type",
+        _ => role.ToString().ToLowerInvariant(),
+    };
 
     // Every excluded type is described, and no type the binding keeps holds one.
     private void CheckExcluded(IReadOnlyList<DescribedType> described)

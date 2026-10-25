@@ -14,6 +14,7 @@
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
 #include "BoundMappings.hpp"
+#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -474,18 +475,6 @@ struct Iris::StructMapping<Fenrir::JointState>
 };
 static_assert(sizeof(Fenrir::JointState) == 56 && alignof(Fenrir::JointState) == 4,
               "Fenrir::JointState is not the layout FenrirPhysics.api.json describes: "
-              "regenerate the description, then this binding");
-
-template <>
-struct Iris::StructMapping<Fenrir::Math::AABB>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.Aabb";
-    static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::Math::Vec3>("Min", 0),
-        Iris::Field<Fenrir::Math::Vec3>("Max", 12));
-};
-static_assert(sizeof(Fenrir::Math::AABB) == 24 && alignof(Fenrir::Math::AABB) == 4,
-              "Fenrir::Math::AABB is not the layout FenrirPhysics.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

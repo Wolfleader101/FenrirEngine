@@ -254,12 +254,6 @@ TEST_CASE("C#'s new JointState() has C++'s Fenrir::JointState{} defaults, field 
     CheckDefaults<Fenrir::JointState>(Fenrir::ScriptingProbe::Component(app.scripting), "JointState");
 }
 
-TEST_CASE("C#'s new Aabb() has C++'s Fenrir::Math::AABB{} defaults, field by field", "[physics][scripting][bindings]")
-{
-    Fenrir::Testing::PhysicsScriptingApp app;
-    CheckDefaults<Fenrir::Math::AABB>(Fenrir::ScriptingProbe::Component(app.scripting), "Aabb");
-}
-
 TEST_CASE("C#'s new PhysicsMaterial() has C++'s Fenrir::PhysicsMaterial{} defaults, field by field", "[physics][scripting][bindings]")
 {
     Fenrir::Testing::PhysicsScriptingApp app;

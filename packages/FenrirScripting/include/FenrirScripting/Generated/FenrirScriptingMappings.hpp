@@ -9,6 +9,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
+#include "FenrirMathMappings.hpp"
 
 #include <cstdint>
 #include <string_view>

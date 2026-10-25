@@ -305,15 +305,16 @@ namespace Fenrir::Math
      */
     struct Ray
     {
-        Point origin; ///< The origin point of the ray.
-        Vec3 dir;     ///< The direction vector of the ray, should be normalized to represent a direction.
+        /** @brief The origin point of the ray. */
+        Point origin{};
+        /** @brief The direction vector of the ray, should be normalized to represent a direction. */
+        Vec3 dir = Vec3(0.0f, 0.0f, 1.0f);
 
         /**
-         * @brief Default constructor, initializes a new ray with a default direction pointing along the z-axis.
+         * @brief Default constructor: a ray from the origin along the z-axis. Its defaults are member initialisers, so
+         * the API description records them (FenrirMath.api.json).
          */
-        inline Ray() : dir(0.0f, 0.0f, 1.0f)
-        {
-        }
+        Ray() = default;
 
         /**
          * @brief Constructor to initialize a ray with specified origin point and direction vector.

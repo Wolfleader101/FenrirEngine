@@ -181,7 +181,7 @@ public static class PhysicsWorld
 
     /// <summary>The world-space box around the body of <paramref name="body"/>.</summary>
     /// <returns>Whether the entity has a body; <paramref name="bounds"/> is default when it does not.</returns>
-    public static bool Bounds(Entity body, out Aabb bounds) => PhysicsNative.Bounds(body, out bounds);
+    public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(body, out bounds);
 
     /// <summary>
     /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is

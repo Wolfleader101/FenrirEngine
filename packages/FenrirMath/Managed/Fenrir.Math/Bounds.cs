@@ -1,12 +1,9 @@
 namespace Fenrir.Math;
 
-/// <summary>An axis-aligned box from its smallest corner to its largest, laid out exactly like FenrirMath's
-/// <c>Math::AABB</c>.</summary>
-public struct Bounds : IEquatable<Bounds>
+// The behaviour of the generated Bounds (Generated/Bounds.cs, from FenrirMath's Math::AABB): an axis-aligned box from its
+// smallest corner to its largest.
+public partial struct Bounds : IEquatable<Bounds>
 {
-    public Vector3 Min;
-    public Vector3 Max;
-
     public Bounds(Vector3 min, Vector3 max)
     {
         Min = min;
