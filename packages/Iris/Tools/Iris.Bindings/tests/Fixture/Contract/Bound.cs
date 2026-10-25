@@ -22,6 +22,12 @@ public struct Quaternion
     public float X, Y, Z, W;
 }
 
+/// <summary>Stands for <c>Fixture::Ticket</c>: one member, so a native takes it by value as that member.</summary>
+public struct Ticket
+{
+    public uint Number;
+}
+
 /// <summary>Stands for <c>Fixture::Handle</c>: new, it holds C++'s default id, all bits set.</summary>
 public struct Handle
 {

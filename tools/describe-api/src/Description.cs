@@ -8,6 +8,12 @@ internal enum Role
     SharedStruct,
     BoundType,
 
+    /// <summary>A resource of a scene: plain data, as a component is.</summary>
+    SceneResource,
+
+    /// <summary>A resource of the app: plain data, as a component is.</summary>
+    AppResource,
+
     /// <summary>Not selected: described because a selected type's field uses it.</summary>
     Nested,
 }
@@ -20,6 +26,8 @@ internal static class Roles
         Role.Event => "event",
         Role.SharedStruct => "shared-struct",
         Role.BoundType => "bound-type",
+        Role.SceneResource => "scene-resource",
+        Role.AppResource => "app-resource",
         _ => "nested",
     };
 
@@ -29,6 +37,8 @@ internal static class Roles
         "event" => Role.Event,
         "shared-struct" => Role.SharedStruct,
         "bound-type" => Role.BoundType,
+        "scene-resource" => Role.SceneResource,
+        "app-resource" => Role.AppResource,
         _ => null,
     };
 }

@@ -1,6 +1,8 @@
 # The tool's own fixture is registered like a binding, so the bindings target and a parent project's dirty-tree check
 # cover its committed outputs too.
 iris_generate_binding(IrisBindingsFixture tests/Fixture/Fixture.binding.toml tests/Fixture/Fixture.api.json)
+# The binding the fixture uses: its mirror of Spring, which the fixture names instead of generating its own.
+iris_generate_binding(IrisBindingsFixtureCommon tests/Fixture/Uses/Common.binding.toml tests/Fixture/Uses/Common.api.json)
 
 if(NOT IRIS_BUILD_TESTS)
     return()

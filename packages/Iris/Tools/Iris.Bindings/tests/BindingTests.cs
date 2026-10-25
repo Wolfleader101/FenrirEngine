@@ -19,6 +19,8 @@ public sealed class BindingTests
 
     private static string FixtureNatives => Path.Combine(FixtureDirectory, "Fixture.natives.json");
 
+    private static string UsesConfig => Path.Combine(FixtureDirectory, "Uses", "Common.binding.toml");
+
     private static CSharpParseOptions Latest => CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest);
 
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
@@ -43,8 +45,8 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 22,
-                    $"The fixture should give 15 mirrors, the natives' class, the mappings, the registration and the " +
+        Assert.True(generated.Count == 25,
+                    $"The fixture should give 18 mirrors, the natives' class, the mappings, the registration and the " +
                     $"two files each of the defaults and natives tests, but gave {generated.Count} files.");
     }
 
@@ -52,14 +54,14 @@ public sealed class BindingTests
     public void AChangedDefaultChangesExactlyItsInitialiser()
     {
         using var directory = new TemporaryDirectory();
-        var description = WriteDescription(directory, root => Field(root, "Fixture::Spring", "damping")["default"] = 0.25);
+        var description = WriteDescription(directory, root => Field(root, "Fixture::SphereShape", "radius")["default"] = 0.25);
 
         var before = Generator.Generate(FixtureConfig, [FixtureDescription]);
         var after = Generator.Generate(FixtureConfig, [description]);
 
         var changed = Changes(before, after);
-        Assert.True(changed.SequenceEqual(["Spring.cs: '    public float Damping = 0.5f;' became '    public float Damping = 0.25f;'"]),
-                    "Changing Spring::damping's default should change only its C# initialiser, but changed:\n" +
+        Assert.True(changed.SequenceEqual(["SphereShape.cs: '    public float Radius = 0.5f;' became '    public float Radius = 0.25f;'"]),
+                    "Changing SphereShape::radius's default should change only its C# initialiser, but changed:\n" +
                     string.Join('\n', changed));
     }
 
@@ -67,19 +69,14 @@ public sealed class BindingTests
     public void AMirrorWhoseDefaultsAreAllZeroHasNoConstructorOrInitialisers()
     {
         using var directory = new TemporaryDirectory();
-        var description = WriteDescription(directory, root =>
-        {
-            Field(root, "Fixture::Spring", "stiffness")["default"] = 0;
-            Field(root, "Fixture::Spring", "damping")["default"] = 0;
-        });
+        var description = WriteDescription(directory, root => Field(root, "Fixture::SphereShape", "radius")["default"] = 0);
 
-        var spring = Mirror(Generator.Generate(FixtureConfig, [description]), "Spring.cs");
+        var sphere = Mirror(Generator.Generate(FixtureConfig, [description]), "SphereShape.cs");
 
-        Assert.True(spring.Contains("    public float Stiffness;\n", StringComparison.Ordinal) &&
-                    spring.Contains("    public float Damping;\n", StringComparison.Ordinal) &&
-                    !spring.Contains("public Spring()", StringComparison.Ordinal),
-                    "With every default zero, C#'s default already holds them, so Spring should have bare fields and no " +
-                    $"constructor, but is:\n{spring}");
+        Assert.True(sphere.Contains("    public float Radius;\n", StringComparison.Ordinal) &&
+                    !sphere.Contains("public SphereShape()", StringComparison.Ordinal),
+                    "With every default zero, C#'s default already holds them, so SphereShape should have a bare field " +
+                    $"and no constructor, but is:\n{sphere}");
     }
 
     [Fact]
@@ -109,7 +106,8 @@ public sealed class BindingTests
         var config = CopyConfig(directory, "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"] }\n" +
                                            "\"Fixture::Quat\" = { type = \"Quaternion\" }\n" +
                                            "\"Fixture::Handle\" = { type = \"Handle\", default = \"Handle.None\" }\n" +
-                                           "\"Fixture::Size\" = { type = \"Size\" }\n");
+                                           "\"Fixture::Size\" = { type = \"Size\" }\n" +
+                                           "\"Fixture::Ticket\" = { type = \"Ticket\", wrapper = \"u32\" }\n");
         var description = WriteDescription(directory, _ => { });
 
         var body = Mirror(Generator.Generate(config, [description]), "Body.cs");
@@ -152,8 +150,8 @@ public sealed class BindingTests
     }
 
     [Theory]
-    [InlineData("exclude = [\"Fixture::Spring\"]\n",
-                "exclude names Fixture::Spring, but Fixture::Body::spring holds one: exclude Fixture::Body too")]
+    [InlineData("exclude = [\"Fixture::Numbers\"]\n",
+                "exclude names Fixture::Numbers, but Fixture::Body::numbers holds one: exclude Fixture::Body too")]
     [InlineData("exclude = [\"Fixture::Missing\"]\n", "exclude names Fixture::Missing, which no description describes")]
     public void AnExclusionTheBindingCannotHonourFailsSayingWhy(string exclude, string diagnostic)
     {
@@ -246,7 +244,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 22, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 25, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -273,13 +271,13 @@ public sealed class BindingTests
         var description = WriteDescription(directory, _ => { });
         var contract = Path.Combine(directory.Path, "Contract");
         Directory.CreateDirectory(contract);
-        File.WriteAllText(Path.Combine(contract, "Spring.cs"),
-                          "namespace Fixture.Bindings;\n\npublic partial struct Spring\n{\n    public float Extra;\n" +
+        File.WriteAllText(Path.Combine(contract, "SphereShape.cs"),
+                          "namespace Fixture.Bindings;\n\npublic partial struct SphereShape\n{\n    public float Extra;\n" +
                           "    public int Count { get; set; }\n    public static int Made;\n    public float Total => Extra;\n}\n");
 
         var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
 
-        Assert.True(exception.Message.Contains("Spring.cs:5: error: Fixture.Bindings.Spring declares the field 'Extra' by hand",
+        Assert.True(exception.Message.Contains("SphereShape.cs:5: error: Fixture.Bindings.SphereShape declares the field 'Extra' by hand",
                                                StringComparison.Ordinal) &&
                     exception.Message.Contains("declares the field 'Count' by hand", StringComparison.Ordinal),
                     "A hand-written field and auto-property in a generated mirror's partial should each fail, naming the " +
@@ -295,7 +293,7 @@ public sealed class BindingTests
                 "Fixture::Shape's default kind is m_sphere, but a tagged union's C# new() makes the kind whose tag value is 0 (Box)")]
     [InlineData("UnboundType", "Fixture::Quat is a bound type (")]
     [InlineData("FieldNamedAfterItsType",
-                "Fixture::Spring::spring: C# cannot name a field Spring inside Spring; give it another name in [names]")]
+                "Fixture::SphereShape::sphereShape: C# cannot name a field SphereShape inside SphereShape; give it another name in [names]")]
     [InlineData("OtherTarget", "the description is for another target")]
     public void WhatCannotBeBoundFailsSayingWhy(string problem, string diagnostic)
     {
@@ -311,7 +309,7 @@ public sealed class BindingTests
                     Type(root, "Fixture::Shape")["defaultKind"] = "m_sphere";
                     break;
                 case "FieldNamedAfterItsType":
-                    Field(root, "Fixture::Spring", "damping")["name"] = "spring";
+                    Field(root, "Fixture::SphereShape", "radius")["name"] = "sphereShape";
                     break;
                 case "OtherTarget":
                     root["pointerSize"] = 4;
@@ -360,15 +358,20 @@ public sealed class BindingTests
     }
 
     [Theory]
-    [InlineData("ByValue", "Fixture.natives.json: Find::origin: cannot map the C++ type 'Fixture::Spring' to C#: Iris " +
-                           "passes no struct or enum by value: take a const pointer")]
+    [InlineData("ByValue", "Fixture.natives.json: Find::origin: cannot map the C++ type 'Fixture::Hit' to C#: a struct " +
+                           "crosses by value only as a wrapper (one field of a number, bool, char or enum, or a bound type " +
+                           "whose [bound-types] entry names its wrapper kind): take a const pointer")]
+    [InlineData("UndescribedByValue", "Fixture.natives.json: Find::origin: cannot map the C++ type 'Fixture::Unknown' to " +
+                                      "C#: no description describes Fixture::Unknown, and [natives] types does not name it")]
+    [InlineData("TextResult", "Fixture.natives.json: Sum (result): cannot map the C++ type 'std::string_view' to C#: a " +
+                              "native returns a number, a bool, an enum, a wrapper, nothing or a void*")]
     [InlineData("Undescribed", "Fixture.natives.json: Find::origin: cannot map the C++ type 'const Fixture::Unknown*' to " +
                                "C#: no description describes Fixture::Unknown, and [natives] types does not name it")]
     [InlineData("NeitherOutNorSpan", "Fixture.natives.json: Find::hit: cannot map the C++ type 'Fixture::Hit*' to C#: a " +
                                      "pointer to non-const data is an output (its doc says [out]), read and " +
                                      "written (its doc says [in,out]) or a span (its std::int32_t count follows it)")]
     [InlineData("Result", "Fixture.natives.json: Sum (result): cannot map the C++ type 'const Fixture::Vec3*' to C#: a " +
-                          "native returns a number, a bool, nothing or a void*")]
+                          "native returns a number, a bool, an enum, a wrapper, nothing or a void*")]
     public void ANativeParameterTheBindingCannotMapFailsNamingTheFunctionAndParameter(string problem, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -380,7 +383,14 @@ public sealed class BindingTests
             {
                 case "ByValue":
                     Parameter(root, "Find", "origin").ReplaceWith(JsonNode.Parse(
-                        """{ "name": "origin", "type": "Fixture::Spring", "kind": "struct" }"""));
+                        """{ "name": "origin", "type": "Fixture::Hit", "kind": "struct" }"""));
+                    break;
+                case "UndescribedByValue":
+                    Parameter(root, "Find", "origin").ReplaceWith(JsonNode.Parse(
+                        """{ "name": "origin", "type": "Fixture::Unknown", "kind": "enum" }"""));
+                    break;
+                case "TextResult":
+                    Native(root, "Sum")["returns"] = JsonNode.Parse("""{ "type": "std::string_view", "kind": "string" }""");
                     break;
                 case "Undescribed":
                     Parameter(root, "Find", "origin")["type"] = "const Fixture::Unknown*";
@@ -408,6 +418,7 @@ public sealed class BindingTests
         // The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
                           .Where(path => Path.GetFileName(path) != "FixtureNative.cs")
+                          .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Uses", "Contract"), "*.cs", SearchOption.AllDirectories))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
                           .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), Latest, path, cancellationToken: Cancel))
@@ -453,6 +464,172 @@ public sealed class BindingTests
                     $"generators included, with no diagnostic:\n{await output}\n{await errors}");
     }
 
+    [Fact]
+    public void AResourceIsMirroredRegisteredAndTestedInEachScopeAndReadOnly()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var weather = Mirror(generated, "Weather.cs");
+        var clock = Mirror(generated, "Clock.cs");
+        var sky = Mirror(generated, "Sky.cs");
+        Assert.True(weather.Contains("[NativeResource(\"Fixture.Bindings.Weather\")]\npublic partial struct Weather : IResource\n", StringComparison.Ordinal) &&
+                    clock.Contains("[NativeResource(\"Fixture.Bindings.Clock\")]\npublic readonly partial struct Clock : IReadOnlyResource\n", StringComparison.Ordinal) &&
+                    sky.Contains("[NativeResource(\"Fixture.Bindings.Sky\")]\n[TaggedUnion]\n", StringComparison.Ordinal) &&
+                    sky.Contains("public partial struct Sky : IResource\n", StringComparison.Ordinal),
+                    "A scene resource, a read-only app resource and a tagged-union app resource should each carry the " +
+                    $"resource attribute and their interface, but are:\n{weather}\n{clock}\n{sky}");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        Assert.True(registration.Contains("Host::MakeSceneResource<Fixture::Weather>(\"Fixture.Bindings.Weather\")", StringComparison.Ordinal) &&
+                    registration.Contains("Host::MakeReadOnlyAppResource<Fixture::Clock>(\"Fixture.Bindings.Clock\")", StringComparison.Ordinal) &&
+                    registration.Contains("Host::MakeAppResource<Fixture::Sky>(\"Fixture.Bindings.Sky\")", StringComparison.Ordinal),
+                    $"Each resource should be in extension.resources, made by its scope's factory, but the registration is:\n{registration}");
+        var defaults = Output(generated, "FixtureDefaultsTests.cpp");
+        Assert.True(new[] { "Weather", "Clock", "Sky" }.All(name => defaults.Contains($"CheckDefaults<Fixture::{name}>", StringComparison.Ordinal)),
+                    $"The defaults test should have a case per resource, but is:\n{defaults}");
+    }
+
+    [Fact]
+    public void AnInternalStructIsMirroredInternalWithNoDefaultsCase()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var tag = Mirror(generated, "Tag.cs");
+        var defaults = Output(generated, "FixtureDefaults.cs");
+        Assert.True(tag.Contains("internal unsafe partial struct Tag\n", StringComparison.Ordinal),
+                    $"Tag is in internal-structs, so its mirror should be internal, but is:\n{tag}");
+        Assert.False(defaults.Contains(" Tag()", StringComparison.Ordinal),
+                     $"A public test method cannot return an internal mirror, so Tag should have no defaults case:\n{defaults}");
+    }
+
+    [Fact]
+    public void AByHandTypeIsMirroredMappedAndTestedButNotInTheGeneratedRegistration()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        Assert.True(Mirror(generated, "BodyId.cs").Contains("public partial struct BodyId", StringComparison.Ordinal) &&
+                    Output(generated, "FixtureMappings.hpp").Contains("struct Iris::StructMapping<Fixture::BodyId>", StringComparison.Ordinal) &&
+                    Output(generated, "FixtureDefaultsTests.cpp").Contains("CheckDefaults<Fixture::BodyId>", StringComparison.Ordinal),
+                    "BodyId is in by-hand, so it should still get its mirror, mapping and defaults case.");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        Assert.False(registration.Contains("<Fixture::BodyId>", StringComparison.Ordinal),
+                     $"BodyId is in by-hand, so the generated registration should not make it, but is:\n{registration}");
+    }
+
+    [Fact]
+    public void ATypeABindingItUsesMirrorsIsNamedThereAndNotGeneratedHere()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        Assert.False(generated.Keys.Any(path => Path.GetFileName(path) == "Spring.cs"),
+                     "Spring is the used Common binding's, so this one should give it no mirror.");
+        var body = Mirror(generated, "Body.cs");
+        Assert.True(body.Contains("using Fixture.Common;\n", StringComparison.Ordinal) &&
+                    body.Contains("    public Spring Tuned = new() { Stiffness = 4 };\n", StringComparison.Ordinal),
+                    $"Body should name the Common binding's Spring, members by its names, but is:\n{body}");
+        var mappings = Output(generated, "FixtureMappings.hpp");
+        Assert.True(mappings.Contains("#include \"../../Uses/Native/Generated/CommonMappings.hpp\"\n", StringComparison.Ordinal) &&
+                    !mappings.Contains("StructMapping<Fixture::Spring>", StringComparison.Ordinal),
+                    $"The mappings should include the Common binding's and map Spring no more, but are:\n{mappings}");
+        Assert.False(generated.Values.Any(text => text.Contains("Fixture.Bindings.Spring", StringComparison.Ordinal)),
+                     "No output should name a Spring of this binding's namespace.");
+    }
+
+    [Fact]
+    public void NativesTakeTextEnumsAndWrappersByValue()
+    {
+        var natives = Mirror(Generator.Generate(FixtureConfig, [FixtureDescription]), "FixtureNative.cs");
+
+        string[] expected =
+        [
+            "using System;\n",
+            "    public static partial void Show(ReadOnlySpan<char> text, uint glyph);\n",
+            "    public static partial BodyId Advance(BodyId body, Motion motion);\n",
+            "    public static partial Motion MotionOf(BodyId body);\n",
+            "    public static partial Ticket Renew(Ticket ticket);\n",
+        ];
+        foreach (var line in expected)
+        {
+            Assert.True(natives.Contains(line, StringComparison.Ordinal),
+                        $"The natives' class should declare\n  {line}but is:\n{natives}");
+        }
+    }
+
+    [Theory]
+    [InlineData("UsedAndExcluded", "Fixture::Spring is mirrored by the binding it uses, ", "but exclude names it too")]
+    [InlineData("UsedAndBound", "Fixture::Spring is mirrored by the binding it uses, ", "but [bound-types] names it too")]
+    [InlineData("UsedAndSelected", "Fixture::Spring is mirrored by the binding it uses, ", "but Fixture.api.json selects it as its own")]
+    [InlineData("UsedWithAnotherLayout", "Fixture::Spring is mirrored by the binding it uses, ", "which describes it with another layout")]
+    [InlineData("UsedTwice", "Fixture::Spring is mirrored by the binding it uses, ", "use the type from one of them")]
+    [InlineData("UsesMissing", "uses ", "Missing.binding.toml, which does not exist")]
+    [InlineData("UsesWithoutDescriptions", "uses ", "which names no descriptions: list the descriptions it binds in its 'descriptions'")]
+    [InlineData("UsesItself", "Other.binding.toml: uses itself, through ", "")]
+    [InlineData("DescriptionsDisagree", "'descriptions' names ", "name the same descriptions")]
+    [InlineData("NoResourceAttribute", "resource, but [csharp] has no resource-attribute", "")]
+    [InlineData("NoReadOnlyResourceInterface",
+                "Fixture::Clock is a read-only app resource, but [csharp] has no read-only-resource-interface", "")]
+    [InlineData("NoResourceFactory", "Fixture::Weather is a scene resource, but [registration] has no make-scene-resource", "")]
+    [InlineData("ReadOnlyNotRegistrable", "[registration] read-only names Fixture::Hit, which is not a described component or resource", "")]
+    [InlineData("ByHandNotRegistrable",
+                "[registration] by-hand names Fixture::Numbers, which is not a described component, event, resource or " +
+                "shared struct this binding mirrors", "")]
+    [InlineData("InternalHeld", "internal-structs names Fixture::Limits, but the public Fixture::Body holds one: list it too", "")]
+    [InlineData("InternalNotStruct", "internal-structs names Fixture::Motion, which is not a described struct this binding mirrors", "")]
+    [InlineData("WrapperNotNumber", "[bound-types] Fixture::Ticket's wrapper is 'struct', which is not a number kind", "")]
+    public void WhatTheConfigurationCannotHonourFailsSayingWhy(string problem, string diagnostic, string rest)
+    {
+        using var directory = new TemporaryDirectory();
+        // A copy of the used binding's configuration, edited, in the directory.
+        string Other(Func<string, string> edit)
+        {
+            var path = Path.Combine(directory.Path, "Other.binding.toml");
+            var text = System.IO.File.ReadAllText(UsesConfig)
+                           .Replace("\"Common.api.json\"", $"\"{Path.Combine(FixtureDirectory, "Uses", "Common.api.json").Replace('\\', '/')}\"",
+                                    StringComparison.Ordinal);
+            System.IO.File.WriteAllText(path, edit(text));
+            return path.Replace('\\', '/');
+        }
+
+        string Uses(string text, string used) => text.Replace("uses = [", $"uses = [\"{used}\", ", StringComparison.Ordinal);
+
+        Func<string, string> edit = problem switch
+        {
+            "UsedAndExcluded" => text => text.Replace("[csharp]", "exclude = [\"Fixture::Spring\"]\n\n[csharp]", StringComparison.Ordinal),
+            "UsedAndBound" => text => text.Replace("[bound-types]\n", "[bound-types]\n\"Fixture::Spring\" = { type = \"Spring\" }\n", StringComparison.Ordinal),
+            "UsedTwice" => text => Uses(text, Other(other => other.Replace("Fixture.Common", "Fixture.Other", StringComparison.Ordinal))),
+            "UsesMissing" => text => Uses(text, "Missing.binding.toml"),
+            "UsesWithoutDescriptions" => text => Uses(text, Other(other => other.Replace("descriptions = [", "# [", StringComparison.Ordinal))),
+            "UsesItself" => text => Uses(text, Other(other => "uses = [\"Other.binding.toml\"]\n" + other)),
+            "DescriptionsDisagree" => text => text.Replace("[csharp]", "descriptions = [\"Elsewhere.api.json\"]\n\n[csharp]", StringComparison.Ordinal),
+            "NoResourceAttribute" => text => text.Replace("resource-attribute = \"NativeResource\"\n", "", StringComparison.Ordinal),
+            "NoReadOnlyResourceInterface" => text => text.Replace("read-only-resource-interface = \"IReadOnlyResource\"\n", "", StringComparison.Ordinal),
+            "NoResourceFactory" => text => text.Replace("make-scene-resource = \"Host::MakeSceneResource\"\n", "", StringComparison.Ordinal),
+            "ReadOnlyNotRegistrable" => text => text.Replace("read-only = [\"Fixture::Collider\"", "read-only = [\"Fixture::Hit\"", StringComparison.Ordinal),
+            "ByHandNotRegistrable" => text => text.Replace("by-hand = [\"Fixture::BodyId\"]", "by-hand = [\"Fixture::Numbers\"]", StringComparison.Ordinal),
+            "InternalHeld" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Tag\", \"Fixture::Limits\"]", StringComparison.Ordinal),
+            "InternalNotStruct" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Motion\"]", StringComparison.Ordinal),
+            "WrapperNotNumber" => text => text.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal),
+            _ => text => text,
+        };
+        var config = CopyConfig(directory, "", edit: edit);
+        var description = WriteDescription(directory, root =>
+        {
+            switch (problem)
+            {
+                case "UsedAndSelected":
+                    Type(root, "Fixture::Spring")["role"] = "shared-struct";
+                    break;
+                case "UsedWithAnotherLayout":
+                    Type(root, "Fixture::Spring")["alignment"] = 8;
+                    break;
+            }
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal) && exception.Message.Contains(rest, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}...{rest}\nbut failed with\n  {exception.Message}");
+    }
+
     // A copy of the fixture's configuration in the directory, so every output lands there. `boundTypes` replaces the
     // entries of [bound-types] when not empty; `topLevel` is added after the namespace, and `edit` applied last.
     private static string CopyConfig(TemporaryDirectory directory, string boundTypes, string topLevel = "",
@@ -468,6 +645,8 @@ public sealed class BindingTests
             text = text[..start] + "[bound-types]\n" + boundTypes + text[end..];
         }
 
+        // The binding it uses stays where it is: only this binding's outputs land in the directory.
+        text = text.Replace("\"Uses/Common.binding.toml\"", $"\"{UsesConfig.Replace('\\', '/')}\"", StringComparison.Ordinal);
         var config = Path.Combine(directory.Path, "Fixture.binding.toml");
         File.WriteAllText(config, edit == null ? text : edit(text));
         File.Copy(FixtureNatives, Path.Combine(directory.Path, "Fixture.natives.json"), overwrite: true);
@@ -499,6 +678,10 @@ public sealed class BindingTests
 
     // The generated mirror of that file name.
     private static string Mirror(IReadOnlyDictionary<string, string> generated, string fileName) =>
+        Output(generated, fileName);
+
+    // The generated file of that name.
+    private static string Output(IReadOnlyDictionary<string, string> generated, string fileName) =>
         generated.Single(file => Path.GetFileName(file.Key) == fileName).Value;
 
     // The fixture's description, edited, written as Fixture.api.json in the directory (the generated files name it).

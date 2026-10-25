@@ -26,10 +26,12 @@ The roles:
 | --- | --- |
 | `component` | A component a binding mirrors. |
 | `event` | An event a binding mirrors. |
+| `scene-resource` | A resource of a scene a binding mirrors, plain data as a component is. |
+| `app-resource` | A resource of the app a binding mirrors, plain data as a component is. |
 | `shared-struct` | Plain data native functions take or return by pointer. |
 | `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout only. |
 
-A selected component, event or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer).
+A selected component, event, resource or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer).
 
 ```toml
 private-members = ["MyPackage::Hit"]
@@ -95,9 +97,9 @@ context = "Fenrir::CallContext"             # What every native takes first.
 describe-api --natives <Name>.binding.toml [compile arguments, or @file]
 ```
 
-It parses each source on its own with the compile arguments and writes `<Name>.natives.json` beside the configuration (again only when its content changes): every free function defined there whose first parameter is `const Context&`, with whether its second is the extension's state (a reference to a non-const class), each later parameter's C++ type and name, its result and its doc comment, in source order. `@param[out]` in a native's doc marks an output, `@param[in,out]` a pointer it reads and writes, and `@notrunning <expression>` the C++ value a caller gets when the native cannot be called. The format is the second half of `SCHEMA.md`.
+It parses each source on its own with the compile arguments and writes `<Name>.natives.json` beside the configuration (again only when its content changes): every free function defined there whose first parameter is `const Context&`, with whether its second is the extension's state (a reference to a non-const class), each later parameter's C++ type and name (a `std::string_view` as the kind `string`, a `char32_t` as a `u32`), its result and its doc comment, in source order. `@param[out]` in a native's doc marks an output, `@param[in,out]` a pointer it reads and writes, and `@notrunning <expression>` the C++ value a caller gets when the native cannot be called. The format is the second half of `SCHEMA.md`.
 
-In CMake, `fenrir_describe_api_natives(<target> <config>)` adds a binding's natives to `fenrir-describe-api`, compiled with `<target>`'s include directories and definitions; `packages/FenrirPhysics/Scripting/CMakeLists.txt` is the example. A native fails the tool, naming the function and parameter, when it has internal linkage (static or in an anonymous namespace: the generated registration names it from another file), takes a reference after the context and state, has an unnamed parameter, a pointer to a pointer or a type of no kind, documents `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data, documents a parameter it does not have, or documents `@notrunning` but returns nothing.
+In CMake, `fenrir_describe_api_natives(<target> <config>)` adds a binding's natives to `fenrir-describe-api`, compiled with `<target>`'s include directories and definitions; `packages/FenrirPhysics/Scripting/CMakeLists.txt` is the example. A native fails the tool, naming the function and parameter, when it has internal linkage (static or in an anonymous namespace: the generated registration names it from another file), takes a reference after the context and state, has an unnamed parameter, a pointer to a pointer, a pointer to a `std::string_view` (text is taken by value) or a type of no kind, documents `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data, documents a parameter it does not have, or documents `@notrunning` but returns nothing.
 
 ## Tests
 

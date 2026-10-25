@@ -15,10 +15,11 @@ its own tests bind a fixture description.
 ## Running
 
 ```sh
-dotnet run --project packages/Iris/Tools/Iris.Bindings/src -- <Name>.binding.toml <Package>.api.json [<Package>.api.json...]
+dotnet run --project packages/Iris/Tools/Iris.Bindings/src -- <Name>.binding.toml [<Package>.api.json...]
 ```
 
-Each output is written only when its content changes. In CMake, `iris_generate_binding()` (from Iris's
+The descriptions are those the configuration's `descriptions` names when none are given; when both name them, they must
+be the same files. Each output is written only when its content changes. In CMake, `iris_generate_binding()` (from Iris's
 `cmake/IrisBindings.cmake`) adds a binding to the bindings target, which the ordinary build never runs:
 
 ```cmake
@@ -36,11 +37,14 @@ header change, and check in CI that it leaves the tree clean.
 ## The configuration
 
 `<Name>.binding.toml`, with paths relative to it. [`tests/Fixture/Fixture.binding.toml`](tests/Fixture/Fixture.binding.toml)
-uses every key but `registered-namespace`, which a test sets.
+uses every key but `registered-namespace` and `descriptions`, which tests set; `tests/Fixture/Uses/Common.binding.toml`, the
+binding it uses, sets `descriptions`.
 
 ```toml
 namespace = "My.Physics"               # The C# namespace of the mirrors, and of every registered name.
-registered-namespace = "My"            # Optional (namespace): components and events are registered as My.Type instead.
+registered-namespace = "My"            # Optional (namespace): components, events and resources are registered as My.Type instead.
+descriptions = ["../../api/MyPhysics.api.json"]  # Optional: the descriptions it binds. A binding another uses names them.
+uses = ["../../../MyMath/api/MyMath.binding.toml"]  # Optional: bindings whose mirrors it names (below).
 exclude = ["My::RawHit"]               # Optional: described types this binding leaves out (it binds them in another form).
 
 [csharp]
@@ -53,11 +57,15 @@ read-only-component-interface = "IReadOnlyComponent"
 event-attribute = "NativeEvent"
 event-interface = "IEvent"
 tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"  # With a resource: its attribute and interfaces.
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
 readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
 private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
 fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
+internal-structs = ["My::ShapeOptions"]  # Optional: structs mirrored internal, for the contract's own use.
 
 [cpp]
 mappings = "src/Generated/MyPhysicsMappings.hpp"
@@ -72,7 +80,12 @@ make-component = "My::MakeComponent"
 make-read-only-component = "My::MakeReadOnlyComponent"
 make-event = "My::MakeEvent"
 make-shared-struct = "My::MakeSharedStruct"
-read-only = ["My::Hierarchy"]          # Components registered (and mirrored) read-only.
+make-scene-resource = "My::MakeSceneResource"  # With a resource of that scope and kind: its factory.
+make-read-only-scene-resource = "My::MakeReadOnlySceneResource"
+make-app-resource = "My::MakeAppResource"
+make-read-only-app-resource = "My::MakeReadOnlyAppResource"
+read-only = ["My::Hierarchy", "My::Clock"]  # Components and resources registered (and mirrored) read-only.
+by-hand = ["My::Gravity"]              # Optional: registered by the extension itself, so not in the generated lists.
 
 [tests]                                # Optional: the defaults test.
 cpp = "Tests/Generated/MyPhysicsDefaultsTests.cpp"
@@ -98,6 +111,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 "Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
 "Math::Quat" = { type = "Quaternion" }  # No constructor: defaults set the components by name, new() { X = 0, ... }.
 "My::Handle" = { type = "Handle", default = "Handle.None" }  # Its own default (T{}), when that is not zero bytes.
+"My::BodyId" = { type = "BodyId", wrapper = "u32" }  # One member a native passes by value: that member's kind.
 
 [names]                                # Exceptions to the PascalCase rule: Type::member, or a bare member name.
 "My::ConvexHullShape::hull" = "Hull"
@@ -113,12 +127,19 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 | --- | --- |
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them). |
-| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`. |
+| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
 itself and binds from that description.
-| `[tests] cpp` and `csharp` | A Catch2 case per component, event and shared struct, and the C# class with one `T()` method returning `new T()` for each. |
+| `[tests] cpp` and `csharp` | A Catch2 case per component, event, resource and shared struct, and the C# class with one `T()` method returning `new T()` for each. A mirror in `internal-structs` has none: a public test method cannot return it (its layout is still checked when the extension registers it). |
+
+**Other bindings' types.** A binding in `uses` is read with the descriptions its own `descriptions` names. A type it
+mirrors that this binding's descriptions also describe (another package's type a field holds, which a description records
+as `nested`) is that binding's: this binding names it by that binding's C# name, adds a `using` of its namespace to the
+mirrors and natives that name it, includes its mappings header (by a path relative to this one's) in this one's mappings,
+and gives it no mirror, mapping, registration or test of its own. Its member and enumerator names in defaults are that
+binding's too. Bound types are not mirrored, so each binding still names its own in `[bound-types]`.
 
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
 or event's `RegisteredNamespace.Type` when `registered-namespace` is set: a mapping still names the C# type). A field's or
@@ -136,7 +157,9 @@ as zero unless it has a `default`) has bare fields and no constructor, since `de
 it adds no member C# did not have. A read-only mirror (an event under `readonly-events`, or a struct in
 `readonly-structs`) is a `readonly struct` of `readonly` fields, always with the constructor, and a field holding a
 read-only struct is `readonly` too. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
-interface, an event the event attribute and interface. An array is an `[InlineArray(N)]` struct nested in its mirror
+interface, an event the event attribute and interface, and a scene or app resource the resource attribute and interface (a
+tagged union's mirror too); a resource in `read-only` gets the read-only interface and, unless it is a tagged union, is a
+`readonly struct`. A struct in `internal-structs` is `internal`, and a public mirror cannot hold one. An array is an `[InlineArray(N)]` struct nested in its mirror
 (`SamplesArray Samples`), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
 `fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
 field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
@@ -165,13 +188,16 @@ native function is written by hand once, as its C++ definition. It writes:
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
 would: an alias in `types` is its C# type; a number or `bool` is itself (`std::int32_t` is `int`, `std::uint64_t` is
-`ulong`); `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
+`ulong`, a `char32_t` is `uint`); a `std::string_view` (kind `string`) is a `ReadOnlySpan<char>`, which a `string`
+converts to; an enum is its described C# enum, crossing as its underlying integer; a wrapper (a described struct of one
+field of a number, `bool`, `char16_t` or enum, or a bound type whose `[bound-types]` entry gives its `wrapper` kind) is
+its C# type, crossing as that field; `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
 `std::int32_t` count is `T*` (a span C# fixes); a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
-`in T`. `T` is a number, or the C# name of a described type or a `types` alias. A result is a number, `bool`, `void` or
-`void*`. Anything else fails naming the function and parameter: a struct or enum by value, a pointer to a type nothing
-names, a pointer to non-const data that is neither an output, read and written, nor followed by a count, or any other
-result.
+`in T`. `T` is a number, or the C# name of a described type or a `types` alias. A result is a number, `bool`, an enum, a
+wrapper, `void` or `void*`. Anything else fails naming the function and parameter: a struct by value that is not a
+wrapper, an enum or struct nothing describes, a pointer to a type nothing names, a pointer to non-const data that is
+neither an output, read and written, nor followed by a count, or any other result (text among them).
 
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
 
@@ -191,7 +217,12 @@ types with one C# name, a tagged union whose default kind is not tag 0 or whose 
 the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
 description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, a
 `private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
-of numbers or is in a read-only mirror, and
+of numbers or is in a read-only mirror, a resource with no resource attribute, interface or (with a registration) factory,
+a `read-only` entry that is not a component or resource, a `by-hand` entry that is not a type the registration would
+list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
+not a number kind, `descriptions` that differ from the command line's, a `uses` entry that does not exist, names no
+descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
+`[bound-types]` or selects itself, or that is described with another layout, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, or a `[natives] class`
 that is also a mirror's name.
 
@@ -200,7 +231,9 @@ that is also a mirror's name.
 `tests/` (xunit, the `IrisBindingsTests` CTest when `IRIS_BUILD_TESTS` is on): the fixture
 (`tests/Fixture/Fixture.api.json`, every kind of field, default and type a description records, read from
 `Fixture.hpp`) and its natives (`tests/Fixture/Fixture.natives.json`, a copy of describe-api's, every form of native
-parameter) give their committed outputs byte for byte, a changed default changes exactly its initialiser, and a native
+parameter) give their committed outputs byte for byte, with a resource of each scope and a read-only one, an internal
+mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a binding of Spring alone), and natives
+taking text, an enum and wrappers; a changed default changes exactly its initialiser, and a native
 added with an output is declared, registered and tested; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles
 against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's scripting SDK is beside Iris, against it

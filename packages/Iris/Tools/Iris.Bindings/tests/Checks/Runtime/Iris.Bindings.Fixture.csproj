@@ -12,6 +12,7 @@
   <ItemGroup>
     <!-- The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it. -->
     <Compile Include="../../Fixture/Contract/**/*.cs" Exclude="../../Fixture/Contract/Generated/FixtureNative.cs" />
+    <Compile Include="../../Fixture/Uses/Contract/**/*.cs" />
     <Compile Include="../../Fixture/Tests/Generated/*.cs" />
     <Compile Include="../Stubs.cs" />
   </ItemGroup>

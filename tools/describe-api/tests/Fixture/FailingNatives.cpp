@@ -1,6 +1,8 @@
 // Native functions the natives mode refuses, one per diagnostic. The tests describe the file once and check that every
 // diagnostic is reported. It is read, never compiled.
 
+#include <string_view>
+
 namespace Host
 {
     class CallContext
@@ -59,5 +61,10 @@ namespace Failing
     bool Wide(const Host::CallContext&, long double wide)
     {
         return wide != 0;
+    }
+
+    bool TextByPointer(const Host::CallContext&, const std::string_view* text)
+    {
+        return text != nullptr;
     }
 } // namespace Failing
