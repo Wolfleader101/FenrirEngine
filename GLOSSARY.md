@@ -140,7 +140,7 @@ The shared assembly `Fenrir.Scripting` that every script assembly compiles again
 *Avoid:* engine API assembly, SDK (that is the contract plus its source generator).
 
 **Math contract**
-The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types.
+The shared assembly `Fenrir.Math` (ADR-0029): FenrirMath's types for C# (`Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray`, `Bounds`), each laid out as its C++ counterpart, with no native functions. The built-in extension shares it before the scripting contract, which is built on it, so every package's contract can use it. The generated bindings name its `Vector3` and `Quaternion` for FenrirMath's vector and quaternion, which FenrirMath's API description records as bound types. Since ADR-0043, `Colour`, `Ray` and `Bounds` are generated mirrors from that description, through the math binding, and the glm-backed five are bound types; `Bounds` is the one C# type for `Math::AABB`.
 *Avoid:* math library (FenrirMath's functions stay in C++).
 
 **Scripting extension**
@@ -180,8 +180,16 @@ A C++ function that C# calls, written once in C++ and named by the full name of 
 *Avoid:* binding (that is the whole of what a language gets), internal call (the Iris-level term), engine API.
 
 **Native resource**
-A plain-data C++ resource, scene or app, that C# sees as a blittable struct marked `[NativeResource]` and reaches through `Resources.Get<T>()` (ADR-0029). A resource with methods (`Keyboard`, `DebugDraw`) is not one: C# gets a facade of native functions instead.
+A plain-data C++ resource, scene or app, that C# sees as a blittable struct marked `[NativeResource]` and reaches through `Resources.Get<T>()` (ADR-0029). Its package's API selection gives it the role `scene-resource` or `app-resource`, and the binding's `read-only` list says whether C# may write it (ADR-0043). A resource with methods (`Keyboard`, `DebugDraw`) is not one: C# gets a facade of native functions instead.
 *Avoid:* singleton, global, resource mirror (informal).
+
+**Facade**
+A hand-written static C# class over a package's generated native functions, standing for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). It holds only what a description cannot say: overloads, generic methods, properties over outputs, constants and conversions.
+*Avoid:* wrapper (that is a one-field struct), API class, service.
+
+**Wrapper**
+A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`, `Entity`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044).
+*Avoid:* handle (an `AssetHandle<T>` has two fields and crosses packed), strong typedef, newtype.
 
 **Call context**
 What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities and the change buffer. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
