@@ -119,8 +119,8 @@ namespace Fenrir
          *
          * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
          * Window, or for a window that has not been made, they do nothing and return false, zero or empty. In debug
-         * builds each such case is warned about once per process for each place in FenrirWindowScripting's native code
-         * that notices it, not once per C# call site.
+         * builds each such case is warned about once per scripting install for each place in FenrirWindowScripting's
+         * native code that notices it, not once per C# call site.
          *
          * Defined by the FenrirWindowScripting library, not FenrirWindow (which never links FenrirScripting), so it
          * exists only in a build with the renderer and scripting on. Include

@@ -1,18 +1,17 @@
 #pragma once
 
 #include <cstdint>
-#include <mutex>
 #include <optional>
-#include <set>
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
 
 namespace Fenrir
 {
@@ -23,44 +22,11 @@ namespace Fenrir
      */
     struct AssetsScripting
     {
-        /**
-         * @brief A handle as it crosses to and from C#: one number, the generation in the high half and the index in
-         * the low (C#'s AssetHandle<T>.Bits).
-         */
-        template <typename T>
-        [[nodiscard]] static AssetHandle<T> Unpack(std::uint64_t bits) noexcept
-        {
-            return {static_cast<std::uint32_t>(bits), static_cast<std::uint32_t>(bits >> 32u)};
-        }
-
-        /** @brief See Unpack. */
-        template <typename T>
-        [[nodiscard]] static std::uint64_t Pack(AssetHandle<T> handle) noexcept
-        {
-            return (std::uint64_t{handle.generation} << 32u) | handle.index;
-        }
-
-        /**
-         * @brief Logs `message` once for each place in the extension that notices a call doing nothing, and each
-         * message, in debug builds only.
-         */
+        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
         void WarnOnce(const CallContext& context, const std::string& message,
                       std::source_location where = std::source_location::current())
         {
-#ifndef NDEBUG
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[assets scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
+            warnings.Warn(context.GetApp(), message, where);
         }
 
         /** @brief The app's asset store; warns once for the caller's call site if there is none. */
@@ -87,7 +53,7 @@ namespace Fenrir
                             std::source_location where = std::source_location::current())
         {
             AssetStore* store = StoreFor(context, function, where);
-            if (store == nullptr || store->IsValid(Unpack<T>(bits)))
+            if (store == nullptr || store->IsValid(AssetHandleFromBits<T>(bits)))
             {
                 return store;
             }
@@ -115,9 +81,7 @@ namespace Fenrir
             return std::nullopt;
         }
 
-        /** @brief The calls warned about, by where and why. Natives may run on several threads at once. */
-        std::mutex mutex;
-        /** @brief See mutex. */
-        std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        /** @brief What the natives have warned about, so that each place warns once. */
+        WarnOnceRecord warnings{"assets scripting"};
     };
 } // namespace Fenrir

@@ -13,7 +13,9 @@
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
 #include "FenrirPhysics/Vehicles.hpp"
-#include "BoundMappings.hpp"
+#include "ScriptQueries.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/EntityValueMapping.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
@@ -885,8 +887,8 @@ static_assert(sizeof(Fenrir::VehicleWheel) == 224 && alignof(Fenrir::VehicleWhee
               "Fenrir::VehicleWheel is not the layout FenrirPhysics.api.json describes: "
               "regenerate the description, then this binding");
 
-static_assert(sizeof(Fenrir::ScriptQueries::EntityValue) == 4 && alignof(Fenrir::ScriptQueries::EntityValue) == 4,
-              "Fenrir::ScriptQueries::EntityValue is not the layout FenrirPhysicsScripting.api.json describes: "
+static_assert(sizeof(Fenrir::EntityValue) == 4 && alignof(Fenrir::EntityValue) == 4,
+              "Fenrir::EntityValue is not the layout FenrirPhysicsScripting.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>
@@ -894,10 +896,10 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::Contact>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.Contact";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("OtherBody", 8),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("OtherCollider", 12),
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4),
+        Iris::Field<Fenrir::EntityValue>("OtherBody", 8),
+        Iris::Field<Fenrir::EntityValue>("OtherCollider", 12),
         Iris::Field<Fenrir::Math::Vec3>("Point", 16),
         Iris::Field<Fenrir::Math::Vec3>("Normal", 28));
 };
@@ -910,8 +912,8 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::MoveCastHit>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.MoveCastHit";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4),
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4),
         Iris::Field<Fenrir::Math::Vec3>("Point", 8),
         Iris::Field<Fenrir::Math::Vec3>("Normal", 20),
         Iris::Field<float>("Distance", 32));
@@ -925,8 +927,8 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::OverlapHit>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.OverlapHit";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4));
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4));
 };
 static_assert(sizeof(Fenrir::ScriptQueries::OverlapHit) == 8 && alignof(Fenrir::ScriptQueries::OverlapHit) == 4,
               "Fenrir::ScriptQueries::OverlapHit is not the layout FenrirPhysicsScripting.api.json describes: "
@@ -937,8 +939,8 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::PenetrationHit>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.PenetrationHit";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4),
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4),
         Iris::Field<Fenrir::Math::Vec3>("Point", 8),
         Iris::Field<Fenrir::Math::Vec3>("Normal", 20),
         Iris::Field<float>("Depth", 32));
@@ -954,7 +956,7 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::QueryFilter>
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("Mask", 0),
         Iris::Field<std::uint32_t>("Layers", 4),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("IgnoreBody", 8),
+        Iris::Field<Fenrir::EntityValue>("IgnoreBody", 8),
         Iris::Field<bool>("HitTriggers", 12));
 };
 static_assert(sizeof(Fenrir::ScriptQueries::QueryFilter) == 16 && alignof(Fenrir::ScriptQueries::QueryFilter) == 4,
@@ -966,8 +968,8 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::RaycastHit>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.RaycastHit";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4),
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4),
         Iris::Field<Fenrir::Math::Vec3>("Point", 8),
         Iris::Field<Fenrir::Math::Vec3>("Normal", 20),
         Iris::Field<float>("Distance", 32));
@@ -981,8 +983,8 @@ struct Iris::StructMapping<Fenrir::ScriptQueries::ShapeCastHit>
 {
     static constexpr std::string_view typeName = "Fenrir.Physics.ShapeCastHit";
     static constexpr auto fields = Iris::StructFields(
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Body", 0),
-        Iris::Field<Fenrir::ScriptQueries::EntityValue>("Collider", 4),
+        Iris::Field<Fenrir::EntityValue>("Body", 0),
+        Iris::Field<Fenrir::EntityValue>("Collider", 4),
         Iris::Field<Fenrir::Math::Vec3>("Point", 8),
         Iris::Field<Fenrir::Math::Vec3>("Normal", 20),
         Iris::Field<float>("Distance", 32));

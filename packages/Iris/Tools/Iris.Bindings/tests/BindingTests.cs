@@ -549,6 +549,7 @@ public sealed class BindingTests
             "    public static partial BodyId Advance(BodyId body, Motion motion);\n",
             "    public static partial Motion MotionOf(BodyId body);\n",
             "    public static partial Ticket Renew(Ticket ticket);\n",
+            "    public static partial void Turn(in Quaternion rotation, int turns);\n",
         ];
         foreach (var line in expected)
         {

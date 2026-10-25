@@ -4,19 +4,19 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Fenrir::EntityValue",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A C# Entity: an entity's 32-bit value alone. The wrapper a native takes or returns where C# passes an Entity, and the field a shared struct holds where C# holds one."
+    },
+    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
       "size": 12,
       "alignment": 4
-    },
-    {
-      "name": "Fenrir::ScriptQueries::EntityValue",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 4,
-      "alignment": 4,
-      "doc": "A C# Entity: an entity's 32-bit value alone."
     },
     {
       "name": "Fenrir::ScriptQueries::Contact",
@@ -30,7 +30,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The body entity (a rigid body or a character body) asked about."
         },
@@ -38,7 +38,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The body's collider touching."
         },
@@ -46,7 +46,7 @@
           "name": "otherBody",
           "offset": 8,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The body entity (a rigid body or a character body) it touches."
         },
@@ -54,7 +54,7 @@
           "name": "otherCollider",
           "offset": 12,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "That body's collider."
         },
@@ -96,7 +96,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the body that blocked the shape."
         },
@@ -104,7 +104,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the collider that blocked it."
         },
@@ -153,7 +153,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the body."
         },
@@ -161,7 +161,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the collider."
         }
@@ -179,7 +179,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the body."
         },
@@ -187,7 +187,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the collider."
         },
@@ -250,7 +250,7 @@
           "name": "ignoreBody",
           "offset": 8,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {
             "value": 4294967295
           },
@@ -277,7 +277,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the body hit."
         },
@@ -285,7 +285,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the collider hit."
         },
@@ -334,7 +334,7 @@
           "name": "body",
           "offset": 0,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the body hit."
         },
@@ -342,7 +342,7 @@
           "name": "collider",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptQueries::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {},
           "doc": "The entity of the collider hit."
         },

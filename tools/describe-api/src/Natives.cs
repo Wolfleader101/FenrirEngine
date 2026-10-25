@@ -79,9 +79,10 @@ internal sealed record NativeType(string Spelling, string Kind, string? Pointee 
 
 /// <summary>
 /// A parameter after the call context and the extension state: an output (<c>@param[out]</c>), a pointer the function
-/// reads and writes (<c>@param[in,out]</c>), or an input.
+/// reads and writes (<c>@param[in,out]</c>), a pointer to one value it reads that is never a span whatever follows it
+/// (<c>@param[in]</c>, <c>Input</c>), or an input.
 /// </summary>
-internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, string? Doc);
+internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, bool Input, string? Doc);
 
 /// <summary>
 /// One native function: a free function taking the call context first, and optionally its extension state.
@@ -254,20 +255,29 @@ internal sealed class NativesDescriber
             var type = Spell(parameter.Type, parameter, subject);
             var output = false;
             var inOut = false;
+            var input = false;
             if (doc.Parameters.TryGetValue(parameter.Name, out var parameterDoc))
             {
                 output = parameterDoc.Output;
                 inOut = parameterDoc.InOut;
+                input = parameterDoc.Input;
                 if ((output || inOut) && (type?.Kind != "pointer" || type.Const))
                 {
                     Error(parameter, subject,
                           $"is documented @param[{(output ? "out" : "in,out")}] but is not a pointer to non-const data");
                 }
+
+                if (input && (type?.Kind != "pointer" || !type.Const))
+                {
+                    Error(parameter, subject,
+                          "is documented @param[in] but is not a pointer to const data: [in] marks one value a native " +
+                          "reads through a pointer, which a count after it does not make a span");
+                }
             }
 
             if (type is not null)
             {
-                described.Add(new NativeParameter(parameter.Name, type, output, inOut, parameterDoc?.Text));
+                described.Add(new NativeParameter(parameter.Name, type, output, inOut, input, parameterDoc?.Text));
             }
         }
 
@@ -528,6 +538,11 @@ internal static class NativesWriter
                     if (parameter.InOut)
                     {
                         json.WriteBoolean("inOut", true);
+                    }
+
+                    if (parameter.Input)
+                    {
+                        json.WriteBoolean("input", true);
                     }
 
                     WriteDoc(json, parameter.Doc);

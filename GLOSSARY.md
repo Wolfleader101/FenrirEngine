@@ -188,7 +188,7 @@ A hand-written static C# class over a package's generated native functions, stan
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**
-A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`, `Entity`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044).
+A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`, `Entity`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). C#'s `Entity` is spelled `EntityValue` in C++, FenrirScripting's one type for it, wherever a native or a shared struct holds one.
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses packed), strong typedef, newtype.
 
 **Call context**

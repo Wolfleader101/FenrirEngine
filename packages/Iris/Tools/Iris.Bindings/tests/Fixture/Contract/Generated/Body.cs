@@ -53,31 +53,43 @@ public partial struct Body : IComponent
         Zeros[2] = 0;
     }
 
-    /// <summary>The storage of <see cref="Samples"/>: 4 elements.</summary>
+    /// <summary>The storage of <see cref="Samples"/>: <see cref="Length"/> elements.</summary>
     [InlineArray(4)]
     public struct SamplesArray
     {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 4;
+
         private float _element;
     }
 
-    /// <summary>The storage of <see cref="Modes"/>: 2 elements.</summary>
+    /// <summary>The storage of <see cref="Modes"/>: <see cref="Length"/> elements.</summary>
     [InlineArray(2)]
     public struct ModesArray
     {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 2;
+
         private Motion _element;
     }
 
-    /// <summary>The storage of <see cref="Springs"/>: 2 elements.</summary>
+    /// <summary>The storage of <see cref="Springs"/>: <see cref="Length"/> elements.</summary>
     [InlineArray(2)]
     public struct SpringsArray
     {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 2;
+
         private Spring _element;
     }
 
-    /// <summary>The storage of <see cref="Zeros"/>: 3 elements.</summary>
+    /// <summary>The storage of <see cref="Zeros"/>: <see cref="Length"/> elements.</summary>
     [InlineArray(3)]
     public struct ZerosArray
     {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 3;
+
         private byte _element;
     }
 }

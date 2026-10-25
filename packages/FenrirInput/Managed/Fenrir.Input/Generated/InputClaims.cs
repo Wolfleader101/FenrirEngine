@@ -41,10 +41,13 @@ public readonly partial struct InputClaims : IReadOnlyResource
         Entries[7] = new();
     }
 
-    /// <summary>The storage of <see cref="Entries"/>: 8 elements.</summary>
+    /// <summary>The storage of <see cref="Entries"/>: <see cref="Length"/> elements.</summary>
     [InlineArray(8)]
     public struct EntriesArray
     {
+        /// <summary>How many elements it holds: the C++ array's length.</summary>
+        public const int Length = 8;
+
         private WindowClaimsEntry _element;
     }
 }

@@ -21,10 +21,10 @@ internal static class DocComment
     }
 
     /// <summary>
-    /// A parameter's doc: whether <c>@param[out]</c> marks it an output, or <c>@param[in,out]</c> a pointer the function
-    /// reads and writes, and its text.
+    /// A parameter's doc: whether <c>@param[out]</c> marks it an output, <c>@param[in,out]</c> a pointer the function
+    /// reads and writes, or <c>@param[in]</c> a pointer to one value it reads (never a span), and its text.
     /// </summary>
-    public sealed record ParameterDoc(bool Output, bool InOut, string? Text);
+    public sealed record ParameterDoc(bool Output, bool InOut, bool Input, string? Text);
 
     /// <summary>
     /// A function's doc: its text without the commands below, each <c>@param</c>, <c>@return</c>, and the
@@ -79,7 +79,8 @@ internal static class DocComment
                 var space = rest.IndexOf(' ');
                 var name = space < 0 ? rest : rest[..space];
                 command = space < 0 ? [] : [rest[(space + 1)..].Trim()];
-                finish = text => parameters[name] = new ParameterDoc(direction == "out", direction == "in,out", text);
+                finish = text => parameters[name] =
+                    new ParameterDoc(direction == "out", direction == "in,out", direction == "in", text);
             }
             else if (isNotRunning)
             {

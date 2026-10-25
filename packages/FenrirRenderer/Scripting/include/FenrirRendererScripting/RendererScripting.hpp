@@ -15,9 +15,9 @@
 // nothing without a renderer.
 //
 // A native function that does nothing (no renderer or asset store in the app, an entity that is not alive or has no
-// Camera, a stale model) warns in debug builds "once per call site": once per process for each place in this
-// library's native code that notices it (its std::source_location) and each reason, however many C# call sites or
-// scripts reach it.
+// Camera, a stale model) warns in debug builds "once per call site": once per Scripting given the extension for each
+// place in this library's native code that notices it (its std::source_location) and each reason, however many C# call
+// sites or scripts reach it.
 
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"

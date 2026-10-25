@@ -11,7 +11,7 @@ namespace Fenrir.Input;
 // never lost in a frame with no tick, nor seen twice in a frame with two. Mouse motion and scroll are summed the same way.
 //
 // Nothing here throws. With no input installed in the app, every function does nothing and returns false or zero; so does
-// a gamepad function given a pad that is not connected. In a debug build of the engine a warning is logged once per process
+// a gamepad function given a pad that is not connected. In a debug build of the engine a warning is logged once per scripting install
 // for each place in the engine's native code that noticed (not once per C# call site).
 
 /// <summary>

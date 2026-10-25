@@ -1,30 +1,19 @@
 #pragma once
 
 // ShapeOptions and TextOptions as C# passes them (Fenrir.DebugDraw's NativeShapeOptions and NativeTextOptions): without
-// the group, which crosses as text of its own, and with the relativeTo entity as its 32-bit value, a C# Entity, since a
-// Fenrir::Entity also holds a pointer to its list. The natives convert these to FenrirDebugDraw's own. This header is
-// the binding's own API description (Scripting/api/FenrirDebugDrawScripting.api.toml), so their C# mirrors and mappings
-// are generated from it, and they are checked against C# as scripts load. The doc comments are C#'s.
+// the group, which crosses as text of its own, and with the relativeTo entity as FenrirScripting's EntityValue, a C#
+// Entity's 32-bit value, since a Fenrir::Entity also holds a pointer to its list. The natives convert these to
+// FenrirDebugDraw's own. This header is the binding's own API description
+// (Scripting/api/FenrirDebugDrawScripting.api.toml), so their C# mirrors and mappings are generated from it, and they
+// are checked against C# as scripts load. The doc comments are C#'s.
 
 #include <cstdint>
 
 #include "FenrirDebugDraw/DebugDraw.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 
 namespace Fenrir::ScriptOptions
 {
-    /** @brief A C# Entity: an entity's 32-bit value alone. */
-    struct EntityValue
-    {
-        EntityValue() = default;
-
-        // Named after the component it sets (the leading underscore is ignored), as an API description needs.
-        constexpr explicit EntityValue(std::uint32_t _value) : value(_value)
-        {
-        }
-
-        std::uint32_t value = 0;
-    };
-
     /** @brief A ShapeOptions without its group, as a native takes it. */
     struct ShapeOptions
     {

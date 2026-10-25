@@ -87,7 +87,7 @@ namespace Fenrir
          *
          * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
          * input installed there, they do nothing and return false or zero, as do the gamepad functions for a pad that
-         * is not connected. In debug builds each such case is warned about once per process for each place in
+         * is not connected. In debug builds each such case is warned about once per scripting install for each place in
          * FenrirInputScripting's native code that notices it, not once per C# call site.
          *
          * Defined by the FenrirInputScripting library, not FenrirInput (which never links FenrirScripting), so it

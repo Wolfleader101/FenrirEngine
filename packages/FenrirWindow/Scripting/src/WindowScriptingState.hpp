@@ -1,16 +1,13 @@
 #pragma once
 
-#include <cstdint>
-#include <mutex>
-#include <set>
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/InputTypes.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
 #include "FenrirWindow/Window.hpp"
 
 namespace Fenrir
@@ -23,28 +20,11 @@ namespace Fenrir
      */
     struct WindowScripting
     {
-        /**
-         * @brief Logs `message` once for each place in the extension that notices a call doing nothing, and each
-         * message, in debug builds only.
-         */
+        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
         void WarnOnce(const CallContext& context, const std::string& message,
                       std::source_location where = std::source_location::current())
         {
-#ifndef NDEBUG
-            // Keyed by the message too: one call site can notice more than one reason.
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[window scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
+            warnings.Warn(context.GetApp(), message, where);
         }
 
         /**
@@ -66,7 +46,6 @@ namespace Fenrir
         }
 
       private:
-        std::mutex mutex;
-        std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        WarnOnceRecord warnings{"window scripting"};
     };
 } // namespace Fenrir

@@ -7,9 +7,10 @@ internal sealed record NativeType(string Spelling, string Kind, string? Pointee,
 
 /// <summary>
 /// A parameter after the call context and the extension state: an output, a pointer the native reads and writes
-/// (<c>inOut</c>), or an input.
+/// (<c>inOut</c>), a pointer to one value it reads that is never a span whatever follows it (<c>input</c>), or an
+/// input.
 /// </summary>
-internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, string? Doc);
+internal sealed record NativeParameter(string Name, NativeType Type, bool Output, bool InOut, bool Input, string? Doc);
 
 /// <summary>
 /// One described native function (<c>docs/natives-description.md</c>). <c>NotRunning</c> is the C++ expression of what a
@@ -63,7 +64,7 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
                     var parameterName = Description.String(parameter, "name", where);
                     return new NativeParameter(parameterName, ReadType(parameter, $"{where}::{parameterName}"),
                                                Flag(parameter, "output"), Flag(parameter, "inOut"),
-                                               Description.OptionalString(parameter, "doc"));
+                                               Flag(parameter, "input"), Description.OptionalString(parameter, "doc"));
                 }).ToList(), Description.OptionalString(function, "notRunning"));
         }).ToList();
         return new NativesDescription(path, Description.String(root, "context", path), functions);
@@ -106,9 +107,10 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// Maps natives to C#: the leading context and state are dropped, and each C++ parameter becomes what the hand-written
 /// declarations used to say. A <c>std::string_view</c> is a <c>ReadOnlySpan&lt;char&gt;</c>, and a <c>const char*</c>
 /// with a <c>std::int32_t</c> length after it a <c>string</c>, both crossing as bytes and a length; any other pointer
-/// with a <c>std::int32_t</c> count after it is a <c>T*</c> span; a <c>T*</c> its doc marks an output is <c>out T</c>,
-/// and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is <c>void*</c>, an address C# passes as it
-/// is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, an alias in <c>[natives] types</c> is the C#
+/// with a <c>std::int32_t</c> count after it is a <c>T*</c> span, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
+/// doc marks an output is <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is
+/// <c>void*</c>, an address C# passes as it is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, an
+/// alias in <c>[natives] types</c> is the C#
 /// type it names, an enum is its C# enum, and a wrapper (a described struct of one field, or a bound type whose entry
 /// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A result is any of those values, nothing, or a
 /// <c>void*</c>. Anything else fails naming the function and parameter.
@@ -208,7 +210,7 @@ internal static class Natives
                     parameters.Add($"out {pointee} {name}");
                     wire.Add(new WireParameter($"{pointee}*", pointee));
                 }
-                else if (countFollows || parameter.InOut || type.PointeeKind == "void")
+                else if ((countFollows && !parameter.Input) || parameter.InOut || type.PointeeKind == "void")
                 {
                     parameters.Add($"{pointee}* {name}");
                     wire.Add(new WireParameter("void*", null));

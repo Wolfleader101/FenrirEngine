@@ -7,8 +7,6 @@
 
 #include <cstdint>
 
-#include "FenrirAssets/AssetHandle.hpp"
-#include "FenrirAssets/MaterialData.hpp"
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirMath/Math.hpp"
 
@@ -40,17 +38,5 @@ namespace Fenrir
         Math::Vec4 value{0.0f};
         /** @brief A texture parameter's default. Unused for a number. */
         DefaultTexture texture = DefaultTexture::White;
-    };
-
-    /**
-     * @brief Holds the enums the natives take by value that no shared struct holds, only so that they are described:
-     * describe-api describes an enum through a field that uses it. The binding excludes this struct, so C# has its
-     * enums and not it.
-     */
-    struct ScriptAssetEnums
-    {
-        Detail::AssetKind kind = Detail::AssetKind::Mesh;
-        ScriptAssetOwner owner = ScriptAssetOwner::Scene;
-        BlendMode blendMode = BlendMode::Opaque;
     };
 } // namespace Fenrir
