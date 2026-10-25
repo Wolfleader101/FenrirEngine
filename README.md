@@ -44,12 +44,16 @@ from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. Its nati
 C++ definitions in `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`: `fenrir-describe-api` describes them into
 `FenrirPhysics.natives.json` beside the binding's configuration, and the binding generates their C# declarations
 (`PhysicsNative`), their registration and a test of their outputs. FenrirScripting's built-in extension is bound the same
-way, from FenrirECS's and FenrirMath's descriptions (the engine's Transform, Name, Relationship and entity link) and its
-natives in `packages/FenrirScripting/src/Bindings.cpp`, by `packages/FenrirScripting/api/FenrirScripting.binding.toml`.
+way, from FenrirECS's description (the engine's Transform, Name, Relationship and entity link) and its natives in
+`packages/FenrirScripting/src/Bindings.cpp`, by `packages/FenrirScripting/api/FenrirScripting.binding.toml`, and so is
+every other engine extension: FenrirInput's, FenrirWindow's, FenrirAssets's, FenrirRenderer's and FenrirDebugDraw's, each by
+its `packages/<Package>/Scripting/api/<Package>.binding.toml`. The Fenrir.Math contract's colour, ray and box are generated
+by `packages/FenrirScripting/api/FenrirMath.binding.toml`, and every other binding names them through `uses` rather than
+mirroring them again (ADR-0043).
 After changing a shared type or a native, run
 `fenrir-describe-api`, then `cmake --build out/build/clang-x64-debug --target fenrir-generate-bindings`, and commit both;
-CI fails on a stale binding as on a stale description. The extensions of FenrirInput, FenrirWindow, FenrirAssets,
-FenrirRenderer and FenrirDebugDraw are still written by hand (their `Managed` contracts and `Scripting` registrations), as is
-the Fenrir.Math contract (`packages/FenrirMath/Managed/Fenrir.Math`), whose types the generated bindings name.
+CI fails on a stale binding as on a stale description. What each contract still holds by hand is its facades (the static
+classes scripts call, such as `Keyboard` or `Renderer`) and the behaviour of its mirrors, as `partial` parts beside the
+generated ones.
 
 The Iris checks are built from Iris itself with `IRIS_BUILD_TESTS`, see `packages/Iris/README.md`.

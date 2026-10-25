@@ -1,0 +1,25 @@
+# FenrirRenderer's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and
+# each type the package shares with bindings, with its role. Projection, RenderTarget, CameraBackground and Sky are tagged
+# unions; their kinds, the Viewport and the tag enums are described through what holds them.
+headers = ["../include/FenrirRenderer/Components.hpp", "../include/FenrirRenderer/Renderer.hpp"]
+
+[types]
+"Fenrir::MeshRenderer" = "component"
+"Fenrir::Camera" = "component"
+"Fenrir::DirectionalLight" = "component"
+"Fenrir::AmbientLight" = "scene-resource"
+"Fenrir::Sky" = "scene-resource"
+"Fenrir::RendererStats" = "shared-struct"
+
+# FenrirMath's ray and box, which the natives fill through pointers: selected with the math description's role, so this
+# binding names them as the math binding's Ray and Bounds.
+"Fenrir::Math::Ray" = "shared-struct"
+"Fenrir::Math::AABB" = "shared-struct"
+
+# Other packages' types the components hold: FenrirAssets's handles and FenrirMath's colour are those packages' (named by
+# their bindings), FenrirInput's WindowId is described through WindowTarget.
+"Fenrir::AssetHandle<Fenrir::Mesh>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Material>" = "bound-type"
+"Fenrir::AssetHandle<Fenrir::Image>" = "bound-type"
+"Fenrir::Math::Vec2" = "bound-type"
+"Fenrir::Math::Vec3" = "bound-type"

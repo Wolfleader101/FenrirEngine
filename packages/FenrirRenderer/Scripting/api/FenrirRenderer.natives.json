@@ -1,0 +1,183 @@
+{
+  "binding": "FenrirRenderer",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "ScreenPointToRay",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "The ray from `camera` through `point`, in window pixels from the top-left of its target.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there is a ray: false with no renderer or no such camera."
+      },
+      "parameters": [
+        {
+          "name": "camera",
+          "type": "Fenrir::RendererScript::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "ray",
+          "type": "Fenrir::Math::Ray*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Ray",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The ray; the default ray when there is none."
+        }
+      ]
+    },
+    {
+      "name": "WorldToScreenPoint",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "Where `point`, in world space, lands on `camera`'s target, in window pixels from its top-left.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it lands: false with no renderer, no such camera, or a point behind the camera."
+      },
+      "parameters": [
+        {
+          "name": "camera",
+          "type": "Fenrir::RendererScript::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "screenPoint",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The point; zero when it does not land."
+        }
+      ]
+    },
+    {
+      "name": "CameraAt",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "The camera whose view of `window` is under `point`, in window pixels from its top-left.",
+      "notRunning": "Fenrir::Entity::Null",
+      "returns": {
+        "type": "Fenrir::RendererScript::EntityId",
+        "kind": "u32",
+        "doc": "The camera entity, or no entity (C#'s Entity.None)."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "point",
+          "type": "const Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
+    },
+    {
+      "name": "GetWorldBounds",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "The world-space box around the meshes of `entity` and its children.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there is one: false with no renderer, an entity not alive, or no mesh to bound."
+      },
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::RendererScript::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "bounds",
+          "type": "Fenrir::Math::AABB*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::AABB",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The box; the default box when there is none."
+        }
+      ]
+    },
+    {
+      "name": "Stats",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "What the renderer did in the last frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the app has a renderer."
+      },
+      "parameters": [
+        {
+          "name": "stats",
+          "type": "Fenrir::RendererStats*",
+          "kind": "pointer",
+          "pointee": "Fenrir::RendererStats",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The counts; zero with no renderer."
+        }
+      ]
+    },
+    {
+      "name": "SpawnModel",
+      "namespace": "Fenrir::RendererNatives",
+      "source": "../src/RendererScripting.cpp",
+      "state": "Fenrir::RendererScripting",
+      "doc": "Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity: recorded, so it takes effect when the system returns.",
+      "notRunning": "Fenrir::Entity::Null",
+      "returns": {
+        "type": "Fenrir::RendererScript::EntityId",
+        "kind": "u32",
+        "doc": "The model's root entity, or no entity (C#'s Entity.None) with no asset store, a stale model or a parent that is not alive."
+      },
+      "parameters": [
+        {
+          "name": "model",
+          "type": "std::uint64_t",
+          "kind": "u64",
+          "doc": "The model's handle, packed as Fenrir.Assets packs one (generation high, index low)."
+        },
+        {
+          "name": "parent",
+          "type": "Fenrir::RendererScript::EntityId",
+          "kind": "u32"
+        }
+      ]
+    }
+  ]
+}

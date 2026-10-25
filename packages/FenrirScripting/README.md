@@ -608,9 +608,10 @@ FenrirPhysics's is a real one: `PhysicsScriptingExtension()` (in its `FenrirPhys
 never links FenrirScripting), whose natives take its extension state, its contract
 `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this package's harness in
 `packages/FenrirPhysics/Scripting/Tests`. FenrirInput's and FenrirWindow's are static (`Input::ScriptingExtension()`,
-`Window::ScriptingExtension()`): they need no installed package, and the window's contract builds on input's. Their
-extensions, and those of FenrirAssets, FenrirRenderer and FenrirDebugDraw, are still written by hand, without a generated
-binding.
+`Window::ScriptingExtension()`): they need no installed package, and the window's contract builds on input's. Every engine
+extension is a generated binding, as FenrirPhysics's is (`packages/<Package>/Scripting/api/<Package>.binding.toml`): its
+mirrors, mappings, native declarations, registration and tests are generated, and its contract holds only its facades and
+its mirrors' behaviour by hand.
 
 ### Native resources
 

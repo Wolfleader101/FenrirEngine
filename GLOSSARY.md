@@ -176,7 +176,7 @@ A named point inside a package's own C++ work where C# systems run, declared by 
 *Avoid:* phase (FenrirApp's), hook, callback.
 
 **Native function**
-A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); in a generated binding its C# declaration and its registration are generated from it (the extensions of input, window, assets, renderer and debug draw still declare both by hand). In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
+A C++ function that C# calls, written once in C++ and named by the full name of the C# method that calls it (`Namespace.Type.Method`); in a generated binding its C# declaration and its registration are generated from it. In C++ its first parameter is the call context, optionally followed by its extension's state; the C# field Iris binds is named by the binding-name rule (`Namespace.Type.__native_Method`). Built on an Iris internal call.
 *Avoid:* binding (that is the whole of what a language gets), internal call (the Iris-level term), engine API.
 
 **Native resource**
