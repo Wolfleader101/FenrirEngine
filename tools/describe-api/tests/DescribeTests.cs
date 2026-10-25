@@ -91,9 +91,24 @@ public sealed class DescribeTests
 
         var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
 
-        Assert.True(exception.Message.Contains("error: Failing::Mode: an enum takes no role; it is described when a field uses it",
-                                               StringComparison.Ordinal),
+        Assert.True(exception.Message.Contains("error: Failing::Mode: an enum takes no role; it is described when a field uses " +
+                                               "it, or when the selection names it as an enum", StringComparison.Ordinal),
                     $"An enum selected as a {role} should fail naming it, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ATypeThatIsNotAnEnumSelectedAsAnEnumFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "NotEnum.api.toml");
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n[types]\n\"Failing::NoInitialiser\" = \"enum\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
+
+        Assert.True(exception.Message.Contains("error: Failing::NoInitialiser: not an enum, so it cannot be selected as one",
+                                               StringComparison.Ordinal),
+                    $"A struct selected as an enum should fail naming it, but failed with\n  {exception.Message}");
     }
 
     [Theory]

@@ -14,6 +14,12 @@ internal enum Role
     /// <summary>A resource of the app: plain data, as a component is.</summary>
     AppResource,
 
+    /// <summary>
+    /// An enum no field holds, selected so it is described all the same (a native function takes it). Only selections
+    /// spell it: a described enum has no role.
+    /// </summary>
+    Enum,
+
     /// <summary>Not selected: described because a selected type's field uses it.</summary>
     Nested,
 }
@@ -39,6 +45,7 @@ internal static class Roles
         "bound-type" => Role.BoundType,
         "scene-resource" => Role.SceneResource,
         "app-resource" => Role.AppResource,
+        "enum" => Role.Enum,
         _ => null,
     };
 }

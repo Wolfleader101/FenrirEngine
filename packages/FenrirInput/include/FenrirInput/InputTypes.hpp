@@ -58,7 +58,9 @@ namespace Fenrir
     enum class Key : std::uint16_t
     {
         Unknown,
-        FENRIR_INPUT_KEYS(FENRIR_INPUT_KEY_ENUMERATOR) Count
+        FENRIR_INPUT_KEYS(FENRIR_INPUT_KEY_ENUMERATOR)
+        /** @brief How many keys there are, `Unknown` included: a size, not a key. */
+        Count
     };
 
     /**
@@ -69,7 +71,9 @@ namespace Fenrir
     enum class Scancode : std::uint16_t
     {
         Unknown,
-        FENRIR_INPUT_KEYS(FENRIR_INPUT_KEY_ENUMERATOR) Count
+        FENRIR_INPUT_KEYS(FENRIR_INPUT_KEY_ENUMERATOR)
+        /** @brief How many scancodes there are, `Unknown` included: a size, not a key. */
+        Count
     };
 
 #undef FENRIR_INPUT_KEY_ENUMERATOR
@@ -128,6 +132,7 @@ namespace Fenrir
         Middle,
         X1,
         X2,
+        /** @brief How many mouse buttons there are: a size, not a button. */
         Count
     };
 
@@ -162,6 +167,7 @@ namespace Fenrir
         RightPaddle2,
         LeftPaddle2,
         Touchpad,
+        /** @brief How many gamepad buttons there are: a size, not a button. */
         Count
     };
 
@@ -180,6 +186,7 @@ namespace Fenrir
         RightY,
         LeftTrigger,
         RightTrigger,
+        /** @brief How many gamepad axes there are: a size, not an axis. */
         Count
     };
 

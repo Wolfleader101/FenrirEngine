@@ -1,0 +1,10 @@
+# FenrirInputScripting's own selection: what C# reads of FenrirInput that FenrirInput does not share in that form.
+# InputClaims keeps its windows in a vector, so C# reads a plain-data copy of it, ScriptInputClaims, which this library
+# refreshes (src/InputScripting.cpp). The window claims and the caret it holds are FenrirInput's, described through it.
+headers = ["../include/FenrirInputScripting/ScriptInputClaims.hpp"]
+
+[types]
+"Fenrir::Detail::ScriptInputClaims" = "app-resource"
+
+# FenrirMath's vector, which the caret holds.
+"Fenrir::Math::Vec2" = "bound-type"

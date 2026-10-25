@@ -8,12 +8,16 @@ fenrir_add_catch2()
 set(fenrir_scripting_tests_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/Tests")
 add_executable(FenrirWindowScriptingTests
     WindowScriptingTests.cpp
+    WindowScriptingApp.hpp
+    Generated/FenrirWindowDefaultsTests.cpp
+    Generated/FenrirWindowNativesTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
 # FenrirWindow's test probe, to resize the hidden window as a user would; and the library's own src, for its UTF-16
 # conversion.
-target_include_directories(FenrirWindowScriptingTests PRIVATE "${fenrir_scripting_tests_dir}" ../../Tests ../src)
+target_include_directories(FenrirWindowScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"
+    ../../Tests ../src)
 target_link_libraries(FenrirWindowScriptingTests PRIVATE FenrirWindowScripting FenrirWindowProbe Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirWindowScriptingTests)
 fenrir_deploy_input_scripting(FenrirWindowScriptingTests)
@@ -22,7 +26,10 @@ fenrir_deploy_window_scripting(FenrirWindowScriptingTests)
 # The fixture script assembly: compiled against the scripting SDK and both contracts, none copied (the host shares its
 # own copies), and rebuilt when any is.
 set(fenrir_window_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_window_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the generated tests' C# classes (Generated/): the defaults test reads their new() values, and the
+# natives test calls the natives through them.
+file(GLOB fenrir_window_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${fenrir_window_fixture_dir}/Fenrir.WindowScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.WindowScriptFixture.csproj"

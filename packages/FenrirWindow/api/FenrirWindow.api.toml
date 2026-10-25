@@ -1,0 +1,12 @@
+# FenrirWindow's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
+# type the package shares with bindings, with its role. The window ids its events hold are FenrirInput's, described here
+# because the events hold them and named by FenrirInput's binding.
+headers = ["../include/FenrirWindow/WindowEvents.hpp", "../include/FenrirWindow/WindowTypes.hpp"]
+
+[types]
+"Fenrir::WindowResizedEvent" = "event"
+"Fenrir::WindowCloseRequestedEvent" = "event"
+"Fenrir::WindowSize" = "shared-struct"
+# Held by no field, but taken by the natives: described all the same.
+"Fenrir::CursorMode" = "enum"
+"Fenrir::CursorShape" = "enum"

@@ -14,9 +14,67 @@
 
 **Touches:** `packages/FenrirInput/api/`, `packages/FenrirInput/Managed/`, `packages/FenrirInput/Scripting/`, `packages/FenrirWindow/api/`, `packages/FenrirWindow/Managed/`, `packages/FenrirWindow/Scripting/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` leave the tree clean; no `IRIS_FIELD`, `[NativeFunction]` or `NativeFunction::Make` remains under either package.
-- [ ] The existing input and window extension tests pass unchanged in behaviour (fed keys per phase, mouse, gamepads, `InputClaims`, hidden-window clipboard, no-op rules with one debug warning per native call site through the state's record).
-- [ ] The generated defaults and natives tests run in both test targets; `TextEvent` arrives with its codepoint through the described event.
-- [ ] A script reads `Keyboard.JustPressed(Key.Space)`, `Window.Size(Window.Main)` and `Resources.TryGetReadOnly<InputClaims>` exactly as before.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` leave the tree clean; no `IRIS_FIELD`, `[NativeFunction]` or `NativeFunction::Make` remains under either package.
+- [x] The existing input and window extension tests pass unchanged in behaviour (fed keys per phase, mouse, gamepads, `InputClaims`, hidden-window clipboard, no-op rules with one debug warning per native call site through the state's record).
+- [x] The generated defaults and natives tests run in both test targets; `TextEvent` arrives with its codepoint through the described event.
+- [x] A script reads `Keyboard.JustPressed(Key.Space)`, `Window.Size(Window.Main)` and `Resources.TryGetReadOnly<InputClaims>` exactly as before.
+
+## Comments
+
+**The `Count` enumerators are kept (settled).** The generated enums carry C++'s `Count`, so each C# enum names exactly
+C++'s values. `Count` is documented in `FenrirInput/InputTypes.hpp` as a size, not an input; that is a doc-only change
+outside the Touches line, and its text becomes the C# doc. `Scripting/Tests/Shapes.cpp` now expects `Count` among each
+enum's members. No `@hidden` command was added.
+
+**The generator change this ticket makes is a selection role `enum` (describe-api), not `@hidden`.** Window's natives
+take `CursorMode` and `CursorShape` by value, but no field holds either, so nothing described them, and describe-api
+refused an enum in a selection. A selection may now name an enum as `enum`: it is described exactly as a field-reached
+enum is, with no role in the output. Anything else on an enum, or `enum` on a non-enum, fails, and each has a test case.
+The describe-api fixture gains `Heading`, selected this way, and so does Iris.Bindings' copy of it.
+
+**A type may be described in two descriptions when alike (Iris.Bindings, outside the Touches line).** FenrirInput's
+binding binds two descriptions: the package's, and the library's own, of `ScriptInputClaims`. The second nests
+FenrirInput's `WindowId`, `WindowInputClaims` and `CaretRect`. Iris.Bindings refused any type described twice that was
+not a bound type. Now a struct, tagged union or enum two descriptions describe alike (the same fields, offsets, kinds,
+defaults and values; docs may differ) is kept once, with the role it is selected with. Described differently, or
+selected with two roles, it fails. Each case has a test.
+
+**The SDK build check no longer hangs (Iris.Bindings tests).** `TheMirrorsBuildAgainstTheScriptingSdkWithNoDiagnostic`
+runs `dotnet build` and reads its output to the end. A reused MSBuild node outlived the build while holding the
+redirected pipes open, so the read waited forever (this is the hang ticket 02 saw once). The build now passes
+`-nodeReuse:false`.
+
+**`ScriptInputClaims` changed shape (binding-owned, inside Touches).**
+- It moved to `Scripting/include/FenrirInputScripting/` because the generated mappings, which include it, are public:
+  window's binding includes them, and so will the renderer's.
+- Its `std::array` became a C array, since describe-api would describe the library's array internals.
+- Its fields became `entries`, `entryCount` and `gamepadClaimed`. Their C# mirrors (`Entries`, a nested `EntriesArray`,
+  `EntryCount`, `GamepadClaimed`) are private and clash with none of `InputClaims`'s hand-written `WindowCount`,
+  `Gamepad`, indexer and `For`.
+- `CaretRect`, `WindowInputClaims` and `WindowClaimsEntry` stay readonly (`readonly-structs`). Read-only mirrors gain a
+  `public T()` that runs their initialisers, which is new C# surface, all zero as before.
+
+**`InputClaimsResource` lives in its own source** (`src/InputClaimsResource.cpp`). It needs the generated mappings, and
+a natives source cannot include them: libclang cannot evaluate `BoundMappings.hpp`'s constexpr `offsetof`s (physics's
+natives source includes no mappings either). Its registration takes the extension's state, so its "more windows than
+C# can read" warning goes through the state's record.
+
+**Warn once is per extension now.** Each extension's state keeps its own record. Since `Input::ScriptingExtension()` and
+`Window::ScriptingExtension()` make a new state each time, a warning is once per call site per Scripting, not per
+process. The facades' remarks still say "once per process", which is true for an app with one Scripting.
+
+**Native names.** The C++ names are kept: `KeyModifiersOf` and `GamepadAxisOf`, so C#'s internal `InputNative` names
+those two that way; the facades are unchanged. Window's natives are `Fenrir::WindowNatives::*`.
+
+**Outside the Touches line, all small:**
+- `fenrir_describe_api` lines in `FenrirInput/CMakeLists.txt` and `FenrirWindow/CMakeLists.txt`, where each package
+  describes itself, as FenrirECS and FenrirPhysics do.
+- `FenrirRenderer/Scripting/include/FenrirRendererScripting/RendererMappings.hpp` includes the generated input mappings,
+  since `WindowId`'s mapping left `InputMappings.hpp`. Ticket 06 replaces that file.
+- The root `README.md` and `FenrirScripting/README.md` still list input and window among the extensions "still written
+  by hand". 05 and 07 edit the same sentences in parallel, so the port that closes the spec updates them once.
+
+**Kept:** `Utf16.hpp` (`GetClipboard` converts to UTF-16). **Added:** `Scripting/Tests/WindowScriptingApp.hpp`, the
+harness window's generated tests run in (no window, so the natives test sees nothing to act on).

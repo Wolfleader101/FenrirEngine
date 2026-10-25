@@ -45,8 +45,8 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 25,
-                    $"The fixture should give 18 mirrors, the natives' class, the mappings, the registration and the " +
+        Assert.True(generated.Count == 26,
+                    $"The fixture should give 19 mirrors, the natives' class, the mappings, the registration and the " +
                     $"two files each of the defaults and natives tests, but gave {generated.Count} files.");
     }
 
@@ -244,7 +244,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 25, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 26, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -449,7 +449,10 @@ public sealed class BindingTests
             Assert.Skip($"The Fenrir scripting SDK is not beside Iris ({sdk}), so only the stubs are compiled against.");
         }
 
-        var start = new ProcessStartInfo("dotnet", ["build", project, "--nologo", "-v:q", "-warnaserror", "--no-incremental"])
+        // No node reuse: a reused MSBuild node outlives the build holding its redirected output open, and the reads below
+        // would wait for it.
+        var start = new ProcessStartInfo("dotnet", ["build", project, "--nologo", "-v:q", "-warnaserror", "--no-incremental",
+                                                    "-nodeReuse:false"])
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -629,6 +632,46 @@ public sealed class BindingTests
 
         Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal) && exception.Message.Contains(rest, StringComparison.Ordinal),
                     $"Binding should fail with\n  {diagnostic}...{rest}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Theory]
+    [InlineData("Alike", "")]
+    [InlineData("Differently", "Fixture::Hit is also described by")]
+    [InlineData("TwoRoles", "with another role; a type described twice is selected in one description at most")]
+    public void ATypeTwoDescriptionsDescribeIsKeptOnceWhenAlike(string problem, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        // A second description holding Hit as a binding's own description holds a package's type: nested, its own doc.
+        var root = JsonNode.Parse(System.IO.File.ReadAllText(FixtureDescription))!;
+        var hit = Type(root, "Fixture::Hit").DeepClone();
+        hit["role"] = problem == "TwoRoles" ? "component" : "nested";
+        hit["doc"] = "Described again.";
+        if (problem == "Differently")
+        {
+            hit["fields"]![2]!["offset"] = 32;
+        }
+
+        var second = Path.Combine(directory.Path, "Second.api.json");
+        System.IO.File.WriteAllText(second, new JsonObject
+        {
+            ["package"] = "Second", ["pointerSize"] = 8, ["alignment"] = "natural", ["types"] = new JsonArray(hit),
+        }.ToJsonString());
+
+        if (problem != "Alike")
+        {
+            var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description, second]));
+            Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                        $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+            return;
+        }
+
+        var once = Generator.Generate(config, [description]);
+        var twice = Generator.Generate(config, [description, second]);
+        Assert.True(Changes(once, twice).Count == 0,
+                    "A type a second description describes alike should be bound once, as the first selects it, but " +
+                    $"the outputs changed:\n{string.Join('\n', Changes(once, twice))}");
     }
 
     // A copy of the fixture's configuration in the directory, so every output lands there. `boundTypes` replaces the

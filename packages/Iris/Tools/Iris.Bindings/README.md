@@ -221,7 +221,9 @@ description describes or one that a type it binds holds, a `readonly-structs` en
 of numbers or is in a read-only mirror, a resource with no resource attribute, interface or (with a registration) factory,
 a `read-only` entry that is not a component or resource, a `by-hand` entry that is not a type the registration would
 list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
-not a number kind, `descriptions` that differ from the command line's, a `uses` entry that does not exist, names no
+not a number kind, a type two descriptions describe differently (a struct, tagged union or enum may be described twice, alike, as a binding's
+own description holds a package's type; it is bound once, with the role it is selected with), `descriptions` that
+differ from the command line's, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and

@@ -1,0 +1,173 @@
+{
+  "package": "FenrirWindow",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::CursorMode",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "How the mouse cursor behaves over a window.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Normal",
+          "value": 0,
+          "doc": "Shown, and free to leave the window."
+        },
+        {
+          "name": "Hidden",
+          "value": 1,
+          "doc": "Hidden over the window, and free to leave it."
+        },
+        {
+          "name": "Captured",
+          "value": 2,
+          "doc": "Hidden and held in the window; the mouse reports raw relative motion (for mouse look)."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::CursorShape",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "Which system cursor is shown over a window. `Hidden` shows none.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Arrow",
+          "value": 0
+        },
+        {
+          "name": "Text",
+          "value": 1,
+          "doc": "The I-beam, over editable text."
+        },
+        {
+          "name": "ResizeEastWest",
+          "value": 2
+        },
+        {
+          "name": "ResizeNorthSouth",
+          "value": 3
+        },
+        {
+          "name": "ResizeNorthWestSouthEast",
+          "value": 4
+        },
+        {
+          "name": "ResizeNorthEastSouthWest",
+          "value": 5
+        },
+        {
+          "name": "Hand",
+          "value": 6,
+          "doc": "The pointing hand, over a link or button."
+        },
+        {
+          "name": "NotAllowed",
+          "value": 7
+        },
+        {
+          "name": "Hidden",
+          "value": 8
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowId",
+      "category": "struct",
+      "role": "nested",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Which window an input came from. A plain number chosen by whoever feeds the input (FenrirWindow, which keys its windows by it, or a test); FenrirInput only compares it.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowCloseRequestedEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A window's close was requested (its close button, or the app asked to quit). With WindowConfig::stopOnMainWindowClose, the main window's request also stops the app; the window itself stays until teardown either way.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowSize",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A width and a height: in logical units (a window's size) or in pixels (its backbuffer).",
+      "fields": [
+        {
+          "name": "width",
+          "offset": 0,
+          "kind": "i32",
+          "default": 0
+        },
+        {
+          "name": "height",
+          "offset": 4,
+          "kind": "i32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowResizedEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 24,
+      "alignment": 4,
+      "doc": "A window's logical size, pixel size or content scale changed. Carries the new values.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "logicalSize",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::WindowSize",
+          "default": {}
+        },
+        {
+          "name": "pixelSize",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::WindowSize",
+          "default": {}
+        },
+        {
+          "name": "contentScale",
+          "offset": 20,
+          "kind": "f32",
+          "default": 1,
+          "doc": "Pixels per logical unit."
+        }
+      ]
+    }
+  ]
+}

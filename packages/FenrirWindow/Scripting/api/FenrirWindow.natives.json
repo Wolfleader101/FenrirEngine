@@ -1,0 +1,286 @@
+{
+  "binding": "FenrirWindow",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "Exists",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Whether `window` has been made.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "Size",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "`window`'s size in logical units.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "size",
+          "type": "Fenrir::WindowSize*",
+          "kind": "pointer",
+          "pointee": "Fenrir::WindowSize",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The size; empty with no such window."
+        }
+      ]
+    },
+    {
+      "name": "PixelSize",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "`window`'s size in pixels.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "size",
+          "type": "Fenrir::WindowSize*",
+          "kind": "pointer",
+          "pointee": "Fenrir::WindowSize",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The size; empty with no such window."
+        }
+      ]
+    },
+    {
+      "name": "ContentScale",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "`window`'s pixels per logical unit.",
+      "returns": {
+        "type": "float",
+        "kind": "f32"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "IsMinimised",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Whether `window` is minimised: nothing should be drawn to it.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "IsFocused",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Whether `window` has the input focus.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "GetCursorMode",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "How the cursor behaves over `window`, as last set.",
+      "returns": {
+        "type": "Fenrir::CursorMode",
+        "kind": "enum"
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "SetCursorMode",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Sets how the cursor behaves over `window`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false with no such window, or if the platform refuses."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "mode",
+          "type": "Fenrir::CursorMode",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "SetCursorShape",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Sets the cursor shown over `window`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false with no such window, or if the platform refuses."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "shape",
+          "type": "Fenrir::CursorShape",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "SetTitle",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Sets `window`'s title.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was set: false with no such window, or if the platform refuses."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        },
+        {
+          "name": "title",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "GetClipboard",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32"
+      },
+      "parameters": [
+        {
+          "name": "text",
+          "type": "char16_t*",
+          "kind": "pointer",
+          "pointee": "char16_t",
+          "pointeeKind": "char16",
+          "doc": "Where to write at most `capacity` chars."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "SetClipboard",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Puts `text` on the system clipboard.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it was put there: false with no window, or if the platform refuses."
+      },
+      "parameters": [
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "name": "RequestClose",
+      "namespace": "Fenrir::WindowNatives",
+      "source": "../src/WindowScripting.cpp",
+      "state": "Fenrir::WindowScripting",
+      "doc": "Asks for `window` to close, as its close button does.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether the request was made: false with no such window."
+      },
+      "parameters": [
+        {
+          "name": "window",
+          "type": "Fenrir::WindowId",
+          "kind": "struct"
+        }
+      ]
+    }
+  ]
+}
