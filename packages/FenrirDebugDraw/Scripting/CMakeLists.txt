@@ -40,7 +40,6 @@ endfunction()
 
 add_library(FenrirDebugDrawScripting STATIC
     include/FenrirDebugDrawScripting/DebugDrawScripting.hpp
-    src/BoundMappings.hpp
     src/DebugDrawScripting.cpp
     src/DebugDrawScriptingState.hpp
     src/ScriptOptions.hpp

@@ -1,20 +1,18 @@
 #pragma once
 
-#include <cstdint>
-#include <mutex>
 #include <optional>
-#include <set>
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
 #include "ScriptOptions.hpp"
 
 namespace Fenrir
@@ -56,26 +54,11 @@ namespace Fenrir
             }
         };
 
-        /**
-         * @brief Logs a warning once for each place in the extension that notices a call doing nothing, and each
-         * message, in debug builds only.
-         */
-        void WarnOnce(const CallContext& context, const std::string& message, std::source_location where)
+        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
+        void WarnOnce(const CallContext& context, const std::string& message,
+                      std::source_location where = std::source_location::current())
         {
-#ifndef NDEBUG
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[debug draw scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
+            warnings.Warn(context.GetApp(), message, where);
         }
 
         /**
@@ -83,10 +66,9 @@ namespace Fenrir
          * no DebugDraw or the entity is not alive: then nothing is drawn, and the caller's call site warns once, naming
          * `function`, the C# call.
          */
-        std::optional<Target> TargetFor(
-            const CallContext& context, std::string_view function,
-            ScriptOptions::EntityValue relativeTo = ScriptOptions::EntityValue(Entity::Null),
-            std::source_location where = std::source_location::current())
+        std::optional<Target> TargetFor(const CallContext& context, std::string_view function,
+                                        EntityValue relativeTo = EntityValue(Entity::Null),
+                                        std::source_location where = std::source_location::current())
         {
             DebugDraw* draw = context.GetApp().GetActiveScene().GetResource<DebugDraw>();
             if (draw == nullptr)
@@ -111,9 +93,7 @@ namespace Fenrir
             return Target{draw, entities.GetEntity(relativeTo.value)};
         }
 
-        /** @brief The calls warned about, by where and why. Natives may run on several threads at once. */
-        std::mutex mutex;
-        /** @brief See mutex. */
-        std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        /** @brief What the natives have warned about, so that each place warns once. */
+        WarnOnceRecord warnings{"debug draw scripting"};
     };
 } // namespace Fenrir

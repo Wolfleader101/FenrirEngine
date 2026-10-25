@@ -1,28 +1,20 @@
 #pragma once
 
-#include <cstdint>
-#include <mutex>
 #include <optional>
-#include <set>
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
 
 namespace Fenrir
 {
-    namespace RendererScript
-    {
-        /** @brief An entity as the natives take and return it: its 32-bit value, which C# passes as an Entity. */
-        using EntityId = std::uint32_t;
-    } // namespace RendererScript
-
     /**
      * @brief The renderer extension's state, which every renderer native function is given second: the record of the
      * warnings it has logged, made by Renderer::ScriptingExtension and kept by the Scripting given the extension. In a
@@ -31,28 +23,11 @@ namespace Fenrir
      */
     struct RendererScripting
     {
-        /**
-         * @brief Logs `message` once for each place in the extension that notices a call doing nothing, and each
-         * message, in debug builds only.
-         */
+        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
         void WarnOnce(const CallContext& context, const std::string& message,
                       std::source_location where = std::source_location::current())
         {
-#ifndef NDEBUG
-            // Keyed by the message too: one call site can notice more than one reason.
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[renderer scripting] {} (warned once)", message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
+            warnings.Warn(context.GetApp(), message, where);
         }
 
         /** @brief Whether the app has a renderer; warns once for the caller's call site if not. */
@@ -71,21 +46,20 @@ namespace Fenrir
         }
 
         /** @brief The entity `id` of the active scene if it is alive; warns once for the caller's call site if not. */
-        std::optional<Entity> Alive(const CallContext& context, RendererScript::EntityId id, std::string_view function,
+        std::optional<Entity> Alive(const CallContext& context, EntityValue id, std::string_view function,
                                     std::source_location where = std::source_location::current())
         {
             EntityList& entities = context.Entities();
-            if (entities.HasEntity(id))
+            if (entities.HasEntity(id.value))
             {
-                return entities.GetEntity(id);
+                return entities.GetEntity(id.value);
             }
             WarnOnce(context, std::string(function) + ": the entity is not alive, so it does nothing", where);
             return std::nullopt;
         }
 
         /** @brief The camera entity `id` if the app has a renderer and it is alive with a Camera; warns once if not. */
-        std::optional<Entity> CameraFor(const CallContext& context, RendererScript::EntityId id,
-                                        std::string_view function,
+        std::optional<Entity> CameraFor(const CallContext& context, EntityValue id, std::string_view function,
                                         std::source_location where = std::source_location::current())
         {
             if (!HasRenderer(context, function, where))
@@ -102,7 +76,6 @@ namespace Fenrir
         }
 
       private:
-        std::mutex mutex;
-        std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        WarnOnceRecord warnings{"renderer scripting"};
     };
 } // namespace Fenrir

@@ -162,37 +162,6 @@
       ]
     },
     {
-      "name": "Fenrir::ScriptAssetEnums",
-      "category": "struct",
-      "role": "shared-struct",
-      "size": 3,
-      "alignment": 1,
-      "doc": "Holds the enums the natives take by value that no shared struct holds, only so that they are described: describe-api describes an enum through a field that uses it. The binding excludes this struct, so C# has its enums and not it.",
-      "fields": [
-        {
-          "name": "kind",
-          "offset": 0,
-          "kind": "enum",
-          "type": "Fenrir::Detail::AssetKind",
-          "default": "Mesh"
-        },
-        {
-          "name": "owner",
-          "offset": 1,
-          "kind": "enum",
-          "type": "Fenrir::ScriptAssetOwner",
-          "default": "Scene"
-        },
-        {
-          "name": "blendMode",
-          "offset": 2,
-          "kind": "enum",
-          "type": "Fenrir::BlendMode",
-          "default": "Opaque"
-        }
-      ]
-    },
-    {
       "name": "Fenrir::ShaderParameterType",
       "category": "enum",
       "size": 1,

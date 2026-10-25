@@ -136,7 +136,7 @@ public static unsafe class DebugDraw
     public static void Grid(Vector3 centre, Quaternion rotation, int cells, float cellSize, Colour colour, ShapeOptions? options = null)
     {
         NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Grid(in centre, in rotation, cellSize, cells, in colour, in native, group);
+        DebugDrawNative.Grid(in centre, in rotation, cells, cellSize, in colour, in native, group);
     }
 
     /// <summary>The frame of <paramref name="transform"/>: its X, Y and Z axes, <paramref name="length"/> long, in red, green and blue.</summary>

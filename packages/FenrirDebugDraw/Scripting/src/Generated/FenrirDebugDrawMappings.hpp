@@ -7,7 +7,8 @@
 
 #include "Iris/Iris.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
-#include "BoundMappings.hpp"
+#include "ScriptOptions.hpp"
+#include "FenrirScripting/EntityValueMapping.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>
@@ -20,6 +21,10 @@ struct Iris::EnumMapping<Fenrir::DepthMode>
 };
 static_assert(sizeof(Fenrir::DepthMode) == 1 && alignof(Fenrir::DepthMode) == 1,
               "Fenrir::DepthMode is not the layout FenrirDebugDrawScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+static_assert(sizeof(Fenrir::EntityValue) == 4 && alignof(Fenrir::EntityValue) == 4,
+              "Fenrir::EntityValue is not the layout FenrirDebugDrawScripting.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
@@ -38,17 +43,13 @@ static_assert(sizeof(Fenrir::Math::Vec2) == 8 && alignof(Fenrir::Math::Vec2) == 
               "Fenrir::Math::Vec2 is not the layout FenrirDebugDrawScripting.api.json describes: "
               "regenerate the description, then this binding");
 
-static_assert(sizeof(Fenrir::ScriptOptions::EntityValue) == 4 && alignof(Fenrir::ScriptOptions::EntityValue) == 4,
-              "Fenrir::ScriptOptions::EntityValue is not the layout FenrirDebugDrawScripting.api.json describes: "
-              "regenerate the description, then this binding");
-
 template <>
 struct Iris::StructMapping<Fenrir::ScriptOptions::ShapeOptions>
 {
     static constexpr std::string_view typeName = "Fenrir.DebugDraw.NativeShapeOptions";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<float>("Duration", 0),
-        Iris::Field<Fenrir::ScriptOptions::EntityValue>("RelativeTo", 4),
+        Iris::Field<Fenrir::EntityValue>("RelativeTo", 4),
         Iris::Field<float>("Thickness", 8),
         Iris::Field<Fenrir::DepthMode>("Depth", 12),
         Iris::Field<std::int32_t>("Segments", 16));
@@ -63,7 +64,7 @@ struct Iris::StructMapping<Fenrir::ScriptOptions::TextOptions>
     static constexpr std::string_view typeName = "Fenrir.DebugDraw.NativeTextOptions";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<float>("Duration", 0),
-        Iris::Field<Fenrir::ScriptOptions::EntityValue>("RelativeTo", 4),
+        Iris::Field<Fenrir::EntityValue>("RelativeTo", 4),
         Iris::Field<float>("Size", 8));
 };
 static_assert(sizeof(Fenrir::ScriptOptions::TextOptions) == 12 && alignof(Fenrir::ScriptOptions::TextOptions) == 4,

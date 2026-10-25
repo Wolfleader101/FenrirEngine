@@ -3,7 +3,7 @@
 // C++ calls the fixture's static methods through Iris, as the system runner calls scripts, and checks what the engine
 // saw.
 
-#include "BoundMappings.hpp"
+#include "Generated/FenrirPhysicsMappings.hpp"
 #include "HeadlessApp.hpp"
 #include "PhysicsScriptingApp.hpp"
 #include "ScriptingProbe.hpp"

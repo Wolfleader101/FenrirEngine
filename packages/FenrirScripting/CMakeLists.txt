@@ -64,12 +64,15 @@ add_library(FenrirScripting STATIC
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp
     include/FenrirScripting/ComponentRegistry.hpp
+    include/FenrirScripting/EntityValue.hpp
+    include/FenrirScripting/EntityValueMapping.hpp
     include/FenrirScripting/Generated/FenrirMathMappings.hpp
     include/FenrirScripting/Generated/FenrirScriptingMappings.hpp
     src/EngineContext.hpp
     src/Generated/FenrirScriptingRegistration.cpp
     include/FenrirScripting/Scripting.hpp
     include/FenrirScripting/ScriptingExtension.hpp
+    include/FenrirScripting/WarnOnceRecord.hpp
 )
 
 target_include_directories(FenrirScripting PUBLIC include)

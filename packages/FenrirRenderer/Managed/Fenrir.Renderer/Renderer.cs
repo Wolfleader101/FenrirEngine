@@ -20,7 +20,7 @@ namespace Fenrir.Renderer;
 /// <para>
 /// Nothing here throws. With no renderer in the app, an entity that is not alive or has no <see cref="Camera"/>, a camera that
 /// draws nothing, or a point outside its viewport or behind it, a function does nothing and returns <c>false</c>, zero or
-/// <see cref="Entity.None"/>. In a debug build of the engine a warning is logged once per process for each place in the
+/// <see cref="Entity.None"/>. In a debug build of the engine a warning is logged once per scripting install for each place in the
 /// engine's native code that noticed and each reason (not once per C# call site).
 /// </para>
 /// </remarks>
@@ -40,7 +40,7 @@ public static class Renderer
     /// The camera drawn last at <paramref name="point"/> of <paramref name="window"/>: the highest-order enabled camera in the
     /// active scene whose viewport holds it. <see cref="Entity.None"/> if there is none.
     /// </summary>
-    public static Entity CameraAt(WindowId window, Vector2 point) => new(RendererNative.CameraAt(window, in point));
+    public static Entity CameraAt(WindowId window, Vector2 point) => RendererNative.CameraAt(window, in point);
 
     /// <summary>The box around <paramref name="entity"/>'s drawn mesh in world space, now.</summary>
     /// <returns>Whether there is one: false if it has no <see cref="MeshRenderer"/> or its mesh does not resolve.</returns>
@@ -65,5 +65,5 @@ public static class Renderer
     /// <see cref="Entity.None"/>. A parent that is not alive spawns nothing.
     /// </summary>
     public static Entity SpawnModel(AssetHandle<Model> model, Entity parent) =>
-        new(RendererNative.SpawnModel(((ulong)model.Generation << 32) | model.Index, parent));
+        RendererNative.SpawnModel(model.Bits, parent);
 }

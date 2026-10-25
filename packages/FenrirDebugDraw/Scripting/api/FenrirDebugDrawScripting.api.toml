@@ -1,8 +1,9 @@
 # The debug draw binding's own selection (ADR-0042, tools/describe-api/README.md): the options its natives take by
-# pointer in the form C# holds them, without the group and with the entity as a C# Entity's 32-bit value, and the math
-# types they take, which the math binding mirrors or every binding binds. FenrirDebugDraw's own headers select nothing:
-# C# holds no component or resource of the package. DepthMode is described because the shape options hold it.
-headers = ["../src/ScriptOptions.hpp"]
+# pointer in the form C# holds them, without the group and with the entity as FenrirScripting's EntityValue, a C#
+# Entity's 32-bit value, and the math types they take, which the math binding mirrors or every binding binds.
+# FenrirDebugDraw's own headers select nothing: C# holds no component or resource of the package. DepthMode is described
+# because the shape options hold it.
+headers = ["../src/ScriptOptions.hpp", "../../../FenrirScripting/include/FenrirScripting/EntityValue.hpp"]
 
 [types]
 "Fenrir::ScriptOptions::ShapeOptions" = "shared-struct"
@@ -11,7 +12,7 @@ headers = ["../src/ScriptOptions.hpp"]
 "Fenrir::Colour" = "shared-struct"
 "Fenrir::Math::AABB" = "shared-struct"
 
-"Fenrir::ScriptOptions::EntityValue" = "bound-type"
+"Fenrir::EntityValue" = "bound-type"
 "Fenrir::Math::Vec2" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"

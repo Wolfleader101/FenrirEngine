@@ -39,7 +39,7 @@ public partial struct WindowSize : IEquatable<WindowSize>
 /// Nothing here throws. With no window in the app (no FenrirWindow, or before the window is made) or a <see cref="WindowId"/>
 /// that names no window, a function does nothing and returns <c>false</c>, zero, an empty size or text, or
 /// <see cref="CursorMode.Normal"/>; the clipboard functions need the main window. In a debug build of the engine a warning is
-/// logged once per process for each place in the engine's native code that noticed (not once per C# call site).
+/// logged once per scripting install for each place in the engine's native code that noticed (not once per C# call site).
 /// </para>
 /// </remarks>
 public static class Window

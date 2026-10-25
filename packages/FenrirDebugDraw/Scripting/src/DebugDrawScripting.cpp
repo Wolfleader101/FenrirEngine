@@ -208,14 +208,13 @@ namespace Fenrir
             }
         }
 
-        // `cellSize` comes before `cells`, unlike in DebugDraw::Grid: to the binding, a pointer followed by a 32-bit
-        // integer is a span.
         /**
          * @brief A grid of `cells` by `cells` squares, `cellSize` across, centred on `centre` and turned by `rotation`
          * (DebugDraw.Grid).
+         * @param[in] rotation One rotation, not a span of them, though `cells` follows it.
          */
         void Grid(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre,
-                  const Math::Quat* rotation, float cellSize, std::int32_t cells, const Colour* colour,
+                  const Math::Quat* rotation, std::int32_t cells, float cellSize, const Colour* colour,
                   const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
             if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Grid", options->relativeTo))

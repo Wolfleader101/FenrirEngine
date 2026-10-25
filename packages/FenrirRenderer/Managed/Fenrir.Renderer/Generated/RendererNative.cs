@@ -32,7 +32,7 @@ internal static unsafe partial class RendererNative
     /// <summary>The camera whose view of `window` is under `point`, in window pixels from its top-left.</summary>
     /// <returns>The camera entity, or no entity (C#'s Entity.None).</returns>
     [NativeFunction]
-    public static partial uint CameraAt(WindowId window, in Vector2 point);
+    public static partial Entity CameraAt(WindowId window, in Vector2 point);
 
     /// <summary>The world-space box around the meshes of `entity` and its children.</summary>
     /// <param name="bounds">The box; the default box when there is none.</param>
@@ -56,5 +56,5 @@ internal static unsafe partial class RendererNative
     /// not alive.
     /// </returns>
     [NativeFunction]
-    public static partial uint SpawnModel(ulong model, Entity parent);
+    public static partial Entity SpawnModel(ulong model, Entity parent);
 }

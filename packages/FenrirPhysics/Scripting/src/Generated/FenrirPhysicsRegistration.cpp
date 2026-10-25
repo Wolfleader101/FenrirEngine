@@ -8,13 +8,14 @@
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "PhysicsScriptingState.hpp"
 #include "ScriptQueries.hpp"
+#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 
 namespace Fenrir::PhysicsNatives
 {
-    bool AddForce(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId entity, const Fenrir::Math::Vec3* force);
-    bool AddImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId entity, const Fenrir::Math::Vec3* impulse);
-    bool AddTorque(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId entity, const Fenrir::Math::Vec3* torque);
-    bool AddAngularImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId entity, const Fenrir::Math::Vec3* impulse);
+    bool AddForce(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* force);
+    bool AddImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* impulse);
+    bool AddTorque(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* torque);
+    bool AddAngularImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* impulse);
     bool Raycast(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::RaycastHit* hit);
     std::int32_t RaycastAll(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::RaycastHit* hits, std::int32_t capacity);
     bool ShapeCast(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::ShapeCastHit* hit);
@@ -24,16 +25,16 @@ namespace Fenrir::PhysicsNatives
     std::int32_t Penetrations(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::PenetrationHit* hits, std::int32_t capacity);
     bool Depenetrate(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::Math::Vec3* offset);
     std::int32_t OverlapPoint(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* point, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::OverlapHit* hits, std::int32_t capacity);
-    std::int32_t ContactsOf(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId body, Fenrir::ScriptQueries::Contact* contacts, std::int32_t capacity);
-    bool IsSleeping(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId body);
-    bool Bounds(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId body, Fenrir::Math::AABB* bounds);
+    std::int32_t ContactsOf(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body, Fenrir::ScriptQueries::Contact* contacts, std::int32_t capacity);
+    bool IsSleeping(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body);
+    bool Bounds(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body, Fenrir::Math::AABB* bounds);
     bool Gravity(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::Math::Vec3* gravity);
     bool SetGravity(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* gravity);
     bool SetDebugDraw(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, std::uint32_t categories);
     std::uint64_t CreateCollisionMesh(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* vertices, std::int32_t vertexCount, const std::uint32_t* indices, std::int32_t indexCount);
     bool ReleaseCollisionMesh(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, std::uint64_t mesh);
-    void FrameFromWorld(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId bodyA, Fenrir::ScriptQueries::EntityId bodyB, const Fenrir::JointFrame* anchor, Fenrir::JointFrames* frames);
-    void GetJointState(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::ScriptQueries::EntityId joint, Fenrir::JointState* state);
+    void FrameFromWorld(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue bodyA, Fenrir::EntityValue bodyB, const Fenrir::JointFrame* anchor, Fenrir::JointFrames* frames);
+    void GetJointState(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue joint, Fenrir::JointState* state);
 } // namespace Fenrir::PhysicsNatives
 
 namespace Fenrir::Generated

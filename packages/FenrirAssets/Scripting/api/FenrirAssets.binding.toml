@@ -7,8 +7,6 @@ namespace = "Fenrir.Assets"
 descriptions = ["../../api/FenrirAssets.api.json", "FenrirAssetsScripting.api.json"]
 # FenrirMath's colour is the math binding's: named as Fenrir.Math's, never mirrored here.
 uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
-# Described only for the enums it holds (ScriptAssets.hpp).
-exclude = ["Fenrir::ScriptAssetEnums"]
 
 [csharp]
 contract = "../../Managed/Fenrir.Assets"

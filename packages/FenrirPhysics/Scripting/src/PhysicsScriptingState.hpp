@@ -1,19 +1,18 @@
 #pragma once
 
-#include <cstdint>
-#include <mutex>
-#include <set>
+#include <cstddef>
 #include <source_location>
 #include <string>
 #include <string_view>
-#include <tuple>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirScene/Scene.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
 
 namespace Fenrir
 {
@@ -37,27 +36,13 @@ namespace Fenrir
         }
 
         /**
-         * @brief Logs "<native>: <message>" once for each place in the extension that notices a call doing nothing, and
-         * each message, in debug builds only. <native> is the native function `where` is in.
+         * @brief Logs "<native>: <message>" once for each place in the extension that notices a call doing nothing
+         * (warnings). <native> is the native function `where` is in.
          */
         void WarnOnce(const CallContext& context, const std::string& message,
                       std::source_location where = std::source_location::current())
         {
-#ifndef NDEBUG
-            // Keyed by the message too: one call site can notice more than one reason (no world, then no body).
-            {
-                const std::lock_guard<std::mutex> lock(mutex);
-                if (!warned.emplace(where.file_name(), where.line(), where.column(), message).second)
-                {
-                    return;
-                }
-            }
-            context.GetApp().Logger()->Warn("[physics scripting] {}: {} (warned once)", NativeName(where), message);
-#else
-            (void)context;
-            (void)message;
-            (void)where;
-#endif
+            warnings.Warn(context.GetApp(), std::string(NativeName(where)) + ": " + message, where);
         }
 
         /** @brief The active scene's physics world, or null (warning once for the caller's call site). */
@@ -75,13 +60,13 @@ namespace Fenrir
          * @brief Whether `entity` is alive with a body (a RigidBody, or a Collider standing for its body, a character's
          * included); warns once if not.
          */
-        bool HasBody(const CallContext& context, std::uint32_t entity,
+        bool HasBody(const CallContext& context, EntityValue entity,
                      std::source_location where = std::source_location::current())
         {
             EntityList& entities = context.Entities();
-            if (entities.HasEntity(entity))
+            if (entities.HasEntity(entity.value))
             {
-                const Entity body = entities.GetEntity(entity);
+                const Entity body = entities.GetEntity(entity.value);
                 if (body.HasComponent<RigidBody>() || body.HasComponent<Collider>())
                 {
                     return true;
@@ -91,9 +76,7 @@ namespace Fenrir
             return false;
         }
 
-        /** @brief The calls warned about, by where and why. Natives may run on several threads at once. */
-        std::mutex mutex;
-        /** @brief See mutex. */
-        std::set<std::tuple<std::string_view, std::uint_least32_t, std::uint_least32_t, std::string>> warned;
+        /** @brief What the natives have warned about, so that each place warns once. */
+        WarnOnceRecord warnings{"physics scripting"};
     };
 } // namespace Fenrir

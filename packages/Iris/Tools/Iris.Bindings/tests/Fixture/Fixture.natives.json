@@ -268,6 +268,33 @@
           "kind": "f64"
         }
       ]
+    },
+    {
+      "name": "Turn",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "Turns by `rotation` `turns` times: a pointer followed by a count that is one value, not a span.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "rotation",
+          "type": "const Fixture::Quat*",
+          "kind": "pointer",
+          "pointee": "Fixture::Quat",
+          "pointeeKind": "struct",
+          "const": true,
+          "input": true,
+          "doc": "One rotation, which `turns` does not size."
+        },
+        {
+          "name": "turns",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
     }
   ]
 }

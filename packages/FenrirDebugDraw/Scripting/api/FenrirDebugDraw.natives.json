@@ -766,17 +766,19 @@
           "kind": "pointer",
           "pointee": "Fenrir::Math::Quat",
           "pointeeKind": "struct",
-          "const": true
-        },
-        {
-          "name": "cellSize",
-          "type": "float",
-          "kind": "f32"
+          "const": true,
+          "input": true,
+          "doc": "One rotation, not a span of them, though `cells` follows it."
         },
         {
           "name": "cells",
           "type": "std::int32_t",
           "kind": "i32"
+        },
+        {
+          "name": "cellSize",
+          "type": "float",
+          "kind": "f32"
         },
         {
           "name": "colour",

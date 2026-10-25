@@ -1,12 +1,20 @@
 # The assets binding's own selection (ADR-0042, tools/describe-api/README.md): the plain data its natives take and give
-# in C#'s form (ScriptAssets.hpp), and the types they take through pointers that FenrirAssets's description does not
-# hold. The binding (FenrirAssets.binding.toml) binds these beside FenrirAssets's own.
-headers = ["../include/FenrirAssetsScripting/ScriptAssets.hpp", "../../../FenrirMath/include/FenrirMath/Colour.hpp"]
+# in C#'s form (ScriptAssets.hpp), the enums they take by value that no shared struct holds, and the types they take
+# through pointers that FenrirAssets's description does not hold. The binding (FenrirAssets.binding.toml) binds these
+# beside FenrirAssets's own.
+headers = [
+    "../include/FenrirAssetsScripting/ScriptAssets.hpp",
+    "../../include/FenrirAssets/AssetHandle.hpp",
+    "../../include/FenrirAssets/MaterialData.hpp",
+    "../../../FenrirMath/include/FenrirMath/Colour.hpp",
+]
 
 [types]
 "Fenrir::ScriptShaderParameter" = "shared-struct"
-# Only so that the asset kind, owner and blend mode are described: the binding excludes it.
-"Fenrir::ScriptAssetEnums" = "shared-struct"
+# Held by no field, but taken by the natives: described all the same.
+"Fenrir::Detail::AssetKind" = "enum"
+"Fenrir::ScriptAssetOwner" = "enum"
+"Fenrir::BlendMode" = "enum"
 # The math binding's, named through its `uses`: described here because a native takes one through a pointer.
 "Fenrir::Colour" = "shared-struct"
 

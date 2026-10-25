@@ -66,4 +66,11 @@ internal static unsafe partial class FixtureNative
     /// <summary>Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result.</summary>
     [NativeFunction]
     public static partial ulong Sum(uint* values, int count, bool all, double scale);
+
+    /// <summary>
+    /// Turns by `rotation` `turns` times: a pointer followed by a count that is one value, not a span.
+    /// </summary>
+    /// <param name="rotation">One rotation, which `turns` does not size.</param>
+    [NativeFunction]
+    public static partial void Turn(in Quaternion rotation, int turns);
 }

@@ -23,7 +23,8 @@ internal-structs = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOption
 
 [cpp]
 mappings = "../src/Generated/FenrirDebugDrawMappings.hpp"
-includes = ["FenrirDebugDraw/DebugDraw.hpp", "BoundMappings.hpp"]
+# The options as C# passes them, and the entity value's mapping, FenrirScripting's.
+includes = ["FenrirDebugDraw/DebugDraw.hpp", "ScriptOptions.hpp", "FenrirScripting/EntityValueMapping.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirDebugDrawRegistration.cpp"
@@ -54,7 +55,8 @@ by-hand = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOp
 # glm stores w first; C#'s constructor takes it last.
 "Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
 "Fenrir::Math::Mat4" = { type = "Matrix4x4" }
-"Fenrir::ScriptOptions::EntityValue" = { type = "Entity", constructor = ["value"] }
+# A C# Entity, held by the options: the one entity value every binding names (ADR-0044).
+"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
 
 [names]
 "Fenrir::ScriptOptions::ShapeOptions" = "NativeShapeOptions"

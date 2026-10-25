@@ -1,7 +1,9 @@
 # FenrirRenderer's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirRenderer.api.json
-# bound to the Fenrir.Renderer contract and Renderer::ScriptingExtension(). Paths are relative to this file. `cmake --build
-# <dir> --target fenrir-generate-bindings` regenerates every output below; they are committed.
+# and this binding's own FenrirRendererScripting.api.json (the entity value its natives take) bound to the Fenrir.Renderer
+# contract and Renderer::ScriptingExtension(). Paths are relative to this file. `cmake --build <dir> --target
+# fenrir-generate-bindings` regenerates every output below; they are committed.
 namespace = "Fenrir.Renderer"
+descriptions = ["../../api/FenrirRenderer.api.json", "FenrirRendererScripting.api.json"]
 # The colour, ray and box are the math binding's, the window id FenrirInput's: named as theirs, never mirrored here. The
 # asset handles are FenrirAssets's bound types, which a binding names in its own [bound-types] (below).
 uses = [
@@ -26,14 +28,20 @@ read-only-resource-interface = "IReadOnlyResource"
 
 [cpp]
 mappings = "../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
-includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp", "FenrirAssetsScripting/AssetMappings.hpp"]
+includes = [
+    "FenrirRenderer/Components.hpp",
+    "FenrirRenderer/Renderer.hpp",
+    "FenrirAssetsScripting/AssetMappings.hpp",
+    # The entity value's mapping and wrapper trait, FenrirScripting's (EntityValue.hpp).
+    "FenrirScripting/EntityValueMapping.hpp",
+]
 
 [registration]
 source = "../src/Generated/FenrirRendererRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
-    # What the natives' declarations name: their extension state and the entity alias.
+    # What the natives' declarations name: their extension state (and through it the entity value).
     "RendererScriptingState.hpp",
 ]
 function = "Fenrir::Generated::RegisterRenderer"
@@ -66,12 +74,12 @@ context = "Fenrir::CallContext"
 class = "RendererNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
-# A native's entity parameters: their 32-bit value crosses, and C# passes an Entity.
-types = { "Fenrir::RendererScript::EntityId" = "Entity" }
 
 [bound-types]
 "Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
 "Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+# A C# Entity, which the natives take and return by value as its one field.
+"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
 "Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>" }
 "Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>" }
 "Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>" }

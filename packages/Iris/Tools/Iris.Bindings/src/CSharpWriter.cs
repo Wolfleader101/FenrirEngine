@@ -204,11 +204,14 @@ internal static class CSharpWriter
         {
             var memberName = binding.MemberName(type, member.Name);
             text.Line();
-            text.Line($"/// <summary>The storage of <see cref=\"{memberName}\"/>: {member.Kind.Length} elements.</summary>");
+            text.Line($"/// <summary>The storage of <see cref=\"{memberName}\"/>: <see cref=\"Length\"/> elements.</summary>");
             text.Line($"[InlineArray({member.Kind.Length})]");
             text.Line($"public struct {Binding.ArrayTypeName(memberName)}");
             text.Line("{");
             text.Indent();
+            text.Line("/// <summary>How many elements it holds: the C++ array's length.</summary>");
+            text.Line($"public const int Length = {member.Kind.Length};");
+            text.Line();
             text.Line($"private {binding.CSharpType(member.Kind.ElementKind!, member.Kind.ElementType)} _element;");
             text.Outdent();
             text.Line("}");
