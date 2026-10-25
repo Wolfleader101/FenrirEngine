@@ -264,8 +264,9 @@ namespace Fenrir
      * both types, when the extension that lists it carries no state or a state of another type.
      *
      * `Args` and `R` are what C# passes and gets: any Iris internal call type (sized numbers, `float`, `double`,
-     * `bool`, `char16_t`, pointers, a shared struct or component by pointer) and, as parameters, `std::string_view`. A
-     * C++ exception that escapes it is stopped and logged by Iris.
+     * `bool`, `char16_t`, pointers, a shared struct or component by pointer, an enum by value as its underlying
+     * integer, a wrapper by value as its one field, see Iris::WrapperOf) and, as parameters, `std::string_view`. A C++
+     * exception that escapes it is stopped and logged by Iris.
      *
      * The C# side declares the field Iris binds under BindingName(). A C# field with no native function, or a different
      * signature, fails Scripting::Install with a diagnostic naming it.
