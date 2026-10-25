@@ -267,8 +267,8 @@ namespace Fenrir
     /** @brief A camera background of one colour, overriding the scene's. */
     struct ColourBackground
     {
-        /** @brief Linear. */
-        Colour colour = Colour::Black;
+        /** @brief Linear. Black by default (Colour::Black). */
+        Colour colour{0.0f, 0.0f, 0.0f, 1.0f};
     };
 
     /** @brief Which kind of background a CameraBackground holds. */
@@ -412,8 +412,8 @@ namespace Fenrir
      */
     struct DirectionalLight
     {
-        /** @brief Linear. */
-        Colour colour = Colour::White;
+        /** @brief Linear. White by default (Colour::White). */
+        Colour colour{1.0f, 1.0f, 1.0f, 1.0f};
         /** @brief A plain multiplier on the colour. */
         float intensity = 1.0f;
     };

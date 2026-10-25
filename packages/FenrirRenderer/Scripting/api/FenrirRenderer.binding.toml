@@ -1,0 +1,86 @@
+# FenrirRenderer's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirRenderer.api.json
+# bound to the Fenrir.Renderer contract and Renderer::ScriptingExtension(). Paths are relative to this file. `cmake --build
+# <dir> --target fenrir-generate-bindings` regenerates every output below; they are committed.
+namespace = "Fenrir.Renderer"
+# The colour, ray and box are the math binding's, the window id FenrirInput's: named as theirs, never mirrored here. The
+# asset handles are FenrirAssets's bound types, which a binding names in its own [bound-types] (below).
+uses = [
+    "../../../FenrirScripting/api/FenrirMath.binding.toml",
+    "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
+    "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
+]
+
+[csharp]
+contract = "../../Managed/Fenrir.Renderer"
+generated = "../../Managed/Fenrir.Renderer/Generated"
+usings = ["Fenrir.Assets", "Fenrir.Math", "Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
+
+[cpp]
+mappings = "../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
+includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp", "FenrirAssetsScripting/AssetMappings.hpp"]
+
+[registration]
+source = "../src/Generated/FenrirRendererRegistration.cpp"
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state and the entity alias.
+    "RendererScriptingState.hpp",
+]
+function = "Fenrir::Generated::RegisterRenderer"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+make-scene-resource = "Fenrir::MakeSceneResource"
+
+[tests]
+cpp = "../Tests/Generated/FenrirRendererDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirRendererDefaults.cs"
+class = "RendererScriptFixture.Defaults"
+includes = ["RendererScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "RendererScriptingTests::RendererScriptingApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[renderer][scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirRendererNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirRendererNatives.cs"
+natives-class = "RendererScriptFixture.Natives"
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the RendererScripting state second) into FenrirRenderer.natives.json, and this binding generates their C# declarations,
+# RendererNative, and their registration.
+[natives]
+sources = ["../src/RendererScripting.cpp"]
+context = "Fenrir::CallContext"
+class = "RendererNative"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"
+# A native's entity parameters: their 32-bit value crosses, and C# passes an Entity.
+types = { "Fenrir::RendererScript::EntityId" = "Entity" }
+
+[bound-types]
+"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
+"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>" }
+"Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>" }
+"Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>" }
+
+[names]
+"Fenrir::Projection" = "CameraProjection"
+
+[nouns]
+"Fenrir::Projection" = "projection"
+"Fenrir::RenderTarget" = "render target"
+"Fenrir::CameraBackground" = "background"
+"Fenrir::Sky" = "sky"

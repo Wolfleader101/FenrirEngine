@@ -13,11 +13,14 @@ add_executable(FenrirRendererScriptingTests
     Picking.cpp
     SpawnModel.cpp
     NoOps.cpp
+    Generated/FenrirRendererDefaultsTests.cpp
+    Generated/FenrirRendererNativesTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
 # RendererProbe, from the renderer's own tests, and the renderer's sources it reads.
-target_include_directories(FenrirRendererScriptingTests PRIVATE "${fenrir_scripting_tests_dir}" ../../Tests ../../src)
+target_include_directories(FenrirRendererScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"
+    ../../Tests ../../src)
 target_link_libraries(FenrirRendererScriptingTests PRIVATE FenrirRendererScripting FenrirRendererCore
                                                            Catch2::Catch2WithMain)
 target_compile_definitions(FenrirRendererScriptingTests PRIVATE
@@ -34,7 +37,10 @@ fenrir_deploy_renderer_scripting(FenrirRendererScriptingTests)
 # The fixture script assembly: compiled against the scripting SDK and the three contracts, none copied (the host shares
 # its own copies), and rebuilt when any is.
 set(fenrir_renderer_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_renderer_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the generated tests' C# classes (Generated/): the defaults test reads their new() values, and the
+# natives test calls the natives through them.
+file(GLOB fenrir_renderer_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${fenrir_renderer_fixture_dir}/Fenrir.RendererScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.RendererScriptFixture.csproj"
