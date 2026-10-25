@@ -4,6 +4,77 @@
   "alignment": "natural",
   "types": [
     {
+      "name": "Fenrir::Colour",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A colour as linear red, green, blue and alpha, each a float, usually in [0, 1] (ADR-0025). Debug draw, materials and lights take it, and the renderer packs it for vertices. Colours written as sRGB hex values, as colour pickers and art tools give them, are converted when made (FromSrgb). Default constructed, it is opaque white.",
+      "fields": [
+        {
+          "name": "r",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "g",
+          "offset": 4,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "b",
+          "offset": 8,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "a",
+          "offset": 12,
+          "kind": "f32",
+          "default": 1
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec3",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 12,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::AABB",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "min",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {}
+        },
+        {
+          "name": "max",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Mat4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 64,
+      "alignment": 4
+    },
+    {
       "name": "Fenrir::Math::Quat",
       "category": "bound-type",
       "role": "bound-type",
@@ -11,10 +82,47 @@
       "alignment": 4
     },
     {
-      "name": "Fenrir::Math::Vec3",
+      "name": "Fenrir::Math::Ray",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 24,
+      "alignment": 4,
+      "doc": "Represents a ray in 3D space defined by an origin point and a direction vector.",
+      "fields": [
+        {
+          "name": "origin",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {},
+          "doc": "The origin point of the ray."
+        },
+        {
+          "name": "dir",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec3",
+          "default": {
+            "x": 0,
+            "y": 0,
+            "z": 1
+          },
+          "doc": "The direction vector of the ray, should be normalized to represent a direction."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
       "category": "bound-type",
       "role": "bound-type",
-      "size": 12,
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::Math::Vec4",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 16,
       "alignment": 4
     }
   ]

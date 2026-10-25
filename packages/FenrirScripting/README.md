@@ -30,7 +30,13 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
 - **The math contract.** `Fenrir.Math` (`packages/FenrirMath/Managed/Fenrir.Math`, namespace `Fenrir.Math`, ADR-0029)
   holds `Vector2`, `Vector3`, `Vector4`, `Quaternion`, `Matrix4x4`, `Colour`, `Ray` and `Bounds`, each laid out as its
   FenrirMath counterpart (`Math::Vec2` to `Math::Mat4`, `Fenrir::Colour`, `Math::Ray`, `Math::AABB`). It is pure managed
-  code with no native functions, so any package's contract can use it. The scripting contract is built on it
+  code with no native functions, so any package's contract can use it. `Colour`, `Ray` and `Bounds` are generated
+  (ADR-0043): the math binding, `api/FenrirMath.binding.toml`, binds FenrirMath's API description to the contract's
+  `Generated/` mirrors, beside which `Colour.cs`, `Ray.cs` and `Bounds.cs` add only behaviour (constructors, operators,
+  conversions), and to `include/FenrirScripting/Generated/FenrirMathMappings.hpp`, and runs its defaults test in this
+  package's tests (`Tests/Generated/FenrirMathDefaults*`). The glm types are its bound types, written by hand and mapped
+  in `include/FenrirScripting/BoundMappings.hpp`. Every other binding names these types through `uses` (the built-in's
+  and FenrirPhysics's do), so each has one C# type and one mapping. The scripting contract is built on it
   (`Transform` holds its `Vector3` and `Quaternion`), and `Scripting::Install` shares it first, before
   `Fenrir.Scripting`. A script names it with `using Fenrir.Math;`. Inside a `Fenrir.*` namespace, `Math` then means the
   namespace, so write `System.Math` (or `MathF`) for the BCL's.
@@ -191,12 +197,12 @@ public struct Health : IComponent { public int Current; public int Max; }
   `Transform` or `Entity` includes `FenrirScripting/Generated/FenrirScriptingMappings.hpp`, the built-in binding's
   mappings, which name them as `Fenrir.Math`'s `Vector3` and `Quaternion` and the contract's `Transform` and
   `EntityLink`. An `Entity` member then maps as itself, and C# sees it as an `EntityLink`, as in `Relationship`. The same
-  header brings the hand-written mappings of FenrirMath's other types (`include/FenrirScripting/BoundMappings.hpp`):
-  `Math::Vec2`, `Vec4`, `Fenrir::Colour` and `Math::Ray`, as `Fenrir.Math`'s `Vector2`, `Vector4`, `Colour` and `Ray`.
-  Two take a stand-in, put where the real type is in a stand-in of the struct holding it: glm keeps a `Math::Mat4`'s
-  columns private, so `Detail::Mat4View` (four `Math::Vec4` columns) is a `Matrix4x4` of `Column0` to `Column3`; and
-  `Math::AABB` maps as FenrirPhysics's `Aabb` (its generated binding), so `Detail::BoundsView` is `Fenrir.Math`'s `Bounds`.
-  In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
+  header brings the math binding's (`include/FenrirScripting/Generated/FenrirMathMappings.hpp`, from
+  `api/FenrirMath.binding.toml`): FenrirMath's `Fenrir::Colour`, `Math::Ray` and `Math::AABB`, generated as
+  `Fenrir.Math`'s `Colour`, `Ray` and `Bounds`, and the hand-written mappings of its glm types
+  (`include/FenrirScripting/BoundMappings.hpp`): `Math::Vec2`, `Vec4` and `Mat4` as `Vector2`, `Vector4` and
+  `Matrix4x4` (glm keeps a matrix's columns private, so its mapping gives `Column0` to `Column3` by offset). A generated
+  binding names these through `uses` rather than mirroring them again (ADR-0043). In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
   `EntityLink.None` is the empty link (C++'s default `Entity`). See "Entity links" below.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
@@ -763,13 +769,13 @@ carries the engine's components (Transform, Name and Relationship, all required)
 `Fenrir.Math` and then the `Fenrir.Scripting` contract built on it. It is always the first extension, so the engine's
 components take their names before any other extension's, and the two contracts are shared before any other.
 
-It is a generated binding (ADR-0042), as FenrirPhysics's is: `api/FenrirScripting.binding.toml` binds FenrirECS's and
-FenrirMath's API descriptions (`packages/FenrirECS/api`, `packages/FenrirMath/api`) and the natives description
+It is a generated binding (ADR-0042), as FenrirPhysics's is: `api/FenrirScripting.binding.toml` binds FenrirECS's API
+description (`packages/FenrirECS/api`), using the math binding's types, and the natives description
 `api/FenrirScripting.natives.json`, which describe-api reads from `src/Bindings.cpp`. From them `Iris.Bindings` writes the
 contract's mirrors and `Native` class (`Managed/Fenrir.Scripting/Generated`), the mappings
 (`include/FenrirScripting/Generated`), the extension's lists (`src/Generated`) and two tests (`Tests/Generated`). Only the
 vector and quaternion, bound types whose C# types are `Fenrir.Math`'s, are mapped by hand
-(`include/FenrirScripting/BoundMappings.hpp`, beside FenrirMath's other types). To add a native
+(`include/FenrirScripting/BoundMappings.hpp`, with the math binding's other bound types). To add a native
 function, in the order a script sees it:
 
 1. **The C++ function**, in `src/Bindings.cpp`'s `Fenrir::ScriptingNatives`, over the `CallContext` like any native

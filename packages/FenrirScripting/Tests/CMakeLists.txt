@@ -6,6 +6,7 @@ add_executable(FenrirScriptingTests
     ScriptingProbe.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
     Generated/FenrirScriptingNativesTests.cpp
+    Generated/FenrirMathDefaultsTests.cpp
 )
 target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")

@@ -144,7 +144,7 @@ public static class World
 
     public static bool IsSleeping(uint entity) => PhysicsWorld.IsSleeping(new Entity(entity));
 
-    private static Aabb lastBounds;
+    private static Bounds lastBounds;
 
     public static bool Bounds(uint entity) => PhysicsWorld.Bounds(new Entity(entity), out lastBounds);
 

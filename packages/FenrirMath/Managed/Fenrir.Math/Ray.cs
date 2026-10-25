@@ -1,21 +1,9 @@
 namespace Fenrir.Math;
 
-/// <summary>
-/// A ray: an origin and a unit direction, laid out exactly like FenrirMath's <c>Math::Ray</c>. As in C++,
-/// <c>new Ray()</c> starts at the origin and points along +Z, and a ray made from a direction normalizes it.
-/// </summary>
-public struct Ray : IEquatable<Ray>
+// The behaviour of the generated Ray (Generated/Ray.cs, from FenrirMath's Math::Ray): an origin and a unit direction. As
+// in C++, new Ray() starts at the origin and points along +Z, and a ray made from a direction normalizes it.
+public partial struct Ray : IEquatable<Ray>
 {
-    public Vector3 Origin;
-    public Vector3 Direction;
-
-    /// <summary>From the origin along +Z, as a default constructed <c>Math::Ray</c> is.</summary>
-    public Ray()
-    {
-        Origin = Vector3.Zero;
-        Direction = new Vector3(0, 0, 1);
-    }
-
     /// <summary>From <paramref name="origin"/> along <paramref name="direction"/>, normalized.</summary>
     public Ray(Vector3 origin, Vector3 direction)
     {
