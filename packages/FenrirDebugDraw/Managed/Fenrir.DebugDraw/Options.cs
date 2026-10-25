@@ -2,15 +2,6 @@ using Fenrir.Scripting;
 
 namespace Fenrir.DebugDraw;
 
-/// <summary>Whether a shape is hidden behind what is in front of it: FenrirDebugDraw's <c>DepthMode</c>.</summary>
-public enum DepthMode : byte
-{
-    /// <summary>Tested against the scene's depth, so geometry in front hides it (the default).</summary>
-    Tested = 0,
-    /// <summary>Drawn over everything, never hidden.</summary>
-    OnTop = 1,
-}
-
 /// <summary>
 /// How a debug draw item of a shape is kept and drawn: FenrirDebugDraw's <c>ShapeOptions</c>, with its defaults when made
 /// with <c>new</c>, so a call names only what it changes:
@@ -66,38 +57,27 @@ public struct TextOptions
     }
 }
 
-// ShapeOptions and TextOptions without their group, which crosses as text of its own: laid out exactly as
-// FenrirDebugDrawScripting's native mirrors, with the entity as its 32-bit value and the depth mode widened to 32 bits so
-// there is no padding to agree on. The native side checks its sizes at compile time, and the tests read every field back
-// through what each call draws.
-internal struct NativeShapeOptions
+// ShapeOptions and TextOptions as the natives take them: their internal mirrors, generated from
+// FenrirDebugDrawScripting's ScriptOptions.hpp (Generated/NativeShapeOptions.cs and NativeTextOptions.cs), without the
+// group, which crosses as text of its own. These parts only convert.
+internal partial struct NativeShapeOptions
 {
-    public float Duration;
-    public uint RelativeTo;
-    public float Thickness;
-    public uint Depth;
-    public int Segments;
-
     public NativeShapeOptions(in ShapeOptions options)
     {
         Duration = options.Duration;
-        RelativeTo = options.RelativeTo.Value;
+        RelativeTo = options.RelativeTo;
         Thickness = options.Thickness;
-        Depth = (uint)options.Depth;
+        Depth = options.Depth;
         Segments = options.Segments;
     }
 }
 
-internal struct NativeTextOptions
+internal partial struct NativeTextOptions
 {
-    public float Duration;
-    public uint RelativeTo;
-    public float Size;
-
     public NativeTextOptions(in TextOptions options)
     {
         Duration = options.Duration;
-        RelativeTo = options.RelativeTo.Value;
+        RelativeTo = options.RelativeTo;
         Size = options.Size;
     }
 }

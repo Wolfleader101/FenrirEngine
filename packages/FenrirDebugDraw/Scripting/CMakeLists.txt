@@ -7,7 +7,8 @@
 # scripting contract, where Scripting::Install finds the extension's relative path.
 set(FENRIR_DEBUGDRAW_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-debugdraw/contract" CACHE INTERNAL "Where the Fenrir.DebugDraw contract is built")
 set(fenrir_debugdraw_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.DebugDraw")
-file(GLOB fenrir_debugdraw_contract_sources CONFIGURE_DEPENDS "${fenrir_debugdraw_managed_dir}/*.cs")
+file(GLOB fenrir_debugdraw_contract_sources CONFIGURE_DEPENDS "${fenrir_debugdraw_managed_dir}/*.cs"
+    "${fenrir_debugdraw_managed_dir}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${FENRIR_DEBUGDRAW_CONTRACT_DIR}/Fenrir.DebugDraw.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_debugdraw_managed_dir}/Fenrir.DebugDraw.csproj"
@@ -39,10 +40,30 @@ endfunction()
 
 add_library(FenrirDebugDrawScripting STATIC
     include/FenrirDebugDrawScripting/DebugDrawScripting.hpp
+    src/BoundMappings.hpp
     src/DebugDrawScripting.cpp
+    src/DebugDrawScriptingState.hpp
+    src/ScriptOptions.hpp
+    src/Generated/FenrirDebugDrawMappings.hpp
+    src/Generated/FenrirDebugDrawRegistration.cpp
 )
 target_include_directories(FenrirDebugDrawScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirDebugDrawScripting PUBLIC FenrirDebugDraw FenrirScripting)
+
+# The binding (ADR-0042, ADR-0043): every native function is written once, as its definition in
+# src/DebugDrawScripting.cpp, which describe-api's natives mode reads into api/FenrirDebugDraw.natives.json, and the
+# options the natives take once, in src/ScriptOptions.hpp, which this library describes itself as
+# api/FenrirDebugDrawScripting.api.json. Iris.Bindings generates the rest from those descriptions and
+# api/FenrirDebugDraw.binding.toml, all committed:
+#   ../Managed/Fenrir.DebugDraw/Generated/  the options' internal C# mirrors, DepthMode, and the natives' declarations,
+#                                           DebugDrawNative, under the hand-written DebugDraw facade;
+#   src/Generated/                          the Iris mappings and the extension's functions.
+# After changing the options or a native, regenerate both stages:
+#   cmake --build <dir> --target fenrir-describe-api
+#   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api(FenrirDebugDrawScripting api/FenrirDebugDrawScripting.api.toml)
+fenrir_describe_api_natives(FenrirDebugDrawScripting api/FenrirDebugDraw.binding.toml)
+iris_generate_binding(FenrirDebugDraw api/FenrirDebugDraw.binding.toml api/FenrirDebugDrawScripting.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

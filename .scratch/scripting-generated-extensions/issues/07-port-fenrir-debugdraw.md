@@ -13,9 +13,50 @@
 
 **Touches:** `packages/FenrirDebugDraw/Managed/`, `packages/FenrirDebugDraw/Scripting/`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` leave the tree clean; no `[NativeFunction]` or `NativeFunction::Make` remains under the package.
-- [ ] The existing debug-draw extension tests pass unchanged in behaviour (items, shapes, text, groups, no-op rules); the generated natives and defaults tests run in the test target.
-- [ ] `DebugDraw.Line(a, b, Colour.Red)`, `DebugDraw.Box(bounds, colour, new ShapeOptions { Group = "nav", Depth = DepthMode.OnTop })` read exactly as before from a script.
-- [ ] Only the ticket's own Touches change. If 06 lands after this ticket, the glossary note and the directory deletion move to 06's closing commit instead.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` leave the tree clean; no `[NativeFunction]` or `NativeFunction::Make` remains under the package.
+- [x] The existing debug-draw extension tests pass unchanged in behaviour (items, shapes, text, groups, no-op rules); the generated natives and defaults tests run in the test target. (Neither has a case for this binding, so it has no `[tests]`: see Comments.)
+- [x] `DebugDraw.Line(a, b, Colour.Red)`, `DebugDraw.Box(bounds, colour, new ShapeOptions { Group = "nav", Depth = DepthMode.OnTop })` read exactly as before from a script.
+- [x] Only the ticket's own Touches change. If 06 lands after this ticket, the glossary note and the directory deletion move to 06's closing commit instead.
+
+## Comments
+
+**The selection's names.** `src/ScriptOptions.hpp` holds `Fenrir::ScriptOptions::ShapeOptions` and `TextOptions` (today's
+`ScriptShapeOptions` and `ScriptTextOptions`, renamed by their namespace) and, after physics's `ScriptQueries`, an
+`EntityValue` for the relativeTo entity, bound to C# `Entity` in `[bound-types]` and mapped by hand in the extension's own
+`src/BoundMappings.hpp`. Its default is written `EntityValue(0xFFFFFFFFu)`: describe-api records a bound type's
+constructor with literal arguments only, not `Entity::Null`. The selection also names `Colour` and `Math::AABB`
+(`shared-struct`, the math description's role) and the four glm types the natives take (`bound-type`), since a native's
+pointee must be described; `DepthMode` is described through the shape options' field, now the enum, so the hand-written
+`DepthMode` in `Options.cs` became the generated `Generated/DepthMode.cs` (same name, values and `byte`).
+
+**The option structs are not registered (settles the ticket against ticket 02).** Ticket 02 said an `internal-structs`
+mirror's layout "is still checked when the extension registers it". It is not: Iris checks a shared struct against a
+public C# struct only (`Iris.Bridge/ComponentExports.cs`), so registering the two internal mirrors made every script load
+fail with "No public struct with that name was found". Both are in `[registration] by-hand` and registered by nothing.
+Their layout is checked this way instead: the C# mirror and the C++ mappings are generated from one description, the
+mappings `static_assert` C++'s size and alignment against it, and the extension's tests set every field from C#
+(duration, relativeTo, thickness, depth, segments; text duration, relativeTo, size) and read it back through what the
+call draws against the same call made in C++. Nothing checks the C# mirror's layout against C++ at run time. A follow-up
+for Iris or Iris.Bindings: either Iris accepts an internal shared struct, or `internal-structs` implies not registered
+and the README's sentence changes. No other port's ticket mirrors a struct internal, so only this binding meets it
+today.
+
+**No `[tests]`.** Neither generated test has a case here: the internal mirrors get no defaults case, `DepthMode` (an enum)
+gets none, and no native has an output, so the natives test has nothing to call. With only internal registered types,
+Iris.Bindings' natives test also crashes (`CSharpWriter.NativesTest` takes `binding.Registered.First()` as the type whose
+assembly it reflects on, and there is none); the empty defaults test generates, but only as unused helpers. So the
+binding has no `[tests]`, and the test target and fixture are unchanged. The crash is a second Iris.Bindings follow-up.
+
+**`Grid`'s native takes `cellSize` before `cells`.** Iris.Bindings reads any pointer followed by a `std::int32_t` as a
+span, so `const Math::Quat* rotation, std::int32_t cells` declared `Quaternion* rotation`. The native's two parameters
+swapped places (a comment there says why); `DebugDraw.Grid` keeps its order.
+
+**The warn-once record** is the `DebugDrawScripting` state (`src/DebugDrawScriptingState.hpp`), with `TargetFor` as a
+member (a free function taking the context first would be read as a native). Warnings stay keyed by native call site and
+reason, now per extension rather than per process; each no-op test has its own app and log, so the tests are unchanged.
+The facade's remarks and the public header say "once" instead of "once per process".
+
+**The spec's closing step moves to 06.** Ticket 06 (renderer) lands after this one, so the `GLOSSARY.md` note under
+*Native function* (which still lists debug draw) and this directory stay; 06's closing commit removes both.
