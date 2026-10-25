@@ -9,8 +9,11 @@ namespace Fixture.Bindings.Tests;
 public static class Defaults
 {
     public static global::Fixture.Bindings.Body Body() => new();
+    public static global::Fixture.Bindings.BodyId BodyId() => new();
+    public static global::Fixture.Bindings.Clock Clock() => new();
     public static global::Fixture.Bindings.Collider Collider() => new();
     public static global::Fixture.Bindings.Hit Hit() => new();
-    public static global::Fixture.Bindings.Tag Tag() => new();
+    public static global::Fixture.Bindings.Sky Sky() => new();
     public static global::Fixture.Bindings.Touched Touched() => new();
+    public static global::Fixture.Bindings.Weather Weather() => new();
 }

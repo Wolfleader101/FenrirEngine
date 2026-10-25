@@ -447,6 +447,22 @@
       ]
     },
     {
+      "name": "Fixture::BodyId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 4,
+      "alignment": 4,
+      "doc": "An id: a struct of one field, which a native takes and returns by value as that field.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
       "name": "Fixture::BoxShape",
       "category": "struct",
       "role": "nested",
@@ -463,6 +479,22 @@
             "y": 0.5,
             "z": 0.5
           }
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Clock",
+      "category": "struct",
+      "role": "app-resource",
+      "size": 8,
+      "alignment": 8,
+      "doc": "An app resource.",
+      "fields": [
+        {
+          "name": "seconds",
+          "offset": 0,
+          "kind": "f64",
+          "default": 0
         }
       ]
     },
@@ -597,6 +629,37 @@
       "doc": "A bound type that is a template's specialisation nothing here instantiates: the tool instantiates it."
     },
     {
+      "name": "Fixture::Sky",
+      "category": "tagged-union",
+      "role": "app-resource",
+      "size": 16,
+      "alignment": 4,
+      "doc": "An app resource that is a tagged union.",
+      "tag": {
+        "name": "m_type",
+        "offset": 0,
+        "kind": "enum",
+        "type": "Fixture::ShapeType",
+        "default": "Box"
+      },
+      "unionOffset": 4,
+      "kinds": [
+        {
+          "name": "m_box",
+          "tag": "Box",
+          "kind": "struct",
+          "type": "Fixture::BoxShape"
+        },
+        {
+          "name": "m_sphere",
+          "tag": "Sphere",
+          "kind": "struct",
+          "type": "Fixture::SphereShape"
+        }
+      ],
+      "defaultKind": "m_box"
+    },
+    {
       "name": "Fixture::Tag",
       "category": "struct",
       "role": "shared-struct",
@@ -634,6 +697,14 @@
       ]
     },
     {
+      "name": "Fixture::Ticket",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A bound type of one member, which a binding may pass to a native by value as that member."
+    },
+    {
       "name": "Fixture::Touched",
       "category": "struct",
       "role": "event",
@@ -654,6 +725,29 @@
           "kind": "struct",
           "type": "Fixture::Handle",
           "default": {}
+        }
+      ]
+    },
+    {
+      "name": "Fixture::Weather",
+      "category": "struct",
+      "role": "scene-resource",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A scene resource: plain data, as a component is, holding a UTF-32 code point.",
+      "fields": [
+        {
+          "name": "wind",
+          "offset": 0,
+          "kind": "f32",
+          "default": 0.5
+        },
+        {
+          "name": "glyph",
+          "offset": 4,
+          "kind": "u32",
+          "default": 42,
+          "doc": "A char32_t: recorded as the u32 it is."
         }
       ]
     }

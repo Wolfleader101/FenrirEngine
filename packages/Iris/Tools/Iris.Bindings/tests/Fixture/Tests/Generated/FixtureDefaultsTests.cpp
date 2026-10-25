@@ -35,6 +35,7 @@ namespace
     // Of a tagged union only the tag and the kind it selects are compared: the other kinds' bytes are not set.
     const std::vector<TaggedUnion> taggedUnions = {
         {"Fixture.Bindings.Shape", {{0u, 1}, {1u, 2}}},
+        {"Fixture.Bindings.Sky", {{0u, 1}, {1u, 2}}},
     };
 
     using Iris::Detail::StructInfo;
@@ -185,6 +186,18 @@ TEST_CASE("C#'s new Body() has C++'s Fixture::Body{} defaults, field by field", 
     CheckDefaults<Fixture::Body>(harness.Component(), "Body");
 }
 
+TEST_CASE("C#'s new BodyId() has C++'s Fixture::BodyId{} defaults, field by field", "[bindings]")
+{
+    const Fixture::DefaultsHarness harness;
+    CheckDefaults<Fixture::BodyId>(harness.Component(), "BodyId");
+}
+
+TEST_CASE("C#'s new Clock() has C++'s Fixture::Clock{} defaults, field by field", "[bindings]")
+{
+    const Fixture::DefaultsHarness harness;
+    CheckDefaults<Fixture::Clock>(harness.Component(), "Clock");
+}
+
 TEST_CASE("C#'s new Collider() has C++'s Fixture::Collider{} defaults, field by field", "[bindings]")
 {
     const Fixture::DefaultsHarness harness;
@@ -197,16 +210,22 @@ TEST_CASE("C#'s new Hit() has C++'s Fixture::Hit{} defaults, field by field", "[
     CheckDefaults<Fixture::Hit>(harness.Component(), "Hit");
 }
 
-TEST_CASE("C#'s new Tag() has C++'s Fixture::Tag{} defaults, field by field", "[bindings]")
+TEST_CASE("C#'s new Sky() has C++'s Fixture::Sky{} defaults, field by field", "[bindings]")
 {
     const Fixture::DefaultsHarness harness;
-    CheckDefaults<Fixture::Tag>(harness.Component(), "Tag");
+    CheckDefaults<Fixture::Sky>(harness.Component(), "Sky");
 }
 
 TEST_CASE("C#'s new Touched() has C++'s Fixture::Touched{} defaults, field by field", "[bindings]")
 {
     const Fixture::DefaultsHarness harness;
     CheckDefaults<Fixture::Touched>(harness.Component(), "Touched");
+}
+
+TEST_CASE("C#'s new Weather() has C++'s Fixture::Weather{} defaults, field by field", "[bindings]")
+{
+    const Fixture::DefaultsHarness harness;
+    CheckDefaults<Fixture::Weather>(harness.Component(), "Weather");
 }
 
 // clang-format on

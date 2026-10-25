@@ -11,6 +11,8 @@
 
   <ItemGroup>
     <Compile Include="../../Fixture/Contract/**/*.cs" />
+    <!-- The binding the fixture uses (Fixture/Uses), whose Spring the fixture's mirrors name. -->
+    <Compile Include="../../Fixture/Uses/Contract/**/*.cs" />
   </ItemGroup>
 
   <Import Project="$(MSBuildThisFileDirectory)../../../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />

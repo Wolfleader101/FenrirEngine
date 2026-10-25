@@ -53,6 +53,12 @@ namespace Failing
         Copied member;
     };
 
+    /** @brief An enum, which a selection cannot give a role. */
+    enum class Mode
+    {
+        Off
+    };
+
     struct Inexpressible
     {
         long double wide = 0.0L;

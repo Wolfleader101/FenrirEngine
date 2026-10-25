@@ -88,21 +88,30 @@ internal sealed record WireParameter(string Type, string? Output);
 /// <param name="Parameters">The C# parameters of the declaration, each <c>[modifier] Type name</c>.</param>
 /// <param name="WireResult">The C# type of the bound function pointer's result.</param>
 /// <param name="Wire">One per C++ parameter after the context and state, in order.</param>
+/// <param name="Named">The described types its declaration names, by C++ name.</param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
-                                   string WireResult, IReadOnlyList<WireParameter> Wire)
+                                   string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named)
 {
+    /// <summary>Whether its declaration takes text, a <c>ReadOnlySpan&lt;char&gt;</c>.</summary>
+    public bool TakesText => Parameters.Any(parameter => parameter.StartsWith(TextType + " ", StringComparison.Ordinal));
+
+    /// <summary>The C# type of a <c>std::string_view</c> parameter.</summary>
+    public const string TextType = "ReadOnlySpan<char>";
+
     /// <summary>Whether the native writes an output, which the natives test checks it writes with no world.</summary>
     public bool HasOutput => Wire.Any(parameter => parameter.Output != null);
 }
 
 /// <summary>
 /// Maps natives to C#: the leading context and state are dropped, and each C++ parameter becomes what the hand-written
-/// declarations used to say. A <c>const char*</c> with a <c>std::int32_t</c> length after it is a <c>string</c>; any
-/// other pointer with a <c>std::int32_t</c> count after it is a <c>T*</c> span; a <c>T*</c> its doc marks an output is
-/// <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is <c>void*</c>, an address
-/// C# passes as it is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, and an alias in
-/// <c>[natives] types</c> is the C# type it names. A result is a number, a bool, nothing, or a <c>void*</c>. Anything
-/// else fails naming the function and parameter.
+/// declarations used to say. A <c>std::string_view</c> is a <c>ReadOnlySpan&lt;char&gt;</c>, and a <c>const char*</c>
+/// with a <c>std::int32_t</c> length after it a <c>string</c>, both crossing as bytes and a length; any other pointer
+/// with a <c>std::int32_t</c> count after it is a <c>T*</c> span; a <c>T*</c> its doc marks an output is <c>out T</c>,
+/// and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is <c>void*</c>, an address C# passes as it
+/// is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, an alias in <c>[natives] types</c> is the C#
+/// type it names, an enum is its C# enum, and a wrapper (a described struct of one field, or a bound type whose entry
+/// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A result is any of those values, nothing, or a
+/// <c>void*</c>. Anything else fails naming the function and parameter.
 /// </summary>
 internal static class Natives
 {
@@ -139,21 +148,28 @@ internal static class Natives
 
     private static BoundNative Bind(Binding binding, NativesConfig config, NativeFunction function, string where)
     {
-        var result = function.Returns switch
+        var named = new List<string>();
+        string result;
+        string wireResult;
+        switch (function.Returns)
         {
-            { Kind: "void" } => "void",
-            { Kind: "pointer", PointeeKind: "void" } => "void*",
-            { Kind: "pointer" or "struct" or "enum" } => throw Unmappable(where + " (result)", function.Returns,
-                                                                       "a native returns a number, a bool, nothing or a void*"),
-            var type => Scalar(type.Kind, where + " (result)", type),
-        };
-        var wireResult = function.Returns.Kind switch
-        {
-            "void" => "void",
-            "bool" => "byte",
-            "pointer" => "void*",
-            var kind => Binding.CSharpScalar(kind),
-        };
+            case { Kind: "void" }:
+                (result, wireResult) = ("void", "void");
+                break;
+            case { Kind: "pointer", PointeeKind: "void" }:
+                (result, wireResult) = ("void*", "void*");
+                break;
+            case { Kind: "pointer" or "string" }:
+                throw Unmappable(where + " (result)", function.Returns,
+                                 "a native returns a number, a bool, an enum, a wrapper, nothing or a void*");
+            case { Kind: "struct" or "enum" } type:
+                var (crosses, kind) = ByValue(binding, type, where + " (result)", named);
+                (result, wireResult) = (crosses, Wire(kind));
+                break;
+            case var type:
+                (result, wireResult) = (Scalar(type.Kind, where + " (result)", type), Wire(type.Kind));
+                break;
+        }
 
         var parameters = new List<string>();
         var wire = new List<WireParameter>();
@@ -182,6 +198,11 @@ internal static class Natives
                 }
 
                 var pointee = Pointee(binding, config, type, subject);
+                if (type.PointeeKind is "struct" or "enum" && !config.Types.ContainsKey(type.Pointee!))
+                {
+                    named.Add(type.Pointee!);
+                }
+
                 if (parameter.Output)
                 {
                     parameters.Add($"out {pointee} {name}");
@@ -210,20 +231,58 @@ internal static class Natives
             if (config.Types.TryGetValue(type.Spelling, out var mapped))
             {
                 parameters.Add($"{mapped} {name}");
+                wire.Add(new WireParameter(Wire(type.Kind), null));
+            }
+            else if (type.Kind == "string")
+            {
+                parameters.Add($"{BoundNative.TextType} {name}");
+                wire.Add(new WireParameter("void*", null));
+                wire.Add(new WireParameter("int", null));
             }
             else if (type.Kind is "struct" or "enum")
             {
-                throw Unmappable(subject, type, "Iris passes no struct or enum by value: take a const pointer");
+                var (crosses, kind) = ByValue(binding, type, subject, named);
+                parameters.Add($"{crosses} {name}");
+                wire.Add(new WireParameter(Wire(kind), null));
             }
             else
             {
                 parameters.Add($"{Scalar(type.Kind, subject, type)} {name}");
+                wire.Add(new WireParameter(Wire(type.Kind), null));
             }
-
-            wire.Add(new WireParameter(type.Kind == "bool" ? "byte" : Binding.CSharpScalar(type.Kind), null));
         }
 
-        return new BoundNative(function, result, parameters, wireResult, wire);
+        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList());
+    }
+
+    // The C# type of the function pointer's parameter or result for a value of this kind: a bool crosses as a byte.
+    private static string Wire(string kind) => kind == "bool" ? "byte" : Binding.CSharpScalar(kind);
+
+    // An enum or wrapper a native takes or returns by value: its C# type, and the kind it crosses as. An enum crosses as
+    // its underlying integer, a described struct of one field as that field, and a bound type as the kind its
+    // [bound-types] entry gives as its wrapper.
+    private static (string Type, string Kind) ByValue(Binding binding, NativeType type, string subject, List<string> named)
+    {
+        if (binding.Find(type.Spelling) is not { } described)
+        {
+            throw Unmappable(subject, type, $"no description describes {type.Spelling}, and [natives] types does not name it");
+        }
+
+        named.Add(described.Name);
+        switch (described.Category)
+        {
+            case Category.Enum:
+                return (binding.CSharpName(described), described.Underlying!);
+            case Category.Struct when described.Fields is [{ Kind: { Kind: not ("struct" or "array" or "pointer") } field }]:
+                return (binding.CSharpName(described),
+                        field.Kind == "enum" ? binding.Type(field.Type!).Underlying! : field.Kind);
+            case Category.BoundType when binding.Config.BoundTypes[described.Name].Wrapper is { } wrapper:
+                return (binding.CSharpName(described), wrapper);
+            default:
+                throw Unmappable(subject, type,
+                                 "a struct crosses by value only as a wrapper (one field of a number, bool, char or enum, " +
+                                 "or a bound type whose [bound-types] entry names its wrapper kind): take a const pointer");
+        }
     }
 
     // The C# type a pointer points at: a number, a type a description describes, or an alias in [natives] types.

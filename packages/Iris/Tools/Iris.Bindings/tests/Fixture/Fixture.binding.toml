@@ -1,6 +1,8 @@
 # The fixture's binding: Fixture.api.json bound to C#. Paths are relative to this file. The generated files are committed
 # beside the hand-written ones, and the tests compare a fresh run with them byte for byte.
 namespace = "Fixture.Bindings"
+# Spring is the Common binding's: named as Fixture.Common.Spring, not mirrored here.
+uses = ["Uses/Common.binding.toml"]
 
 [csharp]
 contract = "Contract"
@@ -13,6 +15,9 @@ read-only-component-interface = "IReadOnlyComponent"
 event-attribute = "NativeEvent"
 event-interface = "IEvent"
 tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
 pointer-type = "ulong"
 readonly-events = true
 # A struct C# reads and never writes: readonly, and so is Body's field holding it.
@@ -20,6 +25,8 @@ readonly-structs = ["Fixture::Limits"]
 # Tag's id and owner are C#'s to reach through members a hand-written part would add, and its label a fixed buffer.
 private-fields = ["Fixture::Tag::m_id", "Fixture::Tag::m_owner"]
 fixed-buffers = ["Fixture::Tag::m_label"]
+# Tag is the contract's own: internal, so the defaults test has no case for it.
+internal-structs = ["Fixture::Tag"]
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
@@ -35,7 +42,13 @@ make-component = "Host::MakeComponent"
 make-read-only-component = "Host::MakeReadOnlyComponent"
 make-event = "Host::MakeEvent"
 make-shared-struct = "Host::MakeSharedStruct"
-read-only = ["Fixture::Collider"]
+make-scene-resource = "Host::MakeSceneResource"
+make-read-only-scene-resource = "Host::MakeReadOnlySceneResource"
+make-app-resource = "Host::MakeAppResource"
+make-read-only-app-resource = "Host::MakeReadOnlyAppResource"
+read-only = ["Fixture::Collider", "Fixture::Clock"]
+# Registered by the extension itself: mirrored, mapped and tested, but not in the generated lists.
+by-hand = ["Fixture::BodyId"]
 
 [tests]
 cpp = "Tests/Generated/FixtureDefaultsTests.cpp"
@@ -69,6 +82,8 @@ types = { "Fixture::EntityId" = "Entity" }
 "Fixture::Handle" = { type = "Handle", default = "new()" }
 # Described by layout only, and held by nothing: its C# type is never named.
 "Fixture::Size" = { type = "Size" }
+# One member, which a native passes by value: the description does not record its kind, so the entry does.
+"Fixture::Ticket" = { type = "Ticket", wrapper = "u32" }
 
 # Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
 [names]

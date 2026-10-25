@@ -19,6 +19,8 @@ internal enum Role
     Event,
     SharedStruct,
     BoundType,
+    SceneResource,
+    AppResource,
     Nested,
 }
 
@@ -142,6 +144,8 @@ internal static class Description
                            "event" => Role.Event,
                            "shared-struct" => Role.SharedStruct,
                            "bound-type" => Role.BoundType,
+                           "scene-resource" => Role.SceneResource,
+                           "app-resource" => Role.AppResource,
                            "nested" => Role.Nested,
                            var other => throw new BindingException($"{where}: unknown role '{other}'"),
                        };

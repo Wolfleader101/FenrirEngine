@@ -274,6 +274,60 @@ namespace Fixture
         char m_label[4] = {'a'};
     };
 
+    /** @brief A scene resource: plain data, as a component is, holding a UTF-32 code point. */
+    struct Weather
+    {
+        float wind = 0.5f;
+        /** @brief A char32_t: recorded as the u32 it is. */
+        char32_t glyph = U'*';
+    };
+
+    /** @brief An app resource. */
+    struct Clock
+    {
+        double seconds = 0.0;
+    };
+
+    /** @brief An app resource that is a tagged union. */
+    class Sky
+    {
+      public:
+        Sky() : Sky(BoxShape{})
+        {
+        }
+
+        Sky(BoxShape box) : m_type(ShapeType::Box), m_box(box)
+        {
+        }
+
+        Sky(SphereShape sphere) : m_type(ShapeType::Sphere), m_sphere(sphere)
+        {
+        }
+
+      private:
+        ShapeType m_type;
+        union {
+            BoxShape m_box;
+            SphereShape m_sphere;
+        };
+    };
+
+    /** @brief An id: a struct of one field, which a native takes and returns by value as that field. */
+    struct BodyId
+    {
+        std::uint32_t value = 0;
+    };
+
+    /** @brief A bound type of one member, which a binding may pass to a native by value as that member. */
+    class Ticket
+    {
+      public:
+        Ticket() = default;
+
+      private:
+        std::uint32_t m_number = 0;
+    };
+
     /** @brief An event between two handles. */
     struct Touched
     {

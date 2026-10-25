@@ -1,17 +1,18 @@
 namespace Iris.Bindings;
 
 /// <summary>
-/// <c>iris-bindings &lt;Name&gt;.binding.toml &lt;Package&gt;.api.json...</c>: writes a binding's C# mirrors, Iris
+/// <c>iris-bindings &lt;Name&gt;.binding.toml [&lt;Package&gt;.api.json...]</c> (the descriptions the configuration's
+/// <c>descriptions</c> names when none are given): writes a binding's C# mirrors, Iris
 /// mappings, registration lists and defaults test, each only when its content changes; with <c>[natives]</c>, also the
 /// native functions' declarations, registration and test, from the <c>&lt;Name&gt;.natives.json</c> beside the configuration.
 /// </summary>
 internal static class Program
 {
-    private const string Usage = "usage: iris-bindings <Name>.binding.toml <Package>.api.json [<Package>.api.json...]";
+    private const string Usage = "usage: iris-bindings <Name>.binding.toml [<Package>.api.json...]";
 
     public static int Main(string[] args)
     {
-        if (args.Length < 2 || args[0] is "-h" or "--help")
+        if (args.Length < 1 || args[0] is "-h" or "--help")
         {
             Console.Error.WriteLine(Usage);
             return 2;

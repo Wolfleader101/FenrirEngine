@@ -15,6 +15,14 @@ namespace Fenrir.Scripting
     {
     }
 
+    public interface IReadOnlyResource
+    {
+    }
+
+    public interface IResource : IReadOnlyResource
+    {
+    }
+
     [AttributeUsage(AttributeTargets.Struct)]
     public sealed class NativeComponentAttribute(string name) : Attribute
     {
@@ -23,6 +31,12 @@ namespace Fenrir.Scripting
 
     [AttributeUsage(AttributeTargets.Struct)]
     public sealed class NativeEventAttribute(string name) : Attribute
+    {
+        public string Name { get; } = name;
+    }
+
+    [AttributeUsage(AttributeTargets.Struct)]
+    public sealed class NativeResourceAttribute(string name) : Attribute
     {
         public string Name { get; } = name;
     }
@@ -49,5 +63,17 @@ namespace Fixture.Bindings
         public static implicit operator Shape(BoxShape value) => new() { _type = ShapeType.Box, _box = value };
 
         public static implicit operator Shape(SphereShape value) => new() { _type = ShapeType.Sphere, _sphere = value };
+    }
+
+    // Likewise for Sky, an app resource.
+    public partial struct Sky
+    {
+        public Sky()
+        {
+            _type = ShapeType.Box;
+            _box = new();
+        }
+
+        public static implicit operator Sky(SphereShape value) => new() { _type = ShapeType.Sphere, _sphere = value };
     }
 }
