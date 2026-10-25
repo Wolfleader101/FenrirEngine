@@ -30,6 +30,7 @@ The roles:
 | `app-resource` | A resource of the app a binding mirrors, plain data as a component is. |
 | `shared-struct` | Plain data native functions take or return by pointer. |
 | `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout only. |
+| `enum` | An enum no field holds that is shared all the same (a native function takes it). An enum a field holds is described without being named. |
 
 A selected component, event, resource or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer).
 
@@ -81,7 +82,7 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `an array of arrays, which the kinds cannot express` | A multi-dimensional array. |
 | `its tag <E> has N values but its union holds M kinds; ...`, `a constructor sets the tag to ...` | A tagged union whose tag values and kinds do not pair in declaration order. |
 | `a tagged union needs a default constructor that chooses its kind`, `its default constructor does not hold one kind with that kind's own defaults` | A tagged union whose default is not one kind with its own defaults. |
-| `no type of that name in the selected headers`, `an enum takes no role` | A selection naming a type that is not there, or an enum. |
+| `no type of that name in the selected headers`, `an enum takes no role`, `not an enum, so it cannot be selected as one` | A selection naming a type that is not there, an enum with another role than `enum`, or a type that is not an enum as one. |
 
 Errors clang reports reading the headers are printed as clang gives them.
 

@@ -22,3 +22,7 @@ target_include_directories(FenrirWindow PUBLIC include PRIVATE src)
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirWindow.api.json,
+# which FenrirWindowScripting's binding binds.
+fenrir_describe_api(FenrirWindow api/FenrirWindow.api.toml)

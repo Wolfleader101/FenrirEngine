@@ -11,10 +11,12 @@ add_executable(FenrirInputScriptingTests
     Devices.cpp
     Shapes.cpp
     NoInput.cpp
+    Generated/FenrirInputDefaultsTests.cpp
+    Generated/FenrirInputNativesTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-target_include_directories(FenrirInputScriptingTests PRIVATE "${fenrir_scripting_tests_dir}")
+target_include_directories(FenrirInputScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}")
 target_link_libraries(FenrirInputScriptingTests PRIVATE FenrirInputScripting Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirInputScriptingTests)
 fenrir_deploy_input_scripting(FenrirInputScriptingTests)
@@ -22,7 +24,10 @@ fenrir_deploy_input_scripting(FenrirInputScriptingTests)
 # The fixture script assembly: compiled against the scripting SDK and the Fenrir.Input contract, neither copied (the host
 # shares its own copies), and rebuilt when either is.
 set(fenrir_input_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-file(GLOB fenrir_input_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs")
+# It also compiles the generated tests' C# classes (Generated/): the defaults test reads their new() values, and the
+# natives test calls the natives through them.
+file(GLOB fenrir_input_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
+    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${fenrir_input_fixture_dir}/Fenrir.InputScriptFixture.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.InputScriptFixture.csproj"

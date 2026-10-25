@@ -61,7 +61,7 @@ A type every binding has its own of (a vector, a quaternion, an entity handle). 
 
 ### `enum`
 
-Described when a field uses it; an enum is never selected. It records `underlying` (an integer kind) and `values`: each enumerator's `name`, `value` (a JSON integer) and `doc`, in declaration order.
+Described when a field uses it, or when the selection names it with the role `enum` (one a native function takes that no field holds); either way it records no role. It records `underlying` (an integer kind) and `values`: each enumerator's `name`, `value` (a JSON integer) and `doc`, in declaration order.
 
 ## Kinds
 

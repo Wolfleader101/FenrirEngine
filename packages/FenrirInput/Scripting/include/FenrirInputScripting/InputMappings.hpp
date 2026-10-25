@@ -1,62 +1,44 @@
 #pragma once
 
-// How FenrirInput's types look to C#: each mapping names its mirror in the Fenrir.Input contract
-// (Managed/Fenrir.Input), and is checked against it whenever a script assembly loads, as part of an event or resource
-// that holds it, so a drift fails the load and names the field. Another package's extension whose events or resources
-// hold a WindowId (FenrirWindow's) includes this header, so its mappings can name it as a field.
+// FenrirInput's ids as wrappers: a native function takes and returns a WindowId or GamepadId by value, crossing as its
+// one 32-bit value (ADR-0044). Everything else C# sees of FenrirInput is generated
+// (Scripting/api/FenrirInput.binding.toml) into FenrirInputScripting/Generated/FenrirInputMappings.hpp, which includes
+// this header; another package's binding that uses FenrirInput's (FenrirWindow's) includes that header, and so these.
 
-#include <Iris/Iris.hpp>
+#include <Iris/InternalCall.hpp>
 
-#include <string_view>
+#include <cstdint>
 
 #include "FenrirInput/InputTypes.hpp"
 
 template <>
-struct Iris::StructMapping<Fenrir::WindowId>
+struct Iris::WrapperOf<Fenrir::WindowId>
 {
-    static constexpr std::string_view typeName = "Fenrir.Input.WindowId";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::WindowId, value, "Value"));
+    using Value = std::uint32_t;
+
+    static Fenrir::WindowId From(Value value)
+    {
+        return Fenrir::WindowId{value};
+    }
+
+    static Value To(Fenrir::WindowId window)
+    {
+        return window.value;
+    }
 };
 
 template <>
-struct Iris::StructMapping<Fenrir::GamepadId>
+struct Iris::WrapperOf<Fenrir::GamepadId>
 {
-    static constexpr std::string_view typeName = "Fenrir.Input.GamepadId";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(Fenrir::GamepadId, value, "Value"));
-};
+    using Value = std::uint32_t;
 
-template <>
-struct Iris::EnumMapping<Fenrir::Key>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.Key";
-};
+    static Fenrir::GamepadId From(Value value)
+    {
+        return Fenrir::GamepadId{value};
+    }
 
-template <>
-struct Iris::EnumMapping<Fenrir::Scancode>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.Scancode";
-};
-
-template <>
-struct Iris::EnumMapping<Fenrir::KeyModifiers>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.KeyModifiers";
-};
-
-template <>
-struct Iris::EnumMapping<Fenrir::MouseButton>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.MouseButton";
-};
-
-template <>
-struct Iris::EnumMapping<Fenrir::GamepadButton>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.GamepadButton";
-};
-
-template <>
-struct Iris::EnumMapping<Fenrir::GamepadAxis>
-{
-    static constexpr std::string_view typeName = "Fenrir.Input.GamepadAxis";
+    static Value To(Fenrir::GamepadId gamepad)
+    {
+        return gamepad.value;
+    }
 };

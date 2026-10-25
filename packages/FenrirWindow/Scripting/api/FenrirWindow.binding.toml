@@ -1,0 +1,60 @@
+# FenrirWindow's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirWindow.api.json bound
+# to the Fenrir.Window contract and Window::ScriptingExtension(). Paths are relative to this file. `cmake --build <dir>
+# --target fenrir-generate-bindings` regenerates every output below; they are committed.
+namespace = "Fenrir.Window"
+# The window ids are FenrirInput's, and the math types the math binding's: named as theirs, never mirrored here.
+uses = ["../../../FenrirInput/Scripting/api/FenrirInput.binding.toml", "../../../FenrirScripting/api/FenrirMath.binding.toml"]
+
+[csharp]
+contract = "../../Managed/Fenrir.Window"
+generated = "../../Managed/Fenrir.Window/Generated"
+usings = ["Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+readonly-events = true
+
+[cpp]
+mappings = "../src/Generated/FenrirWindowMappings.hpp"
+includes = ["FenrirWindow/WindowEvents.hpp", "FenrirWindow/WindowTypes.hpp"]
+
+[registration]
+source = "../src/Generated/FenrirWindowRegistration.cpp"
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state.
+    "WindowScriptingState.hpp",
+]
+function = "Fenrir::Generated::RegisterWindow"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+
+[tests]
+cpp = "../Tests/Generated/FenrirWindowDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirWindowDefaults.cs"
+class = "Fenrir.WindowScriptFixture.Defaults"
+includes = ["WindowScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "WindowScriptingTests::WindowScriptingApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[window][scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirWindowNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirWindowNatives.cs"
+natives-class = "Fenrir.WindowScriptFixture.Natives"
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the WindowScripting state second) into FenrirWindow.natives.json, and this binding generates their C# declarations,
+# WindowNative, and their registration.
+[natives]
+sources = ["../src/WindowScripting.cpp"]
+context = "Fenrir::CallContext"
+class = "WindowNative"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"

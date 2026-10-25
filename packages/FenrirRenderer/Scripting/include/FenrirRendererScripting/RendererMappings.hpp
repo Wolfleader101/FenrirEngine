@@ -12,7 +12,7 @@
 #include <string_view>
 
 #include "FenrirAssetsScripting/AssetMappings.hpp"
-#include "FenrirInputScripting/InputMappings.hpp"
+#include "FenrirInputScripting/Generated/FenrirInputMappings.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"

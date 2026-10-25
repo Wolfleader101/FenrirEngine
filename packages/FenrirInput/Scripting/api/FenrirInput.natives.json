@@ -1,0 +1,382 @@
+{
+  "binding": "FenrirInput",
+  "context": "Fenrir::CallContext",
+  "functions": [
+    {
+      "name": "KeyIsDown",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether the key named `key` by the layout is held.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "key",
+          "type": "Fenrir::Key",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ScancodeIsDown",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether the key at `scancode` is held.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "scancode",
+          "type": "Fenrir::Scancode",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "KeyJustPressed",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `key` went down since the last tick or frame. Repeats are not presses.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "key",
+          "type": "Fenrir::Key",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ScancodeJustPressed",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether the key at `scancode` went down since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "scancode",
+          "type": "Fenrir::Scancode",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "KeyJustReleased",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `key` went up since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "key",
+          "type": "Fenrir::Key",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "ScancodeJustReleased",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether the key at `scancode` went up since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "scancode",
+          "type": "Fenrir::Scancode",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "KeyModifiersOf",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "The modifiers of the latest key that went down or up.",
+      "returns": {
+        "type": "Fenrir::KeyModifiers",
+        "kind": "enum"
+      },
+      "parameters": []
+    },
+    {
+      "name": "MouseIsDown",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` is held.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "button",
+          "type": "Fenrir::MouseButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "MouseJustPressed",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` went down since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "button",
+          "type": "Fenrir::MouseButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "MouseJustReleased",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` went up since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "button",
+          "type": "Fenrir::MouseButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "MousePosition",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Where the pointer last was.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "position",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The position; zero with no input."
+        }
+      ]
+    },
+    {
+      "name": "MouseMotion",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "How far the pointer moved since the last tick or frame.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "motion",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The motion; zero with no input."
+        }
+      ]
+    },
+    {
+      "name": "MouseScroll",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "How far the wheel turned since the last tick or frame, in notches.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "scroll",
+          "type": "Fenrir::Math::Vec2*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Math::Vec2",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The scroll; zero with no input."
+        }
+      ]
+    },
+    {
+      "name": "GamepadsConnected",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Writes the pads connected now, oldest connection first, to `pads`, and returns how many are connected.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32"
+      },
+      "parameters": [
+        {
+          "name": "pads",
+          "type": "Fenrir::GamepadId*",
+          "kind": "pointer",
+          "pointee": "Fenrir::GamepadId",
+          "pointeeKind": "struct",
+          "doc": "Where to write at most `capacity` pads."
+        },
+        {
+          "name": "capacity",
+          "type": "std::int32_t",
+          "kind": "i32"
+        }
+      ]
+    },
+    {
+      "name": "GamepadIsConnected",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `gamepad` is connected.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "gamepad",
+          "type": "Fenrir::GamepadId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "GamepadIsDown",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` is held on `gamepad`.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "gamepad",
+          "type": "Fenrir::GamepadId",
+          "kind": "struct"
+        },
+        {
+          "name": "button",
+          "type": "Fenrir::GamepadButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "GamepadJustPressed",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` went down on `gamepad` since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "gamepad",
+          "type": "Fenrir::GamepadId",
+          "kind": "struct"
+        },
+        {
+          "name": "button",
+          "type": "Fenrir::GamepadButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "GamepadJustReleased",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "Whether `button` went up on `gamepad` since the last tick or frame.",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "gamepad",
+          "type": "Fenrir::GamepadId",
+          "kind": "struct"
+        },
+        {
+          "name": "button",
+          "type": "Fenrir::GamepadButton",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "GamepadAxisOf",
+      "namespace": "Fenrir::InputNatives",
+      "source": "../src/InputScripting.cpp",
+      "state": "Fenrir::InputScripting",
+      "doc": "The value of `axis` on `gamepad`: -1 to 1 for a stick, 0 to 1 for a trigger.",
+      "returns": {
+        "type": "float",
+        "kind": "f32"
+      },
+      "parameters": [
+        {
+          "name": "gamepad",
+          "type": "Fenrir::GamepadId",
+          "kind": "struct"
+        },
+        {
+          "name": "axis",
+          "type": "Fenrir::GamepadAxis",
+          "kind": "enum"
+        }
+      ]
+    }
+  ]
+}

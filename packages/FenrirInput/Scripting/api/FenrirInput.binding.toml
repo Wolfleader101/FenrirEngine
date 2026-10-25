@@ -1,0 +1,90 @@
+# FenrirInput's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirInput.api.json and
+# this library's own FenrirInputScripting.api.json bound to the Fenrir.Input contract and Input::ScriptingExtension().
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output
+# below; they are committed.
+namespace = "Fenrir.Input"
+# Named so the bindings that use this one (FenrirWindow's) can read them.
+descriptions = ["../../api/FenrirInput.api.json", "FenrirInputScripting.api.json"]
+# FenrirMath's types are the math binding's.
+uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+
+[csharp]
+contract = "../../Managed/Fenrir.Input"
+generated = "../../Managed/Fenrir.Input/Generated"
+usings = ["Fenrir.Math", "Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
+readonly-events = true
+# The claims are C++'s: C# reads them and never writes them.
+readonly-structs = ["Fenrir::CaretRect", "Fenrir::WindowInputClaims", "Fenrir::Detail::ScriptWindowClaims"]
+# InputClaims's storage: C# reads it through the contract's indexer, WindowCount, Gamepad and For.
+private-fields = [
+    "Fenrir::Detail::ScriptInputClaims::entries",
+    "Fenrir::Detail::ScriptInputClaims::entryCount",
+    "Fenrir::Detail::ScriptInputClaims::gamepadClaimed",
+]
+
+[cpp]
+mappings = "../include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
+includes = [
+    "FenrirInput/InputEvents.hpp",
+    "FenrirInput/InputRouter.hpp",
+    "FenrirInputScripting/InputMappings.hpp",
+    "FenrirInputScripting/ScriptInputClaims.hpp",
+]
+
+[registration]
+source = "../src/Generated/FenrirInputRegistration.cpp"
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    # What the natives' declarations name: their extension state.
+    "InputScriptingState.hpp",
+]
+function = "Fenrir::Generated::RegisterInput"
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+read-only = ["Fenrir::Detail::ScriptInputClaims"]
+# Refreshed from InputClaims whenever C# gets it, so Input::ScriptingExtension() registers it itself
+# (InputClaimsResource).
+by-hand = ["Fenrir::Detail::ScriptInputClaims"]
+
+[tests]
+cpp = "../Tests/Generated/FenrirInputDefaultsTests.cpp"
+csharp = "../Tests/Generated/FenrirInputDefaults.cs"
+class = "Fenrir.InputScriptFixture.Defaults"
+includes = ["InputScriptingApp.hpp", "ScriptingProbe.hpp"]
+setup = "InputScriptingTests::InputScriptingApp app;"
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+tags = "[input][scripting][bindings]"
+# The natives test: each native with an output, called with nothing to act on, writes its default.
+natives-cpp = "../Tests/Generated/FenrirInputNativesTests.cpp"
+natives-csharp = "../Tests/Generated/FenrirInputNatives.cs"
+natives-class = "Fenrir.InputScriptFixture.Natives"
+
+# The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
+# the InputScripting state second) into FenrirInput.natives.json, and this binding generates their C# declarations,
+# InputNative, and their registration.
+[natives]
+sources = ["../src/InputScripting.cpp"]
+context = "Fenrir::CallContext"
+class = "InputNative"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"
+
+[bound-types]
+"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
+
+[names]
+"Fenrir::Detail::ScriptInputClaims" = "InputClaims"
+"Fenrir::Detail::ScriptWindowClaims" = "WindowClaimsEntry"
