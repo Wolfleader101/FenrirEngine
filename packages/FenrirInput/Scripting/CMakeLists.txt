@@ -7,7 +7,8 @@
 # scripting contract, where Scripting::Install finds the extension's relative path.
 set(FENRIR_INPUT_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-input/contract" CACHE INTERNAL "Where the Fenrir.Input contract is built")
 set(fenrir_input_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.Input")
-file(GLOB fenrir_input_contract_sources CONFIGURE_DEPENDS "${fenrir_input_managed_dir}/*.cs")
+file(GLOB fenrir_input_contract_sources CONFIGURE_DEPENDS "${fenrir_input_managed_dir}/*.cs"
+    "${fenrir_input_managed_dir}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${FENRIR_INPUT_CONTRACT_DIR}/Fenrir.Input.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_input_managed_dir}/Fenrir.Input.csproj"
@@ -39,11 +40,35 @@ endfunction()
 add_library(FenrirInputScripting STATIC
     include/FenrirInputScripting/InputMappings.hpp
     include/FenrirInputScripting/InputScripting.hpp
-    src/ScriptInputClaims.hpp
+    include/FenrirInputScripting/ScriptInputClaims.hpp
+    include/FenrirInputScripting/Generated/FenrirInputMappings.hpp
+    src/InputClaimsResource.cpp
+    src/InputClaimsResource.hpp
     src/InputScripting.cpp
+    src/InputScriptingState.hpp
+    src/Generated/FenrirInputRegistration.cpp
 )
 target_include_directories(FenrirInputScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirInputScripting PUBLIC FenrirInput FenrirScripting)
+
+# The binding (ADR-0043): every input event and id is written once, in FenrirInput's headers (../api/FenrirInput.api.json),
+# the InputClaims copy C# reads once, in include/FenrirInputScripting/ScriptInputClaims.hpp (api/FenrirInputScripting.api.json),
+# and every native function once, as its definition in src/InputScripting.cpp, which describe-api's natives mode reads into
+# api/FenrirInput.natives.json. Iris.Bindings generates the rest from those descriptions and api/FenrirInput.binding.toml,
+# all committed:
+#   ../Managed/Fenrir.Input/Generated/          the C# mirrors, beside which the contract's own .cs files add behaviour
+#                                               only, and the natives' declarations, InputNative;
+#   include/FenrirInputScripting/Generated/     the Iris mappings, which a binding using this one (FenrirWindow's)
+#                                               includes;
+#   src/Generated/                              the extension's events, sharedStructs and functions;
+#   Tests/Generated/                            the defaults test and the natives test.
+# After changing a shared type or a native, regenerate both stages:
+#   cmake --build <dir> --target fenrir-describe-api
+#   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api(FenrirInputScripting api/FenrirInputScripting.api.toml)
+fenrir_describe_api_natives(FenrirInputScripting api/FenrirInput.binding.toml)
+iris_generate_binding(FenrirInput api/FenrirInput.binding.toml ../api/FenrirInput.api.json
+    api/FenrirInputScripting.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

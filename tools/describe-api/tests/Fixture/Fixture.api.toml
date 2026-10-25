@@ -19,3 +19,5 @@ private-members = ["Fixture::Tag"]
 "Fixture::Handle" = "bound-type"
 "Fixture::Size" = "bound-type"
 "Fixture::Ticket" = "bound-type"
+# Held by no field: described because the selection names it.
+"Fixture::Heading" = "enum"

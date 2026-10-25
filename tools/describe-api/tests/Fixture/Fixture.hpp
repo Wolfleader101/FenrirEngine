@@ -328,6 +328,16 @@ namespace Fixture
         std::uint32_t m_number = 0;
     };
 
+    /** @brief A direction no field holds, which a native takes: described because the selection names it. */
+    enum class Heading : std::uint8_t
+    {
+        North,
+        /** @brief Clockwise from North. */
+        East,
+        South,
+        West
+    };
+
     /** @brief An event between two handles. */
     struct Touched
     {

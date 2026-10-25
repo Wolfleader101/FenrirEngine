@@ -204,6 +204,15 @@ static_assert(sizeof(Fixture::Collider) == 20 && alignof(Fixture::Collider) == 4
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::EnumMapping<Fixture::Heading>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Heading";
+};
+static_assert(sizeof(Fixture::Heading) == 1 && alignof(Fixture::Heading) == 1,
+              "Fixture::Heading is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fixture::Hit>
 {
     static constexpr std::string_view typeName = "Fixture.Bindings.Hit";

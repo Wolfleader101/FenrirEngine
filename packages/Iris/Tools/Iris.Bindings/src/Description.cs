@@ -68,7 +68,9 @@ internal static class Description
 {
     /// <summary>
     /// Reads every description and returns their types in input order. A type in two descriptions must be described
-    /// alike in both (a shared bound type); it is kept once.
+    /// alike in both: a bound type of one layout, or another type with the same fields, kinds or values, which a
+    /// binding's own description holds as <c>nested</c> where the package's selects it (a package type inside a
+    /// binding-owned copy). It is kept once, with the role it is selected with.
     /// </summary>
     public static IReadOnlyList<DescribedType> Read(IEnumerable<string> paths)
     {
@@ -80,12 +82,26 @@ internal static class Description
             {
                 if (byName.TryGetValue(type.Name, out var earlier))
                 {
-                    if (earlier.Category != type.Category || earlier.Size != type.Size ||
-                        earlier.Alignment != type.Alignment || type.Category != Category.BoundType)
+                    if (earlier.Category != type.Category || earlier.Size != type.Size || earlier.Alignment != type.Alignment ||
+                        (type.Category != Category.BoundType && !Alike(earlier, type)))
                     {
                         throw new BindingException(
-                            $"{type.Source}: {type.Name} is also described by {earlier.Source}; only a bound type of " +
-                            "the same layout may be described twice");
+                            $"{type.Source}: {type.Name} is also described by {earlier.Source}, differently; a type " +
+                            "described twice must be described alike");
+                    }
+
+                    if (earlier.Role != type.Role && earlier.Role is not Role.Nested && type.Role is not Role.Nested)
+                    {
+                        throw new BindingException(
+                            $"{type.Source}: {type.Name} is also described by {earlier.Source}, with another role; a type " +
+                            "described twice is selected in one description at most");
+                    }
+
+                    if (earlier.Role == Role.Nested && type.Role != Role.Nested)
+                    {
+                        // Selected here, nested there: kept where it was first described, with the role it is selected with.
+                        types[types.IndexOf(earlier)] = type;
+                        byName[type.Name] = type;
                     }
 
                     continue;
@@ -97,6 +113,20 @@ internal static class Description
         }
 
         return types;
+    }
+
+    // Whether two descriptions of a type that is not a bound type record the same fields, tag, kinds and values. Docs may
+    // differ.
+    private static bool Alike(DescribedType a, DescribedType b)
+    {
+        static bool SameField(Field x, Field y) =>
+            x.Name == y.Name && x.Offset == y.Offset && x.Kind == y.Kind && x.Default.GetRawText() == y.Default.GetRawText();
+
+        return a.Fields.Count == b.Fields.Count && a.Fields.Zip(b.Fields).All(pair => SameField(pair.First, pair.Second)) &&
+               (a.Tag == null) == (b.Tag == null) && (a.Tag == null || SameField(a.Tag, b.Tag!)) &&
+               a.UnionOffset == b.UnionOffset && a.DefaultKind == b.DefaultKind && a.Underlying == b.Underlying &&
+               a.Kinds.Select(kind => (kind.Name, kind.Tag, kind.Kind)).SequenceEqual(b.Kinds.Select(kind => (kind.Name, kind.Tag, kind.Kind))) &&
+               a.Values.Select(value => (value.Name, value.Value)).SequenceEqual(b.Values.Select(value => (value.Name, value.Value)));
     }
 
     private static IEnumerable<DescribedType> ReadOne(string path)

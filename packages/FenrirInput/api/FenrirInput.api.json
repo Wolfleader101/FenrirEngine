@@ -1,0 +1,1523 @@
+{
+  "package": "FenrirInput",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::GamepadAxis",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A gamepad axis in the standard layout. Stick axes run from -1 to 1, positive to the right and down; triggers run from 0 (released) to 1 (fully pulled).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "LeftX",
+          "value": 0
+        },
+        {
+          "name": "LeftY",
+          "value": 1
+        },
+        {
+          "name": "RightX",
+          "value": 2
+        },
+        {
+          "name": "RightY",
+          "value": 3
+        },
+        {
+          "name": "LeftTrigger",
+          "value": 4
+        },
+        {
+          "name": "RightTrigger",
+          "value": 5
+        },
+        {
+          "name": "Count",
+          "value": 6,
+          "doc": "How many gamepad axes there are: a size, not an axis."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GamepadId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Which gamepad an input came from: a number its feeder gives the pad when it connects and never gives another pad, so a pad that is unplugged and plugged back in comes back under a new id.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GamepadAxisEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 12,
+      "alignment": 4,
+      "doc": "A gamepad axis moved.",
+      "fields": [
+        {
+          "name": "gamepad",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::GamepadId",
+          "default": {}
+        },
+        {
+          "name": "axis",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::GamepadAxis",
+          "default": "LeftX"
+        },
+        {
+          "name": "value",
+          "offset": 8,
+          "kind": "f32",
+          "default": 0,
+          "doc": "Its new value: -1 to 1 for a stick, 0 to 1 for a trigger."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GamepadButton",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A gamepad button in the standard layout, named by position: `South` is A on an Xbox pad and Cross on a PlayStation pad. `Back`, `Guide` and `Start` are the centre buttons; the paddles are those on the back of some pads, and `Misc1` is an extra centre button (share, capture or mute).",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "South",
+          "value": 0
+        },
+        {
+          "name": "East",
+          "value": 1
+        },
+        {
+          "name": "West",
+          "value": 2
+        },
+        {
+          "name": "North",
+          "value": 3
+        },
+        {
+          "name": "Back",
+          "value": 4
+        },
+        {
+          "name": "Guide",
+          "value": 5
+        },
+        {
+          "name": "Start",
+          "value": 6
+        },
+        {
+          "name": "LeftStick",
+          "value": 7
+        },
+        {
+          "name": "RightStick",
+          "value": 8
+        },
+        {
+          "name": "LeftShoulder",
+          "value": 9
+        },
+        {
+          "name": "RightShoulder",
+          "value": 10
+        },
+        {
+          "name": "DPadUp",
+          "value": 11
+        },
+        {
+          "name": "DPadDown",
+          "value": 12
+        },
+        {
+          "name": "DPadLeft",
+          "value": 13
+        },
+        {
+          "name": "DPadRight",
+          "value": 14
+        },
+        {
+          "name": "Misc1",
+          "value": 15
+        },
+        {
+          "name": "RightPaddle1",
+          "value": 16
+        },
+        {
+          "name": "LeftPaddle1",
+          "value": 17
+        },
+        {
+          "name": "RightPaddle2",
+          "value": 18
+        },
+        {
+          "name": "LeftPaddle2",
+          "value": 19
+        },
+        {
+          "name": "Touchpad",
+          "value": 20
+        },
+        {
+          "name": "Count",
+          "value": 21,
+          "doc": "How many gamepad buttons there are: a size, not a button."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GamepadButtonEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A gamepad button went down or up.",
+      "fields": [
+        {
+          "name": "gamepad",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::GamepadId",
+          "default": {}
+        },
+        {
+          "name": "button",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::GamepadButton",
+          "default": "South"
+        },
+        {
+          "name": "pressed",
+          "offset": 5,
+          "kind": "bool",
+          "default": false,
+          "doc": "True when the button went down, false when it went up."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::GamepadConnectionEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A gamepad was plugged in or unplugged.",
+      "fields": [
+        {
+          "name": "gamepad",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::GamepadId",
+          "default": {}
+        },
+        {
+          "name": "connected",
+          "offset": 4,
+          "kind": "bool",
+          "default": false,
+          "doc": "True when it connected, false when it disconnected."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Key",
+      "category": "enum",
+      "size": 2,
+      "alignment": 2,
+      "doc": "A key code: which key was pressed as the keyboard layout names it. The key that types Z on an AZERTY keyboard is `Key::W` on QWERTY and `Key::Z` on AZERTY. Use it for shortcuts named by letter. A key the layout names with a character outside this list is `Unknown`.",
+      "underlying": "u16",
+      "values": [
+        {
+          "name": "Unknown",
+          "value": 0
+        },
+        {
+          "name": "A",
+          "value": 1
+        },
+        {
+          "name": "B",
+          "value": 2
+        },
+        {
+          "name": "C",
+          "value": 3
+        },
+        {
+          "name": "D",
+          "value": 4
+        },
+        {
+          "name": "E",
+          "value": 5
+        },
+        {
+          "name": "F",
+          "value": 6
+        },
+        {
+          "name": "G",
+          "value": 7
+        },
+        {
+          "name": "H",
+          "value": 8
+        },
+        {
+          "name": "I",
+          "value": 9
+        },
+        {
+          "name": "J",
+          "value": 10
+        },
+        {
+          "name": "K",
+          "value": 11
+        },
+        {
+          "name": "L",
+          "value": 12
+        },
+        {
+          "name": "M",
+          "value": 13
+        },
+        {
+          "name": "N",
+          "value": 14
+        },
+        {
+          "name": "O",
+          "value": 15
+        },
+        {
+          "name": "P",
+          "value": 16
+        },
+        {
+          "name": "Q",
+          "value": 17
+        },
+        {
+          "name": "R",
+          "value": 18
+        },
+        {
+          "name": "S",
+          "value": 19
+        },
+        {
+          "name": "T",
+          "value": 20
+        },
+        {
+          "name": "U",
+          "value": 21
+        },
+        {
+          "name": "V",
+          "value": 22
+        },
+        {
+          "name": "W",
+          "value": 23
+        },
+        {
+          "name": "X",
+          "value": 24
+        },
+        {
+          "name": "Y",
+          "value": 25
+        },
+        {
+          "name": "Z",
+          "value": 26
+        },
+        {
+          "name": "Num0",
+          "value": 27
+        },
+        {
+          "name": "Num1",
+          "value": 28
+        },
+        {
+          "name": "Num2",
+          "value": 29
+        },
+        {
+          "name": "Num3",
+          "value": 30
+        },
+        {
+          "name": "Num4",
+          "value": 31
+        },
+        {
+          "name": "Num5",
+          "value": 32
+        },
+        {
+          "name": "Num6",
+          "value": 33
+        },
+        {
+          "name": "Num7",
+          "value": 34
+        },
+        {
+          "name": "Num8",
+          "value": 35
+        },
+        {
+          "name": "Num9",
+          "value": 36
+        },
+        {
+          "name": "Escape",
+          "value": 37
+        },
+        {
+          "name": "Enter",
+          "value": 38
+        },
+        {
+          "name": "Tab",
+          "value": 39
+        },
+        {
+          "name": "Backspace",
+          "value": 40
+        },
+        {
+          "name": "Space",
+          "value": 41
+        },
+        {
+          "name": "Minus",
+          "value": 42
+        },
+        {
+          "name": "Equals",
+          "value": 43
+        },
+        {
+          "name": "LeftBracket",
+          "value": 44
+        },
+        {
+          "name": "RightBracket",
+          "value": 45
+        },
+        {
+          "name": "Backslash",
+          "value": 46
+        },
+        {
+          "name": "Semicolon",
+          "value": 47
+        },
+        {
+          "name": "Apostrophe",
+          "value": 48
+        },
+        {
+          "name": "Grave",
+          "value": 49
+        },
+        {
+          "name": "Comma",
+          "value": 50
+        },
+        {
+          "name": "Period",
+          "value": 51
+        },
+        {
+          "name": "Slash",
+          "value": 52
+        },
+        {
+          "name": "CapsLock",
+          "value": 53
+        },
+        {
+          "name": "F1",
+          "value": 54
+        },
+        {
+          "name": "F2",
+          "value": 55
+        },
+        {
+          "name": "F3",
+          "value": 56
+        },
+        {
+          "name": "F4",
+          "value": 57
+        },
+        {
+          "name": "F5",
+          "value": 58
+        },
+        {
+          "name": "F6",
+          "value": 59
+        },
+        {
+          "name": "F7",
+          "value": 60
+        },
+        {
+          "name": "F8",
+          "value": 61
+        },
+        {
+          "name": "F9",
+          "value": 62
+        },
+        {
+          "name": "F10",
+          "value": 63
+        },
+        {
+          "name": "F11",
+          "value": 64
+        },
+        {
+          "name": "F12",
+          "value": 65
+        },
+        {
+          "name": "F13",
+          "value": 66
+        },
+        {
+          "name": "F14",
+          "value": 67
+        },
+        {
+          "name": "F15",
+          "value": 68
+        },
+        {
+          "name": "F16",
+          "value": 69
+        },
+        {
+          "name": "F17",
+          "value": 70
+        },
+        {
+          "name": "F18",
+          "value": 71
+        },
+        {
+          "name": "F19",
+          "value": 72
+        },
+        {
+          "name": "F20",
+          "value": 73
+        },
+        {
+          "name": "F21",
+          "value": 74
+        },
+        {
+          "name": "F22",
+          "value": 75
+        },
+        {
+          "name": "F23",
+          "value": 76
+        },
+        {
+          "name": "F24",
+          "value": 77
+        },
+        {
+          "name": "PrintScreen",
+          "value": 78
+        },
+        {
+          "name": "ScrollLock",
+          "value": 79
+        },
+        {
+          "name": "Pause",
+          "value": 80
+        },
+        {
+          "name": "Insert",
+          "value": 81
+        },
+        {
+          "name": "Delete",
+          "value": 82
+        },
+        {
+          "name": "Home",
+          "value": 83
+        },
+        {
+          "name": "End",
+          "value": 84
+        },
+        {
+          "name": "PageUp",
+          "value": 85
+        },
+        {
+          "name": "PageDown",
+          "value": 86
+        },
+        {
+          "name": "Left",
+          "value": 87
+        },
+        {
+          "name": "Right",
+          "value": 88
+        },
+        {
+          "name": "Up",
+          "value": 89
+        },
+        {
+          "name": "Down",
+          "value": 90
+        },
+        {
+          "name": "NumLock",
+          "value": 91
+        },
+        {
+          "name": "KeypadDivide",
+          "value": 92
+        },
+        {
+          "name": "KeypadMultiply",
+          "value": 93
+        },
+        {
+          "name": "KeypadMinus",
+          "value": 94
+        },
+        {
+          "name": "KeypadPlus",
+          "value": 95
+        },
+        {
+          "name": "KeypadEnter",
+          "value": 96
+        },
+        {
+          "name": "KeypadPeriod",
+          "value": 97
+        },
+        {
+          "name": "Keypad0",
+          "value": 98
+        },
+        {
+          "name": "Keypad1",
+          "value": 99
+        },
+        {
+          "name": "Keypad2",
+          "value": 100
+        },
+        {
+          "name": "Keypad3",
+          "value": 101
+        },
+        {
+          "name": "Keypad4",
+          "value": 102
+        },
+        {
+          "name": "Keypad5",
+          "value": 103
+        },
+        {
+          "name": "Keypad6",
+          "value": 104
+        },
+        {
+          "name": "Keypad7",
+          "value": 105
+        },
+        {
+          "name": "Keypad8",
+          "value": 106
+        },
+        {
+          "name": "Keypad9",
+          "value": 107
+        },
+        {
+          "name": "Menu",
+          "value": 108
+        },
+        {
+          "name": "LeftCtrl",
+          "value": 109
+        },
+        {
+          "name": "LeftShift",
+          "value": 110
+        },
+        {
+          "name": "LeftAlt",
+          "value": 111
+        },
+        {
+          "name": "LeftSuper",
+          "value": 112
+        },
+        {
+          "name": "RightCtrl",
+          "value": 113
+        },
+        {
+          "name": "RightShift",
+          "value": 114
+        },
+        {
+          "name": "RightAlt",
+          "value": 115
+        },
+        {
+          "name": "RightSuper",
+          "value": 116
+        },
+        {
+          "name": "Count",
+          "value": 117,
+          "doc": "How many keys there are, `Unknown` included: a size, not a key."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::KeyModifiers",
+      "category": "enum",
+      "size": 2,
+      "alignment": 2,
+      "doc": "The modifiers held, or toggled on (`CapsLock`, `NumLock`), when a key went down or up: a set of bits, combined with `|` and tested with HasModifiers. Either Shift key sets `Shift`, and so on.",
+      "underlying": "u16",
+      "values": [
+        {
+          "name": "None",
+          "value": 0
+        },
+        {
+          "name": "Shift",
+          "value": 1
+        },
+        {
+          "name": "Ctrl",
+          "value": 2
+        },
+        {
+          "name": "Alt",
+          "value": 4
+        },
+        {
+          "name": "Super",
+          "value": 8
+        },
+        {
+          "name": "CapsLock",
+          "value": 16
+        },
+        {
+          "name": "NumLock",
+          "value": 32
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Scancode",
+      "category": "enum",
+      "size": 2,
+      "alignment": 2,
+      "doc": "A scancode: where a key sits on the keyboard, whatever the layout, named as a US QWERTY keyboard prints it. `Scancode::W` is the key above `Scancode::S` on every layout. Use it for keys placed by position, such as WASD.",
+      "underlying": "u16",
+      "values": [
+        {
+          "name": "Unknown",
+          "value": 0
+        },
+        {
+          "name": "A",
+          "value": 1
+        },
+        {
+          "name": "B",
+          "value": 2
+        },
+        {
+          "name": "C",
+          "value": 3
+        },
+        {
+          "name": "D",
+          "value": 4
+        },
+        {
+          "name": "E",
+          "value": 5
+        },
+        {
+          "name": "F",
+          "value": 6
+        },
+        {
+          "name": "G",
+          "value": 7
+        },
+        {
+          "name": "H",
+          "value": 8
+        },
+        {
+          "name": "I",
+          "value": 9
+        },
+        {
+          "name": "J",
+          "value": 10
+        },
+        {
+          "name": "K",
+          "value": 11
+        },
+        {
+          "name": "L",
+          "value": 12
+        },
+        {
+          "name": "M",
+          "value": 13
+        },
+        {
+          "name": "N",
+          "value": 14
+        },
+        {
+          "name": "O",
+          "value": 15
+        },
+        {
+          "name": "P",
+          "value": 16
+        },
+        {
+          "name": "Q",
+          "value": 17
+        },
+        {
+          "name": "R",
+          "value": 18
+        },
+        {
+          "name": "S",
+          "value": 19
+        },
+        {
+          "name": "T",
+          "value": 20
+        },
+        {
+          "name": "U",
+          "value": 21
+        },
+        {
+          "name": "V",
+          "value": 22
+        },
+        {
+          "name": "W",
+          "value": 23
+        },
+        {
+          "name": "X",
+          "value": 24
+        },
+        {
+          "name": "Y",
+          "value": 25
+        },
+        {
+          "name": "Z",
+          "value": 26
+        },
+        {
+          "name": "Num0",
+          "value": 27
+        },
+        {
+          "name": "Num1",
+          "value": 28
+        },
+        {
+          "name": "Num2",
+          "value": 29
+        },
+        {
+          "name": "Num3",
+          "value": 30
+        },
+        {
+          "name": "Num4",
+          "value": 31
+        },
+        {
+          "name": "Num5",
+          "value": 32
+        },
+        {
+          "name": "Num6",
+          "value": 33
+        },
+        {
+          "name": "Num7",
+          "value": 34
+        },
+        {
+          "name": "Num8",
+          "value": 35
+        },
+        {
+          "name": "Num9",
+          "value": 36
+        },
+        {
+          "name": "Escape",
+          "value": 37
+        },
+        {
+          "name": "Enter",
+          "value": 38
+        },
+        {
+          "name": "Tab",
+          "value": 39
+        },
+        {
+          "name": "Backspace",
+          "value": 40
+        },
+        {
+          "name": "Space",
+          "value": 41
+        },
+        {
+          "name": "Minus",
+          "value": 42
+        },
+        {
+          "name": "Equals",
+          "value": 43
+        },
+        {
+          "name": "LeftBracket",
+          "value": 44
+        },
+        {
+          "name": "RightBracket",
+          "value": 45
+        },
+        {
+          "name": "Backslash",
+          "value": 46
+        },
+        {
+          "name": "Semicolon",
+          "value": 47
+        },
+        {
+          "name": "Apostrophe",
+          "value": 48
+        },
+        {
+          "name": "Grave",
+          "value": 49
+        },
+        {
+          "name": "Comma",
+          "value": 50
+        },
+        {
+          "name": "Period",
+          "value": 51
+        },
+        {
+          "name": "Slash",
+          "value": 52
+        },
+        {
+          "name": "CapsLock",
+          "value": 53
+        },
+        {
+          "name": "F1",
+          "value": 54
+        },
+        {
+          "name": "F2",
+          "value": 55
+        },
+        {
+          "name": "F3",
+          "value": 56
+        },
+        {
+          "name": "F4",
+          "value": 57
+        },
+        {
+          "name": "F5",
+          "value": 58
+        },
+        {
+          "name": "F6",
+          "value": 59
+        },
+        {
+          "name": "F7",
+          "value": 60
+        },
+        {
+          "name": "F8",
+          "value": 61
+        },
+        {
+          "name": "F9",
+          "value": 62
+        },
+        {
+          "name": "F10",
+          "value": 63
+        },
+        {
+          "name": "F11",
+          "value": 64
+        },
+        {
+          "name": "F12",
+          "value": 65
+        },
+        {
+          "name": "F13",
+          "value": 66
+        },
+        {
+          "name": "F14",
+          "value": 67
+        },
+        {
+          "name": "F15",
+          "value": 68
+        },
+        {
+          "name": "F16",
+          "value": 69
+        },
+        {
+          "name": "F17",
+          "value": 70
+        },
+        {
+          "name": "F18",
+          "value": 71
+        },
+        {
+          "name": "F19",
+          "value": 72
+        },
+        {
+          "name": "F20",
+          "value": 73
+        },
+        {
+          "name": "F21",
+          "value": 74
+        },
+        {
+          "name": "F22",
+          "value": 75
+        },
+        {
+          "name": "F23",
+          "value": 76
+        },
+        {
+          "name": "F24",
+          "value": 77
+        },
+        {
+          "name": "PrintScreen",
+          "value": 78
+        },
+        {
+          "name": "ScrollLock",
+          "value": 79
+        },
+        {
+          "name": "Pause",
+          "value": 80
+        },
+        {
+          "name": "Insert",
+          "value": 81
+        },
+        {
+          "name": "Delete",
+          "value": 82
+        },
+        {
+          "name": "Home",
+          "value": 83
+        },
+        {
+          "name": "End",
+          "value": 84
+        },
+        {
+          "name": "PageUp",
+          "value": 85
+        },
+        {
+          "name": "PageDown",
+          "value": 86
+        },
+        {
+          "name": "Left",
+          "value": 87
+        },
+        {
+          "name": "Right",
+          "value": 88
+        },
+        {
+          "name": "Up",
+          "value": 89
+        },
+        {
+          "name": "Down",
+          "value": 90
+        },
+        {
+          "name": "NumLock",
+          "value": 91
+        },
+        {
+          "name": "KeypadDivide",
+          "value": 92
+        },
+        {
+          "name": "KeypadMultiply",
+          "value": 93
+        },
+        {
+          "name": "KeypadMinus",
+          "value": 94
+        },
+        {
+          "name": "KeypadPlus",
+          "value": 95
+        },
+        {
+          "name": "KeypadEnter",
+          "value": 96
+        },
+        {
+          "name": "KeypadPeriod",
+          "value": 97
+        },
+        {
+          "name": "Keypad0",
+          "value": 98
+        },
+        {
+          "name": "Keypad1",
+          "value": 99
+        },
+        {
+          "name": "Keypad2",
+          "value": 100
+        },
+        {
+          "name": "Keypad3",
+          "value": 101
+        },
+        {
+          "name": "Keypad4",
+          "value": 102
+        },
+        {
+          "name": "Keypad5",
+          "value": 103
+        },
+        {
+          "name": "Keypad6",
+          "value": 104
+        },
+        {
+          "name": "Keypad7",
+          "value": 105
+        },
+        {
+          "name": "Keypad8",
+          "value": 106
+        },
+        {
+          "name": "Keypad9",
+          "value": 107
+        },
+        {
+          "name": "Menu",
+          "value": 108
+        },
+        {
+          "name": "LeftCtrl",
+          "value": 109
+        },
+        {
+          "name": "LeftShift",
+          "value": 110
+        },
+        {
+          "name": "LeftAlt",
+          "value": 111
+        },
+        {
+          "name": "LeftSuper",
+          "value": 112
+        },
+        {
+          "name": "RightCtrl",
+          "value": 113
+        },
+        {
+          "name": "RightShift",
+          "value": 114
+        },
+        {
+          "name": "RightAlt",
+          "value": 115
+        },
+        {
+          "name": "RightSuper",
+          "value": 116
+        },
+        {
+          "name": "Count",
+          "value": 117,
+          "doc": "How many scancodes there are, `Unknown` included: a size, not a key."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowId",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Which window an input came from. A plain number chosen by whoever feeds the input (FenrirWindow, which keys its windows by it, or a test); FenrirInput only compares it.",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::KeyEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 16,
+      "alignment": 4,
+      "doc": "A key went down, repeated while held, or went up.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "key",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::Key",
+          "default": "Unknown",
+          "doc": "The key as the keyboard layout names it."
+        },
+        {
+          "name": "scancode",
+          "offset": 6,
+          "kind": "enum",
+          "type": "Fenrir::Scancode",
+          "default": "Unknown",
+          "doc": "Where the key sits on the keyboard."
+        },
+        {
+          "name": "modifiers",
+          "offset": 8,
+          "kind": "enum",
+          "type": "Fenrir::KeyModifiers",
+          "default": "None",
+          "doc": "The modifiers held when the key went down or up."
+        },
+        {
+          "name": "pressed",
+          "offset": 10,
+          "kind": "bool",
+          "default": false,
+          "doc": "True when the key went down (or repeated), false when it went up."
+        },
+        {
+          "name": "repeat",
+          "offset": 11,
+          "kind": "bool",
+          "default": false,
+          "doc": "True for the repeats a held key sends; a repeat is not a new press."
+        },
+        {
+          "name": "cancelled",
+          "offset": 12,
+          "kind": "bool",
+          "default": false,
+          "doc": "True for a release sent by a cancellation (ADR-0027): a router raised keyboardFocus or the window lost the focus while the key was held. The key may still be down; its physical release goes to no one."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::Math::Vec2",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4
+    },
+    {
+      "name": "Fenrir::MouseButton",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A mouse button. `X1` and `X2` are the side buttons, back and forward.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "Left",
+          "value": 0
+        },
+        {
+          "name": "Right",
+          "value": 1
+        },
+        {
+          "name": "Middle",
+          "value": 2
+        },
+        {
+          "name": "X1",
+          "value": 3
+        },
+        {
+          "name": "X2",
+          "value": 4
+        },
+        {
+          "name": "Count",
+          "value": 5,
+          "doc": "How many mouse buttons there are: a size, not a button."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::MouseButtonEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A mouse button went down or up.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "button",
+          "offset": 4,
+          "kind": "enum",
+          "type": "Fenrir::MouseButton",
+          "default": "Left"
+        },
+        {
+          "name": "pressed",
+          "offset": 5,
+          "kind": "bool",
+          "default": false,
+          "doc": "True when the button went down, false when it went up."
+        },
+        {
+          "name": "cancelled",
+          "offset": 6,
+          "kind": "bool",
+          "default": false,
+          "doc": "True for a release sent by a cancellation (ADR-0027): a router raised pointerCapture or the window lost the focus while the button was held. The button may still be down; its physical release goes to no one."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::MouseMotionEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 20,
+      "alignment": 4,
+      "doc": "The mouse moved over a window.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "position",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "Where the pointer is now, in the window's logical coordinates (from its top-left corner)."
+        },
+        {
+          "name": "motion",
+          "offset": 12,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "How far it moved, in the same units: raw motion while the cursor is captured."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::MouseScrollEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 12,
+      "alignment": 4,
+      "doc": "The mouse wheel turned.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "notches",
+          "offset": 4,
+          "kind": "struct",
+          "type": "Fenrir::Math::Vec2",
+          "default": {
+            "x": 0,
+            "y": 0
+          },
+          "doc": "How far, in notches: y positive away from the user, x positive to the right."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::TextEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 8,
+      "alignment": 4,
+      "doc": "One Unicode codepoint of typed text: text fed as several codepoints is one event per codepoint.",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "codepoint",
+          "offset": 4,
+          "kind": "u32",
+          "default": 0
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::WindowFocusEvent",
+      "category": "struct",
+      "role": "event",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A window gained or lost the input focus (keyboard input).",
+      "fields": [
+        {
+          "name": "window",
+          "offset": 0,
+          "kind": "struct",
+          "type": "Fenrir::WindowId",
+          "default": {}
+        },
+        {
+          "name": "focused",
+          "offset": 4,
+          "kind": "bool",
+          "default": false,
+          "doc": "True when the window gained the focus, false when it lost it."
+        }
+      ]
+    }
+  ]
+}

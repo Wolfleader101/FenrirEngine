@@ -23,3 +23,7 @@ target_include_directories(FenrirInput PUBLIC include)
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)
 endif()
+
+# Its shared types (ADR-0042): `cmake --build <dir> --target fenrir-describe-api` regenerates api/FenrirInput.api.json,
+# which FenrirInputScripting's binding binds.
+fenrir_describe_api(FenrirInput api/FenrirInput.api.toml)

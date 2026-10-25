@@ -1,4 +1,5 @@
-// The C# mirrors' shapes: each Fenrir.Input enum names C++'s values with C++'s underlying size, and WindowId and
+// The C# mirrors' shapes: each Fenrir.Input enum names C++'s values (its Count among them: the enums are generated from
+// C++'s) with C++'s underlying size, and WindowId and
 // GamepadId are laid out as C++'s (spec seam 7: each extension's layouts). The events and InputClaims are checked field
 // by field, offsets included, whenever the fixture loads, so every test here also checks them.
 
@@ -58,6 +59,13 @@ namespace
         return Members<Enum>({{"Unknown", Enum::Unknown}, FENRIR_TEST_KEYS(FENRIR_TEST_KEY_MEMBER)});
     }
 
+    // `members` and then the enum's Count, which the C# enum names too.
+    template <typename Enum>
+    std::string WithCount(const std::string& members)
+    {
+        return members + "\nCount=" + std::to_string(static_cast<long long>(Enum::Count));
+    }
+
 #undef FENRIR_TEST_KEY_MEMBER
 #undef FENRIR_TEST_KEYS
 
@@ -83,11 +91,11 @@ TEST_CASE("Each C# input enum names the values the C++ enum does, with its under
     }
     {
         INFO("C# Key differs from C++:\n" << EnumMembers(test, "Key"));
-        REQUIRE(EnumMembers(test, "Key") == KeyMembers<Key>());
+        REQUIRE(EnumMembers(test, "Key") == WithCount<Key>(KeyMembers<Key>()));
     }
     {
         INFO("C# Scancode differs from C++:\n" << EnumMembers(test, "Scancode"));
-        REQUIRE(EnumMembers(test, "Scancode") == KeyMembers<Scancode>());
+        REQUIRE(EnumMembers(test, "Scancode") == WithCount<Scancode>(KeyMembers<Scancode>()));
     }
     {
         INFO("C# KeyModifiers differs from C++:\n" << EnumMembers(test, "KeyModifiers"));
@@ -102,48 +110,49 @@ TEST_CASE("Each C# input enum names the values the C++ enum does, with its under
     {
         INFO("C# MouseButton differs from C++:\n" << EnumMembers(test, "MouseButton"));
         REQUIRE(MouseButtonCount == 5);
-        REQUIRE(EnumMembers(test, "MouseButton") == Members<MouseButton>({{"Left", MouseButton::Left},
-                                                                          {"Right", MouseButton::Right},
-                                                                          {"Middle", MouseButton::Middle},
-                                                                          {"X1", MouseButton::X1},
-                                                                          {"X2", MouseButton::X2}}));
+        REQUIRE(EnumMembers(test, "MouseButton") ==
+                WithCount<MouseButton>(Members<MouseButton>({{"Left", MouseButton::Left},
+                                                             {"Right", MouseButton::Right},
+                                                             {"Middle", MouseButton::Middle},
+                                                             {"X1", MouseButton::X1},
+                                                             {"X2", MouseButton::X2}})));
     }
     {
         INFO("C# GamepadButton differs from C++:\n" << EnumMembers(test, "GamepadButton"));
         REQUIRE(GamepadButtonCount == 21);
         REQUIRE(EnumMembers(test, "GamepadButton") ==
-                Members<GamepadButton>({{"South", GamepadButton::South},
-                                        {"East", GamepadButton::East},
-                                        {"West", GamepadButton::West},
-                                        {"North", GamepadButton::North},
-                                        {"Back", GamepadButton::Back},
-                                        {"Guide", GamepadButton::Guide},
-                                        {"Start", GamepadButton::Start},
-                                        {"LeftStick", GamepadButton::LeftStick},
-                                        {"RightStick", GamepadButton::RightStick},
-                                        {"LeftShoulder", GamepadButton::LeftShoulder},
-                                        {"RightShoulder", GamepadButton::RightShoulder},
-                                        {"DPadUp", GamepadButton::DPadUp},
-                                        {"DPadDown", GamepadButton::DPadDown},
-                                        {"DPadLeft", GamepadButton::DPadLeft},
-                                        {"DPadRight", GamepadButton::DPadRight},
-                                        {"Misc1", GamepadButton::Misc1},
-                                        {"RightPaddle1", GamepadButton::RightPaddle1},
-                                        {"LeftPaddle1", GamepadButton::LeftPaddle1},
-                                        {"RightPaddle2", GamepadButton::RightPaddle2},
-                                        {"LeftPaddle2", GamepadButton::LeftPaddle2},
-                                        {"Touchpad", GamepadButton::Touchpad}}));
+                WithCount<GamepadButton>(Members<GamepadButton>({{"South", GamepadButton::South},
+                                                                 {"East", GamepadButton::East},
+                                                                 {"West", GamepadButton::West},
+                                                                 {"North", GamepadButton::North},
+                                                                 {"Back", GamepadButton::Back},
+                                                                 {"Guide", GamepadButton::Guide},
+                                                                 {"Start", GamepadButton::Start},
+                                                                 {"LeftStick", GamepadButton::LeftStick},
+                                                                 {"RightStick", GamepadButton::RightStick},
+                                                                 {"LeftShoulder", GamepadButton::LeftShoulder},
+                                                                 {"RightShoulder", GamepadButton::RightShoulder},
+                                                                 {"DPadUp", GamepadButton::DPadUp},
+                                                                 {"DPadDown", GamepadButton::DPadDown},
+                                                                 {"DPadLeft", GamepadButton::DPadLeft},
+                                                                 {"DPadRight", GamepadButton::DPadRight},
+                                                                 {"Misc1", GamepadButton::Misc1},
+                                                                 {"RightPaddle1", GamepadButton::RightPaddle1},
+                                                                 {"LeftPaddle1", GamepadButton::LeftPaddle1},
+                                                                 {"RightPaddle2", GamepadButton::RightPaddle2},
+                                                                 {"LeftPaddle2", GamepadButton::LeftPaddle2},
+                                                                 {"Touchpad", GamepadButton::Touchpad}})));
     }
     {
         INFO("C# GamepadAxis differs from C++:\n" << EnumMembers(test, "GamepadAxis"));
         REQUIRE(GamepadAxisCount == 6);
         REQUIRE(EnumMembers(test, "GamepadAxis") ==
-                Members<GamepadAxis>({{"LeftX", GamepadAxis::LeftX},
-                                      {"LeftY", GamepadAxis::LeftY},
-                                      {"RightX", GamepadAxis::RightX},
-                                      {"RightY", GamepadAxis::RightY},
-                                      {"LeftTrigger", GamepadAxis::LeftTrigger},
-                                      {"RightTrigger", GamepadAxis::RightTrigger}}));
+                WithCount<GamepadAxis>(Members<GamepadAxis>({{"LeftX", GamepadAxis::LeftX},
+                                                             {"LeftY", GamepadAxis::LeftY},
+                                                             {"RightX", GamepadAxis::RightX},
+                                                             {"RightY", GamepadAxis::RightY},
+                                                             {"LeftTrigger", GamepadAxis::LeftTrigger},
+                                                             {"RightTrigger", GamepadAxis::RightTrigger}})));
     }
     INFO("A C# enum's underlying type does not have the C++ enum's size");
     REQUIRE(EnumSize(test, "Key") == static_cast<int>(sizeof(Key)));

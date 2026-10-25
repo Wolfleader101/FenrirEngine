@@ -587,6 +587,33 @@
       ]
     },
     {
+      "name": "Fixture::Heading",
+      "category": "enum",
+      "size": 1,
+      "alignment": 1,
+      "doc": "A direction no field holds, which a native takes: described because the selection names it.",
+      "underlying": "u8",
+      "values": [
+        {
+          "name": "North",
+          "value": 0
+        },
+        {
+          "name": "East",
+          "value": 1,
+          "doc": "Clockwise from North."
+        },
+        {
+          "name": "South",
+          "value": 2
+        },
+        {
+          "name": "West",
+          "value": 3
+        }
+      ]
+    },
+    {
       "name": "Fixture::Hit",
       "category": "struct",
       "role": "shared-struct",

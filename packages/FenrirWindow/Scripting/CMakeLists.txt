@@ -8,7 +8,8 @@
 # Scripting::Install finds the extension's relative path.
 set(FENRIR_WINDOW_CONTRACT_DIR "${CMAKE_BINARY_DIR}/fenrir-window/contract" CACHE INTERNAL "Where the Fenrir.Window contract is built")
 set(fenrir_window_managed_dir "${CMAKE_CURRENT_SOURCE_DIR}/../Managed/Fenrir.Window")
-file(GLOB fenrir_window_contract_sources CONFIGURE_DEPENDS "${fenrir_window_managed_dir}/*.cs")
+file(GLOB fenrir_window_contract_sources CONFIGURE_DEPENDS "${fenrir_window_managed_dir}/*.cs"
+    "${fenrir_window_managed_dir}/Generated/*.cs")
 add_custom_command(
     OUTPUT "${FENRIR_WINDOW_CONTRACT_DIR}/Fenrir.Window.dll"
     COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${fenrir_window_managed_dir}/Fenrir.Window.csproj"
@@ -43,9 +44,27 @@ add_library(FenrirWindowScripting STATIC
     include/FenrirWindowScripting/WindowScripting.hpp
     src/Utf16.hpp
     src/WindowScripting.cpp
+    src/WindowScriptingState.hpp
+    src/Generated/FenrirWindowMappings.hpp
+    src/Generated/FenrirWindowRegistration.cpp
 )
 target_include_directories(FenrirWindowScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirWindowScripting PUBLIC FenrirWindow FenrirInputScripting FenrirScripting)
+
+# The binding (ADR-0043): the window's events and size are written once, in FenrirWindow's headers
+# (../api/FenrirWindow.api.json), and every native function once, as its definition in src/WindowScripting.cpp, which
+# describe-api's natives mode reads into api/FenrirWindow.natives.json. Iris.Bindings generates the rest from those
+# descriptions and api/FenrirWindow.binding.toml, naming FenrirInput's WindowId through FenrirInput's binding, all
+# committed:
+#   ../Managed/Fenrir.Window/Generated/   the C# mirrors, beside which the contract's own .cs files add behaviour only,
+#                                         and the natives' declarations, WindowNative;
+#   src/Generated/                        the Iris mappings and the extension's events, sharedStructs and functions;
+#   Tests/Generated/                      the defaults test and the natives test.
+# After changing a shared type or a native, regenerate both stages:
+#   cmake --build <dir> --target fenrir-describe-api
+#   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api_natives(FenrirWindowScripting api/FenrirWindow.binding.toml)
+iris_generate_binding(FenrirWindow api/FenrirWindow.binding.toml ../api/FenrirWindow.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

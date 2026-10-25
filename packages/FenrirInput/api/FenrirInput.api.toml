@@ -1,0 +1,22 @@
+# FenrirInput's selection (ADR-0042, tools/describe-api/README.md): the headers to read, relative to this file, and each
+# type the package shares with bindings, with its role. The enums are described because the events hold them.
+headers = ["../include/FenrirInput/InputTypes.hpp", "../include/FenrirInput/InputEvents.hpp"]
+
+[types]
+# The engine events, one per input fed.
+"Fenrir::KeyEvent" = "event"
+"Fenrir::TextEvent" = "event"
+"Fenrir::MouseButtonEvent" = "event"
+"Fenrir::MouseMotionEvent" = "event"
+"Fenrir::MouseScrollEvent" = "event"
+"Fenrir::WindowFocusEvent" = "event"
+"Fenrir::GamepadConnectionEvent" = "event"
+"Fenrir::GamepadButtonEvent" = "event"
+"Fenrir::GamepadAxisEvent" = "event"
+
+# The ids: one field each, so natives take them by value (Iris::WrapperOf).
+"Fenrir::WindowId" = "shared-struct"
+"Fenrir::GamepadId" = "shared-struct"
+
+# FenrirMath's vector, which the mouse events hold (FenrirMath.api.toml).
+"Fenrir::Math::Vec2" = "bound-type"

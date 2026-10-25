@@ -201,7 +201,21 @@ internal sealed class Describer
 
         if (canonical.Handle.kind == CXTypeKind.CXType_Enum)
         {
-            m_errors.Add($"{Where(found)}: error: {name}: an enum takes no role; it is described when a field uses it");
+            if (role != Role.Enum)
+            {
+                m_errors.Add($"{Where(found)}: error: {name}: an enum takes no role; it is described when a field uses " +
+                             "it, or when the selection names it as an enum");
+                return;
+            }
+
+            // Described as an enum a field holds is: by its canonical name, with no role.
+            RegisterReferenced(canonical, name);
+            return;
+        }
+
+        if (role == Role.Enum)
+        {
+            m_errors.Add($"{Where(found)}: error: {name}: not an enum, so it cannot be selected as one");
             return;
         }
 
