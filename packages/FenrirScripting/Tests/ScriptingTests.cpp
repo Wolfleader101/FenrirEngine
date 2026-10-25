@@ -489,7 +489,46 @@ namespace TestExtension
         std::int32_t Amount;
         float Weight;
     };
+
+    // The C# Heading, which a native takes and returns by value as its underlying byte.
+    enum class Heading : std::uint8_t
+    {
+        North = 1,
+        East = 2,
+        South = 3,
+        West = 4
+    };
+
+    // The C# Tag: a wrapper (see its Iris::WrapperOf below), which a native takes and returns by value as its field.
+    struct Tag
+    {
+        std::uint16_t code;
+    };
+
+    Heading TurnRight(const Fenrir::CallContext&, Heading heading)
+    {
+        return heading == Heading::West ? Heading::North : static_cast<Heading>(static_cast<std::uint8_t>(heading) + 1);
+    }
+
+    Tag Retag(const Fenrir::CallContext&, Tag tag, Heading by)
+    {
+        return Tag{static_cast<std::uint16_t>(tag.code + static_cast<std::uint16_t>(by))};
+    }
 } // namespace TestExtension
+
+template <>
+struct Iris::WrapperOf<TestExtension::Tag>
+{
+    using Value = std::uint16_t;
+    static TestExtension::Tag From(Value code)
+    {
+        return TestExtension::Tag{code};
+    }
+    static Value To(TestExtension::Tag tag)
+    {
+        return tag.code;
+    }
+};
 
 template <>
 struct Iris::StructMapping<TestExtension::Reading>
@@ -4185,6 +4224,8 @@ namespace
             NativeFunction::Make<&TestExtension::Rearrange>("Fenrir.TestExtension.Gadgets.Rearrange"),
             NativeFunction::Make<&TestExtension::SpawnUnder>("Fenrir.TestExtension.Gadgets.SpawnUnder"),
             NativeFunction::Make<&TestExtension::AddToTally>("Fenrir.TestExtension.Gadgets.Tally"),
+            NativeFunction::Make<&TestExtension::TurnRight>("Fenrir.TestExtension.Gadgets.TurnRight"),
+            NativeFunction::Make<&TestExtension::Retag>("Fenrir.TestExtension.Gadgets.Retag"),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
@@ -4224,6 +4265,21 @@ namespace
         {
             INFO("An entity did not cross to the native function and back unchanged");
             REQUIRE(ExtensionCall<std::uint32_t>(scripting, "EchoEntity", entity) == entity);
+        }
+    }
+
+    void ANativeFunctionTakesAndReturnsAnEnumAndAWrapperByValue()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("An enum did not cross to the native function and back (East turns right to South, West to North)");
+            REQUIRE(ExtensionCall<std::uint8_t>(scripting, "TurnRight", std::uint8_t{2}) == 3);
+            REQUIRE(ExtensionCall<std::uint8_t>(scripting, "TurnRight", std::uint8_t{4}) == 1);
+        }
+        {
+            INFO("A wrapper and an enum did not both arrive, or the wrapper did not come back (500 + West's 4 is 504)");
+            REQUIRE(ExtensionCall<std::uint16_t>(scripting, "Retag", std::uint16_t{500}, std::uint8_t{4}) == 504);
         }
     }
 
@@ -5247,6 +5303,11 @@ TEST_CASE("a script cannot claim a native component with a struct of its own", "
 TEST_CASE("a native function from an extension gets C#'s arguments and its result reaches C#", "[scripting]")
 {
     ANativeFunctionGetsCSharpArgumentsAndItsResultReachesCSharp();
+}
+
+TEST_CASE("a native function takes and returns an enum and a wrapper by value", "[scripting]")
+{
+    ANativeFunctionTakesAndReturnsAnEnumAndAWrapperByValue();
 }
 
 TEST_CASE("a native function receives a string from C#", "[scripting]")

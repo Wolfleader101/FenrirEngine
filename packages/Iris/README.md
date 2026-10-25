@@ -497,8 +497,28 @@ const auto registered = Iris::RegisterInternalCall<&AddImpl>("MyComponent.Native
   anything, so register them before `Initialize`. A field with no registration fails the initialization (`Sharing
   assembly failed: ...` naming the field); nothing is shared then, and registering the function and trying again
   works. A component that keeps a private copy of a contract it does not share does not get that copy bound.
-- **Signatures.** Parameters and results are `void`, sized integers, `float`, `double`, `bool`, `char16_t` or
-  pointers. A struct is passed as a pointer to it, valid for the call.
+- **Signatures.** Parameters and results are `void`, sized integers, `float`, `double`, `bool`, `char16_t`,
+  pointers, enums or wrappers. A struct is otherwise passed as a pointer to it, valid for the call; by value it does
+  not compile.
+- **Enums.** An enum crosses by value as its underlying integer, and the field declares that integer: a native
+  `enum class Gear : std::int32_t` is an `int` in the field, which the C# side casts to and from its own enum.
+- **Wrappers.** A struct of one field crosses by value as that field once `Iris::WrapperOf` is specialized for it,
+  naming the field's type (a number, `bool`, `char16_t`, an enum or a pointer) and converting both ways. The field
+  declares the field's type.
+
+  ```cpp
+  struct WindowId { std::uint32_t value; };
+
+  template <>
+  struct Iris::WrapperOf<WindowId>
+  {
+      using Value = std::uint32_t;
+      static WindowId From(Value value) { return WindowId{value}; }
+      static Value To(WindowId id) { return id.value; }
+  };
+
+  bool IsOpen(WindowId window);                  // the field: delegate* unmanaged[Cdecl]<uint, bool>
+  ```
 - **String parameters.** A parameter (never the result) can be a `std::string_view`: UTF-8 bytes, valid for the
   call, and not checked for being valid UTF-8. The field declares it as two parameters, a `byte*` to the bytes
   and then an `int` length; any other declaration fails the load and the diagnostic shows both signatures.

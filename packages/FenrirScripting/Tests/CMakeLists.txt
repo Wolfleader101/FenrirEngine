@@ -191,6 +191,9 @@ fenrir_expect_compile(NativeFunctionTwoNamespaceBlocks OK)    # one type, one fi
 fenrir_expect_compile(NativeFunctionOverload FENRIR0024)
 fenrir_expect_compile(NativeFunctionStringResult FENRIR0025)
 fenrir_expect_compile(NativeFunctionUnsupported FENRIR0026)
+fenrir_expect_compile(NativeFunctionTwoFieldStruct FENRIR0026)   # two fields by value: not a wrapper
+fenrir_expect_compile(NativeFunctionStringWrapper FENRIR0026)    # one field, but a string, which does not cross by value
+fenrir_expect_compile(NativeFunctionUnbuildableWrapper FENRIR0026)  # a wrapper result with no constructor or setter for it
 # A [TaggedUnion] struct gets the hand-written union's members from the generator.
 fenrir_expect_compile(TaggedUnionControl OK)     # a byte tag and a noun, every generated member used
 fenrir_expect_compile(TaggedUnionEmptyKind OK)   # a kind with no fields

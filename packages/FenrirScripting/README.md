@@ -573,7 +573,7 @@ buffer, and nothing of any extension. A native function that needs its extension
   `SetState` was given.
 
 Its other parameters and its result are what C# passes and gets: sized numbers, `float`, `double`, `bool`, `char16_t`,
-pointers, and `std::string_view` parameters. It is called only while a Scripting is running. Otherwise C# gets a zero result, or
+pointers, enums and wrappers by value (see "Exposing a native function"), and `std::string_view` parameters. It is called only while a Scripting is running. Otherwise C# gets a zero result, or
 the value given as `Make`'s second argument. It may read and write component and resource data at once, but makes
 structural changes only by recording them (see "The change buffer from a native function"): the calling system holds
 `Ref<T>`s into the storage.
@@ -734,11 +734,14 @@ What crosses, and how:
 | C# | C++ |
 | --- | --- |
 | sized integers, `float`, `double`, `bool`, `char`, pointers | the same (`char16_t` for `char`); `bool` and `char` need `[assembly: DisableRuntimeMarshalling]` |
-| `Entity` | `std::uint32_t`, its value |
+| an enum | the C++ enum, crossing as its underlying integer, which must match the C# enum's |
+| a wrapper: an unmanaged struct of one field or auto-property of the kinds above, such as `Entity` | the C++ struct with an `Iris::WrapperOf` specialization (see Iris's README), or the field's type itself (`std::uint32_t` for `Entity`, its value) |
 | `string` or `ReadOnlySpan<char>` parameter | `std::string_view`, UTF-8 (a lone surrogate becomes U+FFFD), valid for the call |
 | `in`, `ref` or `out` unmanaged struct | a pointer to it, valid for the call |
 
-A string is never a result, and a struct does not cross by value. The generator refuses at build time a native function that
+A wrapper result is built with a constructor taking its member's type when the declaring type can call one (as `Entity`
+has), and otherwise with an object initializer setting the member; a wrapper with neither cannot be a result. A string is
+never a result, and any other struct does not cross by value. The generator refuses at build time a native function that
 is not `static partial` (FENRIR0020, FENRIR0021), is in a type that is not partial (FENRIR0022), is generic (FENRIR0023),
 shares its name with another in its type (FENRIR0024), returns a string (FENRIR0025) or uses a type that cannot cross
 (FENRIR0026). Your friendly API calls the declared method like any other, and adds behaviour (such as turning error codes

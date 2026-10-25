@@ -132,3 +132,10 @@ add_test(NAME UnsupportedTypeDoesNotCompile
     COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG> --target IrisUnsupportedTypeShouldNotCompile)
 set_tests_properties(UnsupportedTypeDoesNotCompile PROPERTIES
     PASS_REGULAR_EXPRESSION "Iris cannot pass this C.. type to managed code")
+# Likewise a struct of two fields by value in an internal call: only a wrapper crosses by value.
+add_executable(IrisStructByValueShouldNotCompile EXCLUDE_FROM_ALL compile_fail_struct.cpp)
+target_link_libraries(IrisStructByValueShouldNotCompile PRIVATE Iris::Iris)
+add_test(NAME StructByValueDoesNotCompile
+    COMMAND "${CMAKE_COMMAND}" --build "${CMAKE_BINARY_DIR}" --config $<CONFIG> --target IrisStructByValueShouldNotCompile)
+set_tests_properties(StructByValueDoesNotCompile PROPERTIES
+    PASS_REGULAR_EXPRESSION "by value only as a wrapper")

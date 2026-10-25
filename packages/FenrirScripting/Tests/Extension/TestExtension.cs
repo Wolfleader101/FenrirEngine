@@ -39,6 +39,29 @@ public static partial class Gadgets
     // Adds to the running total the extension keeps in its extension state, and returns the new total.
     [NativeFunction]
     public static partial int Tally(int by);
+
+    // The next heading clockwise: an enum crosses as its underlying byte.
+    [NativeFunction]
+    public static partial Heading TurnRight(Heading heading);
+
+    // The tag with its code raised by `by` and the heading's value: a wrapper crosses as its one field.
+    [NativeFunction]
+    public static partial Tag Retag(Tag tag, Heading by);
+}
+
+/// <summary>A heading, which the test extension's natives take and return by value.</summary>
+public enum Heading : byte
+{
+    North = 1,
+    East = 2,
+    South = 3,
+    West = 4,
+}
+
+/// <summary>A wrapper of the test extension: a struct of one field, which crosses to a native as that field.</summary>
+public struct Tag
+{
+    public ushort Code;
 }
 
 /// <summary>A scene resource the test extension gives C#: the native <c>Weather</c>.</summary>
