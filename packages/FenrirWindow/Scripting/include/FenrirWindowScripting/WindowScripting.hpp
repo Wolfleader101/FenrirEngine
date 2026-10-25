@@ -14,8 +14,8 @@
 // looks for them).
 //
 // A native function that does nothing (no window, a window id that names none) warns in debug builds "once per call
-// site": once per process for each place in this library's native code that notices it (its std::source_location),
-// however many C# call sites or scripts reach it.
+// site": once per Scripting given the extension for each place in this library's native code that notices it (its
+// std::source_location), however many C# call sites or scripts reach it.
 
 #include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"

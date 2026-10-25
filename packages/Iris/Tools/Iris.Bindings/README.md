@@ -132,7 +132,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
 itself and binds from that description.
-| `[tests] cpp` and `csharp` | A Catch2 case per component, event, resource and shared struct, and the C# class with one `T()` method returning `new T()` for each. A mirror in `internal-structs` has none: a public test method cannot return it (its layout is still checked when the extension registers it). |
+| `[tests] cpp` and `csharp` | A Catch2 case per component, event, resource and shared struct, and the C# class with one `T()` method returning `new T()` for each. A mirror in `internal-structs` has none: a public test method cannot return it. Its layout is checked when the extension registers it, unless it is in `by-hand` too, when only the mappings' size assert checks it. |
 
 **Other bindings' types.** A binding in `uses` is read with the descriptions its own `descriptions` names. A type it
 mirrors that this binding's descriptions also describe (another package's type a field holds, which a description records
@@ -161,7 +161,7 @@ read-only struct is `readonly` too. A component gets the component attribute (`[
 interface, an event the event attribute and interface, and a scene or app resource the resource attribute and interface (a
 tagged union's mirror too); a resource in `read-only` gets the read-only interface and, unless it is a tagged union, is a
 `readonly struct`. A struct in `internal-structs` is `internal`, and a public mirror cannot hold one. An array is an `[InlineArray(N)]` struct nested in its mirror
-(`SamplesArray Samples`), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
+(`SamplesArray Samples`, with `N` as its `Length` constant), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
 `fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
 field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
 it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.
@@ -193,7 +193,8 @@ would: an alias in `types` is its C# type; a number or `bool` is itself (`std::i
 converts to; an enum is its described C# enum, crossing as its underlying integer; a wrapper (a described struct of one
 field of a number, `bool`, `char16_t` or enum, or a bound type whose `[bound-types]` entry gives its `wrapper` kind) is
 its C# type, crossing as that field; `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
-`std::int32_t` count is `T*` (a span C# fixes); a pointer its doc marks `@param[out]` is `out T`, and one it marks
+`std::int32_t` count is `T*` (a span C# fixes), unless its doc marks it `@param[in]`, one value the count after it does
+not size; a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
 `in T`. `T` is a number, or the C# name of a described type or a `types` alias. A result is a number, `bool`, an enum, a
 wrapper, `void` or `void*`. Anything else fails naming the function and parameter: a struct by value that is not a

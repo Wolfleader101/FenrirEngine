@@ -5,8 +5,8 @@ namespace Fenrir.Input;
 // ScriptInputClaims and FenrirInput's InputRouter.hpp (Generated/).
 public readonly partial struct InputClaims
 {
-    /// <summary>How many windows the claims can hold.</summary>
-    public const int MaxWindows = 8;
+    /// <summary>How many windows the claims can hold: C++'s ScriptInputClaims::MaxWindows, through the generated storage.</summary>
+    public const int MaxWindows = EntriesArray.Length;
 
     /// <summary>Whether any router claims the gamepads, for UI navigation.</summary>
     public bool Gamepad => GamepadClaimed;

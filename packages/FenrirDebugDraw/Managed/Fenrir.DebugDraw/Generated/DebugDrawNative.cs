@@ -93,8 +93,9 @@ internal static unsafe partial class DebugDrawNative
     /// A grid of `cells` by `cells` squares, `cellSize` across, centred on `centre` and turned by `rotation`
     /// (DebugDraw.Grid).
     /// </summary>
+    /// <param name="rotation">One rotation, not a span of them, though `cells` follows it.</param>
     [NativeFunction]
-    public static partial void Grid(in Vector3 centre, in Quaternion rotation, float cellSize, int cells,
+    public static partial void Grid(in Vector3 centre, in Quaternion rotation, int cells, float cellSize,
                                     in Colour colour, in NativeShapeOptions options, ReadOnlySpan<char> group);
 
     /// <summary>The frame of `transform`: its axes, `length` long (DebugDraw.Axes).</summary>

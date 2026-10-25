@@ -16,8 +16,8 @@
       "parameters": [
         {
           "name": "camera",
-          "type": "Fenrir::RendererScript::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "point",
@@ -52,8 +52,8 @@
       "parameters": [
         {
           "name": "camera",
-          "type": "Fenrir::RendererScript::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "point",
@@ -80,10 +80,10 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "The camera whose view of `window` is under `point`, in window pixels from its top-left.",
-      "notRunning": "Fenrir::Entity::Null",
+      "notRunning": "Fenrir::EntityValue(Fenrir::Entity::Null)",
       "returns": {
-        "type": "Fenrir::RendererScript::EntityId",
-        "kind": "u32",
+        "type": "Fenrir::EntityValue",
+        "kind": "struct",
         "doc": "The camera entity, or no entity (C#'s Entity.None)."
       },
       "parameters": [
@@ -116,8 +116,8 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::RendererScript::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "bounds",
@@ -159,10 +159,10 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity: recorded, so it takes effect when the system returns.",
-      "notRunning": "Fenrir::Entity::Null",
+      "notRunning": "Fenrir::EntityValue(Fenrir::Entity::Null)",
       "returns": {
-        "type": "Fenrir::RendererScript::EntityId",
-        "kind": "u32",
+        "type": "Fenrir::EntityValue",
+        "kind": "struct",
         "doc": "The model's root entity, or no entity (C#'s Entity.None) with no asset store, a stale model or a parent that is not alive."
       },
       "parameters": [
@@ -174,8 +174,8 @@
         },
         {
           "name": "parent",
-          "type": "Fenrir::RendererScript::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         }
       ]
     }

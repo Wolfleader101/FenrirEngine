@@ -1,0 +1,7 @@
+# The renderer binding's own selection (ADR-0042, tools/describe-api/README.md): the one type its natives take and
+# return that FenrirRenderer's description does not hold, FenrirScripting's EntityValue, a C# Entity's 32-bit value. The
+# binding (FenrirRenderer.binding.toml) names it Entity, and the natives take it by value as its field.
+headers = ["../../../FenrirScripting/include/FenrirScripting/EntityValue.hpp"]
+
+[types]
+"Fenrir::EntityValue" = "bound-type"

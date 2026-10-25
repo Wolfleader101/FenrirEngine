@@ -1,0 +1,15 @@
+{
+  "package": "FenrirRendererScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::EntityValue",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A C# Entity: an entity's 32-bit value alone. The wrapper a native takes or returns where C# passes an Entity, and the field a shared struct holds where C# holds one."
+    }
+  ]
+}

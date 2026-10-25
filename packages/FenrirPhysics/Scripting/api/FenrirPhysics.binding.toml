@@ -42,7 +42,11 @@ includes = [
     "FenrirPhysics/PhysicsWorld.hpp",
     "FenrirPhysics/Queries.hpp",
     "FenrirPhysics/Vehicles.hpp",
-    "BoundMappings.hpp",
+    # The query types as C# holds them, the built-in binding's mappings (Fenrir::Entity as EntityLink, Transform), and
+    # the entity value's mapping and wrapper trait, FenrirScripting's.
+    "ScriptQueries.hpp",
+    "FenrirScripting/Generated/FenrirScriptingMappings.hpp",
+    "FenrirScripting/EntityValueMapping.hpp",
 ]
 
 [registration]
@@ -53,6 +57,7 @@ includes = [
     # What the natives' declarations name: their extension state and the query types as C# holds them.
     "PhysicsScriptingState.hpp",
     "ScriptQueries.hpp",
+    "FenrirScripting/Generated/FenrirScriptingMappings.hpp",
 ]
 function = "Fenrir::Generated::RegisterPhysics"
 extension = "Fenrir::ScriptingExtension"
@@ -81,7 +86,8 @@ natives-class = "Fenrir.PhysicsScriptFixture.Natives"
 "Fenrir::Transform" = { type = "Transform" }
 # A default Entity names no entity, which C#'s new EntityLink() (all zero) does not say.
 "Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None" }
-"Fenrir::ScriptQueries::EntityValue" = { type = "Entity", constructor = ["value"] }
+# A C# Entity: held by the query types, and taken by the natives by value, as its one field.
+"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
 
 [nouns]
 "Fenrir::CollisionShape" = "shape"
@@ -97,5 +103,3 @@ context = "Fenrir::CallContext"
 class = "PhysicsNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
-# A native's entity parameters: their 32-bit value crosses, and C# passes an Entity.
-types = { "Fenrir::ScriptQueries::EntityId" = "Entity" }

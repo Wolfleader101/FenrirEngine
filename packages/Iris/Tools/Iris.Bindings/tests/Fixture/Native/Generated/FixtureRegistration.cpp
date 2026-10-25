@@ -22,6 +22,7 @@ namespace Fixture
     Fixture::Motion MotionOf(const Host::CallContext&, Fixture::BodyId body);
     Fixture::Ticket Renew(const Host::CallContext&, Fixture::Ticket ticket);
     std::uint64_t Sum(const Host::CallContext&, const std::uint32_t* values, std::int32_t count, bool all, double scale);
+    void Turn(const Host::CallContext&, const Fixture::Quat* rotation, std::int32_t turns);
 } // namespace Fixture
 
 namespace Fixture::Bindings
@@ -57,6 +58,7 @@ namespace Fixture::Bindings
             Host::NativeFunction::Make<&Fixture::MotionOf>("Fixture.Bindings.FixtureNative.MotionOf"),
             Host::NativeFunction::Make<&Fixture::Renew>("Fixture.Bindings.FixtureNative.Renew"),
             Host::NativeFunction::Make<&Fixture::Sum>("Fixture.Bindings.FixtureNative.Sum"),
+            Host::NativeFunction::Make<&Fixture::Turn>("Fixture.Bindings.FixtureNative.Turn"),
         };
     }
 } // namespace Fixture::Bindings

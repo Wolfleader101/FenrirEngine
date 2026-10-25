@@ -35,8 +35,8 @@ namespace Fenrir
          *
          * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
          * asset store, or for a stale or empty handle, they do nothing and return false, zero or the empty handle. In
-         * debug builds each such case is warned about once per process for each place in FenrirAssetsScripting's
-         * native code that notices it, not once per C# call site.
+         * debug builds each such case is warned about once per scripting install for each place in
+         * FenrirAssetsScripting's native code that notices it, not once per C# call site.
          *
          * Defined by the FenrirAssetsScripting library, not FenrirAssets (which never links FenrirScripting), so it
          * exists only in a build with assets and scripting on. Include "FenrirAssetsScripting/AssetsScripting.hpp" and

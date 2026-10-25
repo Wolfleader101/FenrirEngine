@@ -15,8 +15,8 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "force",
@@ -41,8 +41,8 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "impulse",
@@ -67,8 +67,8 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "torque",
@@ -93,8 +93,8 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "impulse",
@@ -599,8 +599,8 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "contacts",
@@ -630,8 +630,8 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         }
       ]
     },
@@ -649,8 +649,8 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "bounds",
@@ -800,13 +800,13 @@
       "parameters": [
         {
           "name": "bodyA",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "bodyB",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32",
+          "type": "Fenrir::EntityValue",
+          "kind": "struct",
           "doc": "The empty value (uint.MaxValue in C#) is the world; any other names an entity of the active scene."
         },
         {
@@ -841,8 +841,8 @@
       "parameters": [
         {
           "name": "joint",
-          "type": "Fenrir::ScriptQueries::EntityId",
-          "kind": "u32"
+          "type": "Fenrir::EntityValue",
+          "kind": "struct"
         },
         {
           "name": "state",

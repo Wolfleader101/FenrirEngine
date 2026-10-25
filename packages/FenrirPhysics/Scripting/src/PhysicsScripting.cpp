@@ -38,15 +38,15 @@ namespace Fenrir
 
         // A force-like function: queues `apply` on the entity's body in the active scene's world.
         template <void (PhysicsWorld::*Apply)(const Entity&, const Math::Vec3&)>
-        bool Push(const CallContext& context, PhysicsScripting& physics, Script::EntityId entity,
-                  const Math::Vec3* amount, std::source_location where = std::source_location::current())
+        bool Push(const CallContext& context, PhysicsScripting& physics, EntityValue entity, const Math::Vec3* amount,
+                  std::source_location where = std::source_location::current())
         {
             PhysicsWorld* world = physics.WorldOf(context, where);
             if (world == nullptr || !physics.HasBody(context, entity, where) || amount == nullptr)
             {
                 return false;
             }
-            (world->*Apply)(context.Entities().HandleOf(entity), *amount);
+            (world->*Apply)(context.Entities().HandleOf(entity.value), *amount);
             return true;
         }
 
@@ -70,8 +70,8 @@ namespace Fenrir
         template <typename Out, typename Hit>
         Out ToScript(const Hit& hit)
         {
-            return Out{.body = Script::EntityValue(hit.body.GetId()),
-                       .collider = Script::EntityValue(hit.collider.GetId()),
+            return Out{.body = EntityValue(hit.body.GetId()),
+                       .collider = EntityValue(hit.collider.GetId()),
                        .point = hit.point,
                        .normal = hit.normal,
                        .distance = hit.distance};
@@ -87,8 +87,8 @@ namespace Fenrir
 
         Script::OverlapHit ToScriptOverlap(const OverlapHit& hit)
         {
-            return Script::OverlapHit{.body = Script::EntityValue(hit.body.GetId()),
-                                      .collider = Script::EntityValue(hit.collider.GetId())};
+            return Script::OverlapHit{.body = EntityValue(hit.body.GetId()),
+                                      .collider = EntityValue(hit.collider.GetId())};
         }
 
         static_assert(sizeof(JointFrames) == 2 * sizeof(JointFrame),
@@ -104,7 +104,7 @@ namespace Fenrir
     namespace PhysicsNatives
     {
         /** @brief Pushes the entity's body with `force` (newtons, world space) for the next step only. */
-        bool AddForce(const CallContext& context, PhysicsScripting& physics, Script::EntityId entity,
+        bool AddForce(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                       const Math::Vec3* force)
         {
             return Push<&PhysicsWorld::AddForce>(context, physics, entity, force);
@@ -112,21 +112,21 @@ namespace Fenrir
 
         /** @brief Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next
          * step. */
-        bool AddImpulse(const CallContext& context, PhysicsScripting& physics, Script::EntityId entity,
+        bool AddImpulse(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                         const Math::Vec3* impulse)
         {
             return Push<&PhysicsWorld::AddImpulse>(context, physics, entity, impulse);
         }
 
         /** @brief Twists the entity's body with `torque` (newton metres, world space) for the next step only. */
-        bool AddTorque(const CallContext& context, PhysicsScripting& physics, Script::EntityId entity,
+        bool AddTorque(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                        const Math::Vec3* torque)
         {
             return Push<&PhysicsWorld::AddTorque>(context, physics, entity, torque);
         }
 
         /** @brief Changes the angular velocity of the entity's body by `impulse` over its moment of inertia. */
-        bool AddAngularImpulse(const CallContext& context, PhysicsScripting& physics, Script::EntityId entity,
+        bool AddAngularImpulse(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                                const Math::Vec3* impulse)
         {
             return Push<&PhysicsWorld::AddAngularImpulse>(context, physics, entity, impulse);
@@ -259,8 +259,8 @@ namespace Fenrir
             {
                 return false;
             }
-            *hit = Script::MoveCastHit{.body = Script::EntityValue(found->body.GetId()),
-                                       .collider = Script::EntityValue(found->collider.GetId()),
+            *hit = Script::MoveCastHit{.body = EntityValue(found->body.GetId()),
+                                       .collider = EntityValue(found->collider.GetId()),
                                        .point = found->point,
                                        .normal = found->normal,
                                        .distance = found->distance};
@@ -306,8 +306,8 @@ namespace Fenrir
             const std::size_t count = world->Penetrations(*shape, *pose, found, ToFilter(context.Entities(), filter));
             std::transform(found.begin(), found.begin() + static_cast<std::ptrdiff_t>(count), hits,
                            [](const PenetrationHit& hit) {
-                               return Script::PenetrationHit{.body = Script::EntityValue(hit.body.GetId()),
-                                                             .collider = Script::EntityValue(hit.collider.GetId()),
+                               return Script::PenetrationHit{.body = EntityValue(hit.body.GetId()),
+                                                             .collider = EntityValue(hit.collider.GetId()),
                                                              .point = hit.point,
                                                              .normal = hit.normal,
                                                              .depth = hit.depth};
@@ -361,7 +361,7 @@ namespace Fenrir
          * @param contacts Where to write at most `capacity` contacts.
          * @return How many it wrote.
          */
-        std::int32_t ContactsOf(const CallContext& context, PhysicsScripting& physics, Script::EntityId body,
+        std::int32_t ContactsOf(const CallContext& context, PhysicsScripting& physics, EntityValue body,
                                 Script::Contact* contacts, std::int32_t capacity)
         {
             PhysicsWorld* world = physics.WorldOf(context);
@@ -370,30 +370,29 @@ namespace Fenrir
                 return 0;
             }
             std::int32_t count = 0;
-            world->ForEachContact(context.Entities().HandleOf(body), [&](const Contact& contact) {
+            world->ForEachContact(context.Entities().HandleOf(body.value), [&](const Contact& contact) {
                 if (count < capacity)
                 {
-                    contacts[count++] =
-                        Script::Contact{.body = Script::EntityValue(contact.body.GetId()),
-                                        .collider = Script::EntityValue(contact.collider.GetId()),
-                                        .otherBody = Script::EntityValue(contact.otherBody.GetId()),
-                                        .otherCollider = Script::EntityValue(contact.otherCollider.GetId()),
-                                        .point = contact.point,
-                                        .normal = contact.normal};
+                    contacts[count++] = Script::Contact{.body = EntityValue(contact.body.GetId()),
+                                                        .collider = EntityValue(contact.collider.GetId()),
+                                                        .otherBody = EntityValue(contact.otherBody.GetId()),
+                                                        .otherCollider = EntityValue(contact.otherCollider.GetId()),
+                                                        .point = contact.point,
+                                                        .normal = contact.normal};
                 }
             });
             return count;
         }
 
         /** @brief Whether the body of `body` is asleep: false with no world or no body. */
-        bool IsSleeping(const CallContext& context, PhysicsScripting& physics, Script::EntityId body)
+        bool IsSleeping(const CallContext& context, PhysicsScripting& physics, EntityValue body)
         {
             PhysicsWorld* world = physics.WorldOf(context);
             if (world == nullptr || !physics.HasBody(context, body))
             {
                 return false;
             }
-            return world->IsSleeping(context.Entities().HandleOf(body));
+            return world->IsSleeping(context.Entities().HandleOf(body.value));
         }
 
         /**
@@ -401,7 +400,7 @@ namespace Fenrir
          * @param[out] bounds The box; the default when there is none.
          * @return Whether the entity has a body.
          */
-        bool Bounds(const CallContext& context, PhysicsScripting& physics, Script::EntityId body, Math::AABB* bounds)
+        bool Bounds(const CallContext& context, PhysicsScripting& physics, EntityValue body, Math::AABB* bounds)
         {
             if (bounds == nullptr)
             {
@@ -413,7 +412,7 @@ namespace Fenrir
             {
                 return false;
             }
-            const std::optional<Math::AABB> found = world->Bounds(context.Entities().HandleOf(body));
+            const std::optional<Math::AABB> found = world->Bounds(context.Entities().HandleOf(body.value));
             if (!found)
             {
                 return false;
@@ -516,8 +515,8 @@ namespace Fenrir
          * scene.
          * @param[out] frames The joint's frames; identity frames when a body is not alive.
          */
-        void FrameFromWorld(const CallContext& context, PhysicsScripting& physics, Script::EntityId bodyA,
-                            Script::EntityId bodyB, const JointFrame* anchor, JointFrames* frames)
+        void FrameFromWorld(const CallContext& context, PhysicsScripting& physics, EntityValue bodyA, EntityValue bodyB,
+                            const JointFrame* anchor, JointFrames* frames)
         {
             if (frames == nullptr)
             {
@@ -529,16 +528,17 @@ namespace Fenrir
                 return;
             }
             EntityList& entities = context.Entities();
-            const bool aliveA = entities.HasEntity(bodyA);
-            if (!aliveA || (bodyB != Entity::Null && !entities.HasEntity(bodyB)))
+            const bool aliveA = entities.HasEntity(bodyA.value);
+            if (!aliveA || (bodyB.value != Entity::Null && !entities.HasEntity(bodyB.value)))
             {
                 physics.WarnOnce(context, std::string(aliveA ? "bodyB" : "bodyA") +
                                               " is not alive, so it gives identity frames");
                 return;
             }
             // Qualified: this function's own name hides FenrirPhysics's within this namespace.
-            *frames = Fenrir::FrameFromWorld(entities.HandleOf(bodyA),
-                                             bodyB == Entity::Null ? Entity() : entities.HandleOf(bodyB), *anchor);
+            *frames = Fenrir::FrameFromWorld(entities.HandleOf(bodyA.value),
+                                             bodyB.value == Entity::Null ? Entity() : entities.HandleOf(bodyB.value),
+                                             *anchor);
         }
 
         /**
@@ -546,8 +546,7 @@ namespace Fenrir
          * joint reads zeroed from the world itself, which already warns about an inactive one.
          * @param[out] state The reading; the zeroed state (warning once) with no world or no Joint.
          */
-        void GetJointState(const CallContext& context, PhysicsScripting& physics, Script::EntityId joint,
-                           JointState* state)
+        void GetJointState(const CallContext& context, PhysicsScripting& physics, EntityValue joint, JointState* state)
         {
             if (state == nullptr)
             {
@@ -560,12 +559,12 @@ namespace Fenrir
                 return;
             }
             EntityList& entities = context.Entities();
-            if (!entities.HasEntity(joint) || !entities.GetEntity(joint).HasComponent<Joint>())
+            if (!entities.HasEntity(joint.value) || !entities.GetEntity(joint.value).HasComponent<Joint>())
             {
                 physics.WarnOnce(context, "the entity has no Joint, so it reads zeroed");
                 return;
             }
-            *state = world->GetJointState(entities.HandleOf(joint));
+            *state = world->GetJointState(entities.HandleOf(joint.value));
         }
     } // namespace PhysicsNatives
 

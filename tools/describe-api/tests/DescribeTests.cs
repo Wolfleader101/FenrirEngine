@@ -151,6 +151,8 @@ public sealed class DescribeTests
     [InlineData("Unnamed (parameter 2): is unnamed: a native's parameters are named in C#")]
     [InlineData("OutValue::value: is documented @param[out] but is not a pointer to non-const data")]
     [InlineData("InOutConst::values: is documented @param[in,out] but is not a pointer to non-const data")]
+    [InlineData("InValue::value: is documented @param[in] but is not a pointer to const data: [in] marks one value a " +
+                "native reads through a pointer, which a count after it does not make a span")]
     [InlineData("NotRunningVoid: documents @notrunning but returns nothing")]
     [InlineData("DocumentsMissing: documents a parameter 'missing' it does not have")]
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]

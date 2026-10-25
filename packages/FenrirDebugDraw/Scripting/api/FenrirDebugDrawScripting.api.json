@@ -58,6 +58,14 @@
       ]
     },
     {
+      "name": "Fenrir::EntityValue",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 4,
+      "alignment": 4,
+      "doc": "A C# Entity: an entity's 32-bit value alone. The wrapper a native takes or returns where C# passes an Entity, and the field a shared struct holds where C# holds one."
+    },
+    {
       "name": "Fenrir::Math::Vec3",
       "category": "bound-type",
       "role": "bound-type",
@@ -109,14 +117,6 @@
       "alignment": 4
     },
     {
-      "name": "Fenrir::ScriptOptions::EntityValue",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 4,
-      "alignment": 4,
-      "doc": "A C# Entity: an entity's 32-bit value alone."
-    },
-    {
       "name": "Fenrir::ScriptOptions::ShapeOptions",
       "category": "struct",
       "role": "shared-struct",
@@ -135,7 +135,7 @@
           "name": "relativeTo",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptOptions::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {
             "value": 4294967295
           },
@@ -184,7 +184,7 @@
           "name": "relativeTo",
           "offset": 4,
           "kind": "struct",
-          "type": "Fenrir::ScriptOptions::EntityValue",
+          "type": "Fenrir::EntityValue",
           "default": {
             "value": 4294967295
           },

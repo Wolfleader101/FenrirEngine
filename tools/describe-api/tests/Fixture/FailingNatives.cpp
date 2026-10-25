@@ -36,6 +36,12 @@ namespace Failing
         return value != 0;
     }
 
+    /** @param[in] value One value, but not a pointer. */
+    bool InValue(const Host::CallContext&, int value)
+    {
+        return value != 0;
+    }
+
     /** @param[in,out] values Read and written, but const. */
     bool InOutConst(const Host::CallContext&, const int* values)
     {

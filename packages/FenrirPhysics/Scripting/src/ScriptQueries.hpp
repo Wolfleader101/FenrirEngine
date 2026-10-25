@@ -1,36 +1,18 @@
 #pragma once
 
 // The query types as C# holds them: FenrirPhysics's QueryFilter, hits and Contact (FenrirPhysics/Queries.hpp) with each
-// entity as its 32-bit value, a C# Entity, since a Fenrir::Entity also holds a pointer to its list. The natives convert
-// between these and FenrirPhysics's own. This header is the binding's own API description
-// (Scripting/api/FenrirPhysicsScripting.api.toml), so their C# mirrors, mappings and defaults test are generated from
-// it, and they are checked against C# as scripts load. The doc comments are C#'s.
+// entity as FenrirScripting's EntityValue, a C# Entity's 32-bit value, since a Fenrir::Entity also holds a pointer to
+// its list. The natives convert between these and FenrirPhysics's own. This header is the binding's own API
+// description (Scripting/api/FenrirPhysicsScripting.api.toml), so their C# mirrors, mappings and defaults test are
+// generated from it, and they are checked against C# as scripts load. The doc comments are C#'s.
 
 #include <cstdint>
 
 #include "FenrirMath/Math.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 
 namespace Fenrir::ScriptQueries
 {
-    /**
-     * @brief A C# Entity as a native function takes it: the entity's 32-bit value, which is what crosses. The binding
-     * (FenrirPhysics.binding.toml, [natives] types) declares a parameter of this type as a C# Entity.
-     */
-    using EntityId = std::uint32_t;
-
-    /** @brief A C# Entity: an entity's 32-bit value alone. */
-    struct EntityValue
-    {
-        EntityValue() = default;
-
-        // Named after the component it sets (the leading underscore is ignored), as an API description needs.
-        constexpr explicit EntityValue(std::uint32_t _value) : value(_value)
-        {
-        }
-
-        std::uint32_t value = 0;
-    };
-
     /**
      * @brief Which bodies a query can find. New, it finds every body except triggers.
      *

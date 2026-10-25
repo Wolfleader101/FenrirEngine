@@ -153,4 +153,15 @@ namespace Fixture
         }
         return static_cast<std::uint64_t>(static_cast<double>(sum) * scale) + static_cast<std::uint64_t>(Twice(0));
     }
+
+    /**
+     * @brief Turns by `rotation` `turns` times: a pointer followed by a count that is one value, not a span.
+     * @param[in] rotation One rotation, which `turns` does not size.
+     */
+    void Turn(const Host::CallContext& context, const Quat* rotation, std::int32_t turns)
+    {
+        (void)context;
+        (void)rotation;
+        (void)turns;
+    }
 } // namespace Fixture

@@ -1,14 +1,12 @@
-// The C# mirrors' shapes (spec seam 7: each extension's layouts, and `new` equal to `{}`): the components and resources
-// are checked field by field, offsets, unions and nested enums included, whenever the fixture loads; these cases check
-// the values the native functions pass through pointers, and that what C#'s `new` makes is what C++'s `{}` is.
+// The C# mirrors' shapes (spec seam 7: each extension's layouts, and `new` equal to `{}`): every registered type's
+// layout is checked field by field, offsets, unions and nested enums included, whenever the fixture loads, and the
+// generated defaults tests (Generated/) check each type's `new` against `{}`; these cases check that what C#'s `new`
+// makes for a union kind or a resource inserted from C# is what C++'s `{}` is.
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstdint>
-#include <cstring>
-#include <string>
 
-#include "FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
 #include "RendererScriptingApp.hpp"
 
 using namespace Fenrir;
@@ -16,14 +14,6 @@ using namespace RendererScriptingTests;
 
 namespace
 {
-    template <typename T>
-    void RequireSameLayout(RendererScriptingApp& test, const char* name)
-    {
-        const auto result = ScriptingProbe::Component(test.scripting)->ValidateStruct<T>();
-        INFO("C#'s " << name << " is not laid out as C++'s: " << result.diagnostic);
-        REQUIRE(result.Succeeded());
-    }
-
     bool Same(const Colour& a, const Colour& b)
     {
         return Exactly(a.r, b.r) && Exactly(a.g, b.g) && Exactly(a.b, b.b) && Exactly(a.a, b.a);
@@ -88,14 +78,6 @@ namespace
                                  : SameHandle(a.As<CubemapSky>().cubemap, b.As<CubemapSky>().cubemap);
     }
 } // namespace
-
-TEST_CASE("The values the renderer's native functions pass have the C++ layout", "[renderer][scripting]")
-{
-    RendererScriptingApp test;
-    RequireSameLayout<RendererStats>(test, "RendererStats");
-    RequireSameLayout<Math::Ray>(test, "Ray");
-    RequireSameLayout<Math::AABB>(test, "Bounds");
-}
 
 TEST_CASE("A new MeshRenderer, DirectionalLight and Camera from C# are C++'s, for each union kind's new",
           "[renderer][scripting]")

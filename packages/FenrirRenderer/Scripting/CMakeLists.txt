@@ -57,7 +57,9 @@ target_link_libraries(FenrirRendererScripting PUBLIC FenrirRenderer FenrirAssets
 # The binding (ADR-0043): the renderer's components, resources and stats are written once, in FenrirRenderer's headers
 # (../api/FenrirRenderer.api.json), and every native function once, as its definition in src/RendererScripting.cpp, which
 # describe-api's natives mode reads into api/FenrirRenderer.natives.json. Iris.Bindings generates the rest from those
-# descriptions and api/FenrirRenderer.binding.toml, naming the math, input and assets bindings' types, all committed:
+# descriptions, api/FenrirRendererScripting.api.json (the entity value the natives take, described from FenrirScripting's
+# header by this library) and api/FenrirRenderer.binding.toml, naming the math, input and assets bindings' types, all
+# committed:
 #   ../Managed/Fenrir.Renderer/Generated/       the C# mirrors and the natives' declarations, RendererNative;
 #   include/FenrirRendererScripting/Generated/  the Iris mappings;
 #   src/Generated/                              the extension's components, resources, sharedStructs and functions;
@@ -65,8 +67,10 @@ target_link_libraries(FenrirRendererScripting PUBLIC FenrirRenderer FenrirAssets
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api(FenrirRendererScripting api/FenrirRendererScripting.api.toml)
 fenrir_describe_api_natives(FenrirRendererScripting api/FenrirRenderer.binding.toml)
-iris_generate_binding(FenrirRenderer api/FenrirRenderer.binding.toml ../api/FenrirRenderer.api.json)
+iris_generate_binding(FenrirRenderer api/FenrirRenderer.binding.toml ../api/FenrirRenderer.api.json
+    api/FenrirRendererScripting.api.json)
 
 if(FENRIR_BUILD_TESTS)
     add_subdirectory(Tests)

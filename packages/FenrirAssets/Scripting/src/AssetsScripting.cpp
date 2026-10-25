@@ -159,7 +159,7 @@ namespace Fenrir
             {
                 return false;
             }
-            const std::optional<Out> value = read(*store, AssetsScripting::Unpack<Material>(material));
+            const std::optional<Out> value = read(*store, AssetHandleFromBits<Material>(material));
             if (!value)
             {
                 return false;
@@ -193,7 +193,7 @@ namespace Fenrir
                 return 0;
             }
             return ForKind(assets, context, kind, "Assets.Load", std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
-                return AssetsScripting::Pack(store->Load<T>(path, *assetOwner).handle);
+                return AssetHandleBits(store->Load<T>(path, *assetOwner).handle);
             });
         }
 
@@ -205,7 +205,7 @@ namespace Fenrir
         {
             return ForKind(assets, context, kind, "Assets.Unload", false, [&]<typename T>(AssetHandle<T>) {
                 AssetStore* store = assets.Resolve<T>(context, handle, "Assets.Unload");
-                return store != nullptr && store->Unload(AssetsScripting::Unpack<T>(handle));
+                return store != nullptr && store->Unload(AssetHandleFromBits<T>(handle));
             });
         }
 
@@ -214,9 +214,8 @@ namespace Fenrir
         {
             AssetStore* store = assets.StoreFor(context, "Assets.IsValid");
             return store != nullptr &&
-                   ForKind(assets, context, kind, "Assets.IsValid", false, [&]<typename T>(AssetHandle<T>) {
-                       return store->IsValid(AssetsScripting::Unpack<T>(handle));
-                   });
+                   ForKind(assets, context, kind, "Assets.IsValid", false,
+                           [&]<typename T>(AssetHandle<T>) { return store->IsValid(AssetHandleFromBits<T>(handle)); });
         }
 
         /**
@@ -237,7 +236,7 @@ namespace Fenrir
             }
             std::optional<MeshData> mesh = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
                                                     uvs, uvCount, indices, indexCount, "Assets.AddMesh");
-            return mesh ? AssetsScripting::Pack(store->Add<Mesh>(std::move(*mesh), *assetOwner)) : 0;
+            return mesh ? AssetHandleBits(store->Add<Mesh>(std::move(*mesh), *assetOwner)) : 0;
         }
 
         /**
@@ -256,7 +255,7 @@ namespace Fenrir
             }
             std::optional<MeshData> data = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
                                                     uvs, uvCount, indices, indexCount, "Assets.ReplaceMesh");
-            return data && store->Replace(AssetsScripting::Unpack<Mesh>(mesh), std::move(*data));
+            return data && store->Replace(AssetHandleFromBits<Mesh>(mesh), std::move(*data));
         }
 
         /**
@@ -275,7 +274,7 @@ namespace Fenrir
             }
             std::optional<ImageData> image =
                 ImageFrom(assets, context, width, height, nullptr, 0, "Assets.AddRenderTarget");
-            return image ? AssetsScripting::Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+            return image ? AssetHandleBits(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
         }
 
         /**
@@ -290,7 +289,7 @@ namespace Fenrir
             {
                 return false;
             }
-            if (!store->TryGet(AssetsScripting::Unpack<Image>(image))->pixels.empty())
+            if (!store->TryGet(AssetHandleFromBits<Image>(image))->pixels.empty())
             {
                 assets.WarnOnce(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render "
                                          "target and it does nothing");
@@ -298,7 +297,7 @@ namespace Fenrir
             }
             std::optional<ImageData> data =
                 ImageFrom(assets, context, width, height, nullptr, 0, "Assets.ResizeRenderTarget");
-            return data && store->Replace(AssetsScripting::Unpack<Image>(image), std::move(*data));
+            return data && store->Replace(AssetHandleFromBits<Image>(image), std::move(*data));
         }
 
         /**
@@ -318,7 +317,7 @@ namespace Fenrir
             }
             std::optional<ImageData> image =
                 ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.AddImage");
-            return image ? AssetsScripting::Pack(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+            return image ? AssetHandleBits(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
         }
 
         /**
@@ -335,7 +334,7 @@ namespace Fenrir
             }
             std::optional<ImageData> data =
                 ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.ReplaceImage");
-            return data && store->Replace(AssetsScripting::Unpack<Image>(image), std::move(*data));
+            return data && store->Replace(AssetHandleFromBits<Image>(image), std::move(*data));
         }
 
         /**
@@ -348,8 +347,7 @@ namespace Fenrir
             AssetStore* store = assets.Resolve<Shader>(context, shader, "Materials.Create");
             const std::optional<AssetOwner> assetOwner =
                 store ? assets.OwnerOf(context, owner, "Materials.Create") : std::nullopt;
-            return assetOwner ? AssetsScripting::Pack(
-                                    store->CreateMaterial(AssetsScripting::Unpack<Shader>(shader), *assetOwner))
+            return assetOwner ? AssetHandleBits(store->CreateMaterial(AssetHandleFromBits<Shader>(shader), *assetOwner))
                               : 0;
         }
 
@@ -363,9 +361,9 @@ namespace Fenrir
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Clone");
             const std::optional<AssetOwner> assetOwner =
                 store ? assets.OwnerOf(context, owner, "Materials.Clone") : std::nullopt;
-            return assetOwner ? AssetsScripting::Pack(
-                                    store->CloneMaterial(AssetsScripting::Unpack<Material>(material), *assetOwner))
-                              : 0;
+            return assetOwner
+                       ? AssetHandleBits(store->CloneMaterial(AssetHandleFromBits<Material>(material), *assetOwner))
+                       : 0;
         }
 
         /** @brief Sets a `float` parameter (AssetStore::SetFloat). */
@@ -373,7 +371,7 @@ namespace Fenrir
                       std::string_view name, float value)
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetFloat");
-            return store != nullptr && store->SetFloat(AssetsScripting::Unpack<Material>(material), name, value);
+            return store != nullptr && store->SetFloat(AssetHandleFromBits<Material>(material), name, value);
         }
 
         /** @brief Sets a `vec2` parameter (AssetStore::SetVector2). */
@@ -382,7 +380,7 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector2");
             return store != nullptr && value != nullptr &&
-                   store->SetVector2(AssetsScripting::Unpack<Material>(material), name, *value);
+                   store->SetVector2(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec3` parameter (AssetStore::SetVector3). */
@@ -391,7 +389,7 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector3");
             return store != nullptr && value != nullptr &&
-                   store->SetVector3(AssetsScripting::Unpack<Material>(material), name, *value);
+                   store->SetVector3(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec4` parameter (AssetStore::SetVector4). */
@@ -400,7 +398,7 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector4");
             return store != nullptr && value != nullptr &&
-                   store->SetVector4(AssetsScripting::Unpack<Material>(material), name, *value);
+                   store->SetVector4(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec4` parameter to a colour (AssetStore::SetColour). */
@@ -409,7 +407,7 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetColour");
             return store != nullptr && value != nullptr &&
-                   store->SetColour(AssetsScripting::Unpack<Material>(material), name, *value);
+                   store->SetColour(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a texture parameter to `image`, read with `sampler` (AssetStore::SetTexture). */
@@ -418,8 +416,8 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetTexture");
             return store != nullptr && sampler != nullptr &&
-                   store->SetTexture(AssetsScripting::Unpack<Material>(material), name,
-                                     AssetsScripting::Unpack<Image>(image), *sampler);
+                   store->SetTexture(AssetHandleFromBits<Material>(material), name, AssetHandleFromBits<Image>(image),
+                                     *sampler);
         }
 
         /** @brief Sets how the material's pixels combine with what is behind them (AssetStore::SetBlendMode). */
@@ -433,7 +431,7 @@ namespace Fenrir
                 return false;
             }
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetBlendMode");
-            return store != nullptr && store->SetBlendMode(AssetsScripting::Unpack<Material>(material), blendMode);
+            return store != nullptr && store->SetBlendMode(AssetHandleFromBits<Material>(material), blendMode);
         }
 
         /** @brief Sets the alpha below which a masked material discards a pixel (AssetStore::SetAlphaCutoff). */
@@ -441,7 +439,7 @@ namespace Fenrir
                             float alphaCutoff)
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetAlphaCutoff");
-            return store != nullptr && store->SetAlphaCutoff(AssetsScripting::Unpack<Material>(material), alphaCutoff);
+            return store != nullptr && store->SetAlphaCutoff(AssetHandleFromBits<Material>(material), alphaCutoff);
         }
 
         /** @brief Sets whether both faces of the material are drawn (AssetStore::SetDoubleSided). */
@@ -449,7 +447,7 @@ namespace Fenrir
                             bool doubleSided)
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetDoubleSided");
-            return store != nullptr && store->SetDoubleSided(AssetsScripting::Unpack<Material>(material), doubleSided);
+            return store != nullptr && store->SetDoubleSided(AssetHandleFromBits<Material>(material), doubleSided);
         }
 
         /**
@@ -624,7 +622,7 @@ namespace Fenrir
         bool IsSet(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.IsSet");
-            return store != nullptr && store->IsSet(AssetsScripting::Unpack<Material>(material), name);
+            return store != nullptr && store->IsSet(AssetHandleFromBits<Material>(material), name);
         }
 
         /**
@@ -634,7 +632,7 @@ namespace Fenrir
         bool Reset(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
         {
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Reset");
-            return store != nullptr && store->Reset(AssetsScripting::Unpack<Material>(material), name);
+            return store != nullptr && store->Reset(AssetHandleFromBits<Material>(material), name);
         }
 
         /** @brief How many material parameters the shader has (AssetStore::GetShaderParameters). */
@@ -642,7 +640,7 @@ namespace Fenrir
         {
             AssetStore* store = assets.Resolve<Shader>(context, shader, "Shaders.GetParameterCount");
             return store != nullptr ? static_cast<std::int32_t>(
-                                          store->GetShaderParameters(AssetsScripting::Unpack<Shader>(shader)).size())
+                                          store->GetShaderParameters(AssetHandleFromBits<Shader>(shader)).size())
                                     : 0;
         }
 
@@ -666,7 +664,7 @@ namespace Fenrir
                 return 0;
             }
             const std::span<const ShaderParameter> parameters =
-                store->GetShaderParameters(AssetsScripting::Unpack<Shader>(shader));
+                store->GetShaderParameters(AssetHandleFromBits<Shader>(shader));
             if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
             {
                 assets.WarnOnce(context, "Shaders.GetParameter: the shader has no parameter at that index, so it does "

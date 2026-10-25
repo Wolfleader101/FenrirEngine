@@ -38,6 +38,7 @@ function(fenrir_deploy_assets_scripting target)
 endfunction()
 
 add_library(FenrirAssetsScripting STATIC
+    include/FenrirAssetsScripting/AssetHandleBits.hpp
     include/FenrirAssetsScripting/AssetMappings.hpp
     include/FenrirAssetsScripting/AssetsScripting.hpp
     include/FenrirAssetsScripting/ScriptAssets.hpp

@@ -41,7 +41,6 @@ endfunction()
 
 add_library(FenrirPhysicsScripting STATIC
     include/FenrirPhysicsScripting/PhysicsScripting.hpp
-    src/BoundMappings.hpp
     src/PhysicsScripting.cpp
     src/ScriptQueries.hpp
     src/Generated/FenrirPhysicsMappings.hpp
