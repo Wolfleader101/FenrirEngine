@@ -3,6 +3,7 @@
 // Fixture.natives.json is its description. It is read, never compiled.
 
 #include <cstdint>
+#include <string_view>
 
 #include "Fixture.hpp"
 
@@ -109,6 +110,35 @@ namespace Fixture
         }
         ++*cursor;
         return const_cast<void*>(body);
+    }
+
+    /** @brief Shows `text` in place of `glyph`: text as a std::string_view, and a char32_t, which is a u32. */
+    void Show(const Host::CallContext& context, std::string_view text, char32_t glyph)
+    {
+        (void)context;
+        (void)text;
+        (void)glyph;
+    }
+
+    /** @brief The id after `body`, moving by `motion`: an enum, and a struct of one field, by value. */
+    BodyId Advance(const Host::CallContext& context, BodyId body, Motion motion)
+    {
+        (void)context;
+        return BodyId{body.value + static_cast<std::uint32_t>(motion)};
+    }
+
+    /** @brief How `body` moves: an enum result. */
+    Motion MotionOf(const Host::CallContext& context, BodyId body)
+    {
+        (void)context;
+        return body.value == 0 ? Motion::Still : Motion::Simulated;
+    }
+
+    /** @brief The ticket after `ticket`: a bound type of one member, by value. */
+    Ticket Renew(const Host::CallContext& context, Ticket ticket)
+    {
+        (void)context;
+        return ticket;
     }
 
     /** @brief Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result. */

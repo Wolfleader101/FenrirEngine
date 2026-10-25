@@ -8,13 +8,22 @@ namespace Iris.Bindings;
 /// so the writers only format. Building it checks everything the writers rely on and throws
 /// <see cref="BindingException" /> naming the type and field.
 /// </summary>
+/// <remarks>
+/// A type that one of the bindings in <c>uses</c> mirrors is that binding's: it is named by its C# name there, and gets
+/// no mirror, mapping, registration or test here.
+/// </remarks>
 internal sealed class Binding
 {
     private readonly Dictionary<string, DescribedType> types;
 
-    public Binding(BindingConfig config, IReadOnlyList<DescribedType> described)
+    // Each type a binding in `uses` mirrors, by C++ name, with that binding.
+    private readonly Dictionary<string, Binding> owners = new(StringComparer.Ordinal);
+
+    public Binding(BindingConfig config, IReadOnlyList<DescribedType> described, IReadOnlyList<Binding>? uses = null)
     {
         Config = config;
+        Uses = uses ?? [];
+        CheckUses(described);
         CheckExcluded(described);
         Types = described.Where(type => !config.Exclude.Contains(type.Name)).ToList();
         types = Types.ToDictionary(type => type.Name, StringComparer.Ordinal);
@@ -23,15 +32,60 @@ internal sealed class Binding
 
     public BindingConfig Config { get; }
 
+    /// <summary>The bindings whose mirrors this one names (<c>uses</c>).</summary>
+    public IReadOnlyList<Binding> Uses { get; }
+
     /// <summary>Every described type the binding binds (all but those it excludes), dependencies first.</summary>
     public IReadOnlyList<DescribedType> Types { get; }
 
-    /// <summary>The types that get a C# mirror: every struct, tagged union and enum. Bound types have their own.</summary>
-    public IEnumerable<DescribedType> Mirrored => Types.Where(type => type.Category != Category.BoundType);
+    /// <summary>
+    /// The types that get a C# mirror here: every struct, tagged union and enum that no binding in <c>uses</c> mirrors.
+    /// Bound types have their own.
+    /// </summary>
+    public IEnumerable<DescribedType> Mirrored => Types.Where(type => type.Category != Category.BoundType && !IsUsed(type));
 
-    /// <summary>The types an extension registers, and the defaults test covers: components, events and shared structs.</summary>
-    public IEnumerable<DescribedType> Registered =>
-        Types.Where(type => type.Role is Role.Component or Role.Event or Role.SharedStruct);
+    /// <summary>
+    /// The types the defaults test covers: components, events, resources and shared structs mirrored here, but for an
+    /// <c>internal</c> mirror, which a test's public method cannot return.
+    /// </summary>
+    public IEnumerable<DescribedType> Registered => Types.Where(type => IsRegisteredRole(type) && !IsUsed(type) && !IsInternal(type));
+
+    /// <summary>The types the generated registration lists: those mirrored here with a registered role, but for <c>by-hand</c>.</summary>
+    public IEnumerable<DescribedType> Listed =>
+        Types.Where(type => IsRegisteredRole(type) && !IsUsed(type) && Config.Registration?.ByHand.Contains(type.Name) != true);
+
+    private static bool IsRegisteredRole(DescribedType type) =>
+        type.Role is Role.Component or Role.Event or Role.SharedStruct or Role.SceneResource or Role.AppResource;
+
+    /// <summary>Whether a binding in <c>uses</c> mirrors the type, so this one names it and generates nothing for it.</summary>
+    public bool IsUsed(DescribedType type) => owners.ContainsKey(type.Name);
+
+    /// <summary>
+    /// The C# namespaces of the bindings in <c>uses</c> that mirror any of these types (by C++ name), other than this
+    /// binding's own, in ordinal order: the <c>using</c>s a file naming them needs.
+    /// </summary>
+    public IReadOnlyList<string> UsedNamespaces(IEnumerable<string?> names) =>
+        names.Where(name => name != null && owners.ContainsKey(name))
+             .Select(name => owners[name!].Config.Namespace)
+             .Where(space => space != Config.Namespace)
+             .Distinct()
+             .Order(StringComparer.Ordinal)
+             .ToList();
+
+    /// <summary>The described types a type's fields, tag and kinds name, by C++ name.</summary>
+    public static IEnumerable<string?> Named(DescribedType type) =>
+        type.Fields.SelectMany(field => new[] { field.Kind.Type, field.Kind.ElementType })
+            .Concat(type.Kinds.Select(kind => kind.Kind.Type))
+            .Append(type.Tag?.Kind.Type);
+
+    /// <summary>Whether the type is a scene or app resource.</summary>
+    public static bool IsResource(DescribedType type) => type.Role is Role.SceneResource or Role.AppResource;
+
+    /// <summary>Whether a mirror is <c>internal</c> (<c>[csharp] internal-structs</c>).</summary>
+    public bool IsInternal(DescribedType type) => Config.CSharp.InternalStructs.Contains(type.Name);
+
+    /// <summary>Whether a component or resource is registered, and mirrored, read-only (<c>[registration] read-only</c>).</summary>
+    public bool IsRegisteredReadOnly(DescribedType type) => Config.Registration?.ReadOnly.Contains(type.Name) == true;
 
     /// <summary>The described type of that name, or null.</summary>
     public DescribedType? Find(string name) => types.GetValueOrDefault(name);
@@ -41,9 +95,17 @@ internal sealed class Binding
             ? type
             : throw new BindingException($"{name} is named by a field but described by none of the descriptions");
 
-    /// <summary>The C# name of a type: its configured bound type, a configured name, or its last C++ name segment.</summary>
+    /// <summary>
+    /// The C# name of a type: the name the binding in <c>uses</c> that mirrors it gives it, its configured bound type, a
+    /// configured name, or its last C++ name segment.
+    /// </summary>
     public string CSharpName(DescribedType type)
     {
+        if (owners.TryGetValue(type.Name, out var owner))
+        {
+            return owner.CSharpName(owner.Type(type.Name));
+        }
+
         if (type.Category == Category.BoundType)
         {
             return Config.BoundTypes[type.Name].Type;
@@ -53,7 +115,8 @@ internal sealed class Binding
     }
 
     /// <summary>The name C# knows a mirrored type by, which shared structs are registered under: <c>Namespace.Type</c>.</summary>
-    public string QualifiedName(DescribedType type) => $"{Config.Namespace}.{CSharpName(type)}";
+    public string QualifiedName(DescribedType type) =>
+        owners.TryGetValue(type.Name, out var owner) ? owner.QualifiedName(owner.Type(type.Name)) : $"{Config.Namespace}.{CSharpName(type)}";
 
     /// <summary>
     /// The name a component or event is registered under, which its C# attribute names:
@@ -71,16 +134,21 @@ internal sealed class Binding
 
     /// <summary>A field's or enumerator's C# name: <c>Type::member</c> or <c>member</c> in [names], else PascalCase.</summary>
     public string MemberName(DescribedType owner, string member) =>
-        Config.Names.TryGetValue($"{owner.Name}::{member}", out var qualified) ? qualified
+        owners.TryGetValue(owner.Name, out var binding) ? binding.MemberName(binding.Type(owner.Name), member)
+        : Config.Names.TryGetValue($"{owner.Name}::{member}", out var qualified) ? qualified
         : Config.Names.TryGetValue(member, out var bare) ? bare
         : char.ToUpperInvariant(member[0]) + member[1..];
 
     /// <summary>
     /// Whether a struct's mirror is a <c>readonly struct</c> of <c>readonly</c> fields: an event under
-    /// <c>readonly-events</c>, or a struct <c>readonly-structs</c> names.
+    /// <c>readonly-events</c>, a struct <c>readonly-structs</c> names, or a resource registered read-only. A type a binding
+    /// in <c>uses</c> mirrors is as that binding mirrors it.
     /// </summary>
     public bool IsReadOnly(DescribedType type) =>
-        (type.Role == Role.Event && Config.CSharp.ReadOnlyEvents) || Config.CSharp.ReadOnlyStructs.Contains(type.Name);
+        owners.TryGetValue(type.Name, out var owner)
+            ? owner.IsReadOnly(owner.Type(type.Name))
+            : (type.Role == Role.Event && Config.CSharp.ReadOnlyEvents) || Config.CSharp.ReadOnlyStructs.Contains(type.Name) ||
+              (IsResource(type) && type.Category == Category.Struct && IsRegisteredReadOnly(type));
 
     /// <summary>
     /// Whether a struct's mirror gets field initialisers and an explicit <c>public T() {}</c> to run them: when some
@@ -375,6 +443,50 @@ internal sealed class Binding
         return single ? text + "f" : text.Contains('.') || text.Contains('E') ? text : text + "d";
     }
 
+    // Finds the type each binding in `uses` mirrors among the described ones: one binding's at most, with the layout that
+    // binding describes, never one this binding selects, excludes or binds as a bound type.
+    private void CheckUses(IReadOnlyList<DescribedType> described)
+    {
+        foreach (var used in Uses)
+        {
+            foreach (var mirrored in used.Mirrored)
+            {
+                if (described.FirstOrDefault(type => type.Name == mirrored.Name) is not { } type)
+                {
+                    continue;
+                }
+
+                var where = $"{Config.Path}: {type.Name} is mirrored by the binding it uses, {used.Config.Path}";
+                if (owners.TryGetValue(type.Name, out var other))
+                {
+                    throw new BindingException($"{where}, and by {other.Config.Path}: use the type from one of them");
+                }
+
+                if (Config.Exclude.Contains(type.Name) || Config.BoundTypes.ContainsKey(type.Name))
+                {
+                    throw new BindingException(
+                        $"{where}, but {(Config.Exclude.Contains(type.Name) ? "exclude" : "[bound-types]")} names it too: " +
+                        "a used type is that binding's, so name it in neither");
+                }
+
+                if (type.Role is not (Role.Nested or Role.None))
+                {
+                    throw new BindingException(
+                        $"{where}, but {Path.GetFileName(type.Source)} selects it as its own: select it in one package");
+                }
+
+                if (type.Category != mirrored.Category || type.Size != mirrored.Size || type.Alignment != mirrored.Alignment)
+                {
+                    throw new BindingException(
+                        $"{where}, which describes it with another layout ({Path.GetFileName(mirrored.Source)}): " +
+                        "regenerate both descriptions");
+                }
+
+                owners.Add(type.Name, used);
+            }
+        }
+    }
+
     // Every excluded type is described, and no type the binding keeps holds one.
     private void CheckExcluded(IReadOnlyList<DescribedType> described)
     {
@@ -467,16 +579,111 @@ internal sealed class Binding
 
         foreach (var name in Config.Registration?.ReadOnly ?? new HashSet<string>())
         {
-            if (!types.TryGetValue(name, out var component) || component.Role != Role.Component)
+            if (!types.TryGetValue(name, out var registered) || !(registered.Role == Role.Component || IsResource(registered)))
             {
                 throw new BindingException(
-                    $"{Config.Path}: [registration] read-only names {name}, which is not a described component");
+                    $"{Config.Path}: [registration] read-only names {name}, which is not a described component or resource");
+            }
+        }
+
+        foreach (var name in Config.Registration?.ByHand ?? new HashSet<string>())
+        {
+            if (!types.TryGetValue(name, out var registered) || !IsRegisteredRole(registered) || IsUsed(registered))
+            {
+                throw new BindingException(
+                    $"{Config.Path}: [registration] by-hand names {name}, which is not a described component, event, " +
+                    "resource or shared struct this binding mirrors");
+            }
+        }
+
+        CheckResources();
+        CheckInternal();
+        foreach (var (name, bound) in Config.BoundTypes.Where(entry => entry.Value.Wrapper != null))
+        {
+            if (bound.Wrapper is "bool" || !IsScalar(bound.Wrapper!))
+            {
+                throw new BindingException(
+                    $"{Config.Path}: [bound-types] {name}'s wrapper is '{bound.Wrapper}', which is not a number kind");
             }
         }
 
         foreach (var type in Mirrored)
         {
             CheckType(type);
+        }
+    }
+
+    private static bool IsScalar(string kind)
+    {
+        try
+        {
+            _ = CSharpScalar(kind);
+            return true;
+        }
+        catch (BindingException)
+        {
+            return false;
+        }
+    }
+
+    // A resource mirrored here needs the SDK's resource names, and with a registration its factory.
+    private void CheckResources()
+    {
+        foreach (var type in Mirrored.Where(IsResource))
+        {
+            var readOnly = IsRegisteredReadOnly(type);
+            var scope = type.Role == Role.SceneResource ? "scene" : "app";
+            var interfaceKey = readOnly ? "read-only-resource-interface" : "resource-interface";
+            var missing = Config.CSharp.ResourceAttribute == null ? "resource-attribute"
+                          : (readOnly ? Config.CSharp.ReadOnlyResourceInterface : Config.CSharp.ResourceInterface) == null ? interfaceKey
+                          : null;
+            if (missing != null)
+            {
+                throw new BindingException($"{Config.Path}: {type.Name} is a{(readOnly ? " read-only" : "")} {scope} " +
+                                           $"resource, but [csharp] has no {missing}");
+            }
+
+            if (Config.Registration is { } registration && !registration.ByHand.Contains(type.Name) &&
+                ResourceFactory(registration, type) == null)
+            {
+                throw new BindingException(
+                    $"{Config.Path}: {type.Name} is a{(readOnly ? " read-only" : "")} {scope} resource, but [registration] " +
+                    $"has no make-{(readOnly ? "read-only-" : "")}{scope}-resource");
+            }
+        }
+    }
+
+    /// <summary>The factory a resource is registered by, or null when the configuration names none.</summary>
+    public string? ResourceFactory(RegistrationConfig registration, DescribedType type) =>
+        (type.Role == Role.SceneResource, IsRegisteredReadOnly(type)) switch
+        {
+            (true, false) => registration.MakeSceneResource,
+            (true, true) => registration.MakeReadOnlySceneResource,
+            (false, false) => registration.MakeAppResource,
+            (false, true) => registration.MakeReadOnlyAppResource,
+        };
+
+    // Each internal mirror is a struct mirrored here, and no public mirror holds one (C# refuses a public field of an
+    // internal type).
+    private void CheckInternal()
+    {
+        foreach (var name in Config.CSharp.InternalStructs)
+        {
+            if (!types.TryGetValue(name, out var type) || type.Category is not (Category.Struct or Category.TaggedUnion) ||
+                IsUsed(type))
+            {
+                throw new BindingException(
+                    $"{Config.Path}: internal-structs names {name}, which is not a described struct this binding mirrors");
+            }
+        }
+
+        foreach (var type in Mirrored.Where(type => !IsInternal(type)))
+        {
+            foreach (var held in Named(type).Where(held => held != null && Config.CSharp.InternalStructs.Contains(held)).Distinct())
+            {
+                throw new BindingException(
+                    $"{Config.Path}: internal-structs names {held}, but the public {type.Name} holds one: list it too");
+            }
         }
     }
 

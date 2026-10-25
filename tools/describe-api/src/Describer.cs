@@ -550,6 +550,9 @@ internal sealed class Describer
                 return new FieldType("bool");
             case CXTypeKind.CXType_Char16:
                 return new FieldType("char16");
+            case CXTypeKind.CXType_Char32:
+                // A UTF-32 code point: C# has no 32-bit char, and its bytes are an unsigned integer's.
+                return new FieldType("u32");
             case CXTypeKind.CXType_Float:
                 return new FieldType("f32");
             case CXTypeKind.CXType_Double:

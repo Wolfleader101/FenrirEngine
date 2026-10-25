@@ -10,7 +10,7 @@ namespace Fixture.Bindings;
 /// <summary>
 /// A shared struct whose members are private: described all the same, since the selection's private-members names it.
 /// </summary>
-public unsafe partial struct Tag
+internal unsafe partial struct Tag
 {
     /// <summary>An Id: its default is the constant its initialiser converts to.</summary>
     private uint id = 4294967295;

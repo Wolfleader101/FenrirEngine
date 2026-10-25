@@ -157,6 +157,84 @@
       ]
     },
     {
+      "name": "Show",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "Shows `text` in place of `glyph`: text as a std::string_view, and a char32_t, which is a u32.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "text",
+          "type": "std::string_view",
+          "kind": "string"
+        },
+        {
+          "name": "glyph",
+          "type": "char32_t",
+          "kind": "u32"
+        }
+      ]
+    },
+    {
+      "name": "Advance",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "The id after `body`, moving by `motion`: an enum, and a struct of one field, by value.",
+      "returns": {
+        "type": "Fixture::BodyId",
+        "kind": "struct"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fixture::BodyId",
+          "kind": "struct"
+        },
+        {
+          "name": "motion",
+          "type": "Fixture::Motion",
+          "kind": "enum"
+        }
+      ]
+    },
+    {
+      "name": "MotionOf",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "How `body` moves: an enum result.",
+      "returns": {
+        "type": "Fixture::Motion",
+        "kind": "enum"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fixture::BodyId",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
+      "name": "Renew",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "The ticket after `ticket`: a bound type of one member, by value.",
+      "returns": {
+        "type": "Fixture::Ticket",
+        "kind": "struct"
+      },
+      "parameters": [
+        {
+          "name": "ticket",
+          "type": "Fixture::Ticket",
+          "kind": "struct"
+        }
+      ]
+    },
+    {
       "name": "Sum",
       "namespace": "Fixture",
       "source": "Natives.cpp",

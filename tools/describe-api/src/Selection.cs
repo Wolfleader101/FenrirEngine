@@ -75,7 +75,7 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
             if (roleValue is not string spelling || Roles.Parse(spelling) is not { } role)
             {
                 throw new DescribeException(
-                    $"{path}: type '{name}' has role '{roleValue}'; a role is component, event, shared-struct or bound-type");
+                    $"{path}: type '{name}' has role '{roleValue}'; a role is component, event, scene-resource, app-resource, shared-struct or bound-type");
             }
 
             types.Add(new(name, role));
@@ -94,7 +94,7 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
                 if (types.All(type => type.Key != name) || types.First(type => type.Key == name).Value == Role.BoundType)
                 {
                     throw new DescribeException(
-                        $"{path}: 'private-members' names {name}, which [types] does not select as a component, event or shared struct");
+                        $"{path}: 'private-members' names {name}, which [types] does not select as a component, event, resource or shared struct");
                 }
 
                 privateMembers.Add(name);

@@ -1,0 +1,19 @@
+# A binding the fixture's uses: Common.api.json, Fixture::Spring alone as the package that owns it would describe it, bound
+# to Fixture.Common. Fixture.binding.toml names its Spring rather than mirroring it again. A binding another uses names
+# the descriptions it binds, so that one can read them.
+namespace = "Fixture.Common"
+descriptions = ["Common.api.json"]
+
+[csharp]
+contract = "Contract"
+generated = "Contract/Generated"
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+
+[cpp]
+mappings = "Native/Generated/CommonMappings.hpp"
+includes = ["Fixture.hpp"]

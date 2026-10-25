@@ -4,14 +4,16 @@ using Tomlyn.Model;
 namespace Iris.Bindings;
 
 /// <summary>
-/// The C# type that stands for a bound type, the components its constructor takes, in order, and the C# expression of
-/// its own default (C++'s <c>T{}</c>) when that is not all zero bytes.
+/// The C# type that stands for a bound type, the components its constructor takes, in order, the C# expression of its
+/// own default (C++'s <c>T{}</c>) when that is not all zero bytes, and, for a bound type of one member that a native takes
+/// or returns by value, that member's kind (<c>wrapper</c>), which the description does not record.
 /// </summary>
-internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default);
+internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default, string? Wrapper);
 
 /// <summary>
-/// Where the C# mirrors go, the names of the SDK types they use, and the fields (<c>Type::member</c>) mirrored as private,
-/// or as fixed buffers rather than <c>[InlineArray]</c> structs.
+/// Where the C# mirrors go, the names of the SDK types they use (a resource's only when the binding has one), the
+/// fields (<c>Type::member</c>) mirrored as private, or as fixed buffers rather than <c>[InlineArray]</c> structs, and the
+/// structs mirrored <c>internal</c>.
 /// </summary>
 internal sealed record CSharpConfig(
     string Contract,
@@ -23,16 +25,23 @@ internal sealed record CSharpConfig(
     string EventAttribute,
     string EventInterface,
     string TaggedUnionAttribute,
+    string? ResourceAttribute,
+    string? ResourceInterface,
+    string? ReadOnlyResourceInterface,
     string PointerType,
     bool ReadOnlyEvents,
     IReadOnlySet<string> ReadOnlyStructs,
     IReadOnlySet<string> PrivateFields,
-    IReadOnlySet<string> FixedBuffers);
+    IReadOnlySet<string> FixedBuffers,
+    IReadOnlySet<string> InternalStructs);
 
 /// <summary>Where the Iris mappings go, and the headers they include.</summary>
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
 
-/// <summary>The registration lists: the source, its function, and the factory each kind of registration is made by.</summary>
+/// <summary>
+/// The registration lists: the source, its function, and the factory each kind of registration is made by (a resource's
+/// only when the binding has one), the types registered read-only, and those the extension registers by hand.
+/// </summary>
 internal sealed record RegistrationConfig(
     string Source,
     IReadOnlyList<string> Includes,
@@ -42,7 +51,17 @@ internal sealed record RegistrationConfig(
     string MakeReadOnlyComponent,
     string MakeEvent,
     string MakeSharedStruct,
-    IReadOnlySet<string> ReadOnly);
+    string? MakeSceneResource,
+    string? MakeReadOnlySceneResource,
+    string? MakeAppResource,
+    string? MakeReadOnlyAppResource,
+    IReadOnlySet<string> ReadOnly,
+    IReadOnlySet<string> ByHand)
+{
+    /// <summary>Whether it names a resource factory, so the generated function sets the extension's resources.</summary>
+    public bool HasResources => MakeSceneResource != null || MakeReadOnlySceneResource != null || MakeAppResource != null ||
+                                MakeReadOnlyAppResource != null;
+}
 
 /// <summary>
 /// The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly; and with
@@ -75,13 +94,16 @@ internal sealed record NativesConfig(
 /// <summary>
 /// A binding's configuration (<c>&lt;Name&gt;.binding.toml</c>, the tool's README): everything about the C# side and
 /// the extension that the language-neutral description leaves out. Paths are relative to the file and made absolute
-/// here.
+/// here. <c>Descriptions</c> are the descriptions it binds, when it names them; <c>Uses</c> the configurations of the
+/// bindings whose mirrors it names rather than generating its own.
 /// </summary>
 internal sealed record BindingConfig(
     string Path,
     string Name,
     string Namespace,
     string RegisteredNamespace,
+    IReadOnlyList<string> Descriptions,
+    IReadOnlyList<string> Uses,
     CSharpConfig CSharp,
     CppConfig Cpp,
     RegistrationConfig? Registration,
@@ -115,12 +137,13 @@ internal sealed record BindingConfig(
         }
 
         var reader = new Reader(path);
-        reader.Keys(table, "", "namespace", "registered-namespace", "exclude", "csharp", "cpp", "registration", "tests", "natives", "bound-types", "names",
-                    "nouns");
+        reader.Keys(table, "", "namespace", "registered-namespace", "descriptions", "uses", "exclude", "csharp", "cpp",
+                    "registration", "tests", "natives", "bound-types", "names", "nouns");
         var csharp = reader.Table(table, "csharp");
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
-                    "pointer-type", "readonly-events", "readonly-structs", "private-fields", "fixed-buffers");
+                    "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
+                    "readonly-events", "readonly-structs", "private-fields", "fixed-buffers", "internal-structs");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes");
 
@@ -129,13 +152,19 @@ internal sealed record BindingConfig(
         {
             var section = reader.Table(table, "registration");
             reader.Keys(section, "registration", "source", "includes", "function", "extension", "make-component",
-                        "make-read-only-component", "make-event", "make-shared-struct", "read-only");
+                        "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
+                        "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "read-only",
+                        "by-hand");
             registration = new RegistrationConfig(
                 reader.PathOf(section, "source"), reader.Strings(section, "includes"), reader.String(section, "function"),
                 reader.String(section, "extension"), reader.String(section, "make-component"),
                 reader.String(section, "make-read-only-component"), reader.String(section, "make-event"),
-                reader.String(section, "make-shared-struct"),
-                reader.Strings(section, "read-only").ToHashSet(StringComparer.Ordinal));
+                reader.String(section, "make-shared-struct"), reader.OptionalString(section, "make-scene-resource"),
+                reader.OptionalString(section, "make-read-only-scene-resource"),
+                reader.OptionalString(section, "make-app-resource"),
+                reader.OptionalString(section, "make-read-only-app-resource"),
+                reader.Strings(section, "read-only").ToHashSet(StringComparer.Ordinal),
+                reader.Strings(section, "by-hand").ToHashSet(StringComparer.Ordinal));
         }
 
         TestsConfig? tests = null;
@@ -186,10 +215,11 @@ internal sealed record BindingConfig(
                         $"{path}: bound type '{name}' is a table: {{ type = \"<C# type>\", constructor = [...] }}");
                 }
 
-                reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor", "default");
+                reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor", "default", "wrapper");
                 boundTypes.Add(name, new BoundType(reader.String(bound, "type"),
                                                    bound.ContainsKey("constructor") ? reader.Strings(bound, "constructor") : null,
-                                                   bound.ContainsKey("default") ? reader.String(bound, "default") : null));
+                                                   reader.OptionalString(bound, "default"),
+                                                   reader.OptionalString(bound, "wrapper")));
             }
         }
 
@@ -197,17 +227,22 @@ internal sealed record BindingConfig(
         return new BindingConfig(
             path, fileName[..^Extension.Length], space,
             table.ContainsKey("registered-namespace") ? reader.String(table, "registered-namespace") : space,
+            reader.Paths(table, "descriptions"), reader.Paths(table, "uses"),
             new CSharpConfig(reader.PathOf(csharp, "contract"), reader.PathOf(csharp, "generated"),
                              reader.Strings(csharp, "usings"), reader.String(csharp, "component-attribute"),
                              reader.String(csharp, "component-interface"),
                              reader.String(csharp, "read-only-component-interface"),
                              reader.String(csharp, "event-attribute"), reader.String(csharp, "event-interface"),
                              reader.String(csharp, "tagged-union-attribute"),
+                             reader.OptionalString(csharp, "resource-attribute"),
+                             reader.OptionalString(csharp, "resource-interface"),
+                             reader.OptionalString(csharp, "read-only-resource-interface"),
                              csharp.ContainsKey("pointer-type") ? reader.String(csharp, "pointer-type") : "ulong",
                              csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events"),
                              reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
-                             reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal)),
+                             reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
+                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
             nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
@@ -235,6 +270,11 @@ internal sealed record BindingConfig(
             table.TryGetValue(key, out var value) && value is string text && text.Length > 0
                 ? text
                 : throw new BindingException($"{path}: '{key}' is missing or is not a string");
+
+        public string? OptionalString(TomlTable table, string key) => table.ContainsKey(key) ? String(table, key) : null;
+
+        public IReadOnlyList<string> Paths(TomlTable table, string key) =>
+            Strings(table, key).Select(item => System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, item))).ToList();
 
         public bool Boolean(TomlTable table, string key) =>
             table[key] is bool value ? value : throw new BindingException($"{path}: '{key}' is not true or false");

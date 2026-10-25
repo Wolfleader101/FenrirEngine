@@ -80,6 +80,23 @@ public sealed class DescribeTests
     }
 
     [Theory]
+    [InlineData("scene-resource")]
+    [InlineData("app-resource")]
+    public void AResourceRoleOnAnEnumFails(string role)
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "EnumRole.api.toml");
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n[types]\n\"Failing::Mode\" = \"{role}\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
+
+        Assert.True(exception.Message.Contains("error: Failing::Mode: an enum takes no role; it is described when a field uses it",
+                                               StringComparison.Ordinal),
+                    $"An enum selected as a {role} should fail naming it, but failed with\n  {exception.Message}");
+    }
+
+    [Theory]
     [InlineData("\"Failing::NoInitialiser\" = \"component\"")]
     [InlineData("\"Failing::PrivateMember\" = \"bound-type\"")]
     public void PrivateMembersNamingATypeTheSelectionDoesNotShareFails(string types)
@@ -93,7 +110,7 @@ public sealed class DescribeTests
         var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
 
         Assert.True(exception.Message.Contains("'private-members' names Failing::PrivateMember, which [types] does not " +
-                                               "select as a component, event or shared struct", StringComparison.Ordinal),
+                                               "select as a component, event, resource or shared struct", StringComparison.Ordinal),
                     "A private-members entry that is not a selected plain-data type should fail naming it, but failed " +
                     $"with\n  {exception.Message}");
     }
@@ -123,6 +140,7 @@ public sealed class DescribeTests
     [InlineData("DocumentsMissing: documents a parameter 'missing' it does not have")]
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
     [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]
+    [InlineData("TextByPointer::text: is a pointer to a std::string_view: a native takes text as a std::string_view by value")]
     public void EachUndescribableNativeFailsNamingTheFunctionAndParameter(string diagnostic)
     {
         using var directory = new TemporaryDirectory();

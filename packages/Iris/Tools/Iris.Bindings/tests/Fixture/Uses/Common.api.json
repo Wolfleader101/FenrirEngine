@@ -1,0 +1,29 @@
+{
+  "package": "Common",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fixture::Spring",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A nested struct with defaults of its own.",
+      "fields": [
+        {
+          "name": "stiffness",
+          "offset": 0,
+          "kind": "f32",
+          "default": 2
+        },
+        {
+          "name": "damping",
+          "offset": 4,
+          "kind": "f32",
+          "default": 0.5
+        }
+      ]
+    }
+  ]
+}

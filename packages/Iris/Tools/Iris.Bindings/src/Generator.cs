@@ -6,13 +6,14 @@ namespace Iris.Bindings;
 internal static class Generator
 {
     /// <summary>
-    /// Reads the configuration and descriptions and returns every generated file by absolute path. Throws
-    /// <see cref="BindingException" /> for anything it cannot bind, a hand-written field among it.
+    /// Reads the configuration and descriptions (those given, else those the configuration names) and returns every
+    /// generated file by absolute path. Throws <see cref="BindingException" /> for anything it cannot bind, a hand-written
+    /// field among it.
     /// </summary>
     public static IReadOnlyDictionary<string, string> Generate(string configPath, IEnumerable<string> descriptionPaths)
     {
         var config = BindingConfig.Read(configPath);
-        var binding = new Binding(config, Description.Read(descriptionPaths));
+        var binding = Load(config, descriptionPaths.Select(Path.GetFullPath).ToList(), []);
         var handWritten = HandWritten.Fields(binding);
         if (handWritten.Count > 0)
         {
@@ -59,6 +60,58 @@ internal static class Generator
         }
 
         return files;
+    }
+
+    // A configuration's binding over its descriptions, with the bindings it uses, each read over the descriptions its own
+    // configuration names. `chain` is the configurations whose uses led here.
+    private static Binding Load(BindingConfig config, IReadOnlyList<string> given, IReadOnlyList<string> chain)
+    {
+        if (chain.Contains(config.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            throw new BindingException($"{config.Path}: uses itself, through {string.Join(" and ", chain)}");
+        }
+
+        var uses = new List<Binding>();
+        foreach (var path in config.Uses)
+        {
+            if (!File.Exists(path))
+            {
+                throw new BindingException($"{config.Path}: uses {path}, which does not exist");
+            }
+
+            var used = BindingConfig.Read(path);
+            if (used.Descriptions.Count == 0)
+            {
+                throw new BindingException(
+                    $"{config.Path}: uses {path}, which names no descriptions: list the descriptions it binds in its 'descriptions'");
+            }
+
+            uses.Add(Load(used, [], [.. chain, config.Path]));
+        }
+
+        return new Binding(config, Description.Read(Descriptions(config, given)), uses);
+    }
+
+    // The descriptions a binding binds: those given, which must be those its configuration names when it names any.
+    private static IReadOnlyList<string> Descriptions(BindingConfig config, IReadOnlyList<string> given)
+    {
+        if (given.Count == 0)
+        {
+            return config.Descriptions.Count > 0
+                       ? config.Descriptions
+                       : throw new BindingException(
+                             $"{config.Path}: name at least one <Package>.api.json, on the command line or in 'descriptions'");
+        }
+
+        if (config.Descriptions.Count > 0 &&
+            !config.Descriptions.Order(StringComparer.OrdinalIgnoreCase).SequenceEqual(given.Order(StringComparer.OrdinalIgnoreCase),
+                                                                                       StringComparer.OrdinalIgnoreCase))
+        {
+            throw new BindingException($"{config.Path}: 'descriptions' names {string.Join(", ", config.Descriptions)}, but " +
+                                       $"the command line {string.Join(", ", given)}: name the same descriptions");
+        }
+
+        return given;
     }
 
     /// <summary>

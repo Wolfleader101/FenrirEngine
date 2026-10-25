@@ -8,6 +8,7 @@
 #include "Iris/Iris.hpp"
 #include "Fixture.hpp"
 #include "BoundMappings.hpp"
+#include "../../Uses/Native/Generated/CommonMappings.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -91,18 +92,6 @@ static_assert(sizeof(Fixture::Quat) == 16 && alignof(Fixture::Quat) == 4,
               "Fixture::Quat is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
-template <>
-struct Iris::StructMapping<Fixture::Spring>
-{
-    static constexpr std::string_view typeName = "Fixture.Bindings.Spring";
-    static constexpr auto fields = Iris::StructFields(
-        Iris::Field<float>("Stiffness", 0),
-        Iris::Field<float>("Damping", 4));
-};
-static_assert(sizeof(Fixture::Spring) == 8 && alignof(Fixture::Spring) == 4,
-              "Fixture::Spring is not the layout Fixture.api.json describes: "
-              "regenerate the description, then this binding");
-
 static_assert(sizeof(Fixture::Vec3) == 12 && alignof(Fixture::Vec3) == 4,
               "Fixture::Vec3 is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
@@ -137,6 +126,17 @@ static_assert(sizeof(Fixture::Body) == 280 && alignof(Fixture::Body) == 8,
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fixture::BodyId>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.BodyId";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("Value", 0));
+};
+static_assert(sizeof(Fixture::BodyId) == 4 && alignof(Fixture::BodyId) == 4,
+              "Fixture::BodyId is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fixture::BoxShape>
 {
     static constexpr std::string_view typeName = "Fixture.Bindings.BoxShape";
@@ -145,6 +145,17 @@ struct Iris::StructMapping<Fixture::BoxShape>
 };
 static_assert(sizeof(Fixture::BoxShape) == 12 && alignof(Fixture::BoxShape) == 4,
               "Fixture::BoxShape is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fixture::Clock>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Clock";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<double>("Seconds", 0));
+};
+static_assert(sizeof(Fixture::Clock) == 8 && alignof(Fixture::Clock) == 8,
+              "Fixture::Clock is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>
@@ -210,6 +221,19 @@ static_assert(sizeof(Fixture::Size) == 8 && alignof(Fixture::Size) == 4,
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fixture::Sky>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Sky";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<Fixture::ShapeType>("_type", 0),
+        Iris::Field<Fixture::BoxShape>("_box", 4),
+        Iris::Field<Fixture::SphereShape>("_sphere", 4));
+};
+static_assert(sizeof(Fixture::Sky) == 16 && alignof(Fixture::Sky) == 4,
+              "Fixture::Sky is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fixture::Tag>
 {
     static constexpr std::string_view typeName = "Fixture.Bindings.Tag";
@@ -222,6 +246,10 @@ static_assert(sizeof(Fixture::Tag) == 24 && alignof(Fixture::Tag) == 8,
               "Fixture::Tag is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fixture::Ticket) == 4 && alignof(Fixture::Ticket) == 4,
+              "Fixture::Ticket is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
 template <>
 struct Iris::StructMapping<Fixture::Touched>
 {
@@ -232,6 +260,18 @@ struct Iris::StructMapping<Fixture::Touched>
 };
 static_assert(sizeof(Fixture::Touched) == 32 && alignof(Fixture::Touched) == 8,
               "Fixture::Touched is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fixture::Weather>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Weather";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Wind", 0),
+        Iris::Field<std::uint32_t>("Glyph", 4));
+};
+static_assert(sizeof(Fixture::Weather) == 8 && alignof(Fixture::Weather) == 4,
+              "Fixture::Weather is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
 // clang-format on

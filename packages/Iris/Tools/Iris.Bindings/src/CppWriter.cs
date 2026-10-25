@@ -9,7 +9,7 @@ internal static class CppWriter
     /// <summary>
     /// One <c>Iris::StructMapping</c> per struct and tagged union and one <c>Iris::EnumMapping</c> per enum, each beside a
     /// <c>static_assert</c> of the layout it was described with; a bound type gets only the assert, since the binding maps
-    /// it by hand.
+    /// it by hand. A type a binding in <c>uses</c> mirrors gets nothing: that binding's mappings, included here, map it.
     /// </summary>
     public static string Mappings(Binding binding)
     {
@@ -22,10 +22,15 @@ internal static class CppWriter
             text.Line($"#include \"{include}\"");
         }
 
+        foreach (var used in binding.Uses)
+        {
+            text.Line($"#include \"{Relative(binding.Config.Cpp.Mappings, used.Config.Cpp.Mappings)}\"");
+        }
+
         text.Line();
         text.Line("#include <cstdint>");
         text.Line("#include <string_view>");
-        foreach (var type in binding.Types)
+        foreach (var type in binding.Types.Where(type => !binding.IsUsed(type)))
         {
             text.Line();
             if (type.Category != Category.BoundType)
@@ -97,10 +102,11 @@ internal static class CppWriter
     /// </summary>
     public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives)
     {
+        var registered = registration.HasResources ? "component, event, resource and shared struct" : "component, event and shared struct";
         var text = Header(binding,
                           natives == null
-                              ? "The extension's registration lists: every described component, event and shared struct."
-                              : "The extension's registration lists: every described component, event, shared struct and native function.",
+                              ? $"The extension's registration lists: every described {registered}."
+                              : $"The extension's registration lists: every described {registered.Replace(" and ", ", ")} and native function.",
                           natives);
         text.Line($"#include \"{Relative(registration.Source, binding.Config.Cpp.Mappings)}\"");
         foreach (var include in registration.Includes)
@@ -129,13 +135,18 @@ internal static class CppWriter
         text.Line(signature);
         text.Line("{");
         text.Indent();
-        List(text, "components", binding.Types.Where(type => type.Role == Role.Component),
+        List(text, "components", binding.Listed.Where(type => type.Role == Role.Component),
              type => registration.ReadOnly.Contains(type.Name) ? registration.MakeReadOnlyComponent : registration.MakeComponent,
              binding.RegisteredName);
-        List(text, "events", binding.Types.Where(type => type.Role == Role.Event), _ => registration.MakeEvent,
+        List(text, "events", binding.Listed.Where(type => type.Role == Role.Event), _ => registration.MakeEvent,
              binding.RegisteredName);
-        List(text, "sharedStructs", binding.Types.Where(type => type.Role == Role.SharedStruct),
+        List(text, "sharedStructs", binding.Listed.Where(type => type.Role == Role.SharedStruct),
              _ => registration.MakeSharedStruct, binding.QualifiedName);
+        if (registration.HasResources)
+        {
+            List(text, "resources", binding.Listed.Where(Binding.IsResource), type => binding.ResourceFactory(registration, type)!,
+                 binding.RegisteredName);
+        }
         if (natives != null)
         {
             var config = binding.Config.Natives!;

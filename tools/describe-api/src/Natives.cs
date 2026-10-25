@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using ClangSharp;
 using ClangSharp.Interop;
 using Tomlyn;
@@ -321,6 +322,12 @@ internal sealed class NativesDescriber
                 return null;
             }
 
+            if (target.Kind == "string")
+            {
+                Error(at, subject, "is a pointer to a std::string_view: a native takes text as a std::string_view by value");
+                return null;
+            }
+
             var isConst = pointee.IsLocalConstQualified;
             return new NativeType($"{(isConst ? "const " : "")}{target.Spelling}*", "pointer", target.Spelling,
                                   target.Kind, isConst);
@@ -363,6 +370,8 @@ internal sealed class NativesDescriber
                 return new NativeType(alias ?? "bool", "bool");
             case CXTypeKind.CXType_Char16:
                 return new NativeType(alias ?? "char16_t", "char16");
+            case CXTypeKind.CXType_Char32:
+                return new NativeType(alias ?? "char32_t", "u32");
             case CXTypeKind.CXType_Float:
                 return new NativeType(alias ?? "float", "f32");
             case CXTypeKind.CXType_Double:
@@ -370,6 +379,8 @@ internal sealed class NativesDescriber
             case CXTypeKind.CXType_Char_S:
             case CXTypeKind.CXType_Char_U:
                 return new NativeType(alias ?? "char", Describer.IntegerKind(canonical)!);
+            case CXTypeKind.CXType_Record when IsStringView(canonical):
+                return new NativeType("std::string_view", "string");
             case CXTypeKind.CXType_Record:
                 return new NativeType(alias ?? Unqualified(canonical.AsString), "struct");
             case CXTypeKind.CXType_Enum:
@@ -418,6 +429,10 @@ internal sealed class NativesDescriber
             }
         }
     }
+
+    // std::string_view, std::basic_string_view<char>, as clang spells it under any standard library's inline namespace.
+    private static bool IsStringView(Type canonical) =>
+        Regex.IsMatch(Unqualified(canonical.AsString), @"^std::(\w+::)*basic_string_view<char(,|>)");
 
     private static string FixedWidth(string kind) => kind[0] == 'i' ? $"std::int{kind[1..]}_t" : $"std::uint{kind[1..]}_t";
 

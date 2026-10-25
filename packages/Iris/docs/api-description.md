@@ -26,7 +26,7 @@ Every type has:
 | --- | --- |
 | `name` | The C++ qualified name: as the selection spells it for a selected type (an alias such as `Math::Vec3` included), else clang's canonical spelling (`Ns::Type`). |
 | `category` | `struct`, `tagged-union`, `bound-type` or `enum`. |
-| `role` | Not on enums. `component`, `event`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
+| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
 | `size`, `alignment` | In bytes. An empty struct is 1 byte. |
 | `doc` | The doc comment, when there is one (see "Doc comments"). |
 
@@ -68,7 +68,7 @@ Described when a field uses it; an enum is never selected. It records `underlyin
 | Kind | Bytes |
 | --- | --- |
 | `i8`, `i16`, `i32`, `i64` | Signed integers. |
-| `u8`, `u16`, `u32`, `u64` | Unsigned integers. A C++ `char` is a `u8` (a byte of text) on every target. |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers. A C++ `char` is a `u8` (a byte of text) on every target, and a `char32_t` (a UTF-32 code point) a `u32`. |
 | `f32`, `f64` | IEEE floats. |
 | `bool` | One byte, 0 or 1. |
 | `char16` | A UTF-16 code unit (`char16_t`). |

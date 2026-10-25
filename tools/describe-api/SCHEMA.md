@@ -23,7 +23,7 @@ Every type has:
 | --- | --- |
 | `name` | The C++ qualified name: as the selection spells it for a selected type (an alias such as `Math::Vec3` included), else clang's canonical spelling (`Ns::Type`). |
 | `category` | `struct`, `tagged-union`, `bound-type` or `enum`. |
-| `role` | Not on enums. `component`, `event`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
+| `role` | Not on enums. `component`, `event`, `scene-resource`, `app-resource`, `shared-struct` or `bound-type` for a selected type; `nested` for a type described only because a field uses it. |
 | `size`, `alignment` | In bytes. An empty struct is 1 byte. |
 | `doc` | The doc comment, when there is one (see "Doc comments"). |
 
@@ -65,7 +65,7 @@ Described when a field uses it; an enum is never selected. It records `underlyin
 | Kind | Bytes |
 | --- | --- |
 | `i8`, `i16`, `i32`, `i64` | Signed integers. |
-| `u8`, `u16`, `u32`, `u64` | Unsigned integers. A `char` is a `u8` (a byte of text) on every target. |
+| `u8`, `u16`, `u32`, `u64` | Unsigned integers. A `char` is a `u8` (a byte of text) on every target, and a `char32_t` (a UTF-32 code point) a `u32`. |
 | `f32`, `f64` | IEEE floats. |
 | `bool` | One byte, 0 or 1. |
 | `char16` | A UTF-16 code unit (`char16_t`). |
@@ -136,11 +136,11 @@ A parameter or result is a value or one pointer to a value:
 | Key | Value |
 | --- | --- |
 | `type` | The C++ spelling, usable in a declaration: `float`, `std::uint32_t`, `const Ns::Vec3*`, `Ns::Hit*`. A number is spelled by its kind (`std::int32_t`, never `int` or `long`), unless it is written as an alias outside `std` and the global namespace (`Ns::EntityId`), which is kept so a binding can map it. A struct or enum is its qualified name, or the alias it is written as. |
-| `kind` | `void`, a number kind (`i8` ... `u64`, `f32`, `f64`), `bool`, `char16`, `struct`, `enum`, or `pointer`. `char` is `i8` or `u8` by the target's signedness. |
+| `kind` | `void`, a number kind (`i8` ... `u64`, `f32`, `f64`), `bool`, `char16`, `string`, `struct`, `enum`, or `pointer`. `char` is `i8` or `u8` by the target's signedness, and `char32_t` is `u32`. `string` is a `std::string_view` by value, spelled `std::string_view`: UTF-8 text, which a binding passes as a pointer and a length. |
 | `pointee`, `pointeeKind` | For a pointer: what it points at, spelled and classified as above. |
 | `const` | `true` for a pointer to const (absent otherwise). |
 
-A reference (after the context and state), a pointer to a pointer, and a type of no kind (`long double`, `wchar_t`) fail the tool.
+A reference (after the context and state), a pointer to a pointer, a pointer to a `std::string_view`, and a type of no kind (`long double`, `wchar_t`) fail the tool.
 
 ## Doc commands
 

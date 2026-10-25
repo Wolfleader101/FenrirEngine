@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using Fenrir.Scripting;
+using Fixture.Common;
 
 namespace Fixture.Bindings;
 
