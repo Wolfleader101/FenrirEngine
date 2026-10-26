@@ -47,9 +47,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 24,
-                    $"The fixture should give 19 mirrors, the natives' class, the mappings, the registration and the " +
-                    $"defaults test's two files, but gave {generated.Count} files.");
+        Assert.True(generated.Count == 26,
+                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the mappings, the " +
+                    $"registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -345,7 +345,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 24, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 26, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -457,6 +457,8 @@ public sealed class BindingTests
         {
             var added = Native(root, "Find").DeepClone();
             added["name"] = "Nearest";
+            // Without Find's mark: a second Hits.Find of the same parameters is refused.
+            added.AsObject().Remove("facade");
             root["functions"]!.AsArray().Add(added);
         });
 
@@ -540,11 +542,117 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AFacadeMarkGeneratesAPublicPassThroughThatTakesByValueWhatTheDeclarationTakesIn()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var bodies = Output(generated, "Bodies.cs");
+        var hits = Output(generated, "Hits.cs");
+        foreach (var (part, line) in new[]
+                 {
+                     (bodies, "public static partial class Bodies"),
+                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(body, in force);"),
+                     (hits, "public static bool Find(Vector3 origin, float distance, out Hit hit) =>"),
+                     (hits, "    FixtureNative.Find(in origin, distance, out hit);"),
+                     (hits, "public static int Find(Vector3 origin, Span<Hit> hits) => FixtureNative.FindAll(in origin, hits);"),
+                     (hits, "/// <param name=\"hit\">Where it hit; the default when it did not.</param>"),
+                     (hits, "using System;"),
+                 })
+        {
+            Assert.True(part.Contains(line, StringComparison.Ordinal), $"A facade part should hold\n  {line}\nbut is:\n{part}");
+        }
+
+        Assert.True(!bodies.Contains("using System;", StringComparison.Ordinal),
+                    "A facade part whose methods take no span should not declare System:\n" + bodies);
+        Assert.True(!bodies.Contains("///", StringComparison.Ordinal) || !bodies.Contains("<summary>The generated part", StringComparison.Ordinal),
+                    "The class summary is the hand-written part's: the generated part carries a // comment.\n" + bodies);
+    }
+
+    [Fact]
+    public void AFacadeClassNoMarkNamesAnyMoreIsDeleted()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        Generator.Write(config, Generator.Generate(config, [description]));
+        var bodies = Path.Combine(directory.Path, "Contract", "Generated", "Bodies.cs");
+        Assert.True(File.Exists(bodies), "The fixture's Bodies facade should be written.");
+
+        WriteNatives(directory, root => Native(root, "Push").AsObject().Remove("facade"));
+        var report = Generator.Write(config, Generator.Generate(config, [description]));
+
+        Assert.False(File.Exists(bodies), "A facade class no mark names should be deleted.");
+        Assert.Contains(report, line => line == $"{bodies} deleted");
+    }
+
+    [Theory]
+    [InlineData("Internal", "Fixture.natives.json: Find: @facade Hits.Find cannot be public: it takes Tag")]
+    [InlineData("Pointer", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it takes void* body")]
+    [InlineData("PointerResult", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it returns void*")]
+    [InlineData("Doubled", "Fixture.natives.json: Push and Shove: both are @facade Bodies.Push(Entity, Vector3)")]
+    [InlineData("Mirror", "Fixture.natives.json: Push: @facade Body is the name of the mirror of Fixture::Body")]
+    [InlineData("UsedMirror", "Fixture.natives.json: Push: @facade Spring is the name of the mirror of Fixture::Spring in the binding it uses")]
+    [InlineData("BoundType", "Fixture.natives.json: Push: @facade Vector3 is the name of the C# type of the bound type Fixture::Vec3")]
+    [InlineData("NativesClass", "Fixture.natives.json: Push: @facade FixtureNative is the name of the [natives] class")]
+    [InlineData("Malformed", "Fixture.natives.json: Push: @facade 'Bodies' names a public method as Class.Method")]
+    public void AFacadeMarkTheBindingCannotHonourFailsNamingTheNativeAndTheMark(string problem, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        WriteNatives(directory, root =>
+        {
+            switch (problem)
+            {
+                case "Internal":
+                    Parameter(root, "Find", "origin")["type"] = "const Fixture::Tag*";
+                    Parameter(root, "Find", "origin")["pointee"] = "Fixture::Tag";
+                    break;
+                case "Pointer":
+                    Native(root, "Next")["facade"] = "Records.Next";
+                    Native(root, "Next")["returns"] = JsonNode.Parse("""{ "type": "bool", "kind": "bool" }""");
+                    Native(root, "Next")["parameters"]!.AsArray().RemoveAt(0);
+                    break;
+                case "PointerResult":
+                    Native(root, "Next")["facade"] = "Records.Next";
+                    Native(root, "Next")["parameters"] = new JsonArray();
+                    break;
+                case "Doubled":
+                    var shove = Native(root, "Push").DeepClone();
+                    shove["name"] = "Shove";
+                    root["functions"]!.AsArray().Add(shove);
+                    break;
+                case "Mirror":
+                    Native(root, "Push")["facade"] = "Body.Push";
+                    break;
+                case "UsedMirror":
+                    Native(root, "Push")["facade"] = "Spring.Push";
+                    break;
+                case "BoundType":
+                    Native(root, "Push")["facade"] = "Vector3.Push";
+                    break;
+                case "NativesClass":
+                    Native(root, "Push")["facade"] = "FixtureNative.Push";
+                    break;
+                case "Malformed":
+                    Native(root, "Push")["facade"] = "Bodies";
+                    break;
+            }
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void TheMirrorsAndDefaultsClassCompileAgainstStubsOfTheSdk()
     {
-        // The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it.
+        // The natives' class has no bodies until the SDK's generator writes them, and the facade parts call it: the SDK
+        // check compiles them.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
-                          .Where(path => Path.GetFileName(path) != "FixtureNative.cs")
+                          .Where(path => Path.GetFileName(path) is not ("FixtureNative.cs" or "Bodies.cs" or "Hits.cs"))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Uses", "Contract"), "*.cs", SearchOption.AllDirectories))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
