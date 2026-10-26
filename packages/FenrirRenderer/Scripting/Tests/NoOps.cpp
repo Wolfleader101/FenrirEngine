@@ -1,93 +1,261 @@
-// The no-op rules from C# (spec: "Scripting: the extensions", no-op rules; seam 7: a missing package no-oping): with no
-// renderer, no camera or a stale entity or model, each function does nothing and returns false, zero or Entity.None,
-// nothing throws, and a debug build warns once per native call site and reason, however often C# calls.
-//
-// The warnings are counted once per process, so these cases run in a process of their own, in declaration order
-// (CTest's FenrirRendererScripting-NoOps runs them with --order decl).
+// The no-op rules (spec: "Scripting: the extensions", no-op rules; seam 7: a missing package no-oping), with no .NET:
+// each native function is called from C++ through NativeCallHarness with a RendererScripting state the test makes.
+// With no renderer, no camera, a stale entity or model, or no asset store, each does nothing and returns false, zero or
+// no entity, leaves its output at the default the registration gave it (ADR-0045), nothing throws, and a debug build
+// warns once per native and reason, however often it is called. SpawnModel's handle rule is Assets' (AssetResolve.hpp),
+// so its warning is in Assets' words under the renderer's native.
 
 #include <catch2/catch_test_macros.hpp>
 
+#include "NativeCallHarness.hpp"
+
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <filesystem>
+#include <optional>
 #include <string>
 
+#include "FenrirAssets/AssetStore.hpp"
+#include "FenrirAssets/Assets.hpp"
+#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
-#include "RendererScriptingApp.hpp"
+#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
+#include "FenrirMath/Math.hpp"
+#include "FenrirRenderer/Components.hpp"
+#include "FenrirRenderer/Renderer.hpp"
+#include "FenrirScripting/EntityValue.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
+#include "RendererScriptingState.hpp"
 
-using namespace Fenrir;
-using namespace RendererScriptingTests;
+// The natives under test, as the generated registration declares them (src/Generated/FenrirRendererRegistration.cpp):
+// defined in src/RendererScripting.cpp, which has no header of its own.
+namespace Fenrir::RendererNatives
+{
+    bool ScreenPointToRay(const CallContext&, RendererScripting&, EntityValue camera, const Math::Vec2* point,
+                          Math::Ray* ray);
+    bool WorldToScreenPoint(const CallContext&, RendererScripting&, EntityValue camera, const Math::Vec3* point,
+                            Math::Vec2* screenPoint);
+    EntityValue CameraAt(const CallContext&, RendererScripting&, WindowId window, const Math::Vec2* point);
+    bool GetWorldBounds(const CallContext&, RendererScripting&, EntityValue entity, Math::AABB* bounds);
+    bool Stats(const CallContext&, RendererScripting&, RendererStats* stats);
+    EntityValue SpawnModel(const CallContext&, RendererScripting&, std::uint64_t model, EntityValue parent);
+} // namespace Fenrir::RendererNatives
 
 namespace
 {
-    std::size_t Warnings(const RendererScriptingApp& test, const std::string& text)
+    using namespace Fenrir;
+
+    // A release build warns about nothing (WarnOnceRecord, ADR-0043); a debug build once per place and message.
+#ifdef NDEBUG
+    constexpr std::size_t once = 0;
+#else
+    constexpr std::size_t once = 1;
+#endif
+
+    constexpr const char* NoRenderer = "the app has no renderer (FenrirRenderer is not installed), so it does nothing";
+    constexpr const char* NotAlive = "the entity is not alive, so it does nothing";
+    constexpr const char* NoCamera = "the entity has no Camera, so it does nothing";
+    // Assets' words (AssetResolve.hpp), which SpawnModel reuses.
+    constexpr const char* NoStore = "the app has no asset store (FenrirAssets is not installed), so it does nothing";
+    constexpr const char* StaleModel = "the model handle is empty or stale, so it does nothing";
+
+    // C#'s Entity.None.
+    const EntityValue noEntity(Entity::Null);
+
+    // How many warnings the app logged that read `text`.
+    std::size_t Warnings(const Testing::NativeCallHarness& harness, const std::string& text)
     {
-        return LoggedWith(test.headless, Testing::LogLevel::Warn, text);
+        const auto messages = harness.Logger().Messages();
+        return static_cast<std::size_t>(
+            std::count_if(messages.begin(), messages.end(), [&](const Testing::LoggedMessage& message) {
+                return message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos;
+            }));
     }
+
+    // The whole line the renderer's record logs for `message` in the native `native`.
+    std::string Logged(const std::string& native, const std::string& message)
+    {
+        return "[renderer scripting] " + native + ": " + message + " (warned once)";
+    }
+
+    EntityList& Entities(Testing::NativeCallHarness& harness)
+    {
+        return harness.GetApp().GetActiveScene().GetEntityList();
+    }
+
+    // Assets installed in the harness's app, its asset root FenrirRenderer's test fixtures.
+    Assets InstallAssets(Testing::NativeCallHarness& harness)
+    {
+        return Assets::Install(harness.GetApp(), {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)});
+    }
+
+    // The renderer on the null backend, which needs no window.
+    Renderer InstallRenderer(Testing::NativeCallHarness& harness)
+    {
+        RendererConfig config;
+        config.backend = GraphicsBackend::Null;
+        return Renderer::Install(harness.GetApp(), config);
+    }
+
+    // The fixture model, two_parts.gltf, loaded into `store`.
+    AssetHandle<Model> LoadModel(AssetStore& store)
+    {
+        const AssetHandle<Model> model = store.Load<Model>("two_parts.gltf", AssetOwner::App()).handle;
+        INFO("The fixture model did not load");
+        REQUIRE(store.IsValid(model));
+        return model;
+    }
+
+    // The natives as the registration calls them, each single output zeroed first (ADR-0045): indices into the full
+    // parameter list, context and state counted.
+    using ScreenPointToRay = ZeroingOutputs<&RendererNatives::ScreenPointToRay, 4>;
+    using WorldToScreenPoint = ZeroingOutputs<&RendererNatives::WorldToScreenPoint, 4>;
+    using GetWorldBounds = ZeroingOutputs<&RendererNatives::GetWorldBounds, 3>;
+    using Stats = ZeroingOutputs<&RendererNatives::Stats, 2>;
+
+    const Math::Vec2 centre(640.0f, 360.0f);
+    const Math::Vec3 origin(0.0f);
 } // namespace
 
-TEST_CASE("With no renderer, picking, bounds and stats from C# do nothing and say so once",
+TEST_CASE("With no renderer, picking, bounds and stats do nothing, leave their outputs zeroed and say so once",
           "[renderer][scripting][noops]")
 {
-    RendererScriptingApp test(false);
-    Entity camera = test.Entities().CreateEntity();
+    Testing::NativeCallHarness harness;
+    RendererScripting renderer;
+    Entity camera = Entities(harness).CreateEntity();
     camera.AddComponent<Camera>();
+    const EntityValue cameraValue(camera.GetId());
 
     for (int call = 0; call < 2; ++call)
     {
-        INFO("Call " << call << ": each function should return false, zero or Entity.None");
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Ray", camera.GetId(), 640.0f, 360.0f));
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "ScreenPoint", camera.GetId(), 0.0f, 0.0f, 0.0f));
-        REQUIRE(test.Call<std::uint32_t>(RendererCallsType, "CameraAt", std::uint32_t{1}, 640.0f, 360.0f) == noEntity);
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Bounds", camera.GetId()));
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Stats"));
-        REQUIRE(test.Value(0) == 0.0f);
-        REQUIRE(test.Value(1) == 0.0f);
-        REQUIRE(test.Value(2) == 0.0f);
+        INFO("Call " << call << ": each native should return false, zero or no entity and write nothing");
+        Math::Ray ray;
+        ray.origin = Math::Vec3(3.0f);
+        REQUIRE_FALSE(ScreenPointToRay::Call(harness.Context("RendererNative.ScreenPointToRay"), renderer, cameraValue,
+                                             &centre, &ray));
+        REQUIRE(ray.origin == Math::Ray{}.origin);
+        Math::Vec2 screenPoint(3.0f);
+        REQUIRE_FALSE(WorldToScreenPoint::Call(harness.Context("RendererNative.WorldToScreenPoint"), renderer,
+                                               cameraValue, &origin, &screenPoint));
+        REQUIRE(screenPoint == Math::Vec2(0.0f));
+        REQUIRE(RendererNatives::CameraAt(harness.Context("RendererNative.CameraAt"), renderer, WindowId{1}, &centre) ==
+                noEntity);
+        Math::AABB bounds{};
+        bounds.max = Math::Vec3(3.0f);
+        REQUIRE_FALSE(
+            GetWorldBounds::Call(harness.Context("RendererNative.GetWorldBounds"), renderer, cameraValue, &bounds));
+        REQUIRE(bounds.max == Math::AABB{}.max);
+        RendererStats stats;
+        stats.draws = 3;
+        REQUIRE_FALSE(Stats::Call(harness.Context("RendererNative.Stats"), renderer, &stats));
+        REQUIRE(stats.draws == 0);
     }
-    INFO("Each function should warn once in a debug build, and never in a release build, that there is no renderer");
-    for (const char* function : {"Renderer.ScreenPointToRay", "Renderer.WorldToScreenPoint", "Renderer.CameraAt",
-                                 "Renderer.GetWorldBounds", "Renderer.Stats"})
+    INFO("Each native should warn once in a debug build, and never in a release build, that there is no renderer");
+    for (const char* native : {"RendererNative.ScreenPointToRay", "RendererNative.WorldToScreenPoint",
+                               "RendererNative.CameraAt", "RendererNative.GetWorldBounds", "RendererNative.Stats"})
     {
-        INFO(function);
-        REQUIRE(Warnings(test, std::string(function) + ": the app has no renderer") == warningsPerCallSite);
+        INFO(native);
+        REQUIRE(Warnings(harness, Logged(native, NoRenderer)) == once);
+    }
+    {
+        INFO("A camera entity should not be checked when there is no renderer to pick with");
+        REQUIRE(Warnings(harness, NotAlive) == 0);
+        REQUIRE(Warnings(harness, NoCamera) == 0);
     }
 }
 
-TEST_CASE("SpawnModel from C# needs no renderer", "[renderer][scripting][noops]")
+TEST_CASE("SpawnModel needs no renderer", "[renderer][scripting][noops]")
 {
-    RendererScriptingApp test(false);
-    const Entity parent = test.Entities().CreateEntity();
-    const auto root = test.Call<std::uint32_t>(RendererCallsType, "SpawnUnder", parent.GetId());
-    test.ApplyChanges();
+    Testing::NativeCallHarness harness;
+    const Assets installed = InstallAssets(harness);
+    RendererScripting renderer;
+    const Entity parent = Entities(harness).CreateEntity();
+    const AssetHandle<Model> model = LoadModel(installed.Store());
+
+    const EntityValue root = RendererNatives::SpawnModel(harness.Context("RendererNative.SpawnModel"), renderer,
+                                                         AssetHandleBits(model), EntityValue(parent.GetId()));
+    (void)harness.ApplyChanges();
     INFO("The model should spawn under the parent with no renderer installed");
-    REQUIRE(test.Entities().HasEntity(root));
-    REQUIRE(test.Entities().GetEntity(root).GetComponent<Relationship>().parent == parent);
+    REQUIRE(root != noEntity);
+    REQUIRE(Entities(harness).HasEntity(root.value));
+    REQUIRE(Entities(harness).GetEntity(root.value).GetComponent<Relationship>().parent == parent);
+    REQUIRE(Warnings(harness, "RendererNative.SpawnModel") == 0);
 }
 
-TEST_CASE("A stale entity, an entity with no Camera, an empty model or a dead parent do nothing and say so once",
+TEST_CASE("SpawnModel with no asset store spawns nothing and says so once, in Assets' words under its own name",
           "[renderer][scripting][noops]")
 {
-    RendererScriptingApp test;
-    const std::uint32_t dead = test.Entities().CreateEntity().GetId();
-    test.Entities().DestroyEntity(dead);
-    const Entity plain = test.Entities().CreateEntity();
+    Testing::NativeCallHarness harness;
+    RendererScripting renderer;
+    const CallContext context = harness.Context("RendererNative.SpawnModel");
+    // The handle that would name the first model.
+    const std::uint64_t first = std::uint64_t{1} << 32u;
 
     for (int call = 0; call < 2; ++call)
     {
-        INFO("Call " << call << ": each function should return false or Entity.None");
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Ray", dead, 640.0f, 360.0f));
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Ray", plain.GetId(), 640.0f, 360.0f));
-        REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Bounds", dead));
-        REQUIRE(test.Call<std::uint32_t>(RendererCallsType, "SpawnEmptyModel") == noEntity);
-        REQUIRE(test.Call<std::uint32_t>(RendererCallsType, "SpawnUnder", dead) == noEntity);
+        INFO("Call " << call << ": with no store there is no model to spawn");
+        REQUIRE(RendererNatives::SpawnModel(context, renderer, first, noEntity) == noEntity);
     }
     {
         INFO("Nothing should have been recorded to spawn");
-        REQUIRE(ScriptingProbe::PendingChanges(test.scripting) == 0);
+        REQUIRE(harness.PendingChanges() == 0);
     }
-    INFO("Each reason should warn once in a debug build, and never in a release build");
-    REQUIRE(Warnings(test, "Renderer.ScreenPointToRay: the entity is not alive") == warningsPerCallSite);
-    REQUIRE(Warnings(test, "Renderer.ScreenPointToRay: the entity has no Camera") == warningsPerCallSite);
-    REQUIRE(Warnings(test, "Renderer.GetWorldBounds: the entity is not alive") == warningsPerCallSite);
-    REQUIRE(Warnings(test, "Renderer.SpawnModel: the model handle is empty or stale") == warningsPerCallSite);
-    REQUIRE(Warnings(test, "Renderer.SpawnModel: the entity is not alive") == warningsPerCallSite);
+    INFO("Two spawns with no store should warn once in a debug build, prefixed by the renderer's extension and native");
+    REQUIRE(Warnings(harness, Logged("RendererNative.SpawnModel", NoStore)) == once);
+}
+
+TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do nothing and say so once",
+          "[renderer][scripting][noops]")
+{
+    Testing::NativeCallHarness harness;
+    const Assets installed = InstallAssets(harness);
+    const Renderer withRenderer = InstallRenderer(harness);
+    RendererScripting renderer;
+    const std::uint32_t dead = Entities(harness).CreateEntity().GetId();
+    Entities(harness).DestroyEntity(dead);
+    const Entity plain = Entities(harness).CreateEntity();
+    // Loading a path again gives the same handle, so the stale one is made first: loaded, unloaded, and the live one
+    // loaded after it under a new generation.
+    const AssetHandle<Model> unloaded = LoadModel(installed.Store());
+    REQUIRE(installed.Store().Unload(unloaded));
+    const AssetHandle<Model> model = LoadModel(installed.Store());
+    {
+        INFO("Reloading the model should leave the unloaded handle stale");
+        REQUIRE_FALSE(installed.Store().IsValid(unloaded));
+    }
+
+    const CallContext ray = harness.Context("RendererNative.ScreenPointToRay");
+    const CallContext bounds = harness.Context("RendererNative.GetWorldBounds");
+    const CallContext spawn = harness.Context("RendererNative.SpawnModel");
+    for (int call = 0; call < 2; ++call)
+    {
+        INFO("Call " << call << ": each native should return false or no entity");
+        Math::Ray out;
+        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, EntityValue(dead), &centre, &out));
+        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, EntityValue(plain.GetId()), &centre, &out));
+        Math::AABB box{};
+        REQUIRE_FALSE(RendererNatives::GetWorldBounds(bounds, renderer, EntityValue(dead), &box));
+        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, AssetHandleBits(unloaded), noEntity) == noEntity);
+        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, 0, noEntity) == noEntity);
+        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, AssetHandleBits(model), EntityValue(dead)) == noEntity);
+    }
+    {
+        INFO("Nothing should have been recorded to spawn");
+        REQUIRE(harness.PendingChanges() == 0);
+    }
+    INFO("Each reason should warn once in a debug build, and never in a release build, under the native's name");
+    REQUIRE(Warnings(harness, Logged("RendererNative.ScreenPointToRay", NotAlive)) == once);
+    REQUIRE(Warnings(harness, Logged("RendererNative.ScreenPointToRay", NoCamera)) == once);
+    REQUIRE(Warnings(harness, Logged("RendererNative.GetWorldBounds", NotAlive)) == once);
+    {
+        INFO("A stale and the empty model handle should warn once from the one place SpawnModel resolves them, in "
+             "Assets' words");
+        REQUIRE(Warnings(harness, "[renderer scripting] RendererNative.SpawnModel: " + std::string(StaleModel)) ==
+                once);
+    }
+    REQUIRE(Warnings(harness, Logged("RendererNative.SpawnModel", NotAlive)) == once);
+    REQUIRE(Warnings(harness, NoStore) == 0);
 }
