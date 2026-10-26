@@ -24,12 +24,29 @@ namespace Fenrir
     class CallContext;
     class Scripting;
 
+    namespace Testing
+    {
+        class NativeCallHarness;
+    }
+
     namespace Detail
     {
         class ChangeBuffer;
 
-        // The active Scripting's call context, or null when no Scripting is running.
-        [[nodiscard]] const CallContext* ActiveCallContext() noexcept;
+        template <auto Function, typename State, typename R, typename... Args>
+        struct NativeFunctionCall;
+
+        // What a native function's call context is built from: the running Scripting's App and change buffer. Both null
+        // when no Scripting is running.
+        struct ActiveScripting
+        {
+            App* app = nullptr;
+            ChangeBuffer* changes = nullptr;
+        };
+
+        // The running Scripting's App and change buffer, from which NativeFunctionCall builds each call's context, or
+        // nulls when no Scripting is running.
+        [[nodiscard]] ActiveScripting ActiveCallContext() noexcept;
     } // namespace Detail
 
     /**
@@ -126,9 +143,10 @@ namespace Fenrir
 
     /**
      * @brief What a native function receives first: the App the running Scripting serves, through it the active scene's
-     * entities, and the change buffer. Only scripting makes one, and a native function is only ever called with the one
-     * that is active. It carries nothing of any extension: a native function that needs its package's state takes its
-     * extension state (ScriptingExtension::SetState) as its second parameter.
+     * entities, the change buffer, and the name of the native function being called. One is built for each call, by
+     * the registration's thunk, and a native function is only ever called with the one for its call. It carries nothing
+     * of any extension: a native function that needs its package's state takes its extension state
+     * (ScriptingExtension::SetState) as its second parameter.
      *
      * A native function may read and write component and resource data, but makes structural changes (creating or
      * destroying entities, adding or removing components, inserting or removing resources) only by recording them in
@@ -153,20 +171,37 @@ namespace Fenrir
         /** @brief The change buffer, where structural changes are recorded to play back after the calling system. */
         [[nodiscard]] ChangeBuffer Changes() const noexcept;
 
+        /**
+         * @brief The native function being called, by the type-and-method part of its name: `PhysicsNative.Raycast`
+         * for `Fenrir.Physics.PhysicsNative.Raycast` (NativeFunction::NativeNameFor). What WarnOnceRecord prefixes a
+         * warning with, so a native function never spells its own name.
+         */
+        [[nodiscard]] std::string_view Native() const noexcept
+        {
+            return m_native;
+        }
+
       private:
         friend class Scripting;
-        CallContext(App& app, Detail::ChangeBuffer& changes) noexcept : m_app(&app), m_changes(&changes)
+        friend class Testing::NativeCallHarness;
+        template <auto Function, typename State, typename R, typename... Args>
+        friend struct Detail::NativeFunctionCall;
+
+        // `native` must outlive the context: the thunk's is the registration's, kept until Scripting shuts down.
+        CallContext(App& app, Detail::ChangeBuffer& changes, std::string_view native) noexcept
+            : m_app(&app), m_changes(&changes), m_native(native)
         {
         }
         App* m_app;
         Detail::ChangeBuffer* m_changes;
+        std::string_view m_native;
     };
 
     namespace Detail
     {
-        // The function Iris calls for the native function `Function`: it finds the active call context and calls
-        // `Function` with it (and, when `State` is not void, with the extension state after it), or, when no Scripting
-        // is running, returns the "not running" value without calling it.
+        // The function Iris calls for the native function `Function`: it builds the call context from the running
+        // Scripting and `name` and calls `Function` with it (and, when `State` is not void, with the extension state
+        // after it), or, when no Scripting is running, returns the "not running" value without calling it.
         template <auto Function, typename State, typename R, typename... Args>
         struct NativeFunctionCall
         {
@@ -185,10 +220,14 @@ namespace Fenrir
             // void.
             static inline State* state = nullptr;
 
+            // The type-and-method part of the name it is registered under (NativeFunction::NativeNameFor), written
+            // beside `notRunning`: what each call's context carries as CallContext::Native.
+            static inline std::string name;
+
             static R Call(Args... arguments)
             {
-                const CallContext* context = ActiveCallContext();
-                if (context == nullptr)
+                const ActiveScripting active = ActiveCallContext();
+                if (active.app == nullptr)
                 {
                     if constexpr (std::is_void_v<R>)
                     {
@@ -199,13 +238,14 @@ namespace Fenrir
                         return notRunning;
                     }
                 }
+                const CallContext context(*active.app, *active.changes, name);
                 if constexpr (std::is_void_v<State>)
                 {
-                    return Function(*context, arguments...);
+                    return Function(context, arguments...);
                 }
                 else
                 {
-                    return Function(*context, *state, arguments...);
+                    return Function(context, *state, arguments...);
                 }
             }
         };
@@ -280,12 +320,13 @@ namespace Fenrir
         {
             using Traits = Detail::NativeFunctionTraits<Function>;
             return NativeFunction(std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
-                                  [](std::string_view bindingName, void* state) {
+                                  [](std::string_view bindingName, std::string_view nativeName, void* state) {
                                       if constexpr (!std::is_void_v<typename Traits::Result>)
                                       {
                                           Traits::notRunning = {};
                                       }
                                       Traits::state = static_cast<typename Traits::StateType*>(state);
+                                      Traits::name = std::string(nativeName);
                                       return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
                                   });
         }
@@ -301,12 +342,14 @@ namespace Fenrir
                                                  typename Detail::NativeFunctionTraits<Function>::Result whenNotRunning)
         {
             using Traits = Detail::NativeFunctionTraits<Function>;
-            return NativeFunction(std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
-                                  [whenNotRunning](std::string_view bindingName, void* state) {
-                                      Traits::notRunning = whenNotRunning;
-                                      Traits::state = static_cast<typename Traits::StateType*>(state);
-                                      return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
-                                  });
+            return NativeFunction(
+                std::move(name), Detail::StateTypeOf<typename Traits::StateType>(),
+                [whenNotRunning](std::string_view bindingName, std::string_view nativeName, void* state) {
+                    Traits::notRunning = whenNotRunning;
+                    Traits::state = static_cast<typename Traits::StateType*>(state);
+                    Traits::name = std::string(nativeName);
+                    return Iris::RegisterInternalCall<&Traits::Call>(bindingName);
+                });
         }
 
         /** @brief The full name of the C# method that calls it. */
@@ -328,20 +371,29 @@ namespace Fenrir
          */
         [[nodiscard]] static std::string BindingNameFor(std::string_view name);
 
+        /**
+         * @brief The name a call context carries for the native function "Namespace.Type.Method": its type-and-method
+         * part, `Type.Method` (`Outer+Inner.Method` for a nested type), with the namespace dropped because a
+         * WarnOnceRecord already names the extension. `name` itself when it has no namespace.
+         */
+        [[nodiscard]] static std::string_view NativeNameFor(std::string_view name) noexcept;
+
       private:
         friend class Scripting;
-        using Registrar = std::function<Iris::CallResult<void>(std::string_view bindingName, void* state)>;
+        using Registrar = std::function<Iris::CallResult<void>(std::string_view bindingName,
+                                                               std::string_view nativeName, void* state)>;
 
         NativeFunction(std::string name, std::optional<std::type_index> stateType, Registrar registrar)
             : m_name(std::move(name)), m_stateType(stateType), m_register(std::move(registrar))
         {
         }
 
-        // Sets the "not running" value and the extension state (`state`, of the type StateType() names, or null for a
-        // stateless function), and registers the function Iris calls under BindingName().
+        // Sets the "not running" value, the extension state (`state`, of the type StateType() names, or null for a
+        // stateless function) and the name each call's context carries (NativeNameFor(Name())), and registers the
+        // function Iris calls under BindingName().
         [[nodiscard]] Iris::CallResult<void> Register(void* state) const
         {
-            return m_register(BindingName(), state);
+            return m_register(BindingName(), NativeNameFor(m_name), state);
         }
 
         // The type of extension state it takes, or none for a stateless native function.

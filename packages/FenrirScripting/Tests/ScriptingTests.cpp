@@ -1,4 +1,5 @@
 #include "HeadlessApp.hpp"
+#include "NativeCallHarness.hpp"
 #include "ScriptingProbe.hpp"
 
 #include <catch2/catch_approx.hpp>
@@ -7,8 +8,12 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/Scripting.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -460,10 +465,12 @@ namespace TestExtension
         return child;
     }
 
-    // The test extension's extension state: a running total its Tally native adds to.
+    // The test extension's extension state: a running total its Tally native adds to, and its warn-once record, as a
+    // package's state holds one.
     struct Tally
     {
         std::int32_t total = 0;
+        Fenrir::WarnOnceRecord warnings{"test extension"};
     };
 
     // A state of another type, which Tally does not take.
@@ -477,12 +484,42 @@ namespace TestExtension
         return tally.total;
     }
 
+    // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name,
+    // which this function never spells.
+    void Nudge(const Fenrir::CallContext& context, Tally& tally, std::uint32_t entity)
+    {
+        const Fenrir::NativeGuard guard(context, tally.warnings);
+        if (const std::optional<Fenrir::Entity> found = guard.Alive(Fenrir::EntityValue(entity)))
+        {
+            found->GetComponent<Fenrir::Transform>().pos.y += 1.0F;
+        }
+    }
+
     // The test extension's shared struct, and a mapping of its C# mirror that has drifted: its first field renamed.
     struct Reading
     {
         std::int32_t Count;
         float Weight;
     };
+
+    /**
+     * @brief One reading of the entity (a count of one and its height), registered through ZeroingOutputs so
+     * `reading` is zeroed before this runs: a dead entity returns zero readings and leaves it so.
+     * @param[out] reading The reading.
+     * @return How many readings: one, or zero for a dead entity.
+     * @notrunning -1
+     */
+    std::int32_t Weigh(const Fenrir::CallContext& context, std::uint32_t entity, Reading* reading)
+    {
+        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        if (!found.IsValid())
+        {
+            return 0;
+        }
+        *reading = Reading{1, found.GetComponent<Fenrir::Transform>().pos.y};
+        return 1;
+    }
+    using ZeroingWeigh = Fenrir::ZeroingOutputs<&Weigh, 2>;
 
     struct DriftedReading
     {
@@ -4225,6 +4262,9 @@ namespace
             NativeFunction::Make<&TestExtension::AddToTally>("Fenrir.TestExtension.Gadgets.Tally"),
             NativeFunction::Make<&TestExtension::TurnRight>("Fenrir.TestExtension.Gadgets.TurnRight"),
             NativeFunction::Make<&TestExtension::Retag>("Fenrir.TestExtension.Gadgets.Retag"),
+            NativeFunction::Make<&TestExtension::Nudge>("Fenrir.TestExtension.Gadgets.Nudge"),
+            // As the generated registration names a native with an output (ADR-0045).
+            NativeFunction::Make<&TestExtension::ZeroingWeigh::Call>("Fenrir.TestExtension.Gadgets.Weigh", -1),
         };
         extension.components = {MakeComponent<TestExtension::Charge>("Fenrir.TestExtension.Charge")};
         extension.events = {MakeEvent<TestExtension::Ping>("Fenrir.TestExtension.Ping")};
@@ -4927,6 +4967,115 @@ namespace
         REQUIRE(!entities.GetEntity(orphan).GetComponent<Relationship>().parent.IsValid());
     }
 
+    // How many warnings `headless` logged that read `text`.
+    std::size_t WarningsReading(const HeadlessApp& headless, const std::string& text)
+    {
+        const auto messages = headless.Logger().Messages();
+        return static_cast<std::size_t>(
+            std::count_if(messages.begin(), messages.end(), [&](const Testing::LoggedMessage& message) {
+                return message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos;
+            }));
+    }
+
+    void ANativeFunctionsWarningIsPrefixedWithItsTypeAndMethod()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+        {
+            INFO("The script assembly using the extension did not load");
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        const std::uint32_t live = entities.CreateEntity().GetId();
+        const std::uint32_t dead = entities.CreateEntity().GetId();
+        entities.DestroyEntity(dead);
+
+        ExtensionCall<void>(scripting, "Nudge", live);
+        {
+            INFO("A live entity was not nudged up by one");
+            REQUIRE(ExtensionCall<float>(scripting, "HeightOf", live) == 1.0F);
+        }
+        ExtensionCall<void>(scripting, "Nudge", dead);
+        ExtensionCall<void>(scripting, "Nudge", dead);
+        // The native gave no name: the thunk's call context carries the type-and-method part of its registered name.
+        constexpr const char* Warning = "[test extension] Gadgets.Nudge: the entity is not alive, so it does nothing";
+#ifdef NDEBUG
+        INFO("A release build warned");
+        REQUIRE(WarningsReading(headless, Warning) == 0);
+#else
+        INFO("Two calls on a dead entity did not warn exactly once under '<Type>.<Method>: '");
+        REQUIRE(WarningsReading(headless, Warning) == 1);
+#endif
+    }
+
+    void ANativeCalledWhileNoScriptingRunsReturnsItsNotRunningValueAndLeavesItsOutputUntouched()
+    {
+        {
+            HeadlessApp headless;
+            auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension()}));
+            {
+                INFO("The script assembly using the extension did not load");
+                REQUIRE(scripting.HasScripts());
+            }
+            auto& entities = headless.Get().GetActiveScene().GetEntityList();
+            const Entity live = entities.CreateEntity();
+            live.GetComponent<Transform>().pos.y = 2.5F;
+            const std::uint32_t dead = entities.CreateEntity().GetId();
+            entities.DestroyEntity(dead);
+            {
+                INFO("While it runs, a live entity did not give one reading of its height");
+                REQUIRE(ExtensionCall<std::int32_t>(scripting, "Weigh", live.GetId()) == 1);
+                REQUIRE(ExtensionCall<float>(scripting, "WeighHeight", live.GetId()) == 2.5F);
+            }
+            {
+                INFO("While it runs, a dead entity did not give zero readings and a zeroed reading");
+                REQUIRE(ExtensionCall<std::int32_t>(scripting, "Weigh", dead) == 0);
+                REQUIRE(ExtensionCall<float>(scripting, "WeighHeight", dead) == 0.0F);
+            }
+        }
+        // The Scripting is gone, so the registered thunk is on its not-running path: the value Make was given, and the
+        // zeroing, which sits inside the check, does not run.
+        TestExtension::Reading reading{3, 2.5F};
+        const std::int32_t result =
+            Detail::NativeFunctionTraits<&TestExtension::ZeroingWeigh::Call>::Call(std::uint32_t{5}, &reading);
+        {
+            INFO("A call while no Scripting runs did not return the @notrunning value");
+            REQUIRE(result == -1);
+        }
+        {
+            INFO("A call while no Scripting runs touched the output");
+            REQUIRE((reading.Count == 3 && reading.Weight == 2.5F));
+        }
+    }
+
+    void ANativeFunctionCalledThroughTheHarnessRecordsAChangeThatPlaysBack()
+    {
+        Testing::NativeCallHarness harness;
+        const CallContext context = harness.Context("Gadgets.SpawnCharged");
+        const std::uint32_t spawned = TestExtension::SpawnCharged(context, 7);
+        auto& entities = harness.GetApp().GetActiveScene().GetEntityList();
+        {
+            INFO("The entity the native created is not alive at once");
+            REQUIRE(entities.HasEntity(spawned));
+        }
+        {
+            INFO("The Charge reached the entity before playback, or the two changes were not recorded");
+            REQUIRE_FALSE(entities.GetEntity(spawned).HasComponent<TestExtension::Charge>());
+            REQUIRE(harness.PendingChanges() == 2);
+        }
+        const auto summary = harness.ApplyChanges();
+        {
+            INFO("Creating the entity and adding its Charge were not both played back");
+            REQUIRE((summary.applied == 2 && summary.skipped == 0));
+            REQUIRE(harness.PendingChanges() == 0);
+        }
+        {
+            INFO("The entity does not have the Charge the native recorded after playback");
+            REQUIRE(entities.GetEntity(spawned).HasComponent<TestExtension::Charge>());
+            REQUIRE(entities.GetEntity(spawned).GetComponent<TestExtension::Charge>().Level == 7);
+        }
+    }
+
 } // namespace
 
 TEST_CASE("the fixture loads, frames run and Iris's messages reach the engine logger", "[scripting]")
@@ -5487,4 +5636,20 @@ TEST_CASE("a native function's changes play back in order after the call", "[scr
 TEST_CASE("a native function parents an entity under another at playback", "[scripting]")
 {
     ANativeFunctionParentsAnEntityAtPlayback();
+}
+
+TEST_CASE("a native function's warning is prefixed with its type and method", "[scripting]")
+{
+    ANativeFunctionsWarningIsPrefixedWithItsTypeAndMethod();
+}
+
+TEST_CASE("a native called while no Scripting runs returns its @notrunning value and leaves its output untouched",
+          "[scripting]")
+{
+    ANativeCalledWhileNoScriptingRunsReturnsItsNotRunningValueAndLeavesItsOutputUntouched();
+}
+
+TEST_CASE("a native function called through the harness records a change that plays back", "[scripting]")
+{
+    ANativeFunctionCalledThroughTheHarnessRecordsAChangeThatPlaysBack();
 }

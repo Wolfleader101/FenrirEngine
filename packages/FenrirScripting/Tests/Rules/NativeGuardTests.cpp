@@ -1,0 +1,158 @@
+// The native guard's rules, with no .NET: through NativeCallHarness, a native's context names the native, and the
+// guard's entity-alive rule, requirement check and warning each warn once per place and message under that name.
+#include <catch2/catch_test_macros.hpp>
+
+#include "../NativeCallHarness.hpp"
+
+#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
+#include "FenrirScripting/EntityValue.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
+#include "FenrirScripting/WarnOnceRecord.hpp"
+
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+#include <string>
+
+namespace
+{
+    using namespace Fenrir;
+
+    // A release build warns about nothing (WarnOnceRecord, ADR-0043); a debug build once per place and message.
+#ifdef NDEBUG
+    constexpr std::size_t once = 0;
+#else
+    constexpr std::size_t once = 1;
+#endif
+
+    constexpr const char* Extension = "rules scripting";
+    constexpr const char* Native = "Gadgets.Nudge";
+
+    // How many warnings the app logged that read `text`.
+    std::size_t Warnings(const Testing::NativeCallHarness& harness, const std::string& text)
+    {
+        const auto messages = harness.Logger().Messages();
+        return static_cast<std::size_t>(
+            std::count_if(messages.begin(), messages.end(), [&](const Testing::LoggedMessage& message) {
+                return message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos;
+            }));
+    }
+
+    // The warning the record logs for `message` in the native `Native` of the extension `Extension`.
+    std::string Logged(const std::string& message)
+    {
+        return "[" + std::string(Extension) + "] " + Native + ": " + message + " (warned once)";
+    }
+
+    constexpr const char* NotAlive = "the entity is not alive, so it does nothing";
+} // namespace
+
+TEST_CASE("NativeGuard::Alive is empty for a dead entity and warns once per call site and message across two calls",
+          "[rules][natives]")
+{
+    Testing::NativeCallHarness harness;
+    WarnOnceRecord warnings(Extension);
+    const CallContext context = harness.Context(Native);
+    const NativeGuard guard(context, warnings);
+    EntityList& entities = harness.GetApp().GetActiveScene().GetEntityList();
+    const std::uint32_t live = entities.CreateEntity().GetId();
+    const std::uint32_t dead = entities.CreateEntity().GetId();
+    entities.DestroyEntity(dead);
+
+    {
+        const std::optional<Entity> found = guard.Alive(EntityValue(live));
+        INFO("A live entity of the active scene was not given back");
+        REQUIRE(found.has_value());
+        REQUIRE(found->GetId() == live);
+        REQUIRE(Warnings(harness, Native) == 0);
+    }
+    for (int call = 0; call < 2; ++call)
+    {
+        INFO("A dead entity was given back");
+        REQUIRE_FALSE(guard.Alive(EntityValue(dead)).has_value());
+    }
+    {
+        INFO("Two calls from one place did not warn exactly once, under the native's name");
+        REQUIRE(Warnings(harness, Logged(NotAlive)) == once);
+    }
+    REQUIRE_FALSE(guard.Alive(EntityValue(dead)).has_value());
+    {
+        INFO("A call from a second place did not warn again");
+        REQUIRE(Warnings(harness, Logged(NotAlive)) == 2 * once);
+    }
+}
+
+TEST_CASE(
+    "NativeGuard::Require passes a live pointer and an engaged optional through and warns once for null and empty",
+    "[rules][natives]")
+{
+    Testing::NativeCallHarness harness;
+    WarnOnceRecord warnings(Extension);
+    const CallContext context = harness.Context(Native);
+    const NativeGuard guard(context, warnings);
+    constexpr const char* NullMessage = "the active scene has no physics world yet, so it does nothing";
+    constexpr const char* EmptyMessage = "the handle is stale, so it does nothing";
+
+    int value = 5;
+    {
+        INFO("A live pointer did not pass through as it was");
+        REQUIRE(guard.Require(&value, NullMessage) == &value);
+    }
+    {
+        const std::optional<int> some = guard.Require(std::optional<int>(3), EmptyMessage);
+        INFO("An engaged optional did not pass through as it was");
+        REQUIRE(some == 3);
+    }
+    {
+        INFO("A requirement that held warned");
+        REQUIRE(Warnings(harness, Native) == 0);
+    }
+    for (int call = 0; call < 2; ++call)
+    {
+        INFO("A null pointer did not pass through as null");
+        REQUIRE(guard.Require(static_cast<int*>(nullptr), NullMessage) == nullptr);
+    }
+    {
+        INFO("Two null requirements from one place did not warn exactly once, with the message given");
+        REQUIRE(Warnings(harness, Logged(NullMessage)) == once);
+    }
+    for (int call = 0; call < 2; ++call)
+    {
+        INFO("An empty optional did not pass through empty");
+        REQUIRE_FALSE(guard.Require(std::optional<int>(), EmptyMessage).has_value());
+    }
+    {
+        INFO("Two empty requirements from one place did not warn exactly once, with the message given");
+        REQUIRE(Warnings(harness, Logged(EmptyMessage)) == once);
+    }
+}
+
+TEST_CASE("NativeGuard::Warn logs once for two calls from one place and twice from two places", "[rules][natives]")
+{
+    Testing::NativeCallHarness harness;
+    WarnOnceRecord warnings(Extension);
+    const CallContext context = harness.Context(Native);
+    const NativeGuard guard(context, warnings);
+    constexpr const char* Message = "the entity has no Joint, so it reads zeroed";
+
+    for (int call = 0; call < 2; ++call)
+    {
+        guard.Warn(Message);
+    }
+    {
+        INFO("Two warnings from one place were not logged exactly once");
+        REQUIRE(Warnings(harness, Logged(Message)) == once);
+    }
+    guard.Warn(Message);
+    {
+        INFO("A warning from a second place was not logged again");
+        REQUIRE(Warnings(harness, Logged(Message)) == 2 * once);
+    }
+    guard.Warn("the entity has no Camera, so it does nothing");
+    {
+        INFO("A second message from the same native was not logged under its name");
+        REQUIRE(Warnings(harness, Logged("the entity has no Camera, so it does nothing")) == once);
+    }
+}
