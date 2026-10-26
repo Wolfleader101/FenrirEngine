@@ -1,15 +1,13 @@
 #pragma once
 
 #include <optional>
-#include <source_location>
-#include <string>
-#include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirScripting/EntityValue.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
 
@@ -20,50 +18,39 @@ namespace Fenrir
      * warnings it has logged, made by Renderer::ScriptingExtension and kept by the Scripting given the extension. In a
      * header of its own because the generated registration (Generated/FenrirRendererRegistration.cpp) declares the
      * natives, which name it.
+     *
+     * Its lookups are built on the native guard (NativeGuard.hpp): each warns once per native function and message,
+     * under the native's name, which the call context carries, so no native spells its own.
      */
     struct RendererScripting
     {
-        /** @brief Whether the app has a renderer; warns once for the caller's call site if not. */
-        bool HasRenderer(const CallContext& context, std::string_view function,
-                         std::source_location where = std::source_location::current())
+        /** @brief Whether the app has a renderer; warns once that the native does nothing if not. */
+        bool HasRenderer(const CallContext& context)
         {
             if (Renderer::IsInstalled(context.GetApp()))
             {
                 return true;
             }
-            warnings.Warn(context,
-                          std::string(function) +
-                              ": the app has no renderer (FenrirRenderer is not installed), so it does "
-                              "nothing",
-                          where);
+            const NativeGuard guard(context, warnings);
+            guard.Warn("the app has no renderer (FenrirRenderer is not installed), so it does nothing");
             return false;
         }
 
-        /** @brief The entity `id` of the active scene if it is alive; warns once for the caller's call site if not. */
-        std::optional<Entity> Alive(const CallContext& context, EntityValue id, std::string_view function,
-                                    std::source_location where = std::source_location::current())
+        /**
+         * @brief The camera entity `id` if the app has a renderer and it is alive with a Camera; warns once if not:
+         * through the guard's entity-alive rule when it is not alive, and that it has no Camera when it is.
+         */
+        std::optional<Entity> CameraFor(const CallContext& context, EntityValue id)
         {
-            EntityList& entities = context.Entities();
-            if (entities.HasEntity(id.value))
-            {
-                return entities.GetEntity(id.value);
-            }
-            warnings.Warn(context, std::string(function) + ": the entity is not alive, so it does nothing", where);
-            return std::nullopt;
-        }
-
-        /** @brief The camera entity `id` if the app has a renderer and it is alive with a Camera; warns once if not. */
-        std::optional<Entity> CameraFor(const CallContext& context, EntityValue id, std::string_view function,
-                                        std::source_location where = std::source_location::current())
-        {
-            if (!HasRenderer(context, function, where))
+            if (!HasRenderer(context))
             {
                 return std::nullopt;
             }
-            std::optional<Entity> camera = Alive(context, id, function, where);
+            const NativeGuard guard(context, warnings);
+            const std::optional<Entity> camera = guard.Alive(id);
             if (camera && !camera->HasComponent<Camera>())
             {
-                warnings.Warn(context, std::string(function) + ": the entity has no Camera, so it does nothing", where);
+                guard.Warn("the entity has no Camera, so it does nothing");
                 return std::nullopt;
             }
             return camera;
