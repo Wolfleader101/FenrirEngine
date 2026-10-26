@@ -14,7 +14,7 @@ The format is the [API description](api-description.md)'s: UTF-8 JSON in a fixed
 | Key | Value |
 | --- | --- |
 | `binding` | The configuration's file name without `.binding.toml`. |
-| `context` | The qualified name of the call context every native takes first, as `[natives] context` gives it. |
+| `context` | The qualified name of the call context every native takes first, as `[natives] context` gives it, in the binding's configuration or in the defaults file its `defaults` names. |
 | `functions` | Every native function, in the order of `[natives] sources` and, within a source, of their definitions. |
 
 A **native function** is a free function defined in one of the sources whose first parameter is `const Context&`. Its second parameter is its **state** when it is a reference to a non-const class; every later parameter is described. Member functions, function templates and declarations without a definition are never natives. A native needs external linkage (the generated registration declares and names it from another file), named parameters, and a parameter list the kinds can record; anything else fails the tool, naming the function and parameter.

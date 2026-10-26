@@ -7,18 +7,14 @@ namespace = "Fenrir.Scripting"
 uses = ["FenrirMath.binding.toml"]
 # The engine's components go by their C++ names, Fenrir.Transform and the rest, not the contract's namespace.
 registered-namespace = "Fenrir"
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "FenrirScripting.binding-defaults.toml"
 
 [csharp]
 contract = "../Managed/Fenrir.Scripting"
 generated = "../Managed/Fenrir.Scripting/Generated"
 # The engine's math types are the Fenrir.Math contract's (ADR-0029), which this contract is built on.
 usings = ["Fenrir.Math"]
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 # The engine keeps the hierarchy consistent, so C# only reads a Relationship and the links in it.
 readonly-structs = ["Fenrir::Relationship", "Fenrir::Entity"]
 # A link's value and entity list are the engine's: C# reads them through EntityLink's Target and IsNull.
@@ -32,27 +28,18 @@ includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirSc
 [registration]
 source = "../src/Generated/FenrirScriptingRegistration.cpp"
 includes = [
-    "FenrirScripting/ComponentRegistry.hpp",
-    "FenrirScripting/ScriptingExtension.hpp",
-    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the address alias.
     "../EngineContext.hpp",
 ]
 function = "Fenrir::Generated::RegisterScripting"
-extension = "Fenrir::ScriptingExtension"
-make-component = "Fenrir::MakeComponent"
-make-read-only-component = "Fenrir::MakeReadOnlyComponent"
-make-event = "Fenrir::MakeEvent"
-make-shared-struct = "Fenrir::MakeSharedStruct"
 read-only = ["Fenrir::Relationship"]
 
 [tests]
 cpp = "../Tests/Generated/FenrirScriptingDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirScriptingDefaults.cs"
 class = "Fenrir.ScriptFixture.Defaults"
-includes = ["FixtureApp.hpp", "ScriptingProbe.hpp"]
+includes = ["FixtureApp.hpp"]
 setup = "Fenrir::Testing::FixtureApp app;"
-component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[scripting][bindings]"
 
 [bound-types]
@@ -73,11 +60,6 @@ tags = "[scripting][bindings]"
 # generates from it their C# declarations, the Native class, and their registration.
 [natives]
 sources = ["../src/Bindings.cpp"]
-context = "Fenrir::CallContext"
 class = "Native"
-attribute = "NativeFunction"
-make = "Fenrir::NativeFunction::Make"
-# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
-zero-outputs = "Fenrir::ZeroingOutputs"
 # The addresses and counts natives write into C#'s memory are native-sized there.
 types = { "Fenrir::Detail::NativeAddress" = "nuint" }

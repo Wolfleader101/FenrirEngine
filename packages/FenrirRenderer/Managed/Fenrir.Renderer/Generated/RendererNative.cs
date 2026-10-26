@@ -2,9 +2,9 @@
 // Change the native functions' C++ definitions, then regenerate their description and this binding.
 
 using Fenrir.Assets;
+using Fenrir.Input;
 using Fenrir.Math;
 using Fenrir.Scripting;
-using Fenrir.Input;
 
 namespace Fenrir.Renderer;
 

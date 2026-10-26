@@ -35,9 +35,8 @@ internal static class CSharpWriter
         usings.Sort(StringComparer.Ordinal);
         if (type.Category != Category.Enum)
         {
-            usings.AddRange(binding.Config.CSharp.Usings);
-            // The namespaces of the types it holds that a binding it uses mirrors.
-            usings.AddRange(binding.UsedNamespaces(Binding.Named(type)).Where(space => !usings.Contains(space)));
+            // The configuration's, and the namespaces of the types it holds that a binding it uses mirrors.
+            usings.AddRange(Others(binding, binding.Config.CSharp.Usings.Concat(binding.UsedNamespaces(Binding.Named(type)))));
         }
 
         foreach (var name in usings)
@@ -311,15 +310,20 @@ internal static class CSharpWriter
         return KeyValuePair.Create(config.Class + ".cs", text.ToString());
     }
 
-    // The natives' usings: `first`, the configuration's, and the namespaces of the bindings it uses whose types the natives
-    // name.
+    // The natives' usings: `first`, then the configuration's and the namespaces of the bindings it uses whose types the
+    // natives name.
     private static List<string> NativesUsings(Binding binding, IReadOnlyList<BoundNative> bound, IReadOnlyList<string> first)
     {
         var usings = first.ToList();
-        usings.AddRange(binding.Config.CSharp.Usings.Where(space => !usings.Contains(space)));
-        usings.AddRange(binding.UsedNamespaces(bound.SelectMany(native => native.Named)).Where(space => !usings.Contains(space)));
+        usings.AddRange(Others(binding, binding.Config.CSharp.Usings.Concat(binding.UsedNamespaces(bound.SelectMany(native => native.Named))))
+                            .Where(space => !usings.Contains(space)));
         return usings;
     }
+
+    // The usings after the system ones, each once, in ordinal order, never the file's own namespace: the output depends
+    // on which namespaces a file needs, not on the order a configuration or its defaults file lists them.
+    private static IEnumerable<string> Others(Binding binding, IEnumerable<string> namespaces) =>
+        namespaces.Where(space => space != binding.Config.Namespace).Distinct().Order(StringComparer.Ordinal);
 
     // `start` and the comma-separated parts, then `end`: on one line when it fits, else broken after commas and
     // aligned under the first part.

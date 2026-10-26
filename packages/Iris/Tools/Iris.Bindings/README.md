@@ -37,7 +37,8 @@ header change, and check in CI that it leaves the tree clean.
 ## The configuration
 
 `<Name>.binding.toml`, with paths relative to it. [`tests/Fixture/Fixture.binding.toml`](tests/Fixture/Fixture.binding.toml)
-uses every key but `registered-namespace` and `descriptions`, which tests set; `tests/Fixture/Uses/Common.binding.toml`, the
+uses every key but `registered-namespace` and `descriptions`, which tests set, with the SDK's names in
+`tests/Fixture/Host.binding-defaults.toml`; `tests/Fixture/Uses/Common.binding.toml`, the
 binding it uses, sets `descriptions`.
 
 ```toml
@@ -45,6 +46,7 @@ namespace = "My.Physics"               # The C# namespace of the mirrors, and of
 registered-namespace = "My"            # Optional (namespace): components, events and resources are registered as My.Type instead.
 descriptions = ["../../api/MyPhysics.api.json"]  # Optional: the descriptions it binds. A binding another uses names them.
 uses = ["../../../MyMath/api/MyMath.binding.toml"]  # Optional: bindings whose mirrors it names (below).
+defaults = "../../../MyScripting/api/MyScripting.binding-defaults.toml"  # Optional: the SDK's names, stated once (below).
 exclude = ["My::RawHit"]               # Optional: described types this binding leaves out (it binds them in another form).
 
 [csharp]
@@ -201,6 +203,34 @@ neither an output, read and written, nor followed by a count, or any other resul
 
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
 
+## Defaults
+
+The names of an SDK (its attributes, interfaces, factories, headers, call context and native-function names) are the
+same in every binding of that SDK, so they are stated once, in a **defaults file**, `<Name>.binding-defaults.toml`, that
+each binding names with `defaults`. The file holds the configuration's own sections with only the keys that name an SDK
+thing:
+
+| Section | Keys a defaults file may state |
+| --- | --- |
+| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings` |
+| `[cpp]` | `includes` |
+| `[registration]` | `extension`, `make-component`, `make-read-only-component`, `make-event`, `make-shared-struct`, `make-scene-resource`, `make-read-only-scene-resource`, `make-app-resource`, `make-read-only-app-resource`, `includes` |
+| `[tests]` | `includes`, `component` |
+| `[natives]` | `context`, `attribute`, `make`, `zero-outputs` |
+
+Anything else (a path, a role list, a name of one binding's) fails naming the key. The file's sections are merged into
+the binding's before it is read: a section the binding lacks is not added (a binding with no `[registration]` gets none),
+a scalar the binding states replaces the default, and a list the binding states comes after the default's entries (the
+SDK's includes, then the package's). A binding restating a default, a scalar or a list entry byte for byte, fails with
+"already the default from `<file>`; delete it", so a configuration states only what is its own. The generated `using`s
+are sorted and never name the file's own namespace, so their order does not depend on which file lists a namespace.
+A defaults file has no `defaults` and no `uses` of its own, and a binding whose assembly does not reference the SDK
+(a pure math contract, say) names none.
+
+The header reader that writes the natives description reads two keys of a binding's configuration, `[natives] sources`
+and `context`, and takes `context` from the defaults file when the binding does not state it; this tool reads every other
+key of both files and alone checks what a defaults file may hold.
+
 ## Hand-written parts
 
 C# beside a generated mirror is a second `partial` part that adds behaviour only: methods, computed properties,
@@ -224,7 +254,8 @@ a `read-only` entry that is not a component or resource, a `by-hand` entry that 
 list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
 not a number kind, a type two descriptions describe differently (a struct, tagged union or enum may be described twice, alike, as a binding's
 own description holds a package's type; it is bound once, with the role it is selected with), `descriptions` that
-differ from the command line's, a `uses` entry that does not exist, names no
+differ from the command line's, a `defaults` file that does not exist, is not named `<Name>.binding-defaults.toml`, states
+a key a defaults file may not, or gives a default the binding restates, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and

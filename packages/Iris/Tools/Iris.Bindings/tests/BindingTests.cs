@@ -21,6 +21,8 @@ public sealed class BindingTests
 
     private static string UsesConfig => Path.Combine(FixtureDirectory, "Uses", "Common.binding.toml");
 
+    private static string DefaultsFile => Path.Combine(FixtureDirectory, "Host.binding-defaults.toml");
+
     private static CSharpParseOptions Latest => CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest);
 
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
@@ -58,6 +60,31 @@ public sealed class BindingTests
 
         Assert.Contains(generated.Keys, path => path.EndsWith("Spring.cs", StringComparison.Ordinal));
         Assert.DoesNotContain("component-attribute", File.ReadAllText(UsesConfig), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AScalarTheBindingStatesReplacesTheDefault()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nmake = \"Host::Other::Make\"\n", StringComparison.Ordinal));
+
+        var registration = Generator.Generate(config, [FixtureDescription]).Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+
+        Assert.Contains("Host::Other::Make<", registration, StringComparison.Ordinal);
+        Assert.DoesNotContain("Host::NativeFunction::Make<", registration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AListTheBindingStatesFollowsTheDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Extra.hpp\"]\n", StringComparison.Ordinal));
+
+        var registration = Generator.Generate(config, [FixtureDescription]).Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+
+        var sdk = registration.IndexOf("#include \"Host/Extension.hpp\"", StringComparison.Ordinal);
+        var own = registration.IndexOf("#include \"Extra.hpp\"", StringComparison.Ordinal);
+        Assert.True(sdk >= 0 && own > sdk, $"The SDK's include should come before the binding's, but the registration is:\n{registration}");
     }
 
     [Fact]
@@ -619,6 +646,15 @@ public sealed class BindingTests
     [InlineData("InternalNotStruct", "internal-structs names Fixture::Motion, which is not a described struct this binding mirrors", "")]
     [InlineData("WrapperNotNumber", "[bound-types] Fixture::Ticket's wrapper is 'struct', which is not a number kind", "")]
     [InlineData("NoZeroOutputs", "'zero-outputs' is missing or is not a string", "")]
+    [InlineData("RestatedScalar", "[natives] 'make' is already the default from ", "; delete it")]
+    [InlineData("RestatedListEntry", "[registration] includes lists \"Host/Extension.hpp\", which is already the default from ", "; delete it")]
+    [InlineData("RestatedTestsComponent", "[tests] 'component' is already the default from ", "; delete it")]
+    [InlineData("DefaultsStatesNamespace", "'namespace' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesDefaults", "'defaults' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesNames", "'names' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesSource", "'source' in [registration] is not a key a defaults file may state (a binding's own)", "")]
+    [InlineData("DefaultsMissing", "Missing.binding-defaults.toml, which does not exist", "")]
+    [InlineData("DefaultsMisnamed", "a defaults file is named <Name>.binding-defaults.toml", "")]
     [InlineData("NativesTestKeys", "[tests] natives-cpp, natives-class: the natives test is no longer generated, since the " +
                                    "registration zeroes each native's outputs ([natives] zero-outputs)", "remove the keys")]
     public void WhatTheConfigurationCannotHonourFailsSayingWhy(string problem, string diagnostic, string rest)
@@ -637,6 +673,27 @@ public sealed class BindingTests
 
         string Uses(string text, string used) => text.Replace("uses = [", $"uses = [\"{used}\", ", StringComparison.Ordinal);
 
+        // A copy of the defaults file, edited, in the directory, and the configuration pointed at it.
+        string Defaults(Func<string, string> edit)
+        {
+            var path = Path.Combine(directory.Path, "Host.binding-defaults.toml");
+            System.IO.File.WriteAllText(path, edit(System.IO.File.ReadAllText(DefaultsFile)));
+            return path.Replace('\\', '/');
+        }
+
+        string Misnamed()
+        {
+            var path = Path.Combine(directory.Path, "Host.toml");
+            System.IO.File.Copy(DefaultsFile, path, overwrite: true);
+            return path.Replace('\\', '/');
+        }
+
+        string WithDefaults(string text, string file) =>
+            text.Replace($"\"{DefaultsFile.Replace('\\', '/')}\"", $"\"{file}\"", StringComparison.Ordinal);
+
+        // The configuration with one line of its defaults file gone.
+        string Without(string text, string line) => WithDefaults(text, Defaults(defaults => defaults.Replace(line, "", StringComparison.Ordinal)));
+
         Func<string, string> edit = problem switch
         {
             "UsedAndExcluded" => text => text.Replace("[csharp]", "exclude = [\"Fixture::Spring\"]\n\n[csharp]", StringComparison.Ordinal),
@@ -646,21 +703,30 @@ public sealed class BindingTests
             "UsesWithoutDescriptions" => text => Uses(text, Other(other => other.Replace("descriptions = [", "# [", StringComparison.Ordinal))),
             "UsesItself" => text => Uses(text, Other(other => "uses = [\"Other.binding.toml\"]\n" + other)),
             "DescriptionsDisagree" => text => text.Replace("[csharp]", "descriptions = [\"Elsewhere.api.json\"]\n\n[csharp]", StringComparison.Ordinal),
-            "NoComponentAttribute" => text => text.Replace("component-attribute = \"NativeComponent\"\n", "", StringComparison.Ordinal),
-            "NoReadOnlyComponentInterface" => text => text.Replace("read-only-component-interface = \"IReadOnlyComponent\"\n", "", StringComparison.Ordinal),
-            "NoEventInterface" => text => text.Replace("event-interface = \"IEvent\"\n", "", StringComparison.Ordinal),
-            "NoTaggedUnionAttribute" => text => text.Replace("tagged-union-attribute = \"TaggedUnion\"\n", "", StringComparison.Ordinal),
-            "NoMakeEvent" => text => text.Replace("make-event = \"Host::MakeEvent\"\n", "", StringComparison.Ordinal),
-            "NoMakeReadOnlyComponent" => text => text.Replace("make-read-only-component = \"Host::MakeReadOnlyComponent\"\n", "", StringComparison.Ordinal),
-            "NoResourceAttribute" => text => text.Replace("resource-attribute = \"NativeResource\"\n", "", StringComparison.Ordinal),
-            "NoReadOnlyResourceInterface" => text => text.Replace("read-only-resource-interface = \"IReadOnlyResource\"\n", "", StringComparison.Ordinal),
-            "NoResourceFactory" => text => text.Replace("make-scene-resource = \"Host::MakeSceneResource\"\n", "", StringComparison.Ordinal),
+            "NoComponentAttribute" => text => Without(text, "component-attribute = \"NativeComponent\"\n"),
+            "NoReadOnlyComponentInterface" => text => Without(text, "read-only-component-interface = \"IReadOnlyComponent\"\n"),
+            "NoEventInterface" => text => Without(text, "event-interface = \"IEvent\"\n"),
+            "NoTaggedUnionAttribute" => text => Without(text, "tagged-union-attribute = \"TaggedUnion\"\n"),
+            "NoMakeEvent" => text => Without(text, "make-event = \"Host::MakeEvent\"\n"),
+            "NoMakeReadOnlyComponent" => text => Without(text, "make-read-only-component = \"Host::MakeReadOnlyComponent\"\n"),
+            "NoResourceAttribute" => text => Without(text, "resource-attribute = \"NativeResource\"\n"),
+            "NoReadOnlyResourceInterface" => text => Without(text, "read-only-resource-interface = \"IReadOnlyResource\"\n"),
+            "NoResourceFactory" => text => Without(text, "make-scene-resource = \"Host::MakeSceneResource\"\n"),
             "ReadOnlyNotRegistrable" => text => text.Replace("read-only = [\"Fixture::Collider\"", "read-only = [\"Fixture::Hit\"", StringComparison.Ordinal),
             "ByHandNotRegistrable" => text => text.Replace("by-hand = [\"Fixture::BodyId\"]", "by-hand = [\"Fixture::Numbers\"]", StringComparison.Ordinal),
             "InternalHeld" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Tag\", \"Fixture::Limits\"]", StringComparison.Ordinal),
             "InternalNotStruct" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Motion\"]", StringComparison.Ordinal),
             "WrapperNotNumber" => text => text.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal),
-            "NoZeroOutputs" => text => text.Replace("zero-outputs = \"Host::ZeroingOutputs\"\n", "", StringComparison.Ordinal),
+            "NoZeroOutputs" => text => Without(text, "zero-outputs = \"Host::ZeroingOutputs\"\n"),
+            "RestatedScalar" => text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nmake = \"Host::NativeFunction::Make\"\n", StringComparison.Ordinal),
+            "RestatedListEntry" => text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Host/Extension.hpp\"]\n", StringComparison.Ordinal),
+            "RestatedTestsComponent" => text => text.Replace("tags = \"[bindings]\"\n", "tags = \"[bindings]\"\ncomponent = \"harness.Component()\"\n", StringComparison.Ordinal),
+            "DefaultsStatesNamespace" => text => WithDefaults(text, Defaults(defaults => "namespace = \"Host\"\n" + defaults)),
+            "DefaultsStatesDefaults" => text => WithDefaults(text, Defaults(defaults => "defaults = \"Other.binding-defaults.toml\"\n" + defaults)),
+            "DefaultsStatesNames" => text => WithDefaults(text, Defaults(defaults => defaults + "\n[names]\n\"f64\" = \"Double\"\n")),
+            "DefaultsStatesSource" => text => WithDefaults(text, Defaults(defaults => defaults.Replace("[registration]\n", "[registration]\nsource = \"Native/Generated/FixtureRegistration.cpp\"\n", StringComparison.Ordinal))),
+            "DefaultsMissing" => text => WithDefaults(text, "Missing.binding-defaults.toml"),
+            "DefaultsMisnamed" => text => WithDefaults(text, Misnamed()),
             "NativesTestKeys" => text => text.Replace("tags = \"[bindings]\"\n",
                                                       "tags = \"[bindings]\"\nnatives-cpp = \"Tests/Generated/FixtureNativesTests.cpp\"\n" +
                                                       "natives-class = \"Fixture.Bindings.Tests.Natives\"\n", StringComparison.Ordinal),
@@ -741,8 +807,9 @@ public sealed class BindingTests
             text = text[..start] + "[bound-types]\n" + boundTypes + text[end..];
         }
 
-        // The binding it uses stays where it is: only this binding's outputs land in the directory.
+        // The binding it uses and its defaults file stay where they are: only this binding's outputs land in the directory.
         text = text.Replace("\"Uses/Common.binding.toml\"", $"\"{UsesConfig.Replace('\\', '/')}\"", StringComparison.Ordinal);
+        text = text.Replace("\"Host.binding-defaults.toml\"", $"\"{DefaultsFile.Replace('\\', '/')}\"", StringComparison.Ordinal);
         var config = Path.Combine(directory.Path, "Fixture.binding.toml");
         File.WriteAllText(config, edit == null ? text : edit(text));
         File.Copy(FixtureNatives, Path.Combine(directory.Path, "Fixture.natives.json"), overwrite: true);

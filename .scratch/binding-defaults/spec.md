@@ -95,6 +95,6 @@ All three touch `packages/Iris/Tools/Iris.Bindings/` and the `*.binding.toml` fi
 
 - Every package binding states its namespace, descriptions, uses, defaults, paths, natives sources and class, its own types and names, and nothing else; no `*.binding.toml` under `packages/` states `component-attribute`, `make-component`, `context`, `attribute`, `make`, `zero-outputs`, `usings = ["Fenrir.Scripting"]` or a glm or `EntityValue` bound type.
 - `grep -c "Fenrir::ZeroingOutputs" packages/*/Scripting/api/*.binding.toml packages/FenrirScripting/api/*.binding.toml` finds it in none; it is in the defaults file once.
-- `fenrir-generate-bindings` is a no-op after each PR; every generated file is byte for byte what it was.
+- `fenrir-generate-bindings` is a no-op after each PR. The generated code is the same code: the one-time changes are the generated `using`s sorted (the writer canonicalises them, so their order stops depending on which file lists a namespace), the defaults test's includes with the SDK's first, and Assets's registration gaining the SDK's component-registry include the defaults list for every registration.
 - `dotnet test` for Iris.Bindings and describe-api pass with the new cases; the README documents `defaults`, the defaults file, inherited bound types, `include` and which keys each tool reads.
 - The msvc-x64-debug preset builds and its scripting tests pass locally; the other presets are CI's.

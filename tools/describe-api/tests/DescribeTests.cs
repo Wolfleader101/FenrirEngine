@@ -143,6 +143,22 @@ public sealed class DescribeTests
                     FirstDifference(committed, described));
     }
 
+    [Fact]
+    public void TheCallContextComesFromTheDefaultsFileWhenTheBindingStatesNone()
+    {
+        using var directory = new TemporaryDirectory();
+        var source = Path.Combine(FixtureDirectory(), "Natives.cpp").Replace('\\', '/');
+        File.WriteAllText(Path.Combine(directory.Path, "Host.binding-defaults.toml"), "[natives]\ncontext = \"Host::CallContext\"\n");
+        var config = Path.Combine(directory.Path, "Fixture.binding.toml");
+        File.WriteAllText(config, $"defaults = \"Host.binding-defaults.toml\"\n[natives]\nsources = [\"{source}\"]\n");
+
+        Assert.Equal("Host::CallContext", NativesSelection.Read(config).Context);
+
+        File.WriteAllText(config, $"[natives]\nsources = [\"{source}\"]\n");
+        var exception = Assert.Throws<DescribeException>(() => NativesSelection.Read(config));
+        Assert.Contains("stated here or in the file 'defaults' names", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Hidden: has internal linkage (static, or in an anonymous namespace): the generated registration " +
                 "declares and names it from another source file")]

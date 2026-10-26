@@ -13,7 +13,8 @@ namespace DescribeApi;
 /// <summary>
 /// The <c>[natives]</c> section of a binding's configuration (<c>&lt;Name&gt;.binding.toml</c>), as far as this tool
 /// reads it: the C++ sources holding the native functions, in the order they are described, and the call context every
-/// native takes first. The binding's generator reads the rest of the file; this tool ignores it.
+/// native takes first, which the binding states or its defaults file (the top-level <c>defaults</c>, the SDK's names
+/// stated once) gives. The binding's generator reads the rest of both files; this tool ignores it.
 /// </summary>
 internal sealed record NativesSelection(string Path, string Binding, IReadOnlyList<string> Sources, string Context)
 {
@@ -54,13 +55,12 @@ internal sealed record NativesSelection(string Path, string Binding, IReadOnlyLi
             throw new DescribeException($"{path}: [natives] 'sources' is a list of C++ source paths, relative to the file");
         }
 
-        if (!natives.TryGetValue("context", out var contextValue) || contextValue is not string context || context.Length == 0)
-        {
-            throw new DescribeException(
-                $"{path}: [natives] 'context' is the qualified name of the call context a native function takes first");
-        }
-
         var directory = System.IO.Path.GetDirectoryName(path)!;
+        var context = StatedContext(natives, path) ?? DefaultContext(table, path, directory) ??
+                      throw new DescribeException(
+                          $"{path}: [natives] 'context' is the qualified name of the call context a native function takes " +
+                          "first, stated here or in the file 'defaults' names");
+
         var sources = sourceArray.Cast<string>()
                           .Select(source => System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, source)))
                           .ToList();
@@ -70,6 +70,52 @@ internal sealed record NativesSelection(string Path, string Binding, IReadOnlyLi
         }
 
         return new NativesSelection(path, fileName[..^Extension.Length], sources, context);
+    }
+
+    // The [natives] context a table states, or null when it states none.
+    private static string? StatedContext(TomlTable natives, string path)
+    {
+        if (!natives.TryGetValue("context", out var value))
+        {
+            return null;
+        }
+
+        return value is string context && context.Length > 0
+                   ? context
+                   : throw new DescribeException($"{path}: [natives] 'context' is the qualified name of the call context");
+    }
+
+    // The [natives] context of the defaults file the binding's `defaults` names, or null when it names none or the file
+    // states none. Nothing else of the file is read here; the binding's generator checks the rest.
+    private static string? DefaultContext(TomlTable binding, string path, string directory)
+    {
+        if (!binding.TryGetValue("defaults", out var value))
+        {
+            return null;
+        }
+
+        if (value is not string relative || relative.Length == 0)
+        {
+            throw new DescribeException($"{path}: 'defaults' is the path of the binding's defaults file, relative to the file");
+        }
+
+        var defaultsPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, relative));
+        if (!File.Exists(defaultsPath))
+        {
+            throw new DescribeException($"{path}: defaults names {defaultsPath}, which does not exist");
+        }
+
+        TomlTable defaults;
+        try
+        {
+            defaults = Toml.ToModel(File.ReadAllText(defaultsPath), defaultsPath);
+        }
+        catch (TomlException exception)
+        {
+            throw new DescribeException($"{defaultsPath}: {exception.Message}");
+        }
+
+        return defaults.TryGetValue("natives", out var section) && section is TomlTable natives ? StatedContext(natives, defaultsPath) : null;
     }
 }
 

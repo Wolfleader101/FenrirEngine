@@ -4,8 +4,8 @@
 // C#'s new T() equals C++'s T{} for every type the binding registers, field by field.
 
 #include "../../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
-#include "RendererScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
+#include "RendererScriptingApp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

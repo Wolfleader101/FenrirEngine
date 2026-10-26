@@ -1,0 +1,39 @@
+# The fixture's defaults file (the tool's README, "Defaults"): the Host SDK's names, stated once for every binding of it.
+# Fixture.binding.toml names it with `defaults` and states only what differs. A defaults file holds the keys that name an
+# SDK thing and nothing of one binding's: no paths, no role lists, no names.
+
+[csharp]
+usings = ["Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
+
+[registration]
+includes = ["Host/Extension.hpp"]
+extension = "Host::Extension"
+make-component = "Host::MakeComponent"
+make-read-only-component = "Host::MakeReadOnlyComponent"
+make-event = "Host::MakeEvent"
+make-shared-struct = "Host::MakeSharedStruct"
+make-scene-resource = "Host::MakeSceneResource"
+make-read-only-scene-resource = "Host::MakeReadOnlySceneResource"
+make-app-resource = "Host::MakeAppResource"
+make-read-only-app-resource = "Host::MakeReadOnlyAppResource"
+
+[tests]
+includes = ["DefaultsHarness.hpp"]
+# `setup` declares `harness`.
+component = "harness.Component()"
+
+[natives]
+context = "Host::CallContext"
+attribute = "NativeFunction"
+make = "Host::NativeFunction::Make"
+# A native with outputs is registered as make<&zero-outputs<&F, indices...>::Call>: the host's template zeroes them.
+zero-outputs = "Host::ZeroingOutputs"

@@ -6,18 +6,14 @@
 namespace = "Fenrir.DebugDraw"
 # FenrirMath's colour and box are the math binding's: named as Fenrir.Math's, never mirrored here.
 uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 
 [csharp]
 contract = "../../Managed/Fenrir.DebugDraw"
 generated = "../../Managed/Fenrir.DebugDraw/Generated"
-usings = ["Fenrir.Math", "Fenrir.Scripting"]
+usings = ["Fenrir.Math"]
 # None of these is used: the contract has no components or events.
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 # The facade's: C# names ShapeOptions and TextOptions, with their group, and converts them to these.
 internal-structs = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOptions"]
 
@@ -29,19 +25,11 @@ includes = ["FenrirDebugDraw/DebugDraw.hpp", "ScriptOptions.hpp", "FenrirScripti
 [registration]
 source = "../src/Generated/FenrirDebugDrawRegistration.cpp"
 includes = [
-    "FenrirScripting/ComponentRegistry.hpp",
-    "FenrirScripting/ScriptingExtension.hpp",
-    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the options as C# passes them.
     "DebugDrawScriptingState.hpp",
     "ScriptOptions.hpp",
 ]
 function = "Fenrir::Generated::RegisterDebugDraw"
-extension = "Fenrir::ScriptingExtension"
-make-component = "Fenrir::MakeComponent"
-make-read-only-component = "Fenrir::MakeReadOnlyComponent"
-make-event = "Fenrir::MakeEvent"
-make-shared-struct = "Fenrir::MakeSharedStruct"
 # Not registered at all: Iris checks a shared struct against a public C# struct only, and these are internal. Their
 # layout is the description's on both sides (the C# mirror is generated from it, and the mappings assert C++'s size), and
 # the extension's tests set every field from C# and read it back through what the call draws.
@@ -68,9 +56,4 @@ by-hand = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOp
 # it their C# declarations, the DebugDrawNative class, and their registration.
 [natives]
 sources = ["../src/DebugDrawScripting.cpp"]
-context = "Fenrir::CallContext"
 class = "DebugDrawNative"
-attribute = "NativeFunction"
-make = "Fenrir::NativeFunction::Make"
-# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
-zero-outputs = "Fenrir::ZeroingOutputs"

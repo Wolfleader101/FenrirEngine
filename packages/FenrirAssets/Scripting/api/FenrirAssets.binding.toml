@@ -7,11 +7,13 @@ namespace = "Fenrir.Assets"
 descriptions = ["../../api/FenrirAssets.api.json", "FenrirAssetsScripting.api.json"]
 # FenrirMath's colour is the math binding's: named as Fenrir.Math's, never mirrored here.
 uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 
 [csharp]
 contract = "../../Managed/Fenrir.Assets"
 generated = "../../Managed/Fenrir.Assets/Generated"
-usings = ["Fenrir.Math", "Fenrir.Scripting"]
+usings = ["Fenrir.Math"]
 
 [cpp]
 # On the include path, for the bindings that use this one.
@@ -28,25 +30,17 @@ includes = [
 [registration]
 source = "../src/Generated/FenrirAssetsRegistration.cpp"
 includes = [
-    "FenrirScripting/ScriptingExtension.hpp",
-    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state.
     "AssetsScriptingState.hpp",
 ]
 function = "Fenrir::Generated::RegisterAssets"
-extension = "Fenrir::ScriptingExtension"
-make-component = "Fenrir::MakeComponent"
-make-read-only-component = "Fenrir::MakeReadOnlyComponent"
-make-event = "Fenrir::MakeEvent"
-make-shared-struct = "Fenrir::MakeSharedStruct"
 
 [tests]
 cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirAssetsDefaults.cs"
 class = "AssetsScriptFixture.Defaults"
-includes = ["AssetsScriptingApp.hpp", "ScriptingProbe.hpp"]
+includes = ["AssetsScriptingApp.hpp"]
 setup = "AssetsScriptingTests::AssetsScriptingApp app;"
-component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[assets][scripting][bindings]"
 
 [bound-types]
@@ -69,9 +63,4 @@ tags = "[assets][scripting][bindings]"
 # generates from it their C# declarations, the AssetsNative class the three facades call, and their registration.
 [natives]
 sources = ["../src/AssetsScripting.cpp"]
-context = "Fenrir::CallContext"
 class = "AssetsNative"
-attribute = "NativeFunction"
-make = "Fenrir::NativeFunction::Make"
-# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
-zero-outputs = "Fenrir::ZeroingOutputs"

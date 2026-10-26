@@ -2,8 +2,8 @@
 // Change the native functions' C++ definitions, then regenerate their description and this binding.
 
 using System;
-using Fenrir.Scripting;
 using Fenrir.Input;
+using Fenrir.Scripting;
 
 namespace Fenrir.Window;
 

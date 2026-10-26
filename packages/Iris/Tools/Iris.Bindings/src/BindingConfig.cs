@@ -57,12 +57,7 @@ internal sealed record RegistrationConfig(
     string? MakeAppResource,
     string? MakeReadOnlyAppResource,
     IReadOnlySet<string> ReadOnly,
-    IReadOnlySet<string> ByHand)
-{
-    /// <summary>Whether it names a resource factory, so the generated function sets the extension's resources.</summary>
-    public bool HasResources => MakeSceneResource != null || MakeReadOnlySceneResource != null || MakeAppResource != null ||
-                                MakeReadOnlyAppResource != null;
-}
+    IReadOnlySet<string> ByHand);
 
 /// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
 internal sealed record TestsConfig(
@@ -93,7 +88,8 @@ internal sealed record NativesConfig(
 /// A binding's configuration (<c>&lt;Name&gt;.binding.toml</c>, the tool's README): everything about the C# side and
 /// the extension that the language-neutral description leaves out. Paths are relative to the file and made absolute
 /// here. <c>Descriptions</c> are the descriptions it binds, when it names them; <c>Uses</c> the configurations of the
-/// bindings whose mirrors it names rather than generating its own.
+/// bindings whose mirrors it names rather than generating its own; <c>Defaults</c> the SDK's defaults file
+/// (<see cref="Bindings.Defaults" />), whose names are merged in before the rest is read, or null.
 /// </summary>
 internal sealed record BindingConfig(
     string Path,
@@ -102,6 +98,7 @@ internal sealed record BindingConfig(
     string RegisteredNamespace,
     IReadOnlyList<string> Descriptions,
     IReadOnlyList<string> Uses,
+    string? Defaults,
     CSharpConfig CSharp,
     CppConfig Cpp,
     RegistrationConfig? Registration,
@@ -138,8 +135,15 @@ internal sealed record BindingConfig(
         }
 
         var reader = new Reader(path);
-        reader.Keys(table, "", "namespace", "registered-namespace", "descriptions", "uses", "exclude", "csharp", "cpp",
-                    "registration", "tests", "natives", "bound-types", "names", "nouns");
+        reader.Keys(table, "", "namespace", "registered-namespace", "descriptions", "uses", "defaults", "exclude", "csharp",
+                    "cpp", "registration", "tests", "natives", "bound-types", "names", "nouns");
+        // The SDK's names come in first, so every section below is read as if the binding had spelled them.
+        var defaults = table.ContainsKey("defaults") ? reader.PathOf(table, "defaults") : null;
+        if (defaults != null)
+        {
+            Bindings.Defaults.Apply(table, defaults, path);
+        }
+
         var csharp = reader.Table(table, "csharp");
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
@@ -228,7 +232,7 @@ internal sealed record BindingConfig(
         return new BindingConfig(
             path, fileName[..^Extension.Length], space,
             table.ContainsKey("registered-namespace") ? reader.String(table, "registered-namespace") : space,
-            reader.Paths(table, "descriptions"), reader.Paths(table, "uses"),
+            reader.Paths(table, "descriptions"), reader.Paths(table, "uses"), defaults,
             new CSharpConfig(reader.PathOf(csharp, "contract"), reader.PathOf(csharp, "generated"),
                              reader.Strings(csharp, "usings"), reader.OptionalString(csharp, "component-attribute"),
                              reader.OptionalString(csharp, "component-interface"),
