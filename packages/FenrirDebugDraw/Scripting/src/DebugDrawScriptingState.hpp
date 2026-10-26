@@ -54,13 +54,6 @@ namespace Fenrir
             }
         };
 
-        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
-        void WarnOnce(const CallContext& context, const std::string& message,
-                      std::source_location where = std::source_location::current())
-        {
-            warnings.Warn(context.GetApp(), message, where);
-        }
-
         /**
          * @brief The active scene's DebugDraw and the entity `relativeTo` (Entity::Null for none), unless the scene has
          * no DebugDraw or the entity is not alive: then nothing is drawn, and the caller's call site warns once, naming
@@ -73,10 +66,10 @@ namespace Fenrir
             DebugDraw* draw = context.GetApp().GetActiveScene().GetResource<DebugDraw>();
             if (draw == nullptr)
             {
-                WarnOnce(context,
-                         std::string(function) + ": the active scene has no DebugDraw (FenrirDebugDraw is not "
-                                                 "installed), so it draws nothing",
-                         where);
+                warnings.Warn(context,
+                              std::string(function) + ": the active scene has no DebugDraw (FenrirDebugDraw is not "
+                                                      "installed), so it draws nothing",
+                              where);
                 return std::nullopt;
             }
             if (relativeTo.value == Entity::Null)
@@ -86,8 +79,9 @@ namespace Fenrir
             EntityList& entities = context.Entities();
             if (!entities.HasEntity(relativeTo.value))
             {
-                WarnOnce(context, std::string(function) + ": the relativeTo entity is not alive, so it draws nothing",
-                         where);
+                warnings.Warn(context,
+                              std::string(function) + ": the relativeTo entity is not alive, so it draws nothing",
+                              where);
                 return std::nullopt;
             }
             return Target{draw, entities.GetEntity(relativeTo.value)};

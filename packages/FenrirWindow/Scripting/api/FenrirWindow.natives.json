@@ -6,7 +6,6 @@
       "name": "Exists",
       "namespace": "Fenrir::WindowNatives",
       "source": "../src/WindowScripting.cpp",
-      "state": "Fenrir::WindowScripting",
       "doc": "Whether `window` has been made.",
       "returns": {
         "type": "bool",

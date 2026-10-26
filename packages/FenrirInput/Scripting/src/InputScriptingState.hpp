@@ -21,16 +21,6 @@ namespace Fenrir
     struct InputScripting
     {
         /**
-         * @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings).
-         * Takes the App rather than a call context because InputClaimsResource warns from outside a native.
-         */
-        void WarnOnce(const App& app, const std::string& message,
-                      std::source_location where = std::source_location::current())
-        {
-            warnings.Warn(app, message, where);
-        }
-
-        /**
          * @brief The app's input device `Device`, or null (warning once for the caller's call site) when it has no
          * input. `function` is the C# function the native is behind.
          */
@@ -41,8 +31,9 @@ namespace Fenrir
             const Device* device = context.GetApp().TryGetResource<Device>();
             if (device == nullptr)
             {
-                WarnOnce(context.GetApp(),
-                         std::string(function) + ": the app has no input (Input::Install), so it reads nothing", where);
+                warnings.Warn(context,
+                              std::string(function) + ": the app has no input (Input::Install), so it reads nothing",
+                              where);
             }
             return device;
         }
@@ -54,14 +45,14 @@ namespace Fenrir
             const Gamepads* gamepads = DeviceFor<Gamepads>(context, function, where);
             if (gamepads != nullptr && !gamepads->IsConnected(gamepad))
             {
-                WarnOnce(context.GetApp(),
-                         std::string(function) + ": the gamepad is not connected, so it reads nothing held", where);
+                warnings.Warn(
+                    context, std::string(function) + ": the gamepad is not connected, so it reads nothing held", where);
                 return nullptr;
             }
             return gamepads;
         }
 
-      private:
+        /** @brief What the natives have warned about, so that each place warns once. */
         WarnOnceRecord warnings{"input scripting"};
     };
 } // namespace Fenrir

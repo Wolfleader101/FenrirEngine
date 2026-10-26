@@ -15,6 +15,7 @@
 #include "AssetsScriptingState.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirMath/Colour.hpp"
+#include "FenrirScripting/Enumerator.hpp"
 
 // Everything C# sees of assets but the handles is generated (api/FenrirAssets.binding.toml): the shared structs' and
 // enums' mappings, checked against the Fenrir.Assets contract whenever a script assembly loads, and from the native
@@ -38,7 +39,8 @@ namespace Fenrir
         {
             if (count < 0 || (first == nullptr && count > 0))
             {
-                assets.WarnOnce(context, std::string(function) + ": a span is unusable, so it does nothing", where);
+                assets.warnings.Warn(context, std::string(function) + ": a span is unusable, so it does nothing",
+                                     where);
                 return std::nullopt;
             }
             // C# passes a span as its first element and its length, so the bounds are only as good as C#'s.
@@ -87,9 +89,9 @@ namespace Fenrir
         {
             if (width < 1 || height < 1)
             {
-                assets.WarnOnce(context,
-                                std::string(function) + ": an image is at least one pixel each way, so it does nothing",
-                                where);
+                assets.warnings.Warn(
+                    context, std::string(function) + ": an image is at least one pixel each way, so it does nothing",
+                    where);
                 return std::nullopt;
             }
             auto bytes = Copy(assets, context, rgba8, byteCount, function, where);
@@ -135,10 +137,10 @@ namespace Fenrir
             {
                 return action(AssetHandle<Model>{});
             }
-            assets.WarnOnce(context,
-                            std::string(function) + ": the handle's type is not Mesh, Image, Material, Shader or "
-                                                    "Model, so it does nothing",
-                            where);
+            assets.warnings.Warn(context,
+                                 std::string(function) + ": the handle's type is not Mesh, Image, Material, Shader or "
+                                                         "Model, so it does nothing",
+                                 where);
             return otherwise;
         }
 
@@ -185,15 +187,14 @@ namespace Fenrir
         std::uint64_t Load(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind,
                            std::string_view path, ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.StoreFor(context, "Assets.Load");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Assets.Load") : std::nullopt;
-            if (!assetOwner)
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor(context, owner, "Assets.Load");
+            if (!placed)
             {
                 return 0;
             }
             return ForKind(assets, context, kind, "Assets.Load", std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
-                return AssetHandleBits(store->Load<T>(path, *assetOwner).handle);
+                return AssetHandleBits(placed->store.Load<T>(path, placed->owner).handle);
             });
         }
 
@@ -227,16 +228,15 @@ namespace Fenrir
                               const Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices,
                               std::int32_t indexCount, ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.StoreFor(context, "Assets.AddMesh");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Assets.AddMesh") : std::nullopt;
-            if (!assetOwner)
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor(context, owner, "Assets.AddMesh");
+            if (!placed)
             {
                 return 0;
             }
             std::optional<MeshData> mesh = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
                                                     uvs, uvCount, indices, indexCount, "Assets.AddMesh");
-            return mesh ? AssetHandleBits(store->Add<Mesh>(std::move(*mesh), *assetOwner)) : 0;
+            return mesh ? AssetHandleBits(placed->store.Add<Mesh>(std::move(*mesh), placed->owner)) : 0;
         }
 
         /**
@@ -265,16 +265,15 @@ namespace Fenrir
         std::uint64_t AddRenderTarget(const CallContext& context, AssetsScripting& assets, std::int32_t width,
                                       std::int32_t height, ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.StoreFor(context, "Assets.AddRenderTarget");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Assets.AddRenderTarget") : std::nullopt;
-            if (!assetOwner)
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor(context, owner, "Assets.AddRenderTarget");
+            if (!placed)
             {
                 return 0;
             }
             std::optional<ImageData> image =
                 ImageFrom(assets, context, width, height, nullptr, 0, "Assets.AddRenderTarget");
-            return image ? AssetHandleBits(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+            return image ? AssetHandleBits(placed->store.Add<Image>(std::move(*image), placed->owner)) : 0;
         }
 
         /**
@@ -291,8 +290,8 @@ namespace Fenrir
             }
             if (!store->TryGet(AssetHandleFromBits<Image>(image))->pixels.empty())
             {
-                assets.WarnOnce(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render "
-                                         "target and it does nothing");
+                assets.warnings.Warn(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render "
+                                              "target and it does nothing");
                 return false;
             }
             std::optional<ImageData> data =
@@ -308,16 +307,15 @@ namespace Fenrir
                                std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount,
                                ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.StoreFor(context, "Assets.AddImage");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Assets.AddImage") : std::nullopt;
-            if (!assetOwner)
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor(context, owner, "Assets.AddImage");
+            if (!placed)
             {
                 return 0;
             }
             std::optional<ImageData> image =
                 ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.AddImage");
-            return image ? AssetHandleBits(store->Add<Image>(std::move(*image), *assetOwner)) : 0;
+            return image ? AssetHandleBits(placed->store.Add<Image>(std::move(*image), placed->owner)) : 0;
         }
 
         /**
@@ -344,11 +342,11 @@ namespace Fenrir
         std::uint64_t CreateMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t shader,
                                      ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.Resolve<Shader>(context, shader, "Materials.Create");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Materials.Create") : std::nullopt;
-            return assetOwner ? AssetHandleBits(store->CreateMaterial(AssetHandleFromBits<Shader>(shader), *assetOwner))
-                              : 0;
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor<Shader>(context, shader, owner, "Materials.Create");
+            return placed ? AssetHandleBits(
+                                placed->store.CreateMaterial(AssetHandleFromBits<Shader>(shader), placed->owner))
+                          : 0;
         }
 
         /**
@@ -358,12 +356,11 @@ namespace Fenrir
         std::uint64_t CloneMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                     ScriptAssetOwner owner)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Clone");
-            const std::optional<AssetOwner> assetOwner =
-                store ? assets.OwnerOf(context, owner, "Materials.Clone") : std::nullopt;
-            return assetOwner
-                       ? AssetHandleBits(store->CloneMaterial(AssetHandleFromBits<Material>(material), *assetOwner))
-                       : 0;
+            const std::optional<AssetsScripting::StoreAndOwner> placed =
+                assets.StoreAndOwnerFor<Material>(context, material, owner, "Materials.Clone");
+            return placed ? AssetHandleBits(
+                                placed->store.CloneMaterial(AssetHandleFromBits<Material>(material), placed->owner))
+                          : 0;
         }
 
         /** @brief Sets a `float` parameter (AssetStore::SetFloat). */
@@ -424,10 +421,9 @@ namespace Fenrir
         bool SetBlendMode(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                           BlendMode blendMode)
         {
-            // `blendMode` comes from C#, so it may be none of the enumerators.
-            if (blendMode > BlendMode::Additive)
+            if (!IsEnumerator<BlendMode::Additive>(blendMode))
             {
-                assets.WarnOnce(context, "Materials.SetBlendMode: no such blend mode, so it does nothing");
+                assets.warnings.Warn(context, "Materials.SetBlendMode: no such blend mode, so it does nothing");
                 return false;
             }
             AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetBlendMode");
@@ -667,8 +663,9 @@ namespace Fenrir
                 store->GetShaderParameters(AssetHandleFromBits<Shader>(shader));
             if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
             {
-                assets.WarnOnce(context, "Shaders.GetParameter: the shader has no parameter at that index, so it does "
-                                         "nothing");
+                assets.warnings.Warn(context,
+                                     "Shaders.GetParameter: the shader has no parameter at that index, so it does "
+                                     "nothing");
                 return 0;
             }
             const ShaderParameter& found = parameters[static_cast<std::size_t>(index)];

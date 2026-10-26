@@ -10,7 +10,7 @@
 
 namespace Fenrir::WindowNatives
 {
-    bool Exists(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
+    bool Exists(const Fenrir::CallContext&, Fenrir::WindowId window);
     void Size(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
     void PixelSize(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
     float ContentScale(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);

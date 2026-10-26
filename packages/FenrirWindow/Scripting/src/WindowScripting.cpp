@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/Enumerator.hpp"
 #include "FenrirWindow/WindowEvents.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
 #include "Utf16.hpp"
@@ -33,9 +34,8 @@ namespace Fenrir
     namespace WindowNatives
     {
         /** @brief Whether `window` has been made. */
-        bool Exists(const CallContext& context, WindowScripting& windows, WindowId window)
+        bool Exists(const CallContext& context, WindowId window)
         {
-            (void)windows;
             return Window::Exists(context.GetApp(), window);
         }
 
@@ -98,9 +98,9 @@ namespace Fenrir
          */
         bool SetCursorMode(const CallContext& context, WindowScripting& windows, WindowId window, CursorMode mode)
         {
-            if (static_cast<std::uint8_t>(mode) > static_cast<std::uint8_t>(CursorMode::Captured))
+            if (!IsEnumerator<CursorMode::Captured>(mode))
             {
-                windows.WarnOnce(context, "Window.SetCursorMode: no such cursor mode, so it does nothing");
+                windows.warnings.Warn(context, "Window.SetCursorMode: no such cursor mode, so it does nothing");
                 return false;
             }
             return windows.Made(context, window, "Window.SetCursorMode") &&
@@ -113,9 +113,9 @@ namespace Fenrir
          */
         bool SetCursorShape(const CallContext& context, WindowScripting& windows, WindowId window, CursorShape shape)
         {
-            if (static_cast<std::uint8_t>(shape) > static_cast<std::uint8_t>(CursorShape::Hidden))
+            if (!IsEnumerator<CursorShape::Hidden>(shape))
             {
-                windows.WarnOnce(context, "Window.SetCursorShape: no such cursor shape, so it does nothing");
+                windows.warnings.Warn(context, "Window.SetCursorShape: no such cursor shape, so it does nothing");
                 return false;
             }
             return windows.Made(context, window, "Window.SetCursorShape") &&
