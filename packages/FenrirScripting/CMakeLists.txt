@@ -54,13 +54,13 @@ add_library(FenrirScripting STATIC
     src/Queries.cpp
     src/Queries.hpp
     src/ChangeBuffer.hpp
-    src/ScriptSchema.cpp
+    src/ScriptData.cpp
     src/GenerationLifecycle.cpp
     src/ReloadWatcher.cpp
     src/ReloadWatcher.hpp
     src/ComponentLoader.hpp
     src/GenerationLifecycle.hpp
-    src/ScriptSchema.hpp
+    src/ScriptData.hpp
     src/ScriptComponents.hpp
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp

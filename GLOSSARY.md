@@ -132,8 +132,16 @@ A user's C# assembly holding C# components and systems. The engine loads it as o
 *Avoid:* script (as the name of a type or file), plugin.
 
 **Script report**
-What a script assembly says it defines when it loads: the C# components and events, each with its size and alignment, and a fingerprint of its layout that the engine compares across builds. The engine checks a report before it keeps the assembly, and refuses the whole load if any part of it is wrong.
+What a script assembly says it defines when it loads: the C# components and events, each with its size and alignment, and a fingerprint of its layout that the engine compares across builds. The engine checks a report before it keeps the assembly, and refuses the whole load if any part of it is wrong (see *admission*). In code it is `ScriptReport`, which the reporting natives fill while the assembly's generated tables run.
 *Avoid:* manifest, schema.
+
+**Script data**
+The data of the script components and events a generation of the script assembly defines, alive in the ECS and the App, which the generation leaves behind for the next one together with the registry's entries for them (`ScriptData`). It outlives a generation: stopping one keeps the data for the next to admit against, and only shutting scripting down removes it.
+*Avoid:* owned data, schema.
+
+**Admission**
+Keeping a generation's script report all or nothing: nothing of it is registered unless all of it is. In order, the report is discovered and checked, the native components, events, shared structs and resources are checked against their C# structs, the script's components and events are registered, then stale script data is dropped and the queues of new events made. A failed admission leaves the registry as a stop would, so the previous generation can be admitted again.
+*Avoid:* reconcile (the old function's name), validation (only the first part of it).
 
 **Scripting contract**
 The shared assembly `Fenrir.Scripting` that every script assembly compiles against. It holds the stable engine API and never reloads.
