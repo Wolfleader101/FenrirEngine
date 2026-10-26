@@ -12,13 +12,6 @@ uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
 contract = "../../Managed/Fenrir.Assets"
 generated = "../../Managed/Fenrir.Assets/Generated"
 usings = ["Fenrir.Math", "Fenrir.Scripting"]
-# None of these is used: the contract has no components or events.
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 
 [cpp]
 # On the include path, for the bindings that use this one.
