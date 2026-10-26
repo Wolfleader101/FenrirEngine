@@ -11,6 +11,7 @@ add_executable(FenrirInputScriptingTests
     Devices.cpp
     Shapes.cpp
     Generated/FenrirInputDefaultsTests.cpp
+    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
