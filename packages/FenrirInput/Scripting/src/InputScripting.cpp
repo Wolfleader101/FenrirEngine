@@ -1,13 +1,14 @@
 #include "FenrirInputScripting/InputScripting.hpp"
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <vector>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Devices.hpp"
+#include "FenrirScripting/NativeMarshalling.hpp"
 #include "InputClaimsResource.hpp"
 #include "InputScriptingState.hpp"
 
@@ -22,80 +23,82 @@ namespace Fenrir::Generated
 
 namespace Fenrir
 {
-    // The native functions behind Fenrir.Input's Keyboard, Mouse and Gamepads, each named as C# calls it.
-    // tools/describe-api reads them from this file, in this order, and Iris.Bindings generates their C# declarations
-    // (Fenrir.Input.InputNative) and their registration from that. Each does nothing and returns false or zero with no
-    // input in the app (or a pad that is not connected), warning once per call site in a debug build. Not in an
-    // anonymous namespace: the generated registration names them from another file.
+    // The native functions behind Fenrir.Input's Keyboard, Mouse and Gamepads. tools/describe-api reads them from this
+    // file, in this order, and Iris.Bindings generates their C# declarations (Fenrir.Input.InputNative) and their
+    // registration from that. Each is its one call behind the native guard (ADR-0045): with no input in the app (or a
+    // pad that is not connected) it does nothing and returns false or zero, warning once per native function in a
+    // debug build under the native's name, which the call context carries; its `out` parameter is zeroed by the
+    // registration before it runs, so it writes nothing on that path. Not in an anonymous namespace: the generated
+    // registration names them from another file.
     namespace InputNatives
     {
         /** @brief Whether the key named `key` by the layout is held. */
         bool KeyIsDown(const CallContext& context, InputScripting& input, Key key)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.IsDown");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->IsDown(key);
         }
 
         /** @brief Whether the key at `scancode` is held. */
         bool ScancodeIsDown(const CallContext& context, InputScripting& input, Scancode scancode)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.IsDown");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->IsDown(scancode);
         }
 
         /** @brief Whether `key` went down since the last tick or frame. Repeats are not presses. */
         bool KeyJustPressed(const CallContext& context, InputScripting& input, Key key)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.JustPressed");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->JustPressed(key);
         }
 
         /** @brief Whether the key at `scancode` went down since the last tick or frame. */
         bool ScancodeJustPressed(const CallContext& context, InputScripting& input, Scancode scancode)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.JustPressed");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->JustPressed(scancode);
         }
 
         /** @brief Whether `key` went up since the last tick or frame. */
         bool KeyJustReleased(const CallContext& context, InputScripting& input, Key key)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.JustReleased");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->JustReleased(key);
         }
 
         /** @brief Whether the key at `scancode` went up since the last tick or frame. */
         bool ScancodeJustReleased(const CallContext& context, InputScripting& input, Scancode scancode)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.JustReleased");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard != nullptr && keyboard->JustReleased(scancode);
         }
 
         /** @brief The modifiers of the latest key that went down or up. */
         KeyModifiers KeyModifiersOf(const CallContext& context, InputScripting& input)
         {
-            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context, "Keyboard.Modifiers");
+            const Keyboard* keyboard = input.DeviceFor<Keyboard>(context);
             return keyboard == nullptr ? KeyModifiers::None : keyboard->Modifiers();
         }
 
         /** @brief Whether `button` is held. */
         bool MouseIsDown(const CallContext& context, InputScripting& input, MouseButton button)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.IsDown");
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
             return mouse != nullptr && mouse->IsDown(button);
         }
 
         /** @brief Whether `button` went down since the last tick or frame. */
         bool MouseJustPressed(const CallContext& context, InputScripting& input, MouseButton button)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.JustPressed");
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
             return mouse != nullptr && mouse->JustPressed(button);
         }
 
         /** @brief Whether `button` went up since the last tick or frame. */
         bool MouseJustReleased(const CallContext& context, InputScripting& input, MouseButton button)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.JustReleased");
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
             return mouse != nullptr && mouse->JustReleased(button);
         }
 
@@ -105,10 +108,10 @@ namespace Fenrir
          */
         void MousePosition(const CallContext& context, InputScripting& input, Math::Vec2* position)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.Position");
-            if (position != nullptr)
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
+            if (mouse != nullptr)
             {
-                *position = mouse == nullptr ? Math::Vec2(0.0f, 0.0f) : mouse->Position();
+                *position = mouse->Position();
             }
         }
 
@@ -118,10 +121,10 @@ namespace Fenrir
          */
         void MouseMotion(const CallContext& context, InputScripting& input, Math::Vec2* motion)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.Motion");
-            if (motion != nullptr)
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
+            if (mouse != nullptr)
             {
-                *motion = mouse == nullptr ? Math::Vec2(0.0f, 0.0f) : mouse->Motion();
+                *motion = mouse->Motion();
             }
         }
 
@@ -131,10 +134,10 @@ namespace Fenrir
          */
         void MouseScroll(const CallContext& context, InputScripting& input, Math::Vec2* scroll)
         {
-            const Mouse* mouse = input.DeviceFor<Mouse>(context, "Mouse.Scroll");
-            if (scroll != nullptr)
+            const Mouse* mouse = input.DeviceFor<Mouse>(context);
+            if (mouse != nullptr)
             {
-                *scroll = mouse == nullptr ? Math::Vec2(0.0f, 0.0f) : mouse->Scroll();
+                *scroll = mouse->Scroll();
             }
         }
 
@@ -145,28 +148,28 @@ namespace Fenrir
         std::int32_t GamepadsConnected(const CallContext& context, InputScripting& input, GamepadId* pads,
                                        std::int32_t capacity)
         {
-            const Gamepads* gamepads = input.DeviceFor<Gamepads>(context, "Gamepads.Connected");
+            const Gamepads* gamepads = input.DeviceFor<Gamepads>(context);
             if (gamepads == nullptr)
             {
                 return 0;
             }
             const std::vector<GamepadId> connected = gamepads->Connected();
-            const std::size_t room = pads == nullptr || capacity < 0 ? 0 : static_cast<std::size_t>(capacity);
-            std::copy_n(connected.begin(), std::min(room, connected.size()), pads);
+            const std::span<GamepadId> room = SpanOf(pads, capacity);
+            std::copy_n(connected.begin(), std::min(room.size(), connected.size()), room.begin());
             return static_cast<std::int32_t>(connected.size());
         }
 
         /** @brief Whether `gamepad` is connected. */
         bool GamepadIsConnected(const CallContext& context, InputScripting& input, GamepadId gamepad)
         {
-            const Gamepads* gamepads = input.DeviceFor<Gamepads>(context, "Gamepads.IsConnected");
+            const Gamepads* gamepads = input.DeviceFor<Gamepads>(context);
             return gamepads != nullptr && gamepads->IsConnected(gamepad);
         }
 
         /** @brief Whether `button` is held on `gamepad`. */
         bool GamepadIsDown(const CallContext& context, InputScripting& input, GamepadId gamepad, GamepadButton button)
         {
-            const Gamepads* gamepads = input.PadFor(context, gamepad, "Gamepads.IsDown");
+            const Gamepads* gamepads = input.PadFor(context, gamepad);
             return gamepads != nullptr && gamepads->IsDown(gamepad, button);
         }
 
@@ -174,7 +177,7 @@ namespace Fenrir
         bool GamepadJustPressed(const CallContext& context, InputScripting& input, GamepadId gamepad,
                                 GamepadButton button)
         {
-            const Gamepads* gamepads = input.PadFor(context, gamepad, "Gamepads.JustPressed");
+            const Gamepads* gamepads = input.PadFor(context, gamepad);
             return gamepads != nullptr && gamepads->JustPressed(gamepad, button);
         }
 
@@ -182,14 +185,14 @@ namespace Fenrir
         bool GamepadJustReleased(const CallContext& context, InputScripting& input, GamepadId gamepad,
                                  GamepadButton button)
         {
-            const Gamepads* gamepads = input.PadFor(context, gamepad, "Gamepads.JustReleased");
+            const Gamepads* gamepads = input.PadFor(context, gamepad);
             return gamepads != nullptr && gamepads->JustReleased(gamepad, button);
         }
 
         /** @brief The value of `axis` on `gamepad`: -1 to 1 for a stick, 0 to 1 for a trigger. */
         float GamepadAxisOf(const CallContext& context, InputScripting& input, GamepadId gamepad, GamepadAxis axis)
         {
-            const Gamepads* gamepads = input.PadFor(context, gamepad, "Gamepads.Axis");
+            const Gamepads* gamepads = input.PadFor(context, gamepad);
             return gamepads == nullptr ? 0.0f : gamepads->Axis(gamepad, axis);
         }
     } // namespace InputNatives

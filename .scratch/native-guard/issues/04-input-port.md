@@ -13,9 +13,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] No facade-name string literal remains in `src/InputScripting.cpp` or the state header; no `source_location` outside guard calls.
-- [ ] `NoInput` rule tests pass with no `FENRIR_TEST_INPUT_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] No facade-name string literal remains in `src/InputScripting.cpp` or the state header; no `source_location` outside guard calls.
+- [x] `NoInput` rule tests pass with no `FENRIR_TEST_INPUT_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 
