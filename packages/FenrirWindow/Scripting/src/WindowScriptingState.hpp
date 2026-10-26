@@ -1,11 +1,10 @@
 #pragma once
 
 #include <source_location>
-#include <string>
-#include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/InputTypes.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
 #include "FenrirWindow/Window.hpp"
@@ -22,20 +21,19 @@ namespace Fenrir
     {
         /**
          * @brief Whether `window` has been made in the app (so there is a Window, too); warns once for the caller's
-         * call site if not. `function` is the C# function the native is behind.
+         * call site, under the native function's name, if not.
          */
-        bool Made(const CallContext& context, WindowId window, std::string_view function,
+        bool Made(const CallContext& context, WindowId window,
                   std::source_location where = std::source_location::current())
         {
             if (Window::Exists(context.GetApp(), window))
             {
                 return true;
             }
-            warnings.Warn(context,
-                          std::string(function) +
-                              ": the app has no such window (no Window installed, the window not made "
-                              "yet, or an id that names none), so it does nothing",
-                          where);
+            NativeGuard(context, warnings)
+                .Warn("the app has no such window (no Window installed, the window not made yet, or an id that names "
+                      "none), so it does nothing",
+                      where);
             return false;
         }
 

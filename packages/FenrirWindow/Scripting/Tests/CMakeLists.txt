@@ -1,11 +1,28 @@
-# The window from C#, through the scripting fixture harness (FenrirScripting's HeadlessApp and ScriptingProbe): an App
-# with scripting running a fixture script assembly that uses the Fenrir.Window contract, with no window (the no-op rule)
-# or a hidden one. Tests tagged [display] need SDL's video to start, so without a display they report skipped (Catch2's
-# SKIP, exit code 4), never passed.
+# Two test executables. The natives' rules (no window, an unknown cursor mode, the clipboard written up to a capacity)
+# run from C++ through FenrirScripting's NativeCallHarness, with no .NET and no fixture assembly. The window from C#
+# runs through the scripting fixture harness (FenrirScripting's HeadlessApp and ScriptingProbe): an App with scripting
+# running a fixture script assembly that uses the Fenrir.Window contract, with a hidden window. Tests tagged [display]
+# need SDL's video to start, so without a display they report skipped (Catch2's SKIP, exit code 4), never passed.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
 set(fenrir_scripting_tests_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/Tests")
+
+# The rules, with no .NET. NativeCallHarness includes FenrirScripting's private src/ChangeBuffer.hpp, so the package's
+# src is an include too, as FenrirScriptingRulesTests has it; the library's own src gives the natives' state header.
+add_executable(FenrirWindowScriptingRulesTests
+    Rules.cpp
+    "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
+    "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
+)
+target_include_directories(FenrirWindowScriptingRulesTests PRIVATE "${fenrir_scripting_tests_dir}"
+    "${fenrir_scripting_tests_dir}/../src" ../src)
+target_link_libraries(FenrirWindowScriptingRulesTests PRIVATE FenrirWindowScripting Catch2::Catch2WithMain)
+add_test(NAME FenrirWindowScriptingRules COMMAND FenrirWindowScriptingRulesTests "~[display]")
+set_tests_properties(FenrirWindowScriptingRules PROPERTIES TIMEOUT 60)
+add_test(NAME FenrirWindowScriptingRules-Display COMMAND FenrirWindowScriptingRulesTests "[display]")
+set_tests_properties(FenrirWindowScriptingRules-Display PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 4)
+
 add_executable(FenrirWindowScriptingTests
     WindowScriptingTests.cpp
     WindowScriptingApp.hpp
@@ -13,10 +30,9 @@ add_executable(FenrirWindowScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-# FenrirWindow's test probe, to resize the hidden window as a user would; and the library's own src, for its UTF-16
-# conversion.
+# FenrirWindow's test probe, to resize the hidden window as a user would.
 target_include_directories(FenrirWindowScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"
-    ../../Tests ../src)
+    ../../Tests)
 target_link_libraries(FenrirWindowScriptingTests PRIVATE FenrirWindowScripting FenrirWindowProbe Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirWindowScriptingTests)
 fenrir_deploy_input_scripting(FenrirWindowScriptingTests)
@@ -48,7 +64,7 @@ add_dependencies(FenrirWindowScriptingTests FenrirWindowScriptFixture)
 
 set(fenrir_window_fixture_environment
     "FENRIR_TEST_WINDOW_FIXTURE=${fenrir_window_fixture_dir}/Fenrir.WindowScriptFixture.dll")
-# Everything that needs no display.
+# Everything from C# that needs no display.
 add_test(NAME FenrirWindowScripting COMMAND FenrirWindowScriptingTests "~[display]")
 set_tests_properties(FenrirWindowScripting PROPERTIES TIMEOUT 300 ENVIRONMENT "${fenrir_window_fixture_environment}")
 # Everything that needs a hidden window: skipped without a display.

@@ -42,7 +42,6 @@ endfunction()
 
 add_library(FenrirWindowScripting STATIC
     include/FenrirWindowScripting/WindowScripting.hpp
-    src/Utf16.hpp
     src/WindowScripting.cpp
     src/WindowScriptingState.hpp
     src/Generated/FenrirWindowMappings.hpp
