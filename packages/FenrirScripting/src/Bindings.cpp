@@ -152,12 +152,12 @@ namespace Fenrir::ScriptingNatives
     bool RegisterScriptComponent(const CallContext&, Detail::EngineContext& engine, const char* name,
                                  std::int32_t length, std::int32_t size, std::int32_t alignment)
     {
-        if (engine.discovering == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
+        if (engine.reporting == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
         {
             return false;
         }
-        engine.discovering->push_back({std::string(name, static_cast<std::size_t>(length)),
-                                       static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+        engine.reporting->components.push_back({std::string(name, static_cast<std::size_t>(length)),
+                                                static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
         return true;
     }
 
@@ -275,12 +275,12 @@ namespace Fenrir::ScriptingNatives
     bool RegisterScriptEvent(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
                              std::int32_t size, std::int32_t alignment)
     {
-        if (engine.discoveringEvents == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
+        if (engine.reporting == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
         {
             return false;
         }
-        engine.discoveringEvents->push_back({std::string(name, static_cast<std::size_t>(length)),
-                                             static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+        engine.reporting->events.push_back({std::string(name, static_cast<std::size_t>(length)),
+                                            static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
         return true;
     }
 

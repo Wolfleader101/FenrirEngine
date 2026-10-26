@@ -4,7 +4,7 @@
 #include "EngineContext.hpp"
 #include "GenerationLifecycle.hpp"
 #include "ScriptComponents.hpp"
-#include "ScriptSchema.hpp"
+#include "ScriptData.hpp"
 
 #include <Iris/Iris.hpp>
 
@@ -214,8 +214,9 @@ namespace Fenrir
         // The assembly named by the config is only ever copied; the copy is what loads.
         std::filesystem::path scriptAssembly;
 
-        // The script components and events whose data is alive in the ECS and the App.
-        Detail::OwnedScriptData owned;
+        // The script data: what the generations define, registered in `components` above, and the data of it that is
+        // alive in the ECS and the App.
+        Detail::ScriptData scriptData{components};
 
         // Reloads now, if scripting is running; see GenerationLifecycle::Reload.
         Iris::CallResult<void> Reload();
@@ -346,7 +347,7 @@ namespace Fenrir
                 }
                 if (IsLive())
                 {
-                    Detail::DropScriptData(*context->app, owned);
+                    scriptData.Drop(*context->app);
                 }
                 if (host != nullptr && generations.PendingUnloadCount() != 0)
                 {
@@ -417,7 +418,7 @@ namespace Fenrir
         runnerDestroy.reset();
         runner.reset();
         phaseMask = 0;
-        components.RemoveScriptDefined();
+        scriptData.Forget();
     }
 
     Iris::CallResult<void> Scripting::State::Reload()
@@ -832,8 +833,8 @@ namespace Fenrir
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
                 hooks.reconcile = [self](Detail::LoadedComponent& loaded) {
-                    return Detail::Reconcile(*self->context, self->components, IrisComponentLoader::Of(loaded),
-                                             self->owned);
+                    Detail::IrisScriptAssembly assembly(*self->context, IrisComponentLoader::Of(loaded));
+                    return self->scriptData.Admit(*self->context->app, assembly);
                 };
                 hooks.start = [self](Detail::LoadedComponent& loaded) { return self->StartSystems(loaded); };
                 hooks.stop = [self] { self->StopSystems(); };

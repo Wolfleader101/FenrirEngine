@@ -1,6 +1,7 @@
-// What a loaded script assembly may define, with no .NET: reconcile decides, from the assembly's report, what is
-// refused and what is kept. The assembly side is a small interface with two adapters, one over a loaded Iris component
-// and, here, one that returns literals, so every refusal can be checked without an assembly that lies.
+// What a loaded script assembly may define, with no .NET: admission decides, from the assembly's script report, what is
+// refused and what is kept, and keeps it all or nothing. The assembly side is a small interface with two adapters, one
+// over a loaded Iris component and, here, one that returns literals, so every refusal can be checked without an
+// assembly that lies.
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -8,7 +9,7 @@
 #include "RulesTypes.hpp"
 
 #include "ComponentRegistry.hpp"
-#include "ScriptSchema.hpp"
+#include "ScriptData.hpp"
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -21,10 +22,10 @@ namespace
 {
     using namespace Fenrir;
     using Fenrir::Detail::ComponentRegistry;
-    using Fenrir::Detail::OwnedScriptData;
     using Fenrir::Detail::ScriptAssembly;
     using Fenrir::Detail::ScriptComponentDescription;
-    using Fenrir::Detail::ScriptKind;
+    using Fenrir::Detail::ScriptData;
+    using Fenrir::Detail::ScriptReport;
 
     // Names found by brute force against the storage-id hash (see FenrirECS's tests): these two have the same id.
     constexpr const char* CollidingFirst = "Test.Collide.39238";
@@ -42,17 +43,18 @@ namespace
         std::vector<ScriptComponentDescription> components;
         std::vector<ScriptComponentDescription> events;
         std::map<std::string, std::string> fingerprints; // By name; a name with none has an empty fingerprint.
-        Iris::CallResult<void> report = Succeeded();     // What reporting the components fails with, if it does.
+        Iris::CallResult<void> report = Succeeded();     // What giving the report fails with, if it does.
         Iris::CallResult<void> nativeCheck = Succeeded();
-        int nativeChecks = 0; // How many times reconcile asked for the native components to be checked.
+        int nativeChecks = 0; // How many times admission asked for the native components to be checked.
 
-        Iris::CallResult<void> Report(ScriptKind kind, std::vector<ScriptComponentDescription>& found) override
+        Iris::CallResult<void> Report(ScriptReport& found) override
         {
-            if (kind == ScriptKind::Component && !report.Succeeded())
+            if (!report.Succeeded())
             {
                 return report;
             }
-            found = kind == ScriptKind::Component ? components : events;
+            found.components = components;
+            found.events = events;
             return Succeeded();
         }
 
@@ -69,12 +71,12 @@ namespace
         }
     };
 
-    // The App, the registry (the engine's own components in it, as a Scripting has them) and what is still owned.
+    // The App, the registry (the engine's own components in it, as a Scripting has them) and the script data.
     struct World
     {
         Testing::HeadlessApp headless;
         ComponentRegistry registry;
-        OwnedScriptData owned;
+        ScriptData data{registry};
 
         World()
         {
@@ -86,16 +88,16 @@ namespace
             return headless.Get().GetActiveScene().GetEntityList();
         }
 
-        Iris::CallResult<void> Reconcile(ScriptAssembly& assembly)
+        Iris::CallResult<void> Admit(ScriptAssembly& assembly)
         {
-            return Fenrir::Detail::Reconcile(headless.Get(), registry, assembly, owned);
+            return data.Admit(headless.Get(), assembly);
         }
 
-        // What a reload does between two generations: the script-defined registrations go, the data stays until
-        // reconcile decides.
+        // What a reload does between two generations: the script-defined registrations go, the data stays until the
+        // next admission decides.
         void ReleaseGeneration()
         {
-            registry.RemoveScriptDefined();
+            data.Forget();
         }
 
         // A script component of this name on a new entity, as a script would have added it.
@@ -113,6 +115,26 @@ namespace
             const auto id = registry.Find(componentName);
             return id >= 0 && Entities().Has(registry.Get(id)->type, entity);
         }
+
+        // How many components of a script type the scene holds, by the type's layout, whether or not it is registered.
+        [[nodiscard]] std::size_t CountOf(const char* componentName, std::size_t size = 8, std::size_t alignment = 4)
+        {
+            return Entities().Count(ComponentType::Dynamic(DynamicComponentType(componentName, size, alignment)));
+        }
+
+        [[nodiscard]] std::size_t ScriptDefinedCount() const
+        {
+            std::size_t count = 0;
+            for (const auto& registration : registry.All())
+            {
+                count += registration.scriptDefined ? 1 : 0;
+            }
+            for (const auto& registration : registry.Events())
+            {
+                count += registration.scriptDefined ? 1 : 0;
+            }
+            return count;
+        }
     };
 
     ScriptComponentDescription Component(const char* name, std::size_t size = 8, std::size_t alignment = 4)
@@ -121,13 +143,13 @@ namespace
     }
 } // namespace
 
-TEST_CASE("a sound report registers every component it defines", "[reconcile]")
+TEST_CASE("a sound report registers every component it defines", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health", 4, 4), Component("Rules.Wide", 32, 16)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A sound report should be accepted: " + result.diagnostic);
     REQUIRE(result.Succeeded());
@@ -140,13 +162,13 @@ TEST_CASE("a sound report registers every component it defines", "[reconcile]")
     REQUIRE((world.registry.Get(wide)->type.Size() == 32 && world.registry.Get(wide)->type.Alignment() == 16));
 }
 
-TEST_CASE("a component reported twice is refused", "[reconcile]")
+TEST_CASE("a component reported twice is refused", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health"), Component("Rules.Health")};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A component reported twice should be refused");
     REQUIRE(!result.Succeeded());
@@ -154,7 +176,7 @@ TEST_CASE("a component reported twice is refused", "[reconcile]")
     REQUIRE(result.diagnostic == "The script reported the component 'Rules.Health' more than once.");
 }
 
-TEST_CASE("a component with a layout no C# struct has is refused", "[reconcile]")
+TEST_CASE("a component with a layout no C# struct has is refused", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
@@ -166,7 +188,7 @@ TEST_CASE("a component with a layout no C# struct has is refused", "[reconcile]"
     }));
     assembly.components = {Component("Rules.Odd", size, alignment)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A size of " << size << " with an alignment of " << alignment << " should be refused");
     REQUIRE(!result.Succeeded());
@@ -175,13 +197,13 @@ TEST_CASE("a component with a layout no C# struct has is refused", "[reconcile]"
                                      " and an alignment of " + std::to_string(alignment) + ", which no C# struct has.");
 }
 
-TEST_CASE("a script component cannot take the name of a native component", "[reconcile]")
+TEST_CASE("a script component cannot take the name of a native component", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Fenrir.Transform")};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A script defining the engine's Transform should be refused");
     REQUIRE(!result.Succeeded());
@@ -190,13 +212,13 @@ TEST_CASE("a script component cannot take the name of a native component", "[rec
             "The script defines a component 'Fenrir.Transform', but the engine already has a component of that name.");
 }
 
-TEST_CASE("two script components whose names share a storage id are refused, naming both", "[reconcile]")
+TEST_CASE("two script components whose names share a storage id are refused, naming both", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component(CollidingFirst), Component(CollidingSecond)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("Two names with one storage id should be refused");
     REQUIRE(!result.Succeeded());
@@ -205,7 +227,7 @@ TEST_CASE("two script components whose names share a storage id are refused, nam
                                      "' map to the same storage; rename one.");
 }
 
-TEST_CASE("a refused report leaves the registry unchanged and makes no storage", "[reconcile]")
+TEST_CASE("a refused report leaves the registry unchanged and makes no storage", "[script-data]")
 {
     World world;
     const auto registered = world.registry.All().size();
@@ -214,7 +236,7 @@ TEST_CASE("a refused report leaves the registry unchanged and makes no storage",
     // A sound component first, then one that is refused: nothing of either may remain.
     assembly.components = {Component("Rules.Health"), Component("Fenrir.Transform")};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("The report should be refused");
     REQUIRE(!result.Succeeded());
@@ -223,10 +245,10 @@ TEST_CASE("a refused report leaves the registry unchanged and makes no storage",
     INFO("No storage should have been made");
     REQUIRE(world.Entities().ComponentStorageCount() == storages);
     INFO("Nothing should be recorded as owned");
-    REQUIRE(world.owned.components.empty());
+    REQUIRE(world.data.OwnedComponents().empty());
 }
 
-TEST_CASE("a report the assembly could not give is refused with its explanation", "[reconcile]")
+TEST_CASE("a report the assembly could not give is refused with its explanation", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
@@ -234,7 +256,7 @@ TEST_CASE("a report the assembly could not give is refused with its explanation"
     assembly.report = Iris::CallResult<void>{Iris::CallStatus::ManagedException,
                                              "The script assembly could not report its components: it threw", false};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A report that failed should fail the load");
     REQUIRE(!result.Succeeded());
@@ -247,13 +269,13 @@ TEST_CASE("a report the assembly could not give is refused with its explanation"
 
 // Events.
 
-TEST_CASE("an event reported twice is refused", "[reconcile]")
+TEST_CASE("an event reported twice is refused", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Beep", 4, 4), Component("Rules.Beep", 4, 4)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("An event reported twice should be refused");
     REQUIRE(!result.Succeeded());
@@ -261,7 +283,7 @@ TEST_CASE("an event reported twice is refused", "[reconcile]")
     REQUIRE(result.diagnostic == "The script reported the event 'Rules.Beep' more than once.");
 }
 
-TEST_CASE("an event with a layout the engine cannot store is refused", "[reconcile]")
+TEST_CASE("an event with a layout the engine cannot store is refused", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
@@ -274,7 +296,7 @@ TEST_CASE("an event with a layout the engine cannot store is refused", "[reconci
     }));
     assembly.events = {Component("Rules.Odd", size, alignment)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A size of " << size << " with an alignment of " << alignment << " should be refused");
     REQUIRE(!result.Succeeded());
@@ -284,7 +306,7 @@ TEST_CASE("an event with a layout the engine cannot store is refused", "[reconci
                                      ", which the engine cannot store.");
 }
 
-TEST_CASE("an event cannot take the name of an event the engine already has", "[reconcile]")
+TEST_CASE("an event cannot take the name of an event the engine already has", "[script-data]")
 {
     World world;
     auto registration = MakeEvent<RulesTest::Ping>("Rules.Ping");
@@ -293,7 +315,7 @@ TEST_CASE("an event cannot take the name of an event the engine already has", "[
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Ping", 4, 4)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A script event named like a native one should be refused");
     REQUIRE(!result.Succeeded());
@@ -302,14 +324,14 @@ TEST_CASE("an event cannot take the name of an event the engine already has", "[
             "The script defines an event 'Rules.Ping', but the engine already has an event of that name.");
 }
 
-TEST_CASE("an event cannot take the name of a queue the app already has", "[reconcile]")
+TEST_CASE("an event cannot take the name of a queue the app already has", "[script-data]")
 {
     World world;
     REQUIRE(world.headless.Get().CreateEventQueue("Rules.Taken", 4, 4) != nullptr);
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Taken", 4, 4)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A script event named like an app queue should be refused");
     REQUIRE(!result.Succeeded());
@@ -318,28 +340,28 @@ TEST_CASE("an event cannot take the name of a queue the app already has", "[reco
             "The script defines an event 'Rules.Taken', but the engine already has an event of that name.");
 }
 
-TEST_CASE("an event may keep the name of a queue the previous generation made", "[reconcile]")
+TEST_CASE("an event may keep the name of a queue the previous generation made", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Beep", 4, 4)};
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
     world.ReleaseGeneration();
 
-    const auto again = world.Reconcile(assembly);
+    const auto again = world.Admit(assembly);
 
     INFO("The next generation should be allowed the queue the last one made: " + again.diagnostic);
     REQUIRE(again.Succeeded());
 }
 
-TEST_CASE("a sound report registers its events and makes their queues", "[reconcile]")
+TEST_CASE("a sound report registers its events and makes their queues", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health")};
     assembly.events = {Component("Rules.Beep", 4, 4), Component("Rules.Blast", 32, 16)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("A sound report of components and events should be accepted: " + result.diagnostic);
     REQUIRE(result.Succeeded());
@@ -351,14 +373,14 @@ TEST_CASE("a sound report registers its events and makes their queues", "[reconc
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Blast")->EventSize() == 32);
 }
 
-TEST_CASE("a refused event leaves no component registered and no queue made", "[reconcile]")
+TEST_CASE("a refused event leaves no component registered and no queue made", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health")};
     assembly.events = {Component("Rules.Beep", 4, 4), Component("Rules.Odd", 8, 3)};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("The report should be refused");
     REQUIRE(!result.Succeeded());
@@ -370,17 +392,17 @@ TEST_CASE("a refused event leaves no component registered and no queue made", "[
 
 // What a reload leaves behind.
 
-TEST_CASE("a component whose layout is unchanged keeps its data across a reload", "[reconcile]")
+TEST_CASE("a component whose layout is unchanged keeps its data across a reload", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health")};
     assembly.fingerprints = {{"Rules.Health", "8/4;Current:int"}};
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
     const auto entity = world.EntityWith("Rules.Health");
     world.ReleaseGeneration();
 
-    const auto again = world.Reconcile(assembly);
+    const auto again = world.Admit(assembly);
 
     INFO("The same layout should reload: " + again.diagnostic);
     REQUIRE(again.Succeeded());
@@ -390,13 +412,13 @@ TEST_CASE("a component whose layout is unchanged keeps its data across a reload"
     REQUIRE(!world.headless.Logger().Contains(Testing::LogLevel::Warn, "were removed"));
 }
 
-TEST_CASE("a component whose layout changed is removed from every scene with a warning", "[reconcile]")
+TEST_CASE("a component whose layout changed is removed from every scene with a warning", "[script-data]")
 {
     World world;
     LiteralAssembly before;
     before.components = {Component("Rules.Health")};
     before.fingerprints = {{"Rules.Health", "8/4;Current:int"}};
-    REQUIRE(world.Reconcile(before).Succeeded());
+    REQUIRE(world.Admit(before).Succeeded());
     const auto first = world.EntityWith("Rules.Health");
     const auto second = world.EntityWith("Rules.Health");
     world.ReleaseGeneration();
@@ -404,7 +426,7 @@ TEST_CASE("a component whose layout changed is removed from every scene with a w
     after.components = {Component("Rules.Health", 16, 8)};
     after.fingerprints = {{"Rules.Health", "16/8;Current:long"}};
 
-    const auto result = world.Reconcile(after);
+    const auto result = world.Admit(after);
 
     INFO("The new layout should load: " + result.diagnostic);
     REQUIRE(result.Succeeded());
@@ -418,45 +440,45 @@ TEST_CASE("a component whose layout changed is removed from every scene with a w
     REQUIRE(world.registry.Get(world.registry.Find("Rules.Health"))->type.Size() == 16);
 }
 
-TEST_CASE("a component that no longer exists is removed from every scene with a warning", "[reconcile]")
+TEST_CASE("a component that no longer exists is removed from every scene with a warning", "[script-data]")
 {
     World world;
     LiteralAssembly before;
     before.components = {Component("Rules.Health")};
-    REQUIRE(world.Reconcile(before).Succeeded());
+    REQUIRE(world.Admit(before).Succeeded());
     const auto entity = world.EntityWith("Rules.Health");
     world.ReleaseGeneration();
     LiteralAssembly after;
 
-    const auto result = world.Reconcile(after);
+    const auto result = world.Admit(after);
 
     INFO("A script that dropped the component should load: " + result.diagnostic);
     REQUIRE(result.Succeeded());
     INFO("The entity should not keep data nobody defines");
     REQUIRE(world.registry.Find("Rules.Health") < 0);
-    REQUIRE(world.Entities().Count(ComponentType::Dynamic(DynamicComponentType("Rules.Health", 8, 4))) == 0);
+    REQUIRE(world.CountOf("Rules.Health") == 0);
     REQUIRE(world.Entities().HasEntity(entity));
     INFO("The warning should say it no longer exists");
     REQUIRE(world.headless.Logger().Contains(Testing::LogLevel::Warn,
                                              "the script component 'Rules.Health' no longer exists; 1 component(s) "
                                              "were removed so nothing reads the old bytes as the new layout."));
     INFO("It should no longer be owned");
-    REQUIRE(world.owned.components.empty());
+    REQUIRE(world.data.OwnedComponents().empty());
 }
 
-TEST_CASE("an event queue whose layout is unchanged is kept with its events", "[reconcile]")
+TEST_CASE("an event queue whose layout is unchanged is kept with its events", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Beep", 4, 4)};
     assembly.fingerprints = {{"Rules.Beep", "4/4;Value:int"}};
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
     auto* queue = world.headless.Get().FindEventQueue("Rules.Beep");
     const std::int32_t event = 5;
     REQUIRE(queue->SendRaw(&event));
     world.ReleaseGeneration();
 
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
 
     INFO("The queue should be the same one");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") == queue);
@@ -464,16 +486,16 @@ TEST_CASE("an event queue whose layout is unchanged is kept with its events", "[
     REQUIRE(Testing::HeldEventCount(*queue) == 1);
 }
 
-TEST_CASE("an event that no longer exists loses its queue with a warning", "[reconcile]")
+TEST_CASE("an event that no longer exists loses its queue with a warning", "[script-data]")
 {
     World world;
     LiteralAssembly before;
     before.events = {Component("Rules.Beep", 4, 4)};
-    REQUIRE(world.Reconcile(before).Succeeded());
+    REQUIRE(world.Admit(before).Succeeded());
     world.ReleaseGeneration();
     LiteralAssembly after;
 
-    const auto result = world.Reconcile(after);
+    const auto result = world.Admit(after);
 
     INFO("A script that dropped the event should load: " + result.diagnostic);
     REQUIRE(result.Succeeded());
@@ -485,13 +507,13 @@ TEST_CASE("an event that no longer exists loses its queue with a warning", "[rec
         "the script event 'Rules.Beep' no longer exists; its queue and the events in it were dropped."));
 }
 
-TEST_CASE("an event queue whose layout changed is removed with its events and made again", "[reconcile]")
+TEST_CASE("an event queue whose layout changed is removed with its events and made again", "[script-data]")
 {
     World world;
     LiteralAssembly before;
     before.events = {Component("Rules.Beep", 4, 4)};
     before.fingerprints = {{"Rules.Beep", "4/4;Value:int"}};
-    REQUIRE(world.Reconcile(before).Succeeded());
+    REQUIRE(world.Admit(before).Succeeded());
     const std::int32_t event = 5;
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->SendRaw(&event));
     world.ReleaseGeneration();
@@ -499,7 +521,7 @@ TEST_CASE("an event queue whose layout changed is removed with its events and ma
     after.events = {Component("Rules.Beep", 8, 8)};
     after.fingerprints = {{"Rules.Beep", "8/8;Value:long"}};
 
-    const auto result = world.Reconcile(after);
+    const auto result = world.Admit(after);
 
     INFO("The new layout should load: " + result.diagnostic);
     REQUIRE(result.Succeeded());
@@ -515,14 +537,14 @@ TEST_CASE("an event queue whose layout changed is removed with its events and ma
 
 // The native check, and its place in the order.
 
-TEST_CASE("a failure of the native components' check changes nothing", "[reconcile]")
+TEST_CASE("a failure of the native components' check changes nothing", "[script-data]")
 {
     World world;
     LiteralAssembly before;
     before.components = {Component("Rules.Health")};
     before.events = {Component("Rules.Beep", 4, 4)};
     before.fingerprints = {{"Rules.Health", "8/4;Current:int"}, {"Rules.Beep", "4/4;Value:int"}};
-    REQUIRE(world.Reconcile(before).Succeeded());
+    REQUIRE(world.Admit(before).Succeeded());
     const auto entity = world.EntityWith("Rules.Health");
     const std::int32_t event = 5;
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->SendRaw(&event));
@@ -534,32 +556,32 @@ TEST_CASE("a failure of the native components' check changes nothing", "[reconci
     after.nativeCheck = Iris::CallResult<void>{Iris::CallStatus::InvalidArgument,
                                                "Component 'Test.BadHealth' does not match its C# struct: Max", false};
 
-    const auto result = world.Reconcile(after);
+    const auto result = world.Admit(after);
 
     INFO("The check's failure should be the result, unchanged");
     REQUIRE(
         (!result.Succeeded() && result.diagnostic == "Component 'Test.BadHealth' does not match its C# struct: Max"));
     INFO("The previous generation's component data should not have been dropped, even though the layout changed");
-    REQUIRE(world.Entities().Count(ComponentType::Dynamic(DynamicComponentType("Rules.Health", 8, 4))) == 1);
+    REQUIRE(world.CountOf("Rules.Health") == 1);
     REQUIRE(world.Entities().HasEntity(entity));
     INFO("Nor should its event queue and the event in it");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->EventSize() == 4);
     REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
     INFO("Nothing of the new report should be registered, and ownership should be as it was");
     REQUIRE((world.registry.Find("Rules.Armour") < 0 && world.registry.Find("Rules.Health") < 0));
-    REQUIRE((world.owned.components.size() == 1 && world.owned.components.contains("Rules.Health")));
+    REQUIRE((world.data.OwnedComponents().size() == 1 && world.data.OwnedComponents().contains("Rules.Health")));
     INFO("A warning about dropping data should not have been given");
     REQUIRE(!world.headless.Logger().Contains(Testing::LogLevel::Warn, "were removed"));
 }
 
-TEST_CASE("the native components are checked only after the definitions' own rules pass", "[reconcile]")
+TEST_CASE("the native components are checked only after the definitions' own rules pass", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health"), Component("Rules.Health")};
     assembly.nativeCheck = Iris::CallResult<void>{Iris::CallStatus::InvalidArgument, "the native check", false};
 
-    const auto result = world.Reconcile(assembly);
+    const auto result = world.Admit(assembly);
 
     INFO("The definitions' own refusal should be the one reported");
     REQUIRE(result.diagnostic == "The script reported the component 'Rules.Health' more than once.");
@@ -567,36 +589,102 @@ TEST_CASE("the native components are checked only after the definitions' own rul
     REQUIRE(assembly.nativeChecks == 0);
 }
 
-TEST_CASE("the native components are checked once for a report that passes its own rules", "[reconcile]")
+TEST_CASE("the native components are checked once for a report that passes its own rules", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health")};
     assembly.events = {Component("Rules.Beep", 4, 4)};
 
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
 
     INFO("Components and events share one native check");
     REQUIRE(assembly.nativeChecks == 1);
 }
 
-TEST_CASE("dropping all script data empties what is owned", "[reconcile]")
+// Admission is all or nothing, and what a generation leaves behind outlives it.
+
+TEST_CASE("an admission refused after its components were registered leaves nothing registered and the data as it was",
+          "[script-data]")
+{
+    World world;
+    LiteralAssembly before;
+    before.components = {Component("Rules.Health")};
+    before.events = {Component("Rules.Beep", 4, 4)};
+    before.fingerprints = {{"Rules.Health", "8/4;Current:int"}, {"Rules.Beep", "4/4;Value:int"}};
+    REQUIRE(world.Admit(before).Succeeded());
+    const auto entity = world.EntityWith("Rules.Health");
+    const std::int32_t event = 5;
+    REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->SendRaw(&event));
+    world.ReleaseGeneration();
+    // The report passes every check and the components register, then the events refuse to: an event with no name
+    // is the one report the checks let through that the registry turns down (a real assembly cannot give one, since
+    // the reporting natives refuse an empty name, which is why the checks do not look for it).
+    LiteralAssembly after;
+    after.components = {Component("Rules.Health"), Component("Rules.Armour")};
+    after.events = {Component("Rules.Beep", 4, 4), Component("", 4, 4)};
+    after.fingerprints = before.fingerprints;
+
+    const auto result = world.Admit(after);
+
+    INFO("The admission should be refused with the events' refusal");
+    REQUIRE((!result.Succeeded() && result.diagnostic == "The script's events could not be registered together."));
+    INFO("Nothing script-defined should be left registered, the components that registered first included");
+    REQUIRE(world.ScriptDefinedCount() == 0);
+    REQUIRE((world.registry.Find("Rules.Health") < 0 && world.registry.Find("Rules.Armour") < 0 &&
+             world.registry.FindEvent("Rules.Beep") < 0));
+    INFO("The previous generation's data should be as it was, since nothing stale was dropped");
+    REQUIRE(world.CountOf("Rules.Health") == 1);
+    REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
+    REQUIRE((world.data.OwnedComponents().contains("Rules.Health") && world.data.OwnedEvents().contains("Rules.Beep")));
+
+    const auto restored = world.Admit(before);
+
+    INFO("The previous report should admit again, as a restore of the previous generation does: " +
+         restored.diagnostic);
+    REQUIRE(restored.Succeeded());
+    INFO("It should find its data and its queue where it left them");
+    REQUIRE(world.Has("Rules.Health", entity));
+    REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
+}
+
+TEST_CASE("forgetting a generation removes its registrations and keeps its data for the next", "[script-data]")
 {
     World world;
     LiteralAssembly assembly;
     assembly.components = {Component("Rules.Health")};
     assembly.events = {Component("Rules.Beep", 4, 4)};
-    REQUIRE(world.Reconcile(assembly).Succeeded());
+    REQUIRE(world.Admit(assembly).Succeeded());
     const auto entity = world.EntityWith("Rules.Health");
-    world.ReleaseGeneration();
 
-    Fenrir::Detail::DropScriptData(world.headless.Get(), world.owned);
+    world.data.Forget();
+
+    INFO("Nothing script-defined should be registered");
+    REQUIRE((world.ScriptDefinedCount() == 0 && world.registry.Find("Rules.Health") < 0));
+    INFO("The engine's own components should still be registered");
+    REQUIRE(world.registry.Find("Fenrir.Transform") >= 0);
+    INFO("The data, the queue and their layouts should stay");
+    REQUIRE((world.CountOf("Rules.Health") == 1 && world.Entities().HasEntity(entity)));
+    REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") != nullptr);
+    REQUIRE((world.data.OwnedComponents().contains("Rules.Health") && world.data.OwnedEvents().contains("Rules.Beep")));
+}
+
+TEST_CASE("dropping the script data empties what is owned and registered", "[script-data]")
+{
+    World world;
+    LiteralAssembly assembly;
+    assembly.components = {Component("Rules.Health")};
+    assembly.events = {Component("Rules.Beep", 4, 4)};
+    REQUIRE(world.Admit(assembly).Succeeded());
+    const auto entity = world.EntityWith("Rules.Health");
+
+    world.data.Drop(world.headless.Get());
 
     INFO("The component data should be gone from the entity");
-    REQUIRE(world.Entities().Count(ComponentType::Dynamic(DynamicComponentType("Rules.Health", 8, 4))) == 0);
-    REQUIRE(world.Entities().HasEntity(entity));
+    REQUIRE((world.CountOf("Rules.Health") == 0 && world.Entities().HasEntity(entity)));
     INFO("The event queue should be gone");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") == nullptr);
-    INFO("Nothing should be owned");
-    REQUIRE((world.owned.components.empty() && world.owned.events.empty()));
+    INFO("Nothing should be owned or registered");
+    REQUIRE((world.data.OwnedComponents().empty() && world.data.OwnedEvents().empty()));
+    REQUIRE(world.ScriptDefinedCount() == 0);
 }
