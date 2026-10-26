@@ -138,12 +138,11 @@ internal static class CppWriter
         text.Line("{");
         text.Indent();
         List(text, "components", binding.Listed.Where(type => type.Role == Role.Component),
-             type => registration.ReadOnly.Contains(type.Name) ? registration.MakeReadOnlyComponent : registration.MakeComponent,
-             binding.RegisteredName);
-        List(text, "events", binding.Listed.Where(type => type.Role == Role.Event), _ => registration.MakeEvent,
+             type => binding.MakeComponent(registration, type), binding.RegisteredName);
+        List(text, "events", binding.Listed.Where(type => type.Role == Role.Event), type => binding.MakeEvent(registration, type),
              binding.RegisteredName);
         List(text, "sharedStructs", binding.Listed.Where(type => type.Role == Role.SharedStruct),
-             _ => registration.MakeSharedStruct, binding.QualifiedName);
+             type => binding.MakeSharedStruct(registration, type), binding.QualifiedName);
         if (registration.HasResources)
         {
             List(text, "resources", binding.Listed.Where(Binding.IsResource), type => binding.ResourceFactory(registration, type)!,
