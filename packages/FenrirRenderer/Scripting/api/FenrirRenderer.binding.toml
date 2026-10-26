@@ -41,6 +41,7 @@ source = "../src/Generated/FenrirRendererRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state (and through it the entity value).
     "RendererScriptingState.hpp",
 ]
@@ -60,10 +61,6 @@ includes = ["RendererScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "RendererScriptingTests::RendererScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[renderer][scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirRendererNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirRendererNatives.cs"
-natives-class = "RendererScriptFixture.Natives"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
 # the RendererScripting state second) into FenrirRenderer.natives.json, and this binding generates their C# declarations,
@@ -74,6 +71,8 @@ context = "Fenrir::CallContext"
 class = "RendererNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"
 
 [bound-types]
 "Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }

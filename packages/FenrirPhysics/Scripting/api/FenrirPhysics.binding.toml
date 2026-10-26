@@ -54,6 +54,7 @@ source = "../src/Generated/FenrirPhysicsRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the query types as C# holds them.
     "PhysicsScriptingState.hpp",
     "ScriptQueries.hpp",
@@ -74,10 +75,6 @@ includes = ["PhysicsScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "Fenrir::Testing::PhysicsScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[physics][scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirPhysicsNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirPhysicsNatives.cs"
-natives-class = "Fenrir.PhysicsScriptFixture.Natives"
 
 [bound-types]
 "Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
@@ -103,3 +100,5 @@ context = "Fenrir::CallContext"
 class = "PhysicsNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"

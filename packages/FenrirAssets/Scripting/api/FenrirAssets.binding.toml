@@ -36,6 +36,7 @@ includes = [
 source = "../src/Generated/FenrirAssetsRegistration.cpp"
 includes = [
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state.
     "AssetsScriptingState.hpp",
 ]
@@ -54,10 +55,6 @@ includes = ["AssetsScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "AssetsScriptingTests::AssetsScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[assets][scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirAssetsNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirAssetsNatives.cs"
-natives-class = "AssetsScriptFixture.Natives"
 
 [bound-types]
 "Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
@@ -83,3 +80,5 @@ context = "Fenrir::CallContext"
 class = "AssetsNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"

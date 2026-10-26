@@ -59,7 +59,7 @@ target_link_libraries(FenrirWindowScripting PUBLIC FenrirWindow FenrirInputScrip
 #   ../Managed/Fenrir.Window/Generated/   the C# mirrors, beside which the contract's own .cs files add behaviour only,
 #                                         and the natives' declarations, WindowNative;
 #   src/Generated/                        the Iris mappings and the extension's events, sharedStructs and functions;
-#   Tests/Generated/                      the defaults test and the natives test.
+#   Tests/Generated/                      the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings

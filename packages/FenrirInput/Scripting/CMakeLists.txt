@@ -61,7 +61,7 @@ target_link_libraries(FenrirInputScripting PUBLIC FenrirInput FenrirScripting)
 #   include/FenrirInputScripting/Generated/     the Iris mappings, which a binding using this one (FenrirWindow's)
 #                                               includes;
 #   src/Generated/                              the extension's events, sharedStructs and functions;
-#   Tests/Generated/                            the defaults test and the natives test.
+#   Tests/Generated/                            the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings

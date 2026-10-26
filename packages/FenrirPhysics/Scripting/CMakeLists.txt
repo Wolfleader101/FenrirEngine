@@ -57,8 +57,7 @@ target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScriptin
 #                                         and the natives' declarations, PhysicsNative;
 #   src/Generated/                        the Iris mappings and the extension's components, events, sharedStructs and
 #                                         functions;
-#   Tests/Generated/                      the defaults test (C#'s new T() against C++'s T{}, field by field) and the
-#                                         natives test (each output written when a native has nothing to act on).
+#   Tests/Generated/                      the defaults test (C#'s new T() against C++'s T{}, field by field).
 # The query types natives take by pointer are bound in the form C# holds them (src/ScriptQueries.hpp), which this
 # library describes itself, as api/FenrirPhysicsScripting.api.json. After changing a shared type or a native, regenerate
 # both stages:

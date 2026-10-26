@@ -28,6 +28,13 @@ internal static unsafe partial class FixtureNative
     [NativeFunction]
     public static partial bool Find(in Vector3 origin, float distance, out Hit hit);
 
+    /// <summary>The nearest and farthest hits from `origin`: two outputs, each zeroed by the registration.</summary>
+    /// <param name="nearest">The nearest hit; the default when there is none.</param>
+    /// <param name="farthest">The farthest hit; the default when there is none.</param>
+    /// <returns>How many hits there were.</returns>
+    [NativeFunction]
+    public static partial int Extremes(in Vector3 origin, out Hit nearest, out Hit farthest);
+
     /// <summary>Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.</summary>
     /// <returns>How many it wrote.</returns>
     [NativeFunction]

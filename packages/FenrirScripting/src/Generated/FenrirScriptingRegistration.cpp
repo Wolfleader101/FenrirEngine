@@ -6,6 +6,7 @@
 #include "../../include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
 #include "../EngineContext.hpp"
 
 namespace Fenrir::ScriptingNatives
@@ -61,7 +62,7 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::TimeTickRate>("Fenrir.Scripting.Native.TimeTickRate"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityIsValid>("Fenrir.Scripting.Native.EntityIsValid"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityLinkOwner>("Fenrir.Scripting.Native.EntityLinkOwner"),
-            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityWorldTransform>("Fenrir.Scripting.Native.EntityWorldTransform"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::ScriptingNatives::EntityWorldTransform, 3>::Call>("Fenrir.Scripting.Native.EntityWorldTransform"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntitySetWorldTransform>("Fenrir.Scripting.Native.EntitySetWorldTransform"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentIdOf>("Fenrir.Scripting.Native.ComponentIdOf", -1),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegisterScriptComponent>("Fenrir.Scripting.Native.RegisterScriptComponent"),

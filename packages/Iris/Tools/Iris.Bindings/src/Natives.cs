@@ -79,28 +79,31 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
         element.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.True;
 }
 
-/// <summary>What crosses for one C++ parameter, as the natives test passes it to the bound function pointer.</summary>
+/// <summary>What crosses for one C++ parameter: the bound function pointer's parameter.</summary>
 /// <param name="Type">The C# type of the function pointer's parameter (<c>void*</c>, <c>byte</c> for bool, ...).</param>
 /// <param name="Output">For an output, the C# type of the value it points at; null otherwise.</param>
 internal sealed record WireParameter(string Type, string? Output);
 
-/// <summary>A native function resolved against a binding: its C# declaration and what crosses.</summary>
+/// <summary>A native function resolved against a binding: its C# declaration, what crosses, and what is zeroed.</summary>
 /// <param name="Result">The C# result type of the declaration.</param>
 /// <param name="Parameters">The C# parameters of the declaration, each <c>[modifier] Type name</c>.</param>
 /// <param name="WireResult">The C# type of the bound function pointer's result.</param>
 /// <param name="Wire">One per C++ parameter after the context and state, in order.</param>
 /// <param name="Named">The described types its declaration names, by C++ name.</param>
+/// <param name="Outputs">
+/// The indices, into the C++ function's full parameter list (the call context and the state counted), of the single
+/// outputs (<c>out T</c>) the registration zeroes before the native runs. An output span and an <c>inOut</c> pointer are
+/// not among them.
+/// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
-                                   string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named)
+                                   string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named,
+                                   IReadOnlyList<int> Outputs)
 {
     /// <summary>Whether its declaration takes text, a <c>ReadOnlySpan&lt;char&gt;</c>.</summary>
     public bool TakesText => Parameters.Any(parameter => parameter.StartsWith(TextType + " ", StringComparison.Ordinal));
 
     /// <summary>The C# type of a <c>std::string_view</c> parameter.</summary>
     public const string TextType = "ReadOnlySpan<char>";
-
-    /// <summary>Whether the native writes an output, which the natives test checks it writes with no world.</summary>
-    public bool HasOutput => Wire.Any(parameter => parameter.Output != null);
 }
 
 /// <summary>
@@ -109,7 +112,8 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// with a <c>std::int32_t</c> length after it a <c>string</c>, both crossing as bytes and a length; any other pointer
 /// with a <c>std::int32_t</c> count after it is a <c>T*</c> span, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
 /// doc marks an output is <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is
-/// <c>void*</c>, an address C# passes as it is; a <c>const T*</c> is <c>in T</c>. Numbers and bool are themselves, an
+/// <c>void*</c>, an address C# passes as it is; a <c>const T*</c> is <c>in T</c>. Each <c>out T</c> is also an output the
+/// registration zeroes before the native runs (<see cref="BoundNative.Outputs" />). Numbers and bool are themselves, an
 /// alias in <c>[natives] types</c> is the C#
 /// type it names, an enum is its C# enum, and a wrapper (a described struct of one field, or a bound type whose entry
 /// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A result is any of those values, nothing, or a
@@ -175,6 +179,9 @@ internal static class Natives
 
         var parameters = new List<string>();
         var wire = new List<WireParameter>();
+        var outputs = new List<int>();
+        // The described parameters follow the call context and, when the native takes one, its state.
+        var leading = function.State == null ? 1 : 2;
         var all = function.Parameters;
         for (var index = 0; index < all.Count; index++)
         {
@@ -209,6 +216,7 @@ internal static class Natives
                 {
                     parameters.Add($"out {pointee} {name}");
                     wire.Add(new WireParameter($"{pointee}*", pointee));
+                    outputs.Add(leading + index);
                 }
                 else if ((countFollows && !parameter.Input) || parameter.InOut || type.PointeeKind == "void")
                 {
@@ -254,7 +262,7 @@ internal static class Natives
             }
         }
 
-        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList());
+        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs);
     }
 
     // The C# type of the function pointer's parameter or result for a value of this kind: a bool crosses as a byte.
