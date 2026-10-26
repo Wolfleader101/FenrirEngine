@@ -12,10 +12,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] No facade-name string literal remains in `src/AssetsScripting.cpp` or the state header; the span copy and the hand-rolled text-out are gone.
-- [ ] A test in `NoOps.cpp` calls the public `Resolve<Model>` through the harness with no store, then with a stale handle, and sees one warning each, with the words Renderer will reuse.
-- [ ] `NoOps` rule tests pass with no `FENRIR_TEST_ASSETS_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] No facade-name string literal remains in `src/AssetsScripting.cpp` or the state header; the span copy and the hand-rolled text-out are gone.
+- [x] A test in `NoOps.cpp` calls the public `Resolve<Model>` through the harness with no store, then with a stale handle, and sees one warning each, with the words Renderer will reuse.
+- [x] `NoOps` rule tests pass with no `FENRIR_TEST_ASSETS_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 

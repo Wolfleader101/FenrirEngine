@@ -40,6 +40,7 @@ endfunction()
 add_library(FenrirAssetsScripting STATIC
     include/FenrirAssetsScripting/AssetHandleBits.hpp
     include/FenrirAssetsScripting/AssetMappings.hpp
+    include/FenrirAssetsScripting/AssetResolve.hpp
     include/FenrirAssetsScripting/AssetsScripting.hpp
     include/FenrirAssetsScripting/ScriptAssets.hpp
     include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp

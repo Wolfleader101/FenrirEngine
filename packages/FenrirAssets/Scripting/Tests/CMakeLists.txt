@@ -1,6 +1,8 @@
 # The asset store from C#, through the scripting fixture harness (FenrirScripting's HeadlessApp and ScriptingProbe): an
-# App with assets installed (or not, for the no-op rule), its asset root FenrirAssets's test fixtures, and scripting
-# running a fixture script assembly that uses the Fenrir.Assets contract (spec seam 7).
+# App with assets installed, its asset root FenrirAssets's test fixtures, and scripting running a fixture script
+# assembly that uses the Fenrir.Assets contract (spec seam 7). The no-op rules (NoOps.cpp) need no .NET: they call the
+# natives from C++ through FenrirScripting's NativeCallHarness, which includes that package's private src/ChangeBuffer.hpp,
+# so this executable adds its `src` and this package's own (for the extension state) to its includes.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
@@ -16,9 +18,11 @@ add_executable(FenrirAssetsScriptingTests
     Shapes.cpp
     Generated/FenrirAssetsDefaultsTests.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
+    "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
-target_include_directories(FenrirAssetsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}")
+target_include_directories(FenrirAssetsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"
+    "${fenrir_scripting_tests_dir}/../src" "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 target_link_libraries(FenrirAssetsScriptingTests PRIVATE FenrirAssetsScripting Catch2::Catch2WithMain)
 target_compile_definitions(FenrirAssetsScriptingTests PRIVATE
     FENRIR_ASSETS_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/../../Tests/fixtures")
@@ -56,7 +60,6 @@ set(fenrir_assets_fixture_environment
 add_test(NAME FenrirAssetsScripting COMMAND FenrirAssetsScriptingTests "~[noops]")
 set_tests_properties(FenrirAssetsScripting PROPERTIES TIMEOUT 300 ENVIRONMENT "${fenrir_assets_fixture_environment}")
 # The no-op rules count warnings given once per native call site per process, so they run in a process of their own,
-# in declaration order.
+# in declaration order. They need no fixture assembly, so none is set.
 add_test(NAME FenrirAssetsScripting-NoOps COMMAND FenrirAssetsScriptingTests "[noops]" --order decl)
-set_tests_properties(FenrirAssetsScripting-NoOps PROPERTIES TIMEOUT 300 ENVIRONMENT
-    "${fenrir_assets_fixture_environment}")
+set_tests_properties(FenrirAssetsScripting-NoOps PROPERTIES TIMEOUT 300)
