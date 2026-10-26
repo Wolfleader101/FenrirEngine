@@ -21,10 +21,10 @@ namespace Fenrir
      * owner's, reached through the world), so they need no owner. With no world, no body or a released mesh they do
      * nothing and return false or zero, and an output they write reads as its default.
      *
-     * In debug builds each such case is warned about once per extension made here, for each place in this library's
-     * native code that notices it (its source location) and each reason: not once per C# call site, so a second
-     * script calling the same function the same wrong way is not warned about again. Each call makes a new extension
-     * with its own record, which lasts as long as the Scripting given it.
+     * In debug builds each such case is warned about once per extension made here, for each native function that
+     * notices it and each reason, under the native's name (`[physics scripting] PhysicsNative.Raycast: ...`): not once
+     * per C# call site, so a second script calling the same function the same wrong way is not warned about again.
+     * Each call makes a new extension with its own record, which lasts as long as the Scripting given it.
      */
     [[nodiscard]] ScriptingExtension PhysicsScriptingExtension();
 } // namespace Fenrir

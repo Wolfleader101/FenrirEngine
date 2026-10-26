@@ -4,6 +4,21 @@ include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
 set(fenrir_scripting_tests_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/Tests")
+
+# The natives' rules (no world, no body, no Joint, each warning once under the native's name), called from C++ through
+# FenrirScripting's NativeCallHarness with no .NET and no fixture assembly. The harness includes FenrirScripting's
+# private src/ChangeBuffer.hpp, so this executable is given that package's src directory, as FenrirScriptingRulesTests
+# is, and this library's src for the state and the query types.
+add_executable(FenrirPhysicsScriptingRulesTests
+    Rules.cpp
+    "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
+    "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
+)
+target_include_directories(FenrirPhysicsScriptingRulesTests PRIVATE "${fenrir_scripting_tests_dir}"
+    "${fenrir_scripting_tests_dir}/../src" ../src)
+target_link_libraries(FenrirPhysicsScriptingRulesTests PRIVATE FenrirPhysicsScripting Catch2::Catch2WithMain)
+add_test(NAME FenrirPhysicsScriptingRules COMMAND FenrirPhysicsScriptingRulesTests --order decl)
+set_tests_properties(FenrirPhysicsScriptingRules PROPERTIES TIMEOUT 60)
 add_executable(FenrirPhysicsScriptingTests
     PhysicsScriptingApp.hpp
     PhysicsScriptingTests.cpp

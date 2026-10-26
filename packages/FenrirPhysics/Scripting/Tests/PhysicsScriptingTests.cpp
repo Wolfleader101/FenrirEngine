@@ -373,106 +373,6 @@ namespace
     }
 } // namespace
 
-TEST_CASE("In a scene with no physics world, every function from C# does nothing and returns false or zero",
-          "[physics][scripting]")
-{
-    PhysicsScriptingApp test;
-    const std::uint32_t entity = test.Place(Math::Vec3(0.0f));
-    // No frame has run with a body in the scene, so there is no physics world.
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
-
-    {
-        INFO("Forces with no world should return false, not throw");
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddImpulse", entity, 1.0f, 0.0f, 0.0f));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddForce", entity));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddTorque", entity));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddAngularImpulse", entity));
-    }
-    {
-        INFO("Queries with no world should find nothing");
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "Raycast", 0.0f, 10.0f, 0.0f, 0.0f, -1.0f, 0.0f, 100.0f));
-        REQUIRE(test.Call<int>(WorldType, "RaycastAll", 0.0f, 10.0f, 0.0f, 0.0f, -1.0f, 0.0f, 100.0f, 4) == 0);
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "SphereCast", 0.0f, 10.0f, 0.0f, 0.5f, 0.0f, -1.0f, 0.0f, 100.0f));
-        REQUIRE(test.Call<int>(WorldType, "SphereCastAll", 0.0f, 10.0f, 0.0f, 0.5f, 0.0f, -1.0f, 0.0f, 100.0f, 4) == 0);
-        REQUIRE(test.Call<int>(WorldType, "OverlapBox", 0.0f, 0.0f, 0.0f, 1.0f, 4) == 0);
-        REQUIRE(test.Call<int>(WorldType, "OverlapPoint", 0.0f, 0.0f, 0.0f, 4) == 0);
-    }
-    {
-        INFO("Body state and world settings with no world should be false or zero");
-        REQUIRE(test.Call<int>(WorldType, "ContactsOf", entity, 4) == 0);
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "IsSleeping", entity));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "Bounds", entity));
-        REQUIRE(test.Call<float>(WorldType, "GravityLength") == 0.0f);
-        test.Call<void>(WorldType, "SetGravity", 0.0f, -1.0f, 0.0f);
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "DrawColliders"));
-    }
-#ifndef NDEBUG
-    {
-        test.Call<bool>(WorldType, "AddImpulse", entity, 1.0f, 0.0f, 0.0f);
-        INFO("A debug build should warn once, not on every call, that AddImpulse had no world");
-        REQUIRE(WarningsAbout(test, "AddImpulse") == 1);
-    }
-#endif
-}
-
-TEST_CASE("On an entity without a body, functions from C# do nothing and return false or zero", "[physics][scripting]")
-{
-    PhysicsScriptingApp test;
-    AddStaticBox(test, Math::Vec3(0.0f, -5.0f, 0.0f));
-    const std::uint32_t plain = test.Place(Math::Vec3(0.0f));
-    test.Run(1);
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) != nullptr);
-
-    {
-        INFO("An impulse on an entity with no body should return false");
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddImpulse", plain, 1.0f, 0.0f, 0.0f));
-    }
-    {
-        INFO("An entity with no body has no contacts, does not sleep and has no bounds");
-        REQUIRE(test.Call<int>(WorldType, "ContactsOf", plain, 4) == 0);
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "IsSleeping", plain));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "Bounds", plain));
-    }
-    {
-        INFO("An entity that does not exist is treated as one with no body");
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "AddImpulse", 0xFFFFFFFFu, 1.0f, 0.0f, 0.0f));
-        REQUIRE_FALSE(test.Call<bool>(WorldType, "IsSleeping", 0x00ABCDEFu));
-    }
-#ifndef NDEBUG
-    {
-        INFO("A debug build should warn once that IsSleeping was asked about an entity with no body");
-        REQUIRE(WarningsAbout(test, "IsSleeping") == 1);
-    }
-#endif
-}
-
-TEST_CASE("With no physics world, collision meshes from C# give the none handle and false, warning once each in debug",
-          "[physics][scripting]")
-{
-    PhysicsScriptingApp test;
-    // No frame has run with a body in the scene, so there is no physics world.
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
-
-    for (int call = 0; call < 2; ++call)
-    {
-        {
-            INFO("Cooking a mesh with no world should give the none handle, not throw");
-            REQUIRE(test.Call<std::uint64_t>(WorldType, "MakeGroundMesh") == 0);
-        }
-        {
-            INFO("Releasing a mesh with no world should return false");
-            REQUIRE_FALSE(test.Call<bool>(WorldType, "ReleaseMesh", std::uint64_t{1}));
-        }
-    }
-#ifndef NDEBUG
-    {
-        INFO("A debug build should warn once for each, not on every call, that it had no world");
-        REQUIRE(WarningsAbout(test, "CreateCollisionMesh: the active scene has no physics world") == 1);
-        REQUIRE(WarningsAbout(test, "ReleaseCollisionMesh: the active scene has no physics world") == 1);
-    }
-#endif
-}
-
 TEST_CASE("Once the Physics owner is gone, collision meshes from C# give the none handle and false",
           "[physics][scripting]")
 {
@@ -1111,44 +1011,6 @@ TEST_CASE("GetJointState from C# reads a hinge's angle, load and pose, as C++ do
     }
 }
 
-TEST_CASE("GetJointState from C# reads zeroed with no world and for a non-joint, warning once in debug",
-          "[physics][scripting][joints]")
-{
-    PhysicsScriptingApp test;
-    const std::uint32_t plain = test.Place(Math::Vec3(0.0f));
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
-    const std::vector<float> zeroed = ValuesOf(JointState{});
-
-    test.Call<void>(JointsType, "ReadJointState", plain);
-    {
-        INFO("With no physics world, C# should read the zeroed state, without throwing");
-        REQUIRE(CSharpRead(test) == zeroed);
-    }
-
-    AddStaticBox(test, Math::Vec3(0.0f, -5.0f, 0.0f));
-    test.Run(1);
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) != nullptr);
-    test.Call<void>(JointsType, "ReadJointState", plain);
-    {
-        INFO("On an entity with no Joint, C# should read the zeroed state, without throwing");
-        REQUIRE(CSharpRead(test) == zeroed);
-    }
-    test.Entities().DestroyEntity(plain);
-    test.Call<void>(JointsType, "ReadJointState", plain);
-    {
-        INFO("On an entity no longer alive, likewise");
-        REQUIRE(CSharpRead(test) == zeroed);
-    }
-#ifndef NDEBUG
-    {
-        test.Call<void>(JointsType, "ReadJointState", plain);
-        INFO("A debug build should warn once for no world and once for no Joint, not on every call");
-        REQUIRE(WarningsAbout(test, "GetJointState: the active scene has no physics world") == 1);
-        REQUIRE(WarningsAbout(test, "GetJointState: the entity has no Joint") == 1);
-    }
-#endif
-}
-
 namespace
 {
     // A unit box hanging 0.5 beneath `hook` from a ball joint to the world, made in C++. Returns the joint entity.
@@ -1395,33 +1257,6 @@ TEST_CASE("Motion tests from C# filtered like a body pass what that body would p
         REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "RaycastEast", mover, moverLayers) == wall);
         REQUIRE(test.Call<std::uint32_t>(MotionTestsType, "RaycastEast", mover, 0u) == debris);
     }
-}
-
-TEST_CASE("With no physics world, the motion tests from C# find nothing, warning once each in debug",
-          "[physics][scripting][motion]")
-{
-    PhysicsScriptingApp test;
-    // No frame has run with a body in the scene, so there is no physics world.
-    REQUIRE(PhysicsWorld::Of(test.headless.Get().GetActiveScene()) == nullptr);
-
-    for (int call = 0; call < 2; ++call)
-    {
-        INFO("With no world, MoveCast should return false, Penetrations 0 and Depenetrate zero, without throwing");
-        REQUIRE_FALSE(test.Call<bool>(MotionTestsType, "MoveBox", 0.0f, 0.0f, 0.0f, 10.0f, 0.0f, 0.0f, NoEntity, 0u));
-        REQUIRE(test.Call<int>(MotionTestsType, "PenetrateBox", 0.0f, 0.0f, 0.0f, 4, NoEntity, 0u) == 0);
-        test.Call<void>(MotionTestsType, "DepenetrateBox", 0.0f, 0.0f, 0.0f, NoEntity, 0u);
-        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 0) == 0.0f);
-        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 1) == 0.0f);
-        REQUIRE(test.Call<float>(MotionTestsType, "Offset", 2) == 0.0f);
-    }
-#ifndef NDEBUG
-    {
-        INFO("A debug build should warn once for each, not on every call, that it had no world");
-        REQUIRE(WarningsAbout(test, "MoveCast: the active scene has no physics world") == 1);
-        REQUIRE(WarningsAbout(test, "Penetrations: the active scene has no physics world") == 1);
-        REQUIRE(WarningsAbout(test, "Depenetrate: the active scene has no physics world") == 1);
-    }
-#endif
 }
 
 namespace
