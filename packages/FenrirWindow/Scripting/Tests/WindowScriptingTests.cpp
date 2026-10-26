@@ -1,7 +1,7 @@
-// The window from C# through the scripting fixture harness (spec seam 7): with no window every Fenrir.Window function
-// no-ops with its documented return and one warning per native call site; with a hidden window (skipped without a
-// display) C# reads what C++ does, round-trips the clipboard and reads the window's events. C++ calls the fixture's
-// static methods through Iris, as the system runner calls scripts.
+// The window from C# through the scripting fixture harness (spec seam 7): what a script sees. With a hidden window
+// (skipped without a display) C# reads what C++ does, round-trips the clipboard and reads the window's events; the C#
+// WindowSize has the C++ layout. C++ calls the fixture's static methods through Iris, as the system runner calls
+// scripts. The natives' rules (no window, an unknown cursor mode) are Rules.cpp's, with no .NET.
 
 #include "HeadlessApp.hpp"
 #include "ScriptingProbe.hpp"
@@ -9,7 +9,6 @@
 
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -23,7 +22,6 @@
 #include "FenrirScripting/Scripting.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "FenrirWindowScripting/WindowScripting.hpp"
-#include "Utf16.hpp"
 
 using namespace Fenrir;
 
@@ -91,17 +89,6 @@ namespace
         return Call<std::optional<std::string>>(scripting, CallsType, method, capacity).value_or("<null>");
     }
 
-    // How many warnings the app logged that contain `text`.
-    std::size_t WarningsWith(const Testing::HeadlessApp& headless, const std::string& text)
-    {
-        std::size_t count = 0;
-        for (const Testing::LoggedMessage& message : headless.Logger().Messages())
-        {
-            count += message.level == Testing::LogLevel::Warn && message.text.find(text) != std::string::npos ? 1 : 0;
-        }
-        return count;
-    }
-
     // A hidden main window, as GL tests use.
     WindowConfig HiddenWindow()
     {
@@ -149,68 +136,21 @@ namespace
         }
     };
 
-    // A release build warns about nothing; a debug build once per native call site.
-#ifdef NDEBUG
-    constexpr std::size_t warningsPerCallSite = 0;
-#else
-    constexpr std::size_t warningsPerCallSite = 1;
-#endif
-
     constexpr std::uint32_t mainWindow = 1;
     constexpr std::uint32_t noWindow = 99;
 } // namespace
 
-TEST_CASE("With no window, every C# window function does nothing and warns once per native call site",
-          "[window][scripting]")
+TEST_CASE("C#'s Window.Main names FenrirWindow's main window", "[window][scripting]")
 {
-    // Scripting with both extensions, but no Window::Install: scripts still load.
+    // Scripting with both extensions, but no Window::Install: the extension needs no owner, so scripts still load.
     Testing::HeadlessApp headless;
     Scripting scripting = Scripting::Install(headless.Get(), FixtureConfig());
     {
         INFO("The fixture did not load with the window's extension and no window");
         REQUIRE(scripting.HasScripts());
     }
-
-    {
-        INFO("C#'s Window.Main is not FenrirWindow's main window");
-        REQUIRE(Call<std::uint32_t>(scripting, CallsType, "Main") == Window::MainWindow().value);
-    }
-    for (int call = 0; call < 2; ++call)
-    {
-        INFO("Call " << call << ": a function did something, or returned other than false, zero or empty");
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "Exists", mainWindow));
-        REQUIRE(Call<int>(scripting, CallsType, "Width", mainWindow) == 0);
-        REQUIRE(Call<int>(scripting, CallsType, "Height", mainWindow) == 0);
-        REQUIRE(Call<int>(scripting, CallsType, "PixelWidth", mainWindow) == 0);
-        REQUIRE(Call<int>(scripting, CallsType, "PixelHeight", mainWindow) == 0);
-        REQUIRE(Call<float>(scripting, CallsType, "ContentScale", mainWindow) == 0.0f);
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "IsMinimised", mainWindow));
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "IsFocused", mainWindow));
-        REQUIRE(Call<int>(scripting, CallsType, "GetCursorMode", mainWindow) == static_cast<int>(CursorMode::Normal));
-        REQUIRE_FALSE(
-            Call<bool>(scripting, CallsType, "SetCursorMode", mainWindow, static_cast<int>(CursorMode::Captured)));
-        REQUIRE_FALSE(
-            Call<bool>(scripting, CallsType, "SetCursorShape", mainWindow, static_cast<int>(CursorShape::Hand)));
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "SetTitle", mainWindow, std::string_view("Title")));
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "SetClipboard", std::string_view("Clipboard")));
-        REQUIRE(Call<int>(scripting, CallsType, "ClipboardLength", 16) == 0);
-        REQUIRE(Text(scripting, "Clipboard", 16).empty());
-        REQUIRE_FALSE(Call<bool>(scripting, CallsType, "RequestClose", mainWindow));
-    }
-    {
-        INFO("Nothing stopped the app");
-        REQUIRE(headless.Get().IsRunning());
-    }
-
-    for (const char* function :
-         {"Window.Size", "Window.PixelSize", "Window.ContentScale", "Window.IsMinimised", "Window.IsFocused",
-          "Window.GetCursorMode", "Window.SetCursorMode", "Window.SetCursorShape", "Window.SetTitle",
-          "Window.SetClipboard", "Window.GetClipboard", "Window.RequestClose"})
-    {
-        INFO(function << " did not warn once in a debug build (never in a release build), though called at least "
-                         "twice");
-        REQUIRE(WarningsWith(headless, std::string(function) + ": the app has no such window") == warningsPerCallSite);
-    }
+    INFO("C#'s Window.Main is not FenrirWindow's main window");
+    REQUIRE(Call<std::uint32_t>(scripting, CallsType, "Main") == Window::MainWindow().value);
 }
 
 TEST_CASE("The C# WindowSize has the C++ layout", "[window][scripting]")
@@ -221,20 +161,6 @@ TEST_CASE("The C# WindowSize has the C++ layout", "[window][scripting]")
     // The events holding it are checked field by field, offsets included, as the fixture loads: it loaded.
     INFO("C# WindowSize is not the size of C++'s");
     REQUIRE(Call<int>(scripting, CallsType, "WindowSizeSize") == static_cast<int>(sizeof(WindowSize)));
-}
-
-TEST_CASE("UTF-8 becomes the UTF-16 C# reads, with U+FFFD for bytes that are not UTF-8", "[window][scripting]")
-{
-    {
-        INFO("ASCII, two-, three- and four-byte forms (the last as a surrogate pair) did not convert");
-        REQUIRE(Detail::Utf8ToUtf16("A\xC3\xA9\xE2\x82\xAC\xF0\x9F\x98\x80") == u"Aé€\U0001F600");
-    }
-    INFO("A byte that starts no valid form (a stray continuation byte, a cut-short form, an overlong form, an encoded "
-         "surrogate) did not become U+FFFD, with decoding going on from the next byte");
-    REQUIRE(Detail::Utf8ToUtf16("\x80") == u"�");
-    REQUIRE(Detail::Utf8ToUtf16("a\xE2\x82") == u"a��");
-    REQUIRE(Detail::Utf8ToUtf16("\xC0\xAF") == u"��");
-    REQUIRE(Detail::Utf8ToUtf16("\xED\xA0\x80") == u"���");
 }
 
 TEST_CASE("C# reads a hidden window's sizes, focus and cursor as C++ does", "[window][scripting][display]")
