@@ -63,6 +63,24 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void APointerWithACountIsASpanAndTheCountIsFoldedIntoIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        // A doc on the count would name a parameter the declaration no longer has.
+        WriteNatives(directory, root => Parameter(root, "Sum", "count")["doc"] = "How many values.");
+
+        var natives = Generator.Generate(config, [description]).Single(file => file.Key.EndsWith("FixtureNative.cs", StringComparison.Ordinal)).Value;
+
+        Assert.Contains("FindAll(in Vector3 origin, Span<Hit> hits);", natives, StringComparison.Ordinal);
+        Assert.Contains("Sum(ReadOnlySpan<uint> values, bool all, double scale);", natives, StringComparison.Ordinal);
+        Assert.DoesNotContain("int capacity", natives, StringComparison.Ordinal);
+        Assert.DoesNotContain("<param name=\"count\">", natives, StringComparison.Ordinal);
+        Assert.Contains("using System;", natives, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AScalarTheBindingStatesReplacesTheDefault()
     {
         using var directory = new TemporaryDirectory();
@@ -475,6 +493,8 @@ public sealed class BindingTests
                                      "written (its doc says [in,out]) or a span (its std::int32_t count follows it)")]
     [InlineData("Result", "Fixture.natives.json: Sum (result): cannot map the C++ type 'const Fixture::Vec3*' to C#: a " +
                           "native returns a number, a bool, an enum, a wrapper, nothing or a void*")]
+    [InlineData("ConstCharSpan", "Fixture.natives.json: FindAll::hits: cannot map the C++ type 'const char16_t*' to C#: a const " +
+                                 "char16_t* with a count would be declared ReadOnlySpan<char>, which is text")]
     public void ANativeParameterTheBindingCannotMapFailsNamingTheFunctionAndParameter(string problem, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -494,6 +514,10 @@ public sealed class BindingTests
                     break;
                 case "TextResult":
                     Native(root, "Sum")["returns"] = JsonNode.Parse("""{ "type": "std::string_view", "kind": "string" }""");
+                    break;
+                case "ConstCharSpan":
+                    Parameter(root, "FindAll", "hits").ReplaceWith(JsonNode.Parse(
+                        """{ "name": "hits", "type": "const char16_t*", "kind": "pointer", "pointee": "char16_t", "pointeeKind": "char16", "const": true }"""));
                     break;
                 case "Undescribed":
                     Parameter(root, "Find", "origin")["type"] = "const Fixture::Unknown*";

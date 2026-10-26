@@ -203,7 +203,9 @@ would: an alias in `types` is its C# type; a number or `bool` is itself (`std::i
 converts to; an enum is its described C# enum, crossing as its underlying integer; a wrapper (a described struct of one
 field of a number, `bool`, `char16_t` or enum, or a bound type whose `[bound-types]` entry gives its `wrapper` kind) is
 its C# type, crossing as that field; `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
-`std::int32_t` count is `T*` (a span C# fixes), unless its doc marks it `@param[in]`, one value the count after it does
+`std::int32_t` count is a span, `ReadOnlySpan<T>` for a const pointee and `Span<T>` otherwise (a `char16_t*` buffer is
+`Span<char>`), with the count folded into it (the SDK's generator pins the span and passes its first element and its
+length; a `const char16_t*` with a count is refused, since `ReadOnlySpan<char>` is text), unless its doc marks it `@param[in]`, one value the count after it does
 not size; a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
 `in T`. `T` is a number, or the C# name of a described type or a `types` alias. An `out T` is an output the registration

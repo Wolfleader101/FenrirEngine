@@ -63,7 +63,7 @@ internal static unsafe partial class WindowNative
     /// </summary>
     /// <param name="text">Where to write at most `capacity` chars.</param>
     [NativeFunction]
-    public static partial int GetClipboard(char* text, int capacity);
+    public static partial int GetClipboard(Span<char> text);
 
     /// <summary>Puts `text` on the system clipboard.</summary>
     /// <returns>Whether it was put there: false with no window, or if the platform refuses.</returns>
