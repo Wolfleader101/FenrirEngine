@@ -13,8 +13,6 @@ defaults = "FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../Managed/Fenrir.Scripting"
 generated = "../Managed/Fenrir.Scripting/Generated"
-# The engine's math types are the Fenrir.Math contract's (ADR-0029), which this contract is built on.
-usings = ["Fenrir.Math"]
 # The engine keeps the hierarchy consistent, so C# only reads a Relationship and the links in it.
 readonly-structs = ["Fenrir::Relationship", "Fenrir::Entity"]
 # A link's value and entity list are the engine's: C# reads them through EntityLink's Target and IsNull.
@@ -23,7 +21,7 @@ fixed-buffers = ["Fenrir::Name::name"]
 
 [cpp]
 mappings = "../include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirScripting/BoundMappings.hpp"]
+includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirScriptingRegistration.cpp"
@@ -41,11 +39,6 @@ class = "Fenrir.ScriptFixture.Defaults"
 includes = ["FixtureApp.hpp"]
 setup = "Fenrir::Testing::FixtureApp app;"
 tags = "[scripting][bindings]"
-
-[bound-types]
-"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-# glm stores w first; C#'s constructor takes it last.
-"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
 
 [names]
 "Fenrir::Entity" = "EntityLink"

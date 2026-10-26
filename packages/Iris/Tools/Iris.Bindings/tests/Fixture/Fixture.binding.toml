@@ -21,7 +21,7 @@ internal-structs = ["Fixture::Tag"]
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
-includes = ["Fixture.hpp", "BoundMappings.hpp"]
+includes = ["Fixture.hpp"]
 
 # Never compiled here: Iris has no extension type. The names show the form a host's registration takes.
 [registration]
@@ -47,15 +47,14 @@ class = "FixtureNative"
 types = { "Fixture::EntityId" = "Entity" }
 
 # Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not
-# all zero bytes (its id is all bits set), so it names the expression that makes it.
+# all zero bytes (its id is all bits set), so it names the expression that makes it. Each names its mapping's header,
+# written once into the mappings header. Ticket is the Host SDK's, in the defaults file.
 [bound-types]
-"Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-"Fixture::Quat" = { type = "Quaternion" }
-"Fixture::Handle" = { type = "Handle", default = "new()" }
+"Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"], include = "BoundMappings.hpp" }
+"Fixture::Quat" = { type = "Quaternion", include = "BoundMappings.hpp" }
+"Fixture::Handle" = { type = "Handle", default = "new()", include = "BoundMappings.hpp" }
 # Described by layout only, and held by nothing: its C# type is never named.
-"Fixture::Size" = { type = "Size" }
-# One member, which a native passes by value: the description does not record its kind, so the entry does.
-"Fixture::Ticket" = { type = "Ticket", wrapper = "u32" }
+"Fixture::Size" = { type = "Size", include = "BoundMappings.hpp" }
 
 # Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
 [names]

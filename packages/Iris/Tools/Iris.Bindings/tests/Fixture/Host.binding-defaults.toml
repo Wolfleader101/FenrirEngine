@@ -31,6 +31,11 @@ includes = ["DefaultsHarness.hpp"]
 # `setup` declares `harness`.
 component = "harness.Component()"
 
+# A bound type of the Host SDK's: one member, which a native passes by value (the description does not record its kind,
+# so the entry does), mapped by the header the entry names, included where the type is bound.
+[bound-types]
+"Fixture::Ticket" = { type = "Ticket", wrapper = "u32", include = "BoundMappings.hpp" }
+
 [natives]
 context = "Host::CallContext"
 attribute = "NativeFunction"

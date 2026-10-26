@@ -2,7 +2,6 @@
 // Change the C++ header, then regenerate its description and this binding.
 
 using Fenrir.Assets;
-using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;

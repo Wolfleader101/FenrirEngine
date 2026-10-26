@@ -12,15 +12,14 @@ defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../../Managed/Fenrir.DebugDraw"
 generated = "../../Managed/Fenrir.DebugDraw/Generated"
-usings = ["Fenrir.Math"]
 # None of these is used: the contract has no components or events.
 # The facade's: C# names ShapeOptions and TextOptions, with their group, and converts them to these.
 internal-structs = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOptions"]
 
 [cpp]
 mappings = "../src/Generated/FenrirDebugDrawMappings.hpp"
-# The options as C# passes them, and the entity value's mapping, FenrirScripting's.
-includes = ["FenrirDebugDraw/DebugDraw.hpp", "ScriptOptions.hpp", "FenrirScripting/EntityValueMapping.hpp"]
+# The options as C# passes them.
+includes = ["FenrirDebugDraw/DebugDraw.hpp", "ScriptOptions.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirDebugDrawRegistration.cpp"
@@ -37,15 +36,6 @@ by-hand = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOp
 
 # No [tests]: the generated defaults test would have no case. The option structs are internal, so they get none (a public
 # test method cannot return one).
-
-[bound-types]
-"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
-"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-# glm stores w first; C#'s constructor takes it last.
-"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
-"Fenrir::Math::Mat4" = { type = "Matrix4x4" }
-# A C# Entity, held by the options: the one entity value every binding names (ADR-0044).
-"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
 
 [names]
 "Fenrir::ScriptOptions::ShapeOptions" = "NativeShapeOptions"

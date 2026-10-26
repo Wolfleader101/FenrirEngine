@@ -8,6 +8,7 @@
 #include "Iris/Iris.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "ScriptOptions.hpp"
+#include "FenrirScripting/BoundMappings.hpp"
 #include "FenrirScripting/EntityValueMapping.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 

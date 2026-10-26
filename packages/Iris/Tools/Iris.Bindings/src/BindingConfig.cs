@@ -5,10 +5,17 @@ namespace Iris.Bindings;
 
 /// <summary>
 /// The C# type that stands for a bound type, the components its constructor takes, in order, the C# expression of its
-/// own default (C++'s <c>T{}</c>) when that is not all zero bytes, and, for a bound type of one member that a native takes
-/// or returns by value, that member's kind (<c>wrapper</c>), which the description does not record.
+/// own default (C++'s <c>T{}</c>) when that is not all zero bytes, for a bound type of one member that a native takes
+/// or returns by value, that member's kind (<c>wrapper</c>), which the description does not record, and the header of
+/// its Iris mapping (<c>include</c>), which a binding's mappings header includes when it binds the type.
 /// </summary>
-internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default, string? Wrapper);
+internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default, string? Wrapper, string? Include)
+{
+    /// <summary>Whether two entries say the same in every field (the record's equality compares the list by reference).</summary>
+    public bool Same(BoundType other) =>
+        Type == other.Type && Default == other.Default && Wrapper == other.Wrapper && Include == other.Include &&
+        (Constructor == null ? other.Constructor == null : other.Constructor != null && Constructor.SequenceEqual(other.Constructor));
+}
 
 /// <summary>
 /// Where the C# mirrors go, the names of the SDK types they use (each only when the binding mirrors a type that needs
@@ -89,7 +96,9 @@ internal sealed record NativesConfig(
 /// the extension that the language-neutral description leaves out. Paths are relative to the file and made absolute
 /// here. <c>Descriptions</c> are the descriptions it binds, when it names them; <c>Uses</c> the configurations of the
 /// bindings whose mirrors it names rather than generating its own; <c>Defaults</c> the SDK's defaults file
-/// (<see cref="Bindings.Defaults" />), whose names are merged in before the rest is read, or null.
+/// (<see cref="Bindings.Defaults" />), whose names are merged in before the rest is read, or null, and
+/// <c>DefaultBoundTypes</c> its <c>[bound-types]</c>, kept apart from the binding's own since an inherited entry is
+/// consulted only for a type described here.
 /// </summary>
 internal sealed record BindingConfig(
     string Path,
@@ -99,6 +108,7 @@ internal sealed record BindingConfig(
     IReadOnlyList<string> Descriptions,
     IReadOnlyList<string> Uses,
     string? Defaults,
+    IReadOnlyDictionary<string, BoundType> DefaultBoundTypes,
     CSharpConfig CSharp,
     CppConfig Cpp,
     RegistrationConfig? Registration,
@@ -139,9 +149,10 @@ internal sealed record BindingConfig(
                     "cpp", "registration", "tests", "natives", "bound-types", "names", "nouns");
         // The SDK's names come in first, so every section below is read as if the binding had spelled them.
         var defaults = table.ContainsKey("defaults") ? reader.PathOf(table, "defaults") : null;
-        if (defaults != null)
+        var defaultBoundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);
+        if (defaults != null && Bindings.Defaults.Apply(table, defaults, path) is { } defaultBound)
         {
-            Bindings.Defaults.Apply(table, defaults, path);
+            defaultBoundTypes = ReadBoundTypes(new Reader(defaults), defaultBound, defaults);
         }
 
         var csharp = reader.Table(table, "csharp");
@@ -209,30 +220,19 @@ internal sealed record BindingConfig(
             }
         }
 
-        var boundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);
-        if (table.ContainsKey("bound-types"))
+        var boundTypes = table.ContainsKey("bound-types")
+                             ? ReadBoundTypes(reader, reader.Table(table, "bound-types"), path)
+                             : new Dictionary<string, BoundType>(StringComparer.Ordinal);
+        foreach (var (name, bound) in boundTypes.Where(entry => defaultBoundTypes.TryGetValue(entry.Key, out var given) && given.Same(entry.Value)))
         {
-            foreach (var (name, value) in reader.Table(table, "bound-types"))
-            {
-                if (value is not TomlTable bound)
-                {
-                    throw new BindingException(
-                        $"{path}: bound type '{name}' is a table: {{ type = \"<C# type>\", constructor = [...] }}");
-                }
-
-                reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor", "default", "wrapper");
-                boundTypes.Add(name, new BoundType(reader.String(bound, "type"),
-                                                   bound.ContainsKey("constructor") ? reader.Strings(bound, "constructor") : null,
-                                                   reader.OptionalString(bound, "default"),
-                                                   reader.OptionalString(bound, "wrapper")));
-            }
+            throw new BindingException($"{path}: [bound-types] \"{name}\" is already the default from {defaults}; delete it");
         }
 
         var space = reader.String(table, "namespace");
         return new BindingConfig(
             path, fileName[..^Extension.Length], space,
             table.ContainsKey("registered-namespace") ? reader.String(table, "registered-namespace") : space,
-            reader.Paths(table, "descriptions"), reader.Paths(table, "uses"), defaults,
+            reader.Paths(table, "descriptions"), reader.Paths(table, "uses"), defaults, defaultBoundTypes,
             new CSharpConfig(reader.PathOf(csharp, "contract"), reader.PathOf(csharp, "generated"),
                              reader.Strings(csharp, "usings"), reader.OptionalString(csharp, "component-attribute"),
                              reader.OptionalString(csharp, "component-interface"),
@@ -251,6 +251,28 @@ internal sealed record BindingConfig(
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
             nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
+    }
+
+    // A [bound-types] table, the binding's own or its defaults file's.
+    private static Dictionary<string, BoundType> ReadBoundTypes(Reader reader, TomlTable table, string path)
+    {
+        var boundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);
+        foreach (var (name, value) in table)
+        {
+            if (value is not TomlTable bound)
+            {
+                throw new BindingException(
+                    $"{path}: bound type '{name}' is a table: {{ type = \"<C# type>\", constructor = [...] }}");
+            }
+
+            reader.Keys(bound, $"bound-types.\"{name}\"", "type", "constructor", "default", "wrapper", "include");
+            boundTypes.Add(name, new BoundType(reader.String(bound, "type"),
+                                               bound.ContainsKey("constructor") ? reader.Strings(bound, "constructor") : null,
+                                               reader.OptionalString(bound, "default"), reader.OptionalString(bound, "wrapper"),
+                                               reader.OptionalString(bound, "include")));
+        }
+
+        return boundTypes;
     }
 
     private sealed class Reader(string path)

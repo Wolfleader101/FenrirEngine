@@ -286,7 +286,7 @@ internal static class Natives
             case Category.Struct when described.Fields is [{ Kind: { Kind: not ("struct" or "array" or "pointer") } field }]:
                 return (binding.CSharpName(described),
                         field.Kind == "enum" ? binding.Type(field.Type!).Underlying! : field.Kind);
-            case Category.BoundType when binding.Config.BoundTypes[described.Name].Wrapper is { } wrapper:
+            case Category.BoundType when binding.BoundTypeOf(described).Wrapper is { } wrapper:
                 return (binding.CSharpName(described), wrapper);
             default:
                 throw Unmappable(subject, type,

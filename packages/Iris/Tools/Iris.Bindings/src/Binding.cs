@@ -19,10 +19,15 @@ internal sealed class Binding
     // Each type a binding in `uses` mirrors, by C++ name, with that binding.
     private readonly Dictionary<string, Binding> owners = new(StringComparer.Ordinal);
 
+    // The bound types in force, by C++ name: this binding's own, its defaults file's, and every used binding's (its own
+    // in force), each with the binding whose [bound-types] states it (null for a defaults file's) and that file.
+    private readonly Dictionary<string, InheritedBoundType> bound = new(StringComparer.Ordinal);
+
     public Binding(BindingConfig config, IReadOnlyList<DescribedType> described, IReadOnlyList<Binding>? uses = null)
     {
         Config = config;
         Uses = uses ?? [];
+        CollectBoundTypes();
         CheckUses(described);
         CheckExcluded(described);
         Types = described.Where(type => !config.Exclude.Contains(type.Name)).ToList();
@@ -61,16 +66,84 @@ internal sealed class Binding
     public bool IsUsed(DescribedType type) => owners.ContainsKey(type.Name);
 
     /// <summary>
-    /// The C# namespaces of the bindings in <c>uses</c> that mirror any of these types (by C++ name), other than this
-    /// binding's own, in ordinal order: the <c>using</c>s a file naming them needs.
+    /// The C# namespaces of the bindings in <c>uses</c> that mirror any of these types (by C++ name) or whose
+    /// <c>[bound-types]</c> gives the C# type of one, other than this binding's own, in ordinal order: the <c>using</c>s
+    /// a file naming them needs. A defaults file's bound type has no namespace of its own; the file's <c>usings</c> cover it.
     /// </summary>
     public IReadOnlyList<string> UsedNamespaces(IEnumerable<string?> names) =>
-        names.Where(name => name != null && owners.ContainsKey(name))
-             .Select(name => owners[name!].Config.Namespace)
-             .Where(space => space != Config.Namespace)
+        names.Where(name => name != null)
+             .Select(name => owners.TryGetValue(name!, out var owner) ? owner
+                             : bound.TryGetValue(name!, out var inherited) ? inherited.Owner
+                             : null)
+             .Where(owner => owner != null && owner.Config.Namespace != Config.Namespace)
+             .Select(owner => owner!.Config.Namespace)
              .Distinct()
              .Order(StringComparer.Ordinal)
              .ToList();
+
+    /// <summary>The <c>[bound-types]</c> entry in force for a described bound type: its own, its defaults file's, or a used binding's.</summary>
+    public BoundType BoundTypeOf(DescribedType type) => bound[type.Name].Bound;
+
+    /// <summary>
+    /// The mapping headers of the bound types this binding binds (<c>include</c> on their entries), each once, in ordinal
+    /// order, less any the binding's own <c>[cpp] includes</c> already lists.
+    /// </summary>
+    public IReadOnlyList<string> BoundTypeIncludes =>
+        Types.Where(type => type.Category == Category.BoundType && !IsUsed(type))
+             .Select(type => BoundTypeOf(type).Include)
+             .Where(include => include != null && !Config.Cpp.Includes.Contains(include))
+             .Select(include => include!)
+             .Distinct()
+             .Order(StringComparer.Ordinal)
+             .ToList();
+
+    private sealed record InheritedBoundType(BoundType Bound, Binding? Owner, string Source);
+
+    // The bound types in force: own entries, then the defaults file's, then each used binding's in force, by C++ name.
+    // An own entry overrides; two inherited sources agree or the binding is told which disagree; an own entry that
+    // restates a used binding's is refused (the defaults file's are refused where the configuration is read).
+    private void CollectBoundTypes()
+    {
+        foreach (var (name, entry) in Config.BoundTypes)
+        {
+            bound.Add(name, new InheritedBoundType(entry, this, Config.Path));
+        }
+
+        foreach (var (name, entry) in Config.DefaultBoundTypes.Where(entry => !bound.ContainsKey(entry.Key)))
+        {
+            bound.Add(name, new InheritedBoundType(entry, null, Config.Defaults!));
+        }
+
+        foreach (var used in Uses)
+        {
+            foreach (var (name, inherited) in used.bound)
+            {
+                if (!bound.TryGetValue(name, out var present))
+                {
+                    bound.Add(name, inherited);
+                    continue;
+                }
+
+                if (present.Owner == this)
+                {
+                    if (present.Bound.Same(inherited.Bound))
+                    {
+                        throw new BindingException(
+                            $"{Config.Path}: [bound-types] \"{name}\" is already inherited from {inherited.Source}; delete it");
+                    }
+
+                    continue;
+                }
+
+                if (!present.Bound.Same(inherited.Bound))
+                {
+                    throw new BindingException(
+                        $"{Config.Path}: {present.Source} and {inherited.Source} give \"{name}\" different [bound-types] entries " +
+                        "(one is inherited through uses): make them the same, or state this binding's own");
+                }
+            }
+        }
+    }
 
     /// <summary>The described types a type's fields, tag and kinds name, by C++ name.</summary>
     public static IEnumerable<string?> Named(DescribedType type) =>
@@ -150,7 +223,7 @@ internal sealed class Binding
 
         if (type.Category == Category.BoundType)
         {
-            return Config.BoundTypes[type.Name].Type;
+            return BoundTypeOf(type).Type;
         }
 
         return Config.Names.TryGetValue(type.Name, out var name) ? name : type.Name[(type.Name.LastIndexOf(':') + 1)..];
@@ -236,7 +309,7 @@ internal sealed class Binding
             case Category.BoundType:
                 // Its own default is zero unless [bound-types] gives it another; the components a default sets are numbers.
                 return members.Count == 0
-                           ? Config.BoundTypes[type.Name].Default == null
+                           ? BoundTypeOf(type).Default == null
                            : members.Values.All(component => IsZero(new FieldKind("f64", null, null, null, 0), component));
             case Category.TaggedUnion:
                 // Its tag value is 0 (checked), so its default kind, with that kind's own defaults, decides.
@@ -367,7 +440,7 @@ internal sealed class Binding
         var members = value.EnumerateObject().ToList();
         if (members.Count == 0)
         {
-            return type.Category == Category.BoundType && Config.BoundTypes[type.Name].Default is { } own ? own : "new()";
+            return type.Category == Category.BoundType && BoundTypeOf(type).Default is { } own ? own : "new()";
         }
 
         if (type.Category == Category.BoundType)
@@ -375,7 +448,7 @@ internal sealed class Binding
             // A bound type's components, by name in storage order: through its configured constructor, else by name.
             // Their kinds are not described, so an integral value is written as the integer it is (as a float a large
             // one would round), which C# converts to the component's type as C++ does.
-            var bound = Config.BoundTypes[type.Name];
+            var bound = BoundTypeOf(type);
             var components = members.ToDictionary(member => member.Name,
                                                   member => member.Value.ValueKind == JsonValueKind.Number &&
                                                             !member.Value.GetRawText().Any(c => c is '.' or 'e' or 'E')
@@ -569,10 +642,11 @@ internal sealed class Binding
 
     private void Check()
     {
-        foreach (var type in Types.Where(type => type.Category == Category.BoundType && !Config.BoundTypes.ContainsKey(type.Name)))
+        foreach (var type in Types.Where(type => type.Category == Category.BoundType && !IsUsed(type) && !bound.ContainsKey(type.Name)))
         {
             throw new BindingException(
-                $"{Config.Path}: {type.Name} is a bound type ({type.Source}) with no C# type in [bound-types]");
+                $"{Config.Path}: {type.Name} is a bound type ({type.Source}) with no C# type in [bound-types], here, in its " +
+                "defaults file or in a binding it uses");
         }
 
         foreach (var name in Config.BoundTypes.Keys.Where(name => !types.ContainsKey(name)))
@@ -653,12 +727,14 @@ internal sealed class Binding
         CheckSdkNames();
         CheckResources();
         CheckInternal();
-        foreach (var (name, bound) in Config.BoundTypes.Where(entry => entry.Value.Wrapper != null))
+        foreach (var (file, entries) in new[] { (Config.Path, Config.BoundTypes), (Config.Defaults ?? "", Config.DefaultBoundTypes) })
         {
-            if (bound.Wrapper is "bool" || !IsScalar(bound.Wrapper!))
+            foreach (var (name, entry) in entries.Where(entry => entry.Value.Wrapper != null))
             {
-                throw new BindingException(
-                    $"{Config.Path}: [bound-types] {name}'s wrapper is '{bound.Wrapper}', which is not a number kind");
+                if (entry.Wrapper is "bool" || !IsScalar(entry.Wrapper!))
+                {
+                    throw new BindingException($"{file}: [bound-types] {name}'s wrapper is '{entry.Wrapper}', which is not a number kind");
+                }
             }
         }
 
