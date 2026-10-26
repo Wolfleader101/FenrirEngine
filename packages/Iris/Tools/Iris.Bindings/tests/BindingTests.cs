@@ -51,6 +51,16 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void ABindingWithNoComponentsOrEventsStatesNoSdkName()
+    {
+        // The Common binding mirrors one shared struct and has no registration: its [csharp] names only its paths.
+        var generated = Generator.Generate(UsesConfig, [Path.Combine(FixtureDirectory, "Uses", "Common.api.json")]);
+
+        Assert.Contains(generated.Keys, path => path.EndsWith("Spring.cs", StringComparison.Ordinal));
+        Assert.DoesNotContain("component-attribute", File.ReadAllText(UsesConfig), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AChangedDefaultChangesExactlyItsInitialiser()
     {
         using var directory = new TemporaryDirectory();
@@ -589,6 +599,14 @@ public sealed class BindingTests
     [InlineData("UsesWithoutDescriptions", "uses ", "which names no descriptions: list the descriptions it binds in its 'descriptions'")]
     [InlineData("UsesItself", "Other.binding.toml: uses itself, through ", "")]
     [InlineData("DescriptionsDisagree", "'descriptions' names ", "name the same descriptions")]
+    [InlineData("NoComponentAttribute", "Fixture::Body is a component, but [csharp] has no component-attribute", "")]
+    [InlineData("NoReadOnlyComponentInterface",
+                "Fixture::Collider is a read-only component, but [csharp] has no read-only-component-interface", "")]
+    [InlineData("NoEventInterface", "Fixture::Touched is an event, but [csharp] has no event-interface", "")]
+    [InlineData("NoTaggedUnionAttribute", "Fixture::Shape is a tagged union, but [csharp] has no tagged-union-attribute", "")]
+    [InlineData("NoMakeEvent", "Fixture::Touched is an event, but [registration] has no make-event", "")]
+    [InlineData("NoMakeReadOnlyComponent",
+                "Fixture::Collider is a read-only component, but [registration] has no make-read-only-component", "")]
     [InlineData("NoResourceAttribute", "resource, but [csharp] has no resource-attribute", "")]
     [InlineData("NoReadOnlyResourceInterface",
                 "Fixture::Clock is a read-only app resource, but [csharp] has no read-only-resource-interface", "")]
@@ -628,6 +646,12 @@ public sealed class BindingTests
             "UsesWithoutDescriptions" => text => Uses(text, Other(other => other.Replace("descriptions = [", "# [", StringComparison.Ordinal))),
             "UsesItself" => text => Uses(text, Other(other => "uses = [\"Other.binding.toml\"]\n" + other)),
             "DescriptionsDisagree" => text => text.Replace("[csharp]", "descriptions = [\"Elsewhere.api.json\"]\n\n[csharp]", StringComparison.Ordinal),
+            "NoComponentAttribute" => text => text.Replace("component-attribute = \"NativeComponent\"\n", "", StringComparison.Ordinal),
+            "NoReadOnlyComponentInterface" => text => text.Replace("read-only-component-interface = \"IReadOnlyComponent\"\n", "", StringComparison.Ordinal),
+            "NoEventInterface" => text => text.Replace("event-interface = \"IEvent\"\n", "", StringComparison.Ordinal),
+            "NoTaggedUnionAttribute" => text => text.Replace("tagged-union-attribute = \"TaggedUnion\"\n", "", StringComparison.Ordinal),
+            "NoMakeEvent" => text => text.Replace("make-event = \"Host::MakeEvent\"\n", "", StringComparison.Ordinal),
+            "NoMakeReadOnlyComponent" => text => text.Replace("make-read-only-component = \"Host::MakeReadOnlyComponent\"\n", "", StringComparison.Ordinal),
             "NoResourceAttribute" => text => text.Replace("resource-attribute = \"NativeResource\"\n", "", StringComparison.Ordinal),
             "NoReadOnlyResourceInterface" => text => text.Replace("read-only-resource-interface = \"IReadOnlyResource\"\n", "", StringComparison.Ordinal),
             "NoResourceFactory" => text => text.Replace("make-scene-resource = \"Host::MakeSceneResource\"\n", "", StringComparison.Ordinal),

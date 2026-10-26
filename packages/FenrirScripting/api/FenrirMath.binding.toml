@@ -10,13 +10,6 @@ descriptions = ["../../FenrirMath/api/FenrirMath.api.json"]
 [csharp]
 contract = "../../FenrirMath/Managed/Fenrir.Math"
 generated = "../../FenrirMath/Managed/Fenrir.Math/Generated"
-# None of these is used: the contract has no components or events, and references no scripting.
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 
 [cpp]
 mappings = "../include/FenrirScripting/Generated/FenrirMathMappings.hpp"

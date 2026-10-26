@@ -11,20 +11,20 @@ namespace Iris.Bindings;
 internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor, string? Default, string? Wrapper);
 
 /// <summary>
-/// Where the C# mirrors go, the names of the SDK types they use (a resource's only when the binding has one), the
-/// fields (<c>Type::member</c>) mirrored as private, or as fixed buffers rather than <c>[InlineArray]</c> structs, and the
-/// structs mirrored <c>internal</c>.
+/// Where the C# mirrors go, the names of the SDK types they use (each only when the binding mirrors a type that needs
+/// it: <see cref="Binding" />'s accessors say which), the fields (<c>Type::member</c>) mirrored as private, or as fixed
+/// buffers rather than <c>[InlineArray]</c> structs, and the structs mirrored <c>internal</c>.
 /// </summary>
 internal sealed record CSharpConfig(
     string Contract,
     string Generated,
     IReadOnlyList<string> Usings,
-    string ComponentAttribute,
-    string ComponentInterface,
-    string ReadOnlyComponentInterface,
-    string EventAttribute,
-    string EventInterface,
-    string TaggedUnionAttribute,
+    string? ComponentAttribute,
+    string? ComponentInterface,
+    string? ReadOnlyComponentInterface,
+    string? EventAttribute,
+    string? EventInterface,
+    string? TaggedUnionAttribute,
     string? ResourceAttribute,
     string? ResourceInterface,
     string? ReadOnlyResourceInterface,
@@ -39,18 +39,19 @@ internal sealed record CSharpConfig(
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
 
 /// <summary>
-/// The registration lists: the source, its function, and the factory each kind of registration is made by (a resource's
-/// only when the binding has one), the types registered read-only, and those the extension registers by hand.
+/// The registration lists: the source, its function, and the factory each kind of registration is made by (each only
+/// when the generated lists hold a type of that kind), the types registered read-only, and those the extension
+/// registers by hand.
 /// </summary>
 internal sealed record RegistrationConfig(
     string Source,
     IReadOnlyList<string> Includes,
     string Function,
     string Extension,
-    string MakeComponent,
-    string MakeReadOnlyComponent,
-    string MakeEvent,
-    string MakeSharedStruct,
+    string? MakeComponent,
+    string? MakeReadOnlyComponent,
+    string? MakeEvent,
+    string? MakeSharedStruct,
     string? MakeSceneResource,
     string? MakeReadOnlySceneResource,
     string? MakeAppResource,
@@ -157,9 +158,9 @@ internal sealed record BindingConfig(
                         "by-hand");
             registration = new RegistrationConfig(
                 reader.PathOf(section, "source"), reader.Strings(section, "includes"), reader.String(section, "function"),
-                reader.String(section, "extension"), reader.String(section, "make-component"),
-                reader.String(section, "make-read-only-component"), reader.String(section, "make-event"),
-                reader.String(section, "make-shared-struct"), reader.OptionalString(section, "make-scene-resource"),
+                reader.String(section, "extension"), reader.OptionalString(section, "make-component"),
+                reader.OptionalString(section, "make-read-only-component"), reader.OptionalString(section, "make-event"),
+                reader.OptionalString(section, "make-shared-struct"), reader.OptionalString(section, "make-scene-resource"),
                 reader.OptionalString(section, "make-read-only-scene-resource"),
                 reader.OptionalString(section, "make-app-resource"),
                 reader.OptionalString(section, "make-read-only-app-resource"),
@@ -229,11 +230,11 @@ internal sealed record BindingConfig(
             table.ContainsKey("registered-namespace") ? reader.String(table, "registered-namespace") : space,
             reader.Paths(table, "descriptions"), reader.Paths(table, "uses"),
             new CSharpConfig(reader.PathOf(csharp, "contract"), reader.PathOf(csharp, "generated"),
-                             reader.Strings(csharp, "usings"), reader.String(csharp, "component-attribute"),
-                             reader.String(csharp, "component-interface"),
-                             reader.String(csharp, "read-only-component-interface"),
-                             reader.String(csharp, "event-attribute"), reader.String(csharp, "event-interface"),
-                             reader.String(csharp, "tagged-union-attribute"),
+                             reader.Strings(csharp, "usings"), reader.OptionalString(csharp, "component-attribute"),
+                             reader.OptionalString(csharp, "component-interface"),
+                             reader.OptionalString(csharp, "read-only-component-interface"),
+                             reader.OptionalString(csharp, "event-attribute"), reader.OptionalString(csharp, "event-interface"),
+                             reader.OptionalString(csharp, "tagged-union-attribute"),
                              reader.OptionalString(csharp, "resource-attribute"),
                              reader.OptionalString(csharp, "resource-interface"),
                              reader.OptionalString(csharp, "read-only-resource-interface"),

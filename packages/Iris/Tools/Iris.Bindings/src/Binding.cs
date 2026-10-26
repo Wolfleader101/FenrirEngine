@@ -87,6 +87,48 @@ internal sealed class Binding
     /// <summary>Whether a component or resource is registered, and mirrored, read-only (<c>[registration] read-only</c>).</summary>
     public bool IsRegisteredReadOnly(DescribedType type) => Config.Registration?.ReadOnly.Contains(type.Name) == true;
 
+    // The SDK's names, each demanded by the type that needs it. A key the configuration leaves out is missing only when
+    // a mirrored or listed type needs it, so a binding with no components states no component names; the diagnostic
+    // names the type and the key, as the resource ones do.
+
+    /// <summary>The attribute on a component's mirror (<c>[csharp] component-attribute</c>).</summary>
+    public string ComponentAttribute(DescribedType type) =>
+        Sdk(Config.CSharp.ComponentAttribute, type, "component", "csharp", "component-attribute");
+
+    /// <summary>The interface of a component's mirror: the read-only one when it is registered read-only.</summary>
+    public string ComponentInterface(DescribedType type) =>
+        IsRegisteredReadOnly(type)
+            ? Sdk(Config.CSharp.ReadOnlyComponentInterface, type, "read-only component", "csharp", "read-only-component-interface")
+            : Sdk(Config.CSharp.ComponentInterface, type, "component", "csharp", "component-interface");
+
+    /// <summary>The attribute on an event's mirror (<c>[csharp] event-attribute</c>).</summary>
+    public string EventAttribute(DescribedType type) => Sdk(Config.CSharp.EventAttribute, type, "event", "csharp", "event-attribute");
+
+    /// <summary>The interface of an event's mirror (<c>[csharp] event-interface</c>).</summary>
+    public string EventInterface(DescribedType type) => Sdk(Config.CSharp.EventInterface, type, "event", "csharp", "event-interface");
+
+    /// <summary>The attribute on a tagged union's mirror (<c>[csharp] tagged-union-attribute</c>).</summary>
+    public string TaggedUnionAttribute(DescribedType type) =>
+        Sdk(Config.CSharp.TaggedUnionAttribute, type, "tagged union", "csharp", "tagged-union-attribute");
+
+    /// <summary>The factory a listed component is registered by: the read-only one when it is in <c>read-only</c>.</summary>
+    public string MakeComponent(RegistrationConfig registration, DescribedType type) =>
+        IsRegisteredReadOnly(type)
+            ? Sdk(registration.MakeReadOnlyComponent, type, "read-only component", "registration", "make-read-only-component")
+            : Sdk(registration.MakeComponent, type, "component", "registration", "make-component");
+
+    /// <summary>The factory a listed event is registered by (<c>[registration] make-event</c>).</summary>
+    public string MakeEvent(RegistrationConfig registration, DescribedType type) =>
+        Sdk(registration.MakeEvent, type, "event", "registration", "make-event");
+
+    /// <summary>The factory a listed shared struct is registered by (<c>[registration] make-shared-struct</c>).</summary>
+    public string MakeSharedStruct(RegistrationConfig registration, DescribedType type) =>
+        Sdk(registration.MakeSharedStruct, type, "shared struct", "registration", "make-shared-struct");
+
+    private string Sdk(string? value, DescribedType type, string what, string section, string key) =>
+        value ?? throw new BindingException(
+            $"{Config.Path}: {type.Name} is a{(what[0] is 'a' or 'e' or 'i' or 'o' or 'u' ? "n" : "")} {what}, but [{section}] has no {key}");
+
     /// <summary>The described type of that name, or null.</summary>
     public DescribedType? Find(string name) => types.GetValueOrDefault(name);
 
@@ -608,6 +650,7 @@ internal sealed class Binding
             }
         }
 
+        CheckSdkNames();
         CheckResources();
         CheckInternal();
         foreach (var (name, bound) in Config.BoundTypes.Where(entry => entry.Value.Wrapper != null))
@@ -635,6 +678,52 @@ internal sealed class Binding
         catch (BindingException)
         {
             return false;
+        }
+    }
+
+    // Every SDK name a mirrored or listed type needs is present, checked here so a missing one fails before anything is
+    // written, whichever writer would have asked for it.
+    private void CheckSdkNames()
+    {
+        foreach (var type in Mirrored)
+        {
+            switch (type.Role)
+            {
+                case Role.Component:
+                    _ = ComponentAttribute(type);
+                    _ = ComponentInterface(type);
+                    break;
+                case Role.Event:
+                    _ = EventAttribute(type);
+                    _ = EventInterface(type);
+                    break;
+            }
+
+            if (type.Category == Category.TaggedUnion)
+            {
+                _ = TaggedUnionAttribute(type);
+            }
+        }
+
+        if (Config.Registration is not { } registration)
+        {
+            return;
+        }
+
+        foreach (var type in Listed)
+        {
+            switch (type.Role)
+            {
+                case Role.Component:
+                    _ = MakeComponent(registration, type);
+                    break;
+                case Role.Event:
+                    _ = MakeEvent(registration, type);
+                    break;
+                case Role.SharedStruct:
+                    _ = MakeSharedStruct(registration, type);
+                    break;
+            }
         }
     }
 

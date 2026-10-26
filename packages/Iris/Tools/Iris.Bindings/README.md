@@ -51,12 +51,12 @@ exclude = ["My::RawHit"]               # Optional: described types this binding 
 contract = "../Managed/My.Physics"     # The contract project: its hand-written parts are checked (below).
 generated = "../Managed/My.Physics/Generated"  # One mirror per type. The tool owns this directory's .cs files.
 usings = ["My.Scripting"]              # Where the SDK names below (and the bound types) live.
-component-attribute = "NativeComponent"
+component-attribute = "NativeComponent"  # With a component: its attribute and interface (the read-only one for a read-only component).
 component-interface = "IComponent"
 read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
+event-attribute = "NativeEvent"        # With an event: its attribute and interface.
 event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
+tagged-union-attribute = "TaggedUnion"  # With a tagged union: its attribute.
 resource-attribute = "NativeResource"  # With a resource: its attribute and interfaces.
 resource-interface = "IResource"
 read-only-resource-interface = "IReadOnlyResource"
@@ -76,10 +76,10 @@ source = "src/Generated/MyPhysicsRegistration.cpp"
 includes = ["MyScripting/ScriptingExtension.hpp"]
 function = "My::Generated::RegisterPhysics"  # void F(<extension>& extension), declared and defined in the source.
 extension = "My::ScriptingExtension"
-make-component = "My::MakeComponent"
+make-component = "My::MakeComponent"   # With a component in the lists: its factory (the read-only one for one in read-only).
 make-read-only-component = "My::MakeReadOnlyComponent"
-make-event = "My::MakeEvent"
-make-shared-struct = "My::MakeSharedStruct"
+make-event = "My::MakeEvent"           # With an event in the lists.
+make-shared-struct = "My::MakeSharedStruct"  # With a shared struct in the lists.
 make-scene-resource = "My::MakeSceneResource"  # With a resource of that scope and kind: its factory.
 make-read-only-scene-resource = "My::MakeReadOnlySceneResource"
 make-app-resource = "My::MakeAppResource"
@@ -217,7 +217,9 @@ types with one C# name, a tagged union whose default kind is not tag 0 or whose 
 the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
 description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, a
 `private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
-of numbers or is in a read-only mirror, a resource with no resource attribute, interface or (with a registration) factory,
+of numbers or is in a read-only mirror, a component, event, tagged union or resource with no attribute, interface or
+(with a registration listing it) factory (each SDK name is needed only by the kind of type that uses it, so a binding
+with no components states no component names),
 a `read-only` entry that is not a component or resource, a `by-hand` entry that is not a type the registration would
 list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
 not a number kind, a type two descriptions describe differently (a struct, tagged union or enum may be described twice, alike, as a binding's
