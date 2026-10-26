@@ -20,7 +20,7 @@ namespace Fenrir.DebugDraw;
 /// the engine's native code that noticed and each reason (not once per C# call site).
 /// </para>
 /// </remarks>
-public static unsafe class DebugDraw
+public static class DebugDraw
 {
     /// <summary>The duration that keeps an item until <see cref="Clear()"/> or <see cref="Clear(ReadOnlySpan{char})"/>.</summary>
     public const float Forever = float.PositiveInfinity;
@@ -52,8 +52,7 @@ public static unsafe class DebugDraw
     public static void Polyline(ReadOnlySpan<Vector3> points, bool closed, Colour colour, ShapeOptions? options = null)
     {
         NativeShapeOptions native = Shape(options, out string group);
-        fixed (Vector3* first = points)
-            DebugDrawNative.Polyline(first, points.Length, closed, in colour, in native, group);
+        DebugDrawNative.Polyline(points, closed, in colour, in native, group);
     }
 
     /// <summary>A dot at <paramref name="position"/>, <paramref name="pixelSize"/> pixels across whatever its distance.</summary>
@@ -190,8 +189,7 @@ public static unsafe class DebugDraw
     public static void Triangles(ReadOnlySpan<Vector3> vertices, Colour colour, ShapeOptions? options = null)
     {
         NativeShapeOptions native = Shape(options, out string group);
-        fixed (Vector3* first = vertices)
-            DebugDrawNative.Triangles(first, vertices.Length, in colour, in native, group);
+        DebugDrawNative.Triangles(vertices, in colour, in native, group);
     }
 
     // Text.

@@ -95,12 +95,17 @@ internal sealed record WireParameter(string Type, string? Output);
 /// outputs (<c>out T</c>) the registration zeroes before the native runs. An output span and an <c>inOut</c> pointer are
 /// not among them.
 /// </param>
+/// <param name="Folded">
+/// The C++ parameters the declaration folds into another: a span's count and a text's length, which are the span's
+/// <c>Length</c>, so they get no parameter and no doc of their own.
+/// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
                                    string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named,
-                                   IReadOnlyList<int> Outputs)
+                                   IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded)
 {
-    /// <summary>Whether its declaration takes text, a <c>ReadOnlySpan&lt;char&gt;</c>.</summary>
-    public bool TakesText => Parameters.Any(parameter => parameter.StartsWith(TextType + " ", StringComparison.Ordinal));
+    /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
+    public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
+                                                           parameter.StartsWith("ReadOnlySpan<", StringComparison.Ordinal));
 
     /// <summary>The C# type of a <c>std::string_view</c> parameter.</summary>
     public const string TextType = "ReadOnlySpan<char>";
@@ -110,7 +115,8 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// Maps natives to C#: the leading context and state are dropped, and each C++ parameter becomes what the hand-written
 /// declarations used to say. A <c>std::string_view</c> is a <c>ReadOnlySpan&lt;char&gt;</c>, and a <c>const char*</c>
 /// with a <c>std::int32_t</c> length after it a <c>string</c>, both crossing as bytes and a length; any other pointer
-/// with a <c>std::int32_t</c> count after it is a <c>T*</c> span, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
+/// with a <c>std::int32_t</c> count after it is a span, <c>ReadOnlySpan&lt;T&gt;</c> for a const pointee and
+/// <c>Span&lt;T&gt;</c> otherwise, with the count folded into it, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
 /// doc marks an output is <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is
 /// <c>void*</c>, an address C# passes as it is; a <c>const T*</c> is <c>in T</c>. Each <c>out T</c> is also an output the
 /// registration zeroes before the native runs (<see cref="BoundNative.Outputs" />). Numbers and bool are themselves, an
@@ -180,6 +186,7 @@ internal static class Natives
         var parameters = new List<string>();
         var wire = new List<WireParameter>();
         var outputs = new List<int>();
+        var folded = new List<string>();
         // The described parameters follow the call context and, when the native takes one, its state.
         var leading = function.State == null ? 1 : 2;
         var all = function.Parameters;
@@ -202,7 +209,7 @@ internal static class Natives
                     parameters.Add($"string {name}");
                     wire.Add(new WireParameter("void*", null));
                     wire.Add(new WireParameter("int", null));
-                    index++;
+                    folded.Add(all[++index].Name);
                     continue;
                 }
 
@@ -218,7 +225,23 @@ internal static class Natives
                     wire.Add(new WireParameter($"{pointee}*", pointee));
                     outputs.Add(leading + index);
                 }
-                else if ((countFollows && !parameter.Input) || parameter.InOut || type.PointeeKind == "void")
+                else if (countFollows && !parameter.Input && !parameter.InOut && type.PointeeKind != "void")
+                {
+                    // A span: the SDK's generator pins it and passes its first element and its length, so the count is
+                    // the span's. A const char16_t* would read as ReadOnlySpan<char>, which is text (UTF-8 on the wire).
+                    if (type.Const && type.Pointee == "char16_t")
+                    {
+                        throw Unmappable(subject, type,
+                                         "a const char16_t* with a count would be declared ReadOnlySpan<char>, which is text: " +
+                                         "take a std::string_view, or a non-const buffer to fill");
+                    }
+
+                    parameters.Add($"{(type.Const ? "ReadOnlySpan" : "Span")}<{pointee}> {name}");
+                    wire.Add(new WireParameter("void*", null));
+                    wire.Add(new WireParameter("int", null));
+                    folded.Add(all[++index].Name);
+                }
+                else if (parameter.InOut || type.PointeeKind == "void")
                 {
                     parameters.Add($"{pointee}* {name}");
                     wire.Add(new WireParameter("void*", null));
@@ -262,7 +285,7 @@ internal static class Natives
             }
         }
 
-        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs);
+        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs, folded);
     }
 
     // The C# type of the function pointer's parameter or result for a value of this kind: a bool crosses as a byte.

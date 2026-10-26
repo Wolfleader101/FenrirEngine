@@ -34,7 +34,7 @@ internal static unsafe partial class DebugDrawNative
     /// (DebugDraw.Polyline).
     /// </summary>
     [NativeFunction]
-    public static partial void Polyline(Vector3* points, int count, bool closed, in Colour colour,
+    public static partial void Polyline(ReadOnlySpan<Vector3> points, bool closed, in Colour colour,
                                         in NativeShapeOptions options, ReadOnlySpan<char> group);
 
     /// <summary>A dot at `position`, `pixelSize` pixels across (DebugDraw.Point).</summary>
@@ -131,8 +131,8 @@ internal static unsafe partial class DebugDrawNative
 
     /// <summary>The `count` vertices from `vertices` as triangles, every three one (DebugDraw.Triangles).</summary>
     [NativeFunction]
-    public static partial void Triangles(Vector3* vertices, int count, in Colour colour, in NativeShapeOptions options,
-                                         ReadOnlySpan<char> group);
+    public static partial void Triangles(ReadOnlySpan<Vector3> vertices, in Colour colour,
+                                         in NativeShapeOptions options, ReadOnlySpan<char> group);
 
     /// <summary>Text at a pixel position in each window showing the scene (DebugDraw.ScreenText).</summary>
     [NativeFunction]

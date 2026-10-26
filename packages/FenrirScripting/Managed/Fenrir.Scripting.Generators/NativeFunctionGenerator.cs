@@ -205,6 +205,19 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
                 arguments.Add(local);
                 arguments.Add(local + "Count");
             }
+            else if (SpanElement(parameterType) is ITypeSymbol element)
+            {
+                // A span crosses as its first element's address and its length: pinned here, so the facade over the
+                // declaration never does. An empty span passes null and 0.
+                if (!element.IsUnmanagedType)
+                    return Refused(Refuse(Unsupported, at, display, parameterType.ToDisplayString(), "parameter " + p));
+                string pointer = element.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + "*";
+                fieldTypes.Add(pointer);
+                fieldTypes.Add("int");
+                fixedStatements.Add($"fixed ({pointer} {local} = {p})");
+                arguments.Add(local);
+                arguments.Add(p + ".Length");
+            }
             else if (ByValue(parameterType, compilation, type) is Crossing crossing)
             {
                 fieldTypes.Add(crossing.FieldType);
@@ -298,6 +311,14 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
         }
         return text.ToString();
     }
+
+    // The element type of a System.Span<T> or System.ReadOnlySpan<T>, or null. Text (ReadOnlySpan<char>) is checked first
+    // by the caller, so a Span<char> here is a UTF-16 buffer the native fills.
+    private static ITypeSymbol? SpanElement(ITypeSymbol type) =>
+        type is INamedTypeSymbol { TypeArguments.Length: 1 } named &&
+        named.OriginalDefinition.ToDisplayString() is "System.Span<T>" or "System.ReadOnlySpan<T>"
+            ? named.TypeArguments[0]
+            : null;
 
     private static bool IsText(ITypeSymbol type) =>
         type.SpecialType == SpecialType.System_String ||

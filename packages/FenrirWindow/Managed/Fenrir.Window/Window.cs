@@ -93,11 +93,7 @@ public static class Window
     /// is written, so a result larger than the span says how large a span would hold it. Zero when the clipboard holds no
     /// text.
     /// </summary>
-    public static unsafe int GetClipboard(Span<char> text)
-    {
-        fixed (char* first = text)
-            return WindowNative.GetClipboard(first, text.Length);
-    }
+    public static int GetClipboard(Span<char> text) => WindowNative.GetClipboard(text);
 
     /// <summary>Puts <paramref name="text"/> on the system clipboard.</summary>
     /// <returns>Whether it was put there: false with no window, or if the platform refuses.</returns>
