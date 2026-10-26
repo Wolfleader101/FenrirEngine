@@ -7,15 +7,17 @@
 #include <optional>
 #include <source_location>
 #include <span>
-#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "AssetsScriptingState.hpp"
+#include "FenrirAssetsScripting/AssetResolve.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirScripting/Enumerator.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
+#include "FenrirScripting/NativeMarshalling.hpp"
 
 // Everything C# sees of assets but the handles is generated (api/FenrirAssets.binding.toml): the shared structs' and
 // enums' mappings, checked against the Fenrir.Assets contract whenever a script assembly loads, and from the native
@@ -30,90 +32,51 @@ namespace Fenrir
 {
     namespace
     {
-        // `count` values from `first` on, or nothing (with a warning) for a negative count or a null pointer with
-        // values.
-        template <typename T>
-        std::optional<std::vector<T>> Copy(AssetsScripting& assets, const CallContext& context, const T* first,
-                                           std::int32_t count, std::string_view function,
-                                           std::source_location where = std::source_location::current())
+        // A mesh from C#'s spans (each empty when C# passed none), drawn with one material: one submesh over every
+        // index.
+        MeshData MeshFrom(const Math::Vec3* positions, std::int32_t positionCount, const Math::Vec3* normals,
+                          std::int32_t normalCount, const Math::Vec2* uvs, std::int32_t uvCount,
+                          const std::uint32_t* indices, std::int32_t indexCount)
         {
-            if (count < 0 || (first == nullptr && count > 0))
-            {
-                assets.warnings.Warn(context, std::string(function) + ": a span is unusable, so it does nothing",
-                                     where);
-                return std::nullopt;
-            }
-            // C# passes a span as its first element and its length, so the bounds are only as good as C#'s.
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage"
-#endif
-            const std::span<const T> values(first, static_cast<std::size_t>(count));
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-            return std::vector<T>(values.begin(), values.end());
-        }
-
-        // A mesh from C#'s spans, drawn with one material: one submesh over every index. Takes the state first, so
-        // describe-api does not read it as a native.
-        std::optional<MeshData> MeshFrom(AssetsScripting& assets, const CallContext& context,
-                                         const Math::Vec3* positions, std::int32_t positionCount,
-                                         const Math::Vec3* normals, std::int32_t normalCount, const Math::Vec2* uvs,
-                                         std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount,
-                                         std::string_view function)
-        {
-            auto positionValues = Copy(assets, context, positions, positionCount, function);
-            auto normalValues = Copy(assets, context, normals, normalCount, function);
-            auto uvValues = Copy(assets, context, uvs, uvCount, function);
-            auto indexValues = Copy(assets, context, indices, indexCount, function);
-            if (!positionValues || !normalValues || !uvValues || !indexValues)
-            {
-                return std::nullopt;
-            }
+            const std::span<const Math::Vec3> positionValues = SpanOf(positions, positionCount);
+            const std::span<const Math::Vec3> normalValues = SpanOf(normals, normalCount);
+            const std::span<const Math::Vec2> uvValues = SpanOf(uvs, uvCount);
+            const std::span<const std::uint32_t> indexValues = SpanOf(indices, indexCount);
             MeshData mesh;
-            mesh.positions = std::move(*positionValues);
-            mesh.normals = std::move(*normalValues);
-            mesh.uv0 = std::move(*uvValues);
-            mesh.indices = std::move(*indexValues);
+            mesh.positions.assign(positionValues.begin(), positionValues.end());
+            mesh.normals.assign(normalValues.begin(), normalValues.end());
+            mesh.uv0.assign(uvValues.begin(), uvValues.end());
+            mesh.indices.assign(indexValues.begin(), indexValues.end());
             mesh.submeshes = {{0, static_cast<std::uint32_t>(mesh.indices.size()), 0}};
             return mesh;
         }
 
         // An RGBA8 sRGB image of this size with `rgba8`'s bytes, or none as a render target; nothing (with a warning)
-        // for a side under one pixel or an unusable span. Whether the bytes fit the size is the store's check.
-        std::optional<ImageData> ImageFrom(AssetsScripting& assets, const CallContext& context, std::int32_t width,
-                                           std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount,
-                                           std::string_view function,
+        // for a side under one pixel. Whether the bytes fit the size is the store's check.
+        std::optional<ImageData> ImageFrom(const NativeGuard& guard, std::int32_t width, std::int32_t height,
+                                           const std::uint8_t* rgba8, std::int32_t byteCount,
                                            std::source_location where = std::source_location::current())
         {
             if (width < 1 || height < 1)
             {
-                assets.warnings.Warn(
-                    context, std::string(function) + ": an image is at least one pixel each way, so it does nothing",
-                    where);
+                guard.Warn("an image is at least one pixel each way, so it does nothing", where);
                 return std::nullopt;
             }
-            auto bytes = Copy(assets, context, rgba8, byteCount, function, where);
-            if (!bytes)
-            {
-                return std::nullopt;
-            }
+            const std::span<const std::uint8_t> bytes = SpanOf(rgba8, byteCount);
             ImageData image;
             image.width = static_cast<std::uint32_t>(width);
             image.height = static_cast<std::uint32_t>(height);
             image.format = ImageFormat::RGBA8;
             image.colourSpace = ColourSpace::Srgb;
-            image.pixels.resize(bytes->size());
-            std::transform(bytes->begin(), bytes->end(), image.pixels.begin(),
+            image.pixels.resize(bytes.size());
+            std::transform(bytes.begin(), bytes.end(), image.pixels.begin(),
                            [](std::uint8_t value) { return std::byte{value}; });
             return image;
         }
 
         // Calls `action` with the asset kind C# names (an AssetKind<T>.Value), or warns once and gives `otherwise`.
         template <typename Result, typename Action>
-        Result ForKind(AssetsScripting& assets, const CallContext& context, Detail::AssetKind kind,
-                       std::string_view function, Result otherwise, Action&& action,
+        Result ForKind(const NativeGuard& guard, Detail::AssetKind kind, Result otherwise, Action&& action,
                        std::source_location where = std::source_location::current())
         {
             // Not a switch: `kind` comes from C#, so it may be none of the enumerators.
@@ -137,26 +100,18 @@ namespace Fenrir
             {
                 return action(AssetHandle<Model>{});
             }
-            assets.warnings.Warn(context,
-                                 std::string(function) + ": the handle's type is not Mesh, Image, Material, Shader or "
-                                                         "Model, so it does nothing",
-                                 where);
+            guard.Warn("the handle's type is not Mesh, Image, Material, Shader or Model, so it does nothing", where);
             return otherwise;
         }
 
-        // One material read: writes the default `Out{}` to `out`, then what `read` gives for a live material, if it
-        // gives anything, and says whether it did. Warns once per call site for a stale material.
+        // One material read: writes what `read` gives for a live material to `out`, if it gives anything, and says
+        // whether it did. Warns once per call site for a stale material; `out` holds its default until written (the
+        // registration zeroes it, ADR-0045).
         template <typename Out, typename Read>
-        bool ReadInto(AssetsScripting& assets, const CallContext& context, std::uint64_t material, Out* out,
-                      std::string_view function, Read&& read,
+        bool ReadInto(const NativeGuard& guard, std::uint64_t material, Out* out, Read&& read,
                       std::source_location where = std::source_location::current())
         {
-            if (out == nullptr)
-            {
-                return false;
-            }
-            *out = Out{};
-            AssetStore* store = assets.Resolve<Material>(context, material, function, where);
+            AssetStore* store = Resolve<Material>(guard, material, where);
             if (store == nullptr)
             {
                 return false;
@@ -176,7 +131,8 @@ namespace Fenrir
     // (Fenrir.Assets.AssetsNative) and their registration from that. A handle crosses as its packed bits (C#'s
     // AssetHandle<T>.Bits) and a kind as FenrirAssets's Detail::AssetKind; text as a view; spans as a pointer and a
     // count. Each returns doing nothing (false, zero or the empty handle) with no asset store, a stale or empty handle,
-    // or an unusable argument, having written its output's default first. Not in an anonymous namespace: the generated
+    // or an unusable argument, warning once per place under its own name through its guard; its outputs hold their
+    // defaults because the registration zeroed them (ADR-0045). Not in an anonymous namespace: the generated
     // registration names them from another file.
     namespace AssetsNatives
     {
@@ -187,13 +143,13 @@ namespace Fenrir
         std::uint64_t Load(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind,
                            std::string_view path, ScriptAssetOwner owner)
         {
-            const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor(context, owner, "Assets.Load");
+            const NativeGuard guard(context, assets.warnings);
+            const std::optional<AssetsScripting::StoreAndOwner> placed = assets.StoreAndOwnerFor(guard, owner);
             if (!placed)
             {
                 return 0;
             }
-            return ForKind(assets, context, kind, "Assets.Load", std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
+            return ForKind(guard, kind, std::uint64_t{0}, [&]<typename T>(AssetHandle<T>) {
                 return AssetHandleBits(placed->store.Load<T>(path, placed->owner).handle);
             });
         }
@@ -204,8 +160,9 @@ namespace Fenrir
          */
         bool Unload(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind, std::uint64_t handle)
         {
-            return ForKind(assets, context, kind, "Assets.Unload", false, [&]<typename T>(AssetHandle<T>) {
-                AssetStore* store = assets.Resolve<T>(context, handle, "Assets.Unload");
+            const NativeGuard guard(context, assets.warnings);
+            return ForKind(guard, kind, false, [&]<typename T>(AssetHandle<T>) {
+                AssetStore* store = Resolve<T>(guard, handle);
                 return store != nullptr && store->Unload(AssetHandleFromBits<T>(handle));
             });
         }
@@ -213,10 +170,11 @@ namespace Fenrir
         /** @brief Whether `handle` names a live asset of `kind`. */
         bool IsValid(const CallContext& context, AssetsScripting& assets, Detail::AssetKind kind, std::uint64_t handle)
         {
-            AssetStore* store = assets.StoreFor(context, "Assets.IsValid");
-            return store != nullptr &&
-                   ForKind(assets, context, kind, "Assets.IsValid", false,
-                           [&]<typename T>(AssetHandle<T>) { return store->IsValid(AssetHandleFromBits<T>(handle)); });
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = StoreFor(guard);
+            return store != nullptr && ForKind(guard, kind, false, [&]<typename T>(AssetHandle<T>) {
+                       return store->IsValid(AssetHandleFromBits<T>(handle));
+                   });
         }
 
         /**
@@ -228,15 +186,15 @@ namespace Fenrir
                               const Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices,
                               std::int32_t indexCount, ScriptAssetOwner owner)
         {
-            const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor(context, owner, "Assets.AddMesh");
+            const NativeGuard guard(context, assets.warnings);
+            const std::optional<AssetsScripting::StoreAndOwner> placed = assets.StoreAndOwnerFor(guard, owner);
             if (!placed)
             {
                 return 0;
             }
-            std::optional<MeshData> mesh = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
-                                                    uvs, uvCount, indices, indexCount, "Assets.AddMesh");
-            return mesh ? AssetHandleBits(placed->store.Add<Mesh>(std::move(*mesh), placed->owner)) : 0;
+            return AssetHandleBits(placed->store.Add<Mesh>(
+                MeshFrom(positions, positionCount, normals, normalCount, uvs, uvCount, indices, indexCount),
+                placed->owner));
         }
 
         /**
@@ -248,14 +206,11 @@ namespace Fenrir
                          std::int32_t normalCount, const Math::Vec2* uvs, std::int32_t uvCount,
                          const std::uint32_t* indices, std::int32_t indexCount)
         {
-            AssetStore* store = assets.Resolve<Mesh>(context, mesh, "Assets.ReplaceMesh");
-            if (store == nullptr)
-            {
-                return false;
-            }
-            std::optional<MeshData> data = MeshFrom(assets, context, positions, positionCount, normals, normalCount,
-                                                    uvs, uvCount, indices, indexCount, "Assets.ReplaceMesh");
-            return data && store->Replace(AssetHandleFromBits<Mesh>(mesh), std::move(*data));
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Mesh>(guard, mesh);
+            return store != nullptr && store->Replace(AssetHandleFromBits<Mesh>(mesh),
+                                                      MeshFrom(positions, positionCount, normals, normalCount, uvs,
+                                                               uvCount, indices, indexCount));
         }
 
         /**
@@ -265,14 +220,13 @@ namespace Fenrir
         std::uint64_t AddRenderTarget(const CallContext& context, AssetsScripting& assets, std::int32_t width,
                                       std::int32_t height, ScriptAssetOwner owner)
         {
-            const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor(context, owner, "Assets.AddRenderTarget");
+            const NativeGuard guard(context, assets.warnings);
+            const std::optional<AssetsScripting::StoreAndOwner> placed = assets.StoreAndOwnerFor(guard, owner);
             if (!placed)
             {
                 return 0;
             }
-            std::optional<ImageData> image =
-                ImageFrom(assets, context, width, height, nullptr, 0, "Assets.AddRenderTarget");
+            std::optional<ImageData> image = ImageFrom(guard, width, height, nullptr, 0);
             return image ? AssetHandleBits(placed->store.Add<Image>(std::move(*image), placed->owner)) : 0;
         }
 
@@ -283,19 +237,18 @@ namespace Fenrir
         bool ResizeRenderTarget(const CallContext& context, AssetsScripting& assets, std::uint64_t image,
                                 std::int32_t width, std::int32_t height)
         {
-            AssetStore* store = assets.Resolve<Image>(context, image, "Assets.ResizeRenderTarget");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Image>(guard, image);
             if (store == nullptr)
             {
                 return false;
             }
             if (!store->TryGet(AssetHandleFromBits<Image>(image))->pixels.empty())
             {
-                assets.warnings.Warn(context, "Assets.ResizeRenderTarget: the image has pixels, so it is not a render "
-                                              "target and it does nothing");
+                guard.Warn("the image has pixels, so it is not a render target and it does nothing");
                 return false;
             }
-            std::optional<ImageData> data =
-                ImageFrom(assets, context, width, height, nullptr, 0, "Assets.ResizeRenderTarget");
+            std::optional<ImageData> data = ImageFrom(guard, width, height, nullptr, 0);
             return data && store->Replace(AssetHandleFromBits<Image>(image), std::move(*data));
         }
 
@@ -307,14 +260,13 @@ namespace Fenrir
                                std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount,
                                ScriptAssetOwner owner)
         {
-            const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor(context, owner, "Assets.AddImage");
+            const NativeGuard guard(context, assets.warnings);
+            const std::optional<AssetsScripting::StoreAndOwner> placed = assets.StoreAndOwnerFor(guard, owner);
             if (!placed)
             {
                 return 0;
             }
-            std::optional<ImageData> image =
-                ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.AddImage");
+            std::optional<ImageData> image = ImageFrom(guard, width, height, rgba8, byteCount);
             return image ? AssetHandleBits(placed->store.Add<Image>(std::move(*image), placed->owner)) : 0;
         }
 
@@ -325,13 +277,13 @@ namespace Fenrir
         bool ReplaceImage(const CallContext& context, AssetsScripting& assets, std::uint64_t image, std::int32_t width,
                           std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount)
         {
-            AssetStore* store = assets.Resolve<Image>(context, image, "Assets.ReplaceImage");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Image>(guard, image);
             if (store == nullptr)
             {
                 return false;
             }
-            std::optional<ImageData> data =
-                ImageFrom(assets, context, width, height, rgba8, byteCount, "Assets.ReplaceImage");
+            std::optional<ImageData> data = ImageFrom(guard, width, height, rgba8, byteCount);
             return data && store->Replace(AssetHandleFromBits<Image>(image), std::move(*data));
         }
 
@@ -342,8 +294,9 @@ namespace Fenrir
         std::uint64_t CreateMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t shader,
                                      ScriptAssetOwner owner)
         {
+            const NativeGuard guard(context, assets.warnings);
             const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor<Shader>(context, shader, owner, "Materials.Create");
+                assets.StoreAndOwnerFor<Shader>(guard, shader, owner);
             return placed ? AssetHandleBits(
                                 placed->store.CreateMaterial(AssetHandleFromBits<Shader>(shader), placed->owner))
                           : 0;
@@ -356,8 +309,9 @@ namespace Fenrir
         std::uint64_t CloneMaterial(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                     ScriptAssetOwner owner)
         {
+            const NativeGuard guard(context, assets.warnings);
             const std::optional<AssetsScripting::StoreAndOwner> placed =
-                assets.StoreAndOwnerFor<Material>(context, material, owner, "Materials.Clone");
+                assets.StoreAndOwnerFor<Material>(guard, material, owner);
             return placed ? AssetHandleBits(
                                 placed->store.CloneMaterial(AssetHandleFromBits<Material>(material), placed->owner))
                           : 0;
@@ -367,7 +321,8 @@ namespace Fenrir
         bool SetFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                       std::string_view name, float value)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetFloat");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->SetFloat(AssetHandleFromBits<Material>(material), name, value);
         }
 
@@ -375,58 +330,59 @@ namespace Fenrir
         bool SetVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                         std::string_view name, const Math::Vec2* value)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector2");
-            return store != nullptr && value != nullptr &&
-                   store->SetVector2(AssetHandleFromBits<Material>(material), name, *value);
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
+            return store != nullptr && store->SetVector2(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec3` parameter (AssetStore::SetVector3). */
         bool SetVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                         std::string_view name, const Math::Vec3* value)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector3");
-            return store != nullptr && value != nullptr &&
-                   store->SetVector3(AssetHandleFromBits<Material>(material), name, *value);
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
+            return store != nullptr && store->SetVector3(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec4` parameter (AssetStore::SetVector4). */
         bool SetVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                         std::string_view name, const Math::Vec4* value)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetVector4");
-            return store != nullptr && value != nullptr &&
-                   store->SetVector4(AssetHandleFromBits<Material>(material), name, *value);
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
+            return store != nullptr && store->SetVector4(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a `vec4` parameter to a colour (AssetStore::SetColour). */
         bool SetColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                        std::string_view name, const Colour* value)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetColour");
-            return store != nullptr && value != nullptr &&
-                   store->SetColour(AssetHandleFromBits<Material>(material), name, *value);
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
+            return store != nullptr && store->SetColour(AssetHandleFromBits<Material>(material), name, *value);
         }
 
         /** @brief Sets a texture parameter to `image`, read with `sampler` (AssetStore::SetTexture). */
         bool SetTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                         std::string_view name, std::uint64_t image, const SamplerDescription* sampler)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetTexture");
-            return store != nullptr && sampler != nullptr &&
-                   store->SetTexture(AssetHandleFromBits<Material>(material), name, AssetHandleFromBits<Image>(image),
-                                     *sampler);
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
+            return store != nullptr && store->SetTexture(AssetHandleFromBits<Material>(material), name,
+                                                         AssetHandleFromBits<Image>(image), *sampler);
         }
 
         /** @brief Sets how the material's pixels combine with what is behind them (AssetStore::SetBlendMode). */
         bool SetBlendMode(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                           BlendMode blendMode)
         {
+            const NativeGuard guard(context, assets.warnings);
             if (!IsEnumerator<BlendMode::Additive>(blendMode))
             {
-                assets.warnings.Warn(context, "Materials.SetBlendMode: no such blend mode, so it does nothing");
+                guard.Warn("no such blend mode, so it does nothing");
                 return false;
             }
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetBlendMode");
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->SetBlendMode(AssetHandleFromBits<Material>(material), blendMode);
         }
 
@@ -434,7 +390,8 @@ namespace Fenrir
         bool SetAlphaCutoff(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                             float alphaCutoff)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetAlphaCutoff");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->SetAlphaCutoff(AssetHandleFromBits<Material>(material), alphaCutoff);
         }
 
@@ -442,7 +399,8 @@ namespace Fenrir
         bool SetDoubleSided(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                             bool doubleSided)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.SetDoubleSided");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->SetDoubleSided(AssetHandleFromBits<Material>(material), doubleSided);
         }
 
@@ -454,7 +412,7 @@ namespace Fenrir
         bool TryGetFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                          std::string_view name, float* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetFloat",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetFloat(handle, name);
                             });
@@ -468,7 +426,7 @@ namespace Fenrir
         bool TryGetVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                            std::string_view name, Math::Vec2* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetVector2",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetVector2(handle, name);
                             });
@@ -482,7 +440,7 @@ namespace Fenrir
         bool TryGetVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                            std::string_view name, Math::Vec3* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetVector3",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetVector3(handle, name);
                             });
@@ -496,7 +454,7 @@ namespace Fenrir
         bool TryGetVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                            std::string_view name, Math::Vec4* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetVector4",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetVector4(handle, name);
                             });
@@ -510,7 +468,7 @@ namespace Fenrir
         bool TryGetColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                           std::string_view name, Colour* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetColour",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetColour(handle, name);
                             });
@@ -524,7 +482,7 @@ namespace Fenrir
         bool TryGetTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                            std::string_view name, MaterialTexture* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetTexture",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetTexture(handle, name);
                             });
@@ -538,7 +496,7 @@ namespace Fenrir
         bool TryGetOverrideFloat(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                  std::string_view name, float* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideFloat",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideFloat(handle, name);
                             });
@@ -552,7 +510,7 @@ namespace Fenrir
         bool TryGetOverrideVector2(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                    std::string_view name, Math::Vec2* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector2",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideVector2(handle, name);
                             });
@@ -566,7 +524,7 @@ namespace Fenrir
         bool TryGetOverrideVector3(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                    std::string_view name, Math::Vec3* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector3",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideVector3(handle, name);
                             });
@@ -580,7 +538,7 @@ namespace Fenrir
         bool TryGetOverrideVector4(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                    std::string_view name, Math::Vec4* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideVector4",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideVector4(handle, name);
                             });
@@ -594,7 +552,7 @@ namespace Fenrir
         bool TryGetOverrideColour(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                   std::string_view name, Colour* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideColour",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideColour(handle, name);
                             });
@@ -608,7 +566,7 @@ namespace Fenrir
         bool TryGetOverrideTexture(const CallContext& context, AssetsScripting& assets, std::uint64_t material,
                                    std::string_view name, MaterialTexture* value)
         {
-            return ReadInto(assets, context, material, value, "Materials.TryGetOverrideTexture",
+            return ReadInto(NativeGuard(context, assets.warnings), material, value,
                             [name](const AssetStore& store, AssetHandle<Material> handle) {
                                 return store.TryGetOverrideTexture(handle, name);
                             });
@@ -617,7 +575,8 @@ namespace Fenrir
         /** @brief Whether the material has an override of the parameter (AssetStore::IsSet). */
         bool IsSet(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.IsSet");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->IsSet(AssetHandleFromBits<Material>(material), name);
         }
 
@@ -627,14 +586,16 @@ namespace Fenrir
          */
         bool Reset(const CallContext& context, AssetsScripting& assets, std::uint64_t material, std::string_view name)
         {
-            AssetStore* store = assets.Resolve<Material>(context, material, "Materials.Reset");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Material>(guard, material);
             return store != nullptr && store->Reset(AssetHandleFromBits<Material>(material), name);
         }
 
         /** @brief How many material parameters the shader has (AssetStore::GetShaderParameters). */
         std::int32_t GetShaderParameterCount(const CallContext& context, AssetsScripting& assets, std::uint64_t shader)
         {
-            AssetStore* store = assets.Resolve<Shader>(context, shader, "Shaders.GetParameterCount");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Shader>(guard, shader);
             return store != nullptr ? static_cast<std::int32_t>(
                                           store->GetShaderParameters(AssetHandleFromBits<Shader>(shader)).size())
                                     : 0;
@@ -650,11 +611,8 @@ namespace Fenrir
                                         std::int32_t index, ScriptShaderParameter* parameter, char16_t* name,
                                         std::int32_t capacity)
         {
-            if (parameter != nullptr)
-            {
-                *parameter = ScriptShaderParameter{};
-            }
-            AssetStore* store = assets.Resolve<Shader>(context, shader, "Shaders.GetParameter");
+            const NativeGuard guard(context, assets.warnings);
+            AssetStore* store = Resolve<Shader>(guard, shader);
             if (store == nullptr)
             {
                 return 0;
@@ -663,23 +621,12 @@ namespace Fenrir
                 store->GetShaderParameters(AssetHandleFromBits<Shader>(shader));
             if (index < 0 || static_cast<std::size_t>(index) >= parameters.size())
             {
-                assets.warnings.Warn(context,
-                                     "Shaders.GetParameter: the shader has no parameter at that index, so it does "
-                                     "nothing");
+                guard.Warn("the shader has no parameter at that index, so it does nothing");
                 return 0;
             }
             const ShaderParameter& found = parameters[static_cast<std::size_t>(index)];
-            if (parameter != nullptr)
-            {
-                *parameter = {
-                    found.type, {found.value[0], found.value[1], found.value[2], found.value[3]}, found.texture};
-            }
-            // GLSL names are ASCII, so each byte is one UTF-16 char.
-            const std::size_t room = name == nullptr || capacity < 0 ? 0 : static_cast<std::size_t>(capacity);
-            const std::string_view copied = std::string_view(found.name).substr(0, room);
-            std::transform(copied.begin(), copied.end(), name,
-                           [](char c) { return static_cast<char16_t>(static_cast<unsigned char>(c)); });
-            return static_cast<std::int32_t>(found.name.size());
+            *parameter = {found.type, {found.value[0], found.value[1], found.value[2], found.value[3]}, found.texture};
+            return WriteText(name, capacity, Utf8ToUtf16(found.name));
         }
     } // namespace AssetsNatives
 
