@@ -87,7 +87,7 @@ DebugDraw.Message(1, $"speed: {speed:0} m/s", Colour.White);
   phase until the end of the frame's `Render`, as in C++.
 - **No-op rules:** with no `DebugDraw` in the active scene (debug drawing not installed) or a `relativeTo` entity that is
   not alive, a call draws nothing and `IsGroupShown` is false; nothing throws, and a debug build warns once per native
-  call site and reason.
+  function and reason, under the native's name (`DebugDrawNative.Line: ...`).
 
 ## What a renderer reads
 

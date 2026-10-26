@@ -1,8 +1,8 @@
 #pragma once
 
-// The debug draw scripting tests' harness (spec seam 7: debug draw from C#): an App with debug drawing installed (or
-// not, for the no-op rules), stepped one frame at a time, with scripting running the debug draw fixture script
-// assembly, which uses the Fenrir.DebugDraw contract. C++ calls the fixture's static methods through Iris, as the
+// The debug draw scripting tests' harness (spec seam 7: debug draw from C#): an App with debug drawing installed,
+// stepped one frame at a time, with scripting running the debug draw fixture script assembly, which uses the
+// Fenrir.DebugDraw contract. C++ calls the fixture's static methods through Iris, as the
 // system runner calls scripts, and reads what C# drew through the active scene's DebugDraw: its tessellated batches
 // (seam 6).
 
@@ -15,7 +15,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
-#include <optional>
 #include <string>
 #include <type_traits>
 
@@ -88,15 +87,13 @@ namespace DebugDrawScriptingTests
         return config;
     }
 
-    // An App with debug drawing installed unless `withDebugDrawing` is false, and scripting running the fixture. Each
-    // frame's Render phase keeps what the active scene's DebugDraw tessellates to in `seen`. Members end in reverse
-    // order: scripting, debug drawing, then the app.
+    // An App with debug drawing installed and scripting running the fixture. Each frame's Render phase keeps what the
+    // active scene's DebugDraw tessellates to in `seen`. Members end in reverse order: scripting, debug drawing, then
+    // the app.
     struct DebugDrawScriptingApp
     {
-        explicit DebugDrawScriptingApp(bool withDebugDrawing = true)
-            : drawing(withDebugDrawing
-                          ? std::optional<Fenrir::DebugDrawing>(Fenrir::DebugDrawing::Install(headless.Get()))
-                          : std::nullopt),
+        DebugDrawScriptingApp()
+            : drawing(Fenrir::DebugDrawing::Install(headless.Get())),
               scripting(Fenrir::Scripting::Install(headless.Get(), FixtureConfig()))
         {
             INFO("The fixture did not load with the debug draw extension");
@@ -110,7 +107,7 @@ namespace DebugDrawScriptingTests
         }
 
         Fenrir::Testing::HeadlessApp headless;
-        std::optional<Fenrir::DebugDrawing> drawing;
+        Fenrir::DebugDrawing drawing;
         Fenrir::Scripting scripting;
         Fenrir::DebugBatches seen;
 
