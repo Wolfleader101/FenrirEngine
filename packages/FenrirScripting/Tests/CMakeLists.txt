@@ -26,6 +26,8 @@ add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/ReloadWatcherTests.cpp
     Rules/ReconcileTests.cpp
+    Rules/GenerationLifecycleTests.cpp
+    Rules/FakeComponentLoader.hpp
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp

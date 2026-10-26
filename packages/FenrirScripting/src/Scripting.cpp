@@ -112,6 +112,57 @@ namespace Fenrir
         }
     } // namespace
 
+    namespace
+    {
+        // The lifecycle's loader over the Iris host: a loaded generation is an Iris component, and this is the one
+        // place that knows it. Scripting's hooks reach the component through Of.
+        class IrisComponentLoader final : public Detail::ComponentLoader
+        {
+          public:
+            explicit IrisComponentLoader(Iris::Host& host) : m_host(host)
+            {
+            }
+
+            Iris::CallResult<std::unique_ptr<Detail::LoadedComponent>> Load(const std::filesystem::path& path) override
+            {
+                auto loaded = m_host.LoadComponent(path);
+                if (!loaded.Succeeded())
+                {
+                    return {loaded.status, std::nullopt, std::move(loaded.diagnostic), loaded.diagnosticTruncated};
+                }
+                return {Iris::CallStatus::Success, std::make_unique<Loaded>(std::move(*loaded.value)), {}, false};
+            }
+
+            // The Iris component behind a generation this loader loaded.
+            [[nodiscard]] static Iris::Component& Of(Detail::LoadedComponent& loaded) noexcept
+            {
+                return static_cast<Loaded&>(loaded).component;
+            }
+
+          private:
+            struct Loaded final : Detail::LoadedComponent
+            {
+                explicit Loaded(Iris::Component&& owner) : component(std::move(owner))
+                {
+                }
+
+                Iris::CallResult<void> Release() override
+                {
+                    return component.Release();
+                }
+
+                Iris::CallResult<Iris::ComponentUnloadState> WaitForUnload(std::chrono::milliseconds timeout) override
+                {
+                    return component.WaitForUnload(timeout);
+                }
+
+                Iris::Component component;
+            };
+
+            Iris::Host& m_host;
+        };
+    } // namespace
+
     struct Scripting::State
     {
         // Iris's messages arrive through a sink the host keeps until it is cleared, so the logger is borrowed
@@ -145,6 +196,9 @@ namespace Fenrir
             return contextActive && context->app != nullptr;
         }
         std::unique_ptr<Iris::Host> host;
+        // What the lifecycle loads generations through: the host above. Declared before the lifecycle, which borrows
+        // it.
+        std::optional<IrisComponentLoader> loader;
         // The generations of the script assembly: copies, loading, replacing, retiring, and the file watcher.
         Detail::GenerationLifecycle generations;
 
@@ -172,9 +226,10 @@ namespace Fenrir
 
         // Makes the generation's systems if the script assembly has any, and runs OnCreate. Nothing to do (and success)
         // when the script defines no systems. The phases themselves are scheduled once, at Install.
-        Iris::CallResult<void> StartSystems(const Iris::Component& component)
+        Iris::CallResult<void> StartSystems(Detail::LoadedComponent& loaded)
         {
             using Result = Iris::CallResult<void>;
+            const Iris::Component& component = IrisComponentLoader::Of(loaded);
             const auto type = component.FindType("Fenrir.Scripting.Generated.SystemHost");
             if (type.status == Iris::CallStatus::NotFound)
             {
@@ -449,7 +504,8 @@ namespace Fenrir
 
     Iris::Component* Scripting::LoadedComponent() noexcept
     {
-        return m_state != nullptr ? m_state->generations.Component() : nullptr;
+        auto* loaded = m_state != nullptr ? m_state->generations.Component() : nullptr;
+        return loaded != nullptr ? &IrisComponentLoader::Of(*loaded) : nullptr;
     }
 
     void Scripting::Shutdown() noexcept
@@ -775,14 +831,16 @@ namespace Fenrir
                 // lifecycle, so the raw pointer the hooks keep lives as long as they do.
                 State* const self = state.get();
                 Detail::GenerationLifecycle::Hooks hooks;
-                hooks.reconcile = [self](const Iris::Component& loaded) {
-                    return Detail::Reconcile(*self->context, self->components, loaded, self->owned);
+                hooks.reconcile = [self](Detail::LoadedComponent& loaded) {
+                    return Detail::Reconcile(*self->context, self->components, IrisComponentLoader::Of(loaded),
+                                             self->owned);
                 };
-                hooks.start = [self](const Iris::Component& loaded) { return self->StartSystems(loaded); };
+                hooks.start = [self](Detail::LoadedComponent& loaded) { return self->StartSystems(loaded); };
                 hooks.stop = [self] { self->StopSystems(); };
                 hooks.beforeReload = [self] { (void)self->changes.Apply(*self->context->app, self->components); };
                 const bool hotReload = settings.hotReload;
-                state->generations.Configure(state->host.get(), &logger, std::move(settings), std::move(hooks));
+                state->loader.emplace(*state->host);
+                state->generations.Configure(*state->loader, &logger, std::move(settings), std::move(hooks));
 
                 // The watcher looks before anything else runs in a frame, so a reload happens between frames. The
                 // phases are scheduled once; each runs the current generation's systems, if it has any in that phase.
