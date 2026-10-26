@@ -1,16 +1,13 @@
 #pragma once
 
 #include <optional>
-#include <source_location>
-#include <string>
 #include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "FenrirECS/EntityList.hpp"
-#include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/EntityValue.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
 #include "ScriptOptions.hpp"
@@ -56,35 +53,29 @@ namespace Fenrir
 
         /**
          * @brief The active scene's DebugDraw and the entity `relativeTo` (Entity::Null for none), unless the scene has
-         * no DebugDraw or the entity is not alive: then nothing is drawn, and the caller's call site warns once, naming
-         * `function`, the C# call.
+         * no DebugDraw or the entity is not alive: then nothing is drawn, and the native guard warns once under the
+         * calling native function's name.
          */
-        std::optional<Target> TargetFor(const CallContext& context, std::string_view function,
-                                        EntityValue relativeTo = EntityValue(Entity::Null),
-                                        std::source_location where = std::source_location::current())
+        std::optional<Target> TargetFor(const CallContext& context, EntityValue relativeTo = EntityValue(Entity::Null))
         {
-            DebugDraw* draw = context.GetApp().GetActiveScene().GetResource<DebugDraw>();
+            const NativeGuard guard(context, warnings);
+            DebugDraw* draw = guard.Require(
+                context.GetApp().GetActiveScene().GetResource<DebugDraw>(),
+                "the active scene has no DebugDraw (FenrirDebugDraw is not installed), so it draws nothing");
             if (draw == nullptr)
             {
-                warnings.Warn(context,
-                              std::string(function) + ": the active scene has no DebugDraw (FenrirDebugDraw is not "
-                                                      "installed), so it draws nothing",
-                              where);
                 return std::nullopt;
             }
             if (relativeTo.value == Entity::Null)
             {
                 return Target{draw, Entity()};
             }
-            EntityList& entities = context.Entities();
-            if (!entities.HasEntity(relativeTo.value))
+            const std::optional<Entity> entity = guard.Alive(relativeTo);
+            if (!entity)
             {
-                warnings.Warn(context,
-                              std::string(function) + ": the relativeTo entity is not alive, so it draws nothing",
-                              where);
                 return std::nullopt;
             }
-            return Target{draw, entities.GetEntity(relativeTo.value)};
+            return Target{draw, *entity};
         }
 
         /** @brief What the natives have warned about, so that each place warns once. */

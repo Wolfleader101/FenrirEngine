@@ -36,7 +36,7 @@ namespace Fenrir
          * It needs no owner: its functions read the app the running scripts serve, so scripts always load. With no
          * DebugDraw in the active scene (debug drawing not installed), or a `relativeTo` entity that is not alive, they
          * draw nothing and IsGroupShown is false. In debug builds each such case is warned about once per scripting
-         * install for each place in FenrirDebugDrawScripting's native code that notices it, not once per C# call site.
+         * install for each native function and reason, under the native's name, not once per C# call site.
          *
          * Defined by the FenrirDebugDrawScripting library, not FenrirDebugDraw (which never links FenrirScripting), so
          * it exists only in a build with scripting on. Include "FenrirDebugDrawScripting/DebugDrawScripting.hpp" and

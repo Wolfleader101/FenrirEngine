@@ -1,6 +1,7 @@
 # Debug draw from C#, through the scripting fixture harness (FenrirScripting's HeadlessApp and ScriptingProbe): an App
-# with debug drawing installed (or not, for the no-op rules) and scripting running a fixture script assembly that uses
-# the Fenrir.DebugDraw contract (spec seam 7). What C# drew is read back through the scene's DebugDraw (seam 6).
+# with debug drawing installed and scripting running a fixture script assembly that uses the Fenrir.DebugDraw contract
+# (spec seam 7). What C# drew is read back through the scene's DebugDraw (seam 6). The no-op rules are the rules tests
+# below, with no .NET.
 include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 
@@ -9,7 +10,6 @@ add_executable(FenrirDebugDrawScriptingTests
     DebugDrawScriptingApp.hpp
     Shapes.cpp
     Items.cpp
-    NoOps.cpp
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
@@ -43,13 +43,21 @@ add_custom_target(FenrirDebugDrawScriptFixture DEPENDS "${fenrir_debugdraw_fixtu
 add_dependencies(FenrirDebugDrawScriptFixture FenrirDebugDrawContract)
 add_dependencies(FenrirDebugDrawScriptingTests FenrirDebugDrawScriptFixture)
 
-set(fenrir_debugdraw_fixture_environment
-    "FENRIR_TEST_DEBUGDRAW_FIXTURE=${fenrir_debugdraw_fixture_dir}/Fenrir.DebugDrawScriptFixture.dll")
-add_test(NAME FenrirDebugDrawScripting COMMAND FenrirDebugDrawScriptingTests "~[noops]")
+add_test(NAME FenrirDebugDrawScripting COMMAND FenrirDebugDrawScriptingTests)
 set_tests_properties(FenrirDebugDrawScripting PROPERTIES TIMEOUT 300 ENVIRONMENT
-    "${fenrir_debugdraw_fixture_environment}")
-# The no-op rules count warnings given once per native call site per process, so they run in a process of their own,
-# in declaration order.
-add_test(NAME FenrirDebugDrawScripting-NoOps COMMAND FenrirDebugDrawScriptingTests "[noops]" --order decl)
-set_tests_properties(FenrirDebugDrawScripting-NoOps PROPERTIES TIMEOUT 300 ENVIRONMENT
-    "${fenrir_debugdraw_fixture_environment}")
+    "FENRIR_TEST_DEBUGDRAW_FIXTURE=${fenrir_debugdraw_fixture_dir}/Fenrir.DebugDrawScriptFixture.dll")
+
+# The rules tests: the no-op rules of the natives, called from C++ through FenrirScripting's NativeCallHarness with an
+# extension state the test makes, so they need no .NET runtime and no fixture assembly. The harness includes
+# FenrirScripting's private ChangeBuffer.hpp, so this executable is given that package's source directory, as
+# FenrirScriptingRulesTests is; the natives' state header is private to this package's src.
+add_executable(FenrirDebugDrawScriptingRulesTests
+    NoOps.cpp
+    "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
+    "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
+)
+target_include_directories(FenrirDebugDrawScriptingRulesTests PRIVATE "${fenrir_scripting_tests_dir}"
+    "${fenrir_scripting_tests_dir}/../src" "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+target_link_libraries(FenrirDebugDrawScriptingRulesTests PRIVATE FenrirDebugDrawScripting Catch2::Catch2WithMain)
+add_test(NAME FenrirDebugDrawScriptingRules COMMAND FenrirDebugDrawScriptingRulesTests)
+set_tests_properties(FenrirDebugDrawScriptingRules PROPERTIES TIMEOUT 60)
