@@ -14,12 +14,12 @@
 
 **Touches:** `packages/FenrirScripting/src/ComponentLoader.hpp`, `packages/FenrirScripting/src/GenerationLifecycle.hpp`, `packages/FenrirScripting/src/GenerationLifecycle.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Rules tests (no .NET), each one behaviour: `Load` copies the assembly and the dlls its deps file names and loads the copy, not the original; a load the loader refuses reports why and leaves no generation; `reconcile` refusing a generation releases it and leaves no generation; `start` failing releases the generation (after `stop`) and reports the start's diagnostic; `Reload` runs `beforeReload`, `stop`, releases the old generation, sweeps, then loads a new copy; when the new build fails to load, the previous copy is loaded again and the failure is what `Reload` returns; when the new build loads and fails to start, the previous copy is restored; when the restore fails too, no generation is loaded and the error says so; `Sweep` deletes a retired generation's copy only once the loader reports it collected, and warns once while it is pending; `Reload` called from inside `beforeReload` is `NotInitialized` and the outer reload completes; `Release` removes every copy and the empty scratch directory; before `Configure` every operation does nothing and reports nothing loaded.
-- [ ] `grep -n "Iris::" packages/FenrirScripting/src/GenerationLifecycle.hpp` finds only `CallResult` and `ComponentUnloadState`.
-- [ ] The .NET reload tests in `ScriptingTests.cpp` pass unchanged.
-- [ ] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass.
+- [x] Rules tests (no .NET), each one behaviour: `Load` copies the assembly and the dlls its deps file names and loads the copy, not the original; a load the loader refuses reports why and leaves no generation; `reconcile` refusing a generation releases it and leaves no generation; `start` failing releases the generation (after `stop`) and reports the start's diagnostic; `Reload` runs `beforeReload`, `stop`, releases the old generation, sweeps, then loads a new copy; when the new build fails to load, the previous copy is loaded again and the failure is what `Reload` returns; when the new build loads and fails to start, the previous copy is restored; when the restore fails too, no generation is loaded and the error says so; `Sweep` deletes a retired generation's copy only once the loader reports it collected, and warns once while it is pending; `Reload` called from inside `beforeReload` is `NotInitialized` and the outer reload completes; `Release` removes every copy and the empty scratch directory; before `Configure` every operation does nothing and reports nothing loaded.
+- [x] `grep -n "Iris::" packages/FenrirScripting/src/GenerationLifecycle.hpp` finds only `CallResult` and `ComponentUnloadState`.
+- [x] The .NET reload tests in `ScriptingTests.cpp` pass unchanged.
+- [x] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 

@@ -14,12 +14,12 @@
 
 **Touches:** `packages/FenrirScripting/src/ScriptData.hpp`, `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/src/ScriptSchema.hpp`, `packages/FenrirScripting/src/ScriptSchema.cpp`, `packages/FenrirScripting/src/EngineContext.hpp`, `packages/FenrirScripting/src/Bindings.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/Tests/Rules/`, `packages/FenrirScripting/Tests/CMakeLists.txt`, `packages/FenrirScripting/README.md`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Rules tests (no .NET): every former `ReconcileTests` case passes through `ScriptData`; a failed admission after the components were registered leaves nothing script-defined in the registry, no queue made, the surviving layouts intact, and a second admission of the previous report succeeding; `Forget` keeps the data and layouts and removes the registrations; `Drop` empties everything.
-- [ ] `grep -rn "AddAll\|AddEvents\|RemoveScriptDefined" packages/FenrirScripting/src` finds the registry's declarations and `ScriptData.cpp` only.
-- [ ] The .NET tests in `ScriptingTests.cpp` pass unchanged, the bad-report cases included.
-- [ ] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass.
+- [x] Rules tests (no .NET): every former `ReconcileTests` case passes through `ScriptData`; a failed admission after the components were registered leaves nothing script-defined in the registry, no queue made, the surviving layouts intact, and a second admission of the previous report succeeding; `Forget` keeps the data and layouts and removes the registrations; `Drop` empties everything.
+- [x] `grep -rn "AddAll\|AddEvents\|RemoveScriptDefined" packages/FenrirScripting/src` finds the registry's declarations and `ScriptData.cpp` only.
+- [x] The .NET tests in `ScriptingTests.cpp` pass unchanged, the bad-report cases included.
+- [x] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 

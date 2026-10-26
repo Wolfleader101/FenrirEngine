@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (#157, #159)
 
 # Generation lifecycle: a loader seam under it, and one module for a generation's script data
 
