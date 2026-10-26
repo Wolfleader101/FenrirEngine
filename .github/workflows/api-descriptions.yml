@@ -2,15 +2,18 @@ name: API descriptions
 
 # Regenerates every committed API description (ADR-0042, tools/describe-api/README.md) and every binding generated from
 # them (packages/Iris/Tools/Iris.Bindings/README.md), and fails when that leaves the tree dirty: a header change was
-# committed without its regenerated description, or a description without its regenerated binding. Both runners, because
-# both are the same bytes on every platform. It also runs the binding generator's own tests.
+# committed without its regenerated description, or a description without its regenerated binding. One runner (Windows: the
+# descriptions and bindings are the same bytes on every platform), on pull requests only, to spare the Actions budget.
+# It also runs the binding generator's own tests. Changes to docs and tickets alone run nothing.
 
 on:
   pull_request:
-  push:
-    branches:
-      - dotnet-scripting
-      - main
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - ".scratch/**"
+      - ".githooks/**"
+      - "scripts/check_tickets.py"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,13 +26,9 @@ env:
 
 jobs:
   describe:
-    name: Descriptions and bindings up to date (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Descriptions and bindings up to date
+    runs-on: windows-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
         with:

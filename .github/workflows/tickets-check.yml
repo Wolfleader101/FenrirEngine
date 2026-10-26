@@ -7,13 +7,6 @@ on:
     paths:
       - ".scratch/**"
       - "scripts/check_tickets.py"
-  push:
-    branches:
-      - dotnet-scripting
-      - main
-    paths:
-      - ".scratch/**"
-      - "scripts/check_tickets.py"
 
 jobs:
   tickets:
