@@ -192,7 +192,11 @@ A struct of exactly one field, which a native function takes or returns by value
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses packed), strong typedef, newtype.
 
 **Call context**
-What a native function receives first (`CallContext`): the App the running Scripting serves, and through it the active scene's entities and the change buffer. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
+What a native function receives first (`CallContext`): the App the running Scripting serves, through it the active scene's entities and the change buffer, and the name of the native function being called (its type-and-method part, `PhysicsNative.Raycast`), built for each call by the registration's thunk. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
+
+**Native guard**
+What a native function checks a call against before acting (`NativeGuard`): its extension's warn-once record and the call context, giving the entity-alive rule, a requirement check and a warning, each naming the native and warning once per place and message. `in` and `out` pointers are not checked and outputs are not zeroed by it: the generated declaration and the registration settle both (ADR-0045).
+*Avoid:* checker, validator, precondition.
 
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.

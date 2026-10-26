@@ -711,6 +711,45 @@ std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t leve
 - **Direct structural changes stay forbidden**: never call `CreateEntity`, `AddComponent`, `AddResource` and the like on
   the live storage from a native function, because the calling system's `Ref<T>`s point into it.
 
+### How a native is written
+
+A package native is its one call behind a native guard (`NativeGuard.hpp`), and trusts the generated declaration
+(ADR-0045): its `in` and `out` pointers are never null, so it dereferences them without checking, and each single `out`
+parameter is zeroed before it runs by the registration, which names `ZeroingOutputs<&Native, indices...>::Call` in place
+of the native (indices into the full parameter list, context and state counted), so an early return writes nothing. The
+guard is made from the call context and the extension state's `WarnOnceRecord`, and each of its checks warns once per
+place and message, in debug builds, under the native's name, which the call context carries from the registration
+(`CallContext::Native`, the type-and-method part: `PhysicsNative.Raycast`), so no native spells its own:
+
+```cpp
+/**
+ * @brief The first body a ray hits.
+ * @param[out] hit The hit; its default when nothing is hit.
+ * @return Whether a body was hit.
+ * @notrunning false
+ */
+bool Raycast(const Fenrir::CallContext& context, PhysicsScripting& physics, const Ray* ray, RaycastHit* hit)
+{
+    const Fenrir::NativeGuard guard(context, physics.warnings);
+    PhysicsWorld* world = guard.Require(PhysicsWorld::Of(context.GetApp().GetActiveScene()),
+                                        "the active scene has no physics world yet, so it does nothing");
+    if (world == nullptr)
+    {
+        return false;                                   // *hit is already RaycastHit{}
+    }
+    return world->Raycast(*ray, *hit);
+}
+// The generated registration: NativeFunction::Make<&Fenrir::ZeroingOutputs<&Raycast, 3>::Call>(
+//     "Fenrir.Physics.PhysicsNative.Raycast", false)
+```
+
+`guard.Alive(entity)` is the entity-alive rule (the entity of the active scene, or nothing with a warning), `Require`
+passes a pointer or an optional through and warns when it is empty, and `Warn` warns for its call site; a package's own
+lookups (its world, its store) are built on them in its extension state. A span C# passes as a first element and a count
+is read with `Fenrir::SpanOf` (`NativeMarshalling.hpp`, which also has `WriteText` for text out into a capacity buffer
+and `Utf8ToUtf16`): the first element is the one pointer that can be null, for an empty span. A native's rules (no world,
+dead entity, each warning once) are tested from C++ with `Tests/NativeCallHarness.hpp`, with no .NET (see "Tests").
+
 ## Exposing a native function
 
 A native function is two declarations, one per side, tied together by the C# method's full name, plus a line in an
@@ -839,6 +878,15 @@ The counters and the loaded Iris component the tests need are not on `Scripting`
 
 `Tests/HeadlessApp.hpp` is the harness later tickets build on: `HeadlessApp` owns an `App` and a recording
 logger, and `Run(n)` runs exactly `n` frames.
+
+`Tests/NativeCallHarness.hpp` is the test seam for native functions: `Fenrir::Testing::NativeCallHarness` owns a
+`HeadlessApp` and a change buffer, `Context("PhysicsNative.Raycast")` gives the call context the registration's thunk
+would build for that native, and `ApplyChanges()` plays back what the native recorded, so a native is called from C++
+and its rules (no world, stale handle, dead entity, each warning once) are asserted on the app and its logger with no
+.NET and no fixture assembly. `CallContext` names it as a friend. It includes the package's private
+`src/ChangeBuffer.hpp`, so a test executable using it adds FenrirScripting's `src` directory to its includes beside
+`fenrir_scripting_tests_dir`, as `FenrirScriptingRulesTests` does. The rules tests of `NativeGuard`, `ZeroingOutputs`
+and the marshalling helpers (`Tests/Rules/`) are written on it.
 
 The first configure of a fresh build directory can fail in the third-party assimp project; running the same
 configure command again succeeds. That happens with scripting OFF too.

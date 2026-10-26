@@ -3,26 +3,34 @@ add_executable(FenrirScriptingTests
     ScriptingTests.cpp
     FixtureApp.hpp
     HeadlessApp.hpp
+    NativeCallHarness.hpp
     ScriptingProbe.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
     Generated/FenrirScriptingNativesTests.cpp
     Generated/FenrirMathDefaultsTests.cpp
 )
-target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+# NativeCallHarness.hpp includes the package's private ChangeBuffer.hpp, so this executable is given the source directory
+# too, as every test executable using the harness is.
+target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}/../src")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()
 target_link_libraries(FenrirScriptingTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
 # Puts nethost, the Iris bridge and the contract next to the executable, which is where Scripting looks by default.
 fenrir_deploy_scripting(FenrirScriptingTests)
 
-# The rules tests: FenrirScripting's own modules (the change buffer, and the others as they are split out) tested through
-# their interfaces, with no .NET runtime and no fixture assembly. The modules are private to the package, so this one
-# executable is given the package's source directory; nothing else is.
+# The rules tests: FenrirScripting's own modules (the change buffer, and the others as they are split out) and what a
+# native function is written with (the native guard, the marshalling helpers, the zeroing registration) tested through
+# their interfaces, with no .NET runtime and no fixture assembly. The modules are private to the package, so this
+# executable is given the package's source directory, as is any that uses NativeCallHarness.hpp.
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
     Rules/ReloadWatcherTests.cpp
     Rules/ReconcileTests.cpp
+    Rules/NativeGuardTests.cpp
+    Rules/NativeMarshallingTests.cpp
+    Rules/ZeroingOutputsTests.cpp
     HeadlessApp.hpp
+    NativeCallHarness.hpp
 )
 target_link_libraries(FenrirScriptingRulesTests PRIVATE FenrirScripting Catch2::Catch2WithMain)
 target_include_directories(FenrirScriptingRulesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../src")

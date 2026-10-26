@@ -47,6 +47,15 @@ public static partial class Gadgets
     // The tag with its code raised by `by` and the heading's value: a wrapper crosses as its one field.
     [NativeFunction]
     public static partial Tag Retag(Tag tag, Heading by);
+
+    // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name.
+    [NativeFunction]
+    public static partial void Nudge(Entity entity);
+
+    // One reading of the entity (a count of one and its height), through the registration that zeroes `reading` before
+    // the native runs: zero readings, and a zeroed `reading`, for a dead entity; -1 when no Scripting runs.
+    [NativeFunction]
+    public static partial int Weigh(Entity entity, out Reading reading);
 }
 
 /// <summary>A heading, which the test extension's natives take and return by value.</summary>

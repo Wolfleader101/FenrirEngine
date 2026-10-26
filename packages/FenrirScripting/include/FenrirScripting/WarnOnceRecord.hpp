@@ -55,11 +55,15 @@ namespace Fenrir
 #endif
         }
 
-        /** @brief Warn for the native call `context` is: logs to its app's logger. */
+        /**
+         * @brief Warn for the native call `context` is: logs "[<extension>] <native>: <message> (warned once)" to its
+         * app's logger, with the native function's name from the context (CallContext::Native), so a native function
+         * never spells its own.
+         */
         void Warn(const CallContext& context, const std::string& message,
                   std::source_location where = std::source_location::current())
         {
-            Warn(context.GetApp(), message, where);
+            Warn(context.GetApp(), std::string(context.Native()) + ": " + message, where);
         }
 
       private:
