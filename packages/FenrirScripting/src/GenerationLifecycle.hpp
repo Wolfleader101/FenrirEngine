@@ -11,6 +11,7 @@
 
 #include <Iris/Iris.hpp>
 
+#include "ComponentLoader.hpp"
 #include "FenrirLogger/ILogger.hpp"
 #include "ReloadWatcher.hpp"
 
@@ -21,10 +22,10 @@ namespace Fenrir::Detail
     struct ScriptCopy;
 
     /**
-     * @brief The life of the script assembly's generations: each one a private copy of the file loaded into its own
-     * Iris component, replaced by the next build with the previous one restored if the next fails, released, and waited
-     * for until the runtime has collected it. It reads the file on disk, and a ReloadWatcher decides from that when it
-     * is ready to be loaded again.
+     * @brief The life of the script assembly's generations: each one a private copy of the file loaded through a
+     * ComponentLoader, replaced by the next build with the previous one restored if the next fails, released, and
+     * waited for until the loader says it has been collected. It reads the file on disk, and a ReloadWatcher decides
+     * from that when it is ready to be loaded again.
      *
      * It knows nothing of what a generation contains: the host supplies that through Hooks. It is set up in two steps,
      * because the host that owns it exists before the settings are known; until Configure every operation does nothing
@@ -56,9 +57,9 @@ namespace Fenrir::Detail
         struct Hooks
         {
             /** @brief All-or-nothing checks on a freshly loaded component. Nothing may change if this fails. */
-            std::function<Result(const Iris::Component&)> reconcile;
+            std::function<Result(LoadedComponent&)> reconcile;
             /** @brief Starts what runs inside the loaded generation (its systems). A failure releases it again. */
-            std::function<Result(const Iris::Component&)> start;
+            std::function<Result(LoadedComponent&)> start;
             /** @brief Stops what ran inside the generation, before it is released, and forgets what it defined. */
             std::function<void()> stop;
             /** @brief Runs before a reload takes the old generation down, so nothing a script recorded is left half
@@ -73,10 +74,10 @@ namespace Fenrir::Detail
         GenerationLifecycle(const GenerationLifecycle&) = delete;
         GenerationLifecycle& operator=(const GenerationLifecycle&) = delete;
 
-        /** @brief Gives the lifecycle what it needs. `host` and `logger` are borrowed and must outlive it. */
-        void Configure(Iris::Host* host, ILogger* logger, Settings settings, Hooks hooks);
+        /** @brief Gives the lifecycle what it needs. `loader` and `logger` are borrowed and must outlive it. */
+        void Configure(ComponentLoader& loader, ILogger* logger, Settings settings, Hooks hooks);
 
-        /** @brief Loads the first generation, from the file as it is now. */
+        /** @brief Loads the first generation, from the file as it is now. NotInitialized before Configure. */
         [[nodiscard]] Result Load();
 
         /**
@@ -112,13 +113,13 @@ namespace Fenrir::Detail
         /** @brief Whether a generation is loaded. */
         [[nodiscard]] bool HasGeneration() const noexcept
         {
-            return m_component.has_value();
+            return m_component != nullptr;
         }
 
         /** @brief The loaded generation, or null. Valid until it is unloaded. */
-        [[nodiscard]] Iris::Component* Component() noexcept
+        [[nodiscard]] LoadedComponent* Component() noexcept
         {
-            return m_component.has_value() ? &*m_component : nullptr;
+            return m_component.get();
         }
 
         /** @brief How many generations have been loaded (successfully) since the first. */
@@ -138,23 +139,23 @@ namespace Fenrir::Detail
 
         [[nodiscard]] std::optional<FileStamp> StampNow() const;
         [[nodiscard]] Result LoadGeneration(std::shared_ptr<ScriptCopy> existing);
-        void Retire(Iris::Component&& released, std::shared_ptr<ScriptCopy> copy);
+        void Retire(std::unique_ptr<LoadedComponent> released, std::shared_ptr<ScriptCopy> copy);
 
-        Iris::Host* m_host = nullptr;
+        ComponentLoader* m_loader = nullptr;
         ILogger* m_logger = nullptr;
         Settings m_settings;
         Hooks m_hooks;
 
-        std::optional<Iris::Component> m_component;
+        std::unique_ptr<LoadedComponent> m_component;
         int m_generation = 0;
         int m_copyCounter = 0;
         std::shared_ptr<ScriptCopy> m_activeCopy;
         std::shared_ptr<ScriptCopy> m_previousCopy; // Kept until the next generation loads, to restore if it does not.
 
-        // A released generation waits here until the runtime confirms it was collected.
+        // A released generation waits here until the loader confirms it was collected.
         struct Retired
         {
-            Iris::Component component;
+            std::unique_ptr<LoadedComponent> component;
             std::shared_ptr<ScriptCopy> copy;
             int generation = 0;
             bool warned = false;

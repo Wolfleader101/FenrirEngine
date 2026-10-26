@@ -58,6 +58,7 @@ add_library(FenrirScripting STATIC
     src/GenerationLifecycle.cpp
     src/ReloadWatcher.cpp
     src/ReloadWatcher.hpp
+    src/ComponentLoader.hpp
     src/GenerationLifecycle.hpp
     src/ScriptSchema.hpp
     src/ScriptComponents.hpp
