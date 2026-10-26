@@ -261,11 +261,13 @@ lays it out, and the engine registers it under that name.
 
 ### Loading is all or nothing
 
-A script assembly's load is a transaction. In order: the components it defines are discovered and checked; every native
-component's mapping is checked against its C# struct; and only then are the script's components registered. If any step
-fails, the assembly is released and **nothing** from that load is registered: no registry entries and no storage. (The checks
-today are a malformed report, a name that clashes with a native component or another script component, two names that would
-share a storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
+A script assembly's load is an *admission* (`src/ScriptData.hpp`). In order: the script report is discovered and checked;
+every native component's, event's, shared struct's and resource's mapping is checked against its C# struct; the script's
+components and events are registered; and only then is the previous generation's script data that no longer matches
+dropped and the queues of new events made. If any step fails, the assembly is released and **nothing** from that load is
+registered: no registry entries, and no storage beyond what an earlier generation already owned. (The checks today are a
+malformed report, a name that clashes with a native component or another script component, two names that would share a
+storage, and a native mismatch. Systems will join the order when they exist.) The error says which.
 
 ## Tagged unions
 
@@ -892,7 +894,9 @@ The reload rules (the previous copy restored when a build fails, a start failure
 sweep, the re-entrancy guard) are `Tests/Rules/GenerationLifecycleTests.cpp`: `GenerationLifecycle` loads through its
 `ComponentLoader` seam (`src/ComponentLoader.hpp`), and the rules tests give it `FakeComponentLoader`, which decides
 which loads fail and when a released generation counts as collected, so no .NET is involved. `Scripting.cpp`'s adapter
-over the Iris host is the one that loads real assemblies.
+over the Iris host is the one that loads real assemblies. What a generation defines and what survives a reload is
+`ScriptData` (`src/ScriptData.hpp`): `Tests/Rules/ScriptDataTests.cpp` admits literal script reports through it, with no
+.NET, and checks every refusal, what a reload keeps and drops, and that a failed admission leaves nothing behind.
 
 The first configure of a fresh build directory can fail in the third-party assimp project; running the same
 configure command again succeeds. That happens with scripting OFF too.
