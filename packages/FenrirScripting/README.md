@@ -888,5 +888,11 @@ and its rules (no world, stale handle, dead entity, each warning once) are asser
 `fenrir_scripting_tests_dir`, as `FenrirScriptingRulesTests` does. The rules tests of `NativeGuard`, `ZeroingOutputs`
 and the marshalling helpers (`Tests/Rules/`) are written on it.
 
+The reload rules (the previous copy restored when a build fails, a start failure releasing the generation, retire and
+sweep, the re-entrancy guard) are `Tests/Rules/GenerationLifecycleTests.cpp`: `GenerationLifecycle` loads through its
+`ComponentLoader` seam (`src/ComponentLoader.hpp`), and the rules tests give it `FakeComponentLoader`, which decides
+which loads fail and when a released generation counts as collected, so no .NET is involved. `Scripting.cpp`'s adapter
+over the Iris host is the one that loads real assemblies.
+
 The first configure of a fresh build directory can fail in the third-party assimp project; running the same
 configure command again succeeds. That happens with scripting OFF too.

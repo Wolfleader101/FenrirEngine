@@ -66,7 +66,8 @@ namespace Fenrir::Detail
             std::vector<std::filesystem::path> files{assembly};
             for (const auto& entry : std::filesystem::directory_iterator(source, code))
             {
-                const auto& name = entry.path().filename().native();
+                // A copy, not a reference: filename() is a temporary, and a reference to its string would dangle.
+                const auto name = entry.path().filename().native();
                 if (entry.is_regular_file(code) && entry.path() != assembly && name.rfind(prefix, 0) == 0)
                 {
                     files.push_back(entry.path());
@@ -102,9 +103,9 @@ namespace Fenrir::Detail
         }
     } // namespace
 
-    void GenerationLifecycle::Configure(Iris::Host* host, ILogger* logger, Settings settings, Hooks hooks)
+    void GenerationLifecycle::Configure(ComponentLoader& loader, ILogger* logger, Settings settings, Hooks hooks)
     {
-        m_host = host;
+        m_loader = &loader;
         m_logger = logger;
         m_settings = std::move(settings);
         m_hooks = std::move(hooks);
@@ -129,6 +130,10 @@ namespace Fenrir::Detail
 
     GenerationLifecycle::Result GenerationLifecycle::Load()
     {
+        if (m_loader == nullptr)
+        {
+            return Result{Iris::CallStatus::NotInitialized, "Scripting has no script assembly to load.", false};
+        }
         auto loaded = LoadGeneration(nullptr);
         if (loaded.Succeeded())
         {
@@ -152,7 +157,7 @@ namespace Fenrir::Detail
                     "The script assembly '" + assembly.string() + "' could not be copied for loading. " + error, false};
             }
         }
-        auto loaded = m_host->LoadComponent(copy->directory / assembly.filename());
+        auto loaded = m_loader->Load(copy->directory / assembly.filename());
         if (!loaded.Succeeded())
         {
             return Result{loaded.status,
@@ -160,14 +165,14 @@ namespace Fenrir::Detail
                           loaded.diagnosticTruncated};
         }
         // All or nothing: the assembly stays loaded only if the host accepts what it defines.
-        if (auto validated = m_hooks.reconcile(*loaded.value); !validated.Succeeded())
+        if (auto validated = m_hooks.reconcile(**loaded.value); !validated.Succeeded())
         {
             Retire(std::move(*loaded.value), copy);
             validated.diagnostic =
                 "The script assembly '" + assembly.string() + "' was released. " + validated.diagnostic;
             return validated;
         }
-        m_component.emplace(std::move(*loaded.value));
+        m_component = std::move(*loaded.value);
         m_activeCopy = copy;
         ++m_generation;
         if (auto started = m_hooks.start(*m_component); !started.Succeeded())
@@ -179,9 +184,9 @@ namespace Fenrir::Detail
         return Result{Iris::CallStatus::Success, {}, false};
     }
 
-    void GenerationLifecycle::Retire(Iris::Component&& released, std::shared_ptr<ScriptCopy> copy)
+    void GenerationLifecycle::Retire(std::unique_ptr<LoadedComponent> released, std::shared_ptr<ScriptCopy> copy)
     {
-        (void)released.Release();
+        (void)released->Release();
         m_retired.push_back({std::move(released), std::move(copy), m_generation, false});
     }
 
@@ -191,11 +196,9 @@ namespace Fenrir::Detail
         {
             m_hooks.stop();
         }
-        if (m_component.has_value())
+        if (m_component != nullptr)
         {
-            Iris::Component released = std::move(*m_component);
-            m_component.reset();
-            Retire(std::move(released), m_activeCopy);
+            Retire(std::move(m_component), m_activeCopy);
             m_previousCopy = m_activeCopy;
             m_activeCopy.reset();
         }
@@ -205,7 +208,7 @@ namespace Fenrir::Detail
     {
         for (auto at = m_retired.begin(); at != m_retired.end();)
         {
-            const auto unloaded = at->component.WaitForUnload(m_settings.unloadTimeout);
+            const auto unloaded = at->component->WaitForUnload(m_settings.unloadTimeout);
             if (unloaded.Succeeded() && *unloaded.value == Iris::ComponentUnloadState::Collected)
             {
                 at = m_retired.erase(at);
@@ -226,7 +229,7 @@ namespace Fenrir::Detail
 
     GenerationLifecycle::Result GenerationLifecycle::Reload()
     {
-        if (m_reloading || m_host == nullptr || m_settings.assembly.empty())
+        if (m_reloading || m_loader == nullptr || m_settings.assembly.empty())
         {
             return Result{Iris::CallStatus::NotInitialized,
                           "Scripting is not running a script assembly that can be reloaded.", false};
@@ -282,7 +285,7 @@ namespace Fenrir::Detail
 
     GenerationLifecycle::Watch GenerationLifecycle::Poll(std::chrono::steady_clock::time_point now)
     {
-        if (m_reloading || m_host == nullptr)
+        if (m_reloading || m_loader == nullptr)
         {
             return Watch::Idle;
         }
