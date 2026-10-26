@@ -35,7 +35,10 @@ internal static unsafe partial class FixtureNative
     [NativeFunction]
     public static partial int Extremes(in Vector3 origin, out Hit nearest, out Hit farthest);
 
-    /// <summary>Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.</summary>
+    /// <summary>
+    /// Writes up to `capacity` hits: a stateless native, and a pointer followed by its count. Named as Hits.Find too: a
+    /// second public method of that name, told apart by its parameters.
+    /// </summary>
     /// <returns>How many it wrote.</returns>
     [NativeFunction]
     public static partial int FindAll(in Vector3 origin, Span<Hit> hits);

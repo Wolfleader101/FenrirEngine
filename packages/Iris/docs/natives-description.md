@@ -28,8 +28,9 @@ A **native function** is a free function defined in one of the sources whose fir
 | `source` | The source defining it, relative to the description, with `/`. |
 | `state` | The qualified name of its state's class, when it takes one. |
 | `noexcept` | `true` when it is declared `noexcept` (absent otherwise). |
-| `doc` | Its doc comment without the `@param`, `@return` and `@notrunning` commands (see below), when there is one. |
+| `doc` | Its doc comment without the `@param`, `@return`, `@notrunning` and `@facade` commands (see below), when there is one. |
 | `notRunning` | The C++ expression its `@notrunning` gives: the value a caller gets when the native cannot be called (absent otherwise). |
+| `facade` | The `Class.Method` its `@facade` gives: the public static class, in the binding's namespace, and the method name the binding gives the native there, as a pass-through of its declaration (absent otherwise). |
 | `returns` | Its result, as a type (below), with `doc` from `@return` (or `@returns`). |
 | `parameters` | Every parameter after the call context and the state, in order: `name`, its type (below), `output`, `inOut` or `input`, and `doc`. |
 
@@ -48,4 +49,4 @@ A reference (after the context and state), a pointer to a pointer, a pointer to 
 
 ## Doc commands
 
-The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, `@param[in,out] name text` marks it `inOut` (a pointer the native reads and writes), `@param[in] name text` marks it `input` (a pointer to one value the native reads, which a binding never takes for a span, whatever parameter follows it), and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@notrunning expression` gives `notRunning`, the rest of its line. `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data fails the tool, as do `@param[in]` on anything but a pointer to const data, `@param` naming no parameter and `@notrunning` on a native that returns nothing. The rest of the comment is the function's `doc`, as for a type ("Doc comments" in [the API description](api-description.md)).
+The doc comment is split: `@param name text` (or `\param`) gives that parameter's `doc`, `@param[out] name text` also marks it an `output`, `@param[in,out] name text` marks it `inOut` (a pointer the native reads and writes), `@param[in] name text` marks it `input` (a pointer to one value the native reads, which a binding never takes for a span, whatever parameter follows it), and `@return text` (or `@returns`) gives the result's `doc`; each command's text runs to the next command or blank line. `@notrunning expression` gives `notRunning`, the rest of its line, and `@facade Class.Method` (or `\facade`) gives `facade`, the rest of its line: two identifiers joined by one `.`, both always written. `@param[out]` or `@param[in,out]` on anything but a pointer to non-const data fails the tool, as do `@param[in]` on anything but a pointer to const data, `@param` naming no parameter, `@notrunning` on a native that returns nothing, a `@facade` that is not `Class.Method`, and a second `@facade` on one native. The rest of the comment is the function's `doc`, as for a type ("Doc comments" in [the API description](api-description.md)).

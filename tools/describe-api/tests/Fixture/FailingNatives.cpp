@@ -73,4 +73,19 @@ namespace Failing
     {
         return text != nullptr;
     }
+
+    /** @facade Facades */
+    bool MalformedFacade(const Host::CallContext&)
+    {
+        return false;
+    }
+
+    /**
+     * @facade Facades.Once
+     * @facade Facades.Twice
+     */
+    bool DoubledFacade(const Host::CallContext&)
+    {
+        return false;
+    }
 } // namespace Failing

@@ -133,11 +133,13 @@ internal sealed record NativeParameter(string Name, NativeType Type, bool Output
 /// <summary>
 /// One native function: a free function taking the call context first, and optionally its extension state.
 /// <c>NotRunning</c> is the C++ expression its <c>@notrunning</c> gives, the value a caller gets when the function
-/// cannot be called.
+/// cannot be called; <c>Facade</c> is the <c>Class.Method</c> its <c>@facade</c> gives, the public static class and
+/// method a binding names it as.
 /// </summary>
 internal sealed record NativeFunctionDescription(string Name, string Namespace, string Source, string? State, bool NoExcept,
                                                  string? Doc, NativeType Returns, string? ReturnsDoc,
-                                                 IReadOnlyList<NativeParameter> Parameters, string? NotRunning);
+                                                 IReadOnlyList<NativeParameter> Parameters, string? NotRunning,
+                                                 string? Facade);
 
 /// <summary>What the natives mode writes: a binding's native functions in source order.</summary>
 internal sealed record NativesDescription(string Binding, string Context, IReadOnlyList<NativeFunctionDescription> Functions);
@@ -353,9 +355,25 @@ internal sealed class NativesDescriber
             return null;
         }
 
+        if (doc.Facades.Count > 1)
+        {
+            Error(function, name, "is marked @facade twice; a native names one public method");
+            return null;
+        }
+
+        var facade = doc.Facades.SingleOrDefault();
+        if (facade is not null && !FacadeMark.IsMatch(facade))
+        {
+            Error(function, name, "@facade names a public method as Class.Method");
+            return null;
+        }
+
         return new NativeFunctionDescription(name, Namespace(function.Handle), where, state, noexcept, doc.Text, returns,
-                                             doc.Returns, described, doc.NotRunning);
+                                             doc.Returns, described, doc.NotRunning, facade);
     }
+
+    // A @facade mark: two C++-style identifiers joined by one dot, the public class and the method name it has there.
+    private static readonly Regex FacadeMark = new(@"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$");
 
     // --- Types ---
 
@@ -564,6 +582,11 @@ internal static class NativesWriter
                 if (function.NotRunning is not null)
                 {
                     json.WriteString("notRunning", function.NotRunning);
+                }
+
+                if (function.Facade is not null)
+                {
+                    json.WriteString("facade", function.Facade);
                 }
 
                 json.WriteStartObject("returns");

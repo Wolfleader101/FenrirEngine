@@ -174,6 +174,8 @@ public sealed class DescribeTests
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
     [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]
     [InlineData("TextByPointer::text: is a pointer to a std::string_view: a native takes text as a std::string_view by value")]
+    [InlineData("MalformedFacade: @facade names a public method as Class.Method")]
+    [InlineData("DoubledFacade: is marked @facade twice; a native names one public method")]
     public void EachUndescribableNativeFailsNamingTheFunctionAndParameter(string diagnostic)
     {
         using var directory = new TemporaryDirectory();

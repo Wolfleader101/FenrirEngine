@@ -46,7 +46,10 @@ namespace Fixture
 
     namespace Natives
     {
-        /** @brief Pushes the body of `body` with `force`: an alias, and a const pointer, after the state. */
+        /**
+         * @brief Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.
+         * @facade Bodies.Push
+         */
         bool Push(const Host::CallContext& context, Host::State& state, EntityId body, const Vec3* force)
         {
             (void)context;
@@ -61,6 +64,7 @@ namespace Fixture
          * @param distance How far to look.
          * @param[out] hit Where it hit; the default when it did not.
          * @return Whether it hit.
+         * @facade Hits.Find
          */
         bool Find(const Host::CallContext& context, Host::State& state, const Vec3* origin, float distance, Hit* hit)
         {
@@ -91,7 +95,9 @@ namespace Fixture
         }
 
         /**
-         * @brief Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.
+         * @brief Writes up to `capacity` hits: a stateless native, and a pointer followed by its count. Named as
+         * Hits.Find too: a second public method of that name, told apart by its parameters.
+         * @facade Hits.Find
          * @return How many it wrote.
          */
         std::int32_t FindAll(const Host::CallContext& context, const Vec3* origin, Hit* hits, std::int32_t capacity)

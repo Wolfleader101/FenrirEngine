@@ -195,6 +195,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
+| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. |
 | `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
@@ -213,6 +214,21 @@ zeroes; an output span and a `T*` read and written are not. A result is a number
 wrapper, `void` or `void*`. Anything else fails naming the function and parameter: a struct by value that is not a
 wrapper, an enum or struct nothing describes, a pointer to a type nothing names, a pointer to non-const data that is
 neither an output, read and written, nor followed by a count, or any other result (text among them).
+
+**Facade parts.** A native whose public shape is its declaration's carries `@facade Class.Method` in its C++ doc, and
+the tool writes that method into the generated part of `Class`, a `public static partial class` in the binding's
+namespace with the natives' `using`s rule (`System` when a method takes a span, and the namespaces of the used bindings
+whose types the methods name) and a `//` header, so the hand-written part alone carries the class's summary. The method
+has the declaration's result, parameters and docs (`<summary>`, `<param>`, `<returns>`, the C++ doc verbatim) and an
+expression body calling the native, with one rule and no mark: a parameter the declaration takes `in T` the facade takes
+`T` and passes `in` (no public facade method takes `in`); `out`, spans, text and values are as declared. Two marks may
+give one class and method when their parameter types differ: C# overloads them. The hand-written class is `partial`
+and holds what a description cannot say: overloads that are not renames, generics, properties over outputs, constants,
+defaults, conversions and an `out` returned as a value. A mark is refused, naming the native and the mark, on a native
+whose declaration cannot be public (it takes a type in `internal-structs`, or a pointer: a `void*`, an `[in,out]` `T*`),
+when two marks give one class and method the same parameter types, and when the class is named as a mirror this binding
+or one it uses generates, as a bound type's C# type, or as the `[natives] class`. A facade class no mark names any more
+is deleted as a mirror no longer described is.
 
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
 
@@ -274,7 +290,10 @@ descriptions or uses itself, a used type that two used bindings mirror, that thi
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, a `[natives] class`
-that is also a mirror's name, or a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
+that is also a mirror's name, a `@facade` mark on a native whose declaration cannot be public (an `internal-structs`
+type or a pointer among its parameters or result), two marks giving one class and method the same parameter types, a
+facade class named as a mirror (this binding's or a used one's), a bound type's C# type or the `[natives] class`, a
+`facade` that is not `Class.Method`, or a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
 `natives-class`), which the zeroing registration replaced.
 
 ## Tests
@@ -284,7 +303,10 @@ that is also a mirror's name, or a `[tests]` still naming the natives test (`nat
 `Fixture.hpp`) and its natives (`tests/Fixture/Fixture.natives.json`, a copy of describe-api's, every form of native
 parameter) give their committed outputs byte for byte, with a resource of each scope and a read-only one, an internal
 mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a binding of Spring alone), and natives
-taking text, an enum and wrappers; a changed default changes exactly its initialiser; the registration zeroes a
+taking text, an enum and wrappers; the three marked `@facade` give two facade parts, one method taking by value what
+its declaration takes `in`, one a span, and two of one name told apart by their parameters, a mark a binding cannot
+honour fails naming the native and the mark, and a facade class no mark names is deleted; a changed default changes
+exactly its initialiser; the registration zeroes a
 native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
 read and written, and a native added with an output is declared and registered so; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles
@@ -292,4 +314,5 @@ against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's
 with its source generators (`tests/Checks/Sdk`). The `BindingDefaults` CTest builds the fixture's C# assembly
 (`tests/Checks/Runtime`) and runs the fixture's generated defaults test against it. The fixture is itself a binding, so
 the bindings target regenerates its outputs. Its natives' C# class has no bodies without the SDK's generator, so only the
-SDK check compiles it, and its registration is never compiled: Iris has no extension to register natives with.
+SDK check compiles it and the facade parts that call it, and its registration is never compiled: Iris has no extension
+to register natives with.
