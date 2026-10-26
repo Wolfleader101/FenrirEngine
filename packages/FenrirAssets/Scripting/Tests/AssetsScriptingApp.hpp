@@ -39,7 +39,12 @@ namespace AssetsScriptingTests
         return std::filesystem::absolute(value);
     }
 
-    inline const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_ASSETS_FIXTURE");
+    // Read when scripting is first installed, not at load: the no-op rules (NoOps.cpp) run with no fixture set.
+    inline const std::filesystem::path& Fixture()
+    {
+        static const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_ASSETS_FIXTURE");
+        return fixture;
+    }
 
     inline constexpr double oneTick = Fenrir::Testing::HeadlessApp::FrameDelta;
 
@@ -49,7 +54,6 @@ namespace AssetsScriptingTests
     inline constexpr const char* ImageCallsType = "AssetsScriptFixture.ImageCalls";
     inline constexpr const char* MaterialCallsType = "AssetsScriptFixture.MaterialCalls";
     inline constexpr const char* ShaderCallsType = "AssetsScriptFixture.ShaderCalls";
-    inline constexpr const char* NoOpCallsType = "AssetsScriptFixture.NoOpCalls";
 
     // C#'s AssetOwner values.
     inline constexpr int sceneOwner = 0;
@@ -112,7 +116,7 @@ namespace AssetsScriptingTests
     inline Fenrir::ScriptingConfig FixtureConfig()
     {
         Fenrir::ScriptingConfig config;
-        config.scriptAssembly = fixture;
+        config.scriptAssembly = Fixture();
         config.hotReload = false;
         config.extensions = {Fenrir::Assets::ScriptingExtension()};
         return config;
