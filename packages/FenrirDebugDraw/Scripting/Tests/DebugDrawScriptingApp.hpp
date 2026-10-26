@@ -1,45 +1,23 @@
 #pragma once
 
-// The debug draw scripting tests' harness (spec seam 7: debug draw from C#): an App with debug drawing installed,
-// stepped one frame at a time, with scripting running the debug draw fixture script assembly, which uses the
-// Fenrir.DebugDraw contract. C++ calls the fixture's static methods through Iris, as the
-// system runner calls scripts, and reads what C# drew through the active scene's DebugDraw: its tessellated batches
-// (seam 6).
+// The debug draw scripting tests' part of FenrirScripting's ExtensionTestApp (spec seam 7: debug draw from C#): the
+// fixture CTest names in FENRIR_TEST_DEBUGDRAW_FIXTURE, debug drawing installed, and the debug draw extension. C++
+// calls the fixture's static methods through Iris and reads what C# drew through the active scene's DebugDraw: its
+// tessellated batches (seam 6).
 
-#include "HeadlessApp.hpp"
-#include "ScriptingProbe.hpp"
-
-#include <catch2/catch_test_macros.hpp>
+#include "ExtensionTestApp.hpp"
 
 #include <cstddef>
-#include <cstdlib>
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <type_traits>
 
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirDebugDraw/DebugDrawing.hpp"
 #include "FenrirDebugDrawScripting/DebugDrawScripting.hpp"
-#include "FenrirScripting/Scripting.hpp"
 
 namespace DebugDrawScriptingTests
 {
-    inline std::filesystem::path FromEnvironment(const char* name)
-    {
-        const char* value = std::getenv(name);
-        if (value == nullptr)
-        {
-            std::cerr << "Set " << name << " (CTest does): the debug draw scripting tests need the fixture assembly.\n";
-            return {};
-        }
-        return std::filesystem::absolute(value);
-    }
+    using Fenrir::Testing::oneTick;
 
-    inline const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_DEBUGDRAW_FIXTURE");
-
-    // One tick's worth of frame time, and a frame too short to run a tick.
-    inline constexpr double oneTick = Fenrir::Testing::HeadlessApp::FrameDelta;
+    // A frame too short to run a tick.
     inline constexpr double noTick = oneTick * 0.25;
 
     // The fixture's types the tests call.
@@ -48,77 +26,30 @@ namespace DebugDrawScriptingTests
     inline constexpr const char* ItemCallsType = "DebugDrawScriptFixture.ItemCalls";
     inline constexpr const char* TickDrawerType = "DebugDrawScriptFixture.TickDrawer";
 
-    // Calls a static method of a type in the loaded fixture through Iris.
-    template <typename Result, typename... Args>
-    Result Call(Fenrir::Scripting& scripting, const char* typeName, const char* method, Args... arguments)
+    // Debug drawing, with a Render-phase system keeping what the active scene's DebugDraw tessellates to in `seen`.
+    struct DebugDrawPackages
     {
-        auto* component = Fenrir::ScriptingProbe::Component(scripting);
+        explicit DebugDrawPackages(Fenrir::App& app) : drawing(Fenrir::DebugDrawing::Install(app))
         {
-            INFO("There is no loaded script assembly");
-            REQUIRE(component != nullptr);
-        }
-        const auto type = component->FindType(typeName);
-        {
-            INFO(std::string("The fixture type was not found: ") + type.diagnostic);
-            REQUIRE(type.Succeeded());
-        }
-        const auto handle = type.value->FindMethod<Result(Args...)>(method);
-        {
-            INFO(std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
-            REQUIRE(handle.Succeeded());
-        }
-        const auto result = handle.value->Invoke(arguments...);
-        {
-            INFO(std::string("The fixture method ") + method + " failed (it should never throw): " + result.diagnostic);
-            REQUIRE(result.Succeeded());
-        }
-        if constexpr (!std::is_void_v<Result>)
-        {
-            return *result.value;
-        }
-    }
-
-    inline Fenrir::ScriptingConfig FixtureConfig()
-    {
-        Fenrir::ScriptingConfig config;
-        config.scriptAssembly = fixture;
-        config.hotReload = false;
-        config.extensions = {Fenrir::DebugDrawing::ScriptingExtension()};
-        return config;
-    }
-
-    // An App with debug drawing installed and scripting running the fixture. Each frame's Render phase keeps what the
-    // active scene's DebugDraw tessellates to in `seen`. Members end in reverse order: scripting, debug drawing, then
-    // the app.
-    struct DebugDrawScriptingApp
-    {
-        DebugDrawScriptingApp()
-            : drawing(Fenrir::DebugDrawing::Install(headless.Get())),
-              scripting(Fenrir::Scripting::Install(headless.Get(), FixtureConfig()))
-        {
-            INFO("The fixture did not load with the debug draw extension");
-            REQUIRE(scripting.HasScripts());
-            headless.Get().AddSequentialSystem(Fenrir::SchedulePriority::Render, [this](Fenrir::App& app) {
-                if (const Fenrir::DebugDraw* draw = app.GetActiveScene().GetResource<Fenrir::DebugDraw>())
+            app.AddSequentialSystem(Fenrir::SchedulePriority::Render, [this](Fenrir::App& running) {
+                if (const Fenrir::DebugDraw* draw = running.GetActiveScene().GetResource<Fenrir::DebugDraw>())
                 {
                     seen = draw->Tessellate();
                 }
             });
         }
 
-        Fenrir::Testing::HeadlessApp headless;
         Fenrir::DebugDrawing drawing;
-        Fenrir::Scripting scripting;
         Fenrir::DebugBatches seen;
+    };
 
-        Fenrir::App& Get()
+    // An App with debug drawing installed and scripting running the fixture with the debug draw extension.
+    struct DebugDrawScriptingApp : Fenrir::Testing::ExtensionTestApp<DebugDrawPackages>
+    {
+        DebugDrawScriptingApp()
+            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_DEBUGDRAW_FIXTURE"),
+                               {Fenrir::DebugDrawing::ScriptingExtension()})
         {
-            return headless.Get();
-        }
-
-        Fenrir::EntityList& Entities()
-        {
-            return headless.Get().GetActiveScene().GetEntityList();
         }
 
         // The active scene's DebugDraw.
@@ -136,12 +67,6 @@ namespace DebugDrawScriptingTests
             headless.Get().RunFrame(deltaTime);
             return seen;
         }
-
-        template <typename Result, typename... Args>
-        Result Call(const char* typeName, const char* method, Args... arguments)
-        {
-            return DebugDrawScriptingTests::Call<Result>(scripting, typeName, method, arguments...);
-        }
     };
 
     // How many lines every line batch holds together.
@@ -154,23 +79,4 @@ namespace DebugDrawScriptingTests
         }
         return count;
     }
-
-    // How many messages of `level` the app logged that contain `text`.
-    inline std::size_t LoggedWith(const Fenrir::Testing::HeadlessApp& headless, Fenrir::Testing::LogLevel level,
-                                  const std::string& text)
-    {
-        std::size_t count = 0;
-        for (const Fenrir::Testing::LoggedMessage& message : headless.Logger().Messages())
-        {
-            count += message.level == level && message.text.find(text) != std::string::npos ? 1 : 0;
-        }
-        return count;
-    }
-
-    // A release build warns about nothing; a debug build once per native call site.
-#ifdef NDEBUG
-    inline constexpr std::size_t warningsPerCallSite = 0;
-#else
-    inline constexpr std::size_t warningsPerCallSite = 1;
-#endif
 } // namespace DebugDrawScriptingTests

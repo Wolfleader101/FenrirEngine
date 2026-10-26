@@ -17,6 +17,7 @@ add_executable(FenrirAssetsScriptingTests
     NoOps.cpp
     Shapes.cpp
     Generated/FenrirAssetsDefaultsTests.cpp
+    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"

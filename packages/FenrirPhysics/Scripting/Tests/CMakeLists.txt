@@ -23,6 +23,7 @@ add_executable(FenrirPhysicsScriptingTests
     PhysicsScriptingApp.hpp
     PhysicsScriptingTests.cpp
     Generated/FenrirPhysicsDefaultsTests.cpp
+    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
