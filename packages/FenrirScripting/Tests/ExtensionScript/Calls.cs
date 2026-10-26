@@ -28,6 +28,17 @@ public static class Calls
 
     public static ushort Retag(ushort code, byte by) => Gadgets.Retag(new Tag { Code = code }, (Heading)by).Code;
 
+    public static void Nudge(uint entity) => Gadgets.Nudge(new Entity(entity));
+
+    public static int Weigh(uint entity) => Gadgets.Weigh(new Entity(entity), out _);
+
+    // The height the reading holds: zero for a dead entity, since the registration zeroed it.
+    public static float WeighHeight(uint entity)
+    {
+        Gadgets.Weigh(new Entity(entity), out Reading reading);
+        return reading.Weight;
+    }
+
     public static int ChargeLevel(uint entity) => new Entity(entity).Get<Charge>().Value.Level;
 
     // Native resources, read and written through Resources.

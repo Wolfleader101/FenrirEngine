@@ -3,7 +3,6 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <optional>
 
 #include "ChangeBuffer.hpp"
 #include "ComponentRegistry.hpp"
@@ -29,10 +28,8 @@ namespace Fenrir::Detail
         App* app = nullptr;
         ComponentRegistry* components = nullptr;
 
-        // What every native function receives while this context is active.
-        std::optional<CallContext> call;
-
-        // The structural changes scripts have made since they were last played back.
+        // The structural changes scripts have made since they were last played back. With `app`, what every native
+        // function's call context is built from while this context is active.
         ChangeBuffer* changes = nullptr;
 
         // How many times a script has called into the engine to run a query (diagnostic: a query makes a fixed number).

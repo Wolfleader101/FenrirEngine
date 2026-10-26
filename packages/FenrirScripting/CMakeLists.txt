@@ -68,6 +68,9 @@ add_library(FenrirScripting STATIC
     include/FenrirScripting/EntityValueMapping.hpp
     include/FenrirScripting/Generated/FenrirMathMappings.hpp
     include/FenrirScripting/Generated/FenrirScriptingMappings.hpp
+    include/FenrirScripting/NativeGuard.hpp
+    include/FenrirScripting/NativeMarshalling.hpp
+    include/FenrirScripting/ZeroingOutputs.hpp
     src/EngineContext.hpp
     src/Generated/FenrirScriptingRegistration.cpp
     include/FenrirScripting/Scripting.hpp

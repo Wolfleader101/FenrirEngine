@@ -433,10 +433,11 @@ namespace Fenrir::Detail
         std::atomic<EngineContext*> activeContext{nullptr};
     } // namespace
 
-    const CallContext* ActiveCallContext() noexcept
+    ActiveScripting ActiveCallContext() noexcept
     {
         const auto* context = activeContext.load();
-        return context == nullptr || !context->call ? nullptr : &*context->call;
+        return context == nullptr || context->app == nullptr ? ActiveScripting{}
+                                                             : ActiveScripting{context->app, context->changes};
     }
 
     bool ActivateEngineContext(EngineContext* context) noexcept

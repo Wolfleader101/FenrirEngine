@@ -500,6 +500,18 @@ namespace Fenrir
         return std::string(name.substr(0, split + 1)) + "__native_" + std::string(name.substr(split + 1));
     }
 
+    std::string_view NativeFunction::NativeNameFor(std::string_view name) noexcept
+    {
+        const auto method = name.rfind('.');
+        if (method == std::string_view::npos)
+        {
+            return name;
+        }
+        // The type is what precedes the method, up to the namespace's last dot; a nested type's `+` is part of it.
+        const auto type = name.rfind('.', method - 1);
+        return type == std::string_view::npos ? name : name.substr(type + 1);
+    }
+
     // Why a stage of starting scripting failed: what went wrong, and the diagnostic that came with it, if any.
     struct StartupFailure
     {
@@ -591,7 +603,6 @@ namespace Fenrir
             // resources.
             [&]() -> std::optional<StartupFailure> {
                 state->context->app = &app;
-                state->context->call = CallContext(app, state->changes);
                 state->context->components = &state->components;
                 state->context->changes = &state->changes;
                 // Every extension's components, events, shared structs and resources, in order, by the same rules. A
