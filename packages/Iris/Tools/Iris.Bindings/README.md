@@ -3,9 +3,9 @@
 Generates a C# binding from API descriptions: the C# mirror of every shared struct, tagged union and enum, the Iris
 mappings that check those mirrors against the C++ types, the registration lists of the extension that shares them, and a
 test that C#'s `new T()` holds C++'s `T{}` defaults; and from a natives description, the C# declarations and the
-registration of the extension's native functions, with a test that each writes its outputs. A shared type is then written
-once, in its C++ header, and a native function once, as its C++ definition; everything a binding needs of them is
-generated and committed.
+registration of the extension's native functions, which zeroes each native's outputs before it runs. A shared type is
+then written once, in its C++ header, and a native function once, as its C++ definition; everything a binding needs of
+them is generated and committed.
 
 The input is one or more **API descriptions** ([`docs/api-description.md`](../../docs/api-description.md)), which a
 header reader writes from a package's headers, and one **binding configuration**: the C# side's namespace, directories
@@ -95,9 +95,6 @@ includes = ["MyTestApp.hpp"]
 setup = "MyTestApp app;"               # The first statement of every test case.
 component = "app.Component()"          # A const Iris::Component* holding that class.
 tags = "[physics][bindings]"
-natives-cpp = "Tests/Generated/MyPhysicsNativesTests.cpp"  # Optional, with [natives]: the natives test (below).
-natives-csharp = "Tests/Fixture/Generated/MyPhysicsNatives.cs"
-natives-class = "My.Physics.Tests.Natives"
 
 [natives]                              # Optional: native functions, from <Name>.natives.json beside this file.
 sources = ["src/MyPhysicsScripting.cpp"]  # The source reader's (where the natives are defined, in order); not read here.
@@ -105,6 +102,7 @@ context = "My::CallContext"            # The source reader's: what every native 
 class = "PhysicsNative"                # The internal static partial class declaring them, in the namespace.
 attribute = "NativeFunction"           # The SDK's attribute on each declaration.
 make = "My::NativeFunction::Make"      # Each registration is make<&F>("Namespace.Class.F").
+zero-outputs = "My::ZeroingOutputs"    # A native with outputs is made as make<&zero-outputs<&F, i, j>::Call>(...) (below).
 types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes, by its C++ name.
 
 [bound-types]                          # The C# type of each bound type, and optionally its constructor's components.
@@ -184,8 +182,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
-| `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. |
-| `[tests] natives-cpp` and `natives-csharp` | A Catch2 case per native with an output, and the C# class whose method for it calls the native through the function pointer the host bound, with every input zero or null and every output holding junk, and says whether each output then holds `new T()`. |
+| `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
 would: an alias in `types` is its C# type; a number or `bool` is itself (`std::int32_t` is `int`, `std::uint64_t` is
@@ -196,7 +193,8 @@ its C# type, crossing as that field; `const char*` followed by a `std::int32_t` 
 `std::int32_t` count is `T*` (a span C# fixes), unless its doc marks it `@param[in]`, one value the count after it does
 not size; a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
-`in T`. `T` is a number, or the C# name of a described type or a `types` alias. A result is a number, `bool`, an enum, a
+`in T`. `T` is a number, or the C# name of a described type or a `types` alias. An `out T` is an output the registration
+zeroes; an output span and a `T*` read and written are not. A result is a number, `bool`, an enum, a
 wrapper, `void` or `void*`. Anything else fails naming the function and parameter: a struct by value that is not a
 wrapper, an enum or struct nothing describes, a pointer to a type nothing names, a pointer to non-const data that is
 neither an output, read and written, nor followed by a count, or any other result (text among them).
@@ -228,8 +226,9 @@ differ from the command line's, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and
-a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, or a `[natives] class`
-that is also a mirror's name.
+a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, a `[natives] class`
+that is also a mirror's name, or a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
+`natives-class`), which the zeroing registration replaced.
 
 ## Tests
 
@@ -238,12 +237,12 @@ that is also a mirror's name.
 `Fixture.hpp`) and its natives (`tests/Fixture/Fixture.natives.json`, a copy of describe-api's, every form of native
 parameter) give their committed outputs byte for byte, with a resource of each scope and a read-only one, an internal
 mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a binding of Spring alone), and natives
-taking text, an enum and wrappers; a changed default changes exactly its initialiser, and a native
-added with an output is declared, registered and tested; running
+taking text, an enum and wrappers; a changed default changes exactly its initialiser; the registration zeroes a
+native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
+read and written, and a native added with an output is declared and registered so; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles
 against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's scripting SDK is beside Iris, against it
 with its source generators (`tests/Checks/Sdk`). The `BindingDefaults` CTest builds the fixture's C# assembly
 (`tests/Checks/Runtime`) and runs the fixture's generated defaults test against it. The fixture is itself a binding, so
 the bindings target regenerates its outputs. Its natives' C# class has no bodies without the SDK's generator, so only the
-SDK check compiles it, and its natives test, like its registration, is never compiled: Iris has no extension to register
-natives with.
+SDK check compiles it, and its registration is never compiled: Iris has no extension to register natives with.

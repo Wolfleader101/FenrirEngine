@@ -58,10 +58,6 @@ includes = ["DefaultsHarness.hpp"]
 setup = "const Fixture::DefaultsHarness harness;"
 component = "harness.Component()"
 tags = "[bindings]"
-# Never compiled here either: the natives test calls natives a host registers.
-natives-cpp = "Tests/Generated/FixtureNativesTests.cpp"
-natives-csharp = "Tests/Generated/FixtureNatives.cs"
-natives-class = "Fixture.Bindings.Tests.Natives"
 
 # The native functions in Fixture.natives.json (a copy of tools/describe-api's, read from its Natives.cpp, whose
 # sources and context these are). Their C# class needs the SDK's generator for its bodies, so only the SDK check
@@ -72,6 +68,8 @@ context = "Host::CallContext"
 class = "FixtureNative"
 attribute = "NativeFunction"
 make = "Host::NativeFunction::Make"
+# A native with outputs is registered as make<&zero-outputs<&F, indices...>::Call>: the host's template zeroes them.
+zero-outputs = "Host::ZeroingOutputs"
 types = { "Fixture::EntityId" = "Entity" }
 
 # Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not

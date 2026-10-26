@@ -45,9 +45,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 26,
+        Assert.True(generated.Count == 24,
                     $"The fixture should give 19 mirrors, the natives' class, the mappings, the registration and the " +
-                    $"two files each of the defaults and natives tests, but gave {generated.Count} files.");
+                    $"defaults test's two files, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -244,7 +244,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 26, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 24, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -324,7 +324,29 @@ public sealed class BindingTests
     }
 
     [Fact]
-    public void ANativeAddedWithAnOutputIsDeclaredRegisteredAndTested()
+    public void TheRegistrationZeroesEachSingleOutputAndNothingElse()
+    {
+        var registration = Output(Generator.Generate(FixtureConfig, [FixtureDescription]), "FixtureRegistration.cpp");
+
+        // The indices count the full C++ parameter list: Find's hit follows the context, the state, origin and distance.
+        string[] expected =
+        [
+            "Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Find, 4>::Call>(\"Fixture.Bindings.FixtureNative.Find\"),",
+            "Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Extremes, 3, 4>::Call>(\"Fixture.Bindings.FixtureNative.Extremes\"),",
+            // Inputs only, an output span (hits, sized by capacity) and a pointer read and written (cursor) are not zeroed.
+            "Host::NativeFunction::Make<&Fixture::Natives::Push>(\"Fixture.Bindings.FixtureNative.Push\"),",
+            "Host::NativeFunction::Make<&Fixture::Natives::FindAll>(\"Fixture.Bindings.FixtureNative.FindAll\"),",
+            "Host::NativeFunction::Make<&Fixture::Next>(\"Fixture.Bindings.FixtureNative.Next\", nullptr),",
+        ];
+        foreach (var line in expected)
+        {
+            Assert.True(registration.Contains(line, StringComparison.Ordinal),
+                        $"The registration should make the native as\n  {line}\nbut is:\n{registration}");
+        }
+    }
+
+    [Fact]
+    public void ANativeAddedWithAnOutputIsDeclaredAndRegisteredThroughTheZeroingTemplate()
     {
         using var directory = new TemporaryDirectory();
         var config = CopyConfig(directory, "");
@@ -344,9 +366,7 @@ public sealed class BindingTests
         [
             "FixtureNative.cs: '' became '    public static partial bool Nearest(in Vector3 origin, float distance, out Hit hit);'",
             "FixtureRegistration.cpp: '} // namespace Fixture::Natives' became '    bool Nearest(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);'",
-            "FixtureRegistration.cpp: '' became '            Host::NativeFunction::Make<&Fixture::Natives::Nearest>(\"Fixture.Bindings.FixtureNative.Nearest\"),'",
-            "FixtureNatives.cs: '' became '    public static bool Nearest()'",
-            "FixtureNativesTests.cpp: '' became 'TEST_CASE(\"Fixture.Bindings.FixtureNative.Nearest, given nothing to act on, writes its output's default\", \"[bindings]\")'",
+            "FixtureRegistration.cpp: '' became '            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Nearest, 4>::Call>(\"Fixture.Bindings.FixtureNative.Nearest\"),'",
         ];
         foreach (var line in expected)
         {
@@ -580,6 +600,9 @@ public sealed class BindingTests
     [InlineData("InternalHeld", "internal-structs names Fixture::Limits, but the public Fixture::Body holds one: list it too", "")]
     [InlineData("InternalNotStruct", "internal-structs names Fixture::Motion, which is not a described struct this binding mirrors", "")]
     [InlineData("WrapperNotNumber", "[bound-types] Fixture::Ticket's wrapper is 'struct', which is not a number kind", "")]
+    [InlineData("NoZeroOutputs", "'zero-outputs' is missing or is not a string", "")]
+    [InlineData("NativesTestKeys", "[tests] natives-cpp, natives-class: the natives test is no longer generated, since the " +
+                                   "registration zeroes each native's outputs ([natives] zero-outputs)", "remove the keys")]
     public void WhatTheConfigurationCannotHonourFailsSayingWhy(string problem, string diagnostic, string rest)
     {
         using var directory = new TemporaryDirectory();
@@ -613,6 +636,10 @@ public sealed class BindingTests
             "InternalHeld" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Tag\", \"Fixture::Limits\"]", StringComparison.Ordinal),
             "InternalNotStruct" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Motion\"]", StringComparison.Ordinal),
             "WrapperNotNumber" => text => text.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal),
+            "NoZeroOutputs" => text => text.Replace("zero-outputs = \"Host::ZeroingOutputs\"\n", "", StringComparison.Ordinal),
+            "NativesTestKeys" => text => text.Replace("tags = \"[bindings]\"\n",
+                                                      "tags = \"[bindings]\"\nnatives-cpp = \"Tests/Generated/FixtureNativesTests.cpp\"\n" +
+                                                      "natives-class = \"Fixture.Bindings.Tests.Natives\"\n", StringComparison.Ordinal),
             _ => text => text,
         };
         var config = CopyConfig(directory, "", edit: edit);
@@ -698,13 +725,12 @@ public sealed class BindingTests
         return config;
     }
 
-    // A configuration's text without [natives] or the natives test.
+    // A configuration's text without [natives].
     private static string WithoutNatives(string text)
     {
         var start = text.IndexOf("[natives]", StringComparison.Ordinal);
         var end = text.IndexOf("\n\n", start, StringComparison.Ordinal);
-        text = text[..start] + text[end..];
-        return string.Join('\n', text.Split('\n').Where(line => !line.StartsWith("natives-", StringComparison.Ordinal)));
+        return text[..start] + text[end..];
     }
 
     // The fixture's natives description, edited, written as Fixture.natives.json beside a copied configuration.

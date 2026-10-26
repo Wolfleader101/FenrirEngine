@@ -6,6 +6,7 @@
 #include "FenrirWindowMappings.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
 #include "WindowScriptingState.hpp"
 
 namespace Fenrir::WindowNatives
@@ -41,8 +42,8 @@ namespace Fenrir::Generated
         };
         extension.functions = {
             Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::Exists>("Fenrir.Window.WindowNative.Exists"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::Size>("Fenrir.Window.WindowNative.Size"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::PixelSize>("Fenrir.Window.WindowNative.PixelSize"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::Size, 3>::Call>("Fenrir.Window.WindowNative.Size"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::PixelSize, 3>::Call>("Fenrir.Window.WindowNative.PixelSize"),
             Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::ContentScale>("Fenrir.Window.WindowNative.ContentScale"),
             Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsMinimised>("Fenrir.Window.WindowNative.IsMinimised"),
             Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsFocused>("Fenrir.Window.WindowNative.IsFocused"),

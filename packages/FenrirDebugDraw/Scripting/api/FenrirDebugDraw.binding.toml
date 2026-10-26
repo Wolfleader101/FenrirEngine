@@ -31,6 +31,7 @@ source = "../src/Generated/FenrirDebugDrawRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the options as C# passes them.
     "DebugDrawScriptingState.hpp",
     "ScriptOptions.hpp",
@@ -46,8 +47,8 @@ make-shared-struct = "Fenrir::MakeSharedStruct"
 # the extension's tests set every field from C# and read it back through what the call draws.
 by-hand = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOptions"]
 
-# No [tests]: neither generated test would have a case. The option structs are internal, so they get no defaults case (a
-# public test method cannot return one), and no native has an output, so the natives test has nothing to call.
+# No [tests]: the generated defaults test would have no case. The option structs are internal, so they get none (a public
+# test method cannot return one).
 
 [bound-types]
 "Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
@@ -71,3 +72,5 @@ context = "Fenrir::CallContext"
 class = "DebugDrawNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"

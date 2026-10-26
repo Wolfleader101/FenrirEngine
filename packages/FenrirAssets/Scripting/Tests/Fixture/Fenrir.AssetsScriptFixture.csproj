@@ -10,7 +10,7 @@
        -p:FenrirAssetsContractDir=<the folder holding Fenrir.Assets.dll>/. The contract is compile-time only: the host shares
        its own copy. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
-  <!-- The generated defaults and natives tests' C# halves (../Generated, from Scripting/api/FenrirAssets.binding.toml). -->
+  <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirAssets.binding.toml). -->
   <ItemGroup>
     <Compile Include="../Generated/*.cs" />
   </ItemGroup>

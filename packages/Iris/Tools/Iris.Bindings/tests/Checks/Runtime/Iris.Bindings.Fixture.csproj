@@ -5,7 +5,7 @@
     <AssemblyName>Iris.Bindings.Fixture</AssemblyName>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <!-- The generated natives test calls function pointers. -->
+    <!-- A mirror with a fixed buffer (Tag) is unsafe. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

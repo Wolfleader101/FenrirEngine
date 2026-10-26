@@ -3,7 +3,8 @@
 A **natives description** (`<Name>.natives.json`, beside the binding's configuration `<Name>.binding.toml`) records the
 C++ functions a binding's script language calls: a source reader writes it from the extension's sources (in FenrirEngine,
 `tools/describe-api --natives`, whose `SCHEMA.md` this copies), and [`Tools/Iris.Bindings`](../Tools/Iris.Bindings/README.md)
-reads it when the configuration has `[natives]`, to write their C# declarations, their registration and a test.
+reads it when the configuration has `[natives]`, to write their C# declarations and their registration, which zeroes
+each `output` before the native runs (the configuration's `zero-outputs` names the host's template).
 `Tools/Iris.Bindings/tests/Fixture/Fixture.natives.json` is a worked example of every part below.
 
 The format is the [API description](api-description.md)'s: UTF-8 JSON in a fixed order, the same bytes on any platform.

@@ -59,8 +59,7 @@ target_link_libraries(FenrirAssetsScripting PUBLIC FenrirAssets FenrirScripting)
 #                                        call;
 #   include/FenrirAssetsScripting/Generated/  the Iris mappings, public because FenrirRenderer's binding uses this one;
 #   src/Generated/                       the extension's sharedStructs and functions;
-#   Tests/Generated/                     the defaults test (C#'s new T() against C++'s T{}, field by field) and the
-#                                        natives test (each output written when a native has nothing to act on).
+#   Tests/Generated/                     the defaults test (C#'s new T() against C++'s T{}, field by field).
 # The handles are bound types, mapped by hand (AssetMappings.hpp). The owner C# names and the plain data the natives take
 # in C#'s form are this library's own (include/FenrirAssetsScripting/ScriptAssets.hpp), described as
 # api/FenrirAssetsScripting.api.json. After changing a shared type or a native, regenerate both stages:

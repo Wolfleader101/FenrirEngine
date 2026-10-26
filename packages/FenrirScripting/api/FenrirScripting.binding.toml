@@ -34,6 +34,7 @@ source = "../src/Generated/FenrirScriptingRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the address alias.
     "../EngineContext.hpp",
 ]
@@ -53,10 +54,6 @@ includes = ["FixtureApp.hpp", "ScriptingProbe.hpp"]
 setup = "Fenrir::Testing::FixtureApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirScriptingNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirScriptingNatives.cs"
-natives-class = "Fenrir.ScriptFixture.Natives"
 
 [bound-types]
 "Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
@@ -80,5 +77,7 @@ context = "Fenrir::CallContext"
 class = "Native"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"
 # The addresses and counts natives write into C#'s memory are native-sized there.
 types = { "Fenrir::Detail::NativeAddress" = "nuint" }
