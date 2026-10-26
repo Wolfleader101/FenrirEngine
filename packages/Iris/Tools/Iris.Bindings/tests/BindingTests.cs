@@ -675,6 +675,24 @@ public sealed class BindingTests
                     $"the outputs changed:\n{string.Join('\n', Changes(once, twice))}");
     }
 
+    [Fact]
+    public void ABindingWhoseNativesAreNotDescribedYetBindsNone()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        System.IO.File.Delete(Path.Combine(directory.Path, "Fixture.natives.json"));
+
+        var generated = Generator.Generate(config, [description]);
+
+        var natives = Mirror(generated, "FixtureNative.cs");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        Assert.False(natives.Contains("[NativeFunction]", StringComparison.Ordinal),
+                     $"With no natives description yet, the natives' class should declare none, but is:\n{natives}");
+        Assert.True(registration.Contains("extension.functions = {};", StringComparison.Ordinal),
+                    $"With no natives description yet, the registration should list no natives, but is:\n{registration}");
+    }
+
     // A copy of the fixture's configuration in the directory, so every output lands there. `boundTypes` replaces the
     // entries of [bound-types] when not empty; `topLevel` is added after the namespace, and `edit` applied last.
     private static string CopyConfig(TemporaryDirectory directory, string boundTypes, string topLevel = "",

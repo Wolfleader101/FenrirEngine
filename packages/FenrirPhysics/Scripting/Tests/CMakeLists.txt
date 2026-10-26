@@ -12,6 +12,8 @@ add_executable(FenrirPhysicsScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirPhysicsScriptingTests)
 # The library's own src too, for the generated mappings the defaults test walks and the bound types' mappings the
 # drifted stand-ins use.
 target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}" ../src)

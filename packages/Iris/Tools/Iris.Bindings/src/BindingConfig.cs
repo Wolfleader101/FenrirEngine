@@ -86,6 +86,7 @@ internal sealed record TestsConfig(
 /// </summary>
 internal sealed record NativesConfig(
     string Description,
+    string Context,
     string Class,
     string Attribute,
     string Make,
@@ -191,7 +192,7 @@ internal sealed record BindingConfig(
             reader.Keys(section, "natives", "sources", "context", "class", "attribute", "make", "types");
             nativesConfig = new NativesConfig(
                 System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, fileName[..^Extension.Length] + ".natives.json"),
-                reader.String(section, "class"), reader.String(section, "attribute"), reader.String(section, "make"),
+                reader.String(section, "context"), reader.String(section, "class"), reader.String(section, "attribute"), reader.String(section, "make"),
                 reader.StringTable(section, "types"));
             if (registration is null)
             {

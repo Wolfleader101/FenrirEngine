@@ -18,6 +18,8 @@ add_executable(FenrirRendererScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirRendererScriptingTests)
 # RendererProbe, from the renderer's own tests, and the renderer's sources it reads.
 target_include_directories(FenrirRendererScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"
     ../../Tests ../../src)

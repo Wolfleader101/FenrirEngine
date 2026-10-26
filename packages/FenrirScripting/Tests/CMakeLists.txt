@@ -8,6 +8,8 @@ add_executable(FenrirScriptingTests
     Generated/FenrirScriptingNativesTests.cpp
     Generated/FenrirMathDefaultsTests.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirScriptingTests)
 target_include_directories(FenrirScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 include("${CMAKE_CURRENT_LIST_DIR}/../../../cmake/FenrirCatch2.cmake")
 fenrir_add_catch2()

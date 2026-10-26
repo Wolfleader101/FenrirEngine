@@ -74,6 +74,8 @@ add_library(FenrirScripting STATIC
     include/FenrirScripting/ScriptingExtension.hpp
     include/FenrirScripting/WarnOnceRecord.hpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirScripting)
 
 target_include_directories(FenrirScripting PUBLIC include)
 target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)

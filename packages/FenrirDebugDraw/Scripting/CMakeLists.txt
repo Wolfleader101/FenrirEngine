@@ -46,6 +46,8 @@ add_library(FenrirDebugDrawScripting STATIC
     src/Generated/FenrirDebugDrawMappings.hpp
     src/Generated/FenrirDebugDrawRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirDebugDrawScripting)
 target_include_directories(FenrirDebugDrawScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirDebugDrawScripting PUBLIC FenrirDebugDraw FenrirScripting)
 

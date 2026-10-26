@@ -46,6 +46,8 @@ add_library(FenrirPhysicsScripting STATIC
     src/Generated/FenrirPhysicsMappings.hpp
     src/Generated/FenrirPhysicsRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirPhysicsScripting)
 target_include_directories(FenrirPhysicsScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirPhysicsScripting PUBLIC FenrirPhysics FenrirScripting)
 

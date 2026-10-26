@@ -143,6 +143,22 @@ public sealed class DescribeTests
                     FirstDifference(committed, described));
     }
 
+    [Fact]
+    public void ANativesSourceLibclangCannotReadFailsWithItsErrorsAndWhereTheMappingHeadersGo()
+    {
+        using var directory = new TemporaryDirectory();
+        var source = Path.Combine(directory.Path, "Broken.cpp");
+        File.WriteAllText(source, "namespace Host { class CallContext {}; }\nconstexpr int broken = undeclared;\n");
+        var config = Path.Combine(directory.Path, "Broken.binding.toml");
+        File.WriteAllText(config, "[natives]\nsources = [\"Broken.cpp\"]\ncontext = \"Host::CallContext\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => NativesDescriber.Describe(NativesSelection.Read(config), []));
+
+        Assert.True(exception.Message.Contains("undeclared", StringComparison.Ordinal) &&
+                    exception.Message.Contains("keep Iris mapping headers", StringComparison.Ordinal),
+                    $"A natives source that does not parse should fail with clang's errors and the note, but failed with\n  {exception.Message}");
+    }
+
     [Theory]
     [InlineData("Hidden: has internal linkage (static, or in an anonymous namespace): the generated registration " +
                 "declares and names it from another source file")]

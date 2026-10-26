@@ -5,6 +5,10 @@
 # iris_generate_binding(<name> <config> <descriptions...>) adds a binding to that target. Paths are relative to the
 # calling CMakeLists.txt. A parent project names the target by setting IRIS_GENERATE_BINDINGS_TARGET before adding Iris
 # (iris-generate-bindings when it does not).
+#
+# iris_binding_outputs(<target>...) lets a new binding configure before its first generation: call it after the targets
+# that compile the binding's generated sources, and each of their sources under a Generated/ directory that does not exist
+# yet is created empty, for the bindings target to fill in.
 
 if(NOT IRIS_GENERATE_BINDINGS_TARGET)
     set(IRIS_GENERATE_BINDINGS_TARGET iris-generate-bindings)
@@ -58,4 +62,21 @@ function(iris_generate_binding name config)
     )
     add_dependencies(iris-generate-binding-${name} iris-bindings-tool)
     add_dependencies(${target} iris-generate-binding-${name})
+endfunction()
+
+function(iris_binding_outputs)
+    foreach(target IN LISTS ARGN)
+        get_target_property(sources ${target} SOURCES)
+        get_target_property(directory ${target} SOURCE_DIR)
+        foreach(source IN LISTS sources)
+            # Generator expressions name nothing on disk yet.
+            if(source MATCHES "(^|/)Generated/" AND NOT source MATCHES "\\$<")
+                get_filename_component(path "${source}" ABSOLUTE BASE_DIR "${directory}")
+                if(NOT EXISTS "${path}")
+                    message(STATUS "${path} is not generated yet: it is empty until the bindings target writes it")
+                    file(WRITE "${path}" "")
+                endif()
+            endif()
+        endforeach()
+    endforeach()
 endfunction()

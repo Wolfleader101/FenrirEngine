@@ -47,6 +47,8 @@ add_library(FenrirAssetsScripting STATIC
     src/AssetsScriptingState.hpp
     src/Generated/FenrirAssetsRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirAssetsScripting)
 target_include_directories(FenrirAssetsScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirAssetsScripting PUBLIC FenrirAssets FenrirScripting)
 

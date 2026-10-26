@@ -13,6 +13,8 @@ add_executable(FenrirDebugDrawScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirDebugDrawScriptingTests)
 target_include_directories(FenrirDebugDrawScriptingTests PRIVATE "${fenrir_scripting_tests_dir}")
 target_link_libraries(FenrirDebugDrawScriptingTests PRIVATE FenrirDebugDrawScripting Catch2::Catch2WithMain)
 # The harness reads the fixture's path with std::getenv, which MSVC's runtime calls unsafe.

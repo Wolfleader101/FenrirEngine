@@ -34,6 +34,20 @@ A parent project names the target by setting `IRIS_GENERATE_BINDINGS_TARGET` bef
 `fenrir-generate-bindings`). Running it rebuilds the tool and regenerates every binding; commit the result with the
 header change, and check in CI that it leaves the tree clean.
 
+## Adding a binding
+
+A new binding's outputs do not exist until its first generation, and its natives description not until describe-api has
+read its natives, so the first run goes in this order:
+
+1. Write the selection (`<Package>.api.toml`), the configuration (`<Name>.binding.toml`), and the natives in their
+   source, which includes no mapping headers (describe-api's README, "Native functions").
+2. In CMake, list the generated sources the library and its test target compile, and call `iris_binding_outputs(<target>)`
+   after each: on the first configure it creates them empty, so the build files are written.
+3. `fenrir-describe-api` writes the descriptions and the natives description.
+4. `fenrir-generate-bindings` fills in every output. Run before step 3, it binds no natives (the run says the natives
+   description does not exist yet) and still writes the rest.
+5. Build, and commit the outputs with the inputs.
+
 ## The configuration
 
 `<Name>.binding.toml`, with paths relative to it. [`tests/Fixture/Fixture.binding.toml`](tests/Fixture/Fixture.binding.toml)

@@ -155,6 +155,10 @@ internal sealed class NativesDescriber
 
         if (clangErrors.Count > 0)
         {
+            // The usual cause: a header libclang cannot evaluate, which only the natives' other sources need.
+            clangErrors.Add($"{source}: note: libclang reads a natives source on its own; keep Iris mapping headers " +
+                            "(generated, or a BoundMappings.hpp) out of it, in a source of their own (tools/describe-api/README.md, " +
+                            "\"Native functions\")");
             throw new DescribeException(string.Join("\n", clangErrors));
         }
 

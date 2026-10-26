@@ -16,6 +16,8 @@ add_executable(FenrirInputScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirInputScriptingTests)
 target_include_directories(FenrirInputScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}")
 target_link_libraries(FenrirInputScriptingTests PRIVATE FenrirInputScripting Catch2::Catch2WithMain)
 fenrir_deploy_scripting(FenrirInputScriptingTests)

@@ -32,9 +32,21 @@ internal sealed record NativeFunction(
     public string QualifiedName => Namespace.Length == 0 ? Name : $"{Namespace}::{Name}";
 }
 
-/// <summary>A natives description: the call context every native takes first, and the natives in source order.</summary>
-internal sealed record NativesDescription(string Path, string Context, IReadOnlyList<NativeFunction> Functions)
+/// <summary>
+/// A natives description: the call context every native takes first, and the natives in source order. <c>Missing</c> when
+/// the file does not exist yet (a binding's first run, before describe-api's natives mode has written it): it describes no
+/// natives then.
+/// </summary>
+internal sealed record NativesDescription(string Path, string Context, IReadOnlyList<NativeFunction> Functions,
+                                          bool Missing = false)
 {
+    /// <summary>
+    /// Reads <c>&lt;Name&gt;.natives.json</c>, or, when it does not exist yet, a description of no natives with the
+    /// configuration's context.
+    /// </summary>
+    public static NativesDescription ReadOrNone(NativesConfig config) =>
+        File.Exists(config.Description) ? Read(config.Description) : new(config.Description, config.Context, [], Missing: true);
+
     /// <summary>Reads <c>&lt;Name&gt;.natives.json</c>, or throws <see cref="BindingException" /> saying what is wrong.</summary>
     public static NativesDescription Read(string path)
     {
@@ -134,7 +146,8 @@ internal static class Natives
             }
         }
 
-        foreach (var name in config.Types.Keys.Where(name => natives.Functions.All(function =>
+        // Until describe-api has described them, no native takes anything.
+        foreach (var name in config.Types.Keys.Where(name => !natives.Missing && natives.Functions.All(function =>
                      function.Parameters.All(parameter => parameter.Type.Spelling != name && parameter.Type.Pointee != name))))
         {
             errors.Add($"{binding.Config.Path}: [natives] types names {name}, which no native takes");

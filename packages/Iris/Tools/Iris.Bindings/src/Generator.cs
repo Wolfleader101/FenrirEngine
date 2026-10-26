@@ -30,7 +30,7 @@ internal static class Generator
         IReadOnlyList<BoundNative> bound = [];
         if (config.Natives is { } nativesConfig)
         {
-            natives = NativesDescription.Read(nativesConfig.Description);
+            natives = NativesDescription.ReadOrNone(nativesConfig);
             bound = Natives.Bind(binding, natives);
             if (binding.Mirrored.Any(type => binding.CSharpName(type) == nativesConfig.Class))
             {

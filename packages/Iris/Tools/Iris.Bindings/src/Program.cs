@@ -20,6 +20,12 @@ internal static class Program
 
         try
         {
+            if (BindingConfig.Read(args[0]).Natives is { } natives && !File.Exists(natives.Description))
+            {
+                Console.WriteLine($"iris-bindings: {natives.Description} does not exist yet, so the binding has no natives: " +
+                                  "describe-api's natives mode (the fenrir-describe-api target) writes it");
+            }
+
             var files = Generator.Generate(args[0], args[1..]);
             var report = Generator.Write(args[0], files);
             Console.WriteLine($"iris-bindings: {args[0]}: {files.Count} files, {report.Count} changed");

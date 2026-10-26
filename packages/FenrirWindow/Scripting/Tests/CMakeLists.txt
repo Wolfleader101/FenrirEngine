@@ -14,6 +14,8 @@ add_executable(FenrirWindowScriptingTests
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirWindowScriptingTests)
 # FenrirWindow's test probe, to resize the hidden window as a user would; and the library's own src, for its UTF-16
 # conversion.
 target_include_directories(FenrirWindowScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}"

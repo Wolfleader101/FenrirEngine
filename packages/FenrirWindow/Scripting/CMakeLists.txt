@@ -48,6 +48,8 @@ add_library(FenrirWindowScripting STATIC
     src/Generated/FenrirWindowMappings.hpp
     src/Generated/FenrirWindowRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirWindowScripting)
 target_include_directories(FenrirWindowScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirWindowScripting PUBLIC FenrirWindow FenrirInputScripting FenrirScripting)
 

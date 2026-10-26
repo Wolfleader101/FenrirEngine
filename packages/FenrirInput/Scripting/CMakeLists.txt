@@ -48,6 +48,8 @@ add_library(FenrirInputScripting STATIC
     src/InputScriptingState.hpp
     src/Generated/FenrirInputRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirInputScripting)
 target_include_directories(FenrirInputScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirInputScripting PUBLIC FenrirInput FenrirScripting)
 

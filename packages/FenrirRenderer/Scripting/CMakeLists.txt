@@ -50,6 +50,8 @@ add_library(FenrirRendererScripting STATIC
     src/RendererScriptingState.hpp
     src/Generated/FenrirRendererRegistration.cpp
 )
+# Its generated sources, empty until the first generation on a new binding.
+iris_binding_outputs(FenrirRendererScripting)
 target_include_directories(FenrirRendererScripting PUBLIC include PRIVATE src)
 target_link_libraries(FenrirRendererScripting PUBLIC FenrirRenderer FenrirAssetsScripting FenrirInputScripting
                                                      FenrirScripting)

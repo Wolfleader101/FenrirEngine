@@ -25,3 +25,5 @@ Rules for review: `CODING_STANDARDS.md`.
 Write multi-line files with the Write tool, not Bash heredocs: apostrophes and backslashes in them mis-parse, and `cat >` with no input hangs the call.
 
 For `git show <rev>:<path>` in Bash, prefix `MSYS_NO_PATHCONV=1` (or use PowerShell): Git Bash otherwise rewrites the `rev:path` argument as a Windows path.
+
+Run the MSVC presets' `cmake` and `ctest` through `scripts\msvc.ps1` with the PowerShell tool, which loads the Visual Studio build environment they need: `.\scripts\msvc.ps1 cmake --build out/build/msvc-x64-debug`.
