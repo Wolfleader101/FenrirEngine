@@ -1,17 +1,15 @@
 #include "FenrirWindowScripting/WindowScripting.hpp"
 
-#include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <string_view>
 
 #include "FenrirApp/App.hpp"
 #include "FenrirScripting/Enumerator.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
+#include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirWindow/WindowEvents.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
-#include "Utf16.hpp"
 #include "WindowScriptingState.hpp"
 
 // Everything C# sees of the window is generated (api/FenrirWindow.binding.toml): the events' and the size's mappings,
@@ -29,8 +27,9 @@ namespace Fenrir
     // this file, in this order, and Iris.Bindings generates their C# declarations (Fenrir.Window.WindowNative) and
     // their registration from that. With no such window (no Window installed, the window not made yet, or an id that
     // names none) each does nothing and returns false, zero or an empty value, warning once per call site in a debug
-    // build. Named apart from Window's own functions, and not in an anonymous namespace: the generated registration
-    // names them from another file.
+    // build under the native's name. Each trusts the generated declaration (ADR-0045): its `out` pointer is never null
+    // and the registration has zeroed it before the native runs. Named apart from Window's own functions, and not in an
+    // anonymous namespace: the generated registration names them from another file.
     namespace WindowNatives
     {
         /** @brief Whether `window` has been made. */
@@ -45,10 +44,9 @@ namespace Fenrir
          */
         void Size(const CallContext& context, WindowScripting& windows, WindowId window, WindowSize* size)
         {
-            const bool made = windows.Made(context, window, "Window.Size");
-            if (size != nullptr)
+            if (windows.Made(context, window))
             {
-                *size = made ? Window::LogicalSize(context.GetApp(), window) : WindowSize{};
+                *size = Window::LogicalSize(context.GetApp(), window);
             }
         }
 
@@ -58,38 +56,34 @@ namespace Fenrir
          */
         void PixelSize(const CallContext& context, WindowScripting& windows, WindowId window, WindowSize* size)
         {
-            const bool made = windows.Made(context, window, "Window.PixelSize");
-            if (size != nullptr)
+            if (windows.Made(context, window))
             {
-                *size = made ? Window::PixelSize(context.GetApp(), window) : WindowSize{};
+                *size = Window::PixelSize(context.GetApp(), window);
             }
         }
 
         /** @brief `window`'s pixels per logical unit. */
         float ContentScale(const CallContext& context, WindowScripting& windows, WindowId window)
         {
-            return windows.Made(context, window, "Window.ContentScale") ? Window::ContentScale(context.GetApp(), window)
-                                                                        : 0.0f;
+            return windows.Made(context, window) ? Window::ContentScale(context.GetApp(), window) : 0.0f;
         }
 
         /** @brief Whether `window` is minimised: nothing should be drawn to it. */
         bool IsMinimised(const CallContext& context, WindowScripting& windows, WindowId window)
         {
-            return windows.Made(context, window, "Window.IsMinimised") && Window::IsMinimised(context.GetApp(), window);
+            return windows.Made(context, window) && Window::IsMinimised(context.GetApp(), window);
         }
 
         /** @brief Whether `window` has the input focus. */
         bool IsFocused(const CallContext& context, WindowScripting& windows, WindowId window)
         {
-            return windows.Made(context, window, "Window.IsFocused") && Window::IsFocused(context.GetApp(), window);
+            return windows.Made(context, window) && Window::IsFocused(context.GetApp(), window);
         }
 
         /** @brief How the cursor behaves over `window`, as last set. */
         CursorMode GetCursorMode(const CallContext& context, WindowScripting& windows, WindowId window)
         {
-            return windows.Made(context, window, "Window.GetCursorMode")
-                       ? Window::GetCursorMode(context.GetApp(), window)
-                       : CursorMode::Normal;
+            return windows.Made(context, window) ? Window::GetCursorMode(context.GetApp(), window) : CursorMode::Normal;
         }
 
         /**
@@ -100,11 +94,10 @@ namespace Fenrir
         {
             if (!IsEnumerator<CursorMode::Captured>(mode))
             {
-                windows.warnings.Warn(context, "Window.SetCursorMode: no such cursor mode, so it does nothing");
+                NativeGuard(context, windows.warnings).Warn("no such cursor mode, so it does nothing");
                 return false;
             }
-            return windows.Made(context, window, "Window.SetCursorMode") &&
-                   Window::SetCursorMode(context.GetApp(), window, mode);
+            return windows.Made(context, window) && Window::SetCursorMode(context.GetApp(), window, mode);
         }
 
         /**
@@ -115,11 +108,10 @@ namespace Fenrir
         {
             if (!IsEnumerator<CursorShape::Hidden>(shape))
             {
-                windows.warnings.Warn(context, "Window.SetCursorShape: no such cursor shape, so it does nothing");
+                NativeGuard(context, windows.warnings).Warn("no such cursor shape, so it does nothing");
                 return false;
             }
-            return windows.Made(context, window, "Window.SetCursorShape") &&
-                   Window::SetCursorShape(context.GetApp(), window, shape);
+            return windows.Made(context, window) && Window::SetCursorShape(context.GetApp(), window, shape);
         }
 
         /**
@@ -128,8 +120,7 @@ namespace Fenrir
          */
         bool SetTitle(const CallContext& context, WindowScripting& windows, WindowId window, std::string_view title)
         {
-            return windows.Made(context, window, "Window.SetTitle") &&
-                   Window::SetTitle(context.GetApp(), window, title);
+            return windows.Made(context, window) && Window::SetTitle(context.GetApp(), window, title);
         }
 
         /**
@@ -139,14 +130,11 @@ namespace Fenrir
         std::int32_t GetClipboard(const CallContext& context, WindowScripting& windows, char16_t* text,
                                   std::int32_t capacity)
         {
-            if (!windows.Made(context, Window::MainWindow(), "Window.GetClipboard"))
+            if (!windows.Made(context, Window::MainWindow()))
             {
                 return 0;
             }
-            const std::u16string utf16 = Detail::Utf8ToUtf16(Window::ClipboardText(context.GetApp()));
-            const std::size_t room = text == nullptr || capacity < 0 ? 0 : static_cast<std::size_t>(capacity);
-            std::copy_n(utf16.begin(), std::min(room, utf16.size()), text);
-            return static_cast<std::int32_t>(utf16.size());
+            return WriteText(text, capacity, Utf8ToUtf16(Window::ClipboardText(context.GetApp())));
         }
 
         /**
@@ -155,8 +143,7 @@ namespace Fenrir
          */
         bool SetClipboard(const CallContext& context, WindowScripting& windows, std::string_view text)
         {
-            return windows.Made(context, Window::MainWindow(), "Window.SetClipboard") &&
-                   Window::SetClipboardText(context.GetApp(), text);
+            return windows.Made(context, Window::MainWindow()) && Window::SetClipboardText(context.GetApp(), text);
         }
 
         /**
@@ -165,8 +152,7 @@ namespace Fenrir
          */
         bool RequestClose(const CallContext& context, WindowScripting& windows, WindowId window)
         {
-            return windows.Made(context, window, "Window.RequestClose") &&
-                   Window::RequestClose(context.GetApp(), window);
+            return windows.Made(context, window) && Window::RequestClose(context.GetApp(), window);
         }
     } // namespace WindowNatives
 
