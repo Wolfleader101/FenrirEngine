@@ -31,15 +31,18 @@ internal static class Defaults
         ],
         ["tests"] = ["includes", "component"],
         ["natives"] = ["context", "attribute", "make", "zero-outputs"],
+        // Any entry: an inherited bound type is consulted only for a type described here, so the table is handed back
+        // rather than merged, and its entries are checked where the binding's own are.
+        ["bound-types"] = [],
     };
 
     /// <summary>
     /// Reads the defaults file and merges it into the binding's table, section by section, for the sections the binding
-    /// has (a section it lacks is not added: a binding with no <c>[registration]</c> gets none). Throws
-    /// <see cref="BindingException" /> for a file that is missing, misnamed, states a key a defaults file may not, or one
-    /// the binding restates.
+    /// has (a section it lacks is not added: a binding with no <c>[registration]</c> gets none). Returns the file's
+    /// <c>[bound-types]</c>, or null when it has none. Throws <see cref="BindingException" /> for a file that is missing,
+    /// misnamed, states a key a defaults file may not, or one the binding restates.
     /// </summary>
-    public static void Apply(TomlTable binding, string defaultsPath, string bindingPath)
+    public static TomlTable? Apply(TomlTable binding, string defaultsPath, string bindingPath)
     {
         if (!defaultsPath.EndsWith(Extension, StringComparison.Ordinal) || Path.GetFileName(defaultsPath).Length == Extension.Length)
         {
@@ -61,12 +64,19 @@ internal static class Defaults
             throw new BindingException($"{defaultsPath}: {exception.Message}");
         }
 
+        TomlTable? boundTypes = null;
         foreach (var (name, value) in defaults)
         {
             if (!Allowed.TryGetValue(name, out var allowed) || value is not TomlTable section)
             {
                 throw new BindingException(
                     $"{defaultsPath}: '{name}' is not a section a defaults file may state (one of [{string.Join("], [", Allowed.Keys)}])");
+            }
+
+            if (name == "bound-types")
+            {
+                boundTypes = section;
+                continue;
             }
 
             foreach (var key in section.Keys.Where(key => !allowed.Contains(key)))
@@ -81,6 +91,8 @@ internal static class Defaults
                 Merge(own, section, name, bindingPath, defaultsPath);
             }
         }
+
+        return boundTypes;
     }
 
     private static void Merge(TomlTable own, TomlTable defaults, string section, string bindingPath, string defaultsPath)

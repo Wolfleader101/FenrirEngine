@@ -21,7 +21,8 @@ internal static unsafe class QueryNative
                     throw new InvalidOperationException("A query names the same component twice.");
 
         rows = 0;
-        int capacity = Native.QueryCount(ids, count);
+        var idSpan = new ReadOnlySpan<int>(ids, count);
+        int capacity = Native.QueryCount(idSpan);
         if (capacity < 0)
             throw new InvalidOperationException("The engine does not know one of the components in this query.");
         if (capacity == 0)
@@ -29,7 +30,9 @@ internal static unsafe class QueryNative
 
         int stride = count + 1;
         var buffer = (nuint*)NativeMemory.Alloc((nuint)capacity * (nuint)stride, (nuint)sizeof(nuint));
-        rows = Native.QueryFill(ids, count, buffer, capacity);
+        // QueryFill's capacity counts rows, not entries, so the span it takes is `capacity` long: the native gets the
+        // same count it always did, and never writes past the buffer.
+        rows = Native.QueryFill(idSpan, new Span<nuint>(buffer, capacity));
         if (rows < 0)
         {
             NativeMemory.Free(buffer);

@@ -11,6 +11,7 @@
 #include "FenrirAssets/ShaderContainer.hpp"
 #include "FenrirAssetsScripting/ScriptAssets.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
+#include "FenrirScripting/BoundMappings.hpp"
 #include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>

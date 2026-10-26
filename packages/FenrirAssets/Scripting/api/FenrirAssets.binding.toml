@@ -13,7 +13,6 @@ defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../../Managed/Fenrir.Assets"
 generated = "../../Managed/Fenrir.Assets/Generated"
-usings = ["Fenrir.Math"]
 
 [cpp]
 # On the include path, for the bindings that use this one.
@@ -23,8 +22,6 @@ includes = [
     "FenrirAssets/MaterialData.hpp",
     "FenrirAssets/ShaderContainer.hpp",
     "FenrirAssetsScripting/ScriptAssets.hpp",
-    # The handles' mappings, written by hand, and glm's.
-    "FenrirAssetsScripting/AssetMappings.hpp",
 ]
 
 [registration]
@@ -43,16 +40,14 @@ includes = ["AssetsScriptingApp.hpp"]
 setup = "AssetsScriptingTests::AssetsScriptingApp app;"
 tags = "[assets][scripting][bindings]"
 
+# Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp, included where they are bound):
+# default is the empty handle, all zero. The bindings that use this one (FenrirRenderer's) inherit them.
 [bound-types]
-"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
-"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-"Fenrir::Math::Vec4" = { type = "Vector4", constructor = ["x", "y", "z", "w"] }
-# Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp): default is the empty handle, all zero.
-"Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>" }
-"Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>" }
-"Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>" }
-"Fenrir::AssetHandle<Fenrir::Shader>" = { type = "AssetHandle<Shader>" }
-"Fenrir::AssetHandle<Fenrir::Model>" = { type = "AssetHandle<Model>" }
+"Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Shader>" = { type = "AssetHandle<Shader>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
+"Fenrir::AssetHandle<Fenrir::Model>" = { type = "AssetHandle<Model>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 
 [names]
 "Fenrir::ScriptShaderParameter" = "ShaderParameter"

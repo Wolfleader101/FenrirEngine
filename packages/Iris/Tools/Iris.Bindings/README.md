@@ -108,7 +108,7 @@ zero-outputs = "My::ZeroingOutputs"    # A native with outputs is made as make<&
 types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes, by its C++ name.
 
 [bound-types]                          # The C# type of each bound type, and optionally its constructor's components.
-"Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"], include = "MyScripting/BoundMappings.hpp" }  # Its mapping's header (below).
 "Math::Quat" = { type = "Quaternion" }  # No constructor: defaults set the components by name, new() { X = 0, ... }.
 "My::Handle" = { type = "Handle", default = "Handle.None" }  # Its own default (T{}), when that is not zero bytes.
 "My::BodyId" = { type = "BodyId", wrapper = "u32" }  # One member a native passes by value: that member's kind.
@@ -126,7 +126,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 | Output | Contents |
 | --- | --- |
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
-| `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them). |
+| `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
 | `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
@@ -140,7 +140,18 @@ as `nested`) is that binding's: this binding names it by that binding's C# name,
 mirrors and natives that name it, includes its mappings header (by a path relative to this one's) in this one's mappings,
 and gives it no mirror, mapping, registration or test of its own. This binding's description may select it too, with
 the role the used binding's gives it (a struct a native here fills through a pointer, say), or hold it as `nested`. Its member and enumerator names in defaults are that
-binding's too. Bound types are not mirrored, so each binding still names its own in `[bound-types]`.
+binding's too.
+
+**Other bindings' bound types.** A binding's bound types are its own `[bound-types]`, its defaults file's, and every
+used binding's (transitively), so a vector every binding holds is named once, in the binding that owns it. An inherited
+entry is consulted only for a type a description here holds; the checks on own entries (described, a number wrapper)
+stay. A type a used binding's entry names gets a `using` of that binding's namespace where it is held or taken, as a used
+mirror does; a defaults file's entry has no namespace of its own, and the file's `usings` cover it. An own entry for an
+inherited name overrides it, unless it is identical, which fails ("already inherited from `<file>`; delete it"); two
+inherited sources giving one name different entries fail naming both. An entry's `include` is the header of the type's
+Iris mapping: this binding's mappings header includes it, once, after the binding's own `[cpp] includes` and before the
+used bindings' mappings headers, when this binding binds that type, so a bound type's mapping is named beside the type
+rather than in every binding that holds it.
 
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
 or event's `RegisteredNamespace.Type` when `registered-namespace` is set: a mapping still names the C# type). A field's or
@@ -192,7 +203,9 @@ would: an alias in `types` is its C# type; a number or `bool` is itself (`std::i
 converts to; an enum is its described C# enum, crossing as its underlying integer; a wrapper (a described struct of one
 field of a number, `bool`, `char16_t` or enum, or a bound type whose `[bound-types]` entry gives its `wrapper` kind) is
 its C# type, crossing as that field; `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
-`std::int32_t` count is `T*` (a span C# fixes), unless its doc marks it `@param[in]`, one value the count after it does
+`std::int32_t` count is a span, `ReadOnlySpan<T>` for a const pointee and `Span<T>` otherwise (a `char16_t*` buffer is
+`Span<char>`), with the count folded into it (the SDK's generator pins the span and passes its first element and its
+length; a `const char16_t*` with a count is refused, since `ReadOnlySpan<char>` is text), unless its doc marks it `@param[in]`, one value the count after it does
 not size; a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
 `in T`. `T` is a number, or the C# name of a described type or a `types` alias. An `out T` is an output the registration
@@ -255,7 +268,8 @@ list, an `internal-structs` entry that is not a struct mirrored here or that a p
 not a number kind, a type two descriptions describe differently (a struct, tagged union or enum may be described twice, alike, as a binding's
 own description holds a package's type; it is bound once, with the role it is selected with), `descriptions` that
 differ from the command line's, a `defaults` file that does not exist, is not named `<Name>.binding-defaults.toml`, states
-a key a defaults file may not, or gives a default the binding restates, a `uses` entry that does not exist, names no
+a key a defaults file may not, or gives a default the binding restates, a `[bound-types]` entry a used binding already
+gives identically or that two inherited sources give differently, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and

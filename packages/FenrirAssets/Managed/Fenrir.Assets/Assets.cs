@@ -43,33 +43,19 @@ public static class Assets
     /// value per position. The data is copied, and the mesh's bounds are computed from the positions.
     /// </summary>
     /// <returns>The mesh, or the empty handle (and an error logged) if the streams or indices break those rules.</returns>
-    public static unsafe AssetHandle<Mesh> AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
-                                                   ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices,
-                                                   AssetOwner owner = AssetOwner.Scene)
-    {
-        fixed (Vector3* firstPosition = positions)
-        fixed (Vector3* firstNormal = normals)
-        fixed (Vector2* firstUv = uvs)
-        fixed (uint* firstIndex = indices)
-            return AssetHandle<Mesh>.FromBits(AssetsNative.AddMesh(firstPosition, positions.Length, firstNormal, normals.Length,
-                                                                   firstUv, uvs.Length, firstIndex, indices.Length, owner));
-    }
+    public static AssetHandle<Mesh> AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
+                                            ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices,
+                                            AssetOwner owner = AssetOwner.Scene) =>
+        AssetHandle<Mesh>.FromBits(AssetsNative.AddMesh(positions, normals, uvs, indices, owner));
 
     /// <summary>
     /// Swaps <paramref name="mesh"/>'s data for these streams and triangles, as <see cref="AddMesh"/> takes them, and bumps
     /// its revision so every user sees the change. Its bounds are computed again.
     /// </summary>
     /// <returns>Whether it was replaced: false for a stale handle or data that breaks the rules, which leave it unchanged.</returns>
-    public static unsafe bool ReplaceMesh(AssetHandle<Mesh> mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
-                                          ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices)
-    {
-        fixed (Vector3* firstPosition = positions)
-        fixed (Vector3* firstNormal = normals)
-        fixed (Vector2* firstUv = uvs)
-        fixed (uint* firstIndex = indices)
-            return AssetsNative.ReplaceMesh(mesh.Bits, firstPosition, positions.Length, firstNormal, normals.Length, firstUv,
-                                            uvs.Length, firstIndex, indices.Length);
-    }
+    public static bool ReplaceMesh(AssetHandle<Mesh> mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
+                                   ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices) =>
+        AssetsNative.ReplaceMesh(mesh.Bits, positions, normals, uvs, indices);
 
     /// <summary>
     /// Adds a render target: an RGBA8 sRGB image of this size with no pixels, which a camera draws into and materials sample
@@ -92,21 +78,14 @@ public static class Assets
     /// rows top to bottom. The pixels are copied.
     /// </summary>
     /// <returns>The image, or the empty handle (and an error logged) if the pixels are not <c>width * height * 4</c> bytes.</returns>
-    public static unsafe AssetHandle<Image> AddImage(int width, int height, ReadOnlySpan<byte> rgba8,
-                                                     AssetOwner owner = AssetOwner.Scene)
-    {
-        fixed (byte* first = rgba8)
-            return AssetHandle<Image>.FromBits(AssetsNative.AddImage(width, height, first, rgba8.Length, owner));
-    }
+    public static AssetHandle<Image> AddImage(int width, int height, ReadOnlySpan<byte> rgba8, AssetOwner owner = AssetOwner.Scene) =>
+        AssetHandle<Image>.FromBits(AssetsNative.AddImage(width, height, rgba8, owner));
 
     /// <summary>
     /// Swaps <paramref name="image"/>'s data for an RGBA8 sRGB image of this size from <paramref name="rgba8"/>, as
     /// <see cref="AddImage"/> takes it, and bumps its revision.
     /// </summary>
     /// <returns>Whether it was replaced: false for a stale handle or the wrong number of bytes, which leave it unchanged.</returns>
-    public static unsafe bool ReplaceImage(AssetHandle<Image> image, int width, int height, ReadOnlySpan<byte> rgba8)
-    {
-        fixed (byte* first = rgba8)
-            return AssetsNative.ReplaceImage(image.Bits, width, height, first, rgba8.Length);
-    }
+    public static bool ReplaceImage(AssetHandle<Image> image, int width, int height, ReadOnlySpan<byte> rgba8) =>
+        AssetsNative.ReplaceImage(image.Bits, width, height, rgba8);
 }

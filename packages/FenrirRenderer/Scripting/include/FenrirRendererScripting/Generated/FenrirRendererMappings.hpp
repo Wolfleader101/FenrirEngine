@@ -9,6 +9,7 @@
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
 #include "FenrirAssetsScripting/AssetMappings.hpp"
+#include "FenrirScripting/BoundMappings.hpp"
 #include "FenrirScripting/EntityValueMapping.hpp"
 #include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 #include "../../../../../FenrirInput/Scripting/include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"

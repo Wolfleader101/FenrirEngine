@@ -13,7 +13,6 @@ defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../../Managed/Fenrir.Input"
 generated = "../../Managed/Fenrir.Input/Generated"
-usings = ["Fenrir.Math"]
 readonly-events = true
 # The claims are C++'s: C# reads them and never writes them.
 readonly-structs = ["Fenrir::CaretRect", "Fenrir::WindowInputClaims", "Fenrir::Detail::ScriptWindowClaims"]
@@ -59,9 +58,6 @@ tags = "[input][scripting][bindings]"
 [natives]
 sources = ["../src/InputScripting.cpp"]
 class = "InputNative"
-
-[bound-types]
-"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
 
 [names]
 "Fenrir::Detail::ScriptInputClaims" = "InputClaims"

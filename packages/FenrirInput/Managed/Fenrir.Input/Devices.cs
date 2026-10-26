@@ -99,11 +99,7 @@ public static class Gamepads
     /// Writes the pads connected now, oldest connection first, to <paramref name="pads"/>, and returns how many are
     /// connected. When more are connected than the span holds, the oldest are written.
     /// </summary>
-    public static unsafe int Connected(Span<GamepadId> pads)
-    {
-        fixed (GamepadId* first = pads)
-            return InputNative.GamepadsConnected(first, pads.Length);
-    }
+    public static int Connected(Span<GamepadId> pads) => InputNative.GamepadsConnected(pads);
 
     /// <summary>Whether <paramref name="gamepad"/> is connected.</summary>
     public static bool IsConnected(GamepadId gamepad) => InputNative.GamepadIsConnected(gamepad);

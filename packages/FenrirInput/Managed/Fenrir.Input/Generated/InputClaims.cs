@@ -2,7 +2,6 @@
 // Change the C++ header, then regenerate its description and this binding.
 
 using System.Runtime.CompilerServices;
-using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Input;

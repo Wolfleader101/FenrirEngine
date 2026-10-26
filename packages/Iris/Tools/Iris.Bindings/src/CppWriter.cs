@@ -22,6 +22,12 @@ internal static class CppWriter
             text.Line($"#include \"{include}\"");
         }
 
+        // The mappings of the bound types bound here, where their entries say they are.
+        foreach (var include in binding.BoundTypeIncludes)
+        {
+            text.Line($"#include \"{include}\"");
+        }
+
         foreach (var used in binding.Uses)
         {
             text.Line($"#include \"{Relative(binding.Config.Cpp.Mappings, used.Config.Cpp.Mappings)}\"");
