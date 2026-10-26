@@ -12,10 +12,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] `src/RendererScripting.cpp` no longer names `AssetStore::IsValid` or carries the "no asset store" and "empty or stale" texts; `grep` for them finds only Assets.
-- [ ] A rule test spawns through the harness with a stale model handle and sees Assets' warning, prefixed `[renderer scripting] RendererNative.SpawnModel: `.
-- [ ] `NoOps` rule tests pass with no `FENRIR_TEST_RENDERER_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] `src/RendererScripting.cpp` no longer names `AssetStore::IsValid` or carries the "no asset store" and "empty or stale" texts; `grep` for them finds only Assets.
+- [x] A rule test spawns through the harness with a stale model handle and sees Assets' warning, prefixed `[renderer scripting] RendererNative.SpawnModel: `.
+- [x] `NoOps` rule tests pass with no `FENRIR_TEST_RENDERER_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 
