@@ -96,14 +96,12 @@ internal static class CSharpWriter
         switch (type.Role)
         {
             case Role.Component:
-                text.Line($"[{config.ComponentAttribute}(\"{binding.RegisteredName(type)}\")]");
-                interfaces.Add(binding.Config.Registration?.ReadOnly.Contains(type.Name) == true
-                                   ? config.ReadOnlyComponentInterface
-                                   : config.ComponentInterface);
+                text.Line($"[{binding.ComponentAttribute(type)}(\"{binding.RegisteredName(type)}\")]");
+                interfaces.Add(binding.ComponentInterface(type));
                 break;
             case Role.Event:
-                text.Line($"[{config.EventAttribute}(\"{binding.RegisteredName(type)}\")]");
-                interfaces.Add(config.EventInterface);
+                text.Line($"[{binding.EventAttribute(type)}(\"{binding.RegisteredName(type)}\")]");
+                interfaces.Add(binding.EventInterface(type));
                 break;
             case Role.SceneResource or Role.AppResource:
                 text.Line($"[{config.ResourceAttribute}(\"{binding.RegisteredName(type)}\")]");
@@ -114,8 +112,8 @@ internal static class CSharpWriter
         if (type.Category == Category.TaggedUnion)
         {
             text.Line(binding.Config.Nouns.TryGetValue(type.Name, out var noun)
-                          ? $"[{config.TaggedUnionAttribute}(Noun = \"{noun}\")]"
-                          : $"[{config.TaggedUnionAttribute}]");
+                          ? $"[{binding.TaggedUnionAttribute(type)}(Noun = \"{noun}\")]"
+                          : $"[{binding.TaggedUnionAttribute(type)}]");
             text.Line("[StructLayout(LayoutKind.Explicit)]");
         }
 

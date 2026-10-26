@@ -7,12 +7,6 @@ descriptions = ["Common.api.json"]
 [csharp]
 contract = "Contract"
 generated = "Contract/Generated"
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 
 [cpp]
 mappings = "Native/Generated/CommonMappings.hpp"
