@@ -23,13 +23,6 @@ namespace Fenrir
      */
     struct RendererScripting
     {
-        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
-        void WarnOnce(const CallContext& context, const std::string& message,
-                      std::source_location where = std::source_location::current())
-        {
-            warnings.Warn(context.GetApp(), message, where);
-        }
-
         /** @brief Whether the app has a renderer; warns once for the caller's call site if not. */
         bool HasRenderer(const CallContext& context, std::string_view function,
                          std::source_location where = std::source_location::current())
@@ -38,10 +31,11 @@ namespace Fenrir
             {
                 return true;
             }
-            WarnOnce(context,
-                     std::string(function) + ": the app has no renderer (FenrirRenderer is not installed), so it does "
-                                             "nothing",
-                     where);
+            warnings.Warn(context,
+                          std::string(function) +
+                              ": the app has no renderer (FenrirRenderer is not installed), so it does "
+                              "nothing",
+                          where);
             return false;
         }
 
@@ -54,7 +48,7 @@ namespace Fenrir
             {
                 return entities.GetEntity(id.value);
             }
-            WarnOnce(context, std::string(function) + ": the entity is not alive, so it does nothing", where);
+            warnings.Warn(context, std::string(function) + ": the entity is not alive, so it does nothing", where);
             return std::nullopt;
         }
 
@@ -69,13 +63,13 @@ namespace Fenrir
             std::optional<Entity> camera = Alive(context, id, function, where);
             if (camera && !camera->HasComponent<Camera>())
             {
-                WarnOnce(context, std::string(function) + ": the entity has no Camera, so it does nothing", where);
+                warnings.Warn(context, std::string(function) + ": the entity has no Camera, so it does nothing", where);
                 return std::nullopt;
             }
             return camera;
         }
 
-      private:
+        /** @brief What the natives have warned about, so that each place warns once. */
         WarnOnceRecord warnings{"renderer scripting"};
     };
 } // namespace Fenrir

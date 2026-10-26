@@ -55,8 +55,9 @@ namespace Fenrir
             }
             if (CopyInputClaims(*claims, *copy))
             {
-                input->WarnOnce(app, "InputClaims: routers claim input in more windows than C# can read (" +
-                                         std::to_string(ScriptInputClaims::MaxWindows) + "), so the rest are left out");
+                input->warnings.Warn(app, "InputClaims: routers claim input in more windows than C# can read (" +
+                                              std::to_string(ScriptInputClaims::MaxWindows) +
+                                              "), so the rest are left out");
             }
             return copy;
         };

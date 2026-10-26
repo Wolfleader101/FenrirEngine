@@ -167,15 +167,15 @@ namespace Fenrir
             AssetStore* store = context.GetApp().TryGetResource<AssetStore>();
             if (store == nullptr)
             {
-                renderer.WarnOnce(context, "Renderer.SpawnModel: the app has no asset store (FenrirAssets is not "
-                                           "installed), so it does nothing");
+                renderer.warnings.Warn(context, "Renderer.SpawnModel: the app has no asset store (FenrirAssets is not "
+                                                "installed), so it does nothing");
                 return none;
             }
             const AssetHandle<Model> handle = AssetHandleFromBits<Model>(model);
             if (!store->IsValid(handle))
             {
-                renderer.WarnOnce(context,
-                                  "Renderer.SpawnModel: the model handle is empty or stale, so it does nothing");
+                renderer.warnings.Warn(context,
+                                       "Renderer.SpawnModel: the model handle is empty or stale, so it does nothing");
                 return none;
             }
             const bool parented = parent != none;

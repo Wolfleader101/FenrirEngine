@@ -20,13 +20,6 @@ namespace Fenrir
      */
     struct WindowScripting
     {
-        /** @brief Logs `message` once for each place in the extension that notices a call doing nothing (warnings). */
-        void WarnOnce(const CallContext& context, const std::string& message,
-                      std::source_location where = std::source_location::current())
-        {
-            warnings.Warn(context.GetApp(), message, where);
-        }
-
         /**
          * @brief Whether `window` has been made in the app (so there is a Window, too); warns once for the caller's
          * call site if not. `function` is the C# function the native is behind.
@@ -38,14 +31,15 @@ namespace Fenrir
             {
                 return true;
             }
-            WarnOnce(context,
-                     std::string(function) + ": the app has no such window (no Window installed, the window not made "
-                                             "yet, or an id that names none), so it does nothing",
-                     where);
+            warnings.Warn(context,
+                          std::string(function) +
+                              ": the app has no such window (no Window installed, the window not made "
+                              "yet, or an id that names none), so it does nothing",
+                          where);
             return false;
         }
 
-      private:
+        /** @brief What the natives have warned about, so that each place warns once. */
         WarnOnceRecord warnings{"window scripting"};
     };
 } // namespace Fenrir

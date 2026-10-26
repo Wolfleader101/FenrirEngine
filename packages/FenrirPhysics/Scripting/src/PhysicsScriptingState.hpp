@@ -42,7 +42,7 @@ namespace Fenrir
         void WarnOnce(const CallContext& context, const std::string& message,
                       std::source_location where = std::source_location::current())
         {
-            warnings.Warn(context.GetApp(), std::string(NativeName(where)) + ": " + message, where);
+            warnings.Warn(context, std::string(NativeName(where)) + ": " + message, where);
         }
 
         /** @brief The active scene's physics world, or null (warning once for the caller's call site). */

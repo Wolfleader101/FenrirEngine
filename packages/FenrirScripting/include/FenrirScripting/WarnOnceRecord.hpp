@@ -2,7 +2,7 @@
 
 // What an extension's native functions have warned about, so that each place warns once (ADR-0043): one record per
 // extension, kept in its extension state and reached through it, never a process global. Every extension's state holds
-// one and wraps its Warn in a WarnOnce that takes the call context.
+// one as a public `warnings`, and its natives call Warn on it with their call context.
 
 #include <cstdint>
 #include <mutex>
@@ -13,6 +13,7 @@
 #include <tuple>
 
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
 
 namespace Fenrir
 {
@@ -52,6 +53,13 @@ namespace Fenrir
             (void)message;
             (void)where;
 #endif
+        }
+
+        /** @brief Warn for the native call `context` is: logs to its app's logger. */
+        void Warn(const CallContext& context, const std::string& message,
+                  std::source_location where = std::source_location::current())
+        {
+            Warn(context.GetApp(), message, where);
         }
 
       private:
