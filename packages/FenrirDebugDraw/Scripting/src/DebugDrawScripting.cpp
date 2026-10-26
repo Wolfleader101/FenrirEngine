@@ -1,15 +1,14 @@
 #include "FenrirDebugDrawScripting/DebugDrawScripting.hpp"
 
-#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <span>
 #include <string_view>
 
 #include "DebugDrawScriptingState.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
+#include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "ScriptOptions.hpp"
 
@@ -24,27 +23,6 @@ namespace Fenrir::Generated
 
 namespace Fenrir
 {
-    namespace
-    {
-        // The `count` points from `first` C# passed for a span; empty for none.
-        std::span<const Math::Vec3> Points(const Math::Vec3* first, std::int32_t count)
-        {
-            if (first == nullptr || count <= 0)
-            {
-                return {};
-            }
-            // C# passes a span as its first element and its length, so the bounds are only as good as C#'s.
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunsafe-buffer-usage-in-container"
-#endif
-            return {first, static_cast<std::size_t>(count)};
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
-        }
-    } // namespace
-
     // The native functions, named apart from DebugDraw's own functions. Each is the DebugDraw call of its name on the
     // active scene's DebugDraw, with the options as C# passes them (ScriptOptions.hpp) and the group as text of its
     // own.
@@ -55,7 +33,7 @@ namespace Fenrir
                   const Math::Vec3* to, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                   std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Line", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Line(*from, *to, *colour, target->Shape(*options, group));
             }
@@ -66,7 +44,7 @@ namespace Fenrir
                  const Math::Vec3* direction, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                  std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Ray", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Ray(*origin, *direction, *colour, target->Shape(*options, group));
             }
@@ -77,7 +55,7 @@ namespace Fenrir
                    const Math::Vec3* to, float headLength, const Colour* colour,
                    const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Arrow", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Arrow(*from, *to, headLength, *colour, target->Shape(*options, group));
             }
@@ -91,9 +69,9 @@ namespace Fenrir
                       std::int32_t count, bool closed, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                       std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Polyline", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
-                target->draw->Polyline(Points(points, count), closed, *colour, target->Shape(*options, group));
+                target->draw->Polyline(SpanOf(points, count), closed, *colour, target->Shape(*options, group));
             }
         }
 
@@ -102,7 +80,7 @@ namespace Fenrir
                    float pixelSize, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                    std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Point", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Point(*position, pixelSize, *colour, target->Shape(*options, group));
             }
@@ -112,7 +90,7 @@ namespace Fenrir
         void Box(const CallContext& context, DebugDrawScripting& debugDraw, const Math::AABB* box, const Colour* colour,
                  const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Box", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Box(*box, *colour, target->Shape(*options, group));
             }
@@ -123,7 +101,7 @@ namespace Fenrir
                          const Math::Vec3* halfExtents, const Math::Quat* rotation, const Colour* colour,
                          const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Box", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Box(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
             }
@@ -133,7 +111,7 @@ namespace Fenrir
         void Sphere(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Vec3* centre, float radius,
                     const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Sphere", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Sphere(*centre, radius, *colour, target->Shape(*options, group));
             }
@@ -144,7 +122,7 @@ namespace Fenrir
                      const Math::Vec3* to, float radius, const Colour* colour,
                      const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Capsule", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Capsule(*from, *to, radius, *colour, target->Shape(*options, group));
             }
@@ -155,7 +133,7 @@ namespace Fenrir
                       const Math::Vec3* to, float radius, const Colour* colour,
                       const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Cylinder", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Cylinder(*from, *to, radius, *colour, target->Shape(*options, group));
             }
@@ -166,7 +144,7 @@ namespace Fenrir
                   const Math::Vec3* baseCentre, float radius, const Colour* colour,
                   const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Cone", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Cone(*apex, *baseCentre, radius, *colour, target->Shape(*options, group));
             }
@@ -177,7 +155,7 @@ namespace Fenrir
                     const Math::Vec3* normal, float radius, const Colour* colour,
                     const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Circle", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Circle(*centre, *normal, radius, *colour, target->Shape(*options, group));
             }
@@ -191,7 +169,7 @@ namespace Fenrir
                  const Math::Vec3* normal, const Math::Vec3* start, float angle, const Colour* colour,
                  const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Arc", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Arc(*centre, *normal, *start, angle, *colour, target->Shape(*options, group));
             }
@@ -202,7 +180,7 @@ namespace Fenrir
                    const Math::Vec3* normal, float halfSize, const Colour* colour,
                    const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Plane", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Plane(*point, *normal, halfSize, *colour, target->Shape(*options, group));
             }
@@ -217,7 +195,7 @@ namespace Fenrir
                   const Math::Quat* rotation, std::int32_t cells, float cellSize, const Colour* colour,
                   const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Grid", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Grid(*centre, *rotation, cells, cellSize, *colour, target->Shape(*options, group));
             }
@@ -227,7 +205,7 @@ namespace Fenrir
         void Axes(const CallContext& context, DebugDrawScripting& debugDraw, const Math::Mat4* transform, float length,
                   const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Axes", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Axes(*transform, length, target->Shape(*options, group));
             }
@@ -238,7 +216,7 @@ namespace Fenrir
                      const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group,
                      float farDepth)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Frustum", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Frustum(*viewProjection, *colour, target->Shape(*options, group), farDepth);
             }
@@ -248,7 +226,7 @@ namespace Fenrir
         void SolidBox(const CallContext& context, DebugDrawScripting& debugDraw, const Math::AABB* box,
                       const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->SolidBox(*box, *colour, target->Shape(*options, group));
             }
@@ -259,7 +237,7 @@ namespace Fenrir
                               const Math::Vec3* halfExtents, const Math::Quat* rotation, const Colour* colour,
                               const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidBox", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->SolidBox(*centre, *halfExtents, *rotation, *colour, target->Shape(*options, group));
             }
@@ -270,7 +248,7 @@ namespace Fenrir
                          float radius, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                          std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidSphere", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->SolidSphere(*centre, radius, *colour, target->Shape(*options, group));
             }
@@ -281,7 +259,7 @@ namespace Fenrir
                           const Math::Vec3* to, float radius, const Colour* colour,
                           const ScriptOptions::ShapeOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.SolidCapsule", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->SolidCapsule(*from, *to, radius, *colour, target->Shape(*options, group));
             }
@@ -292,9 +270,9 @@ namespace Fenrir
                        std::int32_t count, const Colour* colour, const ScriptOptions::ShapeOptions* options,
                        std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Triangles", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
-                target->draw->Triangles(Points(vertices, count), *colour, target->Shape(*options, group));
+                target->draw->Triangles(SpanOf(vertices, count), *colour, target->Shape(*options, group));
             }
         }
 
@@ -303,7 +281,7 @@ namespace Fenrir
                         std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
                         std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.ScreenText", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->ScreenText(*position, text, *colour, target->Text(*options, group));
             }
@@ -313,7 +291,7 @@ namespace Fenrir
         void Message(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view text,
                      const Colour* colour, const ScriptOptions::TextOptions* options, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Message", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Message(text, *colour, target->Text(*options, group));
             }
@@ -324,7 +302,7 @@ namespace Fenrir
                           std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
                           std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Message", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->Message(key, text, *colour, target->Text(*options, group));
             }
@@ -335,7 +313,7 @@ namespace Fenrir
                        std::string_view text, const Colour* colour, const ScriptOptions::TextOptions* options,
                        std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.WorldText", options->relativeTo))
+            if (const auto target = debugDraw.TargetFor(context, options->relativeTo))
             {
                 target->draw->WorldText(*position, text, *colour, target->Text(*options, group));
             }
@@ -344,7 +322,7 @@ namespace Fenrir
         /** @brief Shows the group's items (DebugDraw.ShowGroup). */
         void ShowGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.ShowGroup"))
+            if (const auto target = debugDraw.TargetFor(context))
             {
                 target->draw->ShowGroup(group);
             }
@@ -353,7 +331,7 @@ namespace Fenrir
         /** @brief Hides the group's items (DebugDraw.HideGroup). */
         void HideGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.HideGroup"))
+            if (const auto target = debugDraw.TargetFor(context))
             {
                 target->draw->HideGroup(group);
             }
@@ -365,14 +343,14 @@ namespace Fenrir
          */
         bool IsGroupShown(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
-            const auto target = debugDraw.TargetFor(context, "DebugDraw.IsGroupShown");
+            const auto target = debugDraw.TargetFor(context);
             return target && target->draw->IsGroupShown(group);
         }
 
         /** @brief Drops every item (DebugDraw.Clear). */
         void Clear(const CallContext& context, DebugDrawScripting& debugDraw)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Clear"))
+            if (const auto target = debugDraw.TargetFor(context))
             {
                 target->draw->Clear();
             }
@@ -381,7 +359,7 @@ namespace Fenrir
         /** @brief Drops the group's items (DebugDraw.Clear). */
         void ClearGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
-            if (const auto target = debugDraw.TargetFor(context, "DebugDraw.Clear"))
+            if (const auto target = debugDraw.TargetFor(context))
             {
                 target->draw->Clear(group);
             }

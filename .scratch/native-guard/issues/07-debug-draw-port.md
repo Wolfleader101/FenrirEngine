@@ -12,9 +12,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] No facade-name string literal remains in `src/DebugDrawScripting.cpp` or the state header; the local span helper is gone.
-- [ ] `NoOps` rule tests pass with no `FENRIR_TEST_DEBUGDRAW_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] No facade-name string literal remains in `src/DebugDrawScripting.cpp` or the state header; the local span helper is gone.
+- [x] `NoOps` rule tests pass with no `FENRIR_TEST_DEBUGDRAW_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 
