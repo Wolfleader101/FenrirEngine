@@ -27,6 +27,7 @@ add_executable(FenrirWindowScriptingTests
     WindowScriptingTests.cpp
     WindowScriptingApp.hpp
     Generated/FenrirWindowDefaultsTests.cpp
+    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )

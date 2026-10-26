@@ -1,6 +1,7 @@
 # The headless scripting tests: an App with no window runs a few frames around a fixture script assembly.
 add_executable(FenrirScriptingTests
     ScriptingTests.cpp
+    ExtensionTestApp.hpp
     FixtureApp.hpp
     HeadlessApp.hpp
     NativeCallHarness.hpp
