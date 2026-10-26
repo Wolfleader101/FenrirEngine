@@ -6,6 +6,7 @@
 #include "../../include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
 #include "InputScriptingState.hpp"
 
 namespace Fenrir::InputNatives
@@ -64,9 +65,9 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseIsDown>("Fenrir.Input.InputNative.MouseIsDown"),
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustPressed>("Fenrir.Input.InputNative.MouseJustPressed"),
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustReleased>("Fenrir.Input.InputNative.MouseJustReleased"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MousePosition>("Fenrir.Input.InputNative.MousePosition"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseMotion>("Fenrir.Input.InputNative.MouseMotion"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseScroll>("Fenrir.Input.InputNative.MouseScroll"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MousePosition, 2>::Call>("Fenrir.Input.InputNative.MousePosition"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseMotion, 2>::Call>("Fenrir.Input.InputNative.MouseMotion"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseScroll, 2>::Call>("Fenrir.Input.InputNative.MouseScroll"),
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadsConnected>("Fenrir.Input.InputNative.GamepadsConnected"),
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsConnected>("Fenrir.Input.InputNative.GamepadIsConnected"),
             Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsDown>("Fenrir.Input.InputNative.GamepadIsDown"),

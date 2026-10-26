@@ -10,6 +10,7 @@ namespace Fixture::Natives
 {
     bool Push(const Host::CallContext&, Host::State&, Fixture::EntityId body, const Fixture::Vec3* force);
     bool Find(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);
+    std::int32_t Extremes(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, Fixture::Hit* nearest, Fixture::Hit* farthest);
     std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);
 } // namespace Fixture::Natives
 
@@ -49,7 +50,8 @@ namespace Fixture::Bindings
         };
         extension.functions = {
             Host::NativeFunction::Make<&Fixture::Natives::Push>("Fixture.Bindings.FixtureNative.Push"),
-            Host::NativeFunction::Make<&Fixture::Natives::Find>("Fixture.Bindings.FixtureNative.Find"),
+            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Find, 4>::Call>("Fixture.Bindings.FixtureNative.Find"),
+            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Extremes, 3, 4>::Call>("Fixture.Bindings.FixtureNative.Extremes"),
             Host::NativeFunction::Make<&Fixture::Natives::FindAll>("Fixture.Bindings.FixtureNative.FindAll"),
             Host::NativeFunction::Make<&Fixture::Say>("Fixture.Bindings.FixtureNative.Say"),
             Host::NativeFunction::Make<&Fixture::Next>("Fixture.Bindings.FixtureNative.Next", nullptr),

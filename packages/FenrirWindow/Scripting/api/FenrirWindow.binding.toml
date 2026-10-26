@@ -26,6 +26,7 @@ source = "../src/Generated/FenrirWindowRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state.
     "WindowScriptingState.hpp",
 ]
@@ -44,10 +45,6 @@ includes = ["WindowScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "WindowScriptingTests::WindowScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[window][scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirWindowNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirWindowNatives.cs"
-natives-class = "Fenrir.WindowScriptFixture.Natives"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
 # the WindowScripting state second) into FenrirWindow.natives.json, and this binding generates their C# declarations,
@@ -58,3 +55,5 @@ context = "Fenrir::CallContext"
 class = "WindowNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"

@@ -75,6 +75,22 @@ namespace Fixture
         }
 
         /**
+         * @brief The nearest and farthest hits from `origin`: two outputs, each zeroed by the registration.
+         * @param[out] nearest The nearest hit; the default when there is none.
+         * @param[out] farthest The farthest hit; the default when there is none.
+         * @return How many hits there were.
+         */
+        std::int32_t Extremes(const Host::CallContext& context, Host::State& state, const Vec3* origin, Hit* nearest,
+                              Hit* farthest)
+        {
+            (void)context;
+            (void)state;
+            (void)nearest;
+            (void)farthest;
+            return origin != nullptr ? 0 : -1;
+        }
+
+        /**
          * @brief Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.
          * @return How many it wrote.
          */

@@ -11,7 +11,7 @@
        shares its own copy. -->
   <Import Project="$(MSBuildThisFileDirectory)../../../../FenrirScripting/Managed/Fenrir.Scripting.InRepo.props" />
   <ItemGroup>
-    <!-- The generated defaults and natives tests' C# halves (../Generated, from Scripting/api/FenrirInput.binding.toml). -->
+    <!-- The generated defaults test's C# half (../Generated, from Scripting/api/FenrirInput.binding.toml). -->
     <Compile Include="../Generated/*.cs" />
   </ItemGroup>
   <ItemGroup>

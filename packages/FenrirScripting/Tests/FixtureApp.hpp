@@ -1,8 +1,7 @@
 #pragma once
 
-// The harness of the built-in binding's generated tests (Generated/FenrirScriptingDefaultsTests.cpp and
-// Generated/FenrirScriptingNativesTests.cpp): an App with no window and scripting running the fixture script assembly,
-// which compiles the tests' C# classes.
+// The harness of the built-in binding's generated defaults test (Generated/FenrirScriptingDefaultsTests.cpp): an App
+// with no window and scripting running the fixture script assembly, which compiles the test's C# class.
 
 #include "HeadlessApp.hpp"
 

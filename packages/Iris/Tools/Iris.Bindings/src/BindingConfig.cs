@@ -63,10 +63,7 @@ internal sealed record RegistrationConfig(
                                 MakeReadOnlyAppResource != null;
 }
 
-/// <summary>
-/// The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly; and with
-/// natives, the natives test's two sources and C# class.
-/// </summary>
+/// <summary>The defaults test: its two sources, the C# class, and how a test case reaches the loaded C# assembly.</summary>
 internal sealed record TestsConfig(
     string Cpp,
     string CSharp,
@@ -74,14 +71,13 @@ internal sealed record TestsConfig(
     IReadOnlyList<string> Includes,
     string Setup,
     string Component,
-    string Tags,
-    string? NativesCpp,
-    string? NativesCSharp,
-    string? NativesClass);
+    string Tags);
 
 /// <summary>
 /// The native functions (<c>[natives]</c>): their description (<c>&lt;Name&gt;.natives.json</c> beside the
-/// configuration), the C# class declaring them, the SDK's attribute, the C++ factory each is registered by, and the C#
+/// configuration), the C# class declaring them, the SDK's attribute, the C++ factory each is registered by, the C++
+/// template (<c>zero-outputs</c>) the registration names in place of a native with outputs, as
+/// <c>&lt;zero-outputs&gt;&lt;&amp;F, indices...&gt;::Call</c>, which zeroes each before the native runs, and the C#
 /// type of each alias a native takes. <c>sources</c> and <c>context</c> are the header reader's.
 /// </summary>
 internal sealed record NativesConfig(
@@ -89,6 +85,7 @@ internal sealed record NativesConfig(
     string Class,
     string Attribute,
     string Make,
+    string ZeroOutputs,
     IReadOnlyDictionary<string, string> Types);
 
 /// <summary>
@@ -115,6 +112,9 @@ internal sealed record BindingConfig(
     IReadOnlySet<string> Exclude)
 {
     public const string Extension = ".binding.toml";
+
+    /// <summary>The <c>[tests]</c> keys of the natives test that the zeroing registration (ADR-0045) replaced.</summary>
+    public static readonly IReadOnlyList<string> RemovedNativesTestKeys = ["natives-cpp", "natives-csharp", "natives-class"];
 
     /// <summary>Reads a configuration file, or throws <see cref="BindingException" /> saying what is wrong with it.</summary>
     public static BindingConfig Read(string path)
@@ -171,37 +171,37 @@ internal sealed record BindingConfig(
         if (table.ContainsKey("tests"))
         {
             var section = reader.Table(table, "tests");
-            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags",
-                        "natives-cpp", "natives-csharp", "natives-class");
-            var natives = section.ContainsKey("natives-cpp") || section.ContainsKey("natives-csharp") ||
-                          section.ContainsKey("natives-class");
+            // The natives test went when the registration took over zeroing outputs: a configuration still naming it
+            // is told so, rather than that the keys are unknown.
+            var removed = RemovedNativesTestKeys.Where(section.ContainsKey).ToList();
+            if (removed.Count > 0)
+            {
+                throw new BindingException(
+                    $"{path}: [tests] {string.Join(", ", removed)}: the natives test is no longer generated, since the " +
+                    "registration zeroes each native's outputs ([natives] zero-outputs); remove the key" +
+                    (removed.Count > 1 ? "s" : ""));
+            }
+
+            reader.Keys(section, "tests", "cpp", "csharp", "class", "includes", "setup", "component", "tags");
             tests = new TestsConfig(reader.PathOf(section, "cpp"), reader.PathOf(section, "csharp"),
                                     reader.String(section, "class"), reader.Strings(section, "includes"),
                                     reader.String(section, "setup"), reader.String(section, "component"),
-                                    reader.String(section, "tags"),
-                                    natives ? reader.PathOf(section, "natives-cpp") : null,
-                                    natives ? reader.PathOf(section, "natives-csharp") : null,
-                                    natives ? reader.String(section, "natives-class") : null);
+                                    reader.String(section, "tags"));
         }
 
         NativesConfig? nativesConfig = null;
         if (table.ContainsKey("natives"))
         {
             var section = reader.Table(table, "natives");
-            reader.Keys(section, "natives", "sources", "context", "class", "attribute", "make", "types");
+            reader.Keys(section, "natives", "sources", "context", "class", "attribute", "make", "zero-outputs", "types");
             nativesConfig = new NativesConfig(
                 System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, fileName[..^Extension.Length] + ".natives.json"),
                 reader.String(section, "class"), reader.String(section, "attribute"), reader.String(section, "make"),
-                reader.StringTable(section, "types"));
+                reader.String(section, "zero-outputs"), reader.StringTable(section, "types"));
             if (registration is null)
             {
                 throw new BindingException($"{path}: [natives] needs [registration], whose source registers them");
             }
-        }
-
-        if (tests?.NativesCpp is not null && nativesConfig is null)
-        {
-            throw new BindingException($"{path}: [tests] natives-cpp needs [natives]");
         }
 
         var boundTypes = new Dictionary<string, BoundType>(StringComparer.Ordinal);

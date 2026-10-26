@@ -6,7 +6,6 @@ add_executable(FenrirScriptingTests
     NativeCallHarness.hpp
     ScriptingProbe.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
-    Generated/FenrirScriptingNativesTests.cpp
     Generated/FenrirMathDefaultsTests.cpp
 )
 # NativeCallHarness.hpp includes the package's private ChangeBuffer.hpp, so this executable is given the source directory
@@ -43,8 +42,8 @@ set(fenrir_contract_files "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll
 
 # The fixture script assembly, built with the same .NET SDK Iris uses.
 set(fenrir_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-# It also compiles the built-in binding's generated tests' C# classes (Generated/): the defaults test reads their new()
-# values, and the natives test calls each native through them.
+# It also compiles the built-in binding's generated defaults test's C# class (Generated/), whose new() values the test
+# reads.
 file(GLOB fenrir_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
     "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
 # Built twice, in one command so the two builds never run side by side: the fixture, and "version 2" of it (the same sources

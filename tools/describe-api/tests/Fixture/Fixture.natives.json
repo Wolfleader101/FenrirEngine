@@ -66,6 +66,46 @@
       ]
     },
     {
+      "name": "Extremes",
+      "namespace": "Fixture::Natives",
+      "source": "Natives.cpp",
+      "state": "Host::State",
+      "doc": "The nearest and farthest hits from `origin`: two outputs, each zeroed by the registration.",
+      "returns": {
+        "type": "std::int32_t",
+        "kind": "i32",
+        "doc": "How many hits there were."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fixture::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fixture::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "nearest",
+          "type": "Fixture::Hit*",
+          "kind": "pointer",
+          "pointee": "Fixture::Hit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The nearest hit; the default when there is none."
+        },
+        {
+          "name": "farthest",
+          "type": "Fixture::Hit*",
+          "kind": "pointer",
+          "pointee": "Fixture::Hit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The farthest hit; the default when there is none."
+        }
+      ]
+    },
+    {
       "name": "FindAll",
       "namespace": "Fixture::Natives",
       "source": "Natives.cpp",

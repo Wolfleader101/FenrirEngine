@@ -45,18 +45,13 @@ internal static class Generator
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
         if (config.Registration is { } registration)
         {
-            files.Add(registration.Source, CppWriter.Registration(binding, registration, natives));
+            files.Add(registration.Source, CppWriter.Registration(binding, registration, natives, bound));
         }
 
         if (config.Tests is { } tests)
         {
             files.Add(tests.Cpp, CppWriter.DefaultsTest(binding, tests));
             files.Add(tests.CSharp, CSharpWriter.Defaults(binding, tests, Path.GetFileName(tests.Cpp)));
-            if (natives != null && tests.NativesCpp is { } nativesCpp)
-            {
-                files.Add(nativesCpp, CppWriter.NativesTest(binding, tests, natives, bound));
-                files.Add(tests.NativesCSharp!, CSharpWriter.NativesTest(binding, tests, bound, Path.GetFileName(nativesCpp)));
-            }
         }
 
         return files;

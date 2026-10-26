@@ -63,7 +63,7 @@ target_link_libraries(FenrirRendererScripting PUBLIC FenrirRenderer FenrirAssets
 #   ../Managed/Fenrir.Renderer/Generated/       the C# mirrors and the natives' declarations, RendererNative;
 #   include/FenrirRendererScripting/Generated/  the Iris mappings;
 #   src/Generated/                              the extension's components, resources, sharedStructs and functions;
-#   Tests/Generated/                            the defaults test and the natives test.
+#   Tests/Generated/                            the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings

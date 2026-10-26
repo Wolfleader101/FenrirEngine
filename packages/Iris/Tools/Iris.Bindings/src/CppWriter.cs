@@ -98,9 +98,11 @@ internal static class CppWriter
     /// <summary>
     /// The registration lists: one function that sets the extension's components, events and shared structs, each made
     /// with the C# name derived from the namespace and the type, and with natives its functions, each declared here and
-    /// made with the C# name of its declaration.
+    /// made with the C# name of its declaration. A native with outputs is made through <c>zero-outputs</c>
+    /// (<c>ZeroingOutputs&lt;&amp;F, indices...&gt;::Call</c>), so each is zeroed before it runs (ADR-0045).
     /// </summary>
-    public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives)
+    public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives,
+                                      IReadOnlyList<BoundNative> bound)
     {
         var registered = registration.HasResources ? "component, event, resource and shared struct" : "component, event and shared struct";
         var text = Header(binding,
@@ -157,11 +159,17 @@ internal static class CppWriter
             else
             {
                 text.Line("extension.functions = {");
-                foreach (var native in natives.Functions)
+                foreach (var native in bound)
                 {
+                    var described = native.Function;
+                    // The zeroing template, given the native and its outputs' indices, has the native's signature, so it
+                    // stands where the native would; the zeroing then happens inside the factory's not-running check.
+                    var made = native.Outputs.Count == 0
+                                   ? $"&{described.QualifiedName}"
+                                   : $"&{config.ZeroOutputs}<&{described.QualifiedName}, {string.Join(", ", native.Outputs)}>::Call";
                     // A native's @notrunning value is what C# gets when it cannot be called.
-                    var notRunning = native.NotRunning == null ? "" : $", {native.NotRunning}";
-                    text.Line($"    {config.Make}<&{native.QualifiedName}>(\"{binding.Config.Namespace}.{config.Class}.{native.Name}\"{notRunning}),");
+                    var notRunning = described.NotRunning == null ? "" : $", {described.NotRunning}";
+                    text.Line($"    {config.Make}<{made}>(\"{binding.Config.Namespace}.{config.Class}.{described.Name}\"{notRunning}),");
                 }
 
                 text.Line("};");
@@ -227,89 +235,6 @@ internal static class CppWriter
             }
         }
     }
-
-    /// <summary>
-    /// The natives test: a case per native function with an output, calling its method in the natives test's C# class
-    /// (which calls the native with every input zero or null) and requiring that it found each output holding its
-    /// default.
-    /// </summary>
-    public static string NativesTest(Binding binding, TestsConfig tests, NativesDescription natives,
-                                     IReadOnlyList<BoundNative> bound)
-    {
-        var config = binding.Config.Natives!;
-        var text = Header(binding, "Each native function with an output writes its default when it returns early.", natives);
-        text.Line("#include \"Iris/Iris.hpp\"");
-        foreach (var include in tests.Includes)
-        {
-            text.Line($"#include \"{include}\"");
-        }
-
-        text.Line();
-        text.Line("#include <catch2/catch_test_macros.hpp>");
-        text.Line();
-        text.Line("#include <string_view>");
-        text.Line();
-        text.Line("namespace");
-        text.Line("{");
-        text.Indent();
-        text.Line($"constexpr std::string_view NativesClass = \"{tests.NativesClass}\";");
-        text.Line();
-        foreach (var line in NativesCheck)
-        {
-            text.Line(line);
-        }
-
-        text.Outdent();
-        text.Line("} // namespace");
-        foreach (var native in bound.Where(native => native.HasOutput))
-        {
-            var name = native.Function.Name;
-            text.Line();
-            text.Line($"TEST_CASE(\"{binding.Config.Namespace}.{config.Class}.{name}, given nothing to act on, writes its " +
-                      $"output's default\", \"{tests.Tags}\")");
-            text.Line("{");
-            text.Indent();
-            text.Line(tests.Setup);
-            text.Line($"CheckOutputs({tests.Component}, \"{name}\");");
-            text.Outdent();
-            text.Line("}");
-        }
-
-        text.Line();
-        text.Line("// clang-format on");
-        return text.ToString();
-    }
-
-    // The natives test's check, written into the test so it needs only Iris's headers.
-    private static readonly string[] NativesCheck =
-    [
-        "// Calls the natives class's method for `native`, which calls the native with every input zero or null, and",
-        "// requires that each output then holds its default.",
-        "void CheckOutputs(const Iris::Component* component, std::string_view native)",
-        "{",
-        "    {",
-        "        INFO(\"There is no loaded C# assembly holding the natives test\");",
-        "        REQUIRE(component != nullptr);",
-        "    }",
-        "    const auto type = component->FindType(NativesClass);",
-        "    {",
-        "        INFO(\"The natives test class \" << NativesClass << \" was not found: \" << type.diagnostic);",
-        "        REQUIRE(type.Succeeded());",
-        "    }",
-        "    const auto handle = type.value->FindMethod<bool()>(native);",
-        "    {",
-        "        INFO(\"The natives test method \" << native << \" was not found: \" << handle.diagnostic);",
-        "        REQUIRE(handle.Succeeded());",
-        "    }",
-        "    const auto result = handle.value->Invoke();",
-        "    {",
-        "        INFO(\"Calling \" << native << \" failed: \" << result.diagnostic);",
-        "        REQUIRE(result.Succeeded());",
-        "    }",
-        "    INFO(native << \" returned early without writing the default to its output\");",
-        "    REQUIRE(*result.value);",
-        "}",
-    ];
 
     private static void List(Writer text, string member, IEnumerable<DescribedType> types,
                              Func<DescribedType, string> make, Func<DescribedType, string> name)

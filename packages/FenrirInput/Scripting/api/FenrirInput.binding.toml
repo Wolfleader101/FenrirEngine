@@ -45,6 +45,7 @@ source = "../src/Generated/FenrirInputRegistration.cpp"
 includes = [
     "FenrirScripting/ComponentRegistry.hpp",
     "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state.
     "InputScriptingState.hpp",
 ]
@@ -67,10 +68,6 @@ includes = ["InputScriptingApp.hpp", "ScriptingProbe.hpp"]
 setup = "InputScriptingTests::InputScriptingApp app;"
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[input][scripting][bindings]"
-# The natives test: each native with an output, called with nothing to act on, writes its default.
-natives-cpp = "../Tests/Generated/FenrirInputNativesTests.cpp"
-natives-csharp = "../Tests/Generated/FenrirInputNatives.cs"
-natives-class = "Fenrir.InputScriptFixture.Natives"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
 # the InputScripting state second) into FenrirInput.natives.json, and this binding generates their C# declarations,
@@ -81,6 +78,8 @@ context = "Fenrir::CallContext"
 class = "InputNative"
 attribute = "NativeFunction"
 make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"
 
 [bound-types]
 "Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }

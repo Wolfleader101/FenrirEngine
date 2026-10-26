@@ -6,6 +6,7 @@
 #include "../../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "FenrirScripting/ZeroingOutputs.hpp"
 #include "RendererScriptingState.hpp"
 
 namespace Fenrir::RendererNatives
@@ -38,11 +39,11 @@ namespace Fenrir::Generated
             Fenrir::MakeSceneResource<Fenrir::Sky>("Fenrir.Renderer.Sky"),
         };
         extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::ScreenPointToRay>("Fenrir.Renderer.RendererNative.ScreenPointToRay"),
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::WorldToScreenPoint>("Fenrir.Renderer.RendererNative.WorldToScreenPoint"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::ScreenPointToRay, 4>::Call>("Fenrir.Renderer.RendererNative.ScreenPointToRay"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::WorldToScreenPoint, 4>::Call>("Fenrir.Renderer.RendererNative.WorldToScreenPoint"),
             Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::CameraAt>("Fenrir.Renderer.RendererNative.CameraAt", Fenrir::EntityValue(Fenrir::Entity::Null)),
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::GetWorldBounds>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::Stats>("Fenrir.Renderer.RendererNative.Stats"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetWorldBounds, 3>::Call>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
             Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SpawnModel>("Fenrir.Renderer.RendererNative.SpawnModel", Fenrir::EntityValue(Fenrir::Entity::Null)),
         };
     }
