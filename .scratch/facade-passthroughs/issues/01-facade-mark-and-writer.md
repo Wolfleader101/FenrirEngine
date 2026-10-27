@@ -13,11 +13,11 @@
 
 **Touches:** `tools/describe-api/src/Natives.cs`, `tools/describe-api/SCHEMA.md`, `tools/describe-api/tests/`, `packages/Iris/Tools/Iris.Bindings/`, `packages/Iris/docs/natives-description.md`, `docs/adr/0043-native-resources-and-facades-move-onto-the-generated-api-pipeline.md`, `docs/adr/0029-scripting-extensions-carry-native-resources-and-deferred-structural-changes.md`, `GLOSSARY.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for describe-api and Iris.Bindings pass with the new cases; `tests/Checks/Sdk` builds the fixture's facade parts.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit: no package has a mark yet, so no package output changes (CI's api-descriptions check).
-- [ ] The README, `natives-description.md`, `SCHEMA.md`, ADR-0043, ADR-0029 and the glossary say what the tool now does.
+- [x] `dotnet test` for describe-api and Iris.Bindings pass with the new cases; `tests/Checks/Sdk` builds the fixture's facade parts.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit: no package has a mark yet, so no package output changes (CI's api-descriptions check).
+- [x] The README, `natives-description.md`, `SCHEMA.md`, ADR-0043, ADR-0029 and the glossary say what the tool now does.
 
 ## Comments
 

@@ -17,12 +17,12 @@
 
 **Touches:** `packages/FenrirWindow/Scripting/`, `packages/FenrirWindow/Managed/`, `packages/FenrirInput/Scripting/`, `packages/FenrirInput/Managed/`, `packages/FenrirPhysics/Scripting/`, `packages/FenrirPhysics/Managed/`, `packages/FenrirDebugDraw/Scripting/`, `packages/FenrirDebugDraw/Managed/`, `packages/FenrirRenderer/Scripting/`, `packages/FenrirRenderer/Managed/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `grep -c "@facade"` over the five sources finds 11, 15, 7, 5, 5; the five generated facade files exist; no generated public method takes `in`.
-- [ ] The five hand-written facade files hold no member that only forwards to a native.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit (CI's api-descriptions check).
-- [ ] The msvc-x64-debug preset builds and `ctest -LE gl` passes locally, the packages' scripting tests among them; the other presets are CI's.
+- [x] `grep -c "@facade"` over the five sources finds 11, 15, 7, 5, 5; the five generated facade files exist; no generated public method takes `in`.
+- [x] The five hand-written facade files hold no member that only forwards to a native.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit (CI's api-descriptions check).
+- [x] The msvc-x64-debug preset builds and `ctest -LE gl` passes locally, the packages' scripting tests among them; the other presets are CI's.
 
 ## Comments
 

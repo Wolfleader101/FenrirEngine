@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (#164, #165)
 
 # Facade pass-throughs: a native's `@facade` mark generates its public method
 
