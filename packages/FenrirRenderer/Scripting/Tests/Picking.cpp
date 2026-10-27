@@ -35,7 +35,7 @@ TEST_CASE("ScreenPointToRay and WorldToScreenPoint from C# agree with C++", "[re
     const Entity camera = AddCamera(test);
     const Math::Vec2 point{500.0f, 200.0f};
 
-    const std::optional<Math::Ray> expected = test.renderer->ScreenPointToRay(camera, point);
+    const std::optional<Math::Ray> expected = test.renderer.ScreenPointToRay(camera, point);
     REQUIRE(expected.has_value());
     {
         INFO("C# should get a ray through the point, as C++ does");
@@ -52,7 +52,7 @@ TEST_CASE("ScreenPointToRay and WorldToScreenPoint from C# agree with C++", "[re
     }
 
     const Math::Vec3 ahead = expected->origin + expected->dir * 4.0f;
-    const std::optional<Math::Vec2> screen = test.renderer->WorldToScreenPoint(camera, ahead);
+    const std::optional<Math::Vec2> screen = test.renderer.WorldToScreenPoint(camera, ahead);
     REQUIRE(screen.has_value());
     INFO("C# should see a point along the ray where C++ does");
     REQUIRE(test.Call<bool>(RendererCallsType, "ScreenPoint", camera.GetId(), ahead.x, ahead.y, ahead.z));
@@ -77,7 +77,7 @@ TEST_CASE("CameraAt, GetWorldBounds and Stats from C# agree with C++", "[rendere
         REQUIRE(test.Call<std::uint32_t>(RendererCallsType, "CameraAt", std::uint32_t{2}, 640.0f, 360.0f) == noEntity);
     }
     {
-        const std::optional<Math::AABB> bounds = test.renderer->GetWorldBounds(test.Entities().GetEntity(drawn));
+        const std::optional<Math::AABB> bounds = test.renderer.GetWorldBounds(test.Entities().GetEntity(drawn));
         REQUIRE(bounds.has_value());
         INFO("C#'s bounds of the drawn entity should be C++'s");
         REQUIRE(test.Call<bool>(RendererCallsType, "Bounds", drawn));
@@ -90,7 +90,7 @@ TEST_CASE("CameraAt, GetWorldBounds and Stats from C# agree with C++", "[rendere
         INFO("The camera has no MeshRenderer, so no bounds");
         REQUIRE_FALSE(test.Call<bool>(RendererCallsType, "Bounds", camera));
     }
-    const RendererStats stats = test.renderer->Stats();
+    const RendererStats stats = test.renderer.Stats();
     INFO("C#'s stats should be the last frame's, as C++'s: one draw");
     REQUIRE(stats.draws == 1);
     REQUIRE(test.Call<bool>(RendererCallsType, "Stats"));
