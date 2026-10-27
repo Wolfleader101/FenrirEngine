@@ -14,7 +14,7 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/Tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/*/Scripting/api/*.binding.toml`, `packages/*/Scripting/src/`, `packages/FenrirPhysics/Scripting/include/`, `packages/FenrirPhysics/Scripting/Tests/`, `examples/PhysicsDemo/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `BindingTests.cs`: a case with `extension` set finds the maker's definition setting the name, state and assembly and finds its declaration in the natives header; a case without it finds today's register function; a case fails a configuration with `extension` and no `[natives]`.
 - [x] `grep -rn "sharedAssemblies\|extension.name" packages/*/Scripting/src/*.cpp` finds nothing hand-written; `grep -rn PhysicsScriptingExtension` finds nothing.

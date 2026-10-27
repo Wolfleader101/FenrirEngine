@@ -15,7 +15,7 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/Tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/*/Scripting/api/*.binding.toml`, `packages/*/Scripting/src/`, `packages/*/Scripting/Tests/*.cpp`, `packages/*/Scripting/CMakeLists.txt`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirScripting/src/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `BindingTests.cs`: a case reads the fixture binding's generated `FixtureNatives.hpp` and finds each native's declaration and the registration function's declaration, and finds no declaration in `FixtureRegistration.cpp`; a case fails a configuration that keeps `[registration] includes`.
 - [x] `grep -rn "const CallContext&" packages/*/Scripting/Tests/*.cpp` finds nothing; `grep -n "Generated::" packages/FenrirScripting/src/Bindings.cpp` finds only the call.

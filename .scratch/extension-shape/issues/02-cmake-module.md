@@ -12,7 +12,7 @@
 
 **Touches:** `packages/FenrirScripting/cmake/`, `packages/FenrirScripting/CMakeLists.txt`, `packages/*/Scripting/CMakeLists.txt`, `packages/*/Scripting/Tests/CMakeLists.txt`, `packages/*/Scripting/include/`, `examples/PhysicsDemo/CMakeLists.txt`, `examples/DemoScaffold/Tests/CMakeLists.txt`, `README.md`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] The configured build has the same targets and tests as before (`ctest -N` before and after lists the same names); every scripting test passes under the msvc-x64-debug preset.
 - [x] `grep -rn "function(fenrir_deploy_" packages examples` finds only `fenrir_deploy_scripting`; no `Scripting/CMakeLists.txt` names `add_custom_command`, `add_library` or `add_executable`.

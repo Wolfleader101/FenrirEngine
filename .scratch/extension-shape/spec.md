@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Extension shape: a scripting extension's declarations, maker and build come from one owner
 
