@@ -1,5 +1,3 @@
-using System.Reflection;
-
 namespace Fenrir.Scripting;
 
 /// <summary>
@@ -86,7 +84,7 @@ public static unsafe class Resources
     {
         void* pointer = Native.ResourceGet(IdOf<T>());
         if (pointer == null)
-            Log.Warn($"Resources.Get: there is no {ResourceIds<T>.Name} resource now, so the view is empty; use TryGet for a resource that may be absent.");
+            Log.Warn($"Resources.Get: there is no {RegistryIds<T, ResourceKind>.Name} resource now, so the view is empty; use TryGet for a resource that may be absent.");
         return pointer;
     }
 
@@ -104,50 +102,5 @@ public static unsafe class Resources
     }
 
     // The registry id of a native resource type, or a clear exception.
-    private static int IdOf<T>() where T : unmanaged, IReadOnlyResource
-    {
-        int id = ResourceIds<T>.Id;
-        if (id == (int)RegistryError.WrongType)
-            throw new InvalidOperationException($"'{ResourceIds<T>.Name}' is registered for a different C# type than {typeof(T).FullName}; a native resource is reached only through the type the host validated.");
-        if (id == (int)RegistryError.NotRegistered)
-            throw new InvalidOperationException(ResourceIds<T>.HasAttribute
-                ? $"The engine has no resource registered as '{ResourceIds<T>.Name}' (for {typeof(T).Name}): is its package's scripting extension in ScriptingConfig::extensions?"
-                : $"{typeof(T).Name} has no [NativeResource] attribute: a resource is mirrored from one a scripting extension registers.");
-        return id;
-    }
-}
-
-// The registry id of a native resource type, looked up by the name in its [NativeResource] attribute and remembered for as
-// long as the registry it came from is the current one.
-internal static unsafe class ResourceIds<T> where T : unmanaged, IReadOnlyResource
-{
-    private static uint generation;
-    private static bool resolved;
-    private static int id;
-
-    /// <summary>Whether the type carries a [NativeResource] attribute.</summary>
-    internal static bool HasAttribute { get; } = typeof(T).GetCustomAttribute<NativeResourceAttribute>() != null;
-
-    /// <summary>The name in the [NativeResource] attribute, or the type's full name when it has none.</summary>
-    internal static string Name { get; } =
-        typeof(T).GetCustomAttribute<NativeResourceAttribute>()?.Name ?? typeof(T).FullName ?? typeof(T).Name;
-
-    internal static int Id
-    {
-        get
-        {
-            if (!HasAttribute)
-                return (int)RegistryError.NotRegistered;
-            uint current = Native.RegistryGeneration();
-            if (!resolved || generation != current)
-            {
-                id = Resolve();
-                generation = current;
-                resolved = true;
-            }
-            return id;
-        }
-    }
-
-    private static int Resolve() => Native.ResourceIdOf(Name, typeof(T).FullName ?? typeof(T).Name);
+    private static int IdOf<T>() where T : unmanaged, IReadOnlyResource => RegistryIds<T, ResourceKind>.Require();
 }
