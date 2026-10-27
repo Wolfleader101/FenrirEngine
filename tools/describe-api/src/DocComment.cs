@@ -27,29 +27,31 @@ internal static class DocComment
     public sealed record ParameterDoc(bool Output, bool InOut, bool Input, string? Text);
 
     /// <summary>
-    /// A function's doc: its text without the commands below, each <c>@param</c>, <c>@return</c>, and the
-    /// <c>@notrunning</c> value.
+    /// A function's doc: its text without the commands below, each <c>@param</c>, <c>@return</c>, the
+    /// <c>@notrunning</c> value, and every <c>@facade</c> mark as written (one at most is valid; the describer checks).
     /// </summary>
     public sealed record FunctionDoc(string? Text, IReadOnlyDictionary<string, ParameterDoc> Parameters, string? Returns,
-                                     string? NotRunning);
+                                     string? NotRunning, IReadOnlyList<string> Facades);
 
     /// <summary>
     /// A function's doc comment, split: <c>@param name</c>, <c>@param[in] name</c>, <c>@param[out] name</c> or
     /// <c>@param[in,out] name</c> and <c>@return</c> (or <c>@returns</c>) each take the text up to the next command or
-    /// blank line, and <c>@notrunning</c> the rest of its line, a C++ expression; the rest is the function's text, as
-    /// <see cref="Text" /> gives it.
+    /// blank line, <c>@notrunning</c> the rest of its line, a C++ expression, and <c>@facade</c> the rest of its line,
+    /// the public <c>Class.Method</c> the native is named as; the rest is the function's text, as <see cref="Text" />
+    /// gives it.
     /// </summary>
     public static FunctionDoc Function(string? raw)
     {
         var parameters = new Dictionary<string, ParameterDoc>(StringComparer.Ordinal);
         if (string.IsNullOrWhiteSpace(raw))
         {
-            return new FunctionDoc(null, parameters, null, null);
+            return new FunctionDoc(null, parameters, null, null, []);
         }
 
         var body = new List<string>();
         string? returns = null;
         string? notRunning = null;
+        var facades = new List<string>();
         List<string>? command = null;
         Action<string?>? finish = null;
         foreach (var line in Lines(raw).Append(""))
@@ -58,7 +60,8 @@ internal static class DocComment
             var isReturn = line.StartsWith("@return", StringComparison.Ordinal) || line.StartsWith("\\return", StringComparison.Ordinal);
             var isNotRunning = line.StartsWith("@notrunning", StringComparison.Ordinal) ||
                                line.StartsWith("\\notrunning", StringComparison.Ordinal);
-            if (command is not null && (line.Length == 0 || isParam || isReturn || isNotRunning))
+            var isFacade = line.StartsWith("@facade", StringComparison.Ordinal) || line.StartsWith("\\facade", StringComparison.Ordinal);
+            if (command is not null && (line.Length == 0 || isParam || isReturn || isNotRunning || isFacade))
             {
                 finish!(command.Count == 0 ? null : string.Join(' ', command));
                 command = null;
@@ -86,6 +89,10 @@ internal static class DocComment
             {
                 notRunning = line["@notrunning".Length..].Trim();
             }
+            else if (isFacade)
+            {
+                facades.Add(line["@facade".Length..].Trim());
+            }
             else if (isReturn)
             {
                 var rest = line[(line.StartsWith("@returns", StringComparison.Ordinal) || line.StartsWith("\\returns", StringComparison.Ordinal) ? 8 : 7)..].Trim();
@@ -102,7 +109,7 @@ internal static class DocComment
             }
         }
 
-        return new FunctionDoc(Join(body), parameters, returns, notRunning is { Length: > 0 } ? notRunning : null);
+        return new FunctionDoc(Join(body), parameters, returns, notRunning is { Length: > 0 } ? notRunning : null, facades);
     }
 
     // The comment's lines without their markers or @brief, trimmed; blank lines kept as empty strings.

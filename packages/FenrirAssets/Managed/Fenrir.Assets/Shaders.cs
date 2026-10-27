@@ -22,9 +22,6 @@ public static class Shaders
     /// The name's whole length in chars, so a result larger than the span says how large a span would hold it; zero, with
     /// <paramref name="parameter"/> zeroed, if there is no such parameter.
     /// </returns>
-    public static unsafe int GetParameter(AssetHandle<Shader> shader, int index, out ShaderParameter parameter, Span<char> name)
-    {
-        fixed (char* first = name)
-            return AssetsNative.GetShaderParameter(shader.Bits, index, out parameter, first, name.Length);
-    }
+    public static int GetParameter(AssetHandle<Shader> shader, int index, out ShaderParameter parameter, Span<char> name) =>
+        AssetsNative.GetShaderParameter(shader.Bits, index, out parameter, name);
 }

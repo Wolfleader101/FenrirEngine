@@ -7,6 +7,7 @@
       "namespace": "Fenrir::WindowNatives",
       "source": "../src/WindowScripting.cpp",
       "doc": "Whether `window` has been made.",
+      "facade": "Window.Exists",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -79,6 +80,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "`window`'s pixels per logical unit.",
+      "facade": "Window.ContentScale",
       "returns": {
         "type": "float",
         "kind": "f32"
@@ -97,6 +99,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Whether `window` is minimised: nothing should be drawn to it.",
+      "facade": "Window.IsMinimised",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -115,6 +118,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Whether `window` has the input focus.",
+      "facade": "Window.IsFocused",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -133,6 +137,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "How the cursor behaves over `window`, as last set.",
+      "facade": "Window.GetCursorMode",
       "returns": {
         "type": "Fenrir::CursorMode",
         "kind": "enum"
@@ -151,6 +156,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Sets how the cursor behaves over `window`.",
+      "facade": "Window.SetCursorMode",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -175,6 +181,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Sets the cursor shown over `window`.",
+      "facade": "Window.SetCursorShape",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -199,6 +206,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Sets `window`'s title.",
+      "facade": "Window.SetTitle",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -222,7 +230,8 @@
       "namespace": "Fenrir::WindowNatives",
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
-      "doc": "Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars.",
+      "doc": "Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars: as much as fits is written, so a result larger than the span says how large a span would hold it. Zero when the clipboard holds no text.",
+      "facade": "Window.GetClipboard",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32"
@@ -249,6 +258,7 @@
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
       "doc": "Puts `text` on the system clipboard.",
+      "facade": "Window.SetClipboard",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -267,7 +277,8 @@
       "namespace": "Fenrir::WindowNatives",
       "source": "../src/WindowScripting.cpp",
       "state": "Fenrir::WindowScripting",
-      "doc": "Asks for `window` to close, as its close button does.",
+      "doc": "Asks for `window` to close, as its close button does: a `WindowCloseRequestedEvent` is sent and, for the main window when the app stops on its close, the app stops. The window itself stays.",
+      "facade": "Window.RequestClose",
       "returns": {
         "type": "bool",
         "kind": "bool",

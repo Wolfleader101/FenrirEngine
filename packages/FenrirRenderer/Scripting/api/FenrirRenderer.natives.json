@@ -8,10 +8,11 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "The ray from `camera` through `point`, in window pixels from the top-left of its target.",
+      "facade": "Renderer.ScreenPointToRay",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "Whether there is a ray: false with no renderer or no such camera."
+        "doc": "Whether there is a ray: false with no renderer, no such camera, or a point outside the camera's viewport."
       },
       "parameters": [
         {
@@ -43,11 +44,12 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "Where `point`, in world space, lands on `camera`'s target, in window pixels from its top-left.",
+      "doc": "Where `point`, in world space, appears on `camera`'s target, in window pixels from its top-left.",
+      "facade": "Renderer.WorldToScreenPoint",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "Whether it lands: false with no renderer, no such camera, or a point behind the camera."
+        "doc": "Whether it appears: false with no renderer, no such camera, or a point behind the camera."
       },
       "parameters": [
         {
@@ -70,7 +72,7 @@
           "pointee": "Fenrir::Math::Vec2",
           "pointeeKind": "struct",
           "output": true,
-          "doc": "The point; zero when it does not land."
+          "doc": "The point; zero when it does not appear."
         }
       ]
     },
@@ -79,12 +81,13 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "The camera whose view of `window` is under `point`, in window pixels from its top-left.",
+      "doc": "The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order enabled camera in the active scene whose viewport holds it.",
       "notRunning": "Fenrir::EntityValue(Fenrir::Entity::Null)",
+      "facade": "Renderer.CameraAt",
       "returns": {
         "type": "Fenrir::EntityValue",
         "kind": "struct",
-        "doc": "The camera entity, or no entity (C#'s Entity.None)."
+        "doc": "The camera entity, or no entity (C#'s Entity.None) when there is none or no renderer."
       },
       "parameters": [
         {
@@ -107,11 +110,12 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "The world-space box around the meshes of `entity` and its children.",
+      "doc": "The world-space box around the drawn meshes of `entity` and its children, now.",
+      "facade": "Renderer.GetWorldBounds",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "Whether there is one: false with no renderer, an entity not alive, or no mesh to bound."
+        "doc": "Whether there is one: false with no renderer, an entity not alive, or no mesh to bound (no MeshRenderer, or a mesh that does not resolve)."
       },
       "parameters": [
         {
@@ -135,7 +139,8 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "What the renderer did in the last frame.",
+      "doc": "What the renderer did in the last drawn frame; zeros before the first.",
+      "facade": "Renderer.Stats",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -163,7 +168,7 @@
       "returns": {
         "type": "Fenrir::EntityValue",
         "kind": "struct",
-        "doc": "The model's root entity, or no entity (C#'s Entity.None) with no asset store, a stale model or a parent that is not alive."
+        "doc": "The model's root entity, or no entity (C#'s Entity.None) when the app has no store, the model is stale or the parent is not alive."
       },
       "parameters": [
         {

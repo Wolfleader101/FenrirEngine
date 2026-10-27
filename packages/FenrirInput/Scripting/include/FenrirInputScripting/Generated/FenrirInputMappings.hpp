@@ -10,6 +10,7 @@
 #include "FenrirInput/InputRouter.hpp"
 #include "FenrirInputScripting/InputMappings.hpp"
 #include "FenrirInputScripting/ScriptInputClaims.hpp"
+#include "FenrirScripting/BoundMappings.hpp"
 #include "../../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
 #include <cstdint>

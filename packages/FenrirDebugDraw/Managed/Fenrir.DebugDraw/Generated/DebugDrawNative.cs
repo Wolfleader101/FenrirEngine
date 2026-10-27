@@ -34,7 +34,7 @@ internal static unsafe partial class DebugDrawNative
     /// (DebugDraw.Polyline).
     /// </summary>
     [NativeFunction]
-    public static partial void Polyline(Vector3* points, int count, bool closed, in Colour colour,
+    public static partial void Polyline(ReadOnlySpan<Vector3> points, bool closed, in Colour colour,
                                         in NativeShapeOptions options, ReadOnlySpan<char> group);
 
     /// <summary>A dot at `position`, `pixelSize` pixels across (DebugDraw.Point).</summary>
@@ -131,8 +131,8 @@ internal static unsafe partial class DebugDrawNative
 
     /// <summary>The `count` vertices from `vertices` as triangles, every three one (DebugDraw.Triangles).</summary>
     [NativeFunction]
-    public static partial void Triangles(Vector3* vertices, int count, in Colour colour, in NativeShapeOptions options,
-                                         ReadOnlySpan<char> group);
+    public static partial void Triangles(ReadOnlySpan<Vector3> vertices, in Colour colour,
+                                         in NativeShapeOptions options, ReadOnlySpan<char> group);
 
     /// <summary>Text at a pixel position in each window showing the scene (DebugDraw.ScreenText).</summary>
     [NativeFunction]
@@ -156,25 +156,23 @@ internal static unsafe partial class DebugDrawNative
     public static partial void WorldText(in Vector3 position, ReadOnlySpan<char> text, in Colour colour,
                                          in NativeTextOptions options, ReadOnlySpan<char> group);
 
-    /// <summary>Shows the group's items (DebugDraw.ShowGroup).</summary>
+    /// <summary>Shows the group's items.</summary>
     [NativeFunction]
     public static partial void ShowGroup(ReadOnlySpan<char> group);
 
-    /// <summary>Hides the group's items (DebugDraw.HideGroup).</summary>
+    /// <summary>Hides the group's items.</summary>
     [NativeFunction]
     public static partial void HideGroup(ReadOnlySpan<char> group);
 
-    /// <summary>
-    /// Whether the group's items are shown; false with no DebugDraw in the active scene (DebugDraw.IsGroupShown).
-    /// </summary>
+    /// <summary>Whether the group's items are shown; false with no debug drawing in the active scene.</summary>
     [NativeFunction]
     public static partial bool IsGroupShown(ReadOnlySpan<char> group);
 
-    /// <summary>Drops every item (DebugDraw.Clear).</summary>
+    /// <summary>Drops every item.</summary>
     [NativeFunction]
     public static partial void Clear();
 
-    /// <summary>Drops the group's items (DebugDraw.Clear).</summary>
+    /// <summary>Drops the group's items.</summary>
     [NativeFunction]
     public static partial void ClearGroup(ReadOnlySpan<char> group);
 }

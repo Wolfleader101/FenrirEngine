@@ -22,6 +22,12 @@ internal static class CppWriter
             text.Line($"#include \"{include}\"");
         }
 
+        // The mappings of the bound types bound here, where their entries say they are.
+        foreach (var include in binding.BoundTypeIncludes)
+        {
+            text.Line($"#include \"{include}\"");
+        }
+
         foreach (var used in binding.Uses)
         {
             text.Line($"#include \"{Relative(binding.Config.Cpp.Mappings, used.Config.Cpp.Mappings)}\"");
@@ -104,7 +110,10 @@ internal static class CppWriter
     public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives,
                                       IReadOnlyList<BoundNative> bound)
     {
-        var registered = registration.HasResources ? "component, event, resource and shared struct" : "component, event and shared struct";
+        // The extension's resources are set when the lists hold one: a factory the configuration (or its defaults) names
+        // for a resource no description here has is not a list.
+        var hasResources = binding.Listed.Any(Binding.IsResource);
+        var registered = hasResources ? "component, event, resource and shared struct" : "component, event and shared struct";
         var text = Header(binding,
                           natives == null
                               ? $"The extension's registration lists: every described {registered}."
@@ -143,7 +152,7 @@ internal static class CppWriter
              binding.RegisteredName);
         List(text, "sharedStructs", binding.Listed.Where(type => type.Role == Role.SharedStruct),
              type => binding.MakeSharedStruct(registration, type), binding.QualifiedName);
-        if (registration.HasResources)
+        if (hasResources)
         {
             List(text, "resources", binding.Listed.Where(Binding.IsResource), type => binding.ResourceFactory(registration, type)!,
                  binding.RegisteredName);

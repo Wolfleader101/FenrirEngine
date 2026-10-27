@@ -35,10 +35,13 @@ internal static unsafe partial class FixtureNative
     [NativeFunction]
     public static partial int Extremes(in Vector3 origin, out Hit nearest, out Hit farthest);
 
-    /// <summary>Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.</summary>
+    /// <summary>
+    /// Writes up to `capacity` hits: a stateless native, and a pointer followed by its count. Named as Hits.Find too: a
+    /// second public method of that name, told apart by its parameters.
+    /// </summary>
     /// <returns>How many it wrote.</returns>
     [NativeFunction]
-    public static partial int FindAll(in Vector3 origin, Hit* hits, int capacity);
+    public static partial int FindAll(in Vector3 origin, Span<Hit> hits);
 
     /// <summary>
     /// Logs text: a native outside the others' namespace, noexcept, taking characters and their length.
@@ -72,7 +75,7 @@ internal static unsafe partial class FixtureNative
 
     /// <summary>Sums `count` values of numbers' pointee and kinds: a bool, a double, and a 64-bit result.</summary>
     [NativeFunction]
-    public static partial ulong Sum(uint* values, int count, bool all, double scale);
+    public static partial ulong Sum(ReadOnlySpan<uint> values, bool all, double scale);
 
     /// <summary>
     /// Turns by `rotation` `turns` times: a pointer followed by a count that is one value, not a span.

@@ -3,21 +3,12 @@
 namespace = "Fixture.Bindings"
 # Spring is the Common binding's: named as Fixture.Common.Spring, not mirrored here.
 uses = ["Uses/Common.binding.toml"]
+# The Host SDK's names, stated once there; this file states only what is this binding's.
+defaults = "Host.binding-defaults.toml"
 
 [csharp]
 contract = "Contract"
 generated = "Contract/Generated"
-# The SDK's names: the same mirrors compile against stubs of them and once against the Fenrir scripting SDK.
-usings = ["Fenrir.Scripting"]
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
-resource-attribute = "NativeResource"
-resource-interface = "IResource"
-read-only-resource-interface = "IReadOnlyResource"
 pointer-type = "ulong"
 readonly-events = true
 # A struct C# reads and never writes: readonly, and so is Body's field holding it.
@@ -30,22 +21,12 @@ internal-structs = ["Fixture::Tag"]
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
-includes = ["Fixture.hpp", "BoundMappings.hpp"]
+includes = ["Fixture.hpp"]
 
 # Never compiled here: Iris has no extension type. The names show the form a host's registration takes.
 [registration]
 source = "Native/Generated/FixtureRegistration.cpp"
-includes = ["Host/Extension.hpp"]
 function = "Fixture::Bindings::Register"
-extension = "Host::Extension"
-make-component = "Host::MakeComponent"
-make-read-only-component = "Host::MakeReadOnlyComponent"
-make-event = "Host::MakeEvent"
-make-shared-struct = "Host::MakeSharedStruct"
-make-scene-resource = "Host::MakeSceneResource"
-make-read-only-scene-resource = "Host::MakeReadOnlySceneResource"
-make-app-resource = "Host::MakeAppResource"
-make-read-only-app-resource = "Host::MakeReadOnlyAppResource"
 read-only = ["Fixture::Collider", "Fixture::Clock"]
 # Registered by the extension itself: mirrored, mapped and tested, but not in the generated lists.
 by-hand = ["Fixture::BodyId"]
@@ -54,9 +35,7 @@ by-hand = ["Fixture::BodyId"]
 cpp = "Tests/Generated/FixtureDefaultsTests.cpp"
 csharp = "Tests/Generated/FixtureDefaults.cs"
 class = "Fixture.Bindings.Tests.Defaults"
-includes = ["DefaultsHarness.hpp"]
 setup = "const Fixture::DefaultsHarness harness;"
-component = "harness.Component()"
 tags = "[bindings]"
 
 # The native functions in Fixture.natives.json (a copy of tools/describe-api's, read from its Natives.cpp, whose
@@ -64,24 +43,18 @@ tags = "[bindings]"
 # compiles it.
 [natives]
 sources = ["Natives.cpp"]
-context = "Host::CallContext"
 class = "FixtureNative"
-attribute = "NativeFunction"
-make = "Host::NativeFunction::Make"
-# A native with outputs is registered as make<&zero-outputs<&F, indices...>::Call>: the host's template zeroes them.
-zero-outputs = "Host::ZeroingOutputs"
 types = { "Fixture::EntityId" = "Entity" }
 
 # Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not
-# all zero bytes (its id is all bits set), so it names the expression that makes it.
+# all zero bytes (its id is all bits set), so it names the expression that makes it. Each names its mapping's header,
+# written once into the mappings header. Ticket is the Host SDK's, in the defaults file.
 [bound-types]
-"Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-"Fixture::Quat" = { type = "Quaternion" }
-"Fixture::Handle" = { type = "Handle", default = "new()" }
+"Fixture::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"], include = "BoundMappings.hpp" }
+"Fixture::Quat" = { type = "Quaternion", include = "BoundMappings.hpp" }
+"Fixture::Handle" = { type = "Handle", default = "new()", include = "BoundMappings.hpp" }
 # Described by layout only, and held by nothing: its C# type is never named.
-"Fixture::Size" = { type = "Size" }
-# One member, which a native passes by value: the description does not record its kind, so the entry does.
-"Fixture::Ticket" = { type = "Ticket", wrapper = "u32" }
+"Fixture::Size" = { type = "Size", include = "BoundMappings.hpp" }
 
 # Exceptions to the PascalCase rule: one for a member of one type, one for every member of that name.
 [names]

@@ -37,7 +37,8 @@ header change, and check in CI that it leaves the tree clean.
 ## The configuration
 
 `<Name>.binding.toml`, with paths relative to it. [`tests/Fixture/Fixture.binding.toml`](tests/Fixture/Fixture.binding.toml)
-uses every key but `registered-namespace` and `descriptions`, which tests set; `tests/Fixture/Uses/Common.binding.toml`, the
+uses every key but `registered-namespace` and `descriptions`, which tests set, with the SDK's names in
+`tests/Fixture/Host.binding-defaults.toml`; `tests/Fixture/Uses/Common.binding.toml`, the
 binding it uses, sets `descriptions`.
 
 ```toml
@@ -45,6 +46,7 @@ namespace = "My.Physics"               # The C# namespace of the mirrors, and of
 registered-namespace = "My"            # Optional (namespace): components, events and resources are registered as My.Type instead.
 descriptions = ["../../api/MyPhysics.api.json"]  # Optional: the descriptions it binds. A binding another uses names them.
 uses = ["../../../MyMath/api/MyMath.binding.toml"]  # Optional: bindings whose mirrors it names (below).
+defaults = "../../../MyScripting/api/MyScripting.binding-defaults.toml"  # Optional: the SDK's names, stated once (below).
 exclude = ["My::RawHit"]               # Optional: described types this binding leaves out (it binds them in another form).
 
 [csharp]
@@ -106,7 +108,7 @@ zero-outputs = "My::ZeroingOutputs"    # A native with outputs is made as make<&
 types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes, by its C++ name.
 
 [bound-types]                          # The C# type of each bound type, and optionally its constructor's components.
-"Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
+"Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"], include = "MyScripting/BoundMappings.hpp" }  # Its mapping's header (below).
 "Math::Quat" = { type = "Quaternion" }  # No constructor: defaults set the components by name, new() { X = 0, ... }.
 "My::Handle" = { type = "Handle", default = "Handle.None" }  # Its own default (T{}), when that is not zero bytes.
 "My::BodyId" = { type = "BodyId", wrapper = "u32" }  # One member a native passes by value: that member's kind.
@@ -124,7 +126,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 | Output | Contents |
 | --- | --- |
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
-| `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them). |
+| `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
 | `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
@@ -138,7 +140,18 @@ as `nested`) is that binding's: this binding names it by that binding's C# name,
 mirrors and natives that name it, includes its mappings header (by a path relative to this one's) in this one's mappings,
 and gives it no mirror, mapping, registration or test of its own. This binding's description may select it too, with
 the role the used binding's gives it (a struct a native here fills through a pointer, say), or hold it as `nested`. Its member and enumerator names in defaults are that
-binding's too. Bound types are not mirrored, so each binding still names its own in `[bound-types]`.
+binding's too.
+
+**Other bindings' bound types.** A binding's bound types are its own `[bound-types]`, its defaults file's, and every
+used binding's (transitively), so a vector every binding holds is named once, in the binding that owns it. An inherited
+entry is consulted only for a type a description here holds; the checks on own entries (described, a number wrapper)
+stay. A type a used binding's entry names gets a `using` of that binding's namespace where it is held or taken, as a used
+mirror does; a defaults file's entry has no namespace of its own, and the file's `usings` cover it. An own entry for an
+inherited name overrides it, unless it is identical, which fails ("already inherited from `<file>`; delete it"); two
+inherited sources giving one name different entries fail naming both. An entry's `include` is the header of the type's
+Iris mapping: this binding's mappings header includes it, once, after the binding's own `[cpp] includes` and before the
+used bindings' mappings headers, when this binding binds that type, so a bound type's mapping is named beside the type
+rather than in every binding that holds it.
 
 **Names.** A type's C# name is the last segment of its C++ name, its registered name `Namespace.Type` (a component's
 or event's `RegisteredNamespace.Type` when `registered-namespace` is set: a mapping still names the C# type). A field's or
@@ -182,6 +195,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
+| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. |
 | `[registration] source` | Also each native's C++ declaration (in its namespace, so the source can name it) and `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
@@ -190,7 +204,9 @@ would: an alias in `types` is its C# type; a number or `bool` is itself (`std::i
 converts to; an enum is its described C# enum, crossing as its underlying integer; a wrapper (a described struct of one
 field of a number, `bool`, `char16_t` or enum, or a bound type whose `[bound-types]` entry gives its `wrapper` kind) is
 its C# type, crossing as that field; `const char*` followed by a `std::int32_t` length is one `string`; any other pointer followed by a
-`std::int32_t` count is `T*` (a span C# fixes), unless its doc marks it `@param[in]`, one value the count after it does
+`std::int32_t` count is a span, `ReadOnlySpan<T>` for a const pointee and `Span<T>` otherwise (a `char16_t*` buffer is
+`Span<char>`), with the count folded into it (the SDK's generator pins the span and passes its first element and its
+length; a `const char16_t*` with a count is refused, since `ReadOnlySpan<char>` is text), unless its doc marks it `@param[in]`, one value the count after it does
 not size; a pointer its doc marks `@param[out]` is `out T`, and one it marks
 `@param[in,out]` is `T*`; a `void*` or `const void*` is `void*`, an address C# passes as it is; any other `const T*` is
 `in T`. `T` is a number, or the C# name of a described type or a `types` alias. An `out T` is an output the registration
@@ -199,7 +215,50 @@ wrapper, `void` or `void*`. Anything else fails naming the function and paramete
 wrapper, an enum or struct nothing describes, a pointer to a type nothing names, a pointer to non-const data that is
 neither an output, read and written, nor followed by a count, or any other result (text among them).
 
+**Facade parts.** A native whose public shape is its declaration's carries `@facade Class.Method` in its C++ doc, and
+the tool writes that method into the generated part of `Class`, a `public static partial class` in the binding's
+namespace with the natives' `using`s rule (`System` when a method takes a span, and the namespaces of the used bindings
+whose types the methods name) and a `//` header, so the hand-written part alone carries the class's summary. The method
+has the declaration's result, parameters and docs (`<summary>`, `<param>`, `<returns>`, the C++ doc verbatim) and an
+expression body calling the native, with one rule and no mark: a parameter the declaration takes `in T` the facade takes
+`T` and passes `in` (no public facade method takes `in`); `out`, spans, text and values are as declared. Two marks may
+give one class and method when their parameter types differ: C# overloads them. The hand-written class is `partial`
+and holds what a description cannot say: overloads that are not renames, generics, properties over outputs, constants,
+defaults, conversions and an `out` returned as a value. A mark is refused, naming the native and the mark, on a native
+whose declaration cannot be public (it takes a type in `internal-structs`, or a pointer: a `void*`, an `[in,out]` `T*`),
+when two marks give one class and method the same parameter types, and when the class is named as a mirror this binding
+or one it uses generates, as a bound type's C# type, or as the `[natives] class`. A facade class no mark names any more
+is deleted as a mirror no longer described is.
+
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
+
+## Defaults
+
+The names of an SDK (its attributes, interfaces, factories, headers, call context and native-function names) are the
+same in every binding of that SDK, so they are stated once, in a **defaults file**, `<Name>.binding-defaults.toml`, that
+each binding names with `defaults`. The file holds the configuration's own sections with only the keys that name an SDK
+thing:
+
+| Section | Keys a defaults file may state |
+| --- | --- |
+| `[csharp]` | `component-attribute`, `component-interface`, `read-only-component-interface`, `event-attribute`, `event-interface`, `tagged-union-attribute`, `resource-attribute`, `resource-interface`, `read-only-resource-interface`, `pointer-type`, `usings` |
+| `[cpp]` | `includes` |
+| `[registration]` | `extension`, `make-component`, `make-read-only-component`, `make-event`, `make-shared-struct`, `make-scene-resource`, `make-read-only-scene-resource`, `make-app-resource`, `make-read-only-app-resource`, `includes` |
+| `[tests]` | `includes`, `component` |
+| `[natives]` | `context`, `attribute`, `make`, `zero-outputs` |
+
+Anything else (a path, a role list, a name of one binding's) fails naming the key. The file's sections are merged into
+the binding's before it is read: a section the binding lacks is not added (a binding with no `[registration]` gets none),
+a scalar the binding states replaces the default, and a list the binding states comes after the default's entries (the
+SDK's includes, then the package's). A binding restating a default, a scalar or a list entry byte for byte, fails with
+"already the default from `<file>`; delete it", so a configuration states only what is its own. The generated `using`s
+are sorted and never name the file's own namespace, so their order does not depend on which file lists a namespace.
+A defaults file has no `defaults` and no `uses` of its own, and a binding whose assembly does not reference the SDK
+(a pure math contract, say) names none.
+
+The header reader that writes the natives description reads two keys of a binding's configuration, `[natives] sources`
+and `context`, and takes `context` from the defaults file when the binding does not state it; this tool reads every other
+key of both files and alone checks what a defaults file may hold.
 
 ## Hand-written parts
 
@@ -224,12 +283,17 @@ a `read-only` entry that is not a component or resource, a `by-hand` entry that 
 list, an `internal-structs` entry that is not a struct mirrored here or that a public mirror holds, a `wrapper` that is
 not a number kind, a type two descriptions describe differently (a struct, tagged union or enum may be described twice, alike, as a binding's
 own description holds a package's type; it is bound once, with the role it is selected with), `descriptions` that
-differ from the command line's, a `uses` entry that does not exist, names no
+differ from the command line's, a `defaults` file that does not exist, is not named `<Name>.binding-defaults.toml`, states
+a key a defaults file may not, or gives a default the binding restates, a `[bound-types]` entry a used binding already
+gives identically or that two inherited sources give differently, a `uses` entry that does not exist, names no
 descriptions or uses itself, a used type that two used bindings mirror, that this binding excludes, names in
 `[bound-types]` or selects with another role than the used binding's description does, or that is described with
 another layout, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, a `[natives] class`
-that is also a mirror's name, or a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
+that is also a mirror's name, a `@facade` mark on a native whose declaration cannot be public (an `internal-structs`
+type or a pointer among its parameters or result), two marks giving one class and method the same parameter types, a
+facade class named as a mirror (this binding's or a used one's), a bound type's C# type or the `[natives] class`, a
+`facade` that is not `Class.Method`, or a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
 `natives-class`), which the zeroing registration replaced.
 
 ## Tests
@@ -239,7 +303,10 @@ that is also a mirror's name, or a `[tests]` still naming the natives test (`nat
 `Fixture.hpp`) and its natives (`tests/Fixture/Fixture.natives.json`, a copy of describe-api's, every form of native
 parameter) give their committed outputs byte for byte, with a resource of each scope and a read-only one, an internal
 mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a binding of Spring alone), and natives
-taking text, an enum and wrappers; a changed default changes exactly its initialiser; the registration zeroes a
+taking text, an enum and wrappers; the three marked `@facade` give two facade parts, one method taking by value what
+its declaration takes `in`, one a span, and two of one name told apart by their parameters, a mark a binding cannot
+honour fails naming the native and the mark, and a facade class no mark names is deleted; a changed default changes
+exactly its initialiser; the registration zeroes a
 native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
 read and written, and a native added with an output is declared and registered so; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles
@@ -247,4 +314,5 @@ against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's
 with its source generators (`tests/Checks/Sdk`). The `BindingDefaults` CTest builds the fixture's C# assembly
 (`tests/Checks/Runtime`) and runs the fixture's generated defaults test against it. The fixture is itself a binding, so
 the bindings target regenerates its outputs. Its natives' C# class has no bodies without the SDK's generator, so only the
-SDK check compiles it, and its registration is never compiled: Iris has no extension to register natives with.
+SDK check compiles it and the facade parts that call it, and its registration is never compiled: Iris has no extension
+to register natives with.

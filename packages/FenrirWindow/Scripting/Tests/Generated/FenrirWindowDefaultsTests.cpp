@@ -4,8 +4,8 @@
 // C#'s new T() equals C++'s T{} for every type the binding registers, field by field.
 
 #include "../../src/Generated/FenrirWindowMappings.hpp"
-#include "WindowScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
+#include "WindowScriptingApp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -1,0 +1,51 @@
+# The scripting SDK's names for every C# binding (packages/Iris/Tools/Iris.Bindings/README.md, "Defaults"): the one place
+# the SDK's attributes, interfaces, factories, headers and native-function names are spelled. Each package binding names
+# this file with `defaults` and states only what is its own: its namespace, paths, sources and types. Iris.Bindings reads
+# it (a scalar a binding states replaces the default, a list a binding states follows the default's entries, and a binding
+# restating a default is refused); tools/describe-api reads [natives] context from it. A key here names an SDK thing;
+# nothing of one binding's (a path, a role list, a name) may be stated here. Fenrir.Math's binding does not name it:
+# its assembly does not reference Fenrir.Scripting.
+
+[csharp]
+usings = ["Fenrir.Scripting"]
+component-attribute = "NativeComponent"
+component-interface = "IComponent"
+read-only-component-interface = "IReadOnlyComponent"
+event-attribute = "NativeEvent"
+event-interface = "IEvent"
+tagged-union-attribute = "TaggedUnion"
+resource-attribute = "NativeResource"
+resource-interface = "IResource"
+read-only-resource-interface = "IReadOnlyResource"
+
+[registration]
+# What every generated registration names: the factories, the extension, and the zeroing template (ADR-0045).
+includes = [
+    "FenrirScripting/ComponentRegistry.hpp",
+    "FenrirScripting/ScriptingExtension.hpp",
+    "FenrirScripting/ZeroingOutputs.hpp",
+]
+extension = "Fenrir::ScriptingExtension"
+make-component = "Fenrir::MakeComponent"
+make-read-only-component = "Fenrir::MakeReadOnlyComponent"
+make-event = "Fenrir::MakeEvent"
+make-shared-struct = "Fenrir::MakeSharedStruct"
+make-scene-resource = "Fenrir::MakeSceneResource"
+
+[tests]
+# A binding's `setup` declares `app`, the test app whose scripting the probe reaches.
+includes = ["ScriptingProbe.hpp"]
+component = "Fenrir::ScriptingProbe::Component(app.scripting)"
+
+# The one entity value every binding names (ADR-0044): a C# Entity, which natives take and return by value as its one
+# field and shared structs hold. Its mapping and wrapper trait are FenrirScripting's, included where it is bound.
+[bound-types]
+"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32", include = "FenrirScripting/EntityValueMapping.hpp" }
+
+[natives]
+# Every native takes the call context first; tools/describe-api's natives mode reads this to find them.
+context = "Fenrir::CallContext"
+attribute = "NativeFunction"
+make = "Fenrir::NativeFunction::Make"
+# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
+zero-outputs = "Fenrir::ZeroingOutputs"
