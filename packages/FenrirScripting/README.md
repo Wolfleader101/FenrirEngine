@@ -21,7 +21,8 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
 
 - **Where .NET comes from.** The Iris bridge (`Iris.Bridge.dll`, its `.runtimeconfig.json`), `nethost`, the
   scripting contract `Fenrir.Scripting.dll` and the math contract `Fenrir.Math.dll` must sit next to the executable, or
-  in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target>)` on the executable.
+  in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target> [EXTENSIONS <Pkg>...])` on
+  the executable, naming the package extensions it adds, whose contracts go beside it too.
 - **The contract.** `Fenrir.Scripting` (`Managed/Fenrir.Scripting`) is the C# API scripts compile against: `Entity`,
   `Log` and `Time` so far. `Scripting::Install` always shares it with Iris, as one copy in the default load context
   that is never reloaded, so its types have one identity across every load and reload of the script assembly. A
@@ -558,8 +559,8 @@ which the app lists in `ScriptingConfig::extensions`. FenrirScripting never name
 - **native resources**: plain-data scene and app resources (`MakeSceneResource`, `MakeAppResource` and their read-only
   variants), registered and checked the same way, which C# reads and writes in place through `Resources`;
 - **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
-  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (FenrirPhysics's
-  `fenrir_deploy_physics_scripting`, say).
+  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (`fenrir_deploy_scripting(<target>
+  EXTENSIONS Physics)`, say).
 
 Extensions are the only way to give scripting anything, so the app's own components, resources, events and contract go in
 an extension of its own, just as a package's do:

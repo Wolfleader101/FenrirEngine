@@ -12,12 +12,12 @@
 
 **Touches:** `packages/FenrirScripting/cmake/`, `packages/FenrirScripting/CMakeLists.txt`, `packages/*/Scripting/CMakeLists.txt`, `packages/*/Scripting/Tests/CMakeLists.txt`, `packages/*/Scripting/include/`, `examples/PhysicsDemo/CMakeLists.txt`, `examples/DemoScaffold/Tests/CMakeLists.txt`, `README.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] The configured build has the same targets and tests as before (`ctest -N` before and after lists the same names); every scripting test passes under the msvc-x64-debug preset.
-- [ ] `grep -rn "function(fenrir_deploy_" packages examples` finds only `fenrir_deploy_scripting`; no `Scripting/CMakeLists.txt` names `add_custom_command`, `add_library` or `add_executable`.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` still cover every binding (the targets `fenrir-describe-api-*` and `iris-generate-binding-*` exist for each package) and are no-ops.
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] The configured build has the same targets and tests as before (`ctest -N` before and after lists the same names); every scripting test passes under the msvc-x64-debug preset.
+- [x] `grep -rn "function(fenrir_deploy_" packages examples` finds only `fenrir_deploy_scripting`; no `Scripting/CMakeLists.txt` names `add_custom_command`, `add_library` or `add_executable`.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` still cover every binding (the targets `fenrir-describe-api-*` and `iris-generate-binding-*` exist for each package) and are no-ops.
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 
