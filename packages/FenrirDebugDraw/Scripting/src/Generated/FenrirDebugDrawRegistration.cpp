@@ -6,46 +6,62 @@
 #include "FenrirDebugDrawMappings.hpp"
 #include "FenrirDebugDrawNatives.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace Fenrir::Generated
 {
-    void RegisterDebugDraw(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {};
-        extension.events = {};
-        extension.sharedStructs = {};
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Line>("Fenrir.DebugDraw.DebugDrawNative.Line"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Ray>("Fenrir.DebugDraw.DebugDrawNative.Ray"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arrow>("Fenrir.DebugDraw.DebugDrawNative.Arrow"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Polyline>("Fenrir.DebugDraw.DebugDrawNative.Polyline"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Point>("Fenrir.DebugDraw.DebugDrawNative.Point"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Box>("Fenrir.DebugDraw.DebugDrawNative.Box"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::OrientedBox>("Fenrir.DebugDraw.DebugDrawNative.OrientedBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Sphere>("Fenrir.DebugDraw.DebugDrawNative.Sphere"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Capsule>("Fenrir.DebugDraw.DebugDrawNative.Capsule"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cylinder>("Fenrir.DebugDraw.DebugDrawNative.Cylinder"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cone>("Fenrir.DebugDraw.DebugDrawNative.Cone"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Circle>("Fenrir.DebugDraw.DebugDrawNative.Circle"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arc>("Fenrir.DebugDraw.DebugDrawNative.Arc"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Plane>("Fenrir.DebugDraw.DebugDrawNative.Plane"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Grid>("Fenrir.DebugDraw.DebugDrawNative.Grid"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Axes>("Fenrir.DebugDraw.DebugDrawNative.Axes"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Frustum>("Fenrir.DebugDraw.DebugDrawNative.Frustum"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidBox>("Fenrir.DebugDraw.DebugDrawNative.SolidBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidOrientedBox>("Fenrir.DebugDraw.DebugDrawNative.SolidOrientedBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidSphere>("Fenrir.DebugDraw.DebugDrawNative.SolidSphere"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidCapsule>("Fenrir.DebugDraw.DebugDrawNative.SolidCapsule"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Triangles>("Fenrir.DebugDraw.DebugDrawNative.Triangles"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ScreenText>("Fenrir.DebugDraw.DebugDrawNative.ScreenText"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Message>("Fenrir.DebugDraw.DebugDrawNative.Message"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::KeyedMessage>("Fenrir.DebugDraw.DebugDrawNative.KeyedMessage"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::WorldText>("Fenrir.DebugDraw.DebugDrawNative.WorldText"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ShowGroup>("Fenrir.DebugDraw.DebugDrawNative.ShowGroup"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::HideGroup>("Fenrir.DebugDraw.DebugDrawNative.HideGroup"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::IsGroupShown>("Fenrir.DebugDraw.DebugDrawNative.IsGroupShown"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Clear>("Fenrir.DebugDraw.DebugDrawNative.Clear"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ClearGroup>("Fenrir.DebugDraw.DebugDrawNative.ClearGroup"),
-        };
+        void RegisterDebugDraw(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {};
+            extension.events = {};
+            extension.sharedStructs = {};
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Line>("Fenrir.DebugDraw.DebugDrawNative.Line"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Ray>("Fenrir.DebugDraw.DebugDrawNative.Ray"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arrow>("Fenrir.DebugDraw.DebugDrawNative.Arrow"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Polyline>("Fenrir.DebugDraw.DebugDrawNative.Polyline"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Point>("Fenrir.DebugDraw.DebugDrawNative.Point"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Box>("Fenrir.DebugDraw.DebugDrawNative.Box"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::OrientedBox>("Fenrir.DebugDraw.DebugDrawNative.OrientedBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Sphere>("Fenrir.DebugDraw.DebugDrawNative.Sphere"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Capsule>("Fenrir.DebugDraw.DebugDrawNative.Capsule"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cylinder>("Fenrir.DebugDraw.DebugDrawNative.Cylinder"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cone>("Fenrir.DebugDraw.DebugDrawNative.Cone"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Circle>("Fenrir.DebugDraw.DebugDrawNative.Circle"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arc>("Fenrir.DebugDraw.DebugDrawNative.Arc"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Plane>("Fenrir.DebugDraw.DebugDrawNative.Plane"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Grid>("Fenrir.DebugDraw.DebugDrawNative.Grid"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Axes>("Fenrir.DebugDraw.DebugDrawNative.Axes"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Frustum>("Fenrir.DebugDraw.DebugDrawNative.Frustum"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidBox>("Fenrir.DebugDraw.DebugDrawNative.SolidBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidOrientedBox>("Fenrir.DebugDraw.DebugDrawNative.SolidOrientedBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidSphere>("Fenrir.DebugDraw.DebugDrawNative.SolidSphere"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidCapsule>("Fenrir.DebugDraw.DebugDrawNative.SolidCapsule"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Triangles>("Fenrir.DebugDraw.DebugDrawNative.Triangles"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ScreenText>("Fenrir.DebugDraw.DebugDrawNative.ScreenText"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Message>("Fenrir.DebugDraw.DebugDrawNative.Message"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::KeyedMessage>("Fenrir.DebugDraw.DebugDrawNative.KeyedMessage"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::WorldText>("Fenrir.DebugDraw.DebugDrawNative.WorldText"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ShowGroup>("Fenrir.DebugDraw.DebugDrawNative.ShowGroup"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::HideGroup>("Fenrir.DebugDraw.DebugDrawNative.HideGroup"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::IsGroupShown>("Fenrir.DebugDraw.DebugDrawNative.IsGroupShown"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Clear>("Fenrir.DebugDraw.DebugDrawNative.Clear"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ClearGroup>("Fenrir.DebugDraw.DebugDrawNative.ClearGroup"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeDebugDrawExtension(std::shared_ptr<Fenrir::DebugDrawScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirDebugDraw";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.DebugDraw.dll"};
+        Fenrir::Generated::RegisterDebugDraw(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

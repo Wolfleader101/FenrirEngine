@@ -6,31 +6,47 @@
 #include "../../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
 #include "FenrirRendererNatives.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace Fenrir::Generated
 {
-    void RegisterRenderer(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {
-            Fenrir::MakeComponent<Fenrir::Camera>("Fenrir.Renderer.Camera"),
-            Fenrir::MakeComponent<Fenrir::DirectionalLight>("Fenrir.Renderer.DirectionalLight"),
-            Fenrir::MakeComponent<Fenrir::MeshRenderer>("Fenrir.Renderer.MeshRenderer"),
-        };
-        extension.events = {};
-        extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::RendererStats>("Fenrir.Renderer.RendererStats"),
-        };
-        extension.resources = {
-            Fenrir::MakeSceneResource<Fenrir::AmbientLight>("Fenrir.Renderer.AmbientLight"),
-            Fenrir::MakeSceneResource<Fenrir::Sky>("Fenrir.Renderer.Sky"),
-        };
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::ScreenPointToRay, 4>::Call>("Fenrir.Renderer.RendererNative.ScreenPointToRay"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::WorldToScreenPoint, 4>::Call>("Fenrir.Renderer.RendererNative.WorldToScreenPoint"),
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::CameraAt>("Fenrir.Renderer.RendererNative.CameraAt", Fenrir::EntityValue(Fenrir::Entity::Null)),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetWorldBounds, 3>::Call>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
-            Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SpawnModel>("Fenrir.Renderer.RendererNative.SpawnModel", Fenrir::EntityValue(Fenrir::Entity::Null)),
-        };
+        void RegisterRenderer(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {
+                Fenrir::MakeComponent<Fenrir::Camera>("Fenrir.Renderer.Camera"),
+                Fenrir::MakeComponent<Fenrir::DirectionalLight>("Fenrir.Renderer.DirectionalLight"),
+                Fenrir::MakeComponent<Fenrir::MeshRenderer>("Fenrir.Renderer.MeshRenderer"),
+            };
+            extension.events = {};
+            extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::RendererStats>("Fenrir.Renderer.RendererStats"),
+            };
+            extension.resources = {
+                Fenrir::MakeSceneResource<Fenrir::AmbientLight>("Fenrir.Renderer.AmbientLight"),
+                Fenrir::MakeSceneResource<Fenrir::Sky>("Fenrir.Renderer.Sky"),
+            };
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::ScreenPointToRay, 4>::Call>("Fenrir.Renderer.RendererNative.ScreenPointToRay"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::WorldToScreenPoint, 4>::Call>("Fenrir.Renderer.RendererNative.WorldToScreenPoint"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::CameraAt>("Fenrir.Renderer.RendererNative.CameraAt", Fenrir::EntityValue(Fenrir::Entity::Null)),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetWorldBounds, 3>::Call>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
+                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SpawnModel>("Fenrir.Renderer.RendererNative.SpawnModel", Fenrir::EntityValue(Fenrir::Entity::Null)),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeRendererExtension(std::shared_ptr<Fenrir::RendererScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirRenderer";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.Renderer.dll"};
+        Fenrir::Generated::RegisterRenderer(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

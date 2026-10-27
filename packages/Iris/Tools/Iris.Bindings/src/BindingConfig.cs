@@ -46,14 +46,17 @@ internal sealed record CSharpConfig(
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
 
 /// <summary>
-/// The registration lists: the source, its function, and the factory each kind of registration is made by (each only
-/// when the generated lists hold a type of that kind), the types registered read-only, and those the extension
-/// registers by hand. What the source includes comes through the natives header (<c>[natives] includes</c>).
+/// The registration lists: the source, its function, the extension's type, the maker (<c>maker</c>, optional: the
+/// function that makes the extension from its state, which takes the register function's place in the natives header
+/// and makes the register function file-local), and the factory each kind of registration is made by (each only when the
+/// generated lists hold a type of that kind), the types registered read-only, and those the extension registers by hand.
+/// What the source includes comes through the natives header (<c>[natives] includes</c>).
 /// </summary>
 internal sealed record RegistrationConfig(
     string Source,
     string Function,
     string Extension,
+    string? Maker,
     string? MakeComponent,
     string? MakeReadOnlyComponent,
     string? MakeEvent,
@@ -178,13 +181,14 @@ internal sealed record BindingConfig(
                     "the includes served) includes");
             }
 
-            reader.Keys(section, "registration", "source", "function", "extension", "make-component",
+            reader.Keys(section, "registration", "source", "function", "extension", "maker", "make-component",
                         "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
                         "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "read-only",
                         "by-hand");
             registration = new RegistrationConfig(
                 reader.PathOf(section, "source"), reader.String(section, "function"),
-                reader.String(section, "extension"), reader.OptionalString(section, "make-component"),
+                reader.String(section, "extension"), reader.OptionalString(section, "maker"),
+                reader.OptionalString(section, "make-component"),
                 reader.OptionalString(section, "make-read-only-component"), reader.OptionalString(section, "make-event"),
                 reader.OptionalString(section, "make-shared-struct"), reader.OptionalString(section, "make-scene-resource"),
                 reader.OptionalString(section, "make-read-only-scene-resource"),
@@ -231,6 +235,11 @@ internal sealed record BindingConfig(
             {
                 throw new BindingException($"{path}: [natives] needs [registration], whose source registers them");
             }
+        }
+        else if (registration?.Maker != null)
+        {
+            throw new BindingException(
+                $"{path}: [registration] maker needs [natives]: the maker takes the natives' extension state, which their description records");
         }
 
         var boundTypes = table.ContainsKey("bound-types")

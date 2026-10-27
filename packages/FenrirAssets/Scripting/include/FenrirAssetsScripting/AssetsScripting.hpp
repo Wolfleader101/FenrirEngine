@@ -8,8 +8,9 @@
 //     auto scripting = Fenrir::Scripting::Install(app, {.scriptAssembly = ..., .extensions =
 //     {Fenrir::Assets::ScriptingExtension()}});
 //
-// The extension shares the Fenrir.Assets contract assembly, which fenrir_deploy_assets_scripting(<target>) copies next
-// to an executable (beside the scripting contract, where Install looks for it). Another package's binding whose
+// The extension shares the Fenrir.Assets contract assembly, which fenrir_deploy_scripting(<target> EXTENSIONS Assets)
+// copies next to an executable (beside the scripting contract, where Install looks for it). Another package's binding
+// whose
 // components or resources hold asset handles (FenrirRenderer's) uses this one's (api/FenrirAssets.binding.toml), whose
 // generated mappings are "FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp".
 //

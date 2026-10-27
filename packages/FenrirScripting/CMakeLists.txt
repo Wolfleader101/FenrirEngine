@@ -46,6 +46,8 @@ add_custom_target(FenrirScriptingContract ALL DEPENDS
     "${FENRIR_SCRIPTING_CONTRACT_DIR}/analyzers/Fenrir.Scripting.Generators.dll"
     "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.props")
 include(cmake/FenrirScriptingDeploy.cmake)
+# The functions each package's extension directory calls; the root adds those after this one.
+include(cmake/FenrirScriptingExtension.cmake)
 
 add_library(FenrirScripting STATIC
     src/Scripting.cpp

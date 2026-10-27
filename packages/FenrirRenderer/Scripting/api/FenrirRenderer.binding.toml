@@ -25,6 +25,8 @@ includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp"]
 [registration]
 source = "../src/Generated/FenrirRendererRegistration.cpp"
 function = "Fenrir::Generated::RegisterRenderer"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeRendererExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirRendererDefaultsTests.cpp"

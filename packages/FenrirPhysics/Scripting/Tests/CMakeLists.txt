@@ -1,65 +1,13 @@
-# Physics from C#, through the scripting fixture harness (FenrirScripting's HeadlessApp and ScriptingProbe): an App with
-# no window, physics installed, and scripting running a fixture script assembly that uses the Fenrir.Physics contract.
-include("${CMAKE_CURRENT_LIST_DIR}/../../../../cmake/FenrirCatch2.cmake")
-fenrir_add_catch2()
-
-set(fenrir_scripting_tests_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../../FenrirScripting/Tests")
-
-# The natives' rules (no world, no body, no Joint, each warning once under the native's name), called from C++ through
-# FenrirScripting's NativeCallHarness with no .NET and no fixture assembly. The harness includes FenrirScripting's
-# private src/ChangeBuffer.hpp, so this executable is given that package's src directory, as FenrirScriptingRulesTests
-# is, and this library's src for the state and the query types.
-add_executable(FenrirPhysicsScriptingRulesTests
-    Rules.cpp
-    "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
-    "${fenrir_scripting_tests_dir}/NativeCallHarness.hpp"
-)
-target_include_directories(FenrirPhysicsScriptingRulesTests PRIVATE "${fenrir_scripting_tests_dir}"
-    "${fenrir_scripting_tests_dir}/../src" ../src)
-target_link_libraries(FenrirPhysicsScriptingRulesTests PRIVATE FenrirPhysicsScripting Catch2::Catch2WithMain)
-add_test(NAME FenrirPhysicsScriptingRules COMMAND FenrirPhysicsScriptingRulesTests --order decl)
-set_tests_properties(FenrirPhysicsScriptingRules PROPERTIES TIMEOUT 60)
-add_executable(FenrirPhysicsScriptingTests
-    PhysicsScriptingApp.hpp
-    PhysicsScriptingTests.cpp
-    Generated/FenrirPhysicsDefaultsTests.cpp
-    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
-    "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
-    "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
-)
-# The library's own src too, for the generated mappings the defaults test walks and the bound types' mappings the
-# drifted stand-ins use.
-target_include_directories(FenrirPhysicsScriptingTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${fenrir_scripting_tests_dir}" ../src)
-target_link_libraries(FenrirPhysicsScriptingTests PRIVATE FenrirPhysicsScripting Catch2::Catch2WithMain)
-fenrir_deploy_scripting(FenrirPhysicsScriptingTests)
-fenrir_deploy_physics_scripting(FenrirPhysicsScriptingTests)
-
-# The fixture script assembly: compiled against the scripting SDK and the Fenrir.Physics contract, neither copied (the
-# host shares its own copies), and rebuilt when either is.
-set(fenrir_physics_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/fixture")
-# It also compiles the generated defaults test's C# class (Generated/), whose new() values the test reads.
-file(GLOB fenrir_physics_fixture_sources CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/*.cs"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Generated/*.cs")
-add_custom_command(
-    OUTPUT "${fenrir_physics_fixture_dir}/Fenrir.PhysicsScriptFixture.dll"
-    COMMAND "${IRIS_DOTNET_EXECUTABLE}" build "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.PhysicsScriptFixture.csproj"
-        --configuration Release --output "${fenrir_physics_fixture_dir}" -nologo -v:q
-        "-p:FenrirScriptingSdk=${FENRIR_SCRIPTING_CONTRACT_DIR}/" "-p:FenrirPhysicsContractDir=${FENRIR_PHYSICS_CONTRACT_DIR}/"
-        "-p:BaseIntermediateOutputPath=${CMAKE_CURRENT_BINARY_DIR}/fixture-obj/"
-    DEPENDS ${fenrir_physics_fixture_sources} "${CMAKE_CURRENT_SOURCE_DIR}/Fixture/Fenrir.PhysicsScriptFixture.csproj"
-        FenrirPhysicsContract "${FENRIR_PHYSICS_CONTRACT_DIR}/Fenrir.Physics.dll"
-        "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.dll" "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Math.dll"
-    COMMENT "Building the physics scripting test fixture assembly"
-    VERBATIM
-)
-add_custom_target(FenrirPhysicsScriptFixture DEPENDS "${fenrir_physics_fixture_dir}/Fenrir.PhysicsScriptFixture.dll")
-add_dependencies(FenrirPhysicsScriptFixture FenrirPhysicsContract)
-add_dependencies(FenrirPhysicsScriptingTests FenrirPhysicsScriptFixture)
-
-# Some cases install scripting once and rely on running in the order they are declared.
-add_test(NAME FenrirPhysicsScripting COMMAND FenrirPhysicsScriptingTests --order decl)
-set_tests_properties(FenrirPhysicsScripting PROPERTIES TIMEOUT 300 ENVIRONMENT
-    "FENRIR_TEST_PHYSICS_FIXTURE=${fenrir_physics_fixture_dir}/Fenrir.PhysicsScriptFixture.dll")
+# Physics from C#, through the scripting fixture harness: an App with no window, physics installed, and scripting
+# running a fixture script assembly that uses the Fenrir.Physics contract. The rules tests (Rules.cpp) are the natives'
+# rules: no world, no body, no Joint, each warning once under the native's name. Some cases in each install scripting
+# once and rely on running in the order they are declared.
+fenrir_scripting_rules_tests(Physics SOURCES Rules.cpp TEST_ARGS --order decl)
+fenrir_scripting_tests(Physics SOURCES PhysicsScriptingApp.hpp PhysicsScriptingTests.cpp TEST_ARGS --order decl)
+fenrir_script_fixture(Physics)
+# The library's own src too, for the generated mappings the defaults test walks (private here, since no other binding
+# uses this one) and the bound types' mappings the drifted stand-ins use.
+target_include_directories(FenrirPhysicsScriptingTests PRIVATE ../src)
 
 # What the compiler must refuse in a script using the Fenrir.Physics contract: each case is one small C# file built
 # against the SDK and the contract, checked by FenrirScripting's ExpectCompile. The control must compile, so a failure

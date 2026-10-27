@@ -14,11 +14,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/Tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/*/Scripting/api/*.binding.toml`, `packages/*/Scripting/src/`, `packages/FenrirPhysics/Scripting/include/`, `packages/FenrirPhysics/Scripting/Tests/`, `examples/PhysicsDemo/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `BindingTests.cs`: a case with `extension` set finds the maker's definition setting the name, state and assembly and finds its declaration in the natives header; a case without it finds today's register function; a case fails a configuration with `extension` and no `[natives]`.
-- [ ] `grep -rn "sharedAssemblies\|extension.name" packages/*/Scripting/src/*.cpp` finds nothing hand-written; `grep -rn PhysicsScriptingExtension` finds nothing.
-- [ ] Every scripting test passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op after the commit; `check_tickets.py` and clang-format pass.
+- [x] `BindingTests.cs`: a case with `extension` set finds the maker's definition setting the name, state and assembly and finds its declaration in the natives header; a case without it finds today's register function; a case fails a configuration with `extension` and no `[natives]`.
+- [x] `grep -rn "sharedAssemblies\|extension.name" packages/*/Scripting/src/*.cpp` finds nothing hand-written; `grep -rn PhysicsScriptingExtension` finds nothing.
+- [x] Every scripting test passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op after the commit; `check_tickets.py` and clang-format pass.
 
 ## Comments
 

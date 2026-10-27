@@ -134,6 +134,85 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AMakerMakesTheExtensionFromItsStateAndTakesTheRegisterFunctionsPlaceInTheHeader()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nmaker = \"Fixture::Bindings::MakeExtension\"\n", StringComparison.Ordinal));
+
+        var generated = Generator.Generate(config, [FixtureDescription]);
+
+        var header = Output(generated, "FixtureNatives.hpp");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        Assert.True(header.Contains("#include <memory>", StringComparison.Ordinal) &&
+                    header.Contains("namespace Fixture::Bindings\n{\n    Host::Extension MakeExtension(std::shared_ptr<Host::State> state);\n} // namespace Fixture::Bindings", StringComparison.Ordinal) &&
+                    !header.Contains("void Register(", StringComparison.Ordinal),
+                    $"The natives header should declare the maker in the register function's place, but is:\n{header}");
+        string[] defined =
+        [
+            "    namespace\n    {\n        void Register(Host::Extension& extension)\n        {",
+            "    Host::Extension MakeExtension(std::shared_ptr<Host::State> state)\n    {\n" +
+            "        Host::Extension extension;\n" +
+            "        extension.name = \"Fixture\";\n" +
+            "        extension.SetState(std::move(state));\n" +
+            "        extension.sharedAssemblies = {\"Fixture.Bindings.dll\"};\n" +
+            "        Fixture::Bindings::Register(extension);\n" +
+            "        return extension;\n    }",
+        ];
+        foreach (var lines in defined)
+        {
+            Assert.True(registration.Contains(lines, StringComparison.Ordinal), $"The registration should hold\n{lines}\nbut is:\n{registration}");
+        }
+    }
+
+    [Fact]
+    public void WithoutAMakerTheHeaderDeclaresTheRegisterFunctionAndTheRegistrationDefinesItAlone()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var header = Output(generated, "FixtureNatives.hpp");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        Assert.True(header.Contains("    void Register(Host::Extension& extension);\n", StringComparison.Ordinal) &&
+                    registration.Contains("namespace Fixture::Bindings\n{\n    void Register(Host::Extension& extension)\n    {", StringComparison.Ordinal) &&
+                    !registration.Contains("sharedAssemblies", StringComparison.Ordinal) &&
+                    !registration.Contains("namespace\n", StringComparison.Ordinal),
+                    $"Without a maker the register function is declared and defined as before, but the header is:\n{header}\nand the registration:\n{registration}");
+    }
+
+    [Theory]
+    [InlineData("NoNatives", "[registration] maker needs [natives]")]
+    [InlineData("NoState", "[registration] maker: no native in Fixture.natives.json takes an extension state")]
+    [InlineData("TwoStates", "[registration] maker: the natives in Fixture.natives.json take two extension states, Host::State and Host::Other")]
+    public void AMakerTheBindingCannotMakeFailsSayingWhy(string problem, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text =>
+        {
+            text = text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nmaker = \"Fixture::Bindings::MakeExtension\"\n", StringComparison.Ordinal);
+            return problem == "NoNatives" ? WithoutNatives(text) : text;
+        });
+        var description = WriteDescription(directory, _ => { });
+        WriteNatives(directory, root =>
+        {
+            foreach (var function in root["functions"]!.AsArray())
+            {
+                if (problem == "NoState")
+                {
+                    function!.AsObject().Remove("state");
+                }
+                else if (problem == "TwoStates" && function!["name"]!.GetValue<string>() == "Find")
+                {
+                    function["state"] = "Host::Other";
+                }
+            }
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void AConfigurationKeepingRegistrationIncludesFailsSayingWhereTheyMoved()
     {
         using var directory = new TemporaryDirectory();

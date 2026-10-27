@@ -25,6 +25,8 @@ includes = ["FenrirDebugDraw/DebugDraw.hpp", "ScriptOptions.hpp"]
 [registration]
 source = "../src/Generated/FenrirDebugDrawRegistration.cpp"
 function = "Fenrir::Generated::RegisterDebugDraw"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeDebugDrawExtension"
 # Not registered at all: Iris checks a shared struct against a public C# struct only, and these are internal. Their
 # layout is the description's on both sides (the C# mirror is generated from it, and the mappings assert C++'s size), and
 # the extension's tests set every field from C# and read it back through what the call draws.

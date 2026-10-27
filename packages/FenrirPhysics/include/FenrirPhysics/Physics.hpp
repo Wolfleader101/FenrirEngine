@@ -13,6 +13,8 @@
 namespace Fenrir
 {
     class App;
+    // Only named here: FenrirPhysicsScripting defines Physics::ScriptingExtension().
+    struct ScriptingExtension;
 
     namespace Detail
     {
@@ -56,7 +58,7 @@ namespace Fenrir
      *
      * It also holds the collision meshes, which every world shares and reaches (PhysicsWorld::CreateCollisionMesh), so
      * code that holds a world needs nothing of the owner. Physics's scripting extension is such code: it is made by
-     * PhysicsScriptingExtension() in the FenrirPhysicsScripting library and acts on the active scene's world.
+     * Physics::ScriptingExtension() in the FenrirPhysicsScripting library and acts on the active scene's world.
      */
     class Physics
     {
@@ -103,6 +105,22 @@ namespace Fenrir
 
         /** @brief The collision layers named in the PhysicsConfig given to Install. */
         [[nodiscard]] const CollisionLayers& Layers() const;
+
+        /**
+         * @brief What physics gives C#: the physics components and events, the native functions of
+         * `Fenrir.Physics.PhysicsWorld` and the `Fenrir.Physics` contract. Add it to ScriptingConfig::extensions.
+         *
+         * It needs no owner: its native functions act on the active scene's physics world, collision meshes included
+         * (they are the owner's, reached through the world). With no world, no body or a released mesh they do
+         * nothing and return false or zero, and an output they write reads as its default; in debug builds each
+         * such case is warned about once per extension made here, for each native and reason, under the native's
+         * name.
+         *
+         * Defined by the FenrirPhysicsScripting library, not FenrirPhysics (which never links FenrirScripting), so
+         * it exists only in a build with physics and scripting on. Include
+         * "FenrirPhysicsScripting/PhysicsScripting.hpp" and link FenrirPhysicsScripting to call it.
+         */
+        [[nodiscard]] static Fenrir::ScriptingExtension ScriptingExtension();
 
       private:
         explicit Physics(std::shared_ptr<Detail::PhysicsState> state);

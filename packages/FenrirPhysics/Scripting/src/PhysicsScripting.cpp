@@ -571,13 +571,8 @@ namespace Fenrir
         }
     } // namespace PhysicsNatives
 
-    ScriptingExtension PhysicsScriptingExtension()
+    Fenrir::ScriptingExtension Physics::ScriptingExtension()
     {
-        ScriptingExtension extension;
-        extension.name = "FenrirPhysics";
-        extension.SetState(std::make_shared<PhysicsScripting>());
-        extension.sharedAssemblies = {"Fenrir.Physics.dll"};
-        Generated::RegisterPhysics(extension);
-        return extension;
+        return Generated::MakePhysicsExtension(std::make_shared<PhysicsScripting>());
     }
 } // namespace Fenrir

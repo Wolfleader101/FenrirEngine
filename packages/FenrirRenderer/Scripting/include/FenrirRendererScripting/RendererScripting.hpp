@@ -9,8 +9,9 @@
 //     {Fenrir::Input::ScriptingExtension(), Fenrir::Assets::ScriptingExtension(),
 //      Fenrir::Renderer::ScriptingExtension()}});
 //
-// The extension shares the Fenrir.Renderer contract assembly, which fenrir_deploy_renderer_scripting(<target>) copies
-// next to an executable (beside the scripting contract, where Install looks for it). It needs no Renderer installed:
+// The extension shares the Fenrir.Renderer contract assembly, which fenrir_deploy_scripting(<target> EXTENSIONS
+// Renderer) copies next to an executable (beside the scripting contract, where Install looks for it). It needs no
+// Renderer installed:
 // its components and resources are plain data, SpawnModel needs only the asset store, and picking, bounds and stats do
 // nothing without a renderer.
 //
