@@ -4,6 +4,7 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "../../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
+#include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "AssetsScriptingState.hpp"

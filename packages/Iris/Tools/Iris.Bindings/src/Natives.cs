@@ -14,7 +14,8 @@ internal sealed record NativeParameter(string Name, NativeType Type, bool Output
 
 /// <summary>
 /// One described native function (<c>docs/natives-description.md</c>). <c>NotRunning</c> is the C++ expression of what a
-/// caller gets when it cannot be called.
+/// caller gets when it cannot be called; <c>Facade</c> is its <c>@facade</c> mark, <c>Class.Method</c>, the public
+/// static class and method name the binding gives it.
 /// </summary>
 internal sealed record NativeFunction(
     string Name,
@@ -26,7 +27,8 @@ internal sealed record NativeFunction(
     NativeType Returns,
     string? ReturnsDoc,
     IReadOnlyList<NativeParameter> Parameters,
-    string? NotRunning)
+    string? NotRunning,
+    string? Facade)
 {
     /// <summary>The C++ function's qualified name.</summary>
     public string QualifiedName => Namespace.Length == 0 ? Name : $"{Namespace}::{Name}";
@@ -65,7 +67,7 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
                     return new NativeParameter(parameterName, ReadType(parameter, $"{where}::{parameterName}"),
                                                Flag(parameter, "output"), Flag(parameter, "inOut"),
                                                Flag(parameter, "input"), Description.OptionalString(parameter, "doc"));
-                }).ToList(), Description.OptionalString(function, "notRunning"));
+                }).ToList(), Description.OptionalString(function, "notRunning"), Description.OptionalString(function, "facade"));
         }).ToList();
         return new NativesDescription(path, Description.String(root, "context", path), functions);
     }
@@ -84,7 +86,16 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
 /// <param name="Output">For an output, the C# type of the value it points at; null otherwise.</param>
 internal sealed record WireParameter(string Type, string? Output);
 
-/// <summary>A native function resolved against a binding: its C# declaration, what crosses, and what is zeroed.</summary>
+/// <summary>The public static class and method name a native's <c>@facade</c> mark gives it.</summary>
+internal sealed record FacadeName(string Class, string Method)
+{
+    public override string ToString() => $"{Class}.{Method}";
+}
+
+/// <summary>
+/// A native function resolved against a binding: its C# declaration, what crosses, what is zeroed, and the public
+/// method its <c>@facade</c> names.
+/// </summary>
 /// <param name="Result">The C# result type of the declaration.</param>
 /// <param name="Parameters">The C# parameters of the declaration, each <c>[modifier] Type name</c>.</param>
 /// <param name="WireResult">The C# type of the bound function pointer's result.</param>
@@ -95,12 +106,40 @@ internal sealed record WireParameter(string Type, string? Output);
 /// outputs (<c>out T</c>) the registration zeroes before the native runs. An output span and an <c>inOut</c> pointer are
 /// not among them.
 /// </param>
+/// <param name="Folded">
+/// The C++ parameters the declaration folds into another: a span's count and a text's length, which are the span's
+/// <c>Length</c>, so they get no parameter and no doc of their own.
+/// </param>
+/// <param name="Facade">The public class and method its <c>@facade</c> names; null for a native with no mark.</param>
+/// <param name="FacadeParameters">
+/// The parameters of its facade method: the declaration's with <c>in</c> dropped (<c>in Vector3 force</c> becomes
+/// <c>Vector3 force</c>, passed as <c>in force</c>), everything else as declared. Empty with no mark.
+/// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
                                    string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named,
-                                   IReadOnlyList<int> Outputs)
+                                   IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded, FacadeName? Facade,
+                                   IReadOnlyList<string> FacadeParameters)
 {
-    /// <summary>Whether its declaration takes text, a <c>ReadOnlySpan&lt;char&gt;</c>.</summary>
-    public bool TakesText => Parameters.Any(parameter => parameter.StartsWith(TextType + " ", StringComparison.Ordinal));
+    /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
+    public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
+                                                           parameter.StartsWith("ReadOnlySpan<", StringComparison.Ordinal));
+
+    /// <summary>
+    /// The arguments the facade method passes to the declaration, one per parameter: <c>in</c> or <c>out</c> and the
+    /// name where the declaration has the modifier, the name alone otherwise.
+    /// </summary>
+    public IEnumerable<string> FacadeArguments =>
+        Parameters.Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal) ||
+                                       parameter.StartsWith("out ", StringComparison.Ordinal)
+                                           ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
+                                           : ParameterName(parameter));
+
+    /// <summary>The types of the facade method's parameters, which tell two methods of one name apart.</summary>
+    public IEnumerable<string> FacadeParameterTypes =>
+        FacadeParameters.Select(parameter => parameter[..parameter.LastIndexOf(' ')]);
+
+    // The name of a `[modifier] Type name` parameter: a type has no spaces.
+    private static string ParameterName(string parameter) => parameter[(parameter.LastIndexOf(' ') + 1)..];
 
     /// <summary>The C# type of a <c>std::string_view</c> parameter.</summary>
     public const string TextType = "ReadOnlySpan<char>";
@@ -110,7 +149,8 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// Maps natives to C#: the leading context and state are dropped, and each C++ parameter becomes what the hand-written
 /// declarations used to say. A <c>std::string_view</c> is a <c>ReadOnlySpan&lt;char&gt;</c>, and a <c>const char*</c>
 /// with a <c>std::int32_t</c> length after it a <c>string</c>, both crossing as bytes and a length; any other pointer
-/// with a <c>std::int32_t</c> count after it is a <c>T*</c> span, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
+/// with a <c>std::int32_t</c> count after it is a span, <c>ReadOnlySpan&lt;T&gt;</c> for a const pointee and
+/// <c>Span&lt;T&gt;</c> otherwise, with the count folded into it, unless its doc marks it <c>[in]</c>; a <c>T*</c> its
 /// doc marks an output is <c>out T</c>, and one it marks <c>[in,out]</c> is <c>T*</c>; a pointer to <c>void</c> is
 /// <c>void*</c>, an address C# passes as it is; a <c>const T*</c> is <c>in T</c>. Each <c>out T</c> is also an output the
 /// registration zeroes before the native runs (<see cref="BoundNative.Outputs" />). Numbers and bool are themselves, an
@@ -118,6 +158,12 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// type it names, an enum is its C# enum, and a wrapper (a described struct of one field, or a bound type whose entry
 /// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A result is any of those values, nothing, or a
 /// <c>void*</c>. Anything else fails naming the function and parameter.
+/// <para/>
+/// A native's <c>@facade Class.Method</c> names the public method the facade writer generates over its declaration,
+/// which takes <c>T</c> where the declaration takes <c>in T</c>. The mark is refused, naming the native and the mark,
+/// on a native whose declaration cannot be public (it takes a type in <c>internal-structs</c>, or a pointer); when two
+/// marks give one class and method the same parameter types; and when the class is named as a mirror this binding or
+/// one it uses generates, as a bound type's C# type, or as the <c>[natives] class</c>.
 /// </summary>
 internal static class Natives
 {
@@ -144,12 +190,50 @@ internal static class Natives
             errors.Add($"{binding.Config.Path}: [natives] types names {name}, which no native takes");
         }
 
+        errors.AddRange(FacadeErrors(binding, config, natives, bound));
         if (errors.Count > 0)
         {
             throw new BindingException(string.Join('\n', errors));
         }
 
         return bound;
+    }
+
+    // What the marks say together, once each native is bound: two marks giving one class and method the same
+    // parameter types, and a facade class named as a type C# already knows under that name.
+    private static IEnumerable<string> FacadeErrors(Binding binding, NativesConfig config, NativesDescription natives,
+                                                    IReadOnlyList<BoundNative> bound)
+    {
+        var marked = bound.Where(native => native.Facade is not null).ToList();
+        foreach (var group in marked.GroupBy(native => $"{native.Facade}({string.Join(", ", native.FacadeParameterTypes)})")
+                                    .Where(group => group.Count() > 1))
+        {
+            yield return $"{natives.Path}: {string.Join(" and ", group.Select(native => native.Function.Name))}: both are " +
+                         $"@facade {group.Key}";
+        }
+
+        foreach (var native in marked)
+        {
+            var facade = native.Facade!;
+            var taken = facade.Class == config.Class ? "the [natives] class" : NamedType(binding, facade.Class);
+            if (taken is not null)
+            {
+                yield return $"{natives.Path}: {native.Function.Name}: @facade {facade.Class} is the name of {taken}";
+            }
+        }
+    }
+
+    // What a described type of that C# name is, in this binding or one it uses (transitively): a mirror, a bound type.
+    private static string? NamedType(Binding binding, string name)
+    {
+        foreach (var type in binding.Types.Where(type => binding.CSharpName(type) == name))
+        {
+            return type.Category == Category.BoundType
+                       ? $"the C# type of the bound type {type.Name}"
+                       : binding.IsUsed(type) ? $"the mirror of {type.Name} in the binding it uses" : $"the mirror of {type.Name}";
+        }
+
+        return binding.Uses.Select(used => NamedType(used, name)).FirstOrDefault(taken => taken is not null);
     }
 
     private static BoundNative Bind(Binding binding, NativesConfig config, NativeFunction function, string where)
@@ -180,6 +264,7 @@ internal static class Natives
         var parameters = new List<string>();
         var wire = new List<WireParameter>();
         var outputs = new List<int>();
+        var folded = new List<string>();
         // The described parameters follow the call context and, when the native takes one, its state.
         var leading = function.State == null ? 1 : 2;
         var all = function.Parameters;
@@ -202,7 +287,7 @@ internal static class Natives
                     parameters.Add($"string {name}");
                     wire.Add(new WireParameter("void*", null));
                     wire.Add(new WireParameter("int", null));
-                    index++;
+                    folded.Add(all[++index].Name);
                     continue;
                 }
 
@@ -218,7 +303,23 @@ internal static class Natives
                     wire.Add(new WireParameter($"{pointee}*", pointee));
                     outputs.Add(leading + index);
                 }
-                else if ((countFollows && !parameter.Input) || parameter.InOut || type.PointeeKind == "void")
+                else if (countFollows && !parameter.Input && !parameter.InOut && type.PointeeKind != "void")
+                {
+                    // A span: the SDK's generator pins it and passes its first element and its length, so the count is
+                    // the span's. A const char16_t* would read as ReadOnlySpan<char>, which is text (UTF-8 on the wire).
+                    if (type.Const && type.Pointee == "char16_t")
+                    {
+                        throw Unmappable(subject, type,
+                                         "a const char16_t* with a count would be declared ReadOnlySpan<char>, which is text: " +
+                                         "take a std::string_view, or a non-const buffer to fill");
+                    }
+
+                    parameters.Add($"{(type.Const ? "ReadOnlySpan" : "Span")}<{pointee}> {name}");
+                    wire.Add(new WireParameter("void*", null));
+                    wire.Add(new WireParameter("int", null));
+                    folded.Add(all[++index].Name);
+                }
+                else if (parameter.InOut || type.PointeeKind == "void")
                 {
                     parameters.Add($"{pointee}* {name}");
                     wire.Add(new WireParameter("void*", null));
@@ -262,7 +363,52 @@ internal static class Natives
             }
         }
 
-        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs);
+        var facade = Facade(binding, function, parameters, result, named, where);
+        var facadeParameters = facade is null
+                                   ? []
+                                   : parameters.Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
+                                                                        ? parameter["in ".Length..]
+                                                                        : parameter).ToList();
+        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs, folded,
+                               facade, facadeParameters);
+    }
+
+    // The native's @facade as a class and method, or null without one. The mark is refused when the declaration cannot
+    // be public: an internal mirror among the types it names, or a pointer among its parameters or as its result.
+    private static FacadeName? Facade(Binding binding, NativeFunction function, IReadOnlyList<string> parameters,
+                                      string result, IEnumerable<string> named, string where)
+    {
+        if (function.Facade is null)
+        {
+            return null;
+        }
+
+        var parts = function.Facade.Split('.');
+        if (parts.Length != 2 || parts.Any(part => part.Length == 0))
+        {
+            throw new BindingException($"{where}: @facade '{function.Facade}' names a public method as Class.Method");
+        }
+
+        var facade = new FacadeName(parts[0], parts[1]);
+        foreach (var name in named)
+        {
+            if (binding.Find(name) is { } type && binding.IsInternal(type))
+            {
+                throw new BindingException($"{where}: @facade {facade} cannot be public: it takes {binding.CSharpName(type)}");
+            }
+        }
+
+        foreach (var parameter in parameters.Where(parameter => parameter[..parameter.LastIndexOf(' ')].EndsWith('*')))
+        {
+            throw new BindingException($"{where}: @facade {facade} cannot be public: it takes {parameter}");
+        }
+
+        if (result.EndsWith('*'))
+        {
+            throw new BindingException($"{where}: @facade {facade} cannot be public: it returns {result}");
+        }
+
+        return facade;
     }
 
     // The C# type of the function pointer's parameter or result for a value of this kind: a bool crosses as a byte.
@@ -286,7 +432,7 @@ internal static class Natives
             case Category.Struct when described.Fields is [{ Kind: { Kind: not ("struct" or "array" or "pointer") } field }]:
                 return (binding.CSharpName(described),
                         field.Kind == "enum" ? binding.Type(field.Type!).Underlying! : field.Kind);
-            case Category.BoundType when binding.Config.BoundTypes[described.Name].Wrapper is { } wrapper:
+            case Category.BoundType when binding.BoundTypeOf(described).Wrapper is { } wrapper:
                 return (binding.CSharpName(described), wrapper);
             default:
                 throw Unmappable(subject, type,

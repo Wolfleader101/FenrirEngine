@@ -8,6 +8,7 @@
       "source": "Natives.cpp",
       "state": "Host::State",
       "doc": "Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.",
+      "facade": "Bodies.Push",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -34,6 +35,7 @@
       "source": "Natives.cpp",
       "state": "Host::State",
       "doc": "The nearest hit from `origin`.\n\nA second paragraph of the function's doc.",
+      "facade": "Hits.Find",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -109,7 +111,8 @@
       "name": "FindAll",
       "namespace": "Fixture::Natives",
       "source": "Natives.cpp",
-      "doc": "Writes up to `capacity` hits: a stateless native, and a pointer followed by its count.",
+      "doc": "Writes up to `capacity` hits: a stateless native, and a pointer followed by its count. Named as Hits.Find too: a second public method of that name, told apart by its parameters.",
+      "facade": "Hits.Find",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32",

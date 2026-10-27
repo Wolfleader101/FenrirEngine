@@ -4,8 +4,8 @@
 // C#'s new T() equals C++'s T{} for every type the binding registers, field by field.
 
 #include "../../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
-#include "AssetsScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
+#include "AssetsScriptingApp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

@@ -4,7 +4,8 @@ namespace Iris.Bindings;
 /// <c>iris-bindings &lt;Name&gt;.binding.toml [&lt;Package&gt;.api.json...]</c> (the descriptions the configuration's
 /// <c>descriptions</c> names when none are given): writes a binding's C# mirrors, Iris
 /// mappings, registration lists and defaults test, each only when its content changes; with <c>[natives]</c>, also the
-/// native functions' declarations, registration and test, from the <c>&lt;Name&gt;.natives.json</c> beside the configuration.
+/// native functions' declarations, their facade parts and their registration, from the <c>&lt;Name&gt;.natives.json</c>
+/// beside the configuration.
 /// </summary>
 internal static class Program
 {

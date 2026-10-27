@@ -143,6 +143,22 @@ public sealed class DescribeTests
                     FirstDifference(committed, described));
     }
 
+    [Fact]
+    public void TheCallContextComesFromTheDefaultsFileWhenTheBindingStatesNone()
+    {
+        using var directory = new TemporaryDirectory();
+        var source = Path.Combine(FixtureDirectory(), "Natives.cpp").Replace('\\', '/');
+        File.WriteAllText(Path.Combine(directory.Path, "Host.binding-defaults.toml"), "[natives]\ncontext = \"Host::CallContext\"\n");
+        var config = Path.Combine(directory.Path, "Fixture.binding.toml");
+        File.WriteAllText(config, $"defaults = \"Host.binding-defaults.toml\"\n[natives]\nsources = [\"{source}\"]\n");
+
+        Assert.Equal("Host::CallContext", NativesSelection.Read(config).Context);
+
+        File.WriteAllText(config, $"[natives]\nsources = [\"{source}\"]\n");
+        var exception = Assert.Throws<DescribeException>(() => NativesSelection.Read(config));
+        Assert.Contains("stated here or in the file 'defaults' names", exception.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("Hidden: has internal linkage (static, or in an anonymous namespace): the generated registration " +
                 "declares and names it from another source file")]
@@ -158,6 +174,8 @@ public sealed class DescribeTests
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
     [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]
     [InlineData("TextByPointer::text: is a pointer to a std::string_view: a native takes text as a std::string_view by value")]
+    [InlineData("MalformedFacade: @facade names a public method as Class.Method")]
+    [InlineData("DoubledFacade: is marked @facade twice; a native names one public method")]
     public void EachUndescribableNativeFailsNamingTheFunctionAndParameter(string diagnostic)
     {
         using var directory = new TemporaryDirectory();

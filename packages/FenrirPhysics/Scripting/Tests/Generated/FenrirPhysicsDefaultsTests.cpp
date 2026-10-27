@@ -4,8 +4,8 @@
 // C#'s new T() equals C++'s T{} for every type the binding registers, field by field.
 
 #include "../../src/Generated/FenrirPhysicsMappings.hpp"
-#include "PhysicsScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
+#include "PhysicsScriptingApp.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 

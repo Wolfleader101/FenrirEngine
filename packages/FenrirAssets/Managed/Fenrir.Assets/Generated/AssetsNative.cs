@@ -30,14 +30,14 @@ internal static unsafe partial class AssetsNative
     /// <summary>Adds a mesh of these vertex streams and triangles for `owner`, drawn with one material.</summary>
     /// <returns>The mesh, or the empty handle if the store refused it.</returns>
     [NativeFunction]
-    public static partial ulong AddMesh(Vector3* positions, int positionCount, Vector3* normals, int normalCount,
-                                        Vector2* uvs, int uvCount, uint* indices, int indexCount, AssetOwner owner);
+    public static partial ulong AddMesh(ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
+                                        ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices, AssetOwner owner);
 
     /// <summary>Swaps the mesh's data for these streams and triangles.</summary>
     /// <returns>Whether it was replaced.</returns>
     [NativeFunction]
-    public static partial bool ReplaceMesh(ulong mesh, Vector3* positions, int positionCount, Vector3* normals,
-                                           int normalCount, Vector2* uvs, int uvCount, uint* indices, int indexCount);
+    public static partial bool ReplaceMesh(ulong mesh, ReadOnlySpan<Vector3> positions, ReadOnlySpan<Vector3> normals,
+                                           ReadOnlySpan<Vector2> uvs, ReadOnlySpan<uint> indices);
 
     /// <summary>Adds a render target for `owner`: an RGBA8 sRGB image of this size with no pixels.</summary>
     /// <returns>The image, or the empty handle if either side is under one pixel.</returns>
@@ -52,12 +52,12 @@ internal static unsafe partial class AssetsNative
     /// <summary>Adds an RGBA8 sRGB image of this size from `rgba8` for `owner`.</summary>
     /// <returns>The image, or the empty handle if the store refused it.</returns>
     [NativeFunction]
-    public static partial ulong AddImage(int width, int height, byte* rgba8, int byteCount, AssetOwner owner);
+    public static partial ulong AddImage(int width, int height, ReadOnlySpan<byte> rgba8, AssetOwner owner);
 
     /// <summary>Swaps the image's data for an RGBA8 sRGB image from `rgba8`.</summary>
     /// <returns>Whether it was replaced.</returns>
     [NativeFunction]
-    public static partial bool ReplaceImage(ulong image, int width, int height, byte* rgba8, int byteCount);
+    public static partial bool ReplaceImage(ulong image, int width, int height, ReadOnlySpan<byte> rgba8);
 
     /// <summary>A new material drawing with `shader`, for `owner` (AssetStore::CreateMaterial).</summary>
     /// <returns>The material, or the empty handle if the shader does not resolve.</returns>
@@ -199,6 +199,6 @@ internal static unsafe partial class AssetsNative
     /// <param name="parameter">The parameter without its name; the default when there is none.</param>
     /// <returns>The name's whole length in chars, or zero if there is no such parameter.</returns>
     [NativeFunction]
-    public static partial int GetShaderParameter(ulong shader, int index, out ShaderParameter parameter, char* name,
-                                                 int capacity);
+    public static partial int GetShaderParameter(ulong shader, int index, out ShaderParameter parameter,
+                                                 Span<char> name);
 }

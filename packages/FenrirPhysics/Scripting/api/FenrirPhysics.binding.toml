@@ -5,6 +5,8 @@
 namespace = "Fenrir.Physics"
 # FenrirMath's colour, ray and box are the math binding's: named as Fenrir.Math's, never mirrored here.
 uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 
 # FenrirPhysics's query types hold a Fenrir::Entity, which C# holds as a 32-bit Entity: FenrirPhysicsScripting.api.json
 # describes them in that form (src/ScriptQueries.hpp), the natives convert, and these are bound from there instead.
@@ -21,13 +23,6 @@ exclude = [
 [csharp]
 contract = "../../Managed/Fenrir.Physics"
 generated = "../../Managed/Fenrir.Physics/Generated"
-usings = ["Fenrir.Math", "Fenrir.Scripting"]
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
 readonly-events = true
 # Physics writes these back after every move or step: C# reads them in place and cannot write them.
 readonly-structs = ["Fenrir::CharacterState", "Fenrir::VehicleState", "Fenrir::VehicleWheelState"]
@@ -42,49 +37,34 @@ includes = [
     "FenrirPhysics/PhysicsWorld.hpp",
     "FenrirPhysics/Queries.hpp",
     "FenrirPhysics/Vehicles.hpp",
-    # The query types as C# holds them, the built-in binding's mappings (Fenrir::Entity as EntityLink, Transform), and
-    # the entity value's mapping and wrapper trait, FenrirScripting's.
+    # The query types as C# holds them.
     "ScriptQueries.hpp",
-    "FenrirScripting/Generated/FenrirScriptingMappings.hpp",
-    "FenrirScripting/EntityValueMapping.hpp",
 ]
 
 [registration]
 source = "../src/Generated/FenrirPhysicsRegistration.cpp"
 includes = [
-    "FenrirScripting/ComponentRegistry.hpp",
-    "FenrirScripting/ScriptingExtension.hpp",
-    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state and the query types as C# holds them.
     "PhysicsScriptingState.hpp",
     "ScriptQueries.hpp",
     "FenrirScripting/Generated/FenrirScriptingMappings.hpp",
 ]
 function = "Fenrir::Generated::RegisterPhysics"
-extension = "Fenrir::ScriptingExtension"
-make-component = "Fenrir::MakeComponent"
-make-read-only-component = "Fenrir::MakeReadOnlyComponent"
-make-event = "Fenrir::MakeEvent"
-make-shared-struct = "Fenrir::MakeSharedStruct"
 
 [tests]
 cpp = "../Tests/Generated/FenrirPhysicsDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirPhysicsDefaults.cs"
 class = "Fenrir.PhysicsScriptFixture.Defaults"
-includes = ["PhysicsScriptingApp.hpp", "ScriptingProbe.hpp"]
+includes = ["PhysicsScriptingApp.hpp"]
 setup = "Fenrir::Testing::PhysicsScriptingApp app;"
-component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[physics][scripting][bindings]"
 
+# The built-in binding's mirrors, bound here by layout (FenrirPhysics.api.toml selects them as bound types) and mapped by
+# its generated mappings header, included where they are bound.
 [bound-types]
-"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-# glm stores w first; C#'s constructor takes it last.
-"Fenrir::Math::Quat" = { type = "Quaternion", constructor = ["x", "y", "z", "w"] }
-"Fenrir::Transform" = { type = "Transform" }
+"Fenrir::Transform" = { type = "Transform", include = "FenrirScripting/Generated/FenrirScriptingMappings.hpp" }
 # A default Entity names no entity, which C#'s new EntityLink() (all zero) does not say.
-"Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None" }
-# A C# Entity: held by the query types, and taken by the natives by value, as its one field.
-"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
+"Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None", include = "FenrirScripting/Generated/FenrirScriptingMappings.hpp" }
 
 [nouns]
 "Fenrir::CollisionShape" = "shape"
@@ -96,9 +76,4 @@ tags = "[physics][scripting][bindings]"
 # their C# declarations, the PhysicsNative class, and their registration.
 [natives]
 sources = ["../src/PhysicsScripting.cpp"]
-context = "Fenrir::CallContext"
 class = "PhysicsNative"
-attribute = "NativeFunction"
-make = "Fenrir::NativeFunction::Make"
-# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
-zero-outputs = "Fenrir::ZeroingOutputs"

@@ -13,7 +13,8 @@ namespace DescribeApi;
 /// <summary>
 /// The <c>[natives]</c> section of a binding's configuration (<c>&lt;Name&gt;.binding.toml</c>), as far as this tool
 /// reads it: the C++ sources holding the native functions, in the order they are described, and the call context every
-/// native takes first. The binding's generator reads the rest of the file; this tool ignores it.
+/// native takes first, which the binding states or its defaults file (the top-level <c>defaults</c>, the SDK's names
+/// stated once) gives. The binding's generator reads the rest of both files; this tool ignores it.
 /// </summary>
 internal sealed record NativesSelection(string Path, string Binding, IReadOnlyList<string> Sources, string Context)
 {
@@ -54,13 +55,12 @@ internal sealed record NativesSelection(string Path, string Binding, IReadOnlyLi
             throw new DescribeException($"{path}: [natives] 'sources' is a list of C++ source paths, relative to the file");
         }
 
-        if (!natives.TryGetValue("context", out var contextValue) || contextValue is not string context || context.Length == 0)
-        {
-            throw new DescribeException(
-                $"{path}: [natives] 'context' is the qualified name of the call context a native function takes first");
-        }
-
         var directory = System.IO.Path.GetDirectoryName(path)!;
+        var context = StatedContext(natives, path) ?? DefaultContext(table, path, directory) ??
+                      throw new DescribeException(
+                          $"{path}: [natives] 'context' is the qualified name of the call context a native function takes " +
+                          "first, stated here or in the file 'defaults' names");
+
         var sources = sourceArray.Cast<string>()
                           .Select(source => System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, source)))
                           .ToList();
@@ -70,6 +70,52 @@ internal sealed record NativesSelection(string Path, string Binding, IReadOnlyLi
         }
 
         return new NativesSelection(path, fileName[..^Extension.Length], sources, context);
+    }
+
+    // The [natives] context a table states, or null when it states none.
+    private static string? StatedContext(TomlTable natives, string path)
+    {
+        if (!natives.TryGetValue("context", out var value))
+        {
+            return null;
+        }
+
+        return value is string context && context.Length > 0
+                   ? context
+                   : throw new DescribeException($"{path}: [natives] 'context' is the qualified name of the call context");
+    }
+
+    // The [natives] context of the defaults file the binding's `defaults` names, or null when it names none or the file
+    // states none. Nothing else of the file is read here; the binding's generator checks the rest.
+    private static string? DefaultContext(TomlTable binding, string path, string directory)
+    {
+        if (!binding.TryGetValue("defaults", out var value))
+        {
+            return null;
+        }
+
+        if (value is not string relative || relative.Length == 0)
+        {
+            throw new DescribeException($"{path}: 'defaults' is the path of the binding's defaults file, relative to the file");
+        }
+
+        var defaultsPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(directory, relative));
+        if (!File.Exists(defaultsPath))
+        {
+            throw new DescribeException($"{path}: defaults names {defaultsPath}, which does not exist");
+        }
+
+        TomlTable defaults;
+        try
+        {
+            defaults = Toml.ToModel(File.ReadAllText(defaultsPath), defaultsPath);
+        }
+        catch (TomlException exception)
+        {
+            throw new DescribeException($"{defaultsPath}: {exception.Message}");
+        }
+
+        return defaults.TryGetValue("natives", out var section) && section is TomlTable natives ? StatedContext(natives, defaultsPath) : null;
     }
 }
 
@@ -87,11 +133,13 @@ internal sealed record NativeParameter(string Name, NativeType Type, bool Output
 /// <summary>
 /// One native function: a free function taking the call context first, and optionally its extension state.
 /// <c>NotRunning</c> is the C++ expression its <c>@notrunning</c> gives, the value a caller gets when the function
-/// cannot be called.
+/// cannot be called; <c>Facade</c> is the <c>Class.Method</c> its <c>@facade</c> gives, the public static class and
+/// method a binding names it as.
 /// </summary>
 internal sealed record NativeFunctionDescription(string Name, string Namespace, string Source, string? State, bool NoExcept,
                                                  string? Doc, NativeType Returns, string? ReturnsDoc,
-                                                 IReadOnlyList<NativeParameter> Parameters, string? NotRunning);
+                                                 IReadOnlyList<NativeParameter> Parameters, string? NotRunning,
+                                                 string? Facade);
 
 /// <summary>What the natives mode writes: a binding's native functions in source order.</summary>
 internal sealed record NativesDescription(string Binding, string Context, IReadOnlyList<NativeFunctionDescription> Functions);
@@ -307,9 +355,25 @@ internal sealed class NativesDescriber
             return null;
         }
 
+        if (doc.Facades.Count > 1)
+        {
+            Error(function, name, "is marked @facade twice; a native names one public method");
+            return null;
+        }
+
+        var facade = doc.Facades.SingleOrDefault();
+        if (facade is not null && !FacadeMark.IsMatch(facade))
+        {
+            Error(function, name, "@facade names a public method as Class.Method");
+            return null;
+        }
+
         return new NativeFunctionDescription(name, Namespace(function.Handle), where, state, noexcept, doc.Text, returns,
-                                             doc.Returns, described, doc.NotRunning);
+                                             doc.Returns, described, doc.NotRunning, facade);
     }
+
+    // A @facade mark: two C++-style identifiers joined by one dot, the public class and the method name it has there.
+    private static readonly Regex FacadeMark = new(@"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$");
 
     // --- Types ---
 
@@ -518,6 +582,11 @@ internal static class NativesWriter
                 if (function.NotRunning is not null)
                 {
                     json.WriteString("notRunning", function.NotRunning);
+                }
+
+                if (function.Facade is not null)
+                {
+                    json.WriteString("facade", function.Facade);
                 }
 
                 json.WriteStartObject("returns");

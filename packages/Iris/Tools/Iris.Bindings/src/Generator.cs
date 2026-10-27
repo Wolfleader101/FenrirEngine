@@ -40,6 +40,10 @@ internal static class Generator
 
             var (name, text) = CSharpWriter.Natives(binding, natives, bound);
             files.Add(Path.Combine(config.CSharp.Generated, name), text);
+            foreach (var (facade, part) in CSharpWriter.Facades(binding, natives, bound))
+            {
+                files.Add(Path.Combine(config.CSharp.Generated, facade), part);
+            }
         }
 
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
@@ -111,7 +115,8 @@ internal static class Generator
 
     /// <summary>
     /// Writes each file whose content changed, and deletes any other <c>.cs</c> file in the mirrors' directory, which
-    /// the generator owns (a type no longer described). Returns what it did, one line per file.
+    /// the generator owns (a type no longer described, a facade class no mark names). Returns what it did, one line per
+    /// file.
     /// </summary>
     public static IReadOnlyList<string> Write(string configPath, IReadOnlyDictionary<string, string> files)
     {

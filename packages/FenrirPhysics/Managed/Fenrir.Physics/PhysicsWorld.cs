@@ -3,6 +3,11 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Physics;
 
+// The facade over the generated PhysicsNative (Generated/, from Scripting/src/PhysicsScripting.cpp). Its pass-throughs
+// (the forces, ContactsOf, IsSleeping and Bounds) are generated beside it from the natives' @facade marks
+// (Generated/PhysicsWorld.cs); this part holds what a description cannot say: the class doc, the queries' default
+// filter, the values returned from an output, the Gravity property and the handle packing.
+
 /// <summary>
 /// The active scene's physics world, from C#: forces, queries, motion tests, body state, gravity, debug lines and
 /// collision meshes, as <c>Fenrir::PhysicsWorld</c> and <c>Fenrir::Physics</c> offer them in C++ (whose documentation
@@ -26,25 +31,8 @@ namespace Fenrir.Physics;
 /// to a Joint wakes both its bodies.
 /// </para>
 /// </remarks>
-public static class PhysicsWorld
+public static partial class PhysicsWorld
 {
-    /// <summary>Pushes the entity's body with <paramref name="force"/> (newtons, world space) for the next step only.</summary>
-    /// <returns>Whether the force was queued: false with no physics world or no body.</returns>
-    public static bool AddForce(Entity entity, Vector3 force) => PhysicsNative.AddForce(entity, in force);
-
-    /// <summary>Changes the velocity of the entity's body by <paramref name="impulse"/> (newton seconds) over its mass, at the next step.</summary>
-    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
-    public static bool AddImpulse(Entity entity, Vector3 impulse) => PhysicsNative.AddImpulse(entity, in impulse);
-
-    /// <summary>Twists the entity's body with <paramref name="torque"/> (newton metres, world space) for the next step only.</summary>
-    /// <returns>Whether the torque was queued: false with no physics world or no body.</returns>
-    public static bool AddTorque(Entity entity, Vector3 torque) => PhysicsNative.AddTorque(entity, in torque);
-
-    /// <summary>Changes the angular velocity of the entity's body by <paramref name="impulse"/> over its moment of inertia, at the next step.</summary>
-    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
-    public static bool AddAngularImpulse(Entity entity, Vector3 impulse) =>
-        PhysicsNative.AddAngularImpulse(entity, in impulse);
-
     /// <summary>
     /// The nearest body a ray from <paramref name="origin"/> along <paramref name="direction"/> (any length) hits within
     /// <paramref name="maxDistance"/>. A ray that starts inside a box, sphere, capsule or convex hull hits it at
@@ -61,12 +49,9 @@ public static class PhysicsWorld
     /// Writes the hits of a ray, as for <see cref="Raycast"/>, to <paramref name="hits"/>, nearest first, and returns how
     /// many it wrote. When there are more hits than the span holds, the nearest ones are written.
     /// </summary>
-    public static unsafe int RaycastAll(Vector3 origin, Vector3 direction, float maxDistance, Span<RaycastHit> hits,
-                                        QueryFilter filter = default)
-    {
-        fixed (RaycastHit* first = hits)
-            return PhysicsNative.RaycastAll(in origin, in direction, maxDistance, in filter, first, hits.Length);
-    }
+    public static int RaycastAll(Vector3 origin, Vector3 direction, float maxDistance, Span<RaycastHit> hits,
+                                 QueryFilter filter = default) =>
+        PhysicsNative.RaycastAll(in origin, in direction, maxDistance, in filter, hits);
 
     /// <summary>
     /// The first body <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), touches when
@@ -84,12 +69,9 @@ public static class PhysicsWorld
     /// Writes the hits of a shape cast, as for <see cref="ShapeCast"/>, to <paramref name="hits"/>, nearest first, and
     /// returns how many it wrote. When there are more hits than the span holds, the nearest ones are written.
     /// </summary>
-    public static unsafe int ShapeCastAll(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
-                                          Span<ShapeCastHit> hits, QueryFilter filter = default)
-    {
-        fixed (ShapeCastHit* first = hits)
-            return PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, in filter, first, hits.Length);
-    }
+    public static int ShapeCastAll(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
+                                   Span<ShapeCastHit> hits, QueryFilter filter = default) =>
+        PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, in filter, hits);
 
     /// <summary>
     /// How far <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), can move along
@@ -117,11 +99,8 @@ public static class PhysicsWorld
     /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
     /// overlaps to <paramref name="hits"/>, each with its body, and returns how many it wrote, stopping when the span is full.
     /// </summary>
-    public static unsafe int Overlap(CollisionShape shape, Transform pose, Span<OverlapHit> hits, QueryFilter filter = default)
-    {
-        fixed (OverlapHit* first = hits)
-            return PhysicsNative.Overlap(in shape, in pose, in filter, first, hits.Length);
-    }
+    public static int Overlap(CollisionShape shape, Transform pose, Span<OverlapHit> hits, QueryFilter filter = default) =>
+        PhysicsNative.Overlap(in shape, in pose, in filter, hits);
 
     /// <summary>
     /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
@@ -130,12 +109,9 @@ public static class PhysicsWorld
     /// written. A shape only touching a collider does not overlap it. A triangle-mesh shape (<see cref="MeshShape"/>)
     /// finds nothing. Filter like a body as for <see cref="MoveCast"/>.
     /// </summary>
-    public static unsafe int Penetrations(CollisionShape shape, Transform pose, Span<PenetrationHit> hits,
-                                          QueryFilter filter = default)
-    {
-        fixed (PenetrationHit* first = hits)
-            return PhysicsNative.Penetrations(in shape, in pose, in filter, first, hits.Length);
-    }
+    public static int Penetrations(CollisionShape shape, Transform pose, Span<PenetrationHit> hits,
+                                   QueryFilter filter = default) =>
+        PhysicsNative.Penetrations(in shape, in pose, in filter, hits);
 
     /// <summary>
     /// The offset that moves <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), out
@@ -154,34 +130,8 @@ public static class PhysicsWorld
     /// Writes the colliders containing <paramref name="point"/> to <paramref name="hits"/>, each with its body, and returns
     /// how many it wrote, stopping when the span is full.
     /// </summary>
-    public static unsafe int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter filter = default)
-    {
-        fixed (OverlapHit* first = hits)
-            return PhysicsNative.OverlapPoint(in point, in filter, first, hits.Length);
-    }
-
-    /// <summary>
-    /// Writes the contacts the body entity <paramref name="body"/> (a rigid body or a character body) has now (as of the
-    /// last step) to <paramref name="contacts"/>, and returns how many it wrote, stopping when the span is full. Overlaps
-    /// with triggers are not contacts. A character's contacts are those its last move ended touching, so unlike a body's
-    /// they come from before the step: the walls, ground and ceilings it is against and the bodies it pushed, with their
-    /// point and normal (a wall jump's).
-    /// </summary>
-    public static unsafe int ContactsOf(Entity body, Span<Contact> contacts)
-    {
-        fixed (Contact* first = contacts)
-            return PhysicsNative.ContactsOf(body, first, contacts.Length);
-    }
-
-    /// <summary>
-    /// Whether the body of <paramref name="body"/> (a child collider's entity stands for its compound body) is asleep. False
-    /// for an entity with no body.
-    /// </summary>
-    public static bool IsSleeping(Entity body) => PhysicsNative.IsSleeping(body);
-
-    /// <summary>The world-space box around the body of <paramref name="body"/>.</summary>
-    /// <returns>Whether the entity has a body; <paramref name="bounds"/> is default when it does not.</returns>
-    public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(body, out bounds);
+    public static int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter filter = default) =>
+        PhysicsNative.OverlapPoint(in point, in filter, hits);
 
     /// <summary>
     /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is
@@ -225,12 +175,8 @@ public static class PhysicsWorld
     /// The mesh, shared by every collider that refers to it in every scene; the none handle (and an error logged) when there
     /// are no vertices, the indices are not whole triangles or one is out of range.
     /// </returns>
-    public static unsafe CollisionMesh CreateCollisionMesh(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<uint> indices)
-    {
-        fixed (Vector3* firstVertex = vertices)
-        fixed (uint* firstIndex = indices)
-            return new CollisionMesh { Id = PhysicsNative.CreateCollisionMesh(firstVertex, vertices.Length, firstIndex, indices.Length) };
-    }
+    public static CollisionMesh CreateCollisionMesh(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<uint> indices) =>
+        new() { Id = PhysicsNative.CreateCollisionMesh(vertices, indices) };
 
     /// <summary>
     /// Releases a collision mesh made by <see cref="CreateCollisionMesh"/>. A collider still referring to it has its body

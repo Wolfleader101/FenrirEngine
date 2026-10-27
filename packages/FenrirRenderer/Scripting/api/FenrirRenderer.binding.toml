@@ -5,61 +5,37 @@
 namespace = "Fenrir.Renderer"
 descriptions = ["../../api/FenrirRenderer.api.json", "FenrirRendererScripting.api.json"]
 # The colour, ray and box are the math binding's, the window id FenrirInput's: named as theirs, never mirrored here. The
-# asset handles are FenrirAssets's bound types, which a binding names in its own [bound-types] (below).
+# asset handles are FenrirAssets's bound types, and the math types the math binding's, inherited through these.
 uses = [
     "../../../FenrirScripting/api/FenrirMath.binding.toml",
     "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
     "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
 ]
+# The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
+defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 
 [csharp]
 contract = "../../Managed/Fenrir.Renderer"
 generated = "../../Managed/Fenrir.Renderer/Generated"
-usings = ["Fenrir.Assets", "Fenrir.Math", "Fenrir.Scripting"]
-component-attribute = "NativeComponent"
-component-interface = "IComponent"
-read-only-component-interface = "IReadOnlyComponent"
-event-attribute = "NativeEvent"
-event-interface = "IEvent"
-tagged-union-attribute = "TaggedUnion"
-resource-attribute = "NativeResource"
-resource-interface = "IResource"
-read-only-resource-interface = "IReadOnlyResource"
 
 [cpp]
 mappings = "../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
-includes = [
-    "FenrirRenderer/Components.hpp",
-    "FenrirRenderer/Renderer.hpp",
-    "FenrirAssetsScripting/AssetMappings.hpp",
-    # The entity value's mapping and wrapper trait, FenrirScripting's (EntityValue.hpp).
-    "FenrirScripting/EntityValueMapping.hpp",
-]
+includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirRendererRegistration.cpp"
 includes = [
-    "FenrirScripting/ComponentRegistry.hpp",
-    "FenrirScripting/ScriptingExtension.hpp",
-    "FenrirScripting/ZeroingOutputs.hpp",
     # What the natives' declarations name: their extension state (and through it the entity value).
     "RendererScriptingState.hpp",
 ]
 function = "Fenrir::Generated::RegisterRenderer"
-extension = "Fenrir::ScriptingExtension"
-make-component = "Fenrir::MakeComponent"
-make-read-only-component = "Fenrir::MakeReadOnlyComponent"
-make-event = "Fenrir::MakeEvent"
-make-shared-struct = "Fenrir::MakeSharedStruct"
-make-scene-resource = "Fenrir::MakeSceneResource"
 
 [tests]
 cpp = "../Tests/Generated/FenrirRendererDefaultsTests.cpp"
 csharp = "../Tests/Generated/FenrirRendererDefaults.cs"
 class = "RendererScriptFixture.Defaults"
-includes = ["RendererScriptingApp.hpp", "ScriptingProbe.hpp"]
+includes = ["RendererScriptingApp.hpp"]
 setup = "RendererScriptingTests::RendererScriptingApp app;"
-component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 tags = "[renderer][scripting][bindings]"
 
 # The native functions: tools/describe-api's natives mode reads every function in `sources` taking `context` first (with
@@ -67,21 +43,7 @@ tags = "[renderer][scripting][bindings]"
 # RendererNative, and their registration.
 [natives]
 sources = ["../src/RendererScripting.cpp"]
-context = "Fenrir::CallContext"
 class = "RendererNative"
-attribute = "NativeFunction"
-make = "Fenrir::NativeFunction::Make"
-# A native with outputs is registered through FenrirScripting's ZeroingOutputs (ADR-0045), which zeroes each before it runs.
-zero-outputs = "Fenrir::ZeroingOutputs"
-
-[bound-types]
-"Fenrir::Math::Vec2" = { type = "Vector2", constructor = ["x", "y"] }
-"Fenrir::Math::Vec3" = { type = "Vector3", constructor = ["x", "y", "z"] }
-# A C# Entity, which the natives take and return by value as its one field.
-"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32" }
-"Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>" }
-"Fenrir::AssetHandle<Fenrir::Material>" = { type = "AssetHandle<Material>" }
-"Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>" }
 
 [names]
 "Fenrir::Projection" = "CameraProjection"

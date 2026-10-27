@@ -21,6 +21,8 @@ public sealed class BindingTests
 
     private static string UsesConfig => Path.Combine(FixtureDirectory, "Uses", "Common.binding.toml");
 
+    private static string DefaultsFile => Path.Combine(FixtureDirectory, "Host.binding-defaults.toml");
+
     private static CSharpParseOptions Latest => CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Latest);
 
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
@@ -45,9 +47,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 24,
-                    $"The fixture should give 19 mirrors, the natives' class, the mappings, the registration and the " +
-                    $"defaults test's two files, but gave {generated.Count} files.");
+        Assert.True(generated.Count == 26,
+                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the mappings, the " +
+                    $"registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -59,6 +61,95 @@ public sealed class BindingTests
         Assert.Contains(generated.Keys, path => path.EndsWith("Spring.cs", StringComparison.Ordinal));
         Assert.DoesNotContain("component-attribute", File.ReadAllText(UsesConfig), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void APointerWithACountIsASpanAndTheCountIsFoldedIntoIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        // A doc on the count would name a parameter the declaration no longer has.
+        WriteNatives(directory, root => Parameter(root, "Sum", "count")["doc"] = "How many values.");
+
+        var natives = Generator.Generate(config, [description]).Single(file => file.Key.EndsWith("FixtureNative.cs", StringComparison.Ordinal)).Value;
+
+        Assert.Contains("FindAll(in Vector3 origin, Span<Hit> hits);", natives, StringComparison.Ordinal);
+        Assert.Contains("Sum(ReadOnlySpan<uint> values, bool all, double scale);", natives, StringComparison.Ordinal);
+        Assert.DoesNotContain("int capacity", natives, StringComparison.Ordinal);
+        Assert.DoesNotContain("<param name=\"count\">", natives, StringComparison.Ordinal);
+        Assert.Contains("using System;", natives, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AScalarTheBindingStatesReplacesTheDefault()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nmake = \"Host::Other::Make\"\n", StringComparison.Ordinal));
+
+        var registration = Generator.Generate(config, [FixtureDescription]).Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+
+        Assert.Contains("Host::Other::Make<", registration, StringComparison.Ordinal);
+        Assert.DoesNotContain("Host::NativeFunction::Make<", registration, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AListTheBindingStatesFollowsTheDefaults()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Extra.hpp\"]\n", StringComparison.Ordinal));
+
+        var registration = Generator.Generate(config, [FixtureDescription]).Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+
+        var sdk = registration.IndexOf("#include \"Host/Extension.hpp\"", StringComparison.Ordinal);
+        var own = registration.IndexOf("#include \"Extra.hpp\"", StringComparison.Ordinal);
+        Assert.True(sdk >= 0 && own > sdk, $"The SDK's include should come before the binding's, but the registration is:\n{registration}");
+    }
+
+    [Fact]
+    public void ABoundTypeComesThroughUsesWithItsNamespaceAndItsMappingHeader()
+    {
+        using var directory = new TemporaryDirectory();
+        var other = BindingWithBoundTypes(directory, "Other",
+                                          "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"], include = \"OtherBound.hpp\" }\n");
+        // The fixture's own Vec3 entry gone, and Other used.
+        var config = CopyConfig(directory, OwnBoundTypesWithoutVec3,
+                                edit: text => text.Replace("uses = [", $"uses = [\"{other}\", ", StringComparison.Ordinal));
+
+        var generated = Generator.Generate(config, [FixtureDescription]);
+
+        var naming = generated.Where(file => file.Key.EndsWith(".cs", StringComparison.Ordinal) && file.Value.Contains("Vector3", StringComparison.Ordinal)).ToList();
+        Assert.NotEmpty(naming);
+        foreach (var (path, text) in generated.Where(file => file.Key.EndsWith(".cs", StringComparison.Ordinal)))
+        {
+            Assert.True(text.Contains("using Fixture.Other;", StringComparison.Ordinal) == text.Contains("Vector3", StringComparison.Ordinal),
+                        $"{path} should name Fixture.Other exactly when it names Vector3:\n{text}");
+        }
+
+        var mappings = generated.Single(file => file.Key.EndsWith("FixtureMappings.hpp", StringComparison.Ordinal)).Value;
+        Assert.Contains("#include \"OtherBound.hpp\"", mappings, StringComparison.Ordinal);
+        Assert.DoesNotContain("Extra.hpp", mappings, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOwnBoundTypeOverridesAnInheritedOne()
+    {
+        using var directory = new TemporaryDirectory();
+        var other = BindingWithBoundTypes(directory, "Other", "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"] }\n");
+        var config = CopyConfig(directory, OwnBoundTypesWithoutVec3 + "\"Fixture::Vec3\" = { type = \"OwnVector\", constructor = [\"x\", \"y\", \"z\"] }\n",
+                                edit: text => text.Replace("uses = [", $"uses = [\"{other}\", ", StringComparison.Ordinal));
+
+        var generated = Generator.Generate(config, [FixtureDescription]);
+
+        var body = generated.Single(file => file.Key.EndsWith("Body.cs", StringComparison.Ordinal)).Value;
+        Assert.Contains("OwnVector", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("using Fixture.Other;", body, StringComparison.Ordinal);
+    }
+
+    // The fixture's [bound-types] without Vec3, for a test that inherits it.
+    private const string OwnBoundTypesWithoutVec3 =
+        "\"Fixture::Quat\" = { type = \"Quaternion\", include = \"BoundMappings.hpp\" }\n" +
+        "\"Fixture::Handle\" = { type = \"Handle\", default = \"new()\", include = \"BoundMappings.hpp\" }\n" +
+        "\"Fixture::Size\" = { type = \"Size\", include = \"BoundMappings.hpp\" }\n";
 
     [Fact]
     public void AChangedDefaultChangesExactlyItsInitialiser()
@@ -254,7 +345,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 24, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 26, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -366,6 +457,8 @@ public sealed class BindingTests
         {
             var added = Native(root, "Find").DeepClone();
             added["name"] = "Nearest";
+            // Without Find's mark: a second Hits.Find of the same parameters is refused.
+            added.AsObject().Remove("facade");
             root["functions"]!.AsArray().Add(added);
         });
 
@@ -402,6 +495,8 @@ public sealed class BindingTests
                                      "written (its doc says [in,out]) or a span (its std::int32_t count follows it)")]
     [InlineData("Result", "Fixture.natives.json: Sum (result): cannot map the C++ type 'const Fixture::Vec3*' to C#: a " +
                           "native returns a number, a bool, an enum, a wrapper, nothing or a void*")]
+    [InlineData("ConstCharSpan", "Fixture.natives.json: FindAll::hits: cannot map the C++ type 'const char16_t*' to C#: a const " +
+                                 "char16_t* with a count would be declared ReadOnlySpan<char>, which is text")]
     public void ANativeParameterTheBindingCannotMapFailsNamingTheFunctionAndParameter(string problem, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -421,6 +516,10 @@ public sealed class BindingTests
                     break;
                 case "TextResult":
                     Native(root, "Sum")["returns"] = JsonNode.Parse("""{ "type": "std::string_view", "kind": "string" }""");
+                    break;
+                case "ConstCharSpan":
+                    Parameter(root, "FindAll", "hits").ReplaceWith(JsonNode.Parse(
+                        """{ "name": "hits", "type": "const char16_t*", "kind": "pointer", "pointee": "char16_t", "pointeeKind": "char16", "const": true }"""));
                     break;
                 case "Undescribed":
                     Parameter(root, "Find", "origin")["type"] = "const Fixture::Unknown*";
@@ -443,11 +542,117 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AFacadeMarkGeneratesAPublicPassThroughThatTakesByValueWhatTheDeclarationTakesIn()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var bodies = Output(generated, "Bodies.cs");
+        var hits = Output(generated, "Hits.cs");
+        foreach (var (part, line) in new[]
+                 {
+                     (bodies, "public static partial class Bodies"),
+                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(body, in force);"),
+                     (hits, "public static bool Find(Vector3 origin, float distance, out Hit hit) =>"),
+                     (hits, "    FixtureNative.Find(in origin, distance, out hit);"),
+                     (hits, "public static int Find(Vector3 origin, Span<Hit> hits) => FixtureNative.FindAll(in origin, hits);"),
+                     (hits, "/// <param name=\"hit\">Where it hit; the default when it did not.</param>"),
+                     (hits, "using System;"),
+                 })
+        {
+            Assert.True(part.Contains(line, StringComparison.Ordinal), $"A facade part should hold\n  {line}\nbut is:\n{part}");
+        }
+
+        Assert.True(!bodies.Contains("using System;", StringComparison.Ordinal),
+                    "A facade part whose methods take no span should not declare System:\n" + bodies);
+        Assert.True(!bodies.Contains("///", StringComparison.Ordinal) || !bodies.Contains("<summary>The generated part", StringComparison.Ordinal),
+                    "The class summary is the hand-written part's: the generated part carries a // comment.\n" + bodies);
+    }
+
+    [Fact]
+    public void AFacadeClassNoMarkNamesAnyMoreIsDeleted()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        Generator.Write(config, Generator.Generate(config, [description]));
+        var bodies = Path.Combine(directory.Path, "Contract", "Generated", "Bodies.cs");
+        Assert.True(File.Exists(bodies), "The fixture's Bodies facade should be written.");
+
+        WriteNatives(directory, root => Native(root, "Push").AsObject().Remove("facade"));
+        var report = Generator.Write(config, Generator.Generate(config, [description]));
+
+        Assert.False(File.Exists(bodies), "A facade class no mark names should be deleted.");
+        Assert.Contains(report, line => line == $"{bodies} deleted");
+    }
+
+    [Theory]
+    [InlineData("Internal", "Fixture.natives.json: Find: @facade Hits.Find cannot be public: it takes Tag")]
+    [InlineData("Pointer", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it takes void* body")]
+    [InlineData("PointerResult", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it returns void*")]
+    [InlineData("Doubled", "Fixture.natives.json: Push and Shove: both are @facade Bodies.Push(Entity, Vector3)")]
+    [InlineData("Mirror", "Fixture.natives.json: Push: @facade Body is the name of the mirror of Fixture::Body")]
+    [InlineData("UsedMirror", "Fixture.natives.json: Push: @facade Spring is the name of the mirror of Fixture::Spring in the binding it uses")]
+    [InlineData("BoundType", "Fixture.natives.json: Push: @facade Vector3 is the name of the C# type of the bound type Fixture::Vec3")]
+    [InlineData("NativesClass", "Fixture.natives.json: Push: @facade FixtureNative is the name of the [natives] class")]
+    [InlineData("Malformed", "Fixture.natives.json: Push: @facade 'Bodies' names a public method as Class.Method")]
+    public void AFacadeMarkTheBindingCannotHonourFailsNamingTheNativeAndTheMark(string problem, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        WriteNatives(directory, root =>
+        {
+            switch (problem)
+            {
+                case "Internal":
+                    Parameter(root, "Find", "origin")["type"] = "const Fixture::Tag*";
+                    Parameter(root, "Find", "origin")["pointee"] = "Fixture::Tag";
+                    break;
+                case "Pointer":
+                    Native(root, "Next")["facade"] = "Records.Next";
+                    Native(root, "Next")["returns"] = JsonNode.Parse("""{ "type": "bool", "kind": "bool" }""");
+                    Native(root, "Next")["parameters"]!.AsArray().RemoveAt(0);
+                    break;
+                case "PointerResult":
+                    Native(root, "Next")["facade"] = "Records.Next";
+                    Native(root, "Next")["parameters"] = new JsonArray();
+                    break;
+                case "Doubled":
+                    var shove = Native(root, "Push").DeepClone();
+                    shove["name"] = "Shove";
+                    root["functions"]!.AsArray().Add(shove);
+                    break;
+                case "Mirror":
+                    Native(root, "Push")["facade"] = "Body.Push";
+                    break;
+                case "UsedMirror":
+                    Native(root, "Push")["facade"] = "Spring.Push";
+                    break;
+                case "BoundType":
+                    Native(root, "Push")["facade"] = "Vector3.Push";
+                    break;
+                case "NativesClass":
+                    Native(root, "Push")["facade"] = "FixtureNative.Push";
+                    break;
+                case "Malformed":
+                    Native(root, "Push")["facade"] = "Bodies";
+                    break;
+            }
+        });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void TheMirrorsAndDefaultsClassCompileAgainstStubsOfTheSdk()
     {
-        // The natives' class has no bodies until the SDK's generator writes them: the SDK check compiles it.
+        // The natives' class has no bodies until the SDK's generator writes them, and the facade parts call it: the SDK
+        // check compiles them.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
-                          .Where(path => Path.GetFileName(path) != "FixtureNative.cs")
+                          .Where(path => Path.GetFileName(path) is not ("FixtureNative.cs" or "Bodies.cs" or "Hits.cs"))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Uses", "Contract"), "*.cs", SearchOption.AllDirectories))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
@@ -619,6 +824,18 @@ public sealed class BindingTests
     [InlineData("InternalNotStruct", "internal-structs names Fixture::Motion, which is not a described struct this binding mirrors", "")]
     [InlineData("WrapperNotNumber", "[bound-types] Fixture::Ticket's wrapper is 'struct', which is not a number kind", "")]
     [InlineData("NoZeroOutputs", "'zero-outputs' is missing or is not a string", "")]
+    [InlineData("RestatedScalar", "[natives] 'make' is already the default from ", "; delete it")]
+    [InlineData("RestatedListEntry", "[registration] includes lists \"Host/Extension.hpp\", which is already the default from ", "; delete it")]
+    [InlineData("RestatedTestsComponent", "[tests] 'component' is already the default from ", "; delete it")]
+    [InlineData("DefaultsStatesNamespace", "'namespace' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesDefaults", "'defaults' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesNames", "'names' is not a section a defaults file may state", "")]
+    [InlineData("DefaultsStatesSource", "'source' in [registration] is not a key a defaults file may state (a binding's own)", "")]
+    [InlineData("DefaultsMissing", "Missing.binding-defaults.toml, which does not exist", "")]
+    [InlineData("DefaultsMisnamed", "a defaults file is named <Name>.binding-defaults.toml", "")]
+    [InlineData("RestatedDefaultBoundType", "[bound-types] \"Fixture::Ticket\" is already the default from ", "; delete it")]
+    [InlineData("RestatedInheritedBoundType", "[bound-types] \"Fixture::Vec3\" is already inherited from ", "; delete it")]
+    [InlineData("InheritedBoundTypesDisagree", "give \"Fixture::Vec3\" different [bound-types] entries", "")]
     [InlineData("NativesTestKeys", "[tests] natives-cpp, natives-class: the natives test is no longer generated, since the " +
                                    "registration zeroes each native's outputs ([natives] zero-outputs)", "remove the keys")]
     public void WhatTheConfigurationCannotHonourFailsSayingWhy(string problem, string diagnostic, string rest)
@@ -637,6 +854,27 @@ public sealed class BindingTests
 
         string Uses(string text, string used) => text.Replace("uses = [", $"uses = [\"{used}\", ", StringComparison.Ordinal);
 
+        // A copy of the defaults file, edited, in the directory, and the configuration pointed at it.
+        string Defaults(Func<string, string> edit)
+        {
+            var path = Path.Combine(directory.Path, "Host.binding-defaults.toml");
+            System.IO.File.WriteAllText(path, edit(System.IO.File.ReadAllText(DefaultsFile)));
+            return path.Replace('\\', '/');
+        }
+
+        string Misnamed()
+        {
+            var path = Path.Combine(directory.Path, "Host.toml");
+            System.IO.File.Copy(DefaultsFile, path, overwrite: true);
+            return path.Replace('\\', '/');
+        }
+
+        string WithDefaults(string text, string file) =>
+            text.Replace($"\"{DefaultsFile.Replace('\\', '/')}\"", $"\"{file}\"", StringComparison.Ordinal);
+
+        // The configuration with one line of its defaults file gone.
+        string Without(string text, string line) => WithDefaults(text, Defaults(defaults => defaults.Replace(line, "", StringComparison.Ordinal)));
+
         Func<string, string> edit = problem switch
         {
             "UsedAndExcluded" => text => text.Replace("[csharp]", "exclude = [\"Fixture::Spring\"]\n\n[csharp]", StringComparison.Ordinal),
@@ -646,21 +884,35 @@ public sealed class BindingTests
             "UsesWithoutDescriptions" => text => Uses(text, Other(other => other.Replace("descriptions = [", "# [", StringComparison.Ordinal))),
             "UsesItself" => text => Uses(text, Other(other => "uses = [\"Other.binding.toml\"]\n" + other)),
             "DescriptionsDisagree" => text => text.Replace("[csharp]", "descriptions = [\"Elsewhere.api.json\"]\n\n[csharp]", StringComparison.Ordinal),
-            "NoComponentAttribute" => text => text.Replace("component-attribute = \"NativeComponent\"\n", "", StringComparison.Ordinal),
-            "NoReadOnlyComponentInterface" => text => text.Replace("read-only-component-interface = \"IReadOnlyComponent\"\n", "", StringComparison.Ordinal),
-            "NoEventInterface" => text => text.Replace("event-interface = \"IEvent\"\n", "", StringComparison.Ordinal),
-            "NoTaggedUnionAttribute" => text => text.Replace("tagged-union-attribute = \"TaggedUnion\"\n", "", StringComparison.Ordinal),
-            "NoMakeEvent" => text => text.Replace("make-event = \"Host::MakeEvent\"\n", "", StringComparison.Ordinal),
-            "NoMakeReadOnlyComponent" => text => text.Replace("make-read-only-component = \"Host::MakeReadOnlyComponent\"\n", "", StringComparison.Ordinal),
-            "NoResourceAttribute" => text => text.Replace("resource-attribute = \"NativeResource\"\n", "", StringComparison.Ordinal),
-            "NoReadOnlyResourceInterface" => text => text.Replace("read-only-resource-interface = \"IReadOnlyResource\"\n", "", StringComparison.Ordinal),
-            "NoResourceFactory" => text => text.Replace("make-scene-resource = \"Host::MakeSceneResource\"\n", "", StringComparison.Ordinal),
+            "NoComponentAttribute" => text => Without(text, "component-attribute = \"NativeComponent\"\n"),
+            "NoReadOnlyComponentInterface" => text => Without(text, "read-only-component-interface = \"IReadOnlyComponent\"\n"),
+            "NoEventInterface" => text => Without(text, "event-interface = \"IEvent\"\n"),
+            "NoTaggedUnionAttribute" => text => Without(text, "tagged-union-attribute = \"TaggedUnion\"\n"),
+            "NoMakeEvent" => text => Without(text, "make-event = \"Host::MakeEvent\"\n"),
+            "NoMakeReadOnlyComponent" => text => Without(text, "make-read-only-component = \"Host::MakeReadOnlyComponent\"\n"),
+            "NoResourceAttribute" => text => Without(text, "resource-attribute = \"NativeResource\"\n"),
+            "NoReadOnlyResourceInterface" => text => Without(text, "read-only-resource-interface = \"IReadOnlyResource\"\n"),
+            "NoResourceFactory" => text => Without(text, "make-scene-resource = \"Host::MakeSceneResource\"\n"),
             "ReadOnlyNotRegistrable" => text => text.Replace("read-only = [\"Fixture::Collider\"", "read-only = [\"Fixture::Hit\"", StringComparison.Ordinal),
             "ByHandNotRegistrable" => text => text.Replace("by-hand = [\"Fixture::BodyId\"]", "by-hand = [\"Fixture::Numbers\"]", StringComparison.Ordinal),
             "InternalHeld" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Tag\", \"Fixture::Limits\"]", StringComparison.Ordinal),
             "InternalNotStruct" => text => text.Replace("internal-structs = [\"Fixture::Tag\"]", "internal-structs = [\"Fixture::Motion\"]", StringComparison.Ordinal),
-            "WrapperNotNumber" => text => text.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal),
-            "NoZeroOutputs" => text => text.Replace("zero-outputs = \"Host::ZeroingOutputs\"\n", "", StringComparison.Ordinal),
+            "WrapperNotNumber" => text => WithDefaults(text, Defaults(defaults => defaults.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal))),
+            "NoZeroOutputs" => text => Without(text, "zero-outputs = \"Host::ZeroingOutputs\"\n"),
+            "RestatedScalar" => text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nmake = \"Host::NativeFunction::Make\"\n", StringComparison.Ordinal),
+            "RestatedListEntry" => text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Host/Extension.hpp\"]\n", StringComparison.Ordinal),
+            "RestatedTestsComponent" => text => text.Replace("tags = \"[bindings]\"\n", "tags = \"[bindings]\"\ncomponent = \"harness.Component()\"\n", StringComparison.Ordinal),
+            "DefaultsStatesNamespace" => text => WithDefaults(text, Defaults(defaults => "namespace = \"Host\"\n" + defaults)),
+            "DefaultsStatesDefaults" => text => WithDefaults(text, Defaults(defaults => "defaults = \"Other.binding-defaults.toml\"\n" + defaults)),
+            "DefaultsStatesNames" => text => WithDefaults(text, Defaults(defaults => defaults + "\n[names]\n\"f64\" = \"Double\"\n")),
+            "DefaultsStatesSource" => text => WithDefaults(text, Defaults(defaults => defaults.Replace("[registration]\n", "[registration]\nsource = \"Native/Generated/FixtureRegistration.cpp\"\n", StringComparison.Ordinal))),
+            "DefaultsMissing" => text => WithDefaults(text, "Missing.binding-defaults.toml"),
+            "DefaultsMisnamed" => text => WithDefaults(text, Misnamed()),
+            "RestatedDefaultBoundType" => text => text.Replace("[bound-types]\n", "[bound-types]\n\"Fixture::Ticket\" = { type = \"Ticket\", wrapper = \"u32\", include = \"BoundMappings.hpp\" }\n", StringComparison.Ordinal),
+            "RestatedInheritedBoundType" => text => Uses(text, BindingWithBoundTypes(directory, "Other", "\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"], include = \"BoundMappings.hpp\" }\n")),
+            "InheritedBoundTypesDisagree" => text => Uses(Uses(text.Replace("\"Fixture::Vec3\" = { type = \"Vector3\", constructor = [\"x\", \"y\", \"z\"], include = \"BoundMappings.hpp\" }\n", "", StringComparison.Ordinal),
+                                                           BindingWithBoundTypes(directory, "Other", "\"Fixture::Vec3\" = { type = \"Vector3\" }\n")),
+                                                      BindingWithBoundTypes(directory, "Second", "\"Fixture::Vec3\" = { type = \"Vec3\" }\n")),
             "NativesTestKeys" => text => text.Replace("tags = \"[bindings]\"\n",
                                                       "tags = \"[bindings]\"\nnatives-cpp = \"Tests/Generated/FixtureNativesTests.cpp\"\n" +
                                                       "natives-class = \"Fixture.Bindings.Tests.Natives\"\n", StringComparison.Ordinal),
@@ -741,8 +993,9 @@ public sealed class BindingTests
             text = text[..start] + "[bound-types]\n" + boundTypes + text[end..];
         }
 
-        // The binding it uses stays where it is: only this binding's outputs land in the directory.
+        // The binding it uses and its defaults file stay where they are: only this binding's outputs land in the directory.
         text = text.Replace("\"Uses/Common.binding.toml\"", $"\"{UsesConfig.Replace('\\', '/')}\"", StringComparison.Ordinal);
+        text = text.Replace("\"Host.binding-defaults.toml\"", $"\"{DefaultsFile.Replace('\\', '/')}\"", StringComparison.Ordinal);
         var config = Path.Combine(directory.Path, "Fixture.binding.toml");
         File.WriteAllText(config, edit == null ? text : edit(text));
         File.Copy(FixtureNatives, Path.Combine(directory.Path, "Fixture.natives.json"), overwrite: true);
@@ -780,6 +1033,28 @@ public sealed class BindingTests
         generated.Single(file => Path.GetFileName(file.Key) == fileName).Value;
 
     // The fixture's description, edited, written as Fixture.api.json in the directory (the generated files name it).
+    // A binding like the Common one, in the directory, describing only Fixture::Vec3 and an Extra bound type nothing in
+    // the fixture holds, binding Extra and whatever the [bound-types] text given binds: a used binding that supplies
+    // bound types and mirrors nothing.
+    private static string BindingWithBoundTypes(TemporaryDirectory directory, string name, string boundTypes)
+    {
+        var vec3 = Type(JsonNode.Parse(File.ReadAllText(FixtureDescription))!, "Fixture::Vec3").DeepClone();
+        var extra = vec3.DeepClone();
+        extra["name"] = "Fixture::Extra";
+        var description = Path.Combine(directory.Path, name + ".api.json");
+        File.WriteAllText(description, new JsonObject
+        {
+            ["package"] = name, ["pointerSize"] = 8, ["alignment"] = "natural", ["types"] = new JsonArray(extra, vec3),
+        }.ToJsonString());
+
+        var text = File.ReadAllText(UsesConfig)
+                       .Replace("Fixture.Common", "Fixture." + name, StringComparison.Ordinal)
+                       .Replace("\"Common.api.json\"", $"\"{description.Replace('\\', '/')}\"", StringComparison.Ordinal);
+        var config = Path.Combine(directory.Path, name + ".binding.toml");
+        File.WriteAllText(config, text + "\n[bound-types]\n\"Fixture::Extra\" = { type = \"Extra\", include = \"Extra.hpp\" }\n" + boundTypes);
+        return config.Replace('\\', '/');
+    }
+
     private static string WriteDescription(TemporaryDirectory directory, Action<JsonNode> edit)
     {
         var root = JsonNode.Parse(File.ReadAllText(FixtureDescription))!;

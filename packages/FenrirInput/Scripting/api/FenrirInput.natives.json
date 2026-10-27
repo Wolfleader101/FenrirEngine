@@ -8,6 +8,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether the key named `key` by the layout is held.",
+      "facade": "Keyboard.IsDown",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -26,6 +27,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether the key at `scancode` is held.",
+      "facade": "Keyboard.IsDown",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -44,6 +46,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `key` went down since the last tick or frame. Repeats are not presses.",
+      "facade": "Keyboard.JustPressed",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -62,6 +65,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether the key at `scancode` went down since the last tick or frame.",
+      "facade": "Keyboard.JustPressed",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -80,6 +84,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `key` went up since the last tick or frame.",
+      "facade": "Keyboard.JustReleased",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -98,6 +103,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether the key at `scancode` went up since the last tick or frame.",
+      "facade": "Keyboard.JustReleased",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -128,6 +134,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` is held.",
+      "facade": "Mouse.IsDown",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -146,6 +153,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` went down since the last tick or frame.",
+      "facade": "Mouse.JustPressed",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -164,6 +172,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` went up since the last tick or frame.",
+      "facade": "Mouse.JustReleased",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -247,7 +256,8 @@
       "namespace": "Fenrir::InputNatives",
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
-      "doc": "Writes the pads connected now, oldest connection first, to `pads`, and returns how many are connected.",
+      "doc": "Writes the pads connected now, oldest connection first, to `pads`, and returns how many are connected. When more are connected than fit, the oldest are written.",
+      "facade": "Gamepads.Connected",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32"
@@ -274,6 +284,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `gamepad` is connected.",
+      "facade": "Gamepads.IsConnected",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -292,6 +303,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` is held on `gamepad`.",
+      "facade": "Gamepads.IsDown",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -315,6 +327,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` went down on `gamepad` since the last tick or frame.",
+      "facade": "Gamepads.JustPressed",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -338,6 +351,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "Whether `button` went up on `gamepad` since the last tick or frame.",
+      "facade": "Gamepads.JustReleased",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -361,6 +375,7 @@
       "source": "../src/InputScripting.cpp",
       "state": "Fenrir::InputScripting",
       "doc": "The value of `axis` on `gamepad`: -1 to 1 for a stick, 0 to 1 for a trigger.",
+      "facade": "Gamepads.Axis",
       "returns": {
         "type": "float",
         "kind": "f32"
