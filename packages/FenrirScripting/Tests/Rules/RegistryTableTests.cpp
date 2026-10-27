@@ -8,6 +8,7 @@
 #include "ComponentRegistry.hpp"
 
 #include "FenrirScripting/ComponentRegistry.hpp"
+#include "FenrirScripting/Errors.hpp"
 
 #include <cstdint>
 #include <string>
@@ -133,10 +134,11 @@ TEST_CASE("Resolve gives the id to the C# type the name is registered for and re
 
     INFO("The type the registration names did not get the id");
     REQUIRE(components.Resolve("Rules.Velocity", typeName) == velocity);
-    INFO("A different C# type claiming the name should be refused with -3");
-    REQUIRE(components.Resolve("Rules.Velocity", "Other.Struct") == -3);
-    INFO("A name nobody registered should be -1 whatever type asks");
-    REQUIRE(components.Resolve("Rules.Nothing", typeName) == -1);
+    INFO("A different C# type claiming the name should be refused as WrongType");
+    REQUIRE(components.Resolve("Rules.Velocity", "Other.Struct") ==
+            static_cast<std::int32_t>(RegistryError::WrongType));
+    INFO("A name nobody registered should be NotRegistered whatever type asks");
+    REQUIRE(components.Resolve("Rules.Nothing", typeName) == static_cast<std::int32_t>(RegistryError::NotRegistered));
 }
 
 TEST_CASE("RemoveWhere forgets what it selects and re-ids what remains", "[registry-table]")

@@ -21,7 +21,7 @@ fixed-buffers = ["Fenrir::Name::name"]
 
 [cpp]
 mappings = "../include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
-includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp"]
+includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirScripting/Errors.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirScriptingRegistration.cpp"

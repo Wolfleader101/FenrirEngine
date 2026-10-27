@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "FenrirScripting/ComponentRegistry.hpp"
+#include "FenrirScripting/Errors.hpp"
 
 namespace Fenrir::Detail
 {
@@ -41,8 +42,8 @@ namespace Fenrir::Detail
             return m_noun;
         }
 
-        // The id registered under `name` for the C# type that claims it: the id, -1 if nothing is registered under
-        // the name, or -3 if the name is registered for a different C# type.
+        // The id registered under `name` for the C# type that claims it, or a RegistryError as its value: NotRegistered
+        // if nothing is registered under the name, WrongType if it is registered for a different C# type.
         [[nodiscard]] std::int32_t Resolve(std::string_view name, std::string_view typeName) const
         {
             const std::int32_t id = Find(name);
@@ -50,15 +51,16 @@ namespace Fenrir::Detail
             {
                 return id;
             }
-            return Get(id)->typeName == typeName ? id : -3;
+            return Get(id)->typeName == typeName ? id : static_cast<std::int32_t>(RegistryError::WrongType);
         }
 
-        // The id of the new registration, or -1 if the name is empty or any table of the registry already holds it.
+        // The id of the new registration, or RegistryError::NotRegistered as its value if the name is empty or any
+        // table of the registry already holds it.
         std::int32_t Add(Registration registration)
         {
             if (!Usable(registration) || m_names.contains(registration.name))
             {
-                return -1;
+                return static_cast<std::int32_t>(RegistryError::NotRegistered);
             }
             const auto id = static_cast<std::int32_t>(m_registrations.size());
             m_names.insert(registration.name);
@@ -115,11 +117,11 @@ namespace Fenrir::Detail
             Bump();
         }
 
-        // The id registered under a name, or -1.
+        // The id registered under a name, or RegistryError::NotRegistered as its value.
         [[nodiscard]] std::int32_t Find(std::string_view name) const
         {
             const auto found = m_ids.find(std::string(name));
-            return found == m_ids.end() ? -1 : found->second;
+            return found == m_ids.end() ? static_cast<std::int32_t>(RegistryError::NotRegistered) : found->second;
         }
 
         [[nodiscard]] const Registration* Get(std::int32_t id) const noexcept
