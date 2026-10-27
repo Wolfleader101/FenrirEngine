@@ -27,14 +27,6 @@ namespace Fenrir::Detail
     using OwnedLayouts = std::map<std::string, OwnedLayout>;
 
     /**
-     * @brief Checks one native component against its C# struct in a loaded script assembly.
-     *
-     * @return success, or a diagnostic naming the component and the first mismatching field
-     */
-    [[nodiscard]] Iris::CallResult<void> ValidateRegistration(const ComponentRegistration& registration,
-                                                              const Iris::Component& component);
-
-    /**
      * @brief The script assembly as admission sees it: its script report, and the few questions admission asks of it.
      * Two adapters stand behind it: one over a loaded Iris component (which runs the assembly's generated tables and
      * reads its types), and one for tests that returns literals. Everything else admission does is rules over the

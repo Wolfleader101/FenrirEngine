@@ -130,19 +130,21 @@ namespace Fenrir::ScriptingNatives
     /**
      * @brief The id of the native component registered under `name` for the C# type `typeName` (its full name). An id
      * is good only for the registry generation it was looked up in: a new Scripting has a new registry.
-     * @return The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type
-     * (so a script cannot claim a native component with a struct of its own).
-     * @notrunning -1
+     * @return The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name,
+     * WrongType when it is registered for a different C# type (so a script cannot claim a native component with a
+     * struct of its own).
+     * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
     std::int32_t ComponentIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
                                const char* typeName, std::int32_t typeLength)
     {
         if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
         {
-            return -1;
+            return static_cast<std::int32_t>(RegistryError::NotRegistered);
         }
-        return engine.components->Resolve(std::string_view(name, static_cast<std::size_t>(length)),
-                                          std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Components().Resolve(
+            std::string_view(name, static_cast<std::size_t>(length)),
+            std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -174,14 +176,14 @@ namespace Fenrir::ScriptingNatives
      */
     void* ComponentGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
     {
-        const auto* component = engine.components->Get(id);
+        const auto* component = engine.components->Components().Get(id);
         return component == nullptr ? nullptr : context.Entities().Get(component->type, entity);
     }
 
     /** @brief Whether the entity is alive and has the component. */
     bool ComponentHas(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
     {
-        const auto* component = engine.components->Get(id);
+        const auto* component = engine.components->Components().Get(id);
         return component != nullptr && context.Entities().Has(component->type, entity);
     }
 
@@ -201,38 +203,38 @@ namespace Fenrir::ScriptingNatives
 
     /**
      * @brief Records the entity's destruction, for playback.
-     * @return 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -5 scripting is not running.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: EntityNotAlive, or NotActive when scripting is not
+     * running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t EntityDestroy(const CallContext& context, Detail::EngineContext& engine, std::uint32_t entity)
+    ChangeError EntityDestroy(const CallContext& context, Detail::EngineContext& engine, std::uint32_t entity)
     {
-        return static_cast<std::int32_t>(engine.changes->Destroy(context.Entities(), entity));
+        return engine.changes->Destroy(context.Entities(), entity);
     }
 
     /**
      * @brief Records adding the component to the entity, for playback.
      * @param value The component's bytes, or null for a default one.
-     * @return 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the
-     * component is read-only, -5 scripting is not running.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly,
+     * or NotActive when scripting is not running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t ComponentAdd(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
-                              std::uint32_t entity, const void* value)
+    ChangeError ComponentAdd(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
+                             std::uint32_t entity, const void* value)
     {
-        return static_cast<std::int32_t>(
-            engine.changes->Add(context.Entities(), *engine.components, id, entity, value));
+        return engine.changes->Add(context.Entities(), *engine.components, id, entity, value);
     }
 
     /**
      * @brief Records removing the component from the entity, for playback.
-     * @return 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the
-     * component is read-only, -4 the engine requires every entity to have it, -5 scripting is not running.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly,
+     * Required (the engine needs every entity to have it), or NotActive when scripting is not running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t ComponentRemove(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
-                                 std::uint32_t entity)
+    ChangeError ComponentRemove(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
+                                std::uint32_t entity)
     {
-        return static_cast<std::int32_t>(engine.changes->Remove(context.Entities(), *engine.components, id, entity));
+        return engine.changes->Remove(context.Entities(), *engine.components, id, entity);
     }
 
     /**
@@ -254,18 +256,19 @@ namespace Fenrir::ScriptingNatives
     /**
      * @brief The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine
      * owns: the queue C++ SendEvent and EventReader use for a native event.
-     * @return The id; -1 when there is none, -3 when it is registered for a different C# type.
-     * @notrunning -1
+     * @return The id, or a RegistryError as its value: NotRegistered when there is none, WrongType when it is
+     * registered for a different C# type.
+     * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
     std::int32_t EventIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
                            const char* typeName, std::int32_t typeLength)
     {
         if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
         {
-            return -1;
+            return static_cast<std::int32_t>(RegistryError::NotRegistered);
         }
-        return engine.components->ResolveEvent(std::string_view(name, static_cast<std::size_t>(length)),
-                                               std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Events().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
+                                                   std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -286,13 +289,14 @@ namespace Fenrir::ScriptingNatives
 
     /**
      * @brief Records an event to send when the system returns (see ChangeBuffer::SendEvent).
-     * @return 0 when recorded, otherwise why it was refused: -5 scripting is not running, -6 the event has no queue.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: Unknown (the event has no queue), or NotActive when
+     * scripting is not running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t EventSend(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
-                           const void* value)
+    ChangeError EventSend(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
+                          const void* value)
     {
-        return static_cast<std::int32_t>(engine.changes->SendEvent(context.GetApp(), *engine.components, event, value));
+        return engine.changes->SendEvent(context.GetApp(), *engine.components, event, value);
     }
 
     /**
@@ -302,22 +306,22 @@ namespace Fenrir::ScriptingNatives
      * NewReaderCursor, before its first read), moved past what the read yields.
      * @param[in,out] view Five values written: the older part's address and count, the newer part's address and count,
      * and how many events the reader missed.
-     * @return 0, or -1 when there is no such event.
-     * @notrunning -1
+     * @return False when there is no such event.
+     * @notrunning false
      */
-    std::int32_t EventReadAfter(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
-                                std::uint64_t* seen, Detail::NativeAddress* view)
+    bool EventReadAfter(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
+                        std::uint64_t* seen, Detail::NativeAddress* view)
     {
         if (seen == nullptr || view == nullptr)
         {
-            return -1;
+            return false;
         }
-        const auto* registration = engine.components->GetEvent(event);
+        const auto* registration = engine.components->Events().Get(event);
         const IEventQueue* queue =
             registration == nullptr ? nullptr : context.GetApp().FindEventQueue(registration->name);
         if (queue == nullptr || queue->EventSize() != registration->size)
         {
-            return -1;
+            return false;
         }
         auto cursor = static_cast<std::size_t>(*seen);
         const RawEventRange events = queue->ReadRawAfter(cursor);
@@ -327,7 +331,7 @@ namespace Fenrir::ScriptingNatives
         view[2] = reinterpret_cast<Detail::NativeAddress>(events.newer);
         view[3] = events.newerCount;
         view[4] = events.missed;
-        return 0;
+        return true;
     }
 
     /**
@@ -370,18 +374,19 @@ namespace Fenrir::ScriptingNatives
     /**
      * @brief The id of the native resource registered under `name` for the C# type `typeName` (its full name), good
      * only for the registry generation it was looked up in.
-     * @return The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type.
-     * @notrunning -1
+     * @return The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name,
+     * WrongType when it is registered for a different C# type.
+     * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
     std::int32_t ResourceIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
                               const char* typeName, std::int32_t typeLength)
     {
         if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
         {
-            return -1;
+            return static_cast<std::int32_t>(RegistryError::NotRegistered);
         }
-        return engine.components->ResolveResource(std::string_view(name, static_cast<std::size_t>(length)),
-                                                  std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Resources().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
+                                                      std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -391,31 +396,31 @@ namespace Fenrir::ScriptingNatives
      */
     void* ResourceGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id)
     {
-        const auto* resource = engine.components->GetResource(id);
+        const auto* resource = engine.components->Resources().Get(id);
         return resource == nullptr ? nullptr : resource->find(context.GetApp());
     }
 
     /**
      * @brief Records inserting the resource, replacing the one there is, for playback.
      * @param value The resource's bytes, or null for a default one.
-     * @return 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5
-     * scripting is not running.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive
+     * when scripting is not running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t ResourceInsert(const CallContext&, Detail::EngineContext& engine, std::int32_t id, const void* value)
+    ChangeError ResourceInsert(const CallContext&, Detail::EngineContext& engine, std::int32_t id, const void* value)
     {
-        return static_cast<std::int32_t>(engine.changes->InsertResource(*engine.components, id, value));
+        return engine.changes->InsertResource(*engine.components, id, value);
     }
 
     /**
      * @brief Records removing the resource, for playback.
-     * @return 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5
-     * scripting is not running.
-     * @notrunning static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)
+     * @return None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive
+     * when scripting is not running.
+     * @notrunning Fenrir::ChangeError::NotActive
      */
-    std::int32_t ResourceRemove(const CallContext&, Detail::EngineContext& engine, std::int32_t id)
+    ChangeError ResourceRemove(const CallContext&, Detail::EngineContext& engine, std::int32_t id)
     {
-        return static_cast<std::int32_t>(engine.changes->RemoveResource(*engine.components, id));
+        return engine.changes->RemoveResource(*engine.components, id);
     }
 } // namespace Fenrir::ScriptingNatives
 
@@ -485,7 +490,7 @@ namespace Fenrir
 
     bool ChangeBuffer::DestroyEntity(std::uint32_t entity) const
     {
-        return m_changes->Destroy(m_app->GetActiveScene().GetEntityList(), entity) == Detail::ChangeError::None;
+        return m_changes->Destroy(m_app->GetActiveScene().GetEntityList(), entity) == ChangeError::None;
     }
 
     bool ChangeBuffer::RecordOn(std::uint32_t entity, std::function<void(Entity&)> change) const

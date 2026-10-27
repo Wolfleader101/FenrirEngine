@@ -23,7 +23,7 @@ namespace RulesTest
         auto builtIn = Fenrir::Detail::BuiltInExtension({}, {}, std::make_shared<Fenrir::Detail::EngineContext>());
         for (auto& registration : builtIn.components)
         {
-            REQUIRE(registry.Add(std::move(registration)) >= 0);
+            REQUIRE(registry.Components().Add(std::move(registration)) >= 0);
         }
     }
 

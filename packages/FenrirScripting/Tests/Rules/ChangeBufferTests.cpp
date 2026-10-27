@@ -21,8 +21,8 @@
 namespace
 {
     using namespace Fenrir;
+    using Fenrir::ChangeError;
     using Fenrir::Detail::ChangeBuffer;
-    using Fenrir::Detail::ChangeError;
     using Fenrir::Detail::ComponentRegistry;
     using RulesTest::Ping;
     using RulesTest::Velocity;
@@ -46,12 +46,12 @@ namespace
         World()
         {
             RulesTest::AddEngineComponents(registry);
-            transform = registry.Find("Fenrir.Transform");
-            relationship = registry.Find("Fenrir.Relationship");
-            velocity = registry.Add(MakeComponent<Velocity>(VelocityName));
+            transform = registry.Components().Find("Fenrir.Transform");
+            relationship = registry.Components().Find("Fenrir.Relationship");
+            velocity = registry.Components().Add(MakeComponent<Velocity>(VelocityName));
             auto registration = MakeEvent<Ping>(PingName);
             REQUIRE(registration.bind(headless.Get()));
-            ping = registry.AddEvent(std::move(registration));
+            ping = registry.Events().Add(std::move(registration));
         }
 
         EntityList& Entities()
@@ -61,7 +61,7 @@ namespace
 
         [[nodiscard]] const ComponentType& TypeOf(std::int32_t id) const
         {
-            return registry.Get(id)->type;
+            return registry.Components().Get(id)->type;
         }
 
         std::uint32_t NewEntity()
@@ -355,10 +355,9 @@ TEST_CASE("adding or removing an unknown component is refused", "[change-buffer]
     constexpr std::int32_t unknown = 999;
 
     INFO("An add of an unknown component should say so");
-    REQUIRE(world.buffer.Add(world.Entities(), world.registry, unknown, entity, nullptr) ==
-            ChangeError::UnknownComponent);
+    REQUIRE(world.buffer.Add(world.Entities(), world.registry, unknown, entity, nullptr) == ChangeError::Unknown);
     INFO("A remove of an unknown component should say so");
-    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, unknown, entity) == ChangeError::UnknownComponent);
+    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, unknown, entity) == ChangeError::Unknown);
 }
 
 TEST_CASE("adding or removing a read-only component is refused", "[change-buffer]")
@@ -368,10 +367,9 @@ TEST_CASE("adding or removing a read-only component is refused", "[change-buffer
 
     INFO("An add of the read-only Relationship should say it is read-only");
     REQUIRE(world.buffer.Add(world.Entities(), world.registry, world.relationship, entity, nullptr) ==
-            ChangeError::ReadOnlyComponent);
+            ChangeError::ReadOnly);
     INFO("A remove of it should say so too");
-    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, world.relationship, entity) ==
-            ChangeError::ReadOnlyComponent);
+    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, world.relationship, entity) == ChangeError::ReadOnly);
 }
 
 TEST_CASE("removing a component the engine requires is refused", "[change-buffer]")
@@ -380,8 +378,7 @@ TEST_CASE("removing a component the engine requires is refused", "[change-buffer
     const auto entity = world.NewEntity();
 
     INFO("Removing Transform should say the engine requires it");
-    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, world.transform, entity) ==
-            ChangeError::RequiredComponent);
+    REQUIRE(world.buffer.Remove(world.Entities(), world.registry, world.transform, entity) == ChangeError::Required);
 }
 
 TEST_CASE("changing an entity that is not alive is refused", "[change-buffer]")
@@ -419,10 +416,9 @@ TEST_CASE("sending an event that is unknown or has no value is refused", "[chang
     const Ping value{1};
 
     INFO("An unknown event should be refused");
-    REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, 999, &value) == ChangeError::UnknownEvent);
+    REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, 999, &value) == ChangeError::Unknown);
     INFO("A known event with no value should be refused");
-    REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, world.ping, nullptr) ==
-            ChangeError::UnknownEvent);
+    REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, world.ping, nullptr) == ChangeError::Unknown);
     INFO("Nothing should be recorded");
     REQUIRE(world.buffer.Empty());
 }
@@ -458,7 +454,7 @@ TEST_CASE("an event whose queue has gone is skipped with a warning", "[change-bu
     registration.size = 4;
     registration.alignment = 4;
     registration.scriptDefined = true;
-    const auto scripted = world.registry.AddEvent(std::move(registration));
+    const auto scripted = world.registry.Events().Add(std::move(registration));
     const Ping value{1};
     INFO("The send was refused when it was recorded");
     REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, scripted, &value) == ChangeError::None);
@@ -503,7 +499,7 @@ struct Iris::StructMapping<Clock>
 TEST_CASE("inserting and removing a resource play back in order, an insert with its value", "[change-buffer]")
 {
     World world;
-    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    const auto weather = world.registry.Resources().Add(MakeSceneResource<Weather>("Rules.Weather"));
     Weather value{3.0F};
     REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
     value.Wind = 9.0F;
@@ -526,7 +522,7 @@ TEST_CASE("inserting and removing a resource play back in order, an insert with 
 TEST_CASE("an insert copies its value when it is recorded", "[change-buffer]")
 {
     World world;
-    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    const auto weather = world.registry.Resources().Add(MakeSceneResource<Weather>("Rules.Weather"));
     Weather value{3.0F};
     REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
     value.Wind = 9.0F;
@@ -540,15 +536,15 @@ TEST_CASE("an insert copies its value when it is recorded", "[change-buffer]")
 TEST_CASE("inserting or removing an unknown or read-only resource is refused", "[change-buffer]")
 {
     World world;
-    const auto clock = world.registry.AddResource(MakeReadOnlyAppResource<Clock>("Rules.Clock"));
+    const auto clock = world.registry.Resources().Add(MakeReadOnlyAppResource<Clock>("Rules.Clock"));
     constexpr std::int32_t unknown = 42;
 
     INFO("An unknown resource should be refused as unknown");
-    REQUIRE(world.buffer.InsertResource(world.registry, unknown, nullptr) == ChangeError::UnknownResource);
-    REQUIRE(world.buffer.RemoveResource(world.registry, unknown) == ChangeError::UnknownResource);
+    REQUIRE(world.buffer.InsertResource(world.registry, unknown, nullptr) == ChangeError::Unknown);
+    REQUIRE(world.buffer.RemoveResource(world.registry, unknown) == ChangeError::Unknown);
     INFO("A read-only resource should be refused as read-only");
-    REQUIRE(world.buffer.InsertResource(world.registry, clock, nullptr) == ChangeError::ReadOnlyResource);
-    REQUIRE(world.buffer.RemoveResource(world.registry, clock) == ChangeError::ReadOnlyResource);
+    REQUIRE(world.buffer.InsertResource(world.registry, clock, nullptr) == ChangeError::ReadOnly);
+    REQUIRE(world.buffer.RemoveResource(world.registry, clock) == ChangeError::ReadOnly);
     INFO("A refused change should not be recorded");
     REQUIRE(world.buffer.Empty());
 }

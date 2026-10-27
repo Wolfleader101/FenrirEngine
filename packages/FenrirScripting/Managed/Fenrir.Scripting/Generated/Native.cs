@@ -59,8 +59,8 @@ internal static unsafe partial class Native
     /// only for the registry generation it was looked up in: a new Scripting has a new registry.
     /// </summary>
     /// <returns>
-    /// The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type (so a
-    /// script cannot claim a native component with a struct of its own).
+    /// The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name, WrongType when
+    /// it is registered for a different C# type (so a script cannot claim a native component with a struct of its own).
     /// </returns>
     [NativeFunction]
     public static partial int ComponentIdOf(string name, string typeName);
@@ -99,27 +99,27 @@ internal static unsafe partial class Native
 
     /// <summary>Records the entity's destruction, for playback.</summary>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -5 scripting is not running.
+    /// None when recorded, otherwise why it was refused: EntityNotAlive, or NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int EntityDestroy(uint entity);
+    public static partial ChangeError EntityDestroy(uint entity);
 
     /// <summary>Records adding the component to the entity, for playback.</summary>
     /// <param name="value">The component's bytes, or null for a default one.</param>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the
-    /// component is read-only, -5 scripting is not running.
+    /// None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly, or
+    /// NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int ComponentAdd(int id, uint entity, void* value);
+    public static partial ChangeError ComponentAdd(int id, uint entity, void* value);
 
     /// <summary>Records removing the component from the entity, for playback.</summary>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the
-    /// component is read-only, -4 the engine requires every entity to have it, -5 scripting is not running.
+    /// None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly,
+    /// Required (the engine needs every entity to have it), or NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int ComponentRemove(int id, uint entity);
+    public static partial ChangeError ComponentRemove(int id, uint entity);
 
     /// <summary>
     /// Plays back the structural changes recorded since the last time. The system runner calls it after each system.
@@ -138,7 +138,10 @@ internal static unsafe partial class Native
     /// The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine owns:
     /// the queue C++ SendEvent and EventReader use for a native event.
     /// </summary>
-    /// <returns>The id; -1 when there is none, -3 when it is registered for a different C# type.</returns>
+    /// <returns>
+    /// The id, or a RegistryError as its value: NotRegistered when there is none, WrongType when it is registered for a
+    /// different C# type.
+    /// </returns>
     [NativeFunction]
     public static partial int EventIdOf(string name, string typeName);
 
@@ -149,10 +152,11 @@ internal static unsafe partial class Native
 
     /// <summary>Records an event to send when the system returns (see ChangeBuffer::SendEvent).</summary>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -5 scripting is not running, -6 the event has no queue.
+    /// None when recorded, otherwise why it was refused: Unknown (the event has no queue), or NotActive when scripting
+    /// is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int EventSend(int @event, void* value);
+    public static partial ChangeError EventSend(int @event, void* value);
 
     /// <summary>
     /// One read of a C# EventReader. Readers share no state: each keeps its own cursor in C#. The addresses are good
@@ -166,9 +170,9 @@ internal static unsafe partial class Native
     /// Five values written: the older part's address and count, the newer part's address and count, and how many events
     /// the reader missed.
     /// </param>
-    /// <returns>0, or -1 when there is no such event.</returns>
+    /// <returns>False when there is no such event.</returns>
     [NativeFunction]
-    public static partial int EventReadAfter(int @event, ulong* seen, nuint* view);
+    public static partial bool EventReadAfter(int @event, ulong* seen, nuint* view);
 
     /// <summary>
     /// How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this
@@ -191,7 +195,8 @@ internal static unsafe partial class Native
     /// the registry generation it was looked up in.
     /// </summary>
     /// <returns>
-    /// The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type.
+    /// The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name, WrongType when
+    /// it is registered for a different C# type.
     /// </returns>
     [NativeFunction]
     public static partial int ResourceIdOf(string name, string typeName);
@@ -207,17 +212,17 @@ internal static unsafe partial class Native
     /// <summary>Records inserting the resource, replacing the one there is, for playback.</summary>
     /// <param name="value">The resource's bytes, or null for a default one.</param>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting
-    /// is not running.
+    /// None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive when
+    /// scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int ResourceInsert(int id, void* value);
+    public static partial ChangeError ResourceInsert(int id, void* value);
 
     /// <summary>Records removing the resource, for playback.</summary>
     /// <returns>
-    /// 0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting
-    /// is not running.
+    /// None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive when
+    /// scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial int ResourceRemove(int id);
+    public static partial ChangeError ResourceRemove(int id);
 }

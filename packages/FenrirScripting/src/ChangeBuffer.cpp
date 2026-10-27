@@ -36,14 +36,14 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::Add(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                   std::uint32_t entity, const void* value)
     {
-        const auto* registration = registry.Get(component);
+        const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownComponent;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyComponent;
+            return ChangeError::ReadOnly;
         }
         if (!entities.HasEntity(entity))
         {
@@ -62,15 +62,15 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event,
                                         const void* value)
     {
-        const auto* registration = registry.GetEvent(event);
+        const auto* registration = registry.Events().Get(event);
         if (registration == nullptr || value == nullptr)
         {
-            return ChangeError::UnknownEvent;
+            return ChangeError::Unknown;
         }
         const IEventQueue* queue = app.FindEventQueue(registration->name);
         if (queue == nullptr || queue->EventSize() != registration->size)
         {
-            return ChangeError::UnknownEvent;
+            return ChangeError::Unknown;
         }
         m_changes.push_back({Kind::SendEvent, true, event, 0, m_values.size()});
         AppendValue(value, registration->size);
@@ -80,18 +80,18 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::Remove(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                      std::uint32_t entity)
     {
-        const auto* registration = registry.Get(component);
+        const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownComponent;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyComponent;
+            return ChangeError::ReadOnly;
         }
         if (registration->required)
         {
-            return ChangeError::RequiredComponent;
+            return ChangeError::Required;
         }
         if (!entities.HasEntity(entity))
         {
@@ -104,14 +104,14 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::InsertResource(const ComponentRegistry& registry, std::int32_t resource,
                                              const void* value)
     {
-        const auto* registration = registry.GetResource(resource);
+        const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownResource;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyResource;
+            return ChangeError::ReadOnly;
         }
         const Change change{Kind::InsertResource, value != nullptr && registration->size > 0, resource, 0,
                             m_values.size()};
@@ -125,14 +125,14 @@ namespace Fenrir::Detail
 
     ChangeError ChangeBuffer::RemoveResource(const ComponentRegistry& registry, std::int32_t resource)
     {
-        const auto* registration = registry.GetResource(resource);
+        const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownResource;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyResource;
+            return ChangeError::ReadOnly;
         }
         m_changes.push_back({Kind::RemoveResource, false, resource, 0, 0});
         return ChangeError::None;
@@ -181,7 +181,7 @@ namespace Fenrir::Detail
                 ++result.applied;
                 break;
             case Kind::Add: {
-                const auto* registration = registry.Get(change.component);
+                const auto* registration = registry.Components().Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !entities.Add(registration->type, change.entity))
                 {
@@ -199,7 +199,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::SendEvent: {
-                const auto* registration = registry.GetEvent(change.component);
+                const auto* registration = registry.Events().Get(change.component);
                 IEventQueue* queue = registration == nullptr ? nullptr : app.FindEventQueue(registration->name);
                 if (queue == nullptr || queue->EventSize() != registration->size ||
                     !queue->SendRaw(&values[change.valueOffset]))
@@ -212,7 +212,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::InsertResource: {
-                const auto* registration = registry.GetResource(change.component);
+                const auto* registration = registry.Resources().Get(change.component);
                 void* target = registration == nullptr ? nullptr : registration->insert(app);
                 if (target == nullptr)
                 {
@@ -228,7 +228,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::RemoveResource: {
-                const auto* registration = registry.GetResource(change.component);
+                const auto* registration = registry.Resources().Get(change.component);
                 if (registration == nullptr)
                 {
                     ++result.skipped;
@@ -252,7 +252,7 @@ namespace Fenrir::Detail
                 }
                 break;
             case Kind::Remove: {
-                const auto* registration = registry.Get(change.component);
+                const auto* registration = registry.Components().Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !entities.Remove(registration->type, change.entity))
                 {
