@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `ScriptingTests` (.NET) pass unchanged; `grep -rn "ComponentIds<\|EventIds<\|ResourceIds<" Managed/` finds nothing.
 - [ ] `grep -n "generation != current" Managed/Fenrir.Scripting/*.cs` finds one line.

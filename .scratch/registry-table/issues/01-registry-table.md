@@ -12,7 +12,7 @@
 
 **Touches:** `packages/FenrirScripting/src/ComponentRegistry.hpp`, `packages/FenrirScripting/src/Bindings.cpp`, `packages/FenrirScripting/src/ChangeBuffer.cpp`, `packages/FenrirScripting/src/Queries.cpp`, `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Rules tests (no .NET), `Tests/Rules/RegistryTableTests.cpp`: `Add` gives ids in order and `Find` returns them; an empty name and a taken name are refused; a name another kind holds is refused; `AddAll` adds none when one is unusable, taken, or twice in the batch; `Resolve` gives the id for the registered type and `-3` for another; `RemoveWhere` re-ids what remains, `Find` follows, and the generation changes once; `Add` changes the generation and a lookup does not.
 - [ ] `ScriptingTests` (.NET) pass unchanged: the duplicate-name startup failures, the "different C# type" refusals and the admission tests pin the messages.

@@ -14,7 +14,7 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/`, `packages/FenrirScripting/src/`, `packages/FenrirScripting/api/`, `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/Managed/Fenrir.Scripting/`, `packages/FenrirScripting/Tests/`, `docs/adr/0044-natives-pass-enums-text-and-wrappers-by-value-and-bindings-use-other-bindings-mirrors.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] `ScriptingTests` (.NET): the thrown messages for not alive, no such component, read-only component, required component, scripting not running, unknown event, no such resource and read-only resource are each pinned by a case; add a case only where none exists today.
 - [ ] Rules tests: `ChangeBufferTests.cpp` compares against the new enumerators; a `RegistryTableTests.cpp` case reads `Resolve`'s failures as `RegistryError`.
