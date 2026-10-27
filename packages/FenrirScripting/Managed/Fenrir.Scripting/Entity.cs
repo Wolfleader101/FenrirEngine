@@ -65,19 +65,19 @@ public readonly struct Entity : IEquatable<Entity>
     public unsafe void Remove<T>() where T : unmanaged, IComponent => Check(Native.ComponentRemove(IdOf<T>(), Value), "remove", typeof(T));
 
     // Turns the engine's reason for refusing a change into an exception that says what was attempted.
-    private void Check(int code, string what, Type? component = null)
+    private void Check(ChangeError code, string what, Type? component = null)
     {
-        if (code == 0)
+        if (code == ChangeError.None)
             return;
         string subject = component == null ? "" : $" {component.Name}";
         throw new InvalidOperationException(code switch
         {
-            -1 => $"Cannot {what}{subject} on {this}: it is not alive in the active scene.",
-            -2 => $"Cannot {what}{subject} on {this}: the engine has no such component.",
-            -3 => $"Cannot {what}{subject} on {this}: scripts may only read it.",
-            -4 => $"Cannot {what}{subject} on {this}: the engine needs every entity to have it.",
-            -5 => $"Cannot {what}{subject} on {this}: scripting is not running.",
-            _ => $"Cannot {what}{subject} on {this}: the engine refused (code {code}).",
+            ChangeError.EntityNotAlive => $"Cannot {what}{subject} on {this}: it is not alive in the active scene.",
+            ChangeError.Unknown => $"Cannot {what}{subject} on {this}: the engine has no such component.",
+            ChangeError.ReadOnly => $"Cannot {what}{subject} on {this}: scripts may only read it.",
+            ChangeError.Required => $"Cannot {what}{subject} on {this}: the engine needs every entity to have it.",
+            ChangeError.NotActive => $"Cannot {what}{subject} on {this}: scripting is not running.",
+            _ => $"Cannot {what}{subject} on {this}: the engine refused ({code}).",
         });
     }
 
@@ -140,9 +140,9 @@ public readonly struct Entity : IEquatable<Entity>
         if (ComponentIds<T>.IsResource)
             throw new InvalidOperationException($"{typeof(T).Name} is a resource, not a component: reach it through Resources.");
         int id = ComponentIds<T>.Id;
-        if (id == ComponentIds<T>.WrongType)
+        if (id == (int)RegistryError.WrongType)
             throw new InvalidOperationException($"'{ComponentIds<T>.NativeName}' is registered for a different C# type than {typeof(T).FullName}; a native component is reached only through the type the host validated.");
-        if (id == ComponentIds<T>.NotRegistered)
+        if (id == (int)RegistryError.NotRegistered)
             throw new InvalidOperationException(ComponentIds<T>.NativeName != null
                 ? $"The engine has no component registered as '{ComponentIds<T>.NativeName}' (for {typeof(T).Name})."
                 : $"The engine does not know {typeof(T).Name}: a component a script defines is registered when its assembly loads, and only if the script project uses the Fenrir scripting SDK.");

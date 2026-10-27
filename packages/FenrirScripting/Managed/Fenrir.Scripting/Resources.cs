@@ -90,16 +90,16 @@ public static unsafe class Resources
         return pointer;
     }
 
-    private static void Check<T>(int code, string what) where T : unmanaged, IReadOnlyResource
+    private static void Check<T>(ChangeError code, string what) where T : unmanaged, IReadOnlyResource
     {
-        if (code == 0)
+        if (code == ChangeError.None)
             return;
         throw new InvalidOperationException(code switch
         {
-            -5 => $"Cannot {what} {typeof(T).Name}: scripting is not running.",
-            -7 => $"Cannot {what} {typeof(T).Name}: the engine has no such resource.",
-            -8 => $"Cannot {what} {typeof(T).Name}: scripts may only read it.",
-            _ => $"Cannot {what} {typeof(T).Name}: the engine refused (code {code}).",
+            ChangeError.NotActive => $"Cannot {what} {typeof(T).Name}: scripting is not running.",
+            ChangeError.Unknown => $"Cannot {what} {typeof(T).Name}: the engine has no such resource.",
+            ChangeError.ReadOnly => $"Cannot {what} {typeof(T).Name}: scripts may only read it.",
+            _ => $"Cannot {what} {typeof(T).Name}: the engine refused ({code}).",
         });
     }
 
@@ -107,9 +107,9 @@ public static unsafe class Resources
     private static int IdOf<T>() where T : unmanaged, IReadOnlyResource
     {
         int id = ResourceIds<T>.Id;
-        if (id == ResourceIds<T>.WrongType)
+        if (id == (int)RegistryError.WrongType)
             throw new InvalidOperationException($"'{ResourceIds<T>.Name}' is registered for a different C# type than {typeof(T).FullName}; a native resource is reached only through the type the host validated.");
-        if (id == ResourceIds<T>.NotRegistered)
+        if (id == (int)RegistryError.NotRegistered)
             throw new InvalidOperationException(ResourceIds<T>.HasAttribute
                 ? $"The engine has no resource registered as '{ResourceIds<T>.Name}' (for {typeof(T).Name}): is its package's scripting extension in ScriptingConfig::extensions?"
                 : $"{typeof(T).Name} has no [NativeResource] attribute: a resource is mirrored from one a scripting extension registers.");
@@ -121,9 +121,6 @@ public static unsafe class Resources
 // long as the registry it came from is the current one.
 internal static unsafe class ResourceIds<T> where T : unmanaged, IReadOnlyResource
 {
-    internal const int NotRegistered = -1;
-    internal const int WrongType = -3;
-
     private static uint generation;
     private static bool resolved;
     private static int id;
@@ -140,7 +137,7 @@ internal static unsafe class ResourceIds<T> where T : unmanaged, IReadOnlyResour
         get
         {
             if (!HasAttribute)
-                return NotRegistered;
+                return (int)RegistryError.NotRegistered;
             uint current = Native.RegistryGeneration();
             if (!resolved || generation != current)
             {

@@ -6,12 +6,6 @@ namespace Fenrir.Scripting;
 // for as long as the registry it came from is the current one.
 internal static unsafe class ComponentIds<T> where T : unmanaged, IReadOnlyComponent
 {
-    /// <summary>The attribute names a component the host has not registered.</summary>
-    internal const int NotRegistered = -1;
-
-    /// <summary>The attribute names a component the host registered for a different C# type.</summary>
-    internal const int WrongType = -3;
-
     private static uint generation;
     private static bool resolved;
     private static int id;

@@ -39,11 +39,11 @@ namespace Fenrir::Detail
         const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownComponent;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyComponent;
+            return ChangeError::ReadOnly;
         }
         if (!entities.HasEntity(entity))
         {
@@ -65,12 +65,12 @@ namespace Fenrir::Detail
         const auto* registration = registry.Events().Get(event);
         if (registration == nullptr || value == nullptr)
         {
-            return ChangeError::UnknownEvent;
+            return ChangeError::Unknown;
         }
         const IEventQueue* queue = app.FindEventQueue(registration->name);
         if (queue == nullptr || queue->EventSize() != registration->size)
         {
-            return ChangeError::UnknownEvent;
+            return ChangeError::Unknown;
         }
         m_changes.push_back({Kind::SendEvent, true, event, 0, m_values.size()});
         AppendValue(value, registration->size);
@@ -83,15 +83,15 @@ namespace Fenrir::Detail
         const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownComponent;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyComponent;
+            return ChangeError::ReadOnly;
         }
         if (registration->required)
         {
-            return ChangeError::RequiredComponent;
+            return ChangeError::Required;
         }
         if (!entities.HasEntity(entity))
         {
@@ -107,11 +107,11 @@ namespace Fenrir::Detail
         const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownResource;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyResource;
+            return ChangeError::ReadOnly;
         }
         const Change change{Kind::InsertResource, value != nullptr && registration->size > 0, resource, 0,
                             m_values.size()};
@@ -128,11 +128,11 @@ namespace Fenrir::Detail
         const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
-            return ChangeError::UnknownResource;
+            return ChangeError::Unknown;
         }
         if (registration->readOnly)
         {
-            return ChangeError::ReadOnlyResource;
+            return ChangeError::ReadOnly;
         }
         m_changes.push_back({Kind::RemoveResource, false, resource, 0, 0});
         return ChangeError::None;

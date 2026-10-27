@@ -1,0 +1,67 @@
+{
+  "package": "FenrirScripting",
+  "pointerSize": 8,
+  "alignment": "natural",
+  "types": [
+    {
+      "name": "Fenrir::ChangeError",
+      "category": "enum",
+      "size": 4,
+      "alignment": 4,
+      "doc": "What a script asked for that the change buffer refused at once: the result of every native that records a structural change. C# throws on anything but None, with a message that says which change was attempted, so one value serves a component and a resource alike. Described for the C# binding, so the values are the contract's.",
+      "underlying": "i32",
+      "values": [
+        {
+          "name": "None",
+          "value": 0,
+          "doc": "The change was recorded, to play back when the system returns."
+        },
+        {
+          "name": "EntityNotAlive",
+          "value": -1,
+          "doc": "The entity is not alive in the active scene."
+        },
+        {
+          "name": "Unknown",
+          "value": -2,
+          "doc": "No component, event or resource has the id."
+        },
+        {
+          "name": "ReadOnly",
+          "value": -3,
+          "doc": "Scripts may only read the component or resource, so they cannot add, remove, insert or remove it."
+        },
+        {
+          "name": "Required",
+          "value": -4,
+          "doc": "The engine needs every entity to have the component (Transform, Name, Relationship), so it cannot be removed."
+        },
+        {
+          "name": "NotActive",
+          "value": -5,
+          "doc": "Scripting is not running, so there is no scene to change."
+        }
+      ]
+    },
+    {
+      "name": "Fenrir::RegistryError",
+      "category": "enum",
+      "size": 4,
+      "alignment": 4,
+      "doc": "Why a lookup of a component, event or resource by name gave no id. A lookup native returns the id when it found one, otherwise one of these; the binding's generated enum lets C# name the reason it throws for. Described for the C# binding (api/FenrirScripting.api.toml), so the values below are the contract's.",
+      "underlying": "i32",
+      "values": [
+        {
+          "name": "NotRegistered",
+          "value": -1,
+          "doc": "Nothing is registered under the name."
+        },
+        {
+          "name": "WrongType",
+          "value": -2,
+          "doc": "The name is registered for a different C# type than the one asking, so the layout check would be skipped."
+        }
+      ]
+    }
+  ]
+}

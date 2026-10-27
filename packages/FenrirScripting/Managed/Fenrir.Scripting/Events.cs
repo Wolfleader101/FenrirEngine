@@ -46,7 +46,7 @@ internal static unsafe class EventIds<T> where T : unmanaged, IEvent
                 generation = current;
                 resolved = true;
             }
-            if (id == -3)
+            if (id == (int)RegistryError.WrongType)
                 throw new InvalidOperationException($"'{Name}' is registered for a different C# type than {typeof(T).FullName}; a native event is reached only through the type the host validated.");
             if (id < 0)
                 throw new InvalidOperationException(NativeName != null
@@ -96,10 +96,10 @@ public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
         // older data, older count, newer data, newer count, missed
         nuint* view = stackalloc nuint[5];
         int id = EventIds<T>.Id;
-        int code;
+        bool read;
         fixed (ulong* cursor = &seen)
-            code = Native.EventReadAfter(id, cursor, view);
-        if (code != 0)
+            read = Native.EventReadAfter(id, cursor, view);
+        if (!read)
             throw new InvalidOperationException($"Cannot read {typeof(T).Name}: the engine has no queue for it.");
         return new EventRange<T>((T*)view[0], (int)view[1], (T*)view[2], (int)view[3], (int)view[4]);
     }
@@ -179,13 +179,13 @@ public readonly partial struct SystemContext
         /// <exception cref="InvalidOperationException">The engine does not know the event.</exception>
         public void Send<T>(in T value) where T : unmanaged, IEvent
         {
-            int code;
+            ChangeError code;
             fixed (T* pointer = &value)
                 code = Native.EventSend(EventIds<T>.Id, pointer);
-            if (code != 0)
-                throw new InvalidOperationException(code == -6
+            if (code != ChangeError.None)
+                throw new InvalidOperationException(code == ChangeError.Unknown
                     ? $"Cannot send {typeof(T).Name}: the engine has no queue for it."
-                    : $"Cannot send {typeof(T).Name}: the engine refused it (code {code}).");
+                    : $"Cannot send {typeof(T).Name}: the engine refused it ({code}).");
         }
     }
 }
