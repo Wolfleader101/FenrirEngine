@@ -19,11 +19,11 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <thread>
 #include <typeindex>
 #include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #if defined(_WIN32)
@@ -446,7 +446,7 @@ namespace Fenrir
         {
             return nullptr;
         }
-        return m_state->components.Get(m_state->components.Find(name));
+        return m_state->components.Components().Get(m_state->components.Components().Find(name));
     }
 
     Iris::CallResult<void> Scripting::Reload()
@@ -662,50 +662,56 @@ namespace Fenrir
                 state->context->app = &app;
                 state->context->components = &state->components;
                 state->context->changes = &state->changes;
-                // Every extension's components, events, shared structs and resources, in order, by the same rules. A
-                // name names one of them, whatever its kind, across every extension.
-                std::unordered_set<std::string> names;
+                // Every extension's components, events, shared structs and resources, in order, by the same rules: the
+                // registry refuses a name that is empty or that any of its tables already holds, whatever its kind.
                 for (auto& extension : config.extensions)
                 {
                     const std::string source = "extension '" + extension.name + "'";
-                    for (auto& registration : extension.components)
-                    {
-                        if (!names.insert(registration.name).second ||
-                            state->components.Add(std::move(registration)) < 0)
+                    auto addAll = [&](auto& registrations, auto& table,
+                                      auto&& before) -> std::optional<StartupFailure> {
+                        for (auto& registration : registrations)
                         {
-                            return StartupFailure{"a component in " + source + " has an empty or duplicate name", {}};
+                            if (auto failure = before(registration))
+                            {
+                                return failure;
+                            }
+                            if (table.Add(std::move(registration)) < 0)
+                            {
+                                const std::string noun(table.Noun());
+                                const char* article =
+                                    std::string_view("aeiou").find(noun[0]) == std::string_view::npos ? "a " : "an ";
+                                return StartupFailure{
+                                    article + noun + " in " + source + " has an empty or duplicate name", {}};
+                            }
                         }
-                    }
-                    for (auto& registration : extension.events)
-                    {
+                        return std::nullopt;
+                    };
+                    auto nothing = [](const auto&) -> std::optional<StartupFailure> { return std::nullopt; };
+                    // An event's queue is the App's: it is named before the event is registered.
+                    auto bindQueue = [&](EventRegistration& registration) -> std::optional<StartupFailure> {
                         if (registration.bind && !registration.bind(app))
                         {
                             return StartupFailure{"the event '" + registration.name + "' in " + source +
                                                       " names a queue the app already has under another type",
                                                   {}};
                         }
-                        if (!names.insert(registration.name).second ||
-                            state->components.AddEvent(std::move(registration)) < 0)
-                        {
-                            return StartupFailure{"an event in " + source + " has an empty or duplicate name", {}};
-                        }
-                    }
-                    for (auto& registration : extension.sharedStructs)
+                        return std::nullopt;
+                    };
+                    if (auto failure = addAll(extension.components, state->components.Components(), nothing))
                     {
-                        if (!names.insert(registration.name).second ||
-                            !state->components.AddSharedStruct(std::move(registration)))
-                        {
-                            return StartupFailure{"a shared struct in " + source + " has an empty or duplicate name",
-                                                  {}};
-                        }
+                        return failure;
                     }
-                    for (auto& registration : extension.resources)
+                    if (auto failure = addAll(extension.events, state->components.Events(), bindQueue))
                     {
-                        if (!names.insert(registration.name).second ||
-                            state->components.AddResource(std::move(registration)) < 0)
-                        {
-                            return StartupFailure{"a resource in " + source + " has an empty or duplicate name", {}};
-                        }
+                        return failure;
+                    }
+                    if (auto failure = addAll(extension.sharedStructs, state->components.SharedStructs(), nothing))
+                    {
+                        return failure;
+                    }
+                    if (auto failure = addAll(extension.resources, state->components.Resources(), nothing))
+                    {
+                        return failure;
                     }
                 }
                 return std::nullopt;

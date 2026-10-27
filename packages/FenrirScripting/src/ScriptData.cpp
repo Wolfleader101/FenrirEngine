@@ -2,6 +2,7 @@
 
 #include "ScriptComponents.hpp"
 
+#include <cctype>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -26,21 +27,12 @@ namespace Fenrir::Detail
             return Result{Iris::CallStatus::InvalidArgument, std::move(diagnostic), false};
         }
 
-        Result ValidateAll(const std::vector<ComponentRegistration>& registrations, const Iris::Component& component)
+        // Every registration of one table whose C# struct can be checked (a script-defined one has no mapping to
+        // check against) matches it, or the first that does not, named with the table's noun.
+        template <typename Registration>
+        Result ValidateTable(const RegistryTable<Registration>& table, const Iris::Component& component)
         {
-            for (const auto& registration : registrations)
-            {
-                if (auto validated = ValidateRegistration(registration, component); !validated.Succeeded())
-                {
-                    return validated;
-                }
-            }
-            return Succeeded();
-        }
-
-        Result ValidateAllEvents(const std::vector<EventRegistration>& registrations, const Iris::Component& component)
-        {
-            for (const auto& registration : registrations)
+            for (const auto& registration : table.All())
             {
                 if (!registration.validate)
                 {
@@ -48,42 +40,10 @@ namespace Fenrir::Detail
                 }
                 if (auto validated = registration.validate(component); !validated.Succeeded())
                 {
+                    std::string noun(table.Noun());
+                    noun[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(noun[0])));
                     validated.diagnostic =
-                        "Event '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
-                    return validated;
-                }
-            }
-            return Succeeded();
-        }
-
-        Result ValidateAllSharedStructs(const std::vector<SharedStructRegistration>& registrations,
-                                        const Iris::Component& component)
-        {
-            for (const auto& registration : registrations)
-            {
-                if (auto validated = registration.validate(component); !validated.Succeeded())
-                {
-                    validated.diagnostic = "Shared struct '" + registration.name +
-                                           "' does not match its C# struct: " + validated.diagnostic;
-                    return validated;
-                }
-            }
-            return Succeeded();
-        }
-
-        Result ValidateAllResources(const std::vector<ResourceRegistration>& registrations,
-                                    const Iris::Component& component)
-        {
-            for (const auto& registration : registrations)
-            {
-                if (!registration.validate)
-                {
-                    continue;
-                }
-                if (auto validated = registration.validate(component); !validated.Succeeded())
-                {
-                    validated.diagnostic =
-                        "Resource '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
+                        noun + " '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
                     return validated;
                 }
             }
@@ -263,7 +223,7 @@ namespace Fenrir::Detail
                                       std::to_string(description.size) + " and an alignment of " +
                                       std::to_string(description.alignment) + ", which no C# struct has.");
                     }
-                    if (registry.Find(description.name) >= 0)
+                    if (registry.Components().Find(description.name) >= 0)
                     {
                         return Failed("The script defines a component '" + description.name +
                                       "', but the engine already has a component of that name.");
@@ -291,7 +251,7 @@ namespace Fenrir::Detail
                     });
                 }
                 // All or none: the checks make a refusal impossible, but if one happens nothing is half-registered.
-                return registry.AddAll(std::move(registrations))
+                return registry.Components().AddAll(std::move(registrations))
                            ? Succeeded()
                            : Failed("The script's components could not be registered together.");
             };
@@ -325,7 +285,7 @@ namespace Fenrir::Detail
                                       std::to_string(description.size) + " and an alignment of " +
                                       std::to_string(description.alignment) + ", which the engine cannot store.");
                     }
-                    if (registry.FindEvent(description.name) >= 0 ||
+                    if (registry.Events().Find(description.name) >= 0 ||
                         (app.FindEventQueue(description.name) != nullptr && !ownedEvents.contains(description.name)))
                     {
                         return Failed("The script defines an event '" + description.name +
@@ -346,7 +306,7 @@ namespace Fenrir::Detail
                     registration.scriptDefined = true;
                     registrations.push_back(std::move(registration));
                 }
-                return registry.AddEvents(std::move(registrations))
+                return registry.Events().AddAll(std::move(registrations))
                            ? Succeeded()
                            : Failed("The script's events could not be registered together.");
             };
@@ -374,21 +334,6 @@ namespace Fenrir::Detail
             return kind;
         }
     } // namespace
-
-    Result ValidateRegistration(const ComponentRegistration& registration, const Iris::Component& component)
-    {
-        if (!registration.validate)
-        {
-            return Succeeded();
-        }
-        auto validated = registration.validate(component);
-        if (!validated.Succeeded())
-        {
-            validated.diagnostic =
-                "Component '" + registration.name + "' does not match its C# struct: " + validated.diagnostic;
-        }
-        return validated;
-    }
 
     IrisScriptAssembly::IrisScriptAssembly(EngineContext& context, const Iris::Component& component)
         : m_context(context), m_component(component)
@@ -443,19 +388,19 @@ namespace Fenrir::Detail
 
     Result IrisScriptAssembly::CheckNativeAgainstCSharp(const ComponentRegistry& registry)
     {
-        if (auto validated = ValidateAll(registry.All(), m_component); !validated.Succeeded())
+        if (auto validated = ValidateTable(registry.Components(), m_component); !validated.Succeeded())
         {
             return validated;
         }
-        if (auto validated = ValidateAllEvents(registry.Events(), m_component); !validated.Succeeded())
+        if (auto validated = ValidateTable(registry.Events(), m_component); !validated.Succeeded())
         {
             return validated;
         }
-        if (auto validated = ValidateAllSharedStructs(registry.SharedStructs(), m_component); !validated.Succeeded())
+        if (auto validated = ValidateTable(registry.SharedStructs(), m_component); !validated.Succeeded())
         {
             return validated;
         }
-        return ValidateAllResources(registry.Resources(), m_component);
+        return ValidateTable(registry.Resources(), m_component);
     }
 
     // Admission, in an order that puts the one irreversible step as late as it can go and undoes everything after it:
