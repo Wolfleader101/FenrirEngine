@@ -14,8 +14,8 @@ namespace Fenrir
 {
     /**
      * @brief The physics extension's state, which every physics native function is given second: what they share, made
-     * by PhysicsScriptingExtension and kept by the Scripting given the extension. In a header of its own because the
-     * generated registration (Generated/FenrirPhysicsRegistration.cpp) declares the natives, which name it.
+     * by Physics::ScriptingExtension and kept by the Scripting given the extension. In a header of its own because
+     * the generated natives header (Generated/FenrirPhysicsNatives.hpp) declares the natives, which name it.
      *
      * Its lookups are built on the native guard (NativeGuard.hpp): each warns once per native function and message,
      * under the native's name, which the call context carries, so no native spells its own.

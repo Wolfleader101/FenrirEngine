@@ -8,5 +8,5 @@ target_link_libraries(FenrirDemoScaffoldTests PRIVATE FenrirDemoScaffold FenrirD
 add_test(NAME FenrirDemoScaffold COMMAND FenrirDemoScaffoldTests)
 # With scripting built the scaffold links it, so the tests need what it loads at run time beside them.
 if(FENRIR_ENABLE_SCRIPTING)
-    fenrir_deploy_scripting(FenrirDemoScaffoldTests)
+    fenrir_deploy_scripting(FenrirDemoScaffoldTests EXTENSIONS Input Window Assets Renderer DebugDraw)
 endif()

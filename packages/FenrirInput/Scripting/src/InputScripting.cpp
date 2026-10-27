@@ -9,6 +9,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Devices.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
+#include "Generated/FenrirInputNatives.hpp"
 #include "InputClaimsResource.hpp"
 #include "InputScriptingState.hpp"
 
@@ -29,7 +30,7 @@ namespace Fenrir
     // pad that is not connected) it does nothing and returns false or zero, warning once per native function in a
     // debug build under the native's name, which the call context carries; its `out` parameter is zeroed by the
     // registration before it runs, so it writes nothing on that path. Not in an anonymous namespace: the generated
-    // registration names them from another file.
+    // natives header declares them.
     namespace InputNatives
     {
         /**
@@ -244,11 +245,8 @@ namespace Fenrir
     Fenrir::ScriptingExtension Input::ScriptingExtension()
     {
         const auto input = std::make_shared<InputScripting>();
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirInput";
-        extension.SetState(input);
-        extension.sharedAssemblies = {"Fenrir.Input.dll"};
-        Generated::RegisterInput(extension);
+        Fenrir::ScriptingExtension extension = Generated::MakeInputExtension(input);
+        // Registered by hand (by-hand in the binding): refreshed from InputClaims whenever C# gets it.
         extension.resources.push_back(InputClaimsResource(input));
         return extension;
     }

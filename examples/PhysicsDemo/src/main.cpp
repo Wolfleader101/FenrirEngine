@@ -43,7 +43,7 @@ int main()
     config.scenes.push_back(PhysicsDemo::VehiclesCSharp());
     config.scriptAssembly = FENRIR_DEMO_SCRIPT_ASSEMBLY;
     // Physics from C#: the physics components, PhysicsWorld's functions and the Fenrir.Physics contract.
-    config.scriptingExtensions = {Fenrir::PhysicsScriptingExtension()};
+    config.scriptingExtensions = {Fenrir::Physics::ScriptingExtension()};
 #endif
     PhysicsDemo::AddDebugCategoryCycling(app);
 

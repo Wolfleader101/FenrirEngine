@@ -4,89 +4,64 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "FenrirDebugDrawMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "DebugDrawScriptingState.hpp"
-#include "ScriptOptions.hpp"
+#include "FenrirDebugDrawNatives.hpp"
 
-namespace Fenrir::DebugDrawNatives
-{
-    void Line(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Ray(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Arrow(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float headLength, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Polyline(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* points, std::int32_t count, bool closed, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Point(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* position, float pixelSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Box(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::AABB* box, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void OrientedBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* halfExtents, const Fenrir::Math::Quat* rotation, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Sphere(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Capsule(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Cylinder(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Cone(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* apex, const Fenrir::Math::Vec3* baseCentre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Circle(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* normal, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Arc(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* normal, const Fenrir::Math::Vec3* start, float angle, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Plane(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* point, const Fenrir::Math::Vec3* normal, float halfSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Grid(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Quat* rotation, std::int32_t cells, float cellSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Axes(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Mat4* transform, float length, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Frustum(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Mat4* viewProjection, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group, float farDepth);
-    void SolidBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::AABB* box, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidOrientedBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* halfExtents, const Fenrir::Math::Quat* rotation, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidSphere(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidCapsule(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Triangles(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* vertices, std::int32_t count, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void ScreenText(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec2* position, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void Message(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void KeyedMessage(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::int64_t key, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void WorldText(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* position, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void ShowGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    void HideGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    bool IsGroupShown(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    void Clear(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&);
-    void ClearGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-} // namespace Fenrir::DebugDrawNatives
+#include <memory>
+#include <utility>
 
 namespace Fenrir::Generated
 {
-    void RegisterDebugDraw(Fenrir::ScriptingExtension& extension);
-
-    void RegisterDebugDraw(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {};
-        extension.events = {};
-        extension.sharedStructs = {};
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Line>("Fenrir.DebugDraw.DebugDrawNative.Line"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Ray>("Fenrir.DebugDraw.DebugDrawNative.Ray"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arrow>("Fenrir.DebugDraw.DebugDrawNative.Arrow"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Polyline>("Fenrir.DebugDraw.DebugDrawNative.Polyline"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Point>("Fenrir.DebugDraw.DebugDrawNative.Point"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Box>("Fenrir.DebugDraw.DebugDrawNative.Box"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::OrientedBox>("Fenrir.DebugDraw.DebugDrawNative.OrientedBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Sphere>("Fenrir.DebugDraw.DebugDrawNative.Sphere"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Capsule>("Fenrir.DebugDraw.DebugDrawNative.Capsule"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cylinder>("Fenrir.DebugDraw.DebugDrawNative.Cylinder"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cone>("Fenrir.DebugDraw.DebugDrawNative.Cone"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Circle>("Fenrir.DebugDraw.DebugDrawNative.Circle"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arc>("Fenrir.DebugDraw.DebugDrawNative.Arc"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Plane>("Fenrir.DebugDraw.DebugDrawNative.Plane"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Grid>("Fenrir.DebugDraw.DebugDrawNative.Grid"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Axes>("Fenrir.DebugDraw.DebugDrawNative.Axes"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Frustum>("Fenrir.DebugDraw.DebugDrawNative.Frustum"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidBox>("Fenrir.DebugDraw.DebugDrawNative.SolidBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidOrientedBox>("Fenrir.DebugDraw.DebugDrawNative.SolidOrientedBox"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidSphere>("Fenrir.DebugDraw.DebugDrawNative.SolidSphere"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidCapsule>("Fenrir.DebugDraw.DebugDrawNative.SolidCapsule"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Triangles>("Fenrir.DebugDraw.DebugDrawNative.Triangles"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ScreenText>("Fenrir.DebugDraw.DebugDrawNative.ScreenText"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Message>("Fenrir.DebugDraw.DebugDrawNative.Message"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::KeyedMessage>("Fenrir.DebugDraw.DebugDrawNative.KeyedMessage"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::WorldText>("Fenrir.DebugDraw.DebugDrawNative.WorldText"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ShowGroup>("Fenrir.DebugDraw.DebugDrawNative.ShowGroup"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::HideGroup>("Fenrir.DebugDraw.DebugDrawNative.HideGroup"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::IsGroupShown>("Fenrir.DebugDraw.DebugDrawNative.IsGroupShown"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Clear>("Fenrir.DebugDraw.DebugDrawNative.Clear"),
-            Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ClearGroup>("Fenrir.DebugDraw.DebugDrawNative.ClearGroup"),
-        };
+        void RegisterDebugDraw(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {};
+            extension.events = {};
+            extension.sharedStructs = {};
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Line>("Fenrir.DebugDraw.DebugDrawNative.Line"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Ray>("Fenrir.DebugDraw.DebugDrawNative.Ray"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arrow>("Fenrir.DebugDraw.DebugDrawNative.Arrow"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Polyline>("Fenrir.DebugDraw.DebugDrawNative.Polyline"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Point>("Fenrir.DebugDraw.DebugDrawNative.Point"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Box>("Fenrir.DebugDraw.DebugDrawNative.Box"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::OrientedBox>("Fenrir.DebugDraw.DebugDrawNative.OrientedBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Sphere>("Fenrir.DebugDraw.DebugDrawNative.Sphere"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Capsule>("Fenrir.DebugDraw.DebugDrawNative.Capsule"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cylinder>("Fenrir.DebugDraw.DebugDrawNative.Cylinder"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Cone>("Fenrir.DebugDraw.DebugDrawNative.Cone"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Circle>("Fenrir.DebugDraw.DebugDrawNative.Circle"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Arc>("Fenrir.DebugDraw.DebugDrawNative.Arc"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Plane>("Fenrir.DebugDraw.DebugDrawNative.Plane"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Grid>("Fenrir.DebugDraw.DebugDrawNative.Grid"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Axes>("Fenrir.DebugDraw.DebugDrawNative.Axes"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Frustum>("Fenrir.DebugDraw.DebugDrawNative.Frustum"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidBox>("Fenrir.DebugDraw.DebugDrawNative.SolidBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidOrientedBox>("Fenrir.DebugDraw.DebugDrawNative.SolidOrientedBox"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidSphere>("Fenrir.DebugDraw.DebugDrawNative.SolidSphere"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::SolidCapsule>("Fenrir.DebugDraw.DebugDrawNative.SolidCapsule"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Triangles>("Fenrir.DebugDraw.DebugDrawNative.Triangles"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ScreenText>("Fenrir.DebugDraw.DebugDrawNative.ScreenText"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Message>("Fenrir.DebugDraw.DebugDrawNative.Message"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::KeyedMessage>("Fenrir.DebugDraw.DebugDrawNative.KeyedMessage"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::WorldText>("Fenrir.DebugDraw.DebugDrawNative.WorldText"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ShowGroup>("Fenrir.DebugDraw.DebugDrawNative.ShowGroup"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::HideGroup>("Fenrir.DebugDraw.DebugDrawNative.HideGroup"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::IsGroupShown>("Fenrir.DebugDraw.DebugDrawNative.IsGroupShown"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::Clear>("Fenrir.DebugDraw.DebugDrawNative.Clear"),
+                Fenrir::NativeFunction::Make<&Fenrir::DebugDrawNatives::ClearGroup>("Fenrir.DebugDraw.DebugDrawNative.ClearGroup"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeDebugDrawExtension(std::shared_ptr<Fenrir::DebugDrawScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirDebugDraw";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.DebugDraw.dll"};
+        Fenrir::Generated::RegisterDebugDraw(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

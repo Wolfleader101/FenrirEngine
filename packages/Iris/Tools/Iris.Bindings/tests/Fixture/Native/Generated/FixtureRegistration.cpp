@@ -4,32 +4,10 @@
 // The extension's registration lists: every described component, event, resource, shared struct and native function.
 
 #include "FixtureMappings.hpp"
-#include "Host/Extension.hpp"
-
-namespace Fixture::Natives
-{
-    bool Push(const Host::CallContext&, Host::State&, Fixture::EntityId body, const Fixture::Vec3* force);
-    bool Find(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);
-    std::int32_t Extremes(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, Fixture::Hit* nearest, Fixture::Hit* farthest);
-    std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);
-} // namespace Fixture::Natives
-
-namespace Fixture
-{
-    void Say(const Host::CallContext&, const char* text, std::int32_t length) noexcept;
-    void* Next(const Host::CallContext&, std::uint64_t* cursor, const void* body);
-    void Show(const Host::CallContext&, std::string_view text, char32_t glyph);
-    Fixture::BodyId Advance(const Host::CallContext&, Fixture::BodyId body, Fixture::Motion motion);
-    Fixture::Motion MotionOf(const Host::CallContext&, Fixture::BodyId body);
-    Fixture::Ticket Renew(const Host::CallContext&, Fixture::Ticket ticket);
-    std::uint64_t Sum(const Host::CallContext&, const std::uint32_t* values, std::int32_t count, bool all, double scale);
-    void Turn(const Host::CallContext&, const Fixture::Quat* rotation, std::int32_t turns);
-} // namespace Fixture
+#include "FixtureNatives.hpp"
 
 namespace Fixture::Bindings
 {
-    void Register(Host::Extension& extension);
-
     void Register(Host::Extension& extension)
     {
         extension.components = {

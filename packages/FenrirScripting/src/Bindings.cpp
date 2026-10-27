@@ -1,4 +1,5 @@
 #include "EngineContext.hpp"
+#include "Generated/FenrirScriptingNatives.hpp"
 #include "Queries.hpp"
 
 #include "FenrirECS/DefaultComponents.hpp"
@@ -423,13 +424,6 @@ namespace Fenrir::ScriptingNatives
         return engine.changes->RemoveResource(*engine.components, id);
     }
 } // namespace Fenrir::ScriptingNatives
-
-namespace Fenrir::Generated
-{
-    // The built-in extension's components and native functions: src/Generated/FenrirScriptingRegistration.cpp, from
-    // api/FenrirScripting.binding.toml.
-    void RegisterScripting(ScriptingExtension& extension);
-} // namespace Fenrir::Generated
 
 namespace Fenrir::Detail
 {

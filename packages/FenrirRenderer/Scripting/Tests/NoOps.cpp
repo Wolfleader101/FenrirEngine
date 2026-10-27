@@ -28,21 +28,8 @@
 #include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
+#include "Generated/FenrirRendererNatives.hpp"
 #include "RendererScriptingState.hpp"
-
-// The natives under test, as the generated registration declares them (src/Generated/FenrirRendererRegistration.cpp):
-// defined in src/RendererScripting.cpp, which has no header of its own.
-namespace Fenrir::RendererNatives
-{
-    bool ScreenPointToRay(const CallContext&, RendererScripting&, EntityValue camera, const Math::Vec2* point,
-                          Math::Ray* ray);
-    bool WorldToScreenPoint(const CallContext&, RendererScripting&, EntityValue camera, const Math::Vec3* point,
-                            Math::Vec2* screenPoint);
-    EntityValue CameraAt(const CallContext&, RendererScripting&, WindowId window, const Math::Vec2* point);
-    bool GetWorldBounds(const CallContext&, RendererScripting&, EntityValue entity, Math::AABB* bounds);
-    bool Stats(const CallContext&, RendererScripting&, RendererStats* stats);
-    EntityValue SpawnModel(const CallContext&, RendererScripting&, std::uint64_t model, EntityValue parent);
-} // namespace Fenrir::RendererNatives
 
 namespace
 {
