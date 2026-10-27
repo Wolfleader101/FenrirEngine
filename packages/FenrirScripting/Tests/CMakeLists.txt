@@ -24,6 +24,7 @@ fenrir_deploy_scripting(FenrirScriptingTests)
 # executable is given the package's source directory, as is any that uses NativeCallHarness.hpp.
 add_executable(FenrirScriptingRulesTests
     Rules/ChangeBufferTests.cpp
+    Rules/RegistryTableTests.cpp
     Rules/ReloadWatcherTests.cpp
     Rules/ScriptDataTests.cpp
     Rules/GenerationLifecycleTests.cpp

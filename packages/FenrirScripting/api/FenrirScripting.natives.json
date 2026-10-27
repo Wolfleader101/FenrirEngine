@@ -151,11 +151,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "The id of the native component registered under `name` for the C# type `typeName` (its full name). An id is good only for the registry generation it was looked up in: a new Scripting has a new registry.",
-      "notRunning": "-1",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32",
-        "doc": "The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type (so a script cannot claim a native component with a struct of its own)."
+        "doc": "The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name, WrongType when it is registered for a different C# type (so a script cannot claim a native component with a struct of its own)."
       },
       "parameters": [
         {
@@ -304,11 +304,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records the entity's destruction, for playback.",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -5 scripting is not running."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: EntityNotAlive, or NotActive when scripting is not running."
       },
       "parameters": [
         {
@@ -324,11 +324,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records adding the component to the entity, for playback.",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the component is read-only, -5 scripting is not running."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly, or NotActive when scripting is not running."
       },
       "parameters": [
         {
@@ -358,11 +358,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records removing the component from the entity, for playback.",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -1 the entity is not alive, -2 no such component, -3 the component is read-only, -4 the engine requires every entity to have it, -5 scripting is not running."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: EntityNotAlive, Unknown (no such component), ReadOnly, Required (the engine needs every entity to have it), or NotActive when scripting is not running."
       },
       "parameters": [
         {
@@ -408,11 +408,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "The id of the event registered under `name` for the C# type `typeName`. Each event is a queue the engine owns: the queue C++ SendEvent and EventReader use for a native event.",
-      "notRunning": "-1",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32",
-        "doc": "The id; -1 when there is none, -3 when it is registered for a different C# type."
+        "doc": "The id, or a RegistryError as its value: NotRegistered when there is none, WrongType when it is registered for a different C# type."
       },
       "parameters": [
         {
@@ -486,11 +486,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records an event to send when the system returns (see ChangeBuffer::SendEvent).",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -5 scripting is not running, -6 the event has no queue."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: Unknown (the event has no queue), or NotActive when scripting is not running."
       },
       "parameters": [
         {
@@ -514,11 +514,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "One read of a C# EventReader. Readers share no state: each keeps its own cursor in C#. The addresses are good until something is sent to the queue or it swaps.",
-      "notRunning": "-1",
+      "notRunning": "false",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0, or -1 when there is no such event."
+        "type": "bool",
+        "kind": "bool",
+        "doc": "False when there is no such event."
       },
       "parameters": [
         {
@@ -620,11 +620,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "The id of the native resource registered under `name` for the C# type `typeName` (its full name), good only for the registry generation it was looked up in.",
-      "notRunning": "-1",
+      "notRunning": "static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32",
-        "doc": "The id; -1 when nothing is registered under the name, -3 when it is registered for a different C# type."
+        "doc": "The id, or a RegistryError as its value: NotRegistered when nothing is registered under the name, WrongType when it is registered for a different C# type."
       },
       "parameters": [
         {
@@ -682,11 +682,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records inserting the resource, replacing the one there is, for playback.",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive when scripting is not running."
       },
       "parameters": [
         {
@@ -711,11 +711,11 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "Records removing the resource, for playback.",
-      "notRunning": "static_cast<std::int32_t>(Fenrir::Detail::ChangeError::NotActive)",
+      "notRunning": "Fenrir::ChangeError::NotActive",
       "returns": {
-        "type": "std::int32_t",
-        "kind": "i32",
-        "doc": "0 when recorded, otherwise why it was refused: -7 no such resource, -8 the resource is read-only, -5 scripting is not running."
+        "type": "Fenrir::ChangeError",
+        "kind": "enum",
+        "doc": "None when recorded, otherwise why it was refused: Unknown (no such resource), ReadOnly, or NotActive when scripting is not running."
       },
       "parameters": [
         {

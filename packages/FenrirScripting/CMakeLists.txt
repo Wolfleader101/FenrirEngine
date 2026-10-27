@@ -96,8 +96,10 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings
+fenrir_describe_api(FenrirScripting api/FenrirScripting.api.toml)
 fenrir_describe_api_natives(FenrirScripting api/FenrirScripting.binding.toml)
-iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json)
+iris_generate_binding(FenrirScripting api/FenrirScripting.binding.toml ../FenrirECS/api/FenrirECS.api.json
+    api/FenrirScripting.api.json)
 # FenrirMath's binding: the Fenrir.Math contract's colour, ray and box, which every other binding uses (ADR-0043).
 iris_generate_binding(FenrirMath api/FenrirMath.binding.toml ../FenrirMath/api/FenrirMath.api.json)
 

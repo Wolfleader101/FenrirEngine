@@ -8,23 +8,10 @@
 
 #include "ComponentRegistry.hpp"
 #include "FenrirApp/App.hpp"
+#include "FenrirScripting/Errors.hpp"
 
 namespace Fenrir::Detail
 {
-    // What a script asked for that the buffer refused at once, as the code C# turns into a message.
-    enum class ChangeError : std::int32_t
-    {
-        None = 0,
-        EntityNotAlive = -1,
-        UnknownComponent = -2,
-        ReadOnlyComponent = -3,
-        RequiredComponent = -4,
-        NotActive = -5, // Scripting is not running, so there is no scene to change.
-        UnknownEvent = -6,
-        UnknownResource = -7,
-        ReadOnlyResource = -8,
-    };
-
     struct ApplyResult
     {
         std::size_t applied = 0;
