@@ -140,29 +140,46 @@ namespace Fenrir
     // namespace: the generated registration names them from another file.
     namespace PhysicsNatives
     {
-        /** @brief Pushes the entity's body with `force` (newtons, world space) for the next step only. */
+        /**
+         * @brief Pushes the entity's body with `force` (newtons, world space) for the next step only.
+         * @return Whether the force was queued: false with no physics world or no body.
+         * @facade PhysicsWorld.AddForce
+         */
         bool AddForce(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                       const Math::Vec3* force)
         {
             return Push<&PhysicsWorld::AddForce>(context, physics, entity, *force);
         }
 
-        /** @brief Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next
-         * step. */
+        /**
+         * @brief Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next
+         * step.
+         * @return Whether the impulse was queued: false with no physics world or no body.
+         * @facade PhysicsWorld.AddImpulse
+         */
         bool AddImpulse(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                         const Math::Vec3* impulse)
         {
             return Push<&PhysicsWorld::AddImpulse>(context, physics, entity, *impulse);
         }
 
-        /** @brief Twists the entity's body with `torque` (newton metres, world space) for the next step only. */
+        /**
+         * @brief Twists the entity's body with `torque` (newton metres, world space) for the next step only.
+         * @return Whether the torque was queued: false with no physics world or no body.
+         * @facade PhysicsWorld.AddTorque
+         */
         bool AddTorque(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                        const Math::Vec3* torque)
         {
             return Push<&PhysicsWorld::AddTorque>(context, physics, entity, *torque);
         }
 
-        /** @brief Changes the angular velocity of the entity's body by `impulse` over its moment of inertia. */
+        /**
+         * @brief Changes the angular velocity of the entity's body by `impulse` over its moment of inertia, at the next
+         * step.
+         * @return Whether the impulse was queued: false with no physics world or no body.
+         * @facade PhysicsWorld.AddAngularImpulse
+         */
         bool AddAngularImpulse(const CallContext& context, PhysicsScripting& physics, EntityValue entity,
                                const Math::Vec3* impulse)
         {
@@ -361,9 +378,14 @@ namespace Fenrir
         }
 
         /**
-         * @brief Writes the contacts the body entity `body` has now to `contacts` (PhysicsWorld::ForEachContact).
+         * @brief Writes the contacts the body entity `body` (a rigid body or a character body) has now, as of the last
+         * step, to `contacts` (PhysicsWorld::ForEachContact), stopping when they are full. Overlaps with triggers are
+         * not contacts. A character's contacts are those its last move ended touching, so unlike a body's they come
+         * from before the step: the walls, ground and ceilings it is against and the bodies it pushed, with their point
+         * and normal (a wall jump's).
          * @param contacts Where to write at most `capacity` contacts.
          * @return How many it wrote.
+         * @facade PhysicsWorld.ContactsOf
          */
         std::int32_t ContactsOf(const CallContext& context, PhysicsScripting& physics, EntityValue body,
                                 Script::Contact* contacts, std::int32_t capacity)
@@ -384,7 +406,11 @@ namespace Fenrir
             return static_cast<std::int32_t>(count);
         }
 
-        /** @brief Whether the body of `body` is asleep: false with no world or no body. */
+        /**
+         * @brief Whether the body of `body` (a child collider's entity stands for its compound body) is asleep: false
+         * with no world or no body.
+         * @facade PhysicsWorld.IsSleeping
+         */
         bool IsSleeping(const CallContext& context, PhysicsScripting& physics, EntityValue body)
         {
             PhysicsWorld* world = physics.WorldOf(context);
@@ -398,7 +424,8 @@ namespace Fenrir
         /**
          * @brief The world-space box around the body of `body` (PhysicsWorld::Bounds).
          * @param[out] bounds The box; the default when there is none.
-         * @return Whether the entity has a body.
+         * @return Whether the entity has a body; `bounds` is default when it does not.
+         * @facade PhysicsWorld.Bounds
          */
         bool Bounds(const CallContext& context, PhysicsScripting& physics, EntityValue body, Math::AABB* bounds)
         {

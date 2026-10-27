@@ -75,7 +75,9 @@ namespace Fenrir
         /**
          * @brief The ray from `camera` through `point`, in window pixels from the top-left of its target.
          * @param[out] ray The ray; the default ray when there is none.
-         * @return Whether there is a ray: false with no renderer or no such camera.
+         * @return Whether there is a ray: false with no renderer, no such camera, or a point outside the camera's
+         * viewport.
+         * @facade Renderer.ScreenPointToRay
          */
         bool ScreenPointToRay(const CallContext& context, RendererScripting& renderer, EntityValue camera,
                               const Math::Vec2* point, Math::Ray* ray)
@@ -85,9 +87,10 @@ namespace Fenrir
         }
 
         /**
-         * @brief Where `point`, in world space, lands on `camera`'s target, in window pixels from its top-left.
-         * @param[out] screenPoint The point; zero when it does not land.
-         * @return Whether it lands: false with no renderer, no such camera, or a point behind the camera.
+         * @brief Where `point`, in world space, appears on `camera`'s target, in window pixels from its top-left.
+         * @param[out] screenPoint The point; zero when it does not appear.
+         * @return Whether it appears: false with no renderer, no such camera, or a point behind the camera.
+         * @facade Renderer.WorldToScreenPoint
          */
         bool WorldToScreenPoint(const CallContext& context, RendererScripting& renderer, EntityValue camera,
                                 const Math::Vec3* point, Math::Vec2* screenPoint)
@@ -97,9 +100,11 @@ namespace Fenrir
         }
 
         /**
-         * @brief The camera whose view of `window` is under `point`, in window pixels from its top-left.
-         * @return The camera entity, or no entity (C#'s Entity.None).
+         * @brief The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order
+         * enabled camera in the active scene whose viewport holds it.
+         * @return The camera entity, or no entity (C#'s Entity.None) when there is none or no renderer.
          * @notrunning Fenrir::EntityValue(Fenrir::Entity::Null)
+         * @facade Renderer.CameraAt
          */
         EntityValue CameraAt(const CallContext& context, RendererScripting& renderer, WindowId window,
                              const Math::Vec2* point)
@@ -113,9 +118,11 @@ namespace Fenrir
         }
 
         /**
-         * @brief The world-space box around the meshes of `entity` and its children.
+         * @brief The world-space box around the drawn meshes of `entity` and its children, now.
          * @param[out] bounds The box; the default box when there is none.
-         * @return Whether there is one: false with no renderer, an entity not alive, or no mesh to bound.
+         * @return Whether there is one: false with no renderer, an entity not alive, or no mesh to bound (no
+         * MeshRenderer, or a mesh that does not resolve).
+         * @facade Renderer.GetWorldBounds
          */
         bool GetWorldBounds(const CallContext& context, RendererScripting& renderer, EntityValue entity,
                             Math::AABB* bounds)
@@ -130,9 +137,10 @@ namespace Fenrir
         }
 
         /**
-         * @brief What the renderer did in the last frame.
+         * @brief What the renderer did in the last drawn frame; zeros before the first.
          * @param[out] stats The counts; zero with no renderer.
          * @return Whether the app has a renderer.
+         * @facade Renderer.Stats
          */
         bool Stats(const CallContext& context, RendererScripting& renderer, RendererStats* stats)
         {
