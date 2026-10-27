@@ -26,10 +26,6 @@ includes = [
 
 [registration]
 source = "../src/Generated/FenrirAssetsRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state.
-    "AssetsScriptingState.hpp",
-]
 function = "Fenrir::Generated::RegisterAssets"
 
 [tests]
@@ -59,3 +55,8 @@ tags = "[assets][scripting][bindings]"
 [natives]
 sources = ["../src/AssetsScripting.cpp"]
 class = "AssetsNative"
+header = "../src/Generated/FenrirAssetsNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state.
+    "AssetsScriptingState.hpp",
+]

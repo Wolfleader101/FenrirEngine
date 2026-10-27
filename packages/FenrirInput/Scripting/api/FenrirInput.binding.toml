@@ -34,10 +34,6 @@ includes = [
 
 [registration]
 source = "../src/Generated/FenrirInputRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state.
-    "InputScriptingState.hpp",
-]
 function = "Fenrir::Generated::RegisterInput"
 read-only = ["Fenrir::Detail::ScriptInputClaims"]
 # Refreshed from InputClaims whenever C# gets it, so Input::ScriptingExtension() registers it itself
@@ -58,6 +54,11 @@ tags = "[input][scripting][bindings]"
 [natives]
 sources = ["../src/InputScripting.cpp"]
 class = "InputNative"
+header = "../src/Generated/FenrirInputNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state.
+    "InputScriptingState.hpp",
+]
 
 [names]
 "Fenrir::Detail::ScriptInputClaims" = "InputClaims"

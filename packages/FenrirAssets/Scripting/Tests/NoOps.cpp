@@ -30,76 +30,7 @@
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
-
-// The natives under test, as the generated registration (src/Generated/FenrirAssetsRegistration.cpp) declares them:
-// their definitions in src/AssetsScripting.cpp are what describe-api reads, so there is no header of them.
-namespace Fenrir::AssetsNatives
-{
-    std::uint64_t Load(const CallContext&, AssetsScripting&, Detail::AssetKind kind, std::string_view path,
-                       ScriptAssetOwner owner);
-    bool Unload(const CallContext&, AssetsScripting&, Detail::AssetKind kind, std::uint64_t handle);
-    bool IsValid(const CallContext&, AssetsScripting&, Detail::AssetKind kind, std::uint64_t handle);
-    std::uint64_t AddMesh(const CallContext&, AssetsScripting&, const Math::Vec3* positions, std::int32_t positionCount,
-                          const Math::Vec3* normals, std::int32_t normalCount, const Math::Vec2* uvs,
-                          std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount,
-                          ScriptAssetOwner owner);
-    bool ReplaceMesh(const CallContext&, AssetsScripting&, std::uint64_t mesh, const Math::Vec3* positions,
-                     std::int32_t positionCount, const Math::Vec3* normals, std::int32_t normalCount,
-                     const Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices,
-                     std::int32_t indexCount);
-    std::uint64_t AddRenderTarget(const CallContext&, AssetsScripting&, std::int32_t width, std::int32_t height,
-                                  ScriptAssetOwner owner);
-    bool ResizeRenderTarget(const CallContext&, AssetsScripting&, std::uint64_t image, std::int32_t width,
-                            std::int32_t height);
-    std::uint64_t AddImage(const CallContext&, AssetsScripting&, std::int32_t width, std::int32_t height,
-                           const std::uint8_t* rgba8, std::int32_t byteCount, ScriptAssetOwner owner);
-    bool ReplaceImage(const CallContext&, AssetsScripting&, std::uint64_t image, std::int32_t width,
-                      std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount);
-    std::uint64_t CreateMaterial(const CallContext&, AssetsScripting&, std::uint64_t shader, ScriptAssetOwner owner);
-    std::uint64_t CloneMaterial(const CallContext&, AssetsScripting&, std::uint64_t material, ScriptAssetOwner owner);
-    bool SetFloat(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name, float value);
-    bool SetVector2(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                    const Math::Vec2* value);
-    bool SetVector3(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                    const Math::Vec3* value);
-    bool SetVector4(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                    const Math::Vec4* value);
-    bool SetColour(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                   const Colour* value);
-    bool SetTexture(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                    std::uint64_t image, const SamplerDescription* sampler);
-    bool SetBlendMode(const CallContext&, AssetsScripting&, std::uint64_t material, BlendMode blendMode);
-    bool SetAlphaCutoff(const CallContext&, AssetsScripting&, std::uint64_t material, float alphaCutoff);
-    bool SetDoubleSided(const CallContext&, AssetsScripting&, std::uint64_t material, bool doubleSided);
-    bool TryGetFloat(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name, float* value);
-    bool TryGetVector2(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                       Math::Vec2* value);
-    bool TryGetVector3(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                       Math::Vec3* value);
-    bool TryGetVector4(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                       Math::Vec4* value);
-    bool TryGetColour(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                      Colour* value);
-    bool TryGetTexture(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                       MaterialTexture* value);
-    bool TryGetOverrideFloat(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                             float* value);
-    bool TryGetOverrideVector2(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                               Math::Vec2* value);
-    bool TryGetOverrideVector3(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                               Math::Vec3* value);
-    bool TryGetOverrideVector4(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                               Math::Vec4* value);
-    bool TryGetOverrideColour(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                              Colour* value);
-    bool TryGetOverrideTexture(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name,
-                               MaterialTexture* value);
-    bool IsSet(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name);
-    bool Reset(const CallContext&, AssetsScripting&, std::uint64_t material, std::string_view name);
-    std::int32_t GetShaderParameterCount(const CallContext&, AssetsScripting&, std::uint64_t shader);
-    std::int32_t GetShaderParameter(const CallContext&, AssetsScripting&, std::uint64_t shader, std::int32_t index,
-                                    ScriptShaderParameter* parameter, char16_t* name, std::int32_t capacity);
-} // namespace Fenrir::AssetsNatives
+#include "Generated/FenrirAssetsNatives.hpp"
 
 using namespace Fenrir;
 

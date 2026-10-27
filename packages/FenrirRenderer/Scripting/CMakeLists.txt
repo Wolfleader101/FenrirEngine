@@ -48,6 +48,7 @@ add_library(FenrirRendererScripting STATIC
     include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp
     src/RendererScripting.cpp
     src/RendererScriptingState.hpp
+    src/Generated/FenrirRendererNatives.hpp
     src/Generated/FenrirRendererRegistration.cpp
 )
 target_include_directories(FenrirRendererScripting PUBLIC include PRIVATE src)
@@ -62,7 +63,8 @@ target_link_libraries(FenrirRendererScripting PUBLIC FenrirRenderer FenrirAssets
 # committed:
 #   ../Managed/Fenrir.Renderer/Generated/       the C# mirrors and the natives' declarations, RendererNative;
 #   include/FenrirRendererScripting/Generated/  the Iris mappings;
-#   src/Generated/                              the extension's components, resources, sharedStructs and functions;
+#   src/Generated/                              the natives' declarations, and the extension's components, resources,
+#                                               sharedStructs and functions;
 #   Tests/Generated/                            the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api

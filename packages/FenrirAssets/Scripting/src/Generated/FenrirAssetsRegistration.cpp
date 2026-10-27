@@ -4,55 +4,10 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "../../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "AssetsScriptingState.hpp"
-
-namespace Fenrir::AssetsNatives
-{
-    std::uint64_t Load(const Fenrir::CallContext&, Fenrir::AssetsScripting&, Fenrir::Detail::AssetKind kind, std::string_view path, Fenrir::ScriptAssetOwner owner);
-    bool Unload(const Fenrir::CallContext&, Fenrir::AssetsScripting&, Fenrir::Detail::AssetKind kind, std::uint64_t handle);
-    bool IsValid(const Fenrir::CallContext&, Fenrir::AssetsScripting&, Fenrir::Detail::AssetKind kind, std::uint64_t handle);
-    std::uint64_t AddMesh(const Fenrir::CallContext&, Fenrir::AssetsScripting&, const Fenrir::Math::Vec3* positions, std::int32_t positionCount, const Fenrir::Math::Vec3* normals, std::int32_t normalCount, const Fenrir::Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount, Fenrir::ScriptAssetOwner owner);
-    bool ReplaceMesh(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t mesh, const Fenrir::Math::Vec3* positions, std::int32_t positionCount, const Fenrir::Math::Vec3* normals, std::int32_t normalCount, const Fenrir::Math::Vec2* uvs, std::int32_t uvCount, const std::uint32_t* indices, std::int32_t indexCount);
-    std::uint64_t AddRenderTarget(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::int32_t width, std::int32_t height, Fenrir::ScriptAssetOwner owner);
-    bool ResizeRenderTarget(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t image, std::int32_t width, std::int32_t height);
-    std::uint64_t AddImage(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::int32_t width, std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount, Fenrir::ScriptAssetOwner owner);
-    bool ReplaceImage(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t image, std::int32_t width, std::int32_t height, const std::uint8_t* rgba8, std::int32_t byteCount);
-    std::uint64_t CreateMaterial(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t shader, Fenrir::ScriptAssetOwner owner);
-    std::uint64_t CloneMaterial(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, Fenrir::ScriptAssetOwner owner);
-    bool SetFloat(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, float value);
-    bool SetVector2(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, const Fenrir::Math::Vec2* value);
-    bool SetVector3(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, const Fenrir::Math::Vec3* value);
-    bool SetVector4(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, const Fenrir::Math::Vec4* value);
-    bool SetColour(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, const Fenrir::Colour* value);
-    bool SetTexture(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, std::uint64_t image, const Fenrir::SamplerDescription* sampler);
-    bool SetBlendMode(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, Fenrir::BlendMode blendMode);
-    bool SetAlphaCutoff(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, float alphaCutoff);
-    bool SetDoubleSided(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, bool doubleSided);
-    bool TryGetFloat(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, float* value);
-    bool TryGetVector2(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec2* value);
-    bool TryGetVector3(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec3* value);
-    bool TryGetVector4(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec4* value);
-    bool TryGetColour(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Colour* value);
-    bool TryGetTexture(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::MaterialTexture* value);
-    bool TryGetOverrideFloat(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, float* value);
-    bool TryGetOverrideVector2(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec2* value);
-    bool TryGetOverrideVector3(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec3* value);
-    bool TryGetOverrideVector4(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Math::Vec4* value);
-    bool TryGetOverrideColour(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::Colour* value);
-    bool TryGetOverrideTexture(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name, Fenrir::MaterialTexture* value);
-    bool IsSet(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name);
-    bool Reset(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t material, std::string_view name);
-    std::int32_t GetShaderParameterCount(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t shader);
-    std::int32_t GetShaderParameter(const Fenrir::CallContext&, Fenrir::AssetsScripting&, std::uint64_t shader, std::int32_t index, Fenrir::ScriptShaderParameter* parameter, char16_t* name, std::int32_t capacity);
-} // namespace Fenrir::AssetsNatives
+#include "FenrirAssetsNatives.hpp"
 
 namespace Fenrir::Generated
 {
-    void RegisterAssets(Fenrir::ScriptingExtension& extension);
-
     void RegisterAssets(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {};

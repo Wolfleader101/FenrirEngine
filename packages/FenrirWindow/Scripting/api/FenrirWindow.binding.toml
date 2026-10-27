@@ -18,10 +18,6 @@ includes = ["FenrirWindow/WindowEvents.hpp", "FenrirWindow/WindowTypes.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirWindowRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state.
-    "WindowScriptingState.hpp",
-]
 function = "Fenrir::Generated::RegisterWindow"
 
 [tests]
@@ -38,3 +34,8 @@ tags = "[window][scripting][bindings]"
 [natives]
 sources = ["../src/WindowScripting.cpp"]
 class = "WindowNative"
+header = "../src/Generated/FenrirWindowNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state.
+    "WindowScriptingState.hpp",
+]

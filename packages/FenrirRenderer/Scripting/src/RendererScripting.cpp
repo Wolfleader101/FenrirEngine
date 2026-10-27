@@ -14,6 +14,7 @@
 #include "FenrirRenderer/SpawnModel.hpp"
 #include "FenrirScene/Scene.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
+#include "Generated/FenrirRendererNatives.hpp"
 #include "RendererScriptingState.hpp"
 
 // Everything C# sees of the renderer is generated (api/FenrirRenderer.binding.toml): the components', resources' and
@@ -68,8 +69,7 @@ namespace Fenrir
     // (Fenrir.Renderer.RendererNative) and their registration from that. With no renderer (or store) in the app, an
     // entity that is not alive or has no Camera, or a stale model, each does nothing and returns false or no entity,
     // and warns once per call site in a debug build under its own name, which the call context carries. Named apart
-    // from Renderer's own functions, and not in an anonymous namespace: the generated registration names them from
-    // another file.
+    // from Renderer's own functions, and not in an anonymous namespace: the generated natives header declares them.
     namespace RendererNatives
     {
         /**

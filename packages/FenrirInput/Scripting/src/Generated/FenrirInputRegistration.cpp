@@ -4,38 +4,10 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "../../include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "InputScriptingState.hpp"
-
-namespace Fenrir::InputNatives
-{
-    bool KeyIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    bool KeyJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    bool KeyJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    Fenrir::KeyModifiers KeyModifiersOf(const Fenrir::CallContext&, Fenrir::InputScripting&);
-    bool MouseIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    bool MouseJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    bool MouseJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    void MousePosition(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* position);
-    void MouseMotion(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* motion);
-    void MouseScroll(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* scroll);
-    std::int32_t GamepadsConnected(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId* pads, std::int32_t capacity);
-    bool GamepadIsConnected(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad);
-    bool GamepadIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    bool GamepadJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    bool GamepadJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    float GamepadAxisOf(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadAxis axis);
-} // namespace Fenrir::InputNatives
+#include "FenrirInputNatives.hpp"
 
 namespace Fenrir::Generated
 {
-    void RegisterInput(Fenrir::ScriptingExtension& extension);
-
     void RegisterInput(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {};

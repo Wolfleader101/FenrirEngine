@@ -1,8 +1,8 @@
 // The window natives' rules, with no .NET and no fixture assembly: through NativeCallHarness, with a WindowScripting
 // state the test makes, a native with no window of its id returns its default and warns once under its name, an
 // unknown cursor mode or shape does nothing and warns once, and the clipboard is written up to a capacity with its
-// whole length returned. The natives are called as the generated registration declares them
-// (src/Generated/FenrirWindowRegistration.cpp), which zeroes each single output before the native runs.
+// whole length returned. The natives are called as the generated natives header declares them
+// (src/Generated/FenrirWindowNatives.hpp); the registration zeroes each single output before the native runs.
 
 #include "HeadlessApp.hpp"
 #include "NativeCallHarness.hpp"
@@ -20,23 +20,8 @@
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "FenrirWindow/Window.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
+#include "Generated/FenrirWindowNatives.hpp"
 #include "WindowScriptingState.hpp"
-
-namespace Fenrir::WindowNatives
-{
-    void Size(const CallContext&, WindowScripting&, WindowId window, WindowSize* size);
-    void PixelSize(const CallContext&, WindowScripting&, WindowId window, WindowSize* size);
-    float ContentScale(const CallContext&, WindowScripting&, WindowId window);
-    bool IsMinimised(const CallContext&, WindowScripting&, WindowId window);
-    bool IsFocused(const CallContext&, WindowScripting&, WindowId window);
-    CursorMode GetCursorMode(const CallContext&, WindowScripting&, WindowId window);
-    bool SetCursorMode(const CallContext&, WindowScripting&, WindowId window, CursorMode mode);
-    bool SetCursorShape(const CallContext&, WindowScripting&, WindowId window, CursorShape shape);
-    bool SetTitle(const CallContext&, WindowScripting&, WindowId window, std::string_view title);
-    std::int32_t GetClipboard(const CallContext&, WindowScripting&, char16_t* text, std::int32_t capacity);
-    bool SetClipboard(const CallContext&, WindowScripting&, std::string_view text);
-    bool RequestClose(const CallContext&, WindowScripting&, WindowId window);
-} // namespace Fenrir::WindowNatives
 
 namespace
 {

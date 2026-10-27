@@ -47,9 +47,9 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 26,
+        Assert.True(generated.Count == 27,
                     $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the mappings, the " +
-                    $"registration and the defaults test's two files, but gave {generated.Count} files.");
+                    $"natives header, the registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
     [Fact]
@@ -96,13 +96,53 @@ public sealed class BindingTests
     public void AListTheBindingStatesFollowsTheDefaults()
     {
         using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nincludes = [\"Extra.hpp\"]\n", StringComparison.Ordinal));
+
+        var header = Output(Generator.Generate(config, [FixtureDescription]), "FixtureNatives.hpp");
+
+        var sdk = header.IndexOf("#include \"Host/Extension.hpp\"", StringComparison.Ordinal);
+        var own = header.IndexOf("#include \"Extra.hpp\"", StringComparison.Ordinal);
+        Assert.True(sdk >= 0 && own > sdk, $"The SDK's include should come before the binding's, but the natives header is:\n{header}");
+    }
+
+    [Fact]
+    public void TheNativesHeaderDeclaresEachNativeAndTheRegistrationFunctionAndTheRegistrationDeclaresNothing()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var header = Output(generated, "FixtureNatives.hpp");
+        var registration = Output(generated, "FixtureRegistration.cpp");
+        string[] declared =
+        [
+            "#pragma once",
+            "#include \"Host/Extension.hpp\"",
+            "namespace Fixture::Natives\n{\n    bool Push(const Host::CallContext&, Host::State&, Fixture::EntityId body, const Fixture::Vec3* force);",
+            "    std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);\n} // namespace Fixture::Natives",
+            "namespace Fixture\n{\n    void Say(const Host::CallContext&, const char* text, std::int32_t length) noexcept;",
+            "namespace Fixture::Bindings\n{\n    void Register(Host::Extension& extension);\n} // namespace Fixture::Bindings",
+        ];
+        foreach (var line in declared)
+        {
+            Assert.True(header.Contains(line, StringComparison.Ordinal), $"The natives header should hold\n{line}\nbut is:\n{header}");
+        }
+
+        Assert.True(registration.Contains("#include \"FixtureNatives.hpp\"", StringComparison.Ordinal) &&
+                    !registration.Contains("Host::CallContext&", StringComparison.Ordinal) &&
+                    !registration.Contains("void Register(Host::Extension& extension);", StringComparison.Ordinal) &&
+                    !registration.Contains("Host/Extension.hpp", StringComparison.Ordinal),
+                    "The registration should include the natives header by file name and declare nothing itself, but is:\n" + registration);
+    }
+
+    [Fact]
+    public void AConfigurationKeepingRegistrationIncludesFailsSayingWhereTheyMoved()
+    {
+        using var directory = new TemporaryDirectory();
         var config = CopyConfig(directory, "", edit: text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Extra.hpp\"]\n", StringComparison.Ordinal));
 
-        var registration = Generator.Generate(config, [FixtureDescription]).Single(file => file.Key.EndsWith("FixtureRegistration.cpp", StringComparison.Ordinal)).Value;
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [FixtureDescription]));
 
-        var sdk = registration.IndexOf("#include \"Host/Extension.hpp\"", StringComparison.Ordinal);
-        var own = registration.IndexOf("#include \"Extra.hpp\"", StringComparison.Ordinal);
-        Assert.True(sdk >= 0 && own > sdk, $"The SDK's include should come before the binding's, but the registration is:\n{registration}");
+        Assert.True(exception.Message.Contains("[registration] includes moved to [natives] includes", StringComparison.Ordinal),
+                    $"A configuration keeping [registration] includes should be told where they moved, but failed with\n  {exception.Message}");
     }
 
     [Fact]
@@ -345,7 +385,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 26, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 27, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 
@@ -468,7 +508,7 @@ public sealed class BindingTests
         string[] expected =
         [
             "FixtureNative.cs: '' became '    public static partial bool Nearest(in Vector3 origin, float distance, out Hit hit);'",
-            "FixtureRegistration.cpp: '} // namespace Fixture::Natives' became '    bool Nearest(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);'",
+            "FixtureNatives.hpp: '} // namespace Fixture::Natives' became '    bool Nearest(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);'",
             "FixtureRegistration.cpp: '' became '            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Nearest, 4>::Call>(\"Fixture.Bindings.FixtureNative.Nearest\"),'",
         ];
         foreach (var line in expected)
@@ -825,7 +865,7 @@ public sealed class BindingTests
     [InlineData("WrapperNotNumber", "[bound-types] Fixture::Ticket's wrapper is 'struct', which is not a number kind", "")]
     [InlineData("NoZeroOutputs", "'zero-outputs' is missing or is not a string", "")]
     [InlineData("RestatedScalar", "[natives] 'make' is already the default from ", "; delete it")]
-    [InlineData("RestatedListEntry", "[registration] includes lists \"Host/Extension.hpp\", which is already the default from ", "; delete it")]
+    [InlineData("RestatedListEntry", "[natives] includes lists \"Host/Extension.hpp\", which is already the default from ", "; delete it")]
     [InlineData("RestatedTestsComponent", "[tests] 'component' is already the default from ", "; delete it")]
     [InlineData("DefaultsStatesNamespace", "'namespace' is not a section a defaults file may state", "")]
     [InlineData("DefaultsStatesDefaults", "'defaults' is not a section a defaults file may state", "")]
@@ -900,7 +940,7 @@ public sealed class BindingTests
             "WrapperNotNumber" => text => WithDefaults(text, Defaults(defaults => defaults.Replace("wrapper = \"u32\"", "wrapper = \"struct\"", StringComparison.Ordinal))),
             "NoZeroOutputs" => text => Without(text, "zero-outputs = \"Host::ZeroingOutputs\"\n"),
             "RestatedScalar" => text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nmake = \"Host::NativeFunction::Make\"\n", StringComparison.Ordinal),
-            "RestatedListEntry" => text => text.Replace("function = \"Fixture::Bindings::Register\"\n", "function = \"Fixture::Bindings::Register\"\nincludes = [\"Host/Extension.hpp\"]\n", StringComparison.Ordinal),
+            "RestatedListEntry" => text => text.Replace("class = \"FixtureNative\"\n", "class = \"FixtureNative\"\nincludes = [\"Host/Extension.hpp\"]\n", StringComparison.Ordinal),
             "RestatedTestsComponent" => text => text.Replace("tags = \"[bindings]\"\n", "tags = \"[bindings]\"\ncomponent = \"harness.Component()\"\n", StringComparison.Ordinal),
             "DefaultsStatesNamespace" => text => WithDefaults(text, Defaults(defaults => "namespace = \"Host\"\n" + defaults)),
             "DefaultsStatesDefaults" => text => WithDefaults(text, Defaults(defaults => "defaults = \"Other.binding-defaults.toml\"\n" + defaults)),

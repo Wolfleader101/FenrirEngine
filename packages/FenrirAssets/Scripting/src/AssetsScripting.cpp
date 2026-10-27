@@ -18,6 +18,7 @@
 #include "FenrirScripting/Enumerator.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
+#include "Generated/FenrirAssetsNatives.hpp"
 
 // Everything C# sees of assets but the handles is generated (api/FenrirAssets.binding.toml): the shared structs' and
 // enums' mappings, checked against the Fenrir.Assets contract whenever a script assembly loads, and from the native
@@ -133,7 +134,7 @@ namespace Fenrir
     // count. Each returns doing nothing (false, zero or the empty handle) with no asset store, a stale or empty handle,
     // or an unusable argument, warning once per place under its own name through its guard; its outputs hold their
     // defaults because the registration zeroed them (ADR-0045). Not in an anonymous namespace: the generated
-    // registration names them from another file.
+    // natives header declares them.
     namespace AssetsNatives
     {
         /**

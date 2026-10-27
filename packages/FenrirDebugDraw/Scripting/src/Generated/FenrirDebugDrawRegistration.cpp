@@ -4,51 +4,10 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "FenrirDebugDrawMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "DebugDrawScriptingState.hpp"
-#include "ScriptOptions.hpp"
-
-namespace Fenrir::DebugDrawNatives
-{
-    void Line(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Ray(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Arrow(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float headLength, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Polyline(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* points, std::int32_t count, bool closed, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Point(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* position, float pixelSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Box(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::AABB* box, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void OrientedBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* halfExtents, const Fenrir::Math::Quat* rotation, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Sphere(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Capsule(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Cylinder(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Cone(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* apex, const Fenrir::Math::Vec3* baseCentre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Circle(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* normal, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Arc(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* normal, const Fenrir::Math::Vec3* start, float angle, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Plane(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* point, const Fenrir::Math::Vec3* normal, float halfSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Grid(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Quat* rotation, std::int32_t cells, float cellSize, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Axes(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Mat4* transform, float length, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Frustum(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Mat4* viewProjection, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group, float farDepth);
-    void SolidBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::AABB* box, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidOrientedBox(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, const Fenrir::Math::Vec3* halfExtents, const Fenrir::Math::Quat* rotation, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidSphere(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* centre, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void SolidCapsule(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* from, const Fenrir::Math::Vec3* to, float radius, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void Triangles(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* vertices, std::int32_t count, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::ShapeOptions* options, std::string_view group);
-    void ScreenText(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec2* position, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void Message(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void KeyedMessage(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::int64_t key, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void WorldText(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, const Fenrir::Math::Vec3* position, std::string_view text, const Fenrir::Colour* colour, const Fenrir::ScriptOptions::TextOptions* options, std::string_view group);
-    void ShowGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    void HideGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    bool IsGroupShown(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-    void Clear(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&);
-    void ClearGroup(const Fenrir::CallContext&, Fenrir::DebugDrawScripting&, std::string_view group);
-} // namespace Fenrir::DebugDrawNatives
+#include "FenrirDebugDrawNatives.hpp"
 
 namespace Fenrir::Generated
 {
-    void RegisterDebugDraw(Fenrir::ScriptingExtension& extension);
-
     void RegisterDebugDraw(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {};

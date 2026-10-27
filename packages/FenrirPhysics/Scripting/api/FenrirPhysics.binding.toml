@@ -43,12 +43,6 @@ includes = [
 
 [registration]
 source = "../src/Generated/FenrirPhysicsRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state and the query types as C# holds them.
-    "PhysicsScriptingState.hpp",
-    "ScriptQueries.hpp",
-    "FenrirScripting/Generated/FenrirScriptingMappings.hpp",
-]
 function = "Fenrir::Generated::RegisterPhysics"
 
 [tests]
@@ -77,3 +71,12 @@ tags = "[physics][scripting][bindings]"
 [natives]
 sources = ["../src/PhysicsScripting.cpp"]
 class = "PhysicsNative"
+header = "../src/Generated/FenrirPhysicsNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state, the query types as C# holds them, the joints and the
+    # engine's transform.
+    "PhysicsScriptingState.hpp",
+    "ScriptQueries.hpp",
+    "FenrirPhysics/Joints.hpp",
+    "FenrirECS/DefaultComponents.hpp",
+]

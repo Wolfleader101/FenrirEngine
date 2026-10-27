@@ -48,11 +48,10 @@ internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes
 /// <summary>
 /// The registration lists: the source, its function, and the factory each kind of registration is made by (each only
 /// when the generated lists hold a type of that kind), the types registered read-only, and those the extension
-/// registers by hand.
+/// registers by hand. What the source includes comes through the natives header (<c>[natives] includes</c>).
 /// </summary>
 internal sealed record RegistrationConfig(
     string Source,
-    IReadOnlyList<string> Includes,
     string Function,
     string Extension,
     string? MakeComponent,
@@ -78,13 +77,16 @@ internal sealed record TestsConfig(
 
 /// <summary>
 /// The native functions (<c>[natives]</c>): their description (<c>&lt;Name&gt;.natives.json</c> beside the
-/// configuration), the C# class declaring them, the SDK's attribute, the C++ factory each is registered by, the C++
-/// template (<c>zero-outputs</c>) the registration names in place of a native with outputs, as
+/// configuration), the natives header (<c>header</c>) holding their declarations and the headers it includes (what
+/// the declarations name), the C# class declaring them, the SDK's attribute, the C++ factory each is registered by, the
+/// C++ template (<c>zero-outputs</c>) the registration names in place of a native with outputs, as
 /// <c>&lt;zero-outputs&gt;&lt;&amp;F, indices...&gt;::Call</c>, which zeroes each before the native runs, and the C#
 /// type of each alias a native takes. <c>sources</c> and <c>context</c> are the header reader's.
 /// </summary>
 internal sealed record NativesConfig(
     string Description,
+    string Header,
+    IReadOnlyList<string> Includes,
     string Class,
     string Attribute,
     string Make,
@@ -167,12 +169,21 @@ internal sealed record BindingConfig(
         if (table.ContainsKey("registration"))
         {
             var section = reader.Table(table, "registration");
-            reader.Keys(section, "registration", "source", "includes", "function", "extension", "make-component",
+            // The declarations the includes served moved into the natives header, and the key with them: a configuration
+            // still stating it is told where, rather than that the key is unknown.
+            if (section.ContainsKey("includes"))
+            {
+                throw new BindingException(
+                    $"{path}: [registration] includes moved to [natives] includes, which the natives header (the declarations " +
+                    "the includes served) includes");
+            }
+
+            reader.Keys(section, "registration", "source", "function", "extension", "make-component",
                         "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
                         "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "read-only",
                         "by-hand");
             registration = new RegistrationConfig(
-                reader.PathOf(section, "source"), reader.Strings(section, "includes"), reader.String(section, "function"),
+                reader.PathOf(section, "source"), reader.String(section, "function"),
                 reader.String(section, "extension"), reader.OptionalString(section, "make-component"),
                 reader.OptionalString(section, "make-read-only-component"), reader.OptionalString(section, "make-event"),
                 reader.OptionalString(section, "make-shared-struct"), reader.OptionalString(section, "make-scene-resource"),
@@ -209,9 +220,11 @@ internal sealed record BindingConfig(
         if (table.ContainsKey("natives"))
         {
             var section = reader.Table(table, "natives");
-            reader.Keys(section, "natives", "sources", "context", "class", "attribute", "make", "zero-outputs", "types");
+            reader.Keys(section, "natives", "sources", "context", "header", "includes", "class", "attribute", "make",
+                        "zero-outputs", "types");
             nativesConfig = new NativesConfig(
                 System.IO.Path.Combine(System.IO.Path.GetDirectoryName(path)!, fileName[..^Extension.Length] + ".natives.json"),
+                reader.PathOf(section, "header"), reader.Strings(section, "includes"),
                 reader.String(section, "class"), reader.String(section, "attribute"), reader.String(section, "make"),
                 reader.String(section, "zero-outputs"), reader.StringTable(section, "types"));
             if (registration is null)

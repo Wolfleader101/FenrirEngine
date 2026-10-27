@@ -44,6 +44,7 @@ add_library(FenrirDebugDrawScripting STATIC
     src/DebugDrawScriptingState.hpp
     src/ScriptOptions.hpp
     src/Generated/FenrirDebugDrawMappings.hpp
+    src/Generated/FenrirDebugDrawNatives.hpp
     src/Generated/FenrirDebugDrawRegistration.cpp
 )
 target_include_directories(FenrirDebugDrawScripting PUBLIC include PRIVATE src)
@@ -56,7 +57,7 @@ target_link_libraries(FenrirDebugDrawScripting PUBLIC FenrirDebugDraw FenrirScri
 # api/FenrirDebugDraw.binding.toml, all committed:
 #   ../Managed/Fenrir.DebugDraw/Generated/  the options' internal C# mirrors, DepthMode, and the natives' declarations,
 #                                           DebugDrawNative, under the hand-written DebugDraw facade;
-#   src/Generated/                          the Iris mappings and the extension's functions.
+#   src/Generated/                          the Iris mappings, the natives' declarations and the extension's functions.
 # After changing the options or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api
 #   cmake --build <dir> --target fenrir-generate-bindings

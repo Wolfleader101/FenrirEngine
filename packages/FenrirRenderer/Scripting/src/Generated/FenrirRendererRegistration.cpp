@@ -4,25 +4,10 @@
 // The extension's registration lists: every described component, event, resource, shared struct and native function.
 
 #include "../../include/FenrirRendererScripting/Generated/FenrirRendererMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "RendererScriptingState.hpp"
-
-namespace Fenrir::RendererNatives
-{
-    bool ScreenPointToRay(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue camera, const Fenrir::Math::Vec2* point, Fenrir::Math::Ray* ray);
-    bool WorldToScreenPoint(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue camera, const Fenrir::Math::Vec3* point, Fenrir::Math::Vec2* screenPoint);
-    Fenrir::EntityValue CameraAt(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::WindowId window, const Fenrir::Math::Vec2* point);
-    bool GetWorldBounds(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue entity, Fenrir::Math::AABB* bounds);
-    bool Stats(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::RendererStats* stats);
-    Fenrir::EntityValue SpawnModel(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint64_t model, Fenrir::EntityValue parent);
-} // namespace Fenrir::RendererNatives
+#include "FenrirRendererNatives.hpp"
 
 namespace Fenrir::Generated
 {
-    void RegisterRenderer(Fenrir::ScriptingExtension& extension);
-
     void RegisterRenderer(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {

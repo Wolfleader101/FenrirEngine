@@ -10,6 +10,7 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "Generated/FenrirDebugDrawNatives.hpp"
 #include "ScriptOptions.hpp"
 
 // Everything C# sees of debug drawing besides its facade is generated (api/FenrirDebugDraw.binding.toml): the options'

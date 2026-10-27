@@ -46,6 +46,7 @@ add_library(FenrirAssetsScripting STATIC
     include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp
     src/AssetsScripting.cpp
     src/AssetsScriptingState.hpp
+    src/Generated/FenrirAssetsNatives.hpp
     src/Generated/FenrirAssetsRegistration.cpp
 )
 target_include_directories(FenrirAssetsScripting PUBLIC include PRIVATE src)
@@ -59,7 +60,7 @@ target_link_libraries(FenrirAssetsScripting PUBLIC FenrirAssets FenrirScripting)
 #                                        and the natives' declarations, AssetsNative, which Assets, Materials and Shaders
 #                                        call;
 #   include/FenrirAssetsScripting/Generated/  the Iris mappings, public because FenrirRenderer's binding uses this one;
-#   src/Generated/                       the extension's sharedStructs and functions;
+#   src/Generated/                       the natives' declarations, and the extension's sharedStructs and functions;
 #   Tests/Generated/                     the defaults test (C#'s new T() against C++'s T{}, field by field).
 # The handles are bound types, mapped by hand (AssetMappings.hpp). The owner C# names and the plain data the natives take
 # in C#'s form are this library's own (include/FenrirAssetsScripting/ScriptAssets.hpp), described as

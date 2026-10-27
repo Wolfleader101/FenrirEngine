@@ -46,6 +46,7 @@ add_library(FenrirInputScripting STATIC
     src/InputClaimsResource.hpp
     src/InputScripting.cpp
     src/InputScriptingState.hpp
+    src/Generated/FenrirInputNatives.hpp
     src/Generated/FenrirInputRegistration.cpp
 )
 target_include_directories(FenrirInputScripting PUBLIC include PRIVATE src)
@@ -60,7 +61,8 @@ target_link_libraries(FenrirInputScripting PUBLIC FenrirInput FenrirScripting)
 #                                               only, and the natives' declarations, InputNative;
 #   include/FenrirInputScripting/Generated/     the Iris mappings, which a binding using this one (FenrirWindow's)
 #                                               includes;
-#   src/Generated/                              the extension's events, sharedStructs and functions;
+#   src/Generated/                              the natives' declarations, and the extension's events, sharedStructs
+#                                               and functions;
 #   Tests/Generated/                            the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api

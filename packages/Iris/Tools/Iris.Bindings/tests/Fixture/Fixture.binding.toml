@@ -44,6 +44,8 @@ tags = "[bindings]"
 [natives]
 sources = ["Natives.cpp"]
 class = "FixtureNative"
+# The natives' declarations and Register's, beside the registration that includes it.
+header = "Native/Generated/FixtureNatives.hpp"
 types = { "Fixture::EntityId" = "Entity" }
 
 # Vector3's defaults go through its constructor, Quaternion's set components by name, and Handle's own default is not

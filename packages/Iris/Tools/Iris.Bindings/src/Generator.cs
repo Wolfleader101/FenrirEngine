@@ -49,6 +49,11 @@ internal static class Generator
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
         if (config.Registration is { } registration)
         {
+            if (natives != null)
+            {
+                files.Add(config.Natives!.Header, CppWriter.NativesHeader(binding, registration, natives));
+            }
+
             files.Add(registration.Source, CppWriter.Registration(binding, registration, natives, bound));
         }
 

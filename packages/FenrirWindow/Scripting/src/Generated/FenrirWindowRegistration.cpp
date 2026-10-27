@@ -4,32 +4,10 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "FenrirWindowMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "WindowScriptingState.hpp"
-
-namespace Fenrir::WindowNatives
-{
-    bool Exists(const Fenrir::CallContext&, Fenrir::WindowId window);
-    void Size(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
-    void PixelSize(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
-    float ContentScale(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool IsMinimised(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool IsFocused(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    Fenrir::CursorMode GetCursorMode(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool SetCursorMode(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::CursorMode mode);
-    bool SetCursorShape(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::CursorShape shape);
-    bool SetTitle(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, std::string_view title);
-    std::int32_t GetClipboard(const Fenrir::CallContext&, Fenrir::WindowScripting&, char16_t* text, std::int32_t capacity);
-    bool SetClipboard(const Fenrir::CallContext&, Fenrir::WindowScripting&, std::string_view text);
-    bool RequestClose(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-} // namespace Fenrir::WindowNatives
+#include "FenrirWindowNatives.hpp"
 
 namespace Fenrir::Generated
 {
-    void RegisterWindow(Fenrir::ScriptingExtension& extension);
-
     void RegisterWindow(Fenrir::ScriptingExtension& extension)
     {
         extension.components = {};

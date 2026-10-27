@@ -9,6 +9,7 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirInput/Devices.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
+#include "Generated/FenrirInputNatives.hpp"
 #include "InputClaimsResource.hpp"
 #include "InputScriptingState.hpp"
 
@@ -29,7 +30,7 @@ namespace Fenrir
     // pad that is not connected) it does nothing and returns false or zero, warning once per native function in a
     // debug build under the native's name, which the call context carries; its `out` parameter is zeroed by the
     // registration before it runs, so it writes nothing on that path. Not in an anonymous namespace: the generated
-    // registration names them from another file.
+    // natives header declares them.
     namespace InputNatives
     {
         /**
