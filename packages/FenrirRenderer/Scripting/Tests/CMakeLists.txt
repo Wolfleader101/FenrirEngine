@@ -13,6 +13,7 @@ add_executable(FenrirRendererScriptingTests
     Picking.cpp
     SpawnModel.cpp
     Generated/FenrirRendererDefaultsTests.cpp
+    "${fenrir_scripting_tests_dir}/ExtensionTestApp.hpp"
     "${fenrir_scripting_tests_dir}/HeadlessApp.hpp"
     "${fenrir_scripting_tests_dir}/ScriptingProbe.hpp"
 )
