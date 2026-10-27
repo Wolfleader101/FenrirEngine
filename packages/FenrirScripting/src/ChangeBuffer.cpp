@@ -36,7 +36,7 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::Add(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                   std::uint32_t entity, const void* value)
     {
-        const auto* registration = registry.Get(component);
+        const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
             return ChangeError::UnknownComponent;
@@ -62,7 +62,7 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::SendEvent(App& app, const ComponentRegistry& registry, std::int32_t event,
                                         const void* value)
     {
-        const auto* registration = registry.GetEvent(event);
+        const auto* registration = registry.Events().Get(event);
         if (registration == nullptr || value == nullptr)
         {
             return ChangeError::UnknownEvent;
@@ -80,7 +80,7 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::Remove(EntityList& entities, const ComponentRegistry& registry, std::int32_t component,
                                      std::uint32_t entity)
     {
-        const auto* registration = registry.Get(component);
+        const auto* registration = registry.Components().Get(component);
         if (registration == nullptr)
         {
             return ChangeError::UnknownComponent;
@@ -104,7 +104,7 @@ namespace Fenrir::Detail
     ChangeError ChangeBuffer::InsertResource(const ComponentRegistry& registry, std::int32_t resource,
                                              const void* value)
     {
-        const auto* registration = registry.GetResource(resource);
+        const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
             return ChangeError::UnknownResource;
@@ -125,7 +125,7 @@ namespace Fenrir::Detail
 
     ChangeError ChangeBuffer::RemoveResource(const ComponentRegistry& registry, std::int32_t resource)
     {
-        const auto* registration = registry.GetResource(resource);
+        const auto* registration = registry.Resources().Get(resource);
         if (registration == nullptr)
         {
             return ChangeError::UnknownResource;
@@ -181,7 +181,7 @@ namespace Fenrir::Detail
                 ++result.applied;
                 break;
             case Kind::Add: {
-                const auto* registration = registry.Get(change.component);
+                const auto* registration = registry.Components().Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !entities.Add(registration->type, change.entity))
                 {
@@ -199,7 +199,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::SendEvent: {
-                const auto* registration = registry.GetEvent(change.component);
+                const auto* registration = registry.Events().Get(change.component);
                 IEventQueue* queue = registration == nullptr ? nullptr : app.FindEventQueue(registration->name);
                 if (queue == nullptr || queue->EventSize() != registration->size ||
                     !queue->SendRaw(&values[change.valueOffset]))
@@ -212,7 +212,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::InsertResource: {
-                const auto* registration = registry.GetResource(change.component);
+                const auto* registration = registry.Resources().Get(change.component);
                 void* target = registration == nullptr ? nullptr : registration->insert(app);
                 if (target == nullptr)
                 {
@@ -228,7 +228,7 @@ namespace Fenrir::Detail
                 break;
             }
             case Kind::RemoveResource: {
-                const auto* registration = registry.GetResource(change.component);
+                const auto* registration = registry.Resources().Get(change.component);
                 if (registration == nullptr)
                 {
                     ++result.skipped;
@@ -252,7 +252,7 @@ namespace Fenrir::Detail
                 }
                 break;
             case Kind::Remove: {
-                const auto* registration = registry.Get(change.component);
+                const auto* registration = registry.Components().Get(change.component);
                 if (registration == nullptr || !entities.HasEntity(change.entity) ||
                     !entities.Remove(registration->type, change.entity))
                 {

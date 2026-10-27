@@ -103,17 +103,17 @@ namespace
         // A script component of this name on a new entity, as a script would have added it.
         std::uint32_t EntityWith(const char* componentName)
         {
-            const auto id = registry.Find(componentName);
+            const auto id = registry.Components().Find(componentName);
             REQUIRE(id >= 0);
             const auto entity = Entities().CreateEntity().GetId();
-            REQUIRE(Entities().Add(registry.Get(id)->type, entity));
+            REQUIRE(Entities().Add(registry.Components().Get(id)->type, entity));
             return entity;
         }
 
         [[nodiscard]] bool Has(const char* componentName, std::uint32_t entity)
         {
-            const auto id = registry.Find(componentName);
-            return id >= 0 && Entities().Has(registry.Get(id)->type, entity);
+            const auto id = registry.Components().Find(componentName);
+            return id >= 0 && Entities().Has(registry.Components().Get(id)->type, entity);
         }
 
         // How many components of a script type the scene holds, by the type's layout, whether or not it is registered.
@@ -125,11 +125,11 @@ namespace
         [[nodiscard]] std::size_t ScriptDefinedCount() const
         {
             std::size_t count = 0;
-            for (const auto& registration : registry.All())
+            for (const auto& registration : registry.Components().All())
             {
                 count += registration.scriptDefined ? 1 : 0;
             }
-            for (const auto& registration : registry.Events())
+            for (const auto& registration : registry.Events().All())
             {
                 count += registration.scriptDefined ? 1 : 0;
             }
@@ -153,13 +153,15 @@ TEST_CASE("a sound report registers every component it defines", "[script-data]"
 
     INFO("A sound report should be accepted: " + result.diagnostic);
     REQUIRE(result.Succeeded());
-    const auto health = world.registry.Find("Rules.Health");
-    const auto wide = world.registry.Find("Rules.Wide");
+    const auto health = world.registry.Components().Find("Rules.Health");
+    const auto wide = world.registry.Components().Find("Rules.Wide");
     INFO("Both components should be registered");
     REQUIRE((health >= 0 && wide >= 0));
     INFO("They should be script-defined, with the size and alignment the assembly reported");
-    REQUIRE((world.registry.Get(health)->scriptDefined && world.registry.Get(health)->type.Size() == 4));
-    REQUIRE((world.registry.Get(wide)->type.Size() == 32 && world.registry.Get(wide)->type.Alignment() == 16));
+    REQUIRE((world.registry.Components().Get(health)->scriptDefined &&
+             world.registry.Components().Get(health)->type.Size() == 4));
+    REQUIRE((world.registry.Components().Get(wide)->type.Size() == 32 &&
+             world.registry.Components().Get(wide)->type.Alignment() == 16));
 }
 
 TEST_CASE("a component reported twice is refused", "[script-data]")
@@ -230,7 +232,7 @@ TEST_CASE("two script components whose names share a storage id are refused, nam
 TEST_CASE("a refused report leaves the registry unchanged and makes no storage", "[script-data]")
 {
     World world;
-    const auto registered = world.registry.All().size();
+    const auto registered = world.registry.Components().All().size();
     const auto storages = world.Entities().ComponentStorageCount();
     LiteralAssembly assembly;
     // A sound component first, then one that is refused: nothing of either may remain.
@@ -241,7 +243,8 @@ TEST_CASE("a refused report leaves the registry unchanged and makes no storage",
     INFO("The report should be refused");
     REQUIRE(!result.Succeeded());
     INFO("No component should have been registered");
-    REQUIRE((world.registry.All().size() == registered && world.registry.Find("Rules.Health") < 0));
+    REQUIRE((world.registry.Components().All().size() == registered &&
+             world.registry.Components().Find("Rules.Health") < 0));
     INFO("No storage should have been made");
     REQUIRE(world.Entities().ComponentStorageCount() == storages);
     INFO("Nothing should be recorded as owned");
@@ -264,7 +267,7 @@ TEST_CASE("a report the assembly could not give is refused with its explanation"
     REQUIRE((result.status == Iris::CallStatus::ManagedException &&
              result.diagnostic == "The script assembly could not report its components: it threw"));
     INFO("Nothing should have been registered");
-    REQUIRE(world.registry.Find("Rules.Health") < 0);
+    REQUIRE(world.registry.Components().Find("Rules.Health") < 0);
 }
 
 // Events.
@@ -311,7 +314,7 @@ TEST_CASE("an event cannot take the name of an event the engine already has", "[
     World world;
     auto registration = MakeEvent<RulesTest::Ping>("Rules.Ping");
     REQUIRE(registration.bind(world.headless.Get()));
-    REQUIRE(world.registry.AddEvent(std::move(registration)) >= 0);
+    REQUIRE(world.registry.Events().Add(std::move(registration)) >= 0);
     LiteralAssembly assembly;
     assembly.events = {Component("Rules.Ping", 4, 4)};
 
@@ -366,7 +369,7 @@ TEST_CASE("a sound report registers its events and makes their queues", "[script
     INFO("A sound report of components and events should be accepted: " + result.diagnostic);
     REQUIRE(result.Succeeded());
     INFO("Both events should be registered");
-    REQUIRE((world.registry.FindEvent("Rules.Beep") >= 0 && world.registry.FindEvent("Rules.Blast") >= 0));
+    REQUIRE((world.registry.Events().Find("Rules.Beep") >= 0 && world.registry.Events().Find("Rules.Blast") >= 0));
     INFO("Each should have a queue with its own event size");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") != nullptr);
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->EventSize() == 4);
@@ -385,7 +388,7 @@ TEST_CASE("a refused event leaves no component registered and no queue made", "[
     INFO("The report should be refused");
     REQUIRE(!result.Succeeded());
     INFO("The sound component and event of the same report should not remain");
-    REQUIRE((world.registry.Find("Rules.Health") < 0 && world.registry.FindEvent("Rules.Beep") < 0));
+    REQUIRE((world.registry.Components().Find("Rules.Health") < 0 && world.registry.Events().Find("Rules.Beep") < 0));
     INFO("No queue should have been made");
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") == nullptr);
 }
@@ -437,7 +440,7 @@ TEST_CASE("a component whose layout changed is removed from every scene with a w
                                              "the script component 'Rules.Health' changed its layout; 2 component(s) "
                                              "were removed so nothing reads the old bytes as the new layout."));
     INFO("The new layout is what is registered");
-    REQUIRE(world.registry.Get(world.registry.Find("Rules.Health"))->type.Size() == 16);
+    REQUIRE(world.registry.Components().Get(world.registry.Components().Find("Rules.Health"))->type.Size() == 16);
 }
 
 TEST_CASE("a component that no longer exists is removed from every scene with a warning", "[script-data]")
@@ -455,7 +458,7 @@ TEST_CASE("a component that no longer exists is removed from every scene with a 
     INFO("A script that dropped the component should load: " + result.diagnostic);
     REQUIRE(result.Succeeded());
     INFO("The entity should not keep data nobody defines");
-    REQUIRE(world.registry.Find("Rules.Health") < 0);
+    REQUIRE(world.registry.Components().Find("Rules.Health") < 0);
     REQUIRE(world.CountOf("Rules.Health") == 0);
     REQUIRE(world.Entities().HasEntity(entity));
     INFO("The warning should say it no longer exists");
@@ -568,7 +571,8 @@ TEST_CASE("a failure of the native components' check changes nothing", "[script-
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep")->EventSize() == 4);
     REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
     INFO("Nothing of the new report should be registered, and ownership should be as it was");
-    REQUIRE((world.registry.Find("Rules.Armour") < 0 && world.registry.Find("Rules.Health") < 0));
+    REQUIRE(
+        (world.registry.Components().Find("Rules.Armour") < 0 && world.registry.Components().Find("Rules.Health") < 0));
     REQUIRE((world.data.OwnedComponents().size() == 1 && world.data.OwnedComponents().contains("Rules.Health")));
     INFO("A warning about dropping data should not have been given");
     REQUIRE(!world.headless.Logger().Contains(Testing::LogLevel::Warn, "were removed"));
@@ -631,8 +635,8 @@ TEST_CASE("an admission refused after its components were registered leaves noth
     REQUIRE((!result.Succeeded() && result.diagnostic == "The script's events could not be registered together."));
     INFO("Nothing script-defined should be left registered, the components that registered first included");
     REQUIRE(world.ScriptDefinedCount() == 0);
-    REQUIRE((world.registry.Find("Rules.Health") < 0 && world.registry.Find("Rules.Armour") < 0 &&
-             world.registry.FindEvent("Rules.Beep") < 0));
+    REQUIRE((world.registry.Components().Find("Rules.Health") < 0 &&
+             world.registry.Components().Find("Rules.Armour") < 0 && world.registry.Events().Find("Rules.Beep") < 0));
     INFO("The previous generation's data should be as it was, since nothing stale was dropped");
     REQUIRE(world.CountOf("Rules.Health") == 1);
     REQUIRE(Testing::HeldEventCount(*world.headless.Get().FindEventQueue("Rules.Beep")) == 1);
@@ -660,9 +664,9 @@ TEST_CASE("forgetting a generation removes its registrations and keeps its data 
     world.data.Forget();
 
     INFO("Nothing script-defined should be registered");
-    REQUIRE((world.ScriptDefinedCount() == 0 && world.registry.Find("Rules.Health") < 0));
+    REQUIRE((world.ScriptDefinedCount() == 0 && world.registry.Components().Find("Rules.Health") < 0));
     INFO("The engine's own components should still be registered");
-    REQUIRE(world.registry.Find("Fenrir.Transform") >= 0);
+    REQUIRE(world.registry.Components().Find("Fenrir.Transform") >= 0);
     INFO("The data, the queue and their layouts should stay");
     REQUIRE((world.CountOf("Rules.Health") == 1 && world.Entities().HasEntity(entity)));
     REQUIRE(world.headless.Get().FindEventQueue("Rules.Beep") != nullptr);

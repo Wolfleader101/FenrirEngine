@@ -141,8 +141,9 @@ namespace Fenrir::ScriptingNatives
         {
             return -1;
         }
-        return engine.components->Resolve(std::string_view(name, static_cast<std::size_t>(length)),
-                                          std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Components().Resolve(
+            std::string_view(name, static_cast<std::size_t>(length)),
+            std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -174,14 +175,14 @@ namespace Fenrir::ScriptingNatives
      */
     void* ComponentGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
     {
-        const auto* component = engine.components->Get(id);
+        const auto* component = engine.components->Components().Get(id);
         return component == nullptr ? nullptr : context.Entities().Get(component->type, entity);
     }
 
     /** @brief Whether the entity is alive and has the component. */
     bool ComponentHas(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
     {
-        const auto* component = engine.components->Get(id);
+        const auto* component = engine.components->Components().Get(id);
         return component != nullptr && context.Entities().Has(component->type, entity);
     }
 
@@ -264,8 +265,8 @@ namespace Fenrir::ScriptingNatives
         {
             return -1;
         }
-        return engine.components->ResolveEvent(std::string_view(name, static_cast<std::size_t>(length)),
-                                               std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Events().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
+                                                   std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -312,7 +313,7 @@ namespace Fenrir::ScriptingNatives
         {
             return -1;
         }
-        const auto* registration = engine.components->GetEvent(event);
+        const auto* registration = engine.components->Events().Get(event);
         const IEventQueue* queue =
             registration == nullptr ? nullptr : context.GetApp().FindEventQueue(registration->name);
         if (queue == nullptr || queue->EventSize() != registration->size)
@@ -380,8 +381,8 @@ namespace Fenrir::ScriptingNatives
         {
             return -1;
         }
-        return engine.components->ResolveResource(std::string_view(name, static_cast<std::size_t>(length)),
-                                                  std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Resources().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
+                                                      std::string_view(typeName, static_cast<std::size_t>(typeLength)));
     }
 
     /**
@@ -391,7 +392,7 @@ namespace Fenrir::ScriptingNatives
      */
     void* ResourceGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id)
     {
-        const auto* resource = engine.components->GetResource(id);
+        const auto* resource = engine.components->Resources().Get(id);
         return resource == nullptr ? nullptr : resource->find(context.GetApp());
     }
 

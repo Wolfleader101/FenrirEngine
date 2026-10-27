@@ -46,12 +46,12 @@ namespace
         World()
         {
             RulesTest::AddEngineComponents(registry);
-            transform = registry.Find("Fenrir.Transform");
-            relationship = registry.Find("Fenrir.Relationship");
-            velocity = registry.Add(MakeComponent<Velocity>(VelocityName));
+            transform = registry.Components().Find("Fenrir.Transform");
+            relationship = registry.Components().Find("Fenrir.Relationship");
+            velocity = registry.Components().Add(MakeComponent<Velocity>(VelocityName));
             auto registration = MakeEvent<Ping>(PingName);
             REQUIRE(registration.bind(headless.Get()));
-            ping = registry.AddEvent(std::move(registration));
+            ping = registry.Events().Add(std::move(registration));
         }
 
         EntityList& Entities()
@@ -61,7 +61,7 @@ namespace
 
         [[nodiscard]] const ComponentType& TypeOf(std::int32_t id) const
         {
-            return registry.Get(id)->type;
+            return registry.Components().Get(id)->type;
         }
 
         std::uint32_t NewEntity()
@@ -458,7 +458,7 @@ TEST_CASE("an event whose queue has gone is skipped with a warning", "[change-bu
     registration.size = 4;
     registration.alignment = 4;
     registration.scriptDefined = true;
-    const auto scripted = world.registry.AddEvent(std::move(registration));
+    const auto scripted = world.registry.Events().Add(std::move(registration));
     const Ping value{1};
     INFO("The send was refused when it was recorded");
     REQUIRE(world.buffer.SendEvent(world.headless.Get(), world.registry, scripted, &value) == ChangeError::None);
@@ -503,7 +503,7 @@ struct Iris::StructMapping<Clock>
 TEST_CASE("inserting and removing a resource play back in order, an insert with its value", "[change-buffer]")
 {
     World world;
-    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    const auto weather = world.registry.Resources().Add(MakeSceneResource<Weather>("Rules.Weather"));
     Weather value{3.0F};
     REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
     value.Wind = 9.0F;
@@ -526,7 +526,7 @@ TEST_CASE("inserting and removing a resource play back in order, an insert with 
 TEST_CASE("an insert copies its value when it is recorded", "[change-buffer]")
 {
     World world;
-    const auto weather = world.registry.AddResource(MakeSceneResource<Weather>("Rules.Weather"));
+    const auto weather = world.registry.Resources().Add(MakeSceneResource<Weather>("Rules.Weather"));
     Weather value{3.0F};
     REQUIRE(world.buffer.InsertResource(world.registry, weather, &value) == ChangeError::None);
     value.Wind = 9.0F;
@@ -540,7 +540,7 @@ TEST_CASE("an insert copies its value when it is recorded", "[change-buffer]")
 TEST_CASE("inserting or removing an unknown or read-only resource is refused", "[change-buffer]")
 {
     World world;
-    const auto clock = world.registry.AddResource(MakeReadOnlyAppResource<Clock>("Rules.Clock"));
+    const auto clock = world.registry.Resources().Add(MakeReadOnlyAppResource<Clock>("Rules.Clock"));
     constexpr std::int32_t unknown = 42;
 
     INFO("An unknown resource should be refused as unknown");

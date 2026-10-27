@@ -6,24 +6,43 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "FenrirScripting/ComponentRegistry.hpp"
 
 namespace Fenrir::Detail
 {
-    // The table behind the engine's component lookups. Ids are positions, so they are only meaningful to the registry
-    // that issued them: each registry has its own generation, and C# re-resolves a cached id when the generation
-    // changes.
-    class ComponentRegistry
+    // A number no registry has had before: each registry's generation starts as one, and every change to a registry
+    // takes the next.
+    [[nodiscard]] inline std::uint32_t NextRegistryGeneration() noexcept
+    {
+        static std::atomic<std::uint32_t> generations{0};
+        return ++generations;
+    }
+
+    // One kind of thing the engine exposes to C# by name: the table behind the registry's components, events, shared
+    // structs and resources alike. Ids are positions, so they are only meaningful to the registry that issued them;
+    // every change to a table moves its registry's generation on, and C# re-resolves a cached id when the generation
+    // changes. A name names one thing across every table of the registry: `names` is the registry's set of all of
+    // them, which each table consults and keeps.
+    template <typename Registration>
+    class RegistryTable
     {
       public:
-        ComponentRegistry() : m_generation(++s_generations)
+        RegistryTable(std::uint32_t& generation, std::unordered_set<std::string>& names, std::string_view noun)
+            : m_generation(generation), m_names(names), m_noun(noun)
         {
         }
 
-        // The id of a component by name for the C# type that claims it: the id, -1 if nothing is registered under the
-        // name, or -3 if the name is registered for a different C# type.
+        // What this table holds, as its callers' messages say it: "component", "event", "shared struct", "resource".
+        [[nodiscard]] std::string_view Noun() const noexcept
+        {
+            return m_noun;
+        }
+
+        // The id registered under `name` for the C# type that claims it: the id, -1 if nothing is registered under
+        // the name, or -3 if the name is registered for a different C# type.
         [[nodiscard]] std::int32_t Resolve(std::string_view name, std::string_view typeName) const
         {
             const std::int32_t id = Find(name);
@@ -34,65 +53,34 @@ namespace Fenrir::Detail
             return Get(id)->typeName == typeName ? id : -3;
         }
 
-        // The id of the new registration, or -1 if the name is empty or already taken.
-        std::int32_t Add(ComponentRegistration registration)
+        // The id of the new registration, or -1 if the name is empty or any table of the registry already holds it.
+        std::int32_t Add(Registration registration)
         {
-            if (registration.name.empty() || m_ids.contains(registration.name))
+            if (!Usable(registration) || m_names.contains(registration.name))
             {
                 return -1;
             }
-            const auto id = static_cast<std::int32_t>(m_components.size());
+            const auto id = static_cast<std::int32_t>(m_registrations.size());
+            m_names.insert(registration.name);
             m_ids.emplace(registration.name, id);
-            m_components.push_back(std::move(registration));
+            m_registrations.push_back(std::move(registration));
             // The table changed, so any id or "not registered" that C# remembered is stale.
-            m_generation = ++s_generations;
+            Bump();
             return id;
         }
 
-        // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the
-        // native ones. Ids are positions, so the ids of what remains may change; the generation changes with them, and
-        // C# looks its ids up again.
-        void RemoveScriptDefined()
+        // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or
+        // the same name twice.
+        bool AddAll(std::vector<Registration> registrations)
         {
-            std::vector<ComponentRegistration> keptComponents;
-            for (auto& registration : m_components)
+            std::unordered_set<std::string> seen;
+            for (const auto& registration : registrations)
             {
-                if (!registration.scriptDefined)
+                if (!Usable(registration) || m_names.contains(registration.name) ||
+                    !seen.insert(registration.name).second)
                 {
-                    keptComponents.push_back(std::move(registration));
+                    return false;
                 }
-            }
-            std::vector<EventRegistration> keptEvents;
-            for (auto& registration : m_events)
-            {
-                if (!registration.scriptDefined)
-                {
-                    keptEvents.push_back(std::move(registration));
-                }
-            }
-            m_components = std::move(keptComponents);
-            m_events = std::move(keptEvents);
-            m_ids.clear();
-            m_eventIds.clear();
-            for (std::size_t index = 0; index < m_components.size(); ++index)
-            {
-                m_ids.emplace(m_components[index].name, static_cast<std::int32_t>(index));
-            }
-            for (std::size_t index = 0; index < m_events.size(); ++index)
-            {
-                m_eventIds.emplace(m_events[index].name, static_cast<std::int32_t>(index));
-            }
-            m_generation = ++s_generations;
-        }
-
-        // Adds every registration, or none of them: false (and nothing added) if any has an empty or taken name, or the
-        // same name twice.
-        bool AddAll(std::vector<ComponentRegistration> registrations)
-        {
-            if (!CanAddAll(registrations, m_ids,
-                           [](const ComponentRegistration& registration) { return !registration.name.empty(); }))
-            {
-                return false;
             }
             for (auto& registration : registrations)
             {
@@ -101,124 +89,30 @@ namespace Fenrir::Detail
             return true;
         }
 
-        // Events: a second table with its own ids, under the same generation.
-
-        // The id of an event by name for the C# type that claims it: the id, -1 if no event has the name, -3 if the
-        // name belongs to an event of a different C# type.
-        [[nodiscard]] std::int32_t ResolveEvent(std::string_view name, std::string_view typeName) const
+        // Forgets every registration `remove` selects. Ids are positions, so the ids of what remains may change; the
+        // generation changes with them, and C# looks its ids up again.
+        template <typename Remove>
+        void RemoveWhere(Remove remove)
         {
-            const auto found = m_eventIds.find(std::string(name));
-            if (found == m_eventIds.end())
+            std::vector<Registration> kept;
+            for (auto& registration : m_registrations)
             {
-                return -1;
+                if (remove(registration))
+                {
+                    m_names.erase(registration.name);
+                }
+                else
+                {
+                    kept.push_back(std::move(registration));
+                }
             }
-            return m_events[static_cast<std::size_t>(found->second)].typeName == typeName ? found->second : -3;
-        }
-
-        // The id of the new event, or -1 if its name is empty or taken.
-        std::int32_t AddEvent(EventRegistration registration)
-        {
-            if (registration.name.empty() || m_eventIds.contains(registration.name))
+            m_registrations = std::move(kept);
+            m_ids.clear();
+            for (std::size_t index = 0; index < m_registrations.size(); ++index)
             {
-                return -1;
+                m_ids.emplace(m_registrations[index].name, static_cast<std::int32_t>(index));
             }
-            const auto id = static_cast<std::int32_t>(m_events.size());
-            m_eventIds.emplace(registration.name, id);
-            m_events.push_back(std::move(registration));
-            m_generation = ++s_generations;
-            return id;
-        }
-
-        // Adds every event or none: false (and nothing added) if any has an empty or taken name, or the same name
-        // twice.
-        bool AddEvents(std::vector<EventRegistration> registrations)
-        {
-            if (!CanAddAll(registrations, m_eventIds,
-                           [](const EventRegistration& registration) { return !registration.name.empty(); }))
-            {
-                return false;
-            }
-            for (auto& registration : registrations)
-            {
-                (void)AddEvent(std::move(registration));
-            }
-            return true;
-        }
-
-        [[nodiscard]] std::int32_t FindEvent(std::string_view name) const
-        {
-            const auto found = m_eventIds.find(std::string(name));
-            return found == m_eventIds.end() ? -1 : found->second;
-        }
-
-        [[nodiscard]] const EventRegistration* GetEvent(std::int32_t id) const noexcept
-        {
-            return id >= 0 && static_cast<std::size_t>(id) < m_events.size() ? &m_events[static_cast<std::size_t>(id)]
-                                                                             : nullptr;
-        }
-
-        [[nodiscard]] const std::vector<EventRegistration>& Events() const noexcept
-        {
-            return m_events;
-        }
-
-        // Shared structs: native only, with no ids, kept so each load checks them against their C# structs. False (and
-        // nothing added) if the name is empty or a shared struct already has it.
-        bool AddSharedStruct(SharedStructRegistration registration)
-        {
-            if (registration.name.empty() || m_sharedStructNames.contains(registration.name))
-            {
-                return false;
-            }
-            m_sharedStructNames.insert(registration.name);
-            m_sharedStructs.push_back(std::move(registration));
-            return true;
-        }
-
-        [[nodiscard]] const std::vector<SharedStructRegistration>& SharedStructs() const noexcept
-        {
-            return m_sharedStructs;
-        }
-
-        // Resources: a third table with its own ids, under the same generation. Only extensions register them, so a
-        // reload never changes it.
-
-        // The id of a resource by name for the C# type that claims it: the id, -1 if no resource has the name, -3 if
-        // the name belongs to a resource of a different C# type.
-        [[nodiscard]] std::int32_t ResolveResource(std::string_view name, std::string_view typeName) const
-        {
-            const auto found = m_resourceIds.find(std::string(name));
-            if (found == m_resourceIds.end())
-            {
-                return -1;
-            }
-            return m_resources[static_cast<std::size_t>(found->second)].typeName == typeName ? found->second : -3;
-        }
-
-        // The id of the new resource, or -1 if its name is empty or taken.
-        std::int32_t AddResource(ResourceRegistration registration)
-        {
-            if (registration.name.empty() || m_resourceIds.contains(registration.name))
-            {
-                return -1;
-            }
-            const auto id = static_cast<std::int32_t>(m_resources.size());
-            m_resourceIds.emplace(registration.name, id);
-            m_resources.push_back(std::move(registration));
-            m_generation = ++s_generations;
-            return id;
-        }
-
-        [[nodiscard]] const ResourceRegistration* GetResource(std::int32_t id) const noexcept
-        {
-            return id >= 0 && static_cast<std::size_t>(id) < m_resources.size()
-                       ? &m_resources[static_cast<std::size_t>(id)]
-                       : nullptr;
-        }
-
-        [[nodiscard]] const std::vector<ResourceRegistration>& Resources() const noexcept
-        {
-            return m_resources;
+            Bump();
         }
 
         // The id registered under a name, or -1.
@@ -228,16 +122,93 @@ namespace Fenrir::Detail
             return found == m_ids.end() ? -1 : found->second;
         }
 
-        [[nodiscard]] const ComponentRegistration* Get(std::int32_t id) const noexcept
+        [[nodiscard]] const Registration* Get(std::int32_t id) const noexcept
         {
-            return id >= 0 && static_cast<std::size_t>(id) < m_components.size()
-                       ? &m_components[static_cast<std::size_t>(id)]
+            return id >= 0 && static_cast<std::size_t>(id) < m_registrations.size()
+                       ? &m_registrations[static_cast<std::size_t>(id)]
                        : nullptr;
         }
 
-        [[nodiscard]] const std::vector<ComponentRegistration>& All() const noexcept
+        [[nodiscard]] const std::vector<Registration>& All() const noexcept
+        {
+            return m_registrations;
+        }
+
+      private:
+        [[nodiscard]] static bool Usable(const Registration& registration)
+        {
+            return !registration.name.empty();
+        }
+
+        void Bump()
+        {
+            m_generation = NextRegistryGeneration();
+        }
+
+        std::uint32_t& m_generation;
+        std::unordered_set<std::string>& m_names;
+        std::string_view m_noun;
+        std::vector<Registration> m_registrations;
+        std::unordered_map<std::string, std::int32_t> m_ids;
+    };
+
+    // The tables behind the engine's lookups by name: its components, events, shared structs and resources, each a
+    // RegistryTable with its own ids, under one generation and one rule that a name names one of them. Shared structs
+    // have ids like the rest, which nothing asks for: they are kept so each load checks them against their C# structs.
+    class ComponentRegistry
+    {
+      public:
+        ComponentRegistry() = default;
+        ComponentRegistry(const ComponentRegistry&) = delete;
+        ComponentRegistry& operator=(const ComponentRegistry&) = delete;
+
+        [[nodiscard]] RegistryTable<ComponentRegistration>& Components() noexcept
         {
             return m_components;
+        }
+
+        [[nodiscard]] const RegistryTable<ComponentRegistration>& Components() const noexcept
+        {
+            return m_components;
+        }
+
+        [[nodiscard]] RegistryTable<EventRegistration>& Events() noexcept
+        {
+            return m_events;
+        }
+
+        [[nodiscard]] const RegistryTable<EventRegistration>& Events() const noexcept
+        {
+            return m_events;
+        }
+
+        [[nodiscard]] RegistryTable<SharedStructRegistration>& SharedStructs() noexcept
+        {
+            return m_sharedStructs;
+        }
+
+        [[nodiscard]] const RegistryTable<SharedStructRegistration>& SharedStructs() const noexcept
+        {
+            return m_sharedStructs;
+        }
+
+        [[nodiscard]] RegistryTable<ResourceRegistration>& Resources() noexcept
+        {
+            return m_resources;
+        }
+
+        [[nodiscard]] const RegistryTable<ResourceRegistration>& Resources() const noexcept
+        {
+            return m_resources;
+        }
+
+        // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the
+        // native ones. Only those two tables take script-defined entries.
+        void RemoveScriptDefined()
+        {
+            m_components.RemoveWhere(
+                [](const ComponentRegistration& registration) { return registration.scriptDefined; });
+            m_events.RemoveWhere([](const EventRegistration& registration) { return registration.scriptDefined; });
         }
 
         [[nodiscard]] std::uint32_t Generation() const noexcept
@@ -246,34 +217,11 @@ namespace Fenrir::Detail
         }
 
       private:
-        inline static std::atomic<std::uint32_t> s_generations{0};
-
-        // The one rule for adding a batch to either table: every registration is usable (`usable`), none takes a name
-        // `taken` already holds, and no name appears twice in the batch.
-        template <typename Registration, typename Usable>
-        [[nodiscard]] static bool CanAddAll(const std::vector<Registration>& batch,
-                                            const std::unordered_map<std::string, std::int32_t>& taken, Usable usable)
-        {
-            std::unordered_map<std::string, int> seen;
-            for (const auto& registration : batch)
-            {
-                if (!usable(registration) || taken.contains(registration.name) ||
-                    !seen.emplace(registration.name, 0).second)
-                {
-                    return false;
-                }
-            }
-            return true;
-        }
-
-        std::uint32_t m_generation;
-        std::vector<ComponentRegistration> m_components;
-        std::unordered_map<std::string, std::int32_t> m_ids;
-        std::vector<EventRegistration> m_events;
-        std::unordered_map<std::string, std::int32_t> m_eventIds;
-        std::vector<SharedStructRegistration> m_sharedStructs;
-        std::unordered_set<std::string> m_sharedStructNames;
-        std::vector<ResourceRegistration> m_resources;
-        std::unordered_map<std::string, std::int32_t> m_resourceIds;
+        std::uint32_t m_generation = NextRegistryGeneration();
+        std::unordered_set<std::string> m_names;
+        RegistryTable<ComponentRegistration> m_components{m_generation, m_names, "component"};
+        RegistryTable<EventRegistration> m_events{m_generation, m_names, "event"};
+        RegistryTable<SharedStructRegistration> m_sharedStructs{m_generation, m_names, "shared struct"};
+        RegistryTable<ResourceRegistration> m_resources{m_generation, m_names, "resource"};
     };
 } // namespace Fenrir::Detail

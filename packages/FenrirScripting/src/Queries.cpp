@@ -15,7 +15,7 @@ namespace Fenrir::Detail
             types.reserve(ids.size());
             for (const std::int32_t id : ids)
             {
-                const auto* registration = registry.Get(id);
+                const auto* registration = registry.Components().Get(id);
                 if (registration == nullptr)
                 {
                     return {};
