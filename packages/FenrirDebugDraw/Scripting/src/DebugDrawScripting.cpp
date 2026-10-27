@@ -319,7 +319,10 @@ namespace Fenrir
             }
         }
 
-        /** @brief Shows the group's items (DebugDraw.ShowGroup). */
+        /**
+         * @brief Shows the group's items.
+         * @facade DebugDraw.ShowGroup
+         */
         void ShowGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
             if (const auto target = debugDraw.TargetFor(context))
@@ -328,7 +331,10 @@ namespace Fenrir
             }
         }
 
-        /** @brief Hides the group's items (DebugDraw.HideGroup). */
+        /**
+         * @brief Hides the group's items.
+         * @facade DebugDraw.HideGroup
+         */
         void HideGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
             if (const auto target = debugDraw.TargetFor(context))
@@ -338,8 +344,8 @@ namespace Fenrir
         }
 
         /**
-         * @brief Whether the group's items are shown; false with no DebugDraw in the active scene
-         * (DebugDraw.IsGroupShown).
+         * @brief Whether the group's items are shown; false with no debug drawing in the active scene.
+         * @facade DebugDraw.IsGroupShown
          */
         bool IsGroupShown(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
@@ -347,7 +353,10 @@ namespace Fenrir
             return target && target->draw->IsGroupShown(group);
         }
 
-        /** @brief Drops every item (DebugDraw.Clear). */
+        /**
+         * @brief Drops every item.
+         * @facade DebugDraw.Clear
+         */
         void Clear(const CallContext& context, DebugDrawScripting& debugDraw)
         {
             if (const auto target = debugDraw.TargetFor(context))
@@ -356,7 +365,10 @@ namespace Fenrir
             }
         }
 
-        /** @brief Drops the group's items (DebugDraw.Clear). */
+        /**
+         * @brief Drops the group's items.
+         * @facade DebugDraw.Clear
+         */
         void ClearGroup(const CallContext& context, DebugDrawScripting& debugDraw, std::string_view group)
         {
             if (const auto target = debugDraw.TargetFor(context))

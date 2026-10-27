@@ -32,7 +32,10 @@ namespace Fenrir
     // anonymous namespace: the generated registration names them from another file.
     namespace WindowNatives
     {
-        /** @brief Whether `window` has been made. */
+        /**
+         * @brief Whether `window` has been made.
+         * @facade Window.Exists
+         */
         bool Exists(const CallContext& context, WindowId window)
         {
             return Window::Exists(context.GetApp(), window);
@@ -62,25 +65,37 @@ namespace Fenrir
             }
         }
 
-        /** @brief `window`'s pixels per logical unit. */
+        /**
+         * @brief `window`'s pixels per logical unit.
+         * @facade Window.ContentScale
+         */
         float ContentScale(const CallContext& context, WindowScripting& windows, WindowId window)
         {
             return windows.Made(context, window) ? Window::ContentScale(context.GetApp(), window) : 0.0f;
         }
 
-        /** @brief Whether `window` is minimised: nothing should be drawn to it. */
+        /**
+         * @brief Whether `window` is minimised: nothing should be drawn to it.
+         * @facade Window.IsMinimised
+         */
         bool IsMinimised(const CallContext& context, WindowScripting& windows, WindowId window)
         {
             return windows.Made(context, window) && Window::IsMinimised(context.GetApp(), window);
         }
 
-        /** @brief Whether `window` has the input focus. */
+        /**
+         * @brief Whether `window` has the input focus.
+         * @facade Window.IsFocused
+         */
         bool IsFocused(const CallContext& context, WindowScripting& windows, WindowId window)
         {
             return windows.Made(context, window) && Window::IsFocused(context.GetApp(), window);
         }
 
-        /** @brief How the cursor behaves over `window`, as last set. */
+        /**
+         * @brief How the cursor behaves over `window`, as last set.
+         * @facade Window.GetCursorMode
+         */
         CursorMode GetCursorMode(const CallContext& context, WindowScripting& windows, WindowId window)
         {
             return windows.Made(context, window) ? Window::GetCursorMode(context.GetApp(), window) : CursorMode::Normal;
@@ -89,6 +104,7 @@ namespace Fenrir
         /**
          * @brief Sets how the cursor behaves over `window`.
          * @return Whether it was set: false with no such window, or if the platform refuses.
+         * @facade Window.SetCursorMode
          */
         bool SetCursorMode(const CallContext& context, WindowScripting& windows, WindowId window, CursorMode mode)
         {
@@ -103,6 +119,7 @@ namespace Fenrir
         /**
          * @brief Sets the cursor shown over `window`.
          * @return Whether it was set: false with no such window, or if the platform refuses.
+         * @facade Window.SetCursorShape
          */
         bool SetCursorShape(const CallContext& context, WindowScripting& windows, WindowId window, CursorShape shape)
         {
@@ -117,6 +134,7 @@ namespace Fenrir
         /**
          * @brief Sets `window`'s title.
          * @return Whether it was set: false with no such window, or if the platform refuses.
+         * @facade Window.SetTitle
          */
         bool SetTitle(const CallContext& context, WindowScripting& windows, WindowId window, std::string_view title)
         {
@@ -124,8 +142,11 @@ namespace Fenrir
         }
 
         /**
-         * @brief Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars.
+         * @brief Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars: as
+         * much as fits is written, so a result larger than the span says how large a span would hold it. Zero when
+         * the clipboard holds no text.
          * @param text Where to write at most `capacity` chars.
+         * @facade Window.GetClipboard
          */
         std::int32_t GetClipboard(const CallContext& context, WindowScripting& windows, char16_t* text,
                                   std::int32_t capacity)
@@ -140,6 +161,7 @@ namespace Fenrir
         /**
          * @brief Puts `text` on the system clipboard.
          * @return Whether it was put there: false with no window, or if the platform refuses.
+         * @facade Window.SetClipboard
          */
         bool SetClipboard(const CallContext& context, WindowScripting& windows, std::string_view text)
         {
@@ -147,8 +169,10 @@ namespace Fenrir
         }
 
         /**
-         * @brief Asks for `window` to close, as its close button does.
+         * @brief Asks for `window` to close, as its close button does: a `WindowCloseRequestedEvent` is sent and, for
+         * the main window when the app stops on its close, the app stops. The window itself stays.
          * @return Whether the request was made: false with no such window.
+         * @facade Window.RequestClose
          */
         bool RequestClose(const CallContext& context, WindowScripting& windows, WindowId window)
         {

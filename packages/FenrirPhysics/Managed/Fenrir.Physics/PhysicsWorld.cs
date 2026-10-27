@@ -3,6 +3,11 @@ using Fenrir.Scripting;
 
 namespace Fenrir.Physics;
 
+// The facade over the generated PhysicsNative (Generated/, from Scripting/src/PhysicsScripting.cpp). Its pass-throughs
+// (the forces, ContactsOf, IsSleeping and Bounds) are generated beside it from the natives' @facade marks
+// (Generated/PhysicsWorld.cs); this part holds what a description cannot say: the class doc, the queries' default
+// filter, the values returned from an output, the Gravity property and the handle packing.
+
 /// <summary>
 /// The active scene's physics world, from C#: forces, queries, motion tests, body state, gravity, debug lines and
 /// collision meshes, as <c>Fenrir::PhysicsWorld</c> and <c>Fenrir::Physics</c> offer them in C++ (whose documentation
@@ -26,25 +31,8 @@ namespace Fenrir.Physics;
 /// to a Joint wakes both its bodies.
 /// </para>
 /// </remarks>
-public static class PhysicsWorld
+public static partial class PhysicsWorld
 {
-    /// <summary>Pushes the entity's body with <paramref name="force"/> (newtons, world space) for the next step only.</summary>
-    /// <returns>Whether the force was queued: false with no physics world or no body.</returns>
-    public static bool AddForce(Entity entity, Vector3 force) => PhysicsNative.AddForce(entity, in force);
-
-    /// <summary>Changes the velocity of the entity's body by <paramref name="impulse"/> (newton seconds) over its mass, at the next step.</summary>
-    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
-    public static bool AddImpulse(Entity entity, Vector3 impulse) => PhysicsNative.AddImpulse(entity, in impulse);
-
-    /// <summary>Twists the entity's body with <paramref name="torque"/> (newton metres, world space) for the next step only.</summary>
-    /// <returns>Whether the torque was queued: false with no physics world or no body.</returns>
-    public static bool AddTorque(Entity entity, Vector3 torque) => PhysicsNative.AddTorque(entity, in torque);
-
-    /// <summary>Changes the angular velocity of the entity's body by <paramref name="impulse"/> over its moment of inertia, at the next step.</summary>
-    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
-    public static bool AddAngularImpulse(Entity entity, Vector3 impulse) =>
-        PhysicsNative.AddAngularImpulse(entity, in impulse);
-
     /// <summary>
     /// The nearest body a ray from <paramref name="origin"/> along <paramref name="direction"/> (any length) hits within
     /// <paramref name="maxDistance"/>. A ray that starts inside a box, sphere, capsule or convex hull hits it at
@@ -144,25 +132,6 @@ public static class PhysicsWorld
     /// </summary>
     public static int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter filter = default) =>
         PhysicsNative.OverlapPoint(in point, in filter, hits);
-
-    /// <summary>
-    /// Writes the contacts the body entity <paramref name="body"/> (a rigid body or a character body) has now (as of the
-    /// last step) to <paramref name="contacts"/>, and returns how many it wrote, stopping when the span is full. Overlaps
-    /// with triggers are not contacts. A character's contacts are those its last move ended touching, so unlike a body's
-    /// they come from before the step: the walls, ground and ceilings it is against and the bodies it pushed, with their
-    /// point and normal (a wall jump's).
-    /// </summary>
-    public static int ContactsOf(Entity body, Span<Contact> contacts) => PhysicsNative.ContactsOf(body, contacts);
-
-    /// <summary>
-    /// Whether the body of <paramref name="body"/> (a child collider's entity stands for its compound body) is asleep. False
-    /// for an entity with no body.
-    /// </summary>
-    public static bool IsSleeping(Entity body) => PhysicsNative.IsSleeping(body);
-
-    /// <summary>The world-space box around the body of <paramref name="body"/>.</summary>
-    /// <returns>Whether the entity has a body; <paramref name="bounds"/> is default when it does not.</returns>
-    public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(body, out bounds);
 
     /// <summary>
     /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is

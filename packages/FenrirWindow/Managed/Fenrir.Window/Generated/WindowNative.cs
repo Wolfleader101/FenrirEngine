@@ -59,7 +59,9 @@ internal static unsafe partial class WindowNative
     public static partial bool SetTitle(WindowId window, ReadOnlySpan<char> title);
 
     /// <summary>
-    /// Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars.
+    /// Writes the system clipboard's text, as UTF-16, to `text` and returns its whole length in chars: as much as fits
+    /// is written, so a result larger than the span says how large a span would hold it. Zero when the clipboard holds
+    /// no text.
     /// </summary>
     /// <param name="text">Where to write at most `capacity` chars.</param>
     [NativeFunction]
@@ -70,7 +72,10 @@ internal static unsafe partial class WindowNative
     [NativeFunction]
     public static partial bool SetClipboard(ReadOnlySpan<char> text);
 
-    /// <summary>Asks for `window` to close, as its close button does.</summary>
+    /// <summary>
+    /// Asks for `window` to close, as its close button does: a `WindowCloseRequestedEvent` is sent and, for the main
+    /// window when the app stops on its close, the app stops. The window itself stays.
+    /// </summary>
     /// <returns>Whether the request was made: false with no such window.</returns>
     [NativeFunction]
     public static partial bool RequestClose(WindowId window);

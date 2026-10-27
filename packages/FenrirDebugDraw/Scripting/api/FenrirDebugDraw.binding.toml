@@ -1,7 +1,8 @@
 # FenrirDebugDraw's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): this binding's own
 # FenrirDebugDrawScripting.api.json bound to the Fenrir.DebugDraw contract and this extension. C# reaches debug drawing
-# only through the DebugDraw facade, written by hand over the natives declared here; the options the natives take are
-# mirrored internal for it. Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings`
+# only through the DebugDraw facade over the natives declared here: the shape and text calls written by hand (the
+# options the natives take are mirrored internal for it) and the group calls generated from the natives' @facade marks.
+# Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings`
 # regenerates every output below; they are committed.
 namespace = "Fenrir.DebugDraw"
 # FenrirMath's colour and box are the math binding's: named as Fenrir.Math's, never mirrored here.

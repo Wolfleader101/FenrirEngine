@@ -3,6 +3,11 @@ using Fenrir.Scripting;
 
 namespace Fenrir.DebugDraw;
 
+// The facade over the generated DebugDrawNative (Generated/, from Scripting/src/DebugDrawScripting.cpp). Its
+// pass-throughs (the group calls and Clear) are generated beside it from the natives' @facade marks
+// (Generated/DebugDraw.cs); this part holds what a description cannot say: the class doc, Forever, and the shape and
+// text calls, whose options convert to the natives' internal structs.
+
 /// <summary>
 /// Debug shapes and text from C#, drawn into the active scene's debug drawing: FenrirDebugDraw's <c>DebugDraw</c> scene
 /// resource, call for call (ADR-0025; its C++ documentation says what each shape is). It is a facade of native functions,
@@ -20,7 +25,7 @@ namespace Fenrir.DebugDraw;
 /// the engine's native code that noticed and each reason (not once per C# call site).
 /// </para>
 /// </remarks>
-public static class DebugDraw
+public static partial class DebugDraw
 {
     /// <summary>The duration that keeps an item until <see cref="Clear()"/> or <see cref="Clear(ReadOnlySpan{char})"/>.</summary>
     public const float Forever = float.PositiveInfinity;
@@ -222,22 +227,8 @@ public static class DebugDraw
         DebugDrawNative.WorldText(in position, text, in colour, in native, group);
     }
 
-    // Groups: every group is shown until hidden; a hidden group's items still record and expire.
-
-    /// <summary>Shows the group's items.</summary>
-    public static void ShowGroup(ReadOnlySpan<char> group) => DebugDrawNative.ShowGroup(group);
-
-    /// <summary>Hides the group's items.</summary>
-    public static void HideGroup(ReadOnlySpan<char> group) => DebugDrawNative.HideGroup(group);
-
-    /// <summary>Whether the group's items are shown; false with no debug drawing in the active scene.</summary>
-    public static bool IsGroupShown(ReadOnlySpan<char> group) => DebugDrawNative.IsGroupShown(group);
-
-    /// <summary>Drops every item.</summary>
-    public static void Clear() => DebugDrawNative.Clear();
-
-    /// <summary>Drops the group's items.</summary>
-    public static void Clear(ReadOnlySpan<char> group) => DebugDrawNative.ClearGroup(group);
+    // Groups (ShowGroup, HideGroup, IsGroupShown and the two Clears, in the generated part): every group is shown until
+    // hidden; a hidden group's items still record and expire.
 
     private static NativeShapeOptions Shape(ShapeOptions? options, out string group)
     {

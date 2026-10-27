@@ -1320,7 +1320,8 @@
       "namespace": "Fenrir::DebugDrawNatives",
       "source": "../src/DebugDrawScripting.cpp",
       "state": "Fenrir::DebugDrawScripting",
-      "doc": "Shows the group's items (DebugDraw.ShowGroup).",
+      "doc": "Shows the group's items.",
+      "facade": "DebugDraw.ShowGroup",
       "returns": {
         "type": "void",
         "kind": "void"
@@ -1338,7 +1339,8 @@
       "namespace": "Fenrir::DebugDrawNatives",
       "source": "../src/DebugDrawScripting.cpp",
       "state": "Fenrir::DebugDrawScripting",
-      "doc": "Hides the group's items (DebugDraw.HideGroup).",
+      "doc": "Hides the group's items.",
+      "facade": "DebugDraw.HideGroup",
       "returns": {
         "type": "void",
         "kind": "void"
@@ -1356,7 +1358,8 @@
       "namespace": "Fenrir::DebugDrawNatives",
       "source": "../src/DebugDrawScripting.cpp",
       "state": "Fenrir::DebugDrawScripting",
-      "doc": "Whether the group's items are shown; false with no DebugDraw in the active scene (DebugDraw.IsGroupShown).",
+      "doc": "Whether the group's items are shown; false with no debug drawing in the active scene.",
+      "facade": "DebugDraw.IsGroupShown",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -1374,7 +1377,8 @@
       "namespace": "Fenrir::DebugDrawNatives",
       "source": "../src/DebugDrawScripting.cpp",
       "state": "Fenrir::DebugDrawScripting",
-      "doc": "Drops every item (DebugDraw.Clear).",
+      "doc": "Drops every item.",
+      "facade": "DebugDraw.Clear",
       "returns": {
         "type": "void",
         "kind": "void"
@@ -1386,7 +1390,8 @@
       "namespace": "Fenrir::DebugDrawNatives",
       "source": "../src/DebugDrawScripting.cpp",
       "state": "Fenrir::DebugDrawScripting",
-      "doc": "Drops the group's items (DebugDraw.Clear).",
+      "doc": "Drops the group's items.",
+      "facade": "DebugDraw.Clear",
       "returns": {
         "type": "void",
         "kind": "void"

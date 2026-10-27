@@ -69,7 +69,8 @@ internal static unsafe partial class InputNative
     public static partial void MouseScroll(out Vector2 scroll);
 
     /// <summary>
-    /// Writes the pads connected now, oldest connection first, to `pads`, and returns how many are connected.
+    /// Writes the pads connected now, oldest connection first, to `pads`, and returns how many are connected. When more
+    /// are connected than fit, the oldest are written.
     /// </summary>
     /// <param name="pads">Where to write at most `capacity` pads.</param>
     [NativeFunction]

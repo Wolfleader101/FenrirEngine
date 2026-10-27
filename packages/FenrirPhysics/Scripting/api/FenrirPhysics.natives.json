@@ -8,9 +8,11 @@
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
       "doc": "Pushes the entity's body with `force` (newtons, world space) for the next step only.",
+      "facade": "PhysicsWorld.AddForce",
       "returns": {
         "type": "bool",
-        "kind": "bool"
+        "kind": "bool",
+        "doc": "Whether the force was queued: false with no physics world or no body."
       },
       "parameters": [
         {
@@ -34,9 +36,11 @@
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
       "doc": "Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next step.",
+      "facade": "PhysicsWorld.AddImpulse",
       "returns": {
         "type": "bool",
-        "kind": "bool"
+        "kind": "bool",
+        "doc": "Whether the impulse was queued: false with no physics world or no body."
       },
       "parameters": [
         {
@@ -60,9 +64,11 @@
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
       "doc": "Twists the entity's body with `torque` (newton metres, world space) for the next step only.",
+      "facade": "PhysicsWorld.AddTorque",
       "returns": {
         "type": "bool",
-        "kind": "bool"
+        "kind": "bool",
+        "doc": "Whether the torque was queued: false with no physics world or no body."
       },
       "parameters": [
         {
@@ -85,10 +91,12 @@
       "namespace": "Fenrir::PhysicsNatives",
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
-      "doc": "Changes the angular velocity of the entity's body by `impulse` over its moment of inertia.",
+      "doc": "Changes the angular velocity of the entity's body by `impulse` over its moment of inertia, at the next step.",
+      "facade": "PhysicsWorld.AddAngularImpulse",
       "returns": {
         "type": "bool",
-        "kind": "bool"
+        "kind": "bool",
+        "doc": "Whether the impulse was queued: false with no physics world or no body."
       },
       "parameters": [
         {
@@ -590,7 +598,8 @@
       "namespace": "Fenrir::PhysicsNatives",
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
-      "doc": "Writes the contacts the body entity `body` has now to `contacts` (PhysicsWorld::ForEachContact).",
+      "doc": "Writes the contacts the body entity `body` (a rigid body or a character body) has now, as of the last step, to `contacts` (PhysicsWorld::ForEachContact), stopping when they are full. Overlaps with triggers are not contacts. A character's contacts are those its last move ended touching, so unlike a body's they come from before the step: the walls, ground and ceilings it is against and the bodies it pushed, with their point and normal (a wall jump's).",
+      "facade": "PhysicsWorld.ContactsOf",
       "returns": {
         "type": "std::int32_t",
         "kind": "i32",
@@ -622,7 +631,8 @@
       "namespace": "Fenrir::PhysicsNatives",
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
-      "doc": "Whether the body of `body` is asleep: false with no world or no body.",
+      "doc": "Whether the body of `body` (a child collider's entity stands for its compound body) is asleep: false with no world or no body.",
+      "facade": "PhysicsWorld.IsSleeping",
       "returns": {
         "type": "bool",
         "kind": "bool"
@@ -641,10 +651,11 @@
       "source": "../src/PhysicsScripting.cpp",
       "state": "Fenrir::PhysicsScripting",
       "doc": "The world-space box around the body of `body` (PhysicsWorld::Bounds).",
+      "facade": "PhysicsWorld.Bounds",
       "returns": {
         "type": "bool",
         "kind": "bool",
-        "doc": "Whether the entity has a body."
+        "doc": "Whether the entity has a body; `bounds` is default when it does not."
       },
       "parameters": [
         {

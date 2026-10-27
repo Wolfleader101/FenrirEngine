@@ -14,20 +14,26 @@ namespace Fenrir.Physics;
 internal static unsafe partial class PhysicsNative
 {
     /// <summary>Pushes the entity's body with `force` (newtons, world space) for the next step only.</summary>
+    /// <returns>Whether the force was queued: false with no physics world or no body.</returns>
     [NativeFunction]
     public static partial bool AddForce(Entity entity, in Vector3 force);
 
     /// <summary>
     /// Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next step.
     /// </summary>
+    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
     [NativeFunction]
     public static partial bool AddImpulse(Entity entity, in Vector3 impulse);
 
     /// <summary>Twists the entity's body with `torque` (newton metres, world space) for the next step only.</summary>
+    /// <returns>Whether the torque was queued: false with no physics world or no body.</returns>
     [NativeFunction]
     public static partial bool AddTorque(Entity entity, in Vector3 torque);
 
-    /// <summary>Changes the angular velocity of the entity's body by `impulse` over its moment of inertia.</summary>
+    /// <summary>
+    /// Changes the angular velocity of the entity's body by `impulse` over its moment of inertia, at the next step.
+    /// </summary>
+    /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
     [NativeFunction]
     public static partial bool AddAngularImpulse(Entity entity, in Vector3 impulse);
 
@@ -97,20 +103,27 @@ internal static unsafe partial class PhysicsNative
     public static partial int OverlapPoint(in Vector3 point, in QueryFilter filter, Span<OverlapHit> hits);
 
     /// <summary>
-    /// Writes the contacts the body entity `body` has now to `contacts` (PhysicsWorld::ForEachContact).
+    /// Writes the contacts the body entity `body` (a rigid body or a character body) has now, as of the last step, to
+    /// `contacts` (PhysicsWorld::ForEachContact), stopping when they are full. Overlaps with triggers are not contacts.
+    /// A character's contacts are those its last move ended touching, so unlike a body's they come from before the
+    /// step: the walls, ground and ceilings it is against and the bodies it pushed, with their point and normal (a wall
+    /// jump's).
     /// </summary>
     /// <param name="contacts">Where to write at most `capacity` contacts.</param>
     /// <returns>How many it wrote.</returns>
     [NativeFunction]
     public static partial int ContactsOf(Entity body, Span<Contact> contacts);
 
-    /// <summary>Whether the body of `body` is asleep: false with no world or no body.</summary>
+    /// <summary>
+    /// Whether the body of `body` (a child collider's entity stands for its compound body) is asleep: false with no
+    /// world or no body.
+    /// </summary>
     [NativeFunction]
     public static partial bool IsSleeping(Entity body);
 
     /// <summary>The world-space box around the body of `body` (PhysicsWorld::Bounds).</summary>
     /// <param name="bounds">The box; the default when there is none.</param>
-    /// <returns>Whether the entity has a body.</returns>
+    /// <returns>Whether the entity has a body; `bounds` is default when it does not.</returns>
     [NativeFunction]
     public static partial bool Bounds(Entity body, out Bounds bounds);
 

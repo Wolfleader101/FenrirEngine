@@ -1,13 +1,13 @@
 using Fenrir.Assets;
-using Fenrir.Input;
-using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;
 
 // The renderer's components (MeshRenderer, Camera and its unions, DirectionalLight), its scene resources (AmbientLight, Sky),
 // RendererStats and RendererNative are generated from FenrirRenderer's headers and Scripting/src/RendererScripting.cpp
-// (Generated/). This file holds the facade over the natives.
+// (Generated/), and so are Renderer's pass-throughs (Generated/Renderer.cs, from the natives' @facade marks: picking,
+// bounds and stats). This part of the facade holds what a description cannot say: the class doc and SpawnModel, which
+// defaults the parent and packs the model handle.
 
 /// <summary>
 /// The renderer from C#: picking, bounds, stats and spawning models, as FenrirRenderer's <c>Renderer</c> and
@@ -24,33 +24,8 @@ namespace Fenrir.Renderer;
 /// engine's native code that noticed and each reason (not once per C# call site).
 /// </para>
 /// </remarks>
-public static class Renderer
+public static partial class Renderer
 {
-    /// <summary>The ray from <paramref name="camera"/> through <paramref name="point"/> of its target.</summary>
-    /// <returns>Whether there is one; false for a point outside the camera's viewport.</returns>
-    public static bool ScreenPointToRay(Entity camera, Vector2 point, out Ray ray) =>
-        RendererNative.ScreenPointToRay(camera, in point, out ray);
-
-    /// <summary>Where <paramref name="point"/> appears in <paramref name="camera"/>'s target.</summary>
-    /// <returns>Whether it appears; false for a point behind the camera.</returns>
-    public static bool WorldToScreenPoint(Entity camera, Vector3 point, out Vector2 screenPoint) =>
-        RendererNative.WorldToScreenPoint(camera, in point, out screenPoint);
-
-    /// <summary>
-    /// The camera drawn last at <paramref name="point"/> of <paramref name="window"/>: the highest-order enabled camera in the
-    /// active scene whose viewport holds it. <see cref="Entity.None"/> if there is none.
-    /// </summary>
-    public static Entity CameraAt(WindowId window, Vector2 point) => RendererNative.CameraAt(window, in point);
-
-    /// <summary>The box around <paramref name="entity"/>'s drawn mesh in world space, now.</summary>
-    /// <returns>Whether there is one: false if it has no <see cref="MeshRenderer"/> or its mesh does not resolve.</returns>
-    public static bool GetWorldBounds(Entity entity, out Bounds bounds) =>
-        RendererNative.GetWorldBounds(entity, out bounds);
-
-    /// <summary>What the last drawn frame did; zeros before the first.</summary>
-    /// <returns>Whether the app has a renderer.</returns>
-    public static bool Stats(out RendererStats stats) => RendererNative.Stats(out stats);
-
     /// <summary>
     /// Spawns <paramref name="model"/> into the active scene as drawn entities, as C++'s <c>SpawnModel</c> does: a root named
     /// after the file holding one entity per node, each mesh a <see cref="MeshRenderer"/>. The root is usable at once (alive,
