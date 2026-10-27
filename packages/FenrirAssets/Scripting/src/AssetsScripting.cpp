@@ -633,11 +633,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Assets::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirAssets";
-        extension.SetState(std::make_shared<AssetsScripting>());
-        extension.sharedAssemblies = {"Fenrir.Assets.dll"};
-        Generated::RegisterAssets(extension);
-        return extension;
+        return Generated::MakeAssetsExtension(std::make_shared<AssetsScripting>());
     }
 } // namespace Fenrir

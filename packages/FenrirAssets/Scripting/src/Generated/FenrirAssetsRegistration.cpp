@@ -6,55 +6,71 @@
 #include "../../include/FenrirAssetsScripting/Generated/FenrirAssetsMappings.hpp"
 #include "FenrirAssetsNatives.hpp"
 
+#include <memory>
+#include <utility>
+
 namespace Fenrir::Generated
 {
-    void RegisterAssets(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {};
-        extension.events = {};
-        extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::SamplerDescription>("Fenrir.Assets.SamplerDescription"),
-            Fenrir::MakeSharedStruct<Fenrir::MaterialTexture>("Fenrir.Assets.MaterialTexture"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptShaderParameter>("Fenrir.Assets.ShaderParameter"),
-        };
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Load>("Fenrir.Assets.AssetsNative.Load"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Unload>("Fenrir.Assets.AssetsNative.Unload"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::IsValid>("Fenrir.Assets.AssetsNative.IsValid"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddMesh>("Fenrir.Assets.AssetsNative.AddMesh"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ReplaceMesh>("Fenrir.Assets.AssetsNative.ReplaceMesh"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddRenderTarget>("Fenrir.Assets.AssetsNative.AddRenderTarget"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ResizeRenderTarget>("Fenrir.Assets.AssetsNative.ResizeRenderTarget"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddImage>("Fenrir.Assets.AssetsNative.AddImage"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ReplaceImage>("Fenrir.Assets.AssetsNative.ReplaceImage"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::CreateMaterial>("Fenrir.Assets.AssetsNative.CreateMaterial"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::CloneMaterial>("Fenrir.Assets.AssetsNative.CloneMaterial"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetFloat>("Fenrir.Assets.AssetsNative.SetFloat"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector2>("Fenrir.Assets.AssetsNative.SetVector2"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector3>("Fenrir.Assets.AssetsNative.SetVector3"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector4>("Fenrir.Assets.AssetsNative.SetVector4"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetColour>("Fenrir.Assets.AssetsNative.SetColour"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetTexture>("Fenrir.Assets.AssetsNative.SetTexture"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetBlendMode>("Fenrir.Assets.AssetsNative.SetBlendMode"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetAlphaCutoff>("Fenrir.Assets.AssetsNative.SetAlphaCutoff"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetDoubleSided>("Fenrir.Assets.AssetsNative.SetDoubleSided"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetFloat, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetFloat"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector2, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector2"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector3, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector3"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector4, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector4"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetColour, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetColour"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetTexture, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetTexture"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideFloat, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideFloat"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector2, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector2"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector3, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector3"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector4, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector4"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideColour, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideColour"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideTexture, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideTexture"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::IsSet>("Fenrir.Assets.AssetsNative.IsSet"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Reset>("Fenrir.Assets.AssetsNative.Reset"),
-            Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetShaderParameterCount>("Fenrir.Assets.AssetsNative.GetShaderParameterCount"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::GetShaderParameter, 4>::Call>("Fenrir.Assets.AssetsNative.GetShaderParameter"),
-        };
+        void RegisterAssets(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {};
+            extension.events = {};
+            extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::SamplerDescription>("Fenrir.Assets.SamplerDescription"),
+                Fenrir::MakeSharedStruct<Fenrir::MaterialTexture>("Fenrir.Assets.MaterialTexture"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptShaderParameter>("Fenrir.Assets.ShaderParameter"),
+            };
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Load>("Fenrir.Assets.AssetsNative.Load"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Unload>("Fenrir.Assets.AssetsNative.Unload"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::IsValid>("Fenrir.Assets.AssetsNative.IsValid"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddMesh>("Fenrir.Assets.AssetsNative.AddMesh"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ReplaceMesh>("Fenrir.Assets.AssetsNative.ReplaceMesh"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddRenderTarget>("Fenrir.Assets.AssetsNative.AddRenderTarget"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ResizeRenderTarget>("Fenrir.Assets.AssetsNative.ResizeRenderTarget"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::AddImage>("Fenrir.Assets.AssetsNative.AddImage"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::ReplaceImage>("Fenrir.Assets.AssetsNative.ReplaceImage"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::CreateMaterial>("Fenrir.Assets.AssetsNative.CreateMaterial"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::CloneMaterial>("Fenrir.Assets.AssetsNative.CloneMaterial"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetFloat>("Fenrir.Assets.AssetsNative.SetFloat"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector2>("Fenrir.Assets.AssetsNative.SetVector2"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector3>("Fenrir.Assets.AssetsNative.SetVector3"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetVector4>("Fenrir.Assets.AssetsNative.SetVector4"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetColour>("Fenrir.Assets.AssetsNative.SetColour"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetTexture>("Fenrir.Assets.AssetsNative.SetTexture"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetBlendMode>("Fenrir.Assets.AssetsNative.SetBlendMode"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetAlphaCutoff>("Fenrir.Assets.AssetsNative.SetAlphaCutoff"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::SetDoubleSided>("Fenrir.Assets.AssetsNative.SetDoubleSided"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetFloat, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetFloat"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector2, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector2"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector3, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector3"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetVector4, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetVector4"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetColour, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetColour"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetTexture, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetTexture"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideFloat, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideFloat"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector2, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector2"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector3, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector3"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideVector4, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideVector4"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideColour, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideColour"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::TryGetOverrideTexture, 4>::Call>("Fenrir.Assets.AssetsNative.TryGetOverrideTexture"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::IsSet>("Fenrir.Assets.AssetsNative.IsSet"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::Reset>("Fenrir.Assets.AssetsNative.Reset"),
+                Fenrir::NativeFunction::Make<&Fenrir::AssetsNatives::GetShaderParameterCount>("Fenrir.Assets.AssetsNative.GetShaderParameterCount"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::AssetsNatives::GetShaderParameter, 4>::Call>("Fenrir.Assets.AssetsNative.GetShaderParameter"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeAssetsExtension(std::shared_ptr<Fenrir::AssetsScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirAssets";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.Assets.dll"};
+        Fenrir::Generated::RegisterAssets(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

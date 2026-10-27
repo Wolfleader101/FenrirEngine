@@ -381,11 +381,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension DebugDrawing::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirDebugDraw";
-        extension.SetState(std::make_shared<DebugDrawScripting>());
-        extension.sharedAssemblies = {"Fenrir.DebugDraw.dll"};
-        Generated::RegisterDebugDraw(extension);
-        return extension;
+        return Generated::MakeDebugDrawExtension(std::make_shared<DebugDrawScripting>());
     }
 } // namespace Fenrir

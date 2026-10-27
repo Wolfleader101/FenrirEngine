@@ -19,6 +19,8 @@ includes = ["FenrirWindow/WindowEvents.hpp", "FenrirWindow/WindowTypes.hpp"]
 [registration]
 source = "../src/Generated/FenrirWindowRegistration.cpp"
 function = "Fenrir::Generated::RegisterWindow"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeWindowExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirWindowDefaultsTests.cpp"

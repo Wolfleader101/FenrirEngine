@@ -183,11 +183,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Window::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirWindow";
-        extension.SetState(std::make_shared<WindowScripting>());
-        extension.sharedAssemblies = {"Fenrir.Window.dll"};
-        Generated::RegisterWindow(extension);
-        return extension;
+        return Generated::MakeWindowExtension(std::make_shared<WindowScripting>());
     }
 } // namespace Fenrir
