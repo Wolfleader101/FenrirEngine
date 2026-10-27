@@ -245,11 +245,8 @@ namespace Fenrir
     Fenrir::ScriptingExtension Input::ScriptingExtension()
     {
         const auto input = std::make_shared<InputScripting>();
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirInput";
-        extension.SetState(input);
-        extension.sharedAssemblies = {"Fenrir.Input.dll"};
-        Generated::RegisterInput(extension);
+        Fenrir::ScriptingExtension extension = Generated::MakeInputExtension(input);
+        // Registered by hand (by-hand in the binding): refreshed from InputClaims whenever C# gets it.
         extension.resources.push_back(InputClaimsResource(input));
         return extension;
     }

@@ -35,6 +35,8 @@ includes = [
 [registration]
 source = "../src/Generated/FenrirInputRegistration.cpp"
 function = "Fenrir::Generated::RegisterInput"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeInputExtension"
 read-only = ["Fenrir::Detail::ScriptInputClaims"]
 # Refreshed from InputClaims whenever C# gets it, so Input::ScriptingExtension() registers it itself
 # (InputClaimsResource).

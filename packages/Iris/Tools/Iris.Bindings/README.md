@@ -78,6 +78,7 @@ includes = ["MyPhysics/Components.hpp", "MyScripting/EngineMappings.hpp"]  # The
 source = "src/Generated/MyPhysicsRegistration.cpp"  # Includes the mappings and, with natives, the natives header.
 function = "My::Generated::RegisterPhysics"  # void F(<extension>& extension), declared in the natives header, defined here.
 extension = "My::ScriptingExtension"
+maker = "My::Generated::MakePhysicsExtension"  # Optional, with natives: <extension> F(std::shared_ptr<State>), the extension made (below).
 make-component = "My::MakeComponent"   # With a component in the lists: its factory (the read-only one for one in read-only).
 make-read-only-component = "My::MakeReadOnlyComponent"
 make-event = "My::MakeEvent"           # With an event in the lists.
@@ -129,7 +130,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 | --- | --- |
 | `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
-| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. |
+| `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name), calls the function and returns it. |
 
 A type in `exclude` gets none of these: no mirror, mapping, registration or test case. It is for a type the binding
 carries in another form, such as a struct C# holds with a smaller handle than C++'s, which the binding then describes
@@ -198,7 +199,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
 | `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. |
-| `[natives] header` | The **natives header**: `#pragma once`, the `[natives] includes` (the SDK's first, then the binding's: what the declarations name), each native's C++ declaration in its namespace, and the registration function's declaration. The registration includes it by file name, the natives' own source includes it so a definition that drifts from the committed description fails in that source's compile, and the extension's tests include it in place of declarations of their own. It is private to the library: the natives take the extension state. |
+| `[natives] header` | The **natives header**: `#pragma once`, the `[natives] includes` (the SDK's first, then the binding's: what the declarations name), each native's C++ declaration in its namespace, and the registration function's declaration (the maker's in its place, with `<memory>`, when `[registration]` names one). The registration includes it by file name, the natives' own source includes it so a definition that drifts from the committed description fails in that source's compile, and the extension's tests include it in place of declarations of their own. It is private to the library: the natives take the extension state. |
 | `[registration] source` | Also `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
 A native's C# declaration drops the leading context and state and maps each C++ parameter as a hand-written declaration
@@ -297,8 +298,9 @@ that is also a mirror's name, a `@facade` mark on a native whose declaration can
 type or a pointer among its parameters or result), two marks giving one class and method the same parameter types, a
 facade class named as a mirror (this binding's or a used one's), a bound type's C# type or the `[natives] class`, a
 `facade` that is not `Class.Method`, a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
-`natives-class`), which the zeroing registration replaced, or a `[registration] includes`, which moved to
-`[natives] includes` with the declarations it served.
+`natives-class`), which the zeroing registration replaced, a `[registration] includes`, which moved to
+`[natives] includes` with the declarations it served, or a `[registration] maker` without `[natives]`, whose natives
+take no extension state, or whose natives take two.
 
 ## Tests
 
@@ -311,8 +313,9 @@ taking text, an enum and wrappers; the three marked `@facade` give two facade pa
 its declaration takes `in`, one a span, and two of one name told apart by their parameters, a mark a binding cannot
 honour fails naming the native and the mark, and a facade class no mark names is deleted; a changed default changes
 exactly its initialiser; the natives header declares each native and the registration function and the
-registration declares nothing; a configuration keeping `[registration] includes` is told where they moved; the
-registration zeroes a
+registration declares nothing; a configuration keeping `[registration] includes` is told where they moved; with a
+`maker` the header declares it in the function's place and the registration defines it setting the name, state and
+assembly, and a maker with no natives, no state or two states fails saying so; the registration zeroes a
 native's output (and both of a native with two) and nothing of a native with inputs only, an output span or a pointer
 read and written, and a native added with an output is declared and registered so; running
 twice rewrites nothing and a mirror no longer described is deleted; each diagnostic above; the generated C# compiles

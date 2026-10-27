@@ -193,11 +193,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Renderer::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirRenderer";
-        extension.SetState(std::make_shared<RendererScripting>());
-        extension.sharedAssemblies = {"Fenrir.Renderer.dll"};
-        Generated::RegisterRenderer(extension);
-        return extension;
+        return Generated::MakeRendererExtension(std::make_shared<RendererScripting>());
     }
 } // namespace Fenrir

@@ -49,12 +49,13 @@ internal static class Generator
         files.Add(config.Cpp.Mappings, CppWriter.Mappings(binding));
         if (config.Registration is { } registration)
         {
+            var state = registration.Maker == null ? null : StateOf(config, natives!);
             if (natives != null)
             {
-                files.Add(config.Natives!.Header, CppWriter.NativesHeader(binding, registration, natives));
+                files.Add(config.Natives!.Header, CppWriter.NativesHeader(binding, registration, natives, state));
             }
 
-            files.Add(registration.Source, CppWriter.Registration(binding, registration, natives, bound));
+            files.Add(registration.Source, CppWriter.Registration(binding, registration, natives, bound, state));
         }
 
         if (config.Tests is { } tests)
@@ -64,6 +65,23 @@ internal static class Generator
         }
 
         return files;
+    }
+
+    // The extension state the maker takes: the one type the natives that take a state take. A native without one is
+    // allowed (it needs no state); no native with one, or two types, is not.
+    private static string StateOf(BindingConfig config, NativesDescription natives)
+    {
+        var states = natives.Functions.Select(function => function.State).Where(state => state != null).Distinct().ToList();
+        return states.Count switch
+        {
+            1 => states[0]!,
+            0 => throw new BindingException(
+                     $"{config.Path}: [registration] maker: no native in {Path.GetFileName(natives.Path)} takes an extension state, " +
+                     "so there is no state for the maker to take; remove the key"),
+            _ => throw new BindingException(
+                     $"{config.Path}: [registration] maker: the natives in {Path.GetFileName(natives.Path)} take two extension " +
+                     $"states, {string.Join(" and ", states)}; an extension has one"),
+        };
     }
 
     // A configuration's binding over its descriptions, with the bindings it uses, each read over the descriptions its own

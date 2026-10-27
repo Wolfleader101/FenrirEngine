@@ -44,6 +44,8 @@ includes = [
 [registration]
 source = "../src/Generated/FenrirPhysicsRegistration.cpp"
 function = "Fenrir::Generated::RegisterPhysics"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakePhysicsExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirPhysicsDefaultsTests.cpp"

@@ -27,6 +27,8 @@ includes = [
 [registration]
 source = "../src/Generated/FenrirAssetsRegistration.cpp"
 function = "Fenrir::Generated::RegisterAssets"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeAssetsExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
