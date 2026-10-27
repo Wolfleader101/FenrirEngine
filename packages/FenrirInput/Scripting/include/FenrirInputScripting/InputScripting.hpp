@@ -8,8 +8,8 @@
 //     auto scripting = Fenrir::Scripting::Install(app, {.scriptAssembly = ..., .extensions =
 //     {Fenrir::Input::ScriptingExtension()}});
 //
-// The extension shares the Fenrir.Input contract assembly, which fenrir_deploy_input_scripting(<target>) copies next to
-// an executable (beside the scripting contract, where Install looks for it).
+// The extension shares the Fenrir.Input contract assembly, which fenrir_deploy_scripting(<target> EXTENSIONS Input)
+// copies next to an executable (beside the scripting contract, where Install looks for it).
 //
 // A native function that does nothing (no input in the app, a pad that is not connected) warns in debug builds "once
 // per call site": once per Scripting given the extension for each place in this library's native code that notices it

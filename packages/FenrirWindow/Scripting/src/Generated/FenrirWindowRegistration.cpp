@@ -4,57 +4,51 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "FenrirWindowMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "WindowScriptingState.hpp"
+#include "FenrirWindowNatives.hpp"
 
-namespace Fenrir::WindowNatives
-{
-    bool Exists(const Fenrir::CallContext&, Fenrir::WindowId window);
-    void Size(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
-    void PixelSize(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::WindowSize* size);
-    float ContentScale(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool IsMinimised(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool IsFocused(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    Fenrir::CursorMode GetCursorMode(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-    bool SetCursorMode(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::CursorMode mode);
-    bool SetCursorShape(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, Fenrir::CursorShape shape);
-    bool SetTitle(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window, std::string_view title);
-    std::int32_t GetClipboard(const Fenrir::CallContext&, Fenrir::WindowScripting&, char16_t* text, std::int32_t capacity);
-    bool SetClipboard(const Fenrir::CallContext&, Fenrir::WindowScripting&, std::string_view text);
-    bool RequestClose(const Fenrir::CallContext&, Fenrir::WindowScripting&, Fenrir::WindowId window);
-} // namespace Fenrir::WindowNatives
+#include <memory>
+#include <utility>
 
 namespace Fenrir::Generated
 {
-    void RegisterWindow(Fenrir::ScriptingExtension& extension);
-
-    void RegisterWindow(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {};
-        extension.events = {
-            Fenrir::MakeEvent<Fenrir::WindowCloseRequestedEvent>("Fenrir.Window.WindowCloseRequestedEvent"),
-            Fenrir::MakeEvent<Fenrir::WindowResizedEvent>("Fenrir.Window.WindowResizedEvent"),
-        };
-        extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::WindowSize>("Fenrir.Window.WindowSize"),
-        };
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::Exists>("Fenrir.Window.WindowNative.Exists"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::Size, 3>::Call>("Fenrir.Window.WindowNative.Size"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::PixelSize, 3>::Call>("Fenrir.Window.WindowNative.PixelSize"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::ContentScale>("Fenrir.Window.WindowNative.ContentScale"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsMinimised>("Fenrir.Window.WindowNative.IsMinimised"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsFocused>("Fenrir.Window.WindowNative.IsFocused"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::GetCursorMode>("Fenrir.Window.WindowNative.GetCursorMode"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetCursorMode>("Fenrir.Window.WindowNative.SetCursorMode"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetCursorShape>("Fenrir.Window.WindowNative.SetCursorShape"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetTitle>("Fenrir.Window.WindowNative.SetTitle"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::GetClipboard>("Fenrir.Window.WindowNative.GetClipboard"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetClipboard>("Fenrir.Window.WindowNative.SetClipboard"),
-            Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::RequestClose>("Fenrir.Window.WindowNative.RequestClose"),
-        };
+        void RegisterWindow(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {};
+            extension.events = {
+                Fenrir::MakeEvent<Fenrir::WindowCloseRequestedEvent>("Fenrir.Window.WindowCloseRequestedEvent"),
+                Fenrir::MakeEvent<Fenrir::WindowResizedEvent>("Fenrir.Window.WindowResizedEvent"),
+            };
+            extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::WindowSize>("Fenrir.Window.WindowSize"),
+            };
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::Exists>("Fenrir.Window.WindowNative.Exists"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::Size, 3>::Call>("Fenrir.Window.WindowNative.Size"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::WindowNatives::PixelSize, 3>::Call>("Fenrir.Window.WindowNative.PixelSize"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::ContentScale>("Fenrir.Window.WindowNative.ContentScale"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsMinimised>("Fenrir.Window.WindowNative.IsMinimised"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::IsFocused>("Fenrir.Window.WindowNative.IsFocused"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::GetCursorMode>("Fenrir.Window.WindowNative.GetCursorMode"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetCursorMode>("Fenrir.Window.WindowNative.SetCursorMode"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetCursorShape>("Fenrir.Window.WindowNative.SetCursorShape"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetTitle>("Fenrir.Window.WindowNative.SetTitle"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::GetClipboard>("Fenrir.Window.WindowNative.GetClipboard"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::SetClipboard>("Fenrir.Window.WindowNative.SetClipboard"),
+                Fenrir::NativeFunction::Make<&Fenrir::WindowNatives::RequestClose>("Fenrir.Window.WindowNative.RequestClose"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeWindowExtension(std::shared_ptr<Fenrir::WindowScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirWindow";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.Window.dll"};
+        Fenrir::Generated::RegisterWindow(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

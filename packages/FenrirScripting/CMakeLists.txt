@@ -46,6 +46,8 @@ add_custom_target(FenrirScriptingContract ALL DEPENDS
     "${FENRIR_SCRIPTING_CONTRACT_DIR}/analyzers/Fenrir.Scripting.Generators.dll"
     "${FENRIR_SCRIPTING_CONTRACT_DIR}/Fenrir.Scripting.props")
 include(cmake/FenrirScriptingDeploy.cmake)
+# The functions each package's extension directory calls; the root adds those after this one.
+include(cmake/FenrirScriptingExtension.cmake)
 
 add_library(FenrirScripting STATIC
     src/Scripting.cpp
@@ -73,6 +75,7 @@ add_library(FenrirScripting STATIC
     include/FenrirScripting/NativeMarshalling.hpp
     include/FenrirScripting/ZeroingOutputs.hpp
     src/EngineContext.hpp
+    src/Generated/FenrirScriptingNatives.hpp
     src/Generated/FenrirScriptingRegistration.cpp
     include/FenrirScripting/Scripting.hpp
     include/FenrirScripting/ScriptingExtension.hpp
@@ -91,7 +94,8 @@ target_link_libraries(FenrirScripting PUBLIC FenrirApp FenrirLogger Iris::Iris)
 #                                               only, and the natives' declarations, Native;
 #   include/FenrirScripting/Generated/          the Iris mappings, which an extension whose types hold the engine's
 #                                               includes;
-#   src/Generated/                              the extension's components, sharedStructs and functions;
+#   src/Generated/                              the natives' declarations, and the extension's components, sharedStructs
+#                                               and functions;
 #   Tests/Generated/                            the defaults test.
 # After changing a shared type or a native, regenerate both stages:
 #   cmake --build <dir> --target fenrir-describe-api

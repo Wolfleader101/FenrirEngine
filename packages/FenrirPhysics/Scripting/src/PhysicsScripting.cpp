@@ -17,6 +17,7 @@
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "Generated/FenrirPhysicsNatives.hpp"
 #include "PhysicsScriptingState.hpp"
 #include "ScriptQueries.hpp"
 
@@ -137,7 +138,7 @@ namespace Fenrir
     // output (`[out]`), and a span when the std::int32_t count follows it. Each trusts the declaration (ADR-0045): an
     // `in` or `out` pointer is never null, and the registration zeroes each single output before the native runs, so
     // one that returns doing nothing (false or zero) with no world or no body writes nothing. Not in an anonymous
-    // namespace: the generated registration names them from another file.
+    // namespace: the generated natives header declares them.
     namespace PhysicsNatives
     {
         /**
@@ -570,13 +571,8 @@ namespace Fenrir
         }
     } // namespace PhysicsNatives
 
-    ScriptingExtension PhysicsScriptingExtension()
+    Fenrir::ScriptingExtension Physics::ScriptingExtension()
     {
-        ScriptingExtension extension;
-        extension.name = "FenrirPhysics";
-        extension.SetState(std::make_shared<PhysicsScripting>());
-        extension.sharedAssemblies = {"Fenrir.Physics.dll"};
-        Generated::RegisterPhysics(extension);
-        return extension;
+        return Generated::MakePhysicsExtension(std::make_shared<PhysicsScripting>());
     }
 } // namespace Fenrir

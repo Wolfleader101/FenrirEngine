@@ -102,13 +102,64 @@ internal static class CppWriter
     private static string Field(string type, string name, int offset) => $"Iris::Field<{type}>(\"{name}\", {offset})";
 
     /// <summary>
+    /// The natives header: each native's declaration in its namespace, and the registration function's, for the
+    /// registration, the natives' own source and the extension's tests to include. It includes the <c>[natives]</c>
+    /// includes (the SDK's first, then the binding's), which is what the declarations name: the call context, the
+    /// extension state and the types the natives take.
+    /// </summary>
+    public static string NativesHeader(Binding binding, RegistrationConfig registration, NativesDescription natives, string? state)
+    {
+        var declared = registration.Maker == null ? "the registration function's" : "the extension maker's";
+        var text = Header(binding, $"Each native function's declaration and {declared}: included by the " +
+                                   "registration, the natives' source and the tests, so no file declares them by hand.",
+                          natives);
+        text.Line("#pragma once");
+        text.Line();
+        foreach (var include in binding.Config.Natives!.Includes)
+        {
+            text.Line($"#include \"{include}\"");
+        }
+
+        if (state != null)
+        {
+            text.Line();
+            text.Line("#include <memory>");
+        }
+
+        Declarations(text, natives);
+        var (space, signature) = state == null ? Function(registration) : Maker(registration, state);
+        text.Line();
+        if (space.Length > 0)
+        {
+            text.Line($"namespace {space}");
+            text.Line("{");
+            text.Indent();
+        }
+
+        text.Line($"{signature};");
+        if (space.Length > 0)
+        {
+            text.Outdent();
+            text.Line($"}} // namespace {space}");
+        }
+
+        text.Line();
+        text.Line("// clang-format on");
+        return text.ToString();
+    }
+
+    /// <summary>
     /// The registration lists: one function that sets the extension's components, events and shared structs, each made
-    /// with the C# name derived from the namespace and the type, and with natives its functions, each declared here and
-    /// made with the C# name of its declaration. A native with outputs is made through <c>zero-outputs</c>
-    /// (<c>ZeroingOutputs&lt;&amp;F, indices...&gt;::Call</c>), so each is zeroed before it runs (ADR-0045).
+    /// with the C# name derived from the namespace and the type, and with natives its functions, each made with the C#
+    /// name of its declaration. A native with outputs is made through <c>zero-outputs</c>
+    /// (<c>ZeroingOutputs&lt;&amp;F, indices...&gt;::Call</c>), so each is zeroed before it runs (ADR-0045). The source
+    /// declares nothing: with natives it includes the natives header, which declares the natives and the function. With
+    /// a maker (<paramref name="state" /> is the natives' extension state), the function is file-local and the maker
+    /// defined here makes the extension: its name (the binding's), its state, its contract assembly
+    /// (<c>&lt;namespace&gt;.dll</c>) and the lists.
     /// </summary>
     public static string Registration(Binding binding, RegistrationConfig registration, NativesDescription? natives,
-                                      IReadOnlyList<BoundNative> bound)
+                                      IReadOnlyList<BoundNative> bound, string? state)
     {
         // The extension's resources are set when the lists hold one: a factory the configuration (or its defaults) names
         // for a resource no description here has is not a list.
@@ -120,29 +171,35 @@ internal static class CppWriter
                               : $"The extension's registration lists: every described {registered.Replace(" and ", ", ")} and native function.",
                           natives);
         text.Line($"#include \"{Relative(registration.Source, binding.Config.Cpp.Mappings)}\"");
-        foreach (var include in registration.Includes)
-        {
-            text.Line($"#include \"{include}\"");
-        }
-
         if (natives != null)
         {
-            Declarations(text, natives);
+            text.Line($"#include \"{Relative(registration.Source, binding.Config.Natives!.Header)}\"");
         }
 
-        var separator = registration.Function.LastIndexOf("::", StringComparison.Ordinal);
-        var function = registration.Function[(separator < 0 ? 0 : separator + 2)..];
-        var signature = $"void {function}({registration.Extension}& extension)";
-        text.Line();
-        if (separator > 0)
+        if (state != null)
         {
-            text.Line($"namespace {registration.Function[..separator]}");
+            text.Line();
+            text.Line("#include <memory>");
+            text.Line("#include <utility>");
+        }
+
+        var (space, signature) = Function(registration);
+        text.Line();
+        if (space.Length > 0)
+        {
+            text.Line($"namespace {space}");
             text.Line("{");
             text.Indent();
         }
 
-        text.Line($"{signature};");
-        text.Line();
+        if (state != null)
+        {
+            // The maker is what the natives header declares; the register function is this file's own.
+            text.Line("namespace");
+            text.Line("{");
+            text.Indent();
+        }
+
         text.Line(signature);
         text.Line("{");
         text.Indent();
@@ -186,10 +243,47 @@ internal static class CppWriter
 
         text.Outdent();
         text.Line("}");
-        if (separator > 0)
+        if (state != null)
         {
             text.Outdent();
-            text.Line($"}} // namespace {registration.Function[..separator]}");
+            text.Line("} // namespace");
+        }
+
+        // The maker's namespace is usually the function's, so the block stays open for it.
+        var (makerSpace, makerSignature) = state == null ? ("", "") : Maker(registration, state);
+        var shared = state != null && makerSpace == space;
+        if (space.Length > 0 && !shared)
+        {
+            text.Outdent();
+            text.Line($"}} // namespace {space}");
+        }
+
+        if (state != null)
+        {
+            text.Line();
+            if (makerSpace.Length > 0 && !shared)
+            {
+                text.Line($"namespace {makerSpace}");
+                text.Line("{");
+                text.Indent();
+            }
+
+            text.Line(makerSignature);
+            text.Line("{");
+            text.Indent();
+            text.Line($"{registration.Extension} extension;");
+            text.Line($"extension.name = \"{binding.Config.Name}\";");
+            text.Line("extension.SetState(std::move(state));");
+            text.Line($"extension.sharedAssemblies = {{\"{binding.Config.Namespace}.dll\"}};");
+            text.Line($"{registration.Function}(extension);");
+            text.Line("return extension;");
+            text.Outdent();
+            text.Line("}");
+            if (makerSpace.Length > 0)
+            {
+                text.Outdent();
+                text.Line($"}} // namespace {makerSpace}");
+            }
         }
 
         text.Line();
@@ -197,8 +291,23 @@ internal static class CppWriter
         return text.ToString();
     }
 
-    // Each native's declaration, so the registration can name it from this file: consecutive natives of one namespace
-    // inside one block. The context and state are unnamed (a parameter may take either name).
+    // The registration function's namespace (empty when it has none) and its signature, without the namespace.
+    private static (string Space, string Signature) Function(RegistrationConfig registration) =>
+        Split(registration.Function, name => $"void {name}({registration.Extension}& extension)");
+
+    // The maker's namespace and signature: the extension, from a shared pointer to the natives' extension state.
+    private static (string Space, string Signature) Maker(RegistrationConfig registration, string state) =>
+        Split(registration.Maker!, name => $"{registration.Extension} {name}(std::shared_ptr<{state}> state)");
+
+    private static (string Space, string Signature) Split(string qualified, Func<string, string> signature)
+    {
+        var separator = qualified.LastIndexOf("::", StringComparison.Ordinal);
+        var name = qualified[(separator < 0 ? 0 : separator + 2)..];
+        return (separator > 0 ? qualified[..separator] : "", signature(name));
+    }
+
+    // Each native's declaration: consecutive natives of one namespace inside one block. The context and state are unnamed
+    // (a parameter may take either name).
     private static void Declarations(Writer text, NativesDescription natives)
     {
         var groups = new List<List<NativeFunction>>();

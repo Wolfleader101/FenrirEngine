@@ -4,77 +4,65 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "../../include/FenrirInputScripting/Generated/FenrirInputMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "InputScriptingState.hpp"
+#include "FenrirInputNatives.hpp"
 
-namespace Fenrir::InputNatives
-{
-    bool KeyIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    bool KeyJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    bool KeyJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Key key);
-    bool ScancodeJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Scancode scancode);
-    Fenrir::KeyModifiers KeyModifiersOf(const Fenrir::CallContext&, Fenrir::InputScripting&);
-    bool MouseIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    bool MouseJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    bool MouseJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::MouseButton button);
-    void MousePosition(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* position);
-    void MouseMotion(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* motion);
-    void MouseScroll(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::Math::Vec2* scroll);
-    std::int32_t GamepadsConnected(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId* pads, std::int32_t capacity);
-    bool GamepadIsConnected(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad);
-    bool GamepadIsDown(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    bool GamepadJustPressed(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    bool GamepadJustReleased(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadButton button);
-    float GamepadAxisOf(const Fenrir::CallContext&, Fenrir::InputScripting&, Fenrir::GamepadId gamepad, Fenrir::GamepadAxis axis);
-} // namespace Fenrir::InputNatives
+#include <memory>
+#include <utility>
 
 namespace Fenrir::Generated
 {
-    void RegisterInput(Fenrir::ScriptingExtension& extension);
-
-    void RegisterInput(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {};
-        extension.events = {
-            Fenrir::MakeEvent<Fenrir::GamepadAxisEvent>("Fenrir.Input.GamepadAxisEvent"),
-            Fenrir::MakeEvent<Fenrir::GamepadButtonEvent>("Fenrir.Input.GamepadButtonEvent"),
-            Fenrir::MakeEvent<Fenrir::GamepadConnectionEvent>("Fenrir.Input.GamepadConnectionEvent"),
-            Fenrir::MakeEvent<Fenrir::KeyEvent>("Fenrir.Input.KeyEvent"),
-            Fenrir::MakeEvent<Fenrir::MouseButtonEvent>("Fenrir.Input.MouseButtonEvent"),
-            Fenrir::MakeEvent<Fenrir::MouseMotionEvent>("Fenrir.Input.MouseMotionEvent"),
-            Fenrir::MakeEvent<Fenrir::MouseScrollEvent>("Fenrir.Input.MouseScrollEvent"),
-            Fenrir::MakeEvent<Fenrir::TextEvent>("Fenrir.Input.TextEvent"),
-            Fenrir::MakeEvent<Fenrir::WindowFocusEvent>("Fenrir.Input.WindowFocusEvent"),
-        };
-        extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::GamepadId>("Fenrir.Input.GamepadId"),
-            Fenrir::MakeSharedStruct<Fenrir::WindowId>("Fenrir.Input.WindowId"),
-        };
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyIsDown>("Fenrir.Input.InputNative.KeyIsDown"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeIsDown>("Fenrir.Input.InputNative.ScancodeIsDown"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyJustPressed>("Fenrir.Input.InputNative.KeyJustPressed"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeJustPressed>("Fenrir.Input.InputNative.ScancodeJustPressed"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyJustReleased>("Fenrir.Input.InputNative.KeyJustReleased"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeJustReleased>("Fenrir.Input.InputNative.ScancodeJustReleased"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyModifiersOf>("Fenrir.Input.InputNative.KeyModifiersOf"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseIsDown>("Fenrir.Input.InputNative.MouseIsDown"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustPressed>("Fenrir.Input.InputNative.MouseJustPressed"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustReleased>("Fenrir.Input.InputNative.MouseJustReleased"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MousePosition, 2>::Call>("Fenrir.Input.InputNative.MousePosition"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseMotion, 2>::Call>("Fenrir.Input.InputNative.MouseMotion"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseScroll, 2>::Call>("Fenrir.Input.InputNative.MouseScroll"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadsConnected>("Fenrir.Input.InputNative.GamepadsConnected"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsConnected>("Fenrir.Input.InputNative.GamepadIsConnected"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsDown>("Fenrir.Input.InputNative.GamepadIsDown"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadJustPressed>("Fenrir.Input.InputNative.GamepadJustPressed"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadJustReleased>("Fenrir.Input.InputNative.GamepadJustReleased"),
-            Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadAxisOf>("Fenrir.Input.InputNative.GamepadAxisOf"),
-        };
+        void RegisterInput(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {};
+            extension.events = {
+                Fenrir::MakeEvent<Fenrir::GamepadAxisEvent>("Fenrir.Input.GamepadAxisEvent"),
+                Fenrir::MakeEvent<Fenrir::GamepadButtonEvent>("Fenrir.Input.GamepadButtonEvent"),
+                Fenrir::MakeEvent<Fenrir::GamepadConnectionEvent>("Fenrir.Input.GamepadConnectionEvent"),
+                Fenrir::MakeEvent<Fenrir::KeyEvent>("Fenrir.Input.KeyEvent"),
+                Fenrir::MakeEvent<Fenrir::MouseButtonEvent>("Fenrir.Input.MouseButtonEvent"),
+                Fenrir::MakeEvent<Fenrir::MouseMotionEvent>("Fenrir.Input.MouseMotionEvent"),
+                Fenrir::MakeEvent<Fenrir::MouseScrollEvent>("Fenrir.Input.MouseScrollEvent"),
+                Fenrir::MakeEvent<Fenrir::TextEvent>("Fenrir.Input.TextEvent"),
+                Fenrir::MakeEvent<Fenrir::WindowFocusEvent>("Fenrir.Input.WindowFocusEvent"),
+            };
+            extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::GamepadId>("Fenrir.Input.GamepadId"),
+                Fenrir::MakeSharedStruct<Fenrir::WindowId>("Fenrir.Input.WindowId"),
+            };
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyIsDown>("Fenrir.Input.InputNative.KeyIsDown"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeIsDown>("Fenrir.Input.InputNative.ScancodeIsDown"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyJustPressed>("Fenrir.Input.InputNative.KeyJustPressed"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeJustPressed>("Fenrir.Input.InputNative.ScancodeJustPressed"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyJustReleased>("Fenrir.Input.InputNative.KeyJustReleased"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::ScancodeJustReleased>("Fenrir.Input.InputNative.ScancodeJustReleased"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::KeyModifiersOf>("Fenrir.Input.InputNative.KeyModifiersOf"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseIsDown>("Fenrir.Input.InputNative.MouseIsDown"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustPressed>("Fenrir.Input.InputNative.MouseJustPressed"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::MouseJustReleased>("Fenrir.Input.InputNative.MouseJustReleased"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MousePosition, 2>::Call>("Fenrir.Input.InputNative.MousePosition"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseMotion, 2>::Call>("Fenrir.Input.InputNative.MouseMotion"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::InputNatives::MouseScroll, 2>::Call>("Fenrir.Input.InputNative.MouseScroll"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadsConnected>("Fenrir.Input.InputNative.GamepadsConnected"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsConnected>("Fenrir.Input.InputNative.GamepadIsConnected"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadIsDown>("Fenrir.Input.InputNative.GamepadIsDown"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadJustPressed>("Fenrir.Input.InputNative.GamepadJustPressed"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadJustReleased>("Fenrir.Input.InputNative.GamepadJustReleased"),
+                Fenrir::NativeFunction::Make<&Fenrir::InputNatives::GamepadAxisOf>("Fenrir.Input.InputNative.GamepadAxisOf"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakeInputExtension(std::shared_ptr<Fenrir::InputScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirInput";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.Input.dll"};
+        Fenrir::Generated::RegisterInput(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

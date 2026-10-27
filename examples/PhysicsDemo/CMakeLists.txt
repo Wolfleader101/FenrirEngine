@@ -19,7 +19,7 @@ target_link_libraries(PhysicsDemo PRIVATE FenrirPhysics FenrirAssets FenrirDebug
 # Physics's scripting extension, which the C# scenes use, and its contract beside the executable.
 if(FENRIR_ENABLE_SCRIPTING)
     target_link_libraries(PhysicsDemo PRIVATE FenrirPhysicsScripting)
-    fenrir_deploy_physics_scripting(PhysicsDemo)
+    fenrir_deploy_scripting(PhysicsDemo EXTENSIONS Physics)
 endif()
 
 # Each scene's log, checked: a smoke run of the scene alone, long enough for its keys to be pressed about a second apart

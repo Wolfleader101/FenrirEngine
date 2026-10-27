@@ -24,33 +24,9 @@
 #include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
+#include "Generated/FenrirPhysicsNatives.hpp"
 #include "PhysicsScriptingState.hpp"
 #include "ScriptQueries.hpp"
-
-// The natives under test, as the generated registration declares them (src/Generated/FenrirPhysicsRegistration.cpp):
-// they are defined in src/PhysicsScripting.cpp with no header of their own, since only the registration names them.
-namespace Fenrir::PhysicsNatives
-{
-    bool AddImpulse(const CallContext&, PhysicsScripting&, EntityValue entity, const Math::Vec3* impulse);
-    bool Raycast(const CallContext&, PhysicsScripting&, const Math::Vec3* origin, const Math::Vec3* direction,
-                 float maxDistance, const ScriptQueries::QueryFilter* filter, ScriptQueries::RaycastHit* hit);
-    std::int32_t RaycastAll(const CallContext&, PhysicsScripting&, const Math::Vec3* origin,
-                            const Math::Vec3* direction, float maxDistance, const ScriptQueries::QueryFilter* filter,
-                            ScriptQueries::RaycastHit* hits, std::int32_t capacity);
-    bool MoveCast(const CallContext&, PhysicsScripting&, const CollisionShape* shape, const Transform* pose,
-                  const Math::Vec3* motion, const ScriptQueries::QueryFilter* filter, ScriptQueries::MoveCastHit* hit);
-    bool Depenetrate(const CallContext&, PhysicsScripting&, const CollisionShape* shape, const Transform* pose,
-                     const ScriptQueries::QueryFilter* filter, Math::Vec3* offset);
-    std::int32_t ContactsOf(const CallContext&, PhysicsScripting&, EntityValue body, ScriptQueries::Contact* contacts,
-                            std::int32_t capacity);
-    bool IsSleeping(const CallContext&, PhysicsScripting&, EntityValue body);
-    bool Bounds(const CallContext&, PhysicsScripting&, EntityValue body, Math::AABB* bounds);
-    bool Gravity(const CallContext&, PhysicsScripting&, Math::Vec3* gravity);
-    std::uint64_t CreateCollisionMesh(const CallContext&, PhysicsScripting&, const Math::Vec3* vertices,
-                                      std::int32_t vertexCount, const std::uint32_t* indices, std::int32_t indexCount);
-    bool ReleaseCollisionMesh(const CallContext&, PhysicsScripting&, std::uint64_t mesh);
-    void GetJointState(const CallContext&, PhysicsScripting&, EntityValue joint, JointState* state);
-} // namespace Fenrir::PhysicsNatives
 
 namespace
 {

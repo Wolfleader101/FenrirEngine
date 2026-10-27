@@ -130,10 +130,6 @@ function(fenrir_add_demo_scripts name scripts_dir)
     add_dependencies(${name} ${name}DeployScripts)
     target_compile_definitions(${name} PRIVATE FENRIR_DEMO_SCRIPT_ASSEMBLY="scripts/${name}.Scripts.dll")
 
-    fenrir_deploy_scripting(${name})
-    fenrir_deploy_input_scripting(${name})
-    fenrir_deploy_window_scripting(${name})
-    fenrir_deploy_assets_scripting(${name})
-    fenrir_deploy_renderer_scripting(${name})
-    fenrir_deploy_debugdraw_scripting(${name})
+    # The scaffold installs every package's extension (DemoScripting.cpp), so their contracts go beside the executable.
+    fenrir_deploy_scripting(${name} EXTENSIONS Input Window Assets Renderer DebugDraw)
 endfunction()

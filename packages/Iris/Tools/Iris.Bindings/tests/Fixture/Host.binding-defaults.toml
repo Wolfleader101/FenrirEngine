@@ -15,7 +15,6 @@ resource-interface = "IResource"
 read-only-resource-interface = "IReadOnlyResource"
 
 [registration]
-includes = ["Host/Extension.hpp"]
 extension = "Host::Extension"
 make-component = "Host::MakeComponent"
 make-read-only-component = "Host::MakeReadOnlyComponent"
@@ -42,3 +41,5 @@ attribute = "NativeFunction"
 make = "Host::NativeFunction::Make"
 # A native with outputs is registered as make<&zero-outputs<&F, indices...>::Call>: the host's template zeroes them.
 zero-outputs = "Host::ZeroingOutputs"
+# What the natives header and the registration that includes it name: the extension and the zeroing template.
+includes = ["Host/Extension.hpp"]
