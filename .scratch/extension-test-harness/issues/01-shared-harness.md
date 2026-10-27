@@ -11,7 +11,7 @@
 
 **Touches:** `packages/FenrirScripting/Tests/ExtensionTestApp.hpp`, `packages/FenrirAssets/Scripting/Tests/AssetsScriptingApp.hpp`, `packages/FenrirDebugDraw/Scripting/Tests/DebugDrawScriptingApp.hpp`, `packages/FenrirInput/Scripting/Tests/InputScriptingApp.hpp`, `packages/FenrirPhysics/Scripting/Tests/PhysicsScriptingApp.hpp`, `packages/FenrirRenderer/Scripting/Tests/RendererScriptingApp.hpp`, `packages/FenrirWindow/Scripting/Tests/WindowScriptingApp.hpp`, `packages/*/Scripting/Tests/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Every scripting test target (`Fenrir<Package>Scripting`, `-NoOps`, `-Display` and the rules executables) passes on the msvc-x64-debug preset, asserting what it did before.
 - [ ] The six harness headers hold only their package-specific lines: no `FromEnvironment`, no `Call`, no `FixtureConfig`, no `oneTick` definition of their own.
