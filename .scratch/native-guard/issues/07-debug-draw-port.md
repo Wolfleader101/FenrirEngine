@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirDebugDraw/Scripting/src/`, `packages/FenrirDebugDraw/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] No facade-name string literal remains in `src/DebugDrawScripting.cpp` or the state header; the local span helper is gone.
 - [x] `NoOps` rule tests pass with no `FENRIR_TEST_DEBUGDRAW_FIXTURE` set; the remaining .NET tests pass with it.

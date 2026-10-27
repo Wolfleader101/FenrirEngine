@@ -11,7 +11,7 @@
 
 **Touches:** `packages/FenrirInput/Scripting/src/`, `packages/FenrirInput/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] No facade-name string literal remains in `src/InputScripting.cpp` or the state header; no `source_location` outside guard calls.
 - [x] `NoInput` rule tests pass with no `FENRIR_TEST_INPUT_FIXTURE` set; the remaining .NET tests pass with it.

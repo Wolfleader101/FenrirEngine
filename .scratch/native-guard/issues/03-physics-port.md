@@ -11,12 +11,12 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`, `packages/FenrirPhysics/Scripting/src/PhysicsScriptingState.hpp`, `packages/FenrirPhysics/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `grep -n "nullptr" src/PhysicsScripting.cpp` finds only the span and optional checks that remain by design; no `source_location` outside the state's guard calls; no `NativeName`.
-- [ ] The moved rule tests pass with no `FENRIR_TEST_PHYSICS_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] A warning from a physics native in a debug run reads `[physics scripting] PhysicsNative.<Method>: ...` (one test asserts the prefix through the harness's logger).
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] `grep -n "nullptr" src/PhysicsScripting.cpp` finds only the span and optional checks that remain by design; no `source_location` outside the state's guard calls; no `NativeName`.
+- [x] The moved rule tests pass with no `FENRIR_TEST_PHYSICS_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] A warning from a physics native in a debug run reads `[physics scripting] PhysicsNative.<Method>: ...` (one test asserts the prefix through the harness's logger).
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 

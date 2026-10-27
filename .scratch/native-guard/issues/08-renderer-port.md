@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirRenderer/Scripting/src/`, `packages/FenrirRenderer/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `src/RendererScripting.cpp` no longer names `AssetStore::IsValid` or carries the "no asset store" and "empty or stale" texts; `grep` for them finds only Assets.
 - [x] A rule test spawns through the harness with a stale model handle and sees Assets' warning, prefixed `[renderer scripting] RendererNative.SpawnModel: `.

@@ -16,12 +16,12 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/`, `packages/FenrirScripting/src/`, `packages/FenrirScripting/Tests/`, `docs/adr/`, `GLOSSARY.md`, `packages/FenrirScripting/README.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] Rules tests (no .NET): `ZeroingOutputs` zeroes the named outputs and forwards every argument and the result; it leaves an output span and an `inOut` pointer untouched; `NativeGuard::Alive` is empty for a dead entity and warns once per call site and message across two calls; `Require` passes a live pointer and an engaged optional through and warns once for null and empty; `Warn` logs once for two calls from one place and twice from two places; `WriteText` fills up to capacity and returns the full length in both encodings; `SpanOf` is empty for null and for a non-positive count.
-- [ ] `ScriptingTests` (.NET): a native of the test extension warns with `<Type>.<Method>: ` as its prefix with no name given by the native; a native called while no Scripting runs returns its `@notrunning` value and its output is untouched.
-- [ ] `NativeCallHarness` is used by one FenrirScripting test calling a test-extension native directly: the change it records plays back through `ApplyChanges`.
-- [ ] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass; no package extension changes.
+- [x] Rules tests (no .NET): `ZeroingOutputs` zeroes the named outputs and forwards every argument and the result; it leaves an output span and an `inOut` pointer untouched; `NativeGuard::Alive` is empty for a dead entity and warns once per call site and message across two calls; `Require` passes a live pointer and an engaged optional through and warns once for null and empty; `Warn` logs once for two calls from one place and twice from two places; `WriteText` fills up to capacity and returns the full length in both encodings; `SpanOf` is empty for null and for a non-positive count.
+- [x] `ScriptingTests` (.NET): a native of the test extension warns with `<Type>.<Method>: ` as its prefix with no name given by the native; a native called while no Scripting runs returns its `@notrunning` value and its output is untouched.
+- [x] `NativeCallHarness` is used by one FenrirScripting test calling a test-extension native directly: the change it records plays back through `ApplyChanges`.
+- [x] `check_tickets.py`, clang-format and the msvc-x64-debug preset pass; no package extension changes.
 
 ## Comments
 

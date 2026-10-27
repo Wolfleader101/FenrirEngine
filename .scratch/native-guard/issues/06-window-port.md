@@ -10,12 +10,12 @@
 
 **Touches:** `packages/FenrirWindow/Scripting/src/`, `packages/FenrirWindow/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `src/Utf16.hpp` no longer exists; no facade-name string literal remains in `src/WindowScripting.cpp` or the state header.
-- [ ] `GetClipboard` through the harness with a two-character capacity returns the full length and fills two characters (a rule test, no window needed when the clipboard text is given by a fake or the test skips on a headless host as the existing test does).
-- [ ] Rule tests pass with no `FENRIR_TEST_WINDOW_FIXTURE` set; the remaining .NET tests pass with it.
-- [ ] clang-format and the msvc-x64-debug preset pass.
+- [x] `src/Utf16.hpp` no longer exists; no facade-name string literal remains in `src/WindowScripting.cpp` or the state header.
+- [x] `GetClipboard` through the harness with a two-character capacity returns the full length and fills two characters (a rule test, no window needed when the clipboard text is given by a fake or the test skips on a headless host as the existing test does).
+- [x] Rule tests pass with no `FENRIR_TEST_WINDOW_FIXTURE` set; the remaining .NET tests pass with it.
+- [x] clang-format and the msvc-x64-debug preset pass.
 
 ## Comments
 

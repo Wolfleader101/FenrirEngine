@@ -12,11 +12,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/`, `packages/Iris/docs/natives-description.md`, `packages/*/Scripting/api/*.binding.toml`, `packages/FenrirScripting/api/*.binding.toml`, `packages/*/Scripting/src/Generated/*Registration.cpp`, `packages/*/Scripting/Tests/Generated/`, `packages/*/Scripting/Tests/Fixture/`, `packages/*/Scripting/Tests/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for Iris.Bindings passes with the new cases; `fenrir-generate-bindings` is a no-op after the committed regeneration (CI's api-descriptions check).
-- [ ] No `*NativesTests.cpp` or `*Natives.cs` remains under any `Scripting/Tests/`; CTest lists no `writes its output's default` cases.
-- [ ] Every package scripting test target still builds and passes on the msvc-x64-debug preset: the natives behave as before since they still zero by hand.
+- [x] `dotnet test` for Iris.Bindings passes with the new cases; `fenrir-generate-bindings` is a no-op after the committed regeneration (CI's api-descriptions check).
+- [x] No `*NativesTests.cpp` or `*Natives.cs` remains under any `Scripting/Tests/`; CTest lists no `writes its output's default` cases.
+- [x] Every package scripting test target still builds and passes on the msvc-x64-debug preset: the natives behave as before since they still zero by hand.
 
 ## Comments
 

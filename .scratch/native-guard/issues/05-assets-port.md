@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirAssets/Scripting/src/`, `packages/FenrirAssets/Scripting/include/FenrirAssetsScripting/`, `packages/FenrirAssets/Scripting/Tests/`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] No facade-name string literal remains in `src/AssetsScripting.cpp` or the state header; the span copy and the hand-rolled text-out are gone.
 - [x] A test in `NoOps.cpp` calls the public `Resolve<Model>` through the harness with no store, then with a stale handle, and sees one warning each, with the words Renderer will reuse.
