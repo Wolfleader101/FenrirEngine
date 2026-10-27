@@ -49,7 +49,8 @@ namespace Fenrir::Testing
         /** @brief Scripting running the fixture with physics's extension: what the drifted-mirror tests edit. */
         static ScriptingConfig Config()
         {
-            return FixtureConfig(FixtureFromEnvironment("FENRIR_TEST_PHYSICS_FIXTURE"), {PhysicsScriptingExtension()});
+            return FixtureConfig(FixtureFromEnvironment("FENRIR_TEST_PHYSICS_FIXTURE"),
+                                 {Physics::ScriptingExtension()});
         }
 
         // An entity with only the engine's components, at `position`.

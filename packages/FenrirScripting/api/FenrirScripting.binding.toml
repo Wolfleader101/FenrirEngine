@@ -25,10 +25,6 @@ includes = ["FenrirECS/DefaultComponents.hpp", "FenrirECS/Entity.hpp", "FenrirSc
 
 [registration]
 source = "../src/Generated/FenrirScriptingRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state and the address alias.
-    "../EngineContext.hpp",
-]
 function = "Fenrir::Generated::RegisterScripting"
 read-only = ["Fenrir::Relationship"]
 
@@ -54,5 +50,13 @@ tags = "[scripting][bindings]"
 [natives]
 sources = ["../src/Bindings.cpp"]
 class = "Native"
+header = "../src/Generated/FenrirScriptingNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state and the address alias, the engine's transform, and the
+    # change error.
+    "../EngineContext.hpp",
+    "FenrirECS/DefaultComponents.hpp",
+    "FenrirScripting/Errors.hpp",
+]
 # The addresses and counts natives write into C#'s memory are native-sized there.
 types = { "Fenrir::Detail::NativeAddress" = "nuint" }

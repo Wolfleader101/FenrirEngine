@@ -4,105 +4,87 @@
 // The extension's registration lists: every described component, event, shared struct and native function.
 
 #include "FenrirPhysicsMappings.hpp"
-#include "FenrirScripting/ComponentRegistry.hpp"
-#include "FenrirScripting/ScriptingExtension.hpp"
-#include "FenrirScripting/ZeroingOutputs.hpp"
-#include "PhysicsScriptingState.hpp"
-#include "ScriptQueries.hpp"
-#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
+#include "FenrirPhysicsNatives.hpp"
 
-namespace Fenrir::PhysicsNatives
-{
-    bool AddForce(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* force);
-    bool AddImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* impulse);
-    bool AddTorque(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* torque);
-    bool AddAngularImpulse(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue entity, const Fenrir::Math::Vec3* impulse);
-    bool Raycast(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::RaycastHit* hit);
-    std::int32_t RaycastAll(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* origin, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::RaycastHit* hits, std::int32_t capacity);
-    bool ShapeCast(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::ShapeCastHit* hit);
-    std::int32_t ShapeCastAll(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::Math::Vec3* direction, float maxDistance, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::ShapeCastHit* hits, std::int32_t capacity);
-    bool MoveCast(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::Math::Vec3* motion, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::MoveCastHit* hit);
-    std::int32_t Overlap(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::OverlapHit* hits, std::int32_t capacity);
-    std::int32_t Penetrations(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::PenetrationHit* hits, std::int32_t capacity);
-    bool Depenetrate(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::CollisionShape* shape, const Fenrir::Transform* pose, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::Math::Vec3* offset);
-    std::int32_t OverlapPoint(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* point, const Fenrir::ScriptQueries::QueryFilter* filter, Fenrir::ScriptQueries::OverlapHit* hits, std::int32_t capacity);
-    std::int32_t ContactsOf(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body, Fenrir::ScriptQueries::Contact* contacts, std::int32_t capacity);
-    bool IsSleeping(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body);
-    bool Bounds(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue body, Fenrir::Math::AABB* bounds);
-    bool Gravity(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::Math::Vec3* gravity);
-    bool SetGravity(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* gravity);
-    bool SetDebugDraw(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, std::uint32_t categories);
-    std::uint64_t CreateCollisionMesh(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, const Fenrir::Math::Vec3* vertices, std::int32_t vertexCount, const std::uint32_t* indices, std::int32_t indexCount);
-    bool ReleaseCollisionMesh(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, std::uint64_t mesh);
-    void FrameFromWorld(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue bodyA, Fenrir::EntityValue bodyB, const Fenrir::JointFrame* anchor, Fenrir::JointFrames* frames);
-    void GetJointState(const Fenrir::CallContext&, Fenrir::PhysicsScripting&, Fenrir::EntityValue joint, Fenrir::JointState* state);
-} // namespace Fenrir::PhysicsNatives
+#include <memory>
+#include <utility>
 
 namespace Fenrir::Generated
 {
-    void RegisterPhysics(Fenrir::ScriptingExtension& extension);
-
-    void RegisterPhysics(Fenrir::ScriptingExtension& extension)
+    namespace
     {
-        extension.components = {
-            Fenrir::MakeComponent<Fenrir::CharacterBody>("Fenrir.Physics.CharacterBody"),
-            Fenrir::MakeComponent<Fenrir::Collider>("Fenrir.Physics.Collider"),
-            Fenrir::MakeComponent<Fenrir::CollisionFilter>("Fenrir.Physics.CollisionFilter"),
-            Fenrir::MakeComponent<Fenrir::ContactEvents>("Fenrir.Physics.ContactEvents"),
-            Fenrir::MakeComponent<Fenrir::Joint>("Fenrir.Physics.Joint"),
-            Fenrir::MakeComponent<Fenrir::PhysicsMaterial>("Fenrir.Physics.PhysicsMaterial"),
-            Fenrir::MakeComponent<Fenrir::RigidBody>("Fenrir.Physics.RigidBody"),
-            Fenrir::MakeComponent<Fenrir::Trigger>("Fenrir.Physics.Trigger"),
-            Fenrir::MakeComponent<Fenrir::Vehicle>("Fenrir.Physics.Vehicle"),
-            Fenrir::MakeComponent<Fenrir::VehicleAntiRollBar>("Fenrir.Physics.VehicleAntiRollBar"),
-            Fenrir::MakeComponent<Fenrir::VehicleDifferential>("Fenrir.Physics.VehicleDifferential"),
-            Fenrir::MakeComponent<Fenrir::VehicleWheel>("Fenrir.Physics.VehicleWheel"),
-        };
-        extension.events = {
-            Fenrir::MakeEvent<Fenrir::ContactBegin>("Fenrir.Physics.ContactBegin"),
-            Fenrir::MakeEvent<Fenrir::ContactEnd>("Fenrir.Physics.ContactEnd"),
-            Fenrir::MakeEvent<Fenrir::JointBroken>("Fenrir.Physics.JointBroken"),
-            Fenrir::MakeEvent<Fenrir::TriggerEnter>("Fenrir.Physics.TriggerEnter"),
-            Fenrir::MakeEvent<Fenrir::TriggerExit>("Fenrir.Physics.TriggerExit"),
-        };
-        extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::CollisionShape>("Fenrir.Physics.CollisionShape"),
-            Fenrir::MakeSharedStruct<Fenrir::JointFrame>("Fenrir.Physics.JointFrame"),
-            Fenrir::MakeSharedStruct<Fenrir::JointFrames>("Fenrir.Physics.JointFrames"),
-            Fenrir::MakeSharedStruct<Fenrir::JointState>("Fenrir.Physics.JointState"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::Contact>("Fenrir.Physics.Contact"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::MoveCastHit>("Fenrir.Physics.MoveCastHit"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::OverlapHit>("Fenrir.Physics.OverlapHit"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::PenetrationHit>("Fenrir.Physics.PenetrationHit"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::QueryFilter>("Fenrir.Physics.QueryFilter"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::RaycastHit>("Fenrir.Physics.RaycastHit"),
-            Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::ShapeCastHit>("Fenrir.Physics.ShapeCastHit"),
-        };
-        extension.functions = {
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddForce>("Fenrir.Physics.PhysicsNative.AddForce"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddImpulse>("Fenrir.Physics.PhysicsNative.AddImpulse"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddTorque>("Fenrir.Physics.PhysicsNative.AddTorque"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddAngularImpulse>("Fenrir.Physics.PhysicsNative.AddAngularImpulse"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Raycast, 6>::Call>("Fenrir.Physics.PhysicsNative.Raycast"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::RaycastAll>("Fenrir.Physics.PhysicsNative.RaycastAll"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::ShapeCast, 7>::Call>("Fenrir.Physics.PhysicsNative.ShapeCast"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ShapeCastAll>("Fenrir.Physics.PhysicsNative.ShapeCastAll"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::MoveCast, 6>::Call>("Fenrir.Physics.PhysicsNative.MoveCast"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::Overlap>("Fenrir.Physics.PhysicsNative.Overlap"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::Penetrations>("Fenrir.Physics.PhysicsNative.Penetrations"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Depenetrate, 5>::Call>("Fenrir.Physics.PhysicsNative.Depenetrate"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::OverlapPoint>("Fenrir.Physics.PhysicsNative.OverlapPoint"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ContactsOf>("Fenrir.Physics.PhysicsNative.ContactsOf"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::IsSleeping>("Fenrir.Physics.PhysicsNative.IsSleeping"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Bounds, 3>::Call>("Fenrir.Physics.PhysicsNative.Bounds"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Gravity, 2>::Call>("Fenrir.Physics.PhysicsNative.Gravity"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::SetGravity>("Fenrir.Physics.PhysicsNative.SetGravity"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::SetDebugDraw>("Fenrir.Physics.PhysicsNative.SetDebugDraw"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::CreateCollisionMesh>("Fenrir.Physics.PhysicsNative.CreateCollisionMesh"),
-            Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ReleaseCollisionMesh>("Fenrir.Physics.PhysicsNative.ReleaseCollisionMesh"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::FrameFromWorld, 5>::Call>("Fenrir.Physics.PhysicsNative.FrameFromWorld"),
-            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::GetJointState, 3>::Call>("Fenrir.Physics.PhysicsNative.GetJointState"),
-        };
+        void RegisterPhysics(Fenrir::ScriptingExtension& extension)
+        {
+            extension.components = {
+                Fenrir::MakeComponent<Fenrir::CharacterBody>("Fenrir.Physics.CharacterBody"),
+                Fenrir::MakeComponent<Fenrir::Collider>("Fenrir.Physics.Collider"),
+                Fenrir::MakeComponent<Fenrir::CollisionFilter>("Fenrir.Physics.CollisionFilter"),
+                Fenrir::MakeComponent<Fenrir::ContactEvents>("Fenrir.Physics.ContactEvents"),
+                Fenrir::MakeComponent<Fenrir::Joint>("Fenrir.Physics.Joint"),
+                Fenrir::MakeComponent<Fenrir::PhysicsMaterial>("Fenrir.Physics.PhysicsMaterial"),
+                Fenrir::MakeComponent<Fenrir::RigidBody>("Fenrir.Physics.RigidBody"),
+                Fenrir::MakeComponent<Fenrir::Trigger>("Fenrir.Physics.Trigger"),
+                Fenrir::MakeComponent<Fenrir::Vehicle>("Fenrir.Physics.Vehicle"),
+                Fenrir::MakeComponent<Fenrir::VehicleAntiRollBar>("Fenrir.Physics.VehicleAntiRollBar"),
+                Fenrir::MakeComponent<Fenrir::VehicleDifferential>("Fenrir.Physics.VehicleDifferential"),
+                Fenrir::MakeComponent<Fenrir::VehicleWheel>("Fenrir.Physics.VehicleWheel"),
+            };
+            extension.events = {
+                Fenrir::MakeEvent<Fenrir::ContactBegin>("Fenrir.Physics.ContactBegin"),
+                Fenrir::MakeEvent<Fenrir::ContactEnd>("Fenrir.Physics.ContactEnd"),
+                Fenrir::MakeEvent<Fenrir::JointBroken>("Fenrir.Physics.JointBroken"),
+                Fenrir::MakeEvent<Fenrir::TriggerEnter>("Fenrir.Physics.TriggerEnter"),
+                Fenrir::MakeEvent<Fenrir::TriggerExit>("Fenrir.Physics.TriggerExit"),
+            };
+            extension.sharedStructs = {
+                Fenrir::MakeSharedStruct<Fenrir::CollisionShape>("Fenrir.Physics.CollisionShape"),
+                Fenrir::MakeSharedStruct<Fenrir::JointFrame>("Fenrir.Physics.JointFrame"),
+                Fenrir::MakeSharedStruct<Fenrir::JointFrames>("Fenrir.Physics.JointFrames"),
+                Fenrir::MakeSharedStruct<Fenrir::JointState>("Fenrir.Physics.JointState"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::Contact>("Fenrir.Physics.Contact"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::MoveCastHit>("Fenrir.Physics.MoveCastHit"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::OverlapHit>("Fenrir.Physics.OverlapHit"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::PenetrationHit>("Fenrir.Physics.PenetrationHit"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::QueryFilter>("Fenrir.Physics.QueryFilter"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::RaycastHit>("Fenrir.Physics.RaycastHit"),
+                Fenrir::MakeSharedStruct<Fenrir::ScriptQueries::ShapeCastHit>("Fenrir.Physics.ShapeCastHit"),
+            };
+            extension.functions = {
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddForce>("Fenrir.Physics.PhysicsNative.AddForce"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddImpulse>("Fenrir.Physics.PhysicsNative.AddImpulse"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddTorque>("Fenrir.Physics.PhysicsNative.AddTorque"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::AddAngularImpulse>("Fenrir.Physics.PhysicsNative.AddAngularImpulse"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Raycast, 6>::Call>("Fenrir.Physics.PhysicsNative.Raycast"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::RaycastAll>("Fenrir.Physics.PhysicsNative.RaycastAll"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::ShapeCast, 7>::Call>("Fenrir.Physics.PhysicsNative.ShapeCast"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ShapeCastAll>("Fenrir.Physics.PhysicsNative.ShapeCastAll"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::MoveCast, 6>::Call>("Fenrir.Physics.PhysicsNative.MoveCast"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::Overlap>("Fenrir.Physics.PhysicsNative.Overlap"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::Penetrations>("Fenrir.Physics.PhysicsNative.Penetrations"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Depenetrate, 5>::Call>("Fenrir.Physics.PhysicsNative.Depenetrate"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::OverlapPoint>("Fenrir.Physics.PhysicsNative.OverlapPoint"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ContactsOf>("Fenrir.Physics.PhysicsNative.ContactsOf"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::IsSleeping>("Fenrir.Physics.PhysicsNative.IsSleeping"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Bounds, 3>::Call>("Fenrir.Physics.PhysicsNative.Bounds"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::Gravity, 2>::Call>("Fenrir.Physics.PhysicsNative.Gravity"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::SetGravity>("Fenrir.Physics.PhysicsNative.SetGravity"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::SetDebugDraw>("Fenrir.Physics.PhysicsNative.SetDebugDraw"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::CreateCollisionMesh>("Fenrir.Physics.PhysicsNative.CreateCollisionMesh"),
+                Fenrir::NativeFunction::Make<&Fenrir::PhysicsNatives::ReleaseCollisionMesh>("Fenrir.Physics.PhysicsNative.ReleaseCollisionMesh"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::FrameFromWorld, 5>::Call>("Fenrir.Physics.PhysicsNative.FrameFromWorld"),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::PhysicsNatives::GetJointState, 3>::Call>("Fenrir.Physics.PhysicsNative.GetJointState"),
+            };
+        }
+    } // namespace
+
+    Fenrir::ScriptingExtension MakePhysicsExtension(std::shared_ptr<Fenrir::PhysicsScripting> state)
+    {
+        Fenrir::ScriptingExtension extension;
+        extension.name = "FenrirPhysics";
+        extension.SetState(std::move(state));
+        extension.sharedAssemblies = {"Fenrir.Physics.dll"};
+        Fenrir::Generated::RegisterPhysics(extension);
+        return extension;
     }
 } // namespace Fenrir::Generated
 

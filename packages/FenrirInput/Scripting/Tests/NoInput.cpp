@@ -16,33 +16,10 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
+#include "Generated/FenrirInputNatives.hpp"
 #include "InputClaimsResource.hpp"
 #include "InputScriptingState.hpp"
 #include "NativeCallHarness.hpp"
-
-// The natives, as the generated registration declares them from its own file: no header the engine sees declares them.
-namespace Fenrir::InputNatives
-{
-    bool KeyIsDown(const CallContext&, InputScripting&, Key key);
-    bool ScancodeIsDown(const CallContext&, InputScripting&, Scancode scancode);
-    bool KeyJustPressed(const CallContext&, InputScripting&, Key key);
-    bool ScancodeJustPressed(const CallContext&, InputScripting&, Scancode scancode);
-    bool KeyJustReleased(const CallContext&, InputScripting&, Key key);
-    bool ScancodeJustReleased(const CallContext&, InputScripting&, Scancode scancode);
-    KeyModifiers KeyModifiersOf(const CallContext&, InputScripting&);
-    bool MouseIsDown(const CallContext&, InputScripting&, MouseButton button);
-    bool MouseJustPressed(const CallContext&, InputScripting&, MouseButton button);
-    bool MouseJustReleased(const CallContext&, InputScripting&, MouseButton button);
-    void MousePosition(const CallContext&, InputScripting&, Math::Vec2* position);
-    void MouseMotion(const CallContext&, InputScripting&, Math::Vec2* motion);
-    void MouseScroll(const CallContext&, InputScripting&, Math::Vec2* scroll);
-    std::int32_t GamepadsConnected(const CallContext&, InputScripting&, GamepadId* pads, std::int32_t capacity);
-    bool GamepadIsConnected(const CallContext&, InputScripting&, GamepadId gamepad);
-    bool GamepadIsDown(const CallContext&, InputScripting&, GamepadId gamepad, GamepadButton button);
-    bool GamepadJustPressed(const CallContext&, InputScripting&, GamepadId gamepad, GamepadButton button);
-    bool GamepadJustReleased(const CallContext&, InputScripting&, GamepadId gamepad, GamepadButton button);
-    float GamepadAxisOf(const CallContext&, InputScripting&, GamepadId gamepad, GamepadAxis axis);
-} // namespace Fenrir::InputNatives
 
 namespace
 {

@@ -10,6 +10,7 @@
 #include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirWindow/WindowEvents.hpp"
 #include "FenrirWindow/WindowTypes.hpp"
+#include "Generated/FenrirWindowNatives.hpp"
 #include "WindowScriptingState.hpp"
 
 // Everything C# sees of the window is generated (api/FenrirWindow.binding.toml): the events' and the size's mappings,
@@ -29,7 +30,7 @@ namespace Fenrir
     // names none) each does nothing and returns false, zero or an empty value, warning once per call site in a debug
     // build under the native's name. Each trusts the generated declaration (ADR-0045): its `out` pointer is never null
     // and the registration has zeroed it before the native runs. Named apart from Window's own functions, and not in an
-    // anonymous namespace: the generated registration names them from another file.
+    // anonymous namespace: the generated natives header declares them.
     namespace WindowNatives
     {
         /**
@@ -182,11 +183,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension Window::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirWindow";
-        extension.SetState(std::make_shared<WindowScripting>());
-        extension.sharedAssemblies = {"Fenrir.Window.dll"};
-        Generated::RegisterWindow(extension);
-        return extension;
+        return Generated::MakeWindowExtension(std::make_shared<WindowScripting>());
     }
 } // namespace Fenrir

@@ -26,11 +26,9 @@ includes = [
 
 [registration]
 source = "../src/Generated/FenrirAssetsRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state.
-    "AssetsScriptingState.hpp",
-]
 function = "Fenrir::Generated::RegisterAssets"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeAssetsExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
@@ -59,3 +57,8 @@ tags = "[assets][scripting][bindings]"
 [natives]
 sources = ["../src/AssetsScripting.cpp"]
 class = "AssetsNative"
+header = "../src/Generated/FenrirAssetsNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state.
+    "AssetsScriptingState.hpp",
+]

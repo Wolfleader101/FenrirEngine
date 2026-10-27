@@ -27,10 +27,10 @@ internal static class Defaults
         ["registration"] =
         [
             "extension", "make-component", "make-read-only-component", "make-event", "make-shared-struct", "make-scene-resource",
-            "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource", "includes",
+            "make-read-only-scene-resource", "make-app-resource", "make-read-only-app-resource",
         ],
         ["tests"] = ["includes", "component"],
-        ["natives"] = ["context", "attribute", "make", "zero-outputs"],
+        ["natives"] = ["context", "attribute", "make", "zero-outputs", "includes"],
         // Any entry: an inherited bound type is consulted only for a type described here, so the table is handed back
         // rather than merged, and its entries are checked where the binding's own are.
         ["bound-types"] = [],

@@ -10,6 +10,7 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "Generated/FenrirDebugDrawNatives.hpp"
 #include "ScriptOptions.hpp"
 
 // Everything C# sees of debug drawing besides its facade is generated (api/FenrirDebugDraw.binding.toml): the options'
@@ -380,11 +381,6 @@ namespace Fenrir
 
     Fenrir::ScriptingExtension DebugDrawing::ScriptingExtension()
     {
-        Fenrir::ScriptingExtension extension;
-        extension.name = "FenrirDebugDraw";
-        extension.SetState(std::make_shared<DebugDrawScripting>());
-        extension.sharedAssemblies = {"Fenrir.DebugDraw.dll"};
-        Generated::RegisterDebugDraw(extension);
-        return extension;
+        return Generated::MakeDebugDrawExtension(std::make_shared<DebugDrawScripting>());
     }
 } // namespace Fenrir

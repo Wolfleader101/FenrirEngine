@@ -22,27 +22,8 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
+#include "Generated/FenrirDebugDrawNatives.hpp"
 #include "ScriptOptions.hpp"
-
-// The natives under test, as the generated registration declares them (src/Generated/FenrirDebugDrawRegistration.cpp):
-// defined in src/DebugDrawScripting.cpp, which has no header of its own.
-namespace Fenrir::DebugDrawNatives
-{
-    void Line(const CallContext&, DebugDrawScripting&, const Math::Vec3* from, const Math::Vec3* to,
-              const Colour* colour, const ScriptOptions::ShapeOptions* options, std::string_view group);
-    void ScreenText(const CallContext&, DebugDrawScripting&, const Math::Vec2* position, std::string_view text,
-                    const Colour* colour, const ScriptOptions::TextOptions* options, std::string_view group);
-    void Message(const CallContext&, DebugDrawScripting&, std::string_view text, const Colour* colour,
-                 const ScriptOptions::TextOptions* options, std::string_view group);
-    void KeyedMessage(const CallContext&, DebugDrawScripting&, std::int64_t key, std::string_view text,
-                      const Colour* colour, const ScriptOptions::TextOptions* options, std::string_view group);
-    void WorldText(const CallContext&, DebugDrawScripting&, const Math::Vec3* position, std::string_view text,
-                   const Colour* colour, const ScriptOptions::TextOptions* options, std::string_view group);
-    void HideGroup(const CallContext&, DebugDrawScripting&, std::string_view group);
-    bool IsGroupShown(const CallContext&, DebugDrawScripting&, std::string_view group);
-    void Clear(const CallContext&, DebugDrawScripting&);
-    void ClearGroup(const CallContext&, DebugDrawScripting&, std::string_view group);
-} // namespace Fenrir::DebugDrawNatives
 
 namespace
 {

@@ -24,11 +24,9 @@ includes = ["FenrirRenderer/Components.hpp", "FenrirRenderer/Renderer.hpp"]
 
 [registration]
 source = "../src/Generated/FenrirRendererRegistration.cpp"
-includes = [
-    # What the natives' declarations name: their extension state (and through it the entity value).
-    "RendererScriptingState.hpp",
-]
 function = "Fenrir::Generated::RegisterRenderer"
+# Makes the extension from its state (ADR-0046): what the package's public function returns.
+maker = "Fenrir::Generated::MakeRendererExtension"
 
 [tests]
 cpp = "../Tests/Generated/FenrirRendererDefaultsTests.cpp"
@@ -44,6 +42,11 @@ tags = "[renderer][scripting][bindings]"
 [natives]
 sources = ["../src/RendererScripting.cpp"]
 class = "RendererNative"
+header = "../src/Generated/FenrirRendererNatives.hpp"
+includes = [
+    # What the natives' declarations name: their extension state (and through it the entity value).
+    "RendererScriptingState.hpp",
+]
 
 [names]
 "Fenrir::Projection" = "CameraProjection"

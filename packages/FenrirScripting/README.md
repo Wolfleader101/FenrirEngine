@@ -21,7 +21,8 @@ logged as an error and the app runs without scripts (`HasScripts()` is false).
 
 - **Where .NET comes from.** The Iris bridge (`Iris.Bridge.dll`, its `.runtimeconfig.json`), `nethost`, the
   scripting contract `Fenrir.Scripting.dll` and the math contract `Fenrir.Math.dll` must sit next to the executable, or
-  in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target>)` on the executable.
+  in `ScriptingConfig::bridgeDirectory`. In CMake, call `fenrir_deploy_scripting(<target> [EXTENSIONS <Pkg>...])` on
+  the executable, naming the package extensions it adds, whose contracts go beside it too.
 - **The contract.** `Fenrir.Scripting` (`Managed/Fenrir.Scripting`) is the C# API scripts compile against: `Entity`,
   `Log` and `Time` so far. `Scripting::Install` always shares it with Iris, as one copy in the default load context
   that is never reloaded, so its types have one identity across every load and reload of the script assembly. A
@@ -558,8 +559,8 @@ which the app lists in `ScriptingConfig::extensions`. FenrirScripting never name
 - **native resources**: plain-data scene and app resources (`MakeSceneResource`, `MakeAppResource` and their read-only
   variants), registered and checked the same way, which C# reads and writes in place through `Resources`;
 - **shared assemblies**: its C# contract, shared with every script load. A relative path is in the bridge directory,
-  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (FenrirPhysics's
-  `fenrir_deploy_physics_scripting`, say).
+  beside `Fenrir.Scripting.dll`, where the build deploys a package's contract (`fenrir_deploy_scripting(<target>
+  EXTENSIONS Physics)`, say).
 
 Extensions are the only way to give scripting anything, so the app's own components, resources, events and contract go in
 an extension of its own, just as a package's do:
@@ -606,7 +607,7 @@ without scripts, if a C# field has no native function, if their signatures diffe
 (a native function, a component, an event, a shared struct or a resource), or if a native function takes an extension
 state its extension does not carry (none, or one of another type: the diagnostic names the function and both types).
 The tests' test-only extension (`Tests/Extension`, used by `Tests/ExtensionScript`) is a complete example, and
-FenrirPhysics's is a real one: `PhysicsScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
+FenrirPhysics's is a real one: `Physics::ScriptingExtension()` (in its `FenrirPhysicsScripting` library, so FenrirPhysics
 never links FenrirScripting), whose natives take its extension state, its contract
 `packages/FenrirPhysics/Managed/Fenrir.Physics`, and its tests through this package's harness in
 `packages/FenrirPhysics/Scripting/Tests`. FenrirInput's and FenrirWindow's are static (`Input::ScriptingExtension()`,
