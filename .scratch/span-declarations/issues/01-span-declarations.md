@@ -13,11 +13,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/NativeFunctionGenerator.cs`, `packages/*/Managed/*/Generated/*Native.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting/Generated/Native.cs`, `packages/FenrirPhysics/Managed/Fenrir.Physics/PhysicsWorld.cs`, `packages/FenrirAssets/Managed/Fenrir.Assets/Assets.cs`, `packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs`, `packages/FenrirWindow/Managed/Fenrir.Window/Window.cs`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for Iris.Bindings passes with the new cases; `fenrir-generate-bindings` is a no-op after the commit.
-- [ ] No `fixed (` remains in the four facades.
-- [ ] msvc-x64-debug builds and `ctest -LE gl` passes.
+- [x] `dotnet test` for Iris.Bindings passes with the new cases; `fenrir-generate-bindings` is a no-op after the commit.
+- [x] No `fixed (` remains in the four facades.
+- [x] msvc-x64-debug builds and `ctest -LE gl` passes.
 
 ## Comments
 

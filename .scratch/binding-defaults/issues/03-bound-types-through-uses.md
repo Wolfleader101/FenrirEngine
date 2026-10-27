@@ -14,11 +14,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/`, `packages/FenrirScripting/api/`, `packages/*/Scripting/api/*.binding.toml`, `docs/adr/0044-natives-pass-enums-text-and-wrappers-by-value-and-bindings-use-other-bindings-mirrors.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for Iris.Bindings passes with the new cases.
-- [ ] `fenrir-generate-bindings` is a no-op after the commit (CI's api-descriptions check).
-- [ ] `grep -l "Fenrir::Math::Vec3\|Fenrir::EntityValue" packages/*/Scripting/api/*.binding.toml packages/FenrirScripting/api/*.binding.toml` lists only `FenrirMath.binding.toml` and the defaults file.
+- [x] `dotnet test` for Iris.Bindings passes with the new cases.
+- [x] `fenrir-generate-bindings` is a no-op after the commit (CI's api-descriptions check).
+- [x] `grep -l "Fenrir::Math::Vec3\|Fenrir::EntityValue" packages/*/Scripting/api/*.binding.toml packages/FenrirScripting/api/*.binding.toml` lists only `FenrirMath.binding.toml` and the defaults file.
 
 ## Comments
 

@@ -13,11 +13,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/`, `packages/FenrirScripting/api/FenrirMath.binding.toml`, `packages/FenrirAssets/Scripting/api/FenrirAssets.binding.toml`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for Iris.Bindings passes with the new cases.
-- [ ] `fenrir-generate-bindings` is a no-op after the commit (CI's api-descriptions check).
-- [ ] No `*.binding.toml` carries a "None of these is used" comment.
+- [x] `dotnet test` for Iris.Bindings passes with the new cases.
+- [x] `fenrir-generate-bindings` is a no-op after the commit (CI's api-descriptions check).
+- [x] No `*.binding.toml` carries a "None of these is used" comment.
 
 ## Comments
 

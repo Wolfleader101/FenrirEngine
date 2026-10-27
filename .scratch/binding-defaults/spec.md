@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (#156, #158, #160)
 
 # Binding defaults: a package binding states only what varies
 

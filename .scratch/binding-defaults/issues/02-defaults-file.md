@@ -15,11 +15,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/`, `packages/Iris/docs/natives-description.md`, `tools/describe-api/src/Natives.cs`, `tools/describe-api/tests/`, `packages/FenrirScripting/api/`, `packages/*/Scripting/api/*.binding.toml`, `docs/adr/0042-packages-share-plain-data-through-a-generated-api-description.md`
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `dotnet test` for Iris.Bindings and describe-api pass with the new cases.
-- [ ] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit (CI's api-descriptions check).
-- [ ] No `*.binding.toml` under `packages/` states `component-attribute`, `make-component`, `extension`, `context`, `attribute`, `make`, `zero-outputs`, `[tests] component` or `"Fenrir.Scripting"` in `usings`.
+- [x] `dotnet test` for Iris.Bindings and describe-api pass with the new cases.
+- [x] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit (CI's api-descriptions check).
+- [x] No `*.binding.toml` under `packages/` states `component-attribute`, `make-component`, `extension`, `context`, `attribute`, `make`, `zero-outputs`, `[tests] component` or `"Fenrir.Scripting"` in `usings`.
 
 ## Comments
 

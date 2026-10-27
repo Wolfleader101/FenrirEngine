@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: built (#161)
 
 # Span declarations: a generated native takes a span where C++ takes a pointer and a count
 
