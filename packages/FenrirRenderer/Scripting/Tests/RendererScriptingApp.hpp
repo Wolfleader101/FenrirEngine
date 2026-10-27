@@ -1,27 +1,19 @@
 #pragma once
 
-// The renderer scripting tests' harness (spec seam 7): an App with assets installed (its asset root FenrirRenderer's
-// test fixtures) and the renderer on the null backend, or no renderer for the no-op rules, stepped one frame at a time,
-// with scripting running the renderer fixture script assembly, which uses the Fenrir.Renderer contract. C++ calls the
-// fixture's static methods through Iris, as the system runner calls scripts, and reads what C# did through the ECS,
-// RendererProbe and the renderer's public interface.
+// The renderer scripting tests' part of FenrirScripting's ExtensionTestApp (spec seam 7): the fixture CTest names in
+// FENRIR_TEST_RENDERER_FIXTURE, assets installed with its asset root FenrirRenderer's test fixtures, the renderer on
+// the null backend, and the input, assets and renderer extensions. C++ calls the fixture's static methods through Iris
+// and reads what C# did through the ECS, RendererProbe and the renderer's public interface.
 
-#include "HeadlessApp.hpp"
-#include "ScriptingProbe.hpp"
-
-#include <catch2/catch_test_macros.hpp>
+#include "ExtensionTestApp.hpp"
 
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <functional>
-#include <iostream>
-#include <optional>
 #include <span>
-#include <string>
-#include <type_traits>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -30,25 +22,11 @@
 #include "FenrirAssetsScripting/AssetsScripting.hpp"
 #include "FenrirInputScripting/InputScripting.hpp"
 #include "FenrirRendererScripting/RendererScripting.hpp"
-#include "FenrirScripting/Scripting.hpp"
 #include "RendererProbe.hpp"
 
 namespace RendererScriptingTests
 {
-    inline std::filesystem::path FromEnvironment(const char* name)
-    {
-        const char* value = std::getenv(name);
-        if (value == nullptr)
-        {
-            std::cerr << "Set " << name << " (CTest does): the renderer scripting tests need the fixture assembly.\n";
-            return {};
-        }
-        return std::filesystem::absolute(value);
-    }
-
-    inline const std::filesystem::path fixture = FromEnvironment("FENRIR_TEST_RENDERER_FIXTURE");
-
-    inline constexpr double oneTick = Fenrir::Testing::HeadlessApp::FrameDelta;
+    using Fenrir::Testing::noEntity;
 
     // The fixture's types the tests call.
     inline constexpr const char* SceneBuilderType = "RendererScriptFixture.SceneBuilder";
@@ -57,50 +35,6 @@ namespace RendererScriptingTests
     inline constexpr const char* ResourceCallsType = "RendererScriptFixture.ResourceCalls";
     inline constexpr const char* NewCallsType = "RendererScriptFixture.NewCalls";
 
-    // C#'s Entity.None.
-    inline constexpr std::uint32_t noEntity = 0xFFFFFFFFu;
-
-    // Calls a static method of a type in the loaded fixture through Iris.
-    template <typename Result, typename... Args>
-    Result Call(Fenrir::Scripting& scripting, const char* typeName, const char* method, Args... arguments)
-    {
-        auto* component = Fenrir::ScriptingProbe::Component(scripting);
-        {
-            INFO("There is no loaded script assembly");
-            REQUIRE(component != nullptr);
-        }
-        const auto type = component->FindType(typeName);
-        {
-            INFO(std::string("The fixture type was not found: ") + type.diagnostic);
-            REQUIRE(type.Succeeded());
-        }
-        const auto handle = type.value->FindMethod<Result(Args...)>(method);
-        {
-            INFO(std::string("The fixture method ") + method + " was not found: " + handle.diagnostic);
-            REQUIRE(handle.Succeeded());
-        }
-        const auto result = handle.value->Invoke(arguments...);
-        {
-            INFO(std::string("The fixture method ") + method + " failed: " + result.diagnostic);
-            REQUIRE(result.Succeeded());
-        }
-        if constexpr (!std::is_void_v<Result>)
-        {
-            return *result.value;
-        }
-    }
-
-    // Scripting running the fixture, with the extensions the renderer's contract builds on, then the renderer's.
-    inline Fenrir::ScriptingConfig FixtureConfig()
-    {
-        Fenrir::ScriptingConfig config;
-        config.scriptAssembly = fixture;
-        config.hotReload = false;
-        config.extensions = {Fenrir::Input::ScriptingExtension(), Fenrir::Assets::ScriptingExtension(),
-                             Fenrir::Renderer::ScriptingExtension()};
-        return config;
-    }
-
     inline Fenrir::RendererConfig NullBackend()
     {
         Fenrir::RendererConfig config;
@@ -108,58 +42,35 @@ namespace RendererScriptingTests
         return config;
     }
 
-    // An App with assets installed (its asset root FenrirRenderer's test fixtures), the renderer on the null backend
-    // unless `withRenderer` is false, and scripting running the fixture. Members end in reverse order: scripting, the
-    // renderer, the asset store's owner, then the app.
-    struct RendererScriptingApp
+    // Assets with its asset root FenrirRenderer's test fixtures, then the renderer on the null backend over it.
+    struct RendererPackages
     {
-        explicit RendererScriptingApp(bool withRenderer = true)
-            : assets(Fenrir::Assets::Install(headless.Get(), {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)})),
-              renderer(withRenderer
-                           ? std::optional<Fenrir::Renderer>(Fenrir::Renderer::Install(headless.Get(), NullBackend()))
-                           : std::nullopt),
-              scripting(Fenrir::Scripting::Install(headless.Get(), FixtureConfig()))
+        explicit RendererPackages(Fenrir::App& app)
+            : assets(Fenrir::Assets::Install(app, {std::filesystem::absolute(FENRIR_RENDERER_FIXTURES)})),
+              renderer(Fenrir::Renderer::Install(app, NullBackend()))
         {
-            INFO("The fixture did not load with the input, assets and renderer extensions");
-            REQUIRE(scripting.HasScripts());
-            REQUIRE((renderer.has_value() && renderer->IsValid()) == withRenderer);
         }
 
-        Fenrir::Testing::HeadlessApp headless;
         Fenrir::Assets assets;
-        std::optional<Fenrir::Renderer> renderer;
-        Fenrir::Scripting scripting;
+        Fenrir::Renderer renderer;
+    };
 
-        Fenrir::App& Get()
+    // An App with assets and the renderer installed and scripting running the fixture with the extensions the
+    // renderer's contract builds on, then the renderer's.
+    struct RendererScriptingApp : Fenrir::Testing::ExtensionTestApp<RendererPackages>
+    {
+        RendererScriptingApp()
+            : ExtensionTestApp(Fenrir::Testing::FixtureFromEnvironment("FENRIR_TEST_RENDERER_FIXTURE"),
+                               {Fenrir::Input::ScriptingExtension(), Fenrir::Assets::ScriptingExtension(),
+                                Fenrir::Renderer::ScriptingExtension()})
         {
-            return headless.Get();
+            INFO("The renderer did not install on the null backend");
+            REQUIRE(renderer.IsValid());
         }
 
         Fenrir::AssetStore& Store()
         {
             return assets.Store();
-        }
-
-        Fenrir::EntityList& Entities()
-        {
-            return headless.Get().GetActiveScene().GetEntityList();
-        }
-
-        void Frame()
-        {
-            headless.Get().RunFrame(oneTick);
-        }
-
-        // Plays back what the fixture's calls recorded, as the system runner does after a system.
-        void ApplyChanges()
-        {
-            (void)Fenrir::ScriptingProbe::ApplyChanges(scripting);
-        }
-
-        template <typename Result, typename... Args>
-        Result Call(const char* typeName, const char* method, Args... arguments)
-        {
-            return RendererScriptingTests::Call<Result>(scripting, typeName, method, arguments...);
         }
 
         // The float `index` of the value the last RendererCalls call kept.
@@ -170,12 +81,12 @@ namespace RendererScriptingTests
 
         [[nodiscard]] const std::vector<Fenrir::Graphics::CommandList>& Submitted() const
         {
-            return Fenrir::RendererProbe::Submitted(*renderer);
+            return Fenrir::RendererProbe::Submitted(renderer);
         }
 
         [[nodiscard]] Fenrir::Graphics::GraphicsDevice& Device() const
         {
-            return Fenrir::RendererProbe::Device(*renderer);
+            return Fenrir::RendererProbe::Device(renderer);
         }
     };
 
@@ -251,23 +162,4 @@ namespace RendererScriptingTests
         }
         return {};
     }
-
-    // How many messages of `level` the app logged that contain `text`.
-    inline std::size_t LoggedWith(const Fenrir::Testing::HeadlessApp& headless, Fenrir::Testing::LogLevel level,
-                                  const std::string& text)
-    {
-        std::size_t count = 0;
-        for (const Fenrir::Testing::LoggedMessage& message : headless.Logger().Messages())
-        {
-            count += message.level == level && message.text.find(text) != std::string::npos ? 1 : 0;
-        }
-        return count;
-    }
-
-    // A release build warns about nothing; a debug build once per native call site.
-#ifdef NDEBUG
-    inline constexpr std::size_t warningsPerCallSite = 0;
-#else
-    inline constexpr std::size_t warningsPerCallSite = 1;
-#endif
 } // namespace RendererScriptingTests
