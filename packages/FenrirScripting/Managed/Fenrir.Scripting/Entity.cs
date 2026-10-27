@@ -137,16 +137,15 @@ public readonly struct Entity : IEquatable<Entity>
     internal static int IdOf<T>() where T : unmanaged, IReadOnlyComponent
     {
         // A resource meets the component constraints only so that it shares Ref<T>; it never belongs to an entity.
-        if (ComponentIds<T>.IsResource)
+        if (ResourceCheck<T>.IsResource)
             throw new InvalidOperationException($"{typeof(T).Name} is a resource, not a component: reach it through Resources.");
-        int id = ComponentIds<T>.Id;
-        if (id == (int)RegistryError.WrongType)
-            throw new InvalidOperationException($"'{ComponentIds<T>.NativeName}' is registered for a different C# type than {typeof(T).FullName}; a native component is reached only through the type the host validated.");
-        if (id == (int)RegistryError.NotRegistered)
-            throw new InvalidOperationException(ComponentIds<T>.NativeName != null
-                ? $"The engine has no component registered as '{ComponentIds<T>.NativeName}' (for {typeof(T).Name})."
-                : $"The engine does not know {typeof(T).Name}: a component a script defines is registered when its assembly loads, and only if the script project uses the Fenrir scripting SDK.");
-        return id;
+        return RegistryIds<T, ComponentKind>.Require();
+    }
+
+    // Whether a type is a native resource (an IReadOnlyResource), which is never a component.
+    private static class ResourceCheck<T> where T : unmanaged, IReadOnlyComponent
+    {
+        internal static bool IsResource { get; } = typeof(IReadOnlyResource).IsAssignableFrom(typeof(T));
     }
 
     private unsafe void* PointerTo<T>() where T : unmanaged, IReadOnlyComponent

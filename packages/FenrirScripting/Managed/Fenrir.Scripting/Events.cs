@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.InteropServices;
 
 namespace Fenrir.Scripting;
@@ -22,41 +21,6 @@ public sealed class NativeEventAttribute : Attribute
     public NativeEventAttribute(string name) => Name = name;
 
     public string Name { get; }
-}
-
-// The registry id of an event type, looked up by name and remembered while the registry it came from is current.
-internal static unsafe class EventIds<T> where T : unmanaged, IEvent
-{
-    private static uint generation;
-    private static bool resolved;
-    private static int id;
-
-    internal static string? NativeName { get; } = typeof(T).GetCustomAttribute<NativeEventAttribute>()?.Name;
-
-    internal static string Name { get; } = NativeName ?? typeof(T).FullName ?? typeof(T).Name;
-
-    internal static int Id
-    {
-        get
-        {
-            uint current = Native.RegistryGeneration();
-            if (!resolved || generation != current)
-            {
-                id = Resolve();
-                generation = current;
-                resolved = true;
-            }
-            if (id == (int)RegistryError.WrongType)
-                throw new InvalidOperationException($"'{Name}' is registered for a different C# type than {typeof(T).FullName}; a native event is reached only through the type the host validated.");
-            if (id < 0)
-                throw new InvalidOperationException(NativeName != null
-                    ? $"The engine has no event registered as '{NativeName}' (for {typeof(T).Name})."
-                    : $"The engine does not know {typeof(T).Name}: an event a script defines is registered when its assembly loads, and only if the script project uses the Fenrir scripting SDK.");
-            return id;
-        }
-    }
-
-    private static int Resolve() => Native.EventIdOf(Name, typeof(T).FullName ?? typeof(T).Name);
 }
 
 /// <summary>
@@ -95,7 +59,7 @@ public sealed unsafe class EventReader<T> where T : unmanaged, IEvent
     {
         // older data, older count, newer data, newer count, missed
         nuint* view = stackalloc nuint[5];
-        int id = EventIds<T>.Id;
+        int id = RegistryIds<T, EventKind>.Require();
         bool read;
         fixed (ulong* cursor = &seen)
             read = Native.EventReadAfter(id, cursor, view);
@@ -181,7 +145,7 @@ public readonly partial struct SystemContext
         {
             ChangeError code;
             fixed (T* pointer = &value)
-                code = Native.EventSend(EventIds<T>.Id, pointer);
+                code = Native.EventSend(RegistryIds<T, EventKind>.Require(), pointer);
             if (code != ChangeError.None)
                 throw new InvalidOperationException(code == ChangeError.Unknown
                     ? $"Cannot send {typeof(T).Name}: the engine has no queue for it."
