@@ -12,7 +12,7 @@
 
 **Touches:** `packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs`, `packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs`, `packages/FenrirDebugDraw/Scripting/api/FenrirDebugDraw.binding.toml`, `docs/adr/0043-native-resources-and-facades-move-onto-the-generated-api-pipeline.md`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -n "NativeShapeOptions(\|NativeTextOptions(" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` finds nothing; `grep -c "= 1.0f\|= 24\|= 16.0f" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` prints 0.
 - [x] `grep -c "out string group" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs` prints 0; every shape and text method is one expression body.
