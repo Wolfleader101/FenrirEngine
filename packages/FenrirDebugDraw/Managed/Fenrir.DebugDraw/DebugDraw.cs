@@ -6,7 +6,7 @@ namespace Fenrir.DebugDraw;
 // The facade over the generated DebugDrawNative (Generated/, from Scripting/src/DebugDrawScripting.cpp). Its
 // pass-throughs (the group calls and Clear) are generated beside it from the natives' @facade marks
 // (Generated/DebugDraw.cs); this part holds what a description cannot say: the class doc, Forever, and the shape and
-// text calls, whose options convert to the natives' internal structs.
+// text calls, whose public options hold the natives' internal structs and the group beside them (Options.cs).
 
 /// <summary>
 /// Debug shapes and text from C#, drawn into the active scene's debug drawing: FenrirDebugDraw's <c>DebugDraw</c> scene
@@ -33,214 +33,133 @@ public static partial class DebugDraw
     // Wire shapes.
 
     /// <summary>A line from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static void Line(Vector3 from, Vector3 to, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Line(in from, in to, in colour, in native, group);
-    }
+    public static void Line(Vector3 from, Vector3 to, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Line(in from, in to, in colour, Native(options), Group(options));
 
     /// <summary>A line from <paramref name="origin"/> along <paramref name="direction"/>, as long as it is.</summary>
-    public static void Ray(Vector3 origin, Vector3 direction, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Ray(in origin, in direction, in colour, in native, group);
-    }
+    public static void Ray(Vector3 origin, Vector3 direction, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Ray(in origin, in direction, in colour, Native(options), Group(options));
 
     /// <summary>A line from <paramref name="from"/> to <paramref name="to"/> with a head <paramref name="headLength"/> long at <paramref name="to"/>.</summary>
-    public static void Arrow(Vector3 from, Vector3 to, float headLength, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Arrow(in from, in to, headLength, in colour, in native, group);
-    }
+    public static void Arrow(Vector3 from, Vector3 to, float headLength, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Arrow(in from, in to, headLength, in colour, Native(options), Group(options));
 
     /// <summary>Lines joining <paramref name="points"/> in order, and the last back to the first when <paramref name="closed"/>.</summary>
-    public static void Polyline(ReadOnlySpan<Vector3> points, bool closed, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Polyline(points, closed, in colour, in native, group);
-    }
+    public static void Polyline(ReadOnlySpan<Vector3> points, bool closed, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Polyline(points, closed, in colour, Native(options), Group(options));
 
     /// <summary>A dot at <paramref name="position"/>, <paramref name="pixelSize"/> pixels across whatever its distance.</summary>
-    public static void Point(Vector3 position, float pixelSize, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Point(in position, pixelSize, in colour, in native, group);
-    }
+    public static void Point(Vector3 position, float pixelSize, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Point(in position, pixelSize, in colour, Native(options), Group(options));
 
     /// <summary>The twelve edges of an axis-aligned box.</summary>
-    public static void Box(Bounds box, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Box(in box, in colour, in native, group);
-    }
+    public static void Box(Bounds box, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Box(in box, in colour, Native(options), Group(options));
 
     /// <summary>The twelve edges of a box <paramref name="halfExtents"/> from <paramref name="centre"/> along its axes, turned by <paramref name="rotation"/>.</summary>
-    public static void Box(Vector3 centre, Vector3 halfExtents, Quaternion rotation, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.OrientedBox(in centre, in halfExtents, in rotation, in colour, in native, group);
-    }
+    public static void Box(Vector3 centre, Vector3 halfExtents, Quaternion rotation, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.OrientedBox(in centre, in halfExtents, in rotation, in colour, Native(options), Group(options));
 
     /// <summary>Three circles of a sphere, square to the world's X, Y and Z axes.</summary>
-    public static void Sphere(Vector3 centre, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Sphere(in centre, radius, in colour, in native, group);
-    }
+    public static void Sphere(Vector3 centre, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Sphere(in centre, radius, in colour, Native(options), Group(options));
 
     /// <summary>A capsule round the segment from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static void Capsule(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Capsule(in from, in to, radius, in colour, in native, group);
-    }
+    public static void Capsule(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Capsule(in from, in to, radius, in colour, Native(options), Group(options));
 
     /// <summary>A cylinder round the segment from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static void Cylinder(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Cylinder(in from, in to, radius, in colour, in native, group);
-    }
+    public static void Cylinder(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Cylinder(in from, in to, radius, in colour, Native(options), Group(options));
 
     /// <summary>A cone from <paramref name="apex"/> to a circular base round <paramref name="baseCentre"/>.</summary>
-    public static void Cone(Vector3 apex, Vector3 baseCentre, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Cone(in apex, in baseCentre, radius, in colour, in native, group);
-    }
+    public static void Cone(Vector3 apex, Vector3 baseCentre, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Cone(in apex, in baseCentre, radius, in colour, Native(options), Group(options));
 
     /// <summary>A circle round <paramref name="centre"/> in the plane square to <paramref name="normal"/>.</summary>
-    public static void Circle(Vector3 centre, Vector3 normal, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Circle(in centre, in normal, radius, in colour, in native, group);
-    }
+    public static void Circle(Vector3 centre, Vector3 normal, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Circle(in centre, in normal, radius, in colour, Native(options), Group(options));
 
     /// <summary>
     /// Part of a circle round <paramref name="centre"/>: from <c>centre + start</c>, turning <paramref name="angle"/> radians
     /// about <paramref name="normal"/> (counter-clockwise looking down it).
     /// </summary>
-    public static void Arc(Vector3 centre, Vector3 normal, Vector3 start, float angle, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Arc(in centre, in normal, in start, angle, in colour, in native, group);
-    }
+    public static void Arc(Vector3 centre, Vector3 normal, Vector3 start, float angle, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Arc(in centre, in normal, in start, angle, in colour, Native(options), Group(options));
 
     /// <summary>A square <paramref name="halfSize"/> from <paramref name="point"/> in the plane square to <paramref name="normal"/>, and its normal.</summary>
-    public static void Plane(Vector3 point, Vector3 normal, float halfSize, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Plane(in point, in normal, halfSize, in colour, in native, group);
-    }
+    public static void Plane(Vector3 point, Vector3 normal, float halfSize, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Plane(in point, in normal, halfSize, in colour, Native(options), Group(options));
 
     /// <summary>
     /// A grid of <paramref name="cells"/> by <paramref name="cells"/> squares, <paramref name="cellSize"/> across, centred on
     /// <paramref name="centre"/> in the plane of its local X and Z axes turned by <paramref name="rotation"/>.
     /// </summary>
-    public static void Grid(Vector3 centre, Quaternion rotation, int cells, float cellSize, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Grid(in centre, in rotation, cells, cellSize, in colour, in native, group);
-    }
+    public static void Grid(Vector3 centre, Quaternion rotation, int cells, float cellSize, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Grid(in centre, in rotation, cells, cellSize, in colour, Native(options), Group(options));
 
     /// <summary>The frame of <paramref name="transform"/>: its X, Y and Z axes, <paramref name="length"/> long, in red, green and blue.</summary>
-    public static void Axes(Matrix4x4 transform, float length, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Axes(in transform, length, in native, group);
-    }
+    public static void Axes(Matrix4x4 transform, float length, ShapeOptions? options = null) =>
+        DebugDrawNative.Axes(in transform, length, Native(options), Group(options));
 
     /// <summary>
     /// The twelve edges of the volume <paramref name="viewProjection"/> sees, between its near plane and depth
     /// <paramref name="farDepth"/> in reversed-Z [0, 1] depth (ADR-0026).
     /// </summary>
-    public static void Frustum(Matrix4x4 viewProjection, Colour colour, ShapeOptions? options = null, float farDepth = 0.0f)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Frustum(in viewProjection, in colour, in native, group, farDepth);
-    }
+    public static void Frustum(Matrix4x4 viewProjection, Colour colour, ShapeOptions? options = null, float farDepth = 0.0f) =>
+        DebugDrawNative.Frustum(in viewProjection, in colour, Native(options), Group(options), farDepth);
 
     // Solid shapes: triangles with the colour's alpha, depth tested without writing depth and not sorted.
 
     /// <summary>A solid axis-aligned box.</summary>
-    public static void SolidBox(Bounds box, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.SolidBox(in box, in colour, in native, group);
-    }
+    public static void SolidBox(Bounds box, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.SolidBox(in box, in colour, Native(options), Group(options));
 
     /// <summary>A solid box <paramref name="halfExtents"/> from <paramref name="centre"/> along its axes, turned by <paramref name="rotation"/>.</summary>
-    public static void SolidBox(Vector3 centre, Vector3 halfExtents, Quaternion rotation, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.SolidOrientedBox(in centre, in halfExtents, in rotation, in colour, in native, group);
-    }
+    public static void SolidBox(Vector3 centre, Vector3 halfExtents, Quaternion rotation, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.SolidOrientedBox(in centre, in halfExtents, in rotation, in colour, Native(options),
+                                         Group(options));
 
     /// <summary>A solid sphere.</summary>
-    public static void SolidSphere(Vector3 centre, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.SolidSphere(in centre, radius, in colour, in native, group);
-    }
+    public static void SolidSphere(Vector3 centre, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.SolidSphere(in centre, radius, in colour, Native(options), Group(options));
 
     /// <summary>A solid capsule round the segment from <paramref name="from"/> to <paramref name="to"/>.</summary>
-    public static void SolidCapsule(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.SolidCapsule(in from, in to, radius, in colour, in native, group);
-    }
+    public static void SolidCapsule(Vector3 from, Vector3 to, float radius, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.SolidCapsule(in from, in to, radius, in colour, Native(options), Group(options));
 
     /// <summary>The caller's triangles: every three of <paramref name="vertices"/> are one. A remainder of one or two is ignored.</summary>
-    public static void Triangles(ReadOnlySpan<Vector3> vertices, Colour colour, ShapeOptions? options = null)
-    {
-        NativeShapeOptions native = Shape(options, out string group);
-        DebugDrawNative.Triangles(vertices, in colour, in native, group);
-    }
+    public static void Triangles(ReadOnlySpan<Vector3> vertices, Colour colour, ShapeOptions? options = null) =>
+        DebugDrawNative.Triangles(vertices, in colour, Native(options), Group(options));
 
     // Text.
 
     /// <summary>Text at a pixel position in each window showing the scene, from its top-left.</summary>
-    public static void ScreenText(Vector2 position, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null)
-    {
-        NativeTextOptions native = Text(options, out string group);
-        DebugDrawNative.ScreenText(in position, text, in colour, in native, group);
-    }
+    public static void ScreenText(Vector2 position, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null) =>
+        DebugDrawNative.ScreenText(in position, text, in colour, Native(options), Group(options));
 
     /// <summary>An on-screen message: stacked from the window's top-left, newest first.</summary>
-    public static void Message(ReadOnlySpan<char> text, Colour colour, TextOptions? options = null)
-    {
-        NativeTextOptions native = Text(options, out string group);
-        DebugDrawNative.Message(text, in colour, in native, group);
-    }
+    public static void Message(ReadOnlySpan<char> text, Colour colour, TextOptions? options = null) =>
+        DebugDrawNative.Message(text, in colour, Native(options), Group(options));
 
     /// <summary>An on-screen message under <paramref name="key"/>: it replaces the message under the same key, in its place.</summary>
-    public static void Message(long key, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null)
-    {
-        NativeTextOptions native = Text(options, out string group);
-        DebugDrawNative.KeyedMessage(key, text, in colour, in native, group);
-    }
+    public static void Message(long key, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null) =>
+        DebugDrawNative.KeyedMessage(key, text, in colour, Native(options), Group(options));
 
     /// <summary>Text at a point in the world, facing the screen at a constant pixel size, never hidden.</summary>
-    public static void WorldText(Vector3 position, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null)
-    {
-        NativeTextOptions native = Text(options, out string group);
-        DebugDrawNative.WorldText(in position, text, in colour, in native, group);
-    }
+    public static void WorldText(Vector3 position, ReadOnlySpan<char> text, Colour colour, TextOptions? options = null) =>
+        DebugDrawNative.WorldText(in position, text, in colour, Native(options), Group(options));
 
     // Groups (ShowGroup, HideGroup, IsGroupShown and the two Clears, in the generated part): every group is shown until
     // hidden; a hidden group's items still record and expire.
 
-    private static NativeShapeOptions Shape(ShapeOptions? options, out string group)
-    {
-        ShapeOptions chosen = options ?? new ShapeOptions();
-        group = chosen.Group ?? "Default";
-        return new NativeShapeOptions(in chosen);
-    }
+    // The options as the natives take them, and the group beside them: a null options is a new one, a null group Default.
 
-    private static NativeTextOptions Text(TextOptions? options, out string group)
-    {
-        TextOptions chosen = options ?? new TextOptions();
-        group = chosen.Group ?? "Default";
-        return new NativeTextOptions(in chosen);
-    }
+    private static NativeShapeOptions Native(ShapeOptions? options) => options?.Native ?? new();
+
+    private static string Group(ShapeOptions? options) => options?.Group ?? "Default";
+
+    private static NativeTextOptions Native(TextOptions? options) => options?.Native ?? new();
+
+    private static string Group(TextOptions? options) => options?.Group ?? "Default";
 }
