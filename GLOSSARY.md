@@ -206,6 +206,10 @@ What a native function receives first (`CallContext`): the App the running Scrip
 What a native function checks a call against before acting (`NativeGuard`): its extension's warn-once record and the call context, giving the entity-alive rule, a requirement check and a warning, each naming the native and warning once per place and message. `in` and `out` pointers are not checked and outputs are not zeroed by it: the generated declaration and the registration settle both (ADR-0045).
 *Avoid:* checker, validator, precondition.
 
+**Native call harness**
+The test adapter at the registration seam (`NativeCallHarness`, in FenrirScripting's test support): given scripting extensions, it registers their native functions as `Scripting::Install` does and is the active Scripting while it lives, so a test calls a native by its registered name through the registration's own thunk, with no .NET, and reads what it returned, wrote and warned (`WarnedOnce`). What the registration settles (the context, the state, the zeroed outputs) is therefore under test, never re-spelled by the test.
+*Avoid:* mock scripting, fake runtime, test context.
+
 **Script**
 Informal: user C# code in general. Not the name of any type or concept.
 
