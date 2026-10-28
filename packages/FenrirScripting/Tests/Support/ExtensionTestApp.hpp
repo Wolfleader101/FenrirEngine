@@ -6,7 +6,8 @@
 // C# did with what the engine holds. Each package's <Package>ScriptingApp.hpp adds only its own part: the fixture CTest
 // names, the extensions, the packages to install and any helper only it has.
 //
-// Shared with package tests through `fenrir_scripting_tests_dir`, like HeadlessApp.hpp and ScriptingProbe.hpp.
+// Shared with package tests through the FenrirScriptingTestSupport library, like HeadlessApp.hpp and
+// ScriptingProbe.hpp.
 
 #include "HeadlessApp.hpp"
 #include "ScriptingProbe.hpp"

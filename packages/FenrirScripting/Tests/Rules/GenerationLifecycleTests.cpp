@@ -6,8 +6,8 @@
 // their calls.
 #include <catch2/catch_test_macros.hpp>
 
-#include "../HeadlessApp.hpp"
 #include "FakeComponentLoader.hpp"
+#include "HeadlessApp.hpp"
 
 #include "GenerationLifecycle.hpp"
 

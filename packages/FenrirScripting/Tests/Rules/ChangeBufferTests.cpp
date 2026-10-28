@@ -4,7 +4,7 @@
 // entity list and component registry.
 #include <catch2/catch_test_macros.hpp>
 
-#include "../HeadlessApp.hpp"
+#include "HeadlessApp.hpp"
 #include "RulesTypes.hpp"
 
 #include "ChangeBuffer.hpp"
