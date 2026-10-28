@@ -5,7 +5,6 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirPhysics/Components.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
@@ -31,24 +30,24 @@ namespace Fenrir
         }
 
         /**
-         * @brief Whether `entity` is alive with a body (a RigidBody, or a Collider standing for its body, a character's
-         * included); warns once if not: through the guard's entity-alive rule when it is not alive, and that it has no
-         * body when it is.
+         * @brief `entity` as the active scene's handle, if it is alive there with a body (a RigidBody, or a Collider
+         * standing for its body, a character's included); nothing, warning once, if not: through the guard's
+         * entity-alive rule when it is not alive, and that it has no body when it is.
          */
-        bool HasBody(const CallContext& context, EntityValue entity)
+        std::optional<Entity> BodyOf(const CallContext& context, const Entity& entity)
         {
             const NativeGuard guard(context, warnings);
             const std::optional<Entity> body = guard.Alive(entity);
             if (!body)
             {
-                return false;
+                return std::nullopt;
             }
             if (body->HasComponent<RigidBody>() || body->HasComponent<Collider>())
             {
-                return true;
+                return body;
             }
             guard.Warn("the entity has no body, so it does nothing");
-            return false;
+            return std::nullopt;
         }
 
         /** @brief What the natives have warned about, so that each place warns once. */

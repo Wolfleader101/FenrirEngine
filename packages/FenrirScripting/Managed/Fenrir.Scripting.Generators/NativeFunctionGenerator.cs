@@ -54,7 +54,7 @@ public sealed class NativeFunctionGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor StringResult = Error("FENRIR0025", "A native function cannot return a string",
         "Native function '{0}' returns a string, which cannot cross from C++: return a length and fill a buffer instead");
     private static readonly DiagnosticDescriptor Unsupported = Error("FENRIR0026", "A type cannot cross to a native function",
-        "Native function '{0}' uses '{1}' ({2}), which cannot cross: use a number, bool, char, pointer, enum, a wrapper (a struct of one such field or auto-property, as Entity is), a string parameter, or an in/ref/out unmanaged struct");
+        "Native function '{0}' uses '{1}' ({2}), which cannot cross: use a number, bool, char, pointer, enum, a wrapper (a struct of one such field or auto-property, as WindowId is), a string parameter, or an in/ref/out unmanaged struct");
 
     private static DiagnosticDescriptor Error(string id, string title, string message) =>
         new(id, title, message, "Fenrir.Scripting", DiagnosticSeverity.Error, isEnabledByDefault: true);

@@ -11,13 +11,13 @@ namespace Fenrir.Scripting;
 public readonly partial struct Relationship : IReadOnlyComponent
 {
     /// <summary>The entity's parent.</summary>
-    public readonly EntityLink Parent = new();
+    public readonly Entity Parent = new();
     /// <summary>The first of its children; the rest follow through each child's nextSibling.</summary>
-    public readonly EntityLink FirstChild = new();
+    public readonly Entity FirstChild = new();
     /// <summary>The next child of its parent.</summary>
-    public readonly EntityLink NextSibling = new();
+    public readonly Entity NextSibling = new();
     /// <summary>The previous child of its parent.</summary>
-    public readonly EntityLink PrevSibling = new();
+    public readonly Entity PrevSibling = new();
 
     public Relationship()
     {

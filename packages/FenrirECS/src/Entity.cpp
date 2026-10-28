@@ -34,6 +34,11 @@ namespace Fenrir
         return static_cast<uint32_t>(m_entityId);
     }
 
+    bool Entity::HasEntityList() const noexcept
+    {
+        return m_entityList != nullptr;
+    }
+
     bool Entity::IsValid() const
     {
         return m_entityId != entt::null && m_entityList != nullptr && m_entityList->m_registry.valid(m_entityId);

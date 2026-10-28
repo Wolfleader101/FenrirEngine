@@ -16,9 +16,9 @@ public readonly partial struct CharacterState
     /// <summary>
     /// The body entity of the ground (a rigid body or a character body), on ground only; empty otherwise.
     /// </summary>
-    public readonly EntityLink GroundBody = new();
+    public readonly Entity GroundBody = new();
     /// <summary>The collider entity of the ground touched, on ground only; empty otherwise.</summary>
-    public readonly EntityLink GroundCollider = new();
+    public readonly Entity GroundCollider = new();
     /// <summary>World space, where the character touches its ground, on ground only.</summary>
     public readonly Vector3 GroundPoint = new(0, 0, 0);
     /// <summary>

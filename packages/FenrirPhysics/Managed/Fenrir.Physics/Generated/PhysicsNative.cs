@@ -16,26 +16,26 @@ internal static unsafe partial class PhysicsNative
     /// <summary>Pushes the entity's body with `force` (newtons, world space) for the next step only.</summary>
     /// <returns>Whether the force was queued: false with no physics world or no body.</returns>
     [NativeFunction]
-    public static partial bool AddForce(Entity entity, in Vector3 force);
+    public static partial bool AddForce(in Entity entity, in Vector3 force);
 
     /// <summary>
     /// Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next step.
     /// </summary>
     /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
     [NativeFunction]
-    public static partial bool AddImpulse(Entity entity, in Vector3 impulse);
+    public static partial bool AddImpulse(in Entity entity, in Vector3 impulse);
 
     /// <summary>Twists the entity's body with `torque` (newton metres, world space) for the next step only.</summary>
     /// <returns>Whether the torque was queued: false with no physics world or no body.</returns>
     [NativeFunction]
-    public static partial bool AddTorque(Entity entity, in Vector3 torque);
+    public static partial bool AddTorque(in Entity entity, in Vector3 torque);
 
     /// <summary>
     /// Changes the angular velocity of the entity's body by `impulse` over its moment of inertia, at the next step.
     /// </summary>
     /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
     [NativeFunction]
-    public static partial bool AddAngularImpulse(Entity entity, in Vector3 impulse);
+    public static partial bool AddAngularImpulse(in Entity entity, in Vector3 impulse);
 
     /// <summary>The nearest body a ray hits (PhysicsWorld::Raycast).</summary>
     /// <param name="hit">Where it hit; the default when it did not.</param>
@@ -112,20 +112,20 @@ internal static unsafe partial class PhysicsNative
     /// <param name="contacts">Where to write at most `capacity` contacts.</param>
     /// <returns>How many it wrote.</returns>
     [NativeFunction]
-    public static partial int ContactsOf(Entity body, Span<Contact> contacts);
+    public static partial int ContactsOf(in Entity body, Span<Contact> contacts);
 
     /// <summary>
     /// Whether the body of `body` (a child collider's entity stands for its compound body) is asleep: false with no
     /// world or no body.
     /// </summary>
     [NativeFunction]
-    public static partial bool IsSleeping(Entity body);
+    public static partial bool IsSleeping(in Entity body);
 
     /// <summary>The world-space box around the body of `body` (PhysicsWorld::Bounds).</summary>
     /// <param name="bounds">The box; the default when there is none.</param>
     /// <returns>Whether the entity has a body; `bounds` is default when it does not.</returns>
     [NativeFunction]
-    public static partial bool Bounds(Entity body, out Bounds bounds);
+    public static partial bool Bounds(in Entity body, out Bounds bounds);
 
     /// <summary>The world's gravity.</summary>
     /// <param name="gravity">The gravity, in metres per second squared; zero with no world.</param>
@@ -161,11 +161,12 @@ internal static unsafe partial class PhysicsNative
     /// app to warn through); identity frames, warning once, if not. Needs no physics world.
     /// </summary>
     /// <param name="bodyB">
-    /// The empty value (uint.MaxValue in C#) is the world; any other names an entity of the active scene.
+    /// No entity (Entity.None in C#) is the world; any other names an entity of the active scene.
     /// </param>
     /// <param name="frames">The joint's frames; identity frames when a body is not alive.</param>
     [NativeFunction]
-    public static partial void FrameFromWorld(Entity bodyA, Entity bodyB, in JointFrame anchor, out JointFrames frames);
+    public static partial void FrameFromWorld(in Entity bodyA, in Entity bodyB, in JointFrame anchor,
+                                              out JointFrames frames);
 
     /// <summary>
     /// The world's reading of the joint on `joint` (PhysicsWorld::GetJointState). An inactive or unstepped joint reads
@@ -173,5 +174,5 @@ internal static unsafe partial class PhysicsNative
     /// </summary>
     /// <param name="state">The reading; the zeroed state (warning once) with no world or no Joint.</param>
     [NativeFunction]
-    public static partial void GetJointState(Entity joint, out JointState state);
+    public static partial void GetJointState(in Entity joint, out JointState state);
 }

@@ -10,11 +10,11 @@ namespace Fenrir.Physics;
 public readonly partial struct TriggerEnter : IEvent
 {
     /// <summary>The trigger's collider entity.</summary>
-    public readonly EntityLink Trigger = new();
+    public readonly Entity Trigger = new();
     /// <summary>The body entity (a rigid body or a character body) of the collider that entered.</summary>
-    public readonly EntityLink OtherBody = new();
+    public readonly Entity OtherBody = new();
     /// <summary>The collider entity that entered.</summary>
-    public readonly EntityLink OtherCollider = new();
+    public readonly Entity OtherCollider = new();
 
     public TriggerEnter()
     {

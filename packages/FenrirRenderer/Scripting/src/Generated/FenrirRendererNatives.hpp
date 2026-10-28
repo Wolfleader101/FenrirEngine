@@ -14,12 +14,12 @@
 
 namespace Fenrir::RendererNatives
 {
-    bool ScreenPointToRay(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue camera, const Fenrir::Math::Vec2* point, Fenrir::Math::Ray* ray);
-    bool WorldToScreenPoint(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue camera, const Fenrir::Math::Vec3* point, Fenrir::Math::Vec2* screenPoint);
-    Fenrir::EntityValue CameraAt(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::WindowId window, const Fenrir::Math::Vec2* point);
-    bool GetWorldBounds(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::EntityValue entity, Fenrir::Math::AABB* bounds);
+    bool ScreenPointToRay(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::Entity* camera, const Fenrir::Math::Vec2* point, Fenrir::Math::Ray* ray);
+    bool WorldToScreenPoint(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::Entity* camera, const Fenrir::Math::Vec3* point, Fenrir::Math::Vec2* screenPoint);
+    bool CameraAt(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::WindowId window, const Fenrir::Math::Vec2* point, Fenrir::Entity* camera);
+    bool GetWorldBounds(const Fenrir::CallContext&, Fenrir::RendererScripting&, const Fenrir::Entity* entity, Fenrir::Math::AABB* bounds);
     bool Stats(const Fenrir::CallContext&, Fenrir::RendererScripting&, Fenrir::RendererStats* stats);
-    Fenrir::EntityValue SpawnModel(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint64_t model, Fenrir::EntityValue parent);
+    bool SpawnModel(const Fenrir::CallContext&, Fenrir::RendererScripting&, std::uint64_t model, const Fenrir::Entity* parent, Fenrir::Entity* root);
 } // namespace Fenrir::RendererNatives
 
 namespace Fenrir::Generated
