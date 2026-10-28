@@ -109,12 +109,16 @@ namespace Fixture
         }
     } // namespace Natives
 
-    /** @brief Logs text: a native outside the others' namespace, noexcept, taking characters and their length. */
-    void Say(const Host::CallContext& context, const char* text, std::int32_t length) noexcept
+    /**
+     * @brief Logs text: a native outside the others' namespace, noexcept, taking characters and their length, and a
+     * char by value. Both chars are u8, whatever the target's signedness.
+     */
+    void Say(const Host::CallContext& context, const char* text, std::int32_t length, char terminator) noexcept
     {
         (void)context;
         (void)text;
         (void)length;
+        (void)terminator;
     }
 
     /**
