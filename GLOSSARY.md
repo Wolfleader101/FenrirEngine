@@ -199,6 +199,10 @@ A static C# class over a package's generated native functions, its generated par
 A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). An `Entity` is not one: it is a mirror of two fields, and crosses by pointer.
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses by pointer, as a bound type), strong typedef, newtype.
 
+**Crossing form**
+The form in which a native function's parameter or result crosses to C#, decided once by the binding from the natives description and the binding's configuration: a value, `in T`, `out T`, a pointer (`T*`, `void*`), a span, a read-only span, or text. The registration zeroes each `out` before the native runs; a span or text folds the C++ count or length after it. Iris.Bindings carries it as a typed record (`BoundParameter`, the `.scratch/bound-parameter` spec), and the description stays raw: a pointee's C# name, a wrapper and a `[natives] types` alias are the binding's facts, not the C++ header's.
+*Avoid:* parameter kind (the description's `kind` is the C++ type's), modifier (only `in` and `out` have one), marshalling.
+
 **Call context**
 What a native function receives first (`CallContext`): the App the running Scripting serves, through it the active scene's entities and the change buffer, and the name of the native function being called (its type-and-method part, `PhysicsNative.Raycast`), built for each call by the registration's thunk. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
 
