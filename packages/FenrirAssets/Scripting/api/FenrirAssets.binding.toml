@@ -13,6 +13,8 @@ defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../../Managed/Fenrir.Assets"
 generated = "../../Managed/Fenrir.Assets/Generated"
+# The kind-generic natives' handle (ScriptAssets.hpp): the facade's own, which AssetHandle<T> converts to and from.
+internal-structs = ["Fenrir::ScriptAssetHandle"]
 
 [cpp]
 # On the include path, for the bindings that use this one.
@@ -29,6 +31,10 @@ source = "../src/Generated/FenrirAssetsRegistration.cpp"
 function = "Fenrir::Generated::RegisterAssets"
 # Makes the extension from its state (ADR-0046): what the package's public function returns.
 maker = "Fenrir::Generated::MakeAssetsExtension"
+# Not registered: Iris checks a shared struct against a public C# struct only, and the kind-generic natives' handle is
+# internal (as FenrirDebugDraw's options are). Its layout is the description's on both sides (the C# mirror is generated
+# from it, and the mappings assert C++'s size), and the tests load, unload and validate through it from C#.
+by-hand = ["Fenrir::ScriptAssetHandle"]
 
 [tests]
 cpp = "../Tests/Generated/FenrirAssetsDefaultsTests.cpp"
@@ -39,7 +45,9 @@ setup = "AssetsScriptingTests::AssetsScriptingApp app;"
 tags = "[assets][scripting][bindings]"
 
 # Hand-written in the contract (Handles.cs) and mapped by hand (AssetMappings.hpp, included where they are bound):
-# default is the empty handle, all zero. The bindings that use this one (FenrirRenderer's) inherit them.
+# default is the empty handle, all zero. The bindings that use this one (FenrirRenderer's) inherit them. A native takes
+# one as `const AssetHandle<T>*` (C#'s `in AssetHandle<T>`) and gives one through an `AssetHandle<T>*` marked
+# `@param[out]`, by the pointer rule over these keys.
 [bound-types]
 "Fenrir::AssetHandle<Fenrir::Mesh>" = { type = "AssetHandle<Mesh>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
 "Fenrir::AssetHandle<Fenrir::Image>" = { type = "AssetHandle<Image>", include = "FenrirAssetsScripting/AssetMappings.hpp" }
@@ -50,10 +58,12 @@ tags = "[assets][scripting][bindings]"
 [names]
 "Fenrir::ScriptShaderParameter" = "ShaderParameter"
 "Fenrir::ScriptAssetOwner" = "AssetOwner"
+"Fenrir::ScriptAssetHandle" = "NativeAssetHandle"
 
 # The native functions behind Assets, Materials and Shaders: tools/describe-api's natives mode reads every function in
 # `sources` taking `context` first (with the extension's state second) into FenrirAssets.natives.json, and this binding
-# generates from it their C# declarations, the AssetsNative class the three facades call, and their registration.
+# generates from it their C# declarations, the AssetsNative class the three facades call, their registration, and from
+# their @facade marks the generated parts of Assets, Materials and Shaders.
 [natives]
 sources = ["../src/AssetsScripting.cpp"]
 class = "AssetsNative"

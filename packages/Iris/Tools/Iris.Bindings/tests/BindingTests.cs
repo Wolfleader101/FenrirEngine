@@ -807,6 +807,9 @@ public sealed class BindingTests
     [InlineData("BoundType", "Fixture.natives.json: Push: @facade Vector3 is the name of the C# type of the bound type Fixture::Vec3")]
     [InlineData("NativesClass", "Fixture.natives.json: Push: @facade FixtureNative is the name of the [natives] class")]
     [InlineData("Malformed", "Fixture.natives.json: Push: @facade 'Bodies' names a public method as Class.Method")]
+    [InlineData("ReturnsNotOut", "Fixture.natives.json: Nearest: @facade Hits.Nearest returns 'origin', which is not an out of its declaration")]
+    [InlineData("ReturnsBesideAnother", "Fixture.natives.json: Extremes: @facade Hits.Extremes returns one output, but the declaration has 2 outs")]
+    [InlineData("ReturnsLosesResult", "Fixture.natives.json: Nearest: @facade Hits.Nearest returns an output, but the declaration's result is int, which the method would lose")]
     public void AFacadeMarkTheBindingCannotHonourFailsNamingTheNativeAndTheMark(string problem, string diagnostic)
     {
         using var directory = new TemporaryDirectory();
@@ -862,6 +865,17 @@ public sealed class BindingTests
                 case "Malformed":
                     Native(root, "Push")["facade"] = "Bodies";
                     break;
+                case "ReturnsNotOut":
+                    Native(root, "Nearest")["facadeReturns"] = "origin";
+                    break;
+                case "ReturnsBesideAnother":
+                    Native(root, "Extremes")["facade"] = "Hits.Extremes";
+                    Native(root, "Extremes")["facadeReturns"] = "nearest";
+                    Native(root, "Extremes")["returns"] = JsonNode.Parse("""{ "type": "bool", "kind": "bool" }""");
+                    break;
+                case "ReturnsLosesResult":
+                    Native(root, "Nearest")["returns"] = JsonNode.Parse("""{ "type": "std::int32_t", "kind": "i32" }""");
+                    break;
             }
         });
 
@@ -869,6 +883,34 @@ public sealed class BindingTests
 
         Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
                     $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void AFacadeMarkThatReturnsAnOutputGeneratesAMethodGivingItBackAsItsValue()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var hits = Output(generated, "Hits.cs");
+        var natives = Output(generated, "FixtureNative.cs");
+        foreach (var (part, line) in new[]
+                 {
+                     // The method returns the output's type, takes the rest, declares the output in its call, drops the
+                     // bool and returns the output as the call left it: no conditional, no C#-side "none".
+                     (hits, "public static Hit Nearest(Vector3 origin)"),
+                     (hits, "    _ = FixtureNative.Nearest(in origin, out Hit hit);"),
+                     (hits, "    return hit;"),
+                     (hits, "/// <returns>Where it hit; the C++ default when the call did nothing.</returns>"),
+                     // The plain mark beside it keeps the declaration's shape, bool and out.
+                     (hits, "public static bool Find(Vector3 origin, float distance, out Hit hit) =>"),
+                     // The declaration itself is unchanged by the mark.
+                     (natives, "public static partial bool Nearest(in Vector3 origin, out Hit hit);"),
+                 })
+        {
+            Assert.True(part.Contains(line, StringComparison.Ordinal), $"The output should hold\n  {line}\nbut is:\n{part}");
+        }
+
+        Assert.False(hits.Contains("<param name=\"hit\">Where it hit.</param>", StringComparison.Ordinal),
+                     "The returned output is documented as the method's result, not as a parameter:\n" + hits);
     }
 
     [Fact]

@@ -9,14 +9,14 @@ namespace AssetsScriptFixture;
 // C++ and compare.
 public static class MaterialCalls
 {
-    public static ulong Create(ulong shader) => Bits.Of(Materials.Create(Bits.To<Shader>(shader)));
+    public static ulong Create(ulong shader) => TestHandle.Of(Materials.Create(TestHandle.To<Shader>(shader)));
 
-    public static ulong Clone(ulong material) => Bits.Of(Materials.Clone(Bits.To<Material>(material)));
+    public static ulong Clone(ulong material) => TestHandle.Of(Materials.Clone(TestHandle.To<Material>(material)));
 
     // The tests' edit sequence, on the fixture shader's parameters. Returns each call's result, "1" or "0", in order.
     public static string Edit(ulong materialBits, ulong imageBits)
     {
-        AssetHandle<Material> material = Bits.To<Material>(materialBits);
+        AssetHandle<Material> material = TestHandle.To<Material>(materialBits);
         var sampler = new SamplerDescription
         {
             WrapU = SamplerWrap.ClampToEdge,
@@ -30,7 +30,7 @@ public static class MaterialCalls
             Materials.SetColour(material, "tint", new Colour(0.5f, 0.25f, 1, 1)),
             Materials.SetVector2(material, "offset", new Vector2(4, 5)),
             Materials.SetVector3(material, "emissive", new Vector3(1, 2, 3)),
-            Materials.SetTexture(material, "baseColourTexture", Bits.To<Image>(imageBits), sampler),
+            Materials.SetTexture(material, "baseColourTexture", TestHandle.To<Image>(imageBits), sampler),
             Materials.SetFloat(material, "tint", 1), // the wrong type
             Materials.SetFloat(material, "missing", 1), // a name the shader lacks
             Materials.SetVector4(material, "tint", new Vector4(0.5f, 0.25f, 1, 0.75f)),
@@ -43,13 +43,13 @@ public static class MaterialCalls
         return string.Join(",", results.Select(result => result ? "1" : "0"));
     }
 
-    public static bool Reset(ulong material, string name) => Materials.Reset(Bits.To<Material>(material), name);
+    public static bool Reset(ulong material, string name) => Materials.Reset(TestHandle.To<Material>(material), name);
 
     // Every read of every name the tests ask about, as the tests write the same reads from C++: one line per name, its IsSet
     // then each type's effective value and override ("-" when there is none).
     public static string Describe(ulong materialBits, string names)
     {
-        AssetHandle<Material> material = Bits.To<Material>(materialBits);
+        AssetHandle<Material> material = TestHandle.To<Material>(materialBits);
         var text = new StringBuilder();
         foreach (string name in names.Split(','))
         {

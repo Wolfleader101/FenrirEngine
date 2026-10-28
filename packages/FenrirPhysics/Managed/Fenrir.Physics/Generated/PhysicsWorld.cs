@@ -53,4 +53,20 @@ public static partial class PhysicsWorld
     /// <param name="bounds">The box; the default when there is none.</param>
     /// <returns>Whether the entity has a body; `bounds` is default when it does not.</returns>
     public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(in body, out bounds);
+
+    /// <summary>
+    /// How the joint on `joint` sits and how hard it pulls, as of the last step (PhysicsWorld::GetJointState). Only
+    /// reads: nothing is written into its Joint. While a joint's bodies sleep, the force and torque keep the values
+    /// they had when they fell asleep; while it is disabled they are 0. The pose readings are always current. An
+    /// inactive or unstepped joint reads zeroed from the world itself, which already warns about an inactive one.
+    /// </summary>
+    /// <returns>
+    /// The reading; the zeroed state (warning once) with no world or no Joint; the C++ default when the call did
+    /// nothing.
+    /// </returns>
+    public static JointState GetJointState(Entity joint)
+    {
+        PhysicsNative.GetJointState(in joint, out JointState state);
+        return state;
+    }
 }

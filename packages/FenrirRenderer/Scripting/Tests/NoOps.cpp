@@ -16,9 +16,9 @@
 #include <optional>
 #include <string>
 
+#include "FenrirAssets/AssetHandle.hpp"
 #include "FenrirAssets/AssetStore.hpp"
 #include "FenrirAssets/Assets.hpp"
-#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
@@ -165,8 +165,8 @@ TEST_CASE("SpawnModel needs no renderer", "[renderer][scripting][noops]")
     const AssetHandle<Model> model = LoadModel(installed.Store());
 
     Entity root;
-    const bool spawned = RendererNatives::SpawnModel(harness.Context("RendererNative.SpawnModel"), renderer,
-                                                     AssetHandleBits(model), &parent, &root);
+    const bool spawned =
+        RendererNatives::SpawnModel(harness.Context("RendererNative.SpawnModel"), renderer, &model, &parent, &root);
     (void)harness.ApplyChanges();
     INFO("The model should spawn under the parent with no renderer installed");
     REQUIRE(spawned);
@@ -182,14 +182,14 @@ TEST_CASE("SpawnModel with no asset store spawns nothing and says so once, in As
     Testing::NativeCallHarness harness;
     RendererScripting renderer;
     const CallContext context = harness.Context("RendererNative.SpawnModel");
-    // The handle that would name the first model.
-    const std::uint64_t first = std::uint64_t{1} << 32u;
+    // The handle that would name the first model: slot 0, generation 1.
+    const AssetHandle<Model> first{0, 1};
 
     for (int call = 0; call < 2; ++call)
     {
         INFO("Call " << call << ": with no store there is no model to spawn");
         Entity root;
-        REQUIRE_FALSE(SpawnModelCall::Call(context, renderer, first, &noEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(context, renderer, &first, &noEntity, &root));
         REQUIRE(root == noEntity);
     }
     {
@@ -216,6 +216,7 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
     const AssetHandle<Model> unloaded = LoadModel(installed.Store());
     REQUIRE(installed.Store().Unload(unloaded));
     const AssetHandle<Model> model = LoadModel(installed.Store());
+    const AssetHandle<Model> empty;
     {
         INFO("Reloading the model should leave the unloaded handle stale");
         REQUIRE_FALSE(installed.Store().IsValid(unloaded));
@@ -233,9 +234,9 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
         Math::AABB box{};
         REQUIRE_FALSE(RendererNatives::GetWorldBounds(bounds, renderer, &deadEntity, &box));
         Entity root;
-        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, AssetHandleBits(unloaded), &noEntity, &root));
-        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, 0, &noEntity, &root));
-        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, AssetHandleBits(model), &deadEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, &unloaded, &noEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, &empty, &noEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, &model, &deadEntity, &root));
         REQUIRE(root == noEntity);
     }
     {

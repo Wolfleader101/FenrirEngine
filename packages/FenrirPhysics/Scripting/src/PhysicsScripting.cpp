@@ -460,9 +460,13 @@ namespace Fenrir
         }
 
         /**
-         * @brief The world's reading of the joint on `joint` (PhysicsWorld::GetJointState). An inactive or unstepped
-         * joint reads zeroed from the world itself, which already warns about an inactive one.
+         * @brief How the joint on `joint` sits and how hard it pulls, as of the last step
+         * (PhysicsWorld::GetJointState). Only reads: nothing is written into its Joint. While a joint's bodies sleep,
+         * the force and torque keep the values they had when they fell asleep; while it is disabled they are 0. The
+         * pose readings are always current. An inactive or unstepped joint reads zeroed from the world itself, which
+         * already warns about an inactive one.
          * @param[out] state The reading; the zeroed state (warning once) with no world or no Joint.
+         * @facade PhysicsWorld.GetJointState returns state
          */
         void GetJointState(const CallContext& context, PhysicsScripting& physics, const Entity* joint,
                            JointState* state)
