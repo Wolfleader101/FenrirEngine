@@ -5,7 +5,7 @@ namespace Fenrir.Window;
 // The behaviour of WindowSize. Its fields, the cursor enums and the events (WindowResizedEvent, WindowCloseRequestedEvent)
 // are generated from FenrirWindow's headers (Generated/), and so are WindowNative, the native functions Window calls, and
 // Window's pass-throughs (Generated/Window.cs, from the natives' @facade marks). This part of Window holds what a
-// description cannot say: the main window's id and the sizes returned from an out parameter.
+// description cannot say: the main window's id.
 public partial struct WindowSize : IEquatable<WindowSize>
 {
     public WindowSize(int width, int height)
@@ -48,18 +48,4 @@ public static partial class Window
 {
     /// <summary>The main window, whether or not it has been made yet.</summary>
     public static WindowId Main => new(1);
-
-    /// <summary><paramref name="window"/>'s size in logical units.</summary>
-    public static WindowSize Size(WindowId window)
-    {
-        WindowNative.Size(window, out WindowSize size);
-        return size;
-    }
-
-    /// <summary><paramref name="window"/>'s size in pixels.</summary>
-    public static WindowSize PixelSize(WindowId window)
-    {
-        WindowNative.PixelSize(window, out WindowSize size);
-        return size;
-    }
 }
