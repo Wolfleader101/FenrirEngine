@@ -45,6 +45,7 @@ namespace Fenrir
         /**
          * @brief `window`'s size in logical units.
          * @param[out] size The size; empty with no such window.
+         * @facade Window.Size returns size
          */
         void Size(const CallContext& context, WindowScripting& windows, WindowId window, WindowSize* size)
         {
@@ -57,6 +58,7 @@ namespace Fenrir
         /**
          * @brief `window`'s size in pixels.
          * @param[out] size The size; empty with no such window.
+         * @facade Window.PixelSize returns size
          */
         void PixelSize(const CallContext& context, WindowScripting& windows, WindowId window, WindowSize* size)
         {

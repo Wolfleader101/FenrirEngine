@@ -12,11 +12,11 @@
 
 **Touches:** `tools/describe-api/src/Natives.cs`, `tools/describe-api/tests/`, `tools/describe-api/SCHEMA.md`, `packages/Iris/docs/natives-description.md`, `packages/Iris/Tools/Iris.Bindings/src/Natives.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/Iris/Tools/Iris.Bindings/tests/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `dotnet test tools/describe-api/tests` and `dotnet test packages/Iris/Tools/Iris.Bindings/tests` pass with the new cases; `fenrir-describe-api` and `fenrir-generate-bindings` leave every engine binding unchanged.
-- [ ] The fixture's committed `Fixture.natives.json` carries `facadeReturns` on one native, and its generated facade has a method returning the out's type and no out parameter.
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `dotnet test tools/describe-api/tests` and `dotnet test packages/Iris/Tools/Iris.Bindings/tests` pass with the new cases; `fenrir-describe-api` and `fenrir-generate-bindings` leave every engine binding unchanged.
+- [x] The fixture's committed `Fixture.natives.json` carries `facadeReturns` on one native, and its generated facade has a method returning the out's type and no out parameter.
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 

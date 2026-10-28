@@ -31,6 +31,15 @@ internal static unsafe partial class FixtureNative
     [NativeFunction]
     public static partial bool Find(in Vector3 origin, float distance, out Hit hit);
 
+    /// <summary>
+    /// The nearest hit from `origin` as a value: `returns` names the single output the facade method gives back,
+    /// dropping the bool.
+    /// </summary>
+    /// <param name="hit">Where it hit.</param>
+    /// <returns>Whether it hit.</returns>
+    [NativeFunction]
+    public static partial bool Nearest(in Vector3 origin, out Hit hit);
+
     /// <summary>The nearest and farthest hits from `origin`: two outputs, each zeroed by the registration.</summary>
     /// <param name="nearest">The nearest hit; the default when there is none.</param>
     /// <param name="farthest">The farthest hit; the default when there is none.</param>

@@ -15,12 +15,12 @@
 
 **Touches:** `packages/FenrirAssets/Scripting/`, `packages/FenrirAssets/Managed/Fenrir.Assets/`, `packages/FenrirRenderer/Scripting/src/RendererScripting.cpp`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Scripting/Tests/NoOps.cpp`, `packages/FenrirRenderer/Managed/Fenrir.Renderer/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `AssetHandleBits.hpp` does not exist; `grep -rn "FromBits\|\.Bits\b\|AssetHandleBits" packages/FenrirAssets packages/FenrirRenderer` finds nothing outside `Tests/`; `grep -c "std::uint64_t" packages/FenrirAssets/Scripting/src/AssetsScripting.cpp` is 0.
-- [ ] `Assets.cs` holds six methods (three generic, three overloads); `Renderer.cs` holds one; both stages regenerate to a clean tree.
-- [ ] `FenrirAssetsScripting`, `FenrirAssetsScriptingRules`, `FenrirRendererScripting` and `FenrirRendererScriptingRules` pass under the msvc-x64-debug preset.
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `AssetHandleBits.hpp` does not exist; `grep -rn "FromBits\|\.Bits\b\|AssetHandleBits" packages/FenrirAssets packages/FenrirRenderer` finds nothing outside `Tests/`; `grep -c "std::uint64_t" packages/FenrirAssets/Scripting/src/AssetsScripting.cpp` is 0.
+- [x] `Assets.cs` holds six methods (three generic, three overloads); `Renderer.cs` holds one; both stages regenerate to a clean tree.
+- [x] `FenrirAssetsScripting`, `FenrirAssetsScriptingRules`, `FenrirRendererScripting` and `FenrirRendererScriptingRules` pass under the msvc-x64-debug preset.
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 

@@ -88,6 +88,8 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order enabled camera in the active scene whose viewport holds it.",
+      "facade": "Renderer.CameraAt",
+      "facadeReturns": "camera",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -179,7 +181,9 @@
       "namespace": "Fenrir::RendererNatives",
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
-      "doc": "Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity: recorded, so it takes effect when the system returns.",
+      "doc": "Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity: a root named after the file holding one entity per node, each mesh a MeshRenderer. The root is usable at once (alive, so it can be given components or parented in the same call); the tree is made, as every structural change is, when the system returns. It needs no renderer in the app.",
+      "facade": "Renderer.SpawnModel",
+      "facadeReturns": "root",
       "returns": {
         "type": "bool",
         "kind": "bool",
@@ -188,9 +192,12 @@
       "parameters": [
         {
           "name": "model",
-          "type": "std::uint64_t",
-          "kind": "u64",
-          "doc": "The model's handle, packed as Fenrir.Assets packs one (generation high, index low)."
+          "type": "const Fenrir::AssetHandle<Fenrir::Model>*",
+          "kind": "pointer",
+          "pointee": "Fenrir::AssetHandle<Fenrir::Model>",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The model's handle."
         },
         {
           "name": "parent",
@@ -199,7 +206,7 @@
           "pointee": "Fenrir::Entity",
           "pointeeKind": "struct",
           "const": true,
-          "doc": "The entity to spawn under; no entity (Entity.None in C#) for none."
+          "doc": "The entity to spawn under; no entity (Entity.None in C#) for none. A parent that is not alive spawns nothing."
         },
         {
           "name": "root",
@@ -208,7 +215,7 @@
           "pointee": "Fenrir::Entity",
           "pointeeKind": "struct",
           "output": true,
-          "doc": "The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was spawned."
+          "doc": "The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was spawned: an empty or stale model handle, no asset store, or a parent not alive."
         }
       ]
     }

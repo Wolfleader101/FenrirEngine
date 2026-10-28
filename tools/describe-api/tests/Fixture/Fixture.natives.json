@@ -68,6 +68,39 @@
       ]
     },
     {
+      "name": "Nearest",
+      "namespace": "Fixture::Natives",
+      "source": "Natives.cpp",
+      "state": "Host::State",
+      "doc": "The nearest hit from `origin` as a value: `returns` names the single output the facade method gives back, dropping the bool.",
+      "facade": "Hits.Nearest",
+      "facadeReturns": "hit",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it hit."
+      },
+      "parameters": [
+        {
+          "name": "origin",
+          "type": "const Fixture::Vec3*",
+          "kind": "pointer",
+          "pointee": "Fixture::Vec3",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "hit",
+          "type": "Fixture::Hit*",
+          "kind": "pointer",
+          "pointee": "Fixture::Hit",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "Where it hit."
+        }
+      ]
+    },
+    {
       "name": "Extremes",
       "namespace": "Fixture::Natives",
       "source": "Natives.cpp",

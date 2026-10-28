@@ -11,6 +11,7 @@ namespace Fixture::Natives
 {
     bool Push(const Host::CallContext&, Host::State&, const Fixture::EntityId* body, const Fixture::Vec3* force);
     bool Find(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, float distance, Fixture::Hit* hit);
+    bool Nearest(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, Fixture::Hit* hit);
     std::int32_t Extremes(const Host::CallContext&, Host::State&, const Fixture::Vec3* origin, Fixture::Hit* nearest, Fixture::Hit* farthest);
     std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);
 } // namespace Fixture::Natives

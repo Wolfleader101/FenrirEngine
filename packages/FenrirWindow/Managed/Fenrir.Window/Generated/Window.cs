@@ -14,6 +14,22 @@ public static partial class Window
     /// <summary>Whether `window` has been made.</summary>
     public static bool Exists(WindowId window) => WindowNative.Exists(window);
 
+    /// <summary>`window`'s size in logical units.</summary>
+    /// <returns>The size; empty with no such window; the C++ default when the call did nothing.</returns>
+    public static WindowSize Size(WindowId window)
+    {
+        WindowNative.Size(window, out WindowSize size);
+        return size;
+    }
+
+    /// <summary>`window`'s size in pixels.</summary>
+    /// <returns>The size; empty with no such window; the C++ default when the call did nothing.</returns>
+    public static WindowSize PixelSize(WindowId window)
+    {
+        WindowNative.PixelSize(window, out WindowSize size);
+        return size;
+    }
+
     /// <summary>`window`'s pixels per logical unit.</summary>
     public static float ContentScale(WindowId window) => WindowNative.ContentScale(window);
 

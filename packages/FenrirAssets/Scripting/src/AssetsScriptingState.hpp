@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <optional>
 #include <source_location>
 
@@ -41,14 +40,14 @@ namespace Fenrir
         }
 
         /**
-         * @brief As StoreAndOwnerFor, when `bits` also has to name a live asset of kind `T` in the store (Resolve).
+         * @brief As StoreAndOwnerFor, when `handle` also has to name a live asset of kind `T` in the store (Resolve).
          */
         template <typename T>
-        std::optional<StoreAndOwner> StoreAndOwnerFor(const NativeGuard& guard, std::uint64_t bits,
+        std::optional<StoreAndOwner> StoreAndOwnerFor(const NativeGuard& guard, const AssetHandle<T>& handle,
                                                       ScriptAssetOwner owner,
                                                       std::source_location where = std::source_location::current())
         {
-            return Placed(guard, Resolve<T>(guard, bits, where), owner, where);
+            return Placed(guard, Resolve<T>(guard, handle, where), owner, where);
         }
 
         /** @brief The owner C# names: the active scene or the app. Warns once if it names neither. */

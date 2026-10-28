@@ -1,5 +1,8 @@
 namespace Fenrir.Assets;
 
+// GetParameterCount and GetParameter are generated (Generated/Shaders.cs, from the natives' @facade marks in
+// Scripting/src/AssetsScripting.cpp). This part holds the class doc.
+
 /// <summary>
 /// A shader's material parameters from C#, read from its shader container alone, as FenrirAssets'
 /// <c>AssetStore::GetShaderParameters</c> reads them in C++: for an editor, or anything showing what a material inherits.
@@ -9,19 +12,6 @@ namespace Fenrir.Assets;
 /// zero. In a debug build of the engine a warning is logged once per scripting install for each place in the engine's native
 /// code that noticed.
 /// </remarks>
-public static class Shaders
+public static partial class Shaders
 {
-    /// <summary>How many material parameters <paramref name="shader"/> has.</summary>
-    public static int GetParameterCount(AssetHandle<Shader> shader) => AssetsNative.GetShaderParameterCount(shader.Bits);
-
-    /// <summary>
-    /// Reads parameter <paramref name="index"/> of <paramref name="shader"/>: its type and default into
-    /// <paramref name="parameter"/>, and its name into <paramref name="name"/>, as much as fits.
-    /// </summary>
-    /// <returns>
-    /// The name's whole length in chars, so a result larger than the span says how large a span would hold it; zero, with
-    /// <paramref name="parameter"/> zeroed, if there is no such parameter.
-    /// </returns>
-    public static int GetParameter(AssetHandle<Shader> shader, int index, out ShaderParameter parameter, Span<char> name) =>
-        AssetsNative.GetShaderParameter(shader.Bits, index, out parameter, name);
 }

@@ -203,7 +203,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
-| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. A mark naming a struct this binding mirrors gives no part: its method goes into the mirror's own file, static or on `this`. |
+| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is; a mark with `returns <out>` gives a method whose result is that output's type ("Facade parts" below). The hand-written part beside it is the rest of the facade. A mark naming a struct this binding mirrors gives no part: its method goes into the mirror's own file, static or on `this`. |
 | `[natives] header` | The **natives header**: `#pragma once`, the `[natives] includes` (the SDK's first, then the binding's: what the declarations name), each native's C++ declaration in its namespace, and the registration function's declaration (the maker's in its place, with `<memory>`, when `[registration]` names one). The registration includes it by file name, the natives' own source includes it so a definition that drifts from the committed description fails in that source's compile, and the extension's tests include it in place of declarations of their own. It is private to the library: the natives take the extension state. |
 | `[registration] source` | Also `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
@@ -231,13 +231,21 @@ whose types the methods name) and a `//` header, so the hand-written part alone 
 has the declaration's result, parameters and docs (`<summary>`, `<param>`, `<returns>`, the C++ doc verbatim) and an
 expression body calling the native, with one rule and no mark: a parameter the declaration takes `in T` the facade takes
 `T` and passes `in` (no public facade method takes `in`); `out`, spans, text and values are as declared. Two marks may
-give one class and method when their parameter types differ: C# overloads them. The hand-written class is `partial`
-and holds what a description cannot say: overloads that are not renames, generics, properties over outputs, constants,
-defaults, conversions and an `out` returned as a value. A mark is refused, naming the native and the mark, on a native
-whose declaration cannot be public (it takes a type in `internal-structs`, or a pointer: a `void*`, an `[in,out]` `T*`),
-when two marks give one class and method the same parameter types, and when the class is named as a mirror a binding
-it uses generates, as an enum or tagged union mirrored here, as a bound type's C# type, or as the `[natives] class`. A
-facade class no mark names any more is deleted as a mirror no longer described is.
+give one class and method when their parameter types differ: C# overloads them. One more word on the mark,
+`@facade Class.Method returns <out>`, names the one `out` the method gives back as its value instead: `bool
+Nearest(..., Hit* hit)` marked `@facade Hits.Nearest returns hit` gives `public static Hit Nearest(Vector3 origin)`, a
+block body that declares the out in its call, drops the native's `bool` and returns the out exactly as the call left it.
+The registration zeroed that out before the native ran and a native that fails returns without writing it, so a failed
+call returns the C++ default (an empty handle, a default entity), which the method's `<returns>` says; the generator
+knows no per-type "none" and writes no conditional. The word is an opt-in: a plain mark on the same shape keeps
+`bool Find(..., out Hit hit)`, for callers that want the bool. The hand-written class is `partial` and holds what a
+description cannot say: overloads that are not renames, generics, properties over outputs, constants, defaults,
+conversions and a throw on `false`. A mark is refused, naming the native and the mark, on a native whose declaration
+cannot be public (it takes a type in `internal-structs`, or a pointer: a `void*`, an `[in,out]` `T*`), when two marks
+give one class and method the same parameter types, when the class is named as a mirror a binding it uses generates, as
+an enum or tagged union mirrored here, as a bound type's C# type, or as the `[natives] class`, and when `returns` names
+anything but the declaration's one `out` or sits on a native whose result is neither `bool` nor nothing (the header
+reader refuses those shapes first). A facade class no mark names any more is deleted as a mirror no longer described is.
 
 **Facade methods on a mirror.** The class a mark names may be a struct this binding mirrors (`@facade Entity.Destroy`
 on a native of the built-in binding, whose `Entity` is the mirror of `Fenrir::Entity`). The method then goes into the
@@ -319,7 +327,8 @@ a native parameter or result it cannot map (above), a `[natives] types` alias no
 that is also a mirror's name, a `@facade` mark on a native whose declaration cannot be public (an `internal-structs`
 type or a pointer among its parameters or result), two marks giving one class and method the same parameter types, a
 facade class named as a used binding's mirror, an enum or tagged union mirrored here, a bound type's C# type or the
-`[natives] class`, a mark on a mirror naming one of its fields as the method, a
+`[natives] class`, a mark on a mirror naming one of its fields as the method, a `returns` on a mark that names anything but
+the declaration's one `out` or sits on a native whose result is neither `bool` nor nothing, a
 `facade` that is not `Class.Method`, a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
 `natives-class`), which the zeroing registration replaced, a `[registration] includes`, which moved to
 `[natives] includes` with the declarations it served, or a `[registration] maker` without `[natives]`, whose natives

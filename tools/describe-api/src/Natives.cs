@@ -134,12 +134,13 @@ internal sealed record NativeParameter(string Name, NativeType Type, bool Output
 /// One native function: a free function taking the call context first, and optionally its extension state.
 /// <c>NotRunning</c> is the C++ expression its <c>@notrunning</c> gives, the value a caller gets when the function
 /// cannot be called; <c>Facade</c> is the <c>Class.Method</c> its <c>@facade</c> gives, the public static class and
-/// method a binding names it as.
+/// method a binding names it as, and <c>FacadeReturns</c> the single output the mark's <c>returns</c> names, which that
+/// method gives as its value (null when the mark names none).
 /// </summary>
 internal sealed record NativeFunctionDescription(string Name, string Namespace, string Source, string? State, bool NoExcept,
                                                  string? Doc, NativeType Returns, string? ReturnsDoc,
                                                  IReadOnlyList<NativeParameter> Parameters, string? NotRunning,
-                                                 string? Facade);
+                                                 string? Facade, string? FacadeReturns);
 
 /// <summary>What the natives mode writes: a binding's native functions in source order.</summary>
 internal sealed record NativesDescription(string Binding, string Context, IReadOnlyList<NativeFunctionDescription> Functions);
@@ -361,19 +362,68 @@ internal sealed class NativesDescriber
             return null;
         }
 
-        var facade = doc.Facades.SingleOrDefault();
-        if (facade is not null && !FacadeMark.IsMatch(facade))
+        var mark = doc.Facades.SingleOrDefault();
+        string? facade = null;
+        string? facadeReturns = null;
+        if (mark is not null)
         {
-            Error(function, name, "@facade names a public method as Class.Method");
-            return null;
+            var match = FacadeMark.Match(mark);
+            if (!match.Success)
+            {
+                Error(function, name, "@facade names a public method as Class.Method, followed at most by 'returns <parameter>'");
+                return null;
+            }
+
+            facade = match.Groups["mark"].Value;
+            if (match.Groups["returns"].Success)
+            {
+                facadeReturns = match.Groups["returns"].Value;
+                if (!CheckFacadeReturns(function, name, facadeReturns, described, returns))
+                {
+                    return null;
+                }
+            }
         }
 
         return new NativeFunctionDescription(name, Namespace(function.Handle), where, state, noexcept, doc.Text, returns,
-                                             doc.Returns, described, doc.NotRunning, facade);
+                                             doc.Returns, described, doc.NotRunning, facade, facadeReturns);
     }
 
-    // A @facade mark: two C++-style identifiers joined by one dot, the public class and the method name it has there.
-    private static readonly Regex FacadeMark = new(@"^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$");
+    // A @facade mark: two C++-style identifiers joined by one dot, the public class and the method name it has there,
+    // followed at most by `returns` and the name of the single output the method gives as its value.
+    private static readonly Regex FacadeMark =
+        new(@"^(?<mark>[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)(?:\s+returns\s+(?<returns>[A-Za-z_][A-Za-z0-9_]*))?$");
+
+    // Whether `returns` can hold: it names one of the native's single outputs (a `@param[out]` pointer), the native has
+    // no other single output, and its result is nothing or a bool, which the facade method drops. Each failure is an
+    // error naming the function; the binding generates the value-returning method only from a record that passed.
+    private bool CheckFacadeReturns(FunctionDecl function, string name, string returns, IReadOnlyList<NativeParameter> parameters,
+                                    NativeType result)
+    {
+        var errorsBefore = m_errors.Count;
+        var named = parameters.FirstOrDefault(parameter => parameter.Name == returns);
+        if (named is null)
+        {
+            Error(function, name, $"@facade returns '{returns}', which names no parameter of the native");
+        }
+        else if (!named.Output)
+        {
+            Error(function, name, $"@facade returns '{returns}', which is not a single output (a pointer documented @param[out])");
+        }
+
+        if (parameters.Count(parameter => parameter.Output) > 1)
+        {
+            Error(function, name, "@facade returns one output, but the native has more than one: the method could return only one");
+        }
+
+        if (result.Kind is not ("void" or "bool"))
+        {
+            Error(function, name, $"@facade returns an output, but the native's result is {result.Spelling}, which the method would lose: " +
+                                  "only a bool result, or none, is dropped");
+        }
+
+        return m_errors.Count == errorsBefore;
+    }
 
     // --- Types ---
 
@@ -587,6 +637,11 @@ internal static class NativesWriter
                 if (function.Facade is not null)
                 {
                     json.WriteString("facade", function.Facade);
+                }
+
+                if (function.FacadeReturns is not null)
+                {
+                    json.WriteString("facadeReturns", function.FacadeReturns);
                 }
 
                 json.WriteStartObject("returns");

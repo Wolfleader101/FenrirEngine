@@ -81,10 +81,12 @@ public struct AssetHandle<T> : IEquatable<AssetHandle<T>> where T : class
 
     public override readonly string ToString() => $"AssetHandle<{typeof(T).Name}>({Index}, {Generation})";
 
-    // How a handle crosses to a native function: one number, the generation in the high half and the index in the low.
-    internal readonly ulong Bits => ((ulong)Generation << 32) | Index;
+    // How a handle crosses the three kind-generic natives (Load, Unload, IsValid), which take the kind beside it: as
+    // the kind-neutral NativeAssetHandle (the mirror of C++'s ScriptAssetHandle), laid out as this is. Every other
+    // native takes an AssetHandle<T> itself, by `in` or `out`.
+    internal readonly NativeAssetHandle ToNative() => new() { Index = Index, Generation = Generation };
 
-    internal static AssetHandle<T> FromBits(ulong bits) => new((uint)bits, (uint)(bits >> 32));
+    internal static AssetHandle<T> FromNative(NativeAssetHandle native) => new(native.Index, native.Generation);
 }
 
 // The kind each asset name crosses to a native function as: FenrirAssets' Detail::AssetKind, generated as AssetKind.
