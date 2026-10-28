@@ -225,6 +225,10 @@ static_assert(sizeof(Fixture::Hit) == 32 && alignof(Fixture::Hit) == 8,
               "Fixture::Hit is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
+static_assert(sizeof(Fixture::Pair<double>) == 16 && alignof(Fixture::Pair<double>) == 8,
+              "Fixture::Pair<double> is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
 static_assert(sizeof(Fixture::Size) == 8 && alignof(Fixture::Size) == 4,
               "Fixture::Size is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");

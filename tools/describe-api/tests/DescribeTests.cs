@@ -144,6 +144,18 @@ public sealed class DescribeTests
     }
 
     [Fact]
+    public void ACharIsU8ByPointerAndByValueWhateverTheHostsSignedness()
+    {
+        var selection = NativesSelection.Read(Path.Combine(FixtureDirectory(), "Fixture.binding.toml"));
+        var say = NativesDescriber.Describe(selection, []).Functions.Single(function => function.Name == "Say");
+        var text = say.Parameters.Single(parameter => parameter.Name == "text").Type;
+        var terminator = say.Parameters.Single(parameter => parameter.Name == "terminator").Type;
+
+        Assert.Equal(("const char*", "pointer", "char", "u8"), (text.Spelling, text.Kind, text.Pointee, text.PointeeKind));
+        Assert.Equal(("char", "u8"), (terminator.Spelling, terminator.Kind));
+    }
+
+    [Fact]
     public void TheCallContextComesFromTheDefaultsFileWhenTheBindingStatesNone()
     {
         using var directory = new TemporaryDirectory();

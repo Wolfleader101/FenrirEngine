@@ -571,29 +571,19 @@ internal sealed class Describer
     private FieldType Classify(Type declared, Decl at, string subject)
     {
         var type = declared.CanonicalType;
+        if (ScalarKind(type) is { } scalar)
+        {
+            return new FieldType(scalar);
+        }
+
         switch (type.Handle.kind)
         {
-            case CXTypeKind.CXType_Bool:
-                return new FieldType("bool");
-            case CXTypeKind.CXType_Char16:
-                return new FieldType("char16");
-            case CXTypeKind.CXType_Char32:
-                // A UTF-32 code point: C# has no 32-bit char, and its bytes are an unsigned integer's.
-                return new FieldType("u32");
-            case CXTypeKind.CXType_Float:
-                return new FieldType("f32");
-            case CXTypeKind.CXType_Double:
-                return new FieldType("f64");
             case CXTypeKind.CXType_Enum when IsHandle(type):
                 var enumDecl = (EnumDecl)type.AsTagDecl!.Definition!;
                 return new FieldType(IntegerKind(enumDecl.IntegerType.CanonicalType) ??
                                      throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records"));
             case CXTypeKind.CXType_Enum:
                 return new FieldType("enum", RegisterReferenced(type, subject));
-            case CXTypeKind.CXType_Char_S:
-            case CXTypeKind.CXType_Char_U:
-                // A char is a byte of text, unsigned on every target, so a description reads the same everywhere.
-                return new FieldType("u8");
             case CXTypeKind.CXType_Record:
                 return new FieldType("struct", RegisterReferenced(type, subject));
             case CXTypeKind.CXType_Pointer:
@@ -611,12 +601,28 @@ internal sealed class Describer
                 throw Error(at, subject, "a reference member: a shared type holds values, not references");
         }
 
-        if (IntegerKind(type) is { } integer)
-        {
-            return new FieldType(integer);
-        }
-
         throw Error(at, subject, $"its type '{declared.AsString}' is not a kind the description records");
+    }
+
+    /// <summary>
+    /// The kind of a scalar type, as a field and a native parameter alike record it: <c>bool</c>, <c>char16</c>,
+    /// <c>u32</c> for a <c>char32_t</c>, <c>f32</c>, <c>f64</c>, <c>u8</c> for a <c>char</c> of either signedness, or
+    /// an integer's kind. Null for anything else.
+    /// </summary>
+    internal static string? ScalarKind(Type type)
+    {
+        return type.Handle.kind switch
+        {
+            CXTypeKind.CXType_Bool => "bool",
+            CXTypeKind.CXType_Char16 => "char16",
+            // A UTF-32 code point: C# has no 32-bit char, and its bytes are an unsigned integer's.
+            CXTypeKind.CXType_Char32 => "u32",
+            CXTypeKind.CXType_Float => "f32",
+            CXTypeKind.CXType_Double => "f64",
+            // A char is a byte of text, unsigned on every target, so a description reads the same everywhere.
+            CXTypeKind.CXType_Char_S or CXTypeKind.CXType_Char_U => "u8",
+            _ => IntegerKind(type),
+        };
     }
 
     internal static string? IntegerKind(Type type)
