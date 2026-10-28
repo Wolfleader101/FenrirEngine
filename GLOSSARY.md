@@ -114,6 +114,10 @@ A value naming one kind of component, native or C#, that the ECS's runtime opera
 Logic that runs once per frame phase over the entities a query selects. Native systems are C++ functions, and C# systems are `ISystem` classes.
 *Avoid:* script, behaviour, manager.
 
+**System host**
+The one managed object the generator writes per script assembly, found by its name when a generation loads and called once per phase: it makes the script's systems and runs them in order. In C++ it is the seam of the same name (`SystemHost`), behind which `ScriptSystems` keeps the engine's rules: which phases run, on which thread, and what a failure means.
+*Avoid:* runner, scheduler.
+
 **Event**
 Plain data one system sends and others read. Each reader sees each event once, including events sent after it last ran, as long as it reads before its queue swaps twice; a queue swaps at the end of each frame that ran a tick, so reading once a frame is enough (ADR-0012). A new reader starts at the oldest event its queue still holds. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
 
