@@ -12,11 +12,11 @@
 
 **Touches:** `packages/FenrirScripting/Tests/ScriptingTests.cpp`, `packages/FenrirScripting/Tests/*Tests.cpp`, `packages/FenrirScripting/Tests/TestExtension.*`, `packages/FenrirScripting/Tests/FixtureCalls.hpp`, `packages/FenrirScripting/Tests/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `ScriptingTests.cpp` does not exist; no file under `packages/FenrirScripting/Tests/` is over 1000 lines (`wc -l`).
-- [ ] `FenrirScriptingTests --list-tests | wc -l` is 115 before and after; `ctest -R "^FenrirScripting$"` passes under the msvc-x64-debug preset, twice in a row.
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `ScriptingTests.cpp` does not exist; no file under `packages/FenrirScripting/Tests/` is over 1000 lines (`wc -l`).
+- [x] `FenrirScriptingTests --list-tests | wc -l` is 115 before and after; `ctest -R "^FenrirScripting$"` passes under the msvc-x64-debug preset, twice in a row.
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 
