@@ -12,7 +12,7 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/Natives.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs`, `packages/Iris/Tools/Iris.Bindings/src/CppWriter.cs`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -c "StartsWith\|LastIndexOf\|IndexOf(' ')\|EndsWith" packages/Iris/Tools/Iris.Bindings/src/Natives.cs` is 0 and `grep -c '== "void"' packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs` is 0.
 - [x] `dotnet test packages/Iris/Tools/Iris.Bindings/tests` passes 118 and `dotnet test tools/describe-api/tests` passes 38, both unchanged.
@@ -22,3 +22,5 @@
 ## Comments
 
 Filed from the bound-parameter grilling (spec decisions 1 to 3, 7 to 9). Branch `bound-parameter-01-typed-record`, cut from `dotnet-scripting` unless the 1+7 spec's ticket has landed on `CppWriter.cs` first, in which case it is cut from that branch.
+
+Resolved: PR #219 merged into the spec branch, and the spec #215 into `dotnet-scripting` (commit `7adc707c`).
