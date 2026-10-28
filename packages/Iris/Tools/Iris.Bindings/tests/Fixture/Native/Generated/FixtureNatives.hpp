@@ -25,6 +25,7 @@ namespace Fixture
     Fixture::Ticket Renew(const Host::CallContext&, Fixture::Ticket ticket);
     std::uint64_t Sum(const Host::CallContext&, const std::uint32_t* values, std::int32_t count, bool all, double scale);
     void Turn(const Host::CallContext&, const Fixture::Quat* rotation, std::int32_t turns);
+    void Damp(const Host::CallContext&, Fixture::EntityId body, const Fixture::Damper* damper, const Fixture::Angles* angles);
 } // namespace Fixture
 
 namespace Fixture::Bindings

@@ -338,6 +338,39 @@
           "kind": "i32"
         }
       ]
+    },
+    {
+      "name": "Damp",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "Damps `body` by `damper` toward `angles`: a struct and a bound type the Common binding describes (Fixture.binding.toml uses it) and Fixture.api.json does not.",
+      "returns": {
+        "type": "void",
+        "kind": "void"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fixture::EntityId",
+          "kind": "u32"
+        },
+        {
+          "name": "damper",
+          "type": "const Fixture::Damper*",
+          "kind": "pointer",
+          "pointee": "Fixture::Damper",
+          "pointeeKind": "struct",
+          "const": true
+        },
+        {
+          "name": "angles",
+          "type": "const Fixture::Angles*",
+          "kind": "pointer",
+          "pointee": "Fixture::Angles",
+          "pointeeKind": "struct",
+          "const": true
+        }
+      ]
     }
   ]
 }
