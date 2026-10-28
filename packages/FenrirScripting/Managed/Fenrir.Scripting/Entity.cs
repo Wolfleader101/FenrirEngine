@@ -1,8 +1,9 @@
 namespace Fenrir.Scripting;
 
 // The hand-written half of Entity: what a description cannot say about the mirror of C++ Fenrir::Entity. The generated
-// half (Generated/Entity.cs, from FenrirECS.api.json) holds its two fields, `value` and `owner`, and the constructor that
-// makes None.
+// half (Generated/Entity.cs, from FenrirECS.api.json) holds its two fields, `value` and `owner`, the constructor that
+// makes None, and the methods the natives in src/Bindings.cpp marked `@facade Entity.<Method>` give it (TryCreate,
+// TryGetWorldTransform, TrySetWorldTransform); this half wraps those that throw instead of returning false.
 
 /// <remarks>
 /// An entity, as the engine holds one: its full EnTT value (version bits included, so a stale handle to a destroyed
@@ -38,12 +39,8 @@ public readonly partial struct Entity : IEquatable<Entity>
     /// <see cref="Transform"/>.
     /// </summary>
     /// <exception cref="InvalidOperationException">There is no active scene.</exception>
-    public static unsafe Entity Create()
-    {
-        if (!Native.EntityCreate(out Entity entity))
-            throw new InvalidOperationException("There is no active scene to create an entity in.");
-        return entity;
-    }
+    public static Entity Create() =>
+        TryCreate(out Entity entity) ? entity : throw new InvalidOperationException("There is no active scene to create an entity in.");
 
     /// <summary>
     /// Destroys this entity, and with it all its components, when the system returns. Until then it is still alive and
@@ -104,24 +101,16 @@ public readonly partial struct Entity : IEquatable<Entity>
     /// rotation.
     /// </summary>
     /// <exception cref="InvalidOperationException">The entity is not alive, or has no <see cref="Transform"/>.</exception>
-    public unsafe Transform WorldTransform
-    {
-        get
-        {
-            if (!Native.EntityWorldTransform(in this, out Transform world))
-                throw NoTransform();
-            return world;
-        }
-    }
+    public Transform WorldTransform => TryGetWorldTransform(out Transform world) ? world : throw NoTransform();
 
     /// <summary>
     /// Sets this entity's <see cref="Transform"/>, relative to its parent, so that its <see cref="WorldTransform"/> is
     /// <paramref name="world"/>. It is component data, not a structural change, so it takes effect at once.
     /// </summary>
     /// <exception cref="InvalidOperationException">The entity is not alive, or has no <see cref="Transform"/>.</exception>
-    public unsafe void SetWorldTransform(Transform world)
+    public void SetWorldTransform(Transform world)
     {
-        if (!Native.EntitySetWorldTransform(in this, in world))
+        if (!TrySetWorldTransform(world))
             throw NoTransform();
     }
 

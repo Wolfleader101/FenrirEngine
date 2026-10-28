@@ -80,6 +80,7 @@ namespace Fenrir::ScriptingNatives
      * @brief The entity's world transform (FenrirECS GetWorldTransform), composed through its parents on each call.
      * @param[out] world The world transform; the default Transform when the entity is not alive or has none.
      * @return False when the entity is not alive or has no Transform.
+     * @facade Entity.TryGetWorldTransform
      */
     bool EntityWorldTransform(const CallContext& context, Detail::EngineContext&, const Entity* entity,
                               Transform* world)
@@ -103,6 +104,7 @@ namespace Fenrir::ScriptingNatives
      * @brief Sets the entity's Transform so its world transform is `world` (FenrirECS SetWorldTransform). Component
      * data only, so it takes effect at once.
      * @return False, touching nothing, when the entity is not alive or has no Transform.
+     * @facade Entity.TrySetWorldTransform
      */
     bool EntitySetWorldTransform(const CallContext& context, Detail::EngineContext&, const Entity* entity,
                                  const Transform* world)
@@ -187,6 +189,7 @@ namespace Fenrir::ScriptingNatives
      * @param[out] entity The new entity, owned by the active scene's list; no entity (the default Entity, C#'s
      * Entity.None) when none could be made.
      * @return Whether one was made: false when there is no active scene.
+     * @facade Entity.TryCreate
      */
     bool EntityCreate(const CallContext& context, Detail::EngineContext& engine, Entity* entity)
     {

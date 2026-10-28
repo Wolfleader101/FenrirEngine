@@ -11,11 +11,12 @@
 
   <ItemGroup>
     <!-- The natives' class has no bodies until the SDK's generator writes them, and the facade parts (Bodies, Hits) call
-         it: the SDK check compiles them. -->
+         it: the SDK check compiles them. Body's methods call it too, so NativeStubs.cs stands in for the natives they call. -->
     <Compile Include="../../Fixture/Contract/**/*.cs"
              Exclude="../../Fixture/Contract/Generated/FixtureNative.cs;../../Fixture/Contract/Generated/Bodies.cs;../../Fixture/Contract/Generated/Hits.cs" />
     <Compile Include="../../Fixture/Uses/Contract/**/*.cs" />
     <Compile Include="../../Fixture/Tests/Generated/*.cs" />
     <Compile Include="../Stubs.cs" />
+    <Compile Include="../NativeStubs.cs" />
   </ItemGroup>
 </Project>

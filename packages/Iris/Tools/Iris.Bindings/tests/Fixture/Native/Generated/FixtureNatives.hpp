@@ -26,6 +26,8 @@ namespace Fixture
     std::uint64_t Sum(const Host::CallContext&, const std::uint32_t* values, std::int32_t count, bool all, double scale);
     void Turn(const Host::CallContext&, const Fixture::Quat* rotation, std::int32_t turns);
     void Damp(const Host::CallContext&, const Fixture::EntityId* body, const Fixture::Damper* damper, const Fixture::Angles* angles);
+    bool Outweighs(const Host::CallContext&, const Fixture::Body* body, float mass);
+    bool Make(const Host::CallContext&, Fixture::Body* body, float mass);
 } // namespace Fixture
 
 namespace Fixture::Bindings
