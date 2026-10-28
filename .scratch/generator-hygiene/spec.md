@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Generator hygiene: the two tools describe one thing one way and carry nothing unread
 

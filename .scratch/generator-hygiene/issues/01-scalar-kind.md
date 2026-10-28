@@ -11,8 +11,7 @@
 
 **Touches:** `tools/describe-api/src/Describer.cs`, `tools/describe-api/src/Natives.cs`, `tools/describe-api/tests/`, `packages/Iris/docs/natives-description.md`, `packages/FenrirScripting/api/FenrirScripting.natives.json`
 
-**Status:** claimed
-
+**Status:** resolved
 - [x] `DescribeTests.cs`: a case describes a native taking `const char*` with a count and one taking a `char` by value and reads `u8` for both; the fixture's byte-for-byte case still passes.
 - [x] `grep -n "CXType_Char_S" tools/describe-api/src/*.cs` finds one line; `grep -c '"i8"' packages/FenrirScripting/api/FenrirScripting.natives.json` is 0. (Built: the grep finds three lines, each a different question: `ScalarKind`'s `u8`, `IntegerKind`'s signed list, which an enum's underlying type still needs, and the natives spelling `char`, which `u8` alone cannot give back since `std::uint8_t` is a `u8` too. The kind is decided once.)
 - [x] `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit; the msvc-x64-debug preset builds and the scripting tests pass.
