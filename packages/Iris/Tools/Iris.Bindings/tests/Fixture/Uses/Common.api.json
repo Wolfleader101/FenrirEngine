@@ -24,6 +24,36 @@
           "default": 0.5
         }
       ]
+    },
+    {
+      "name": "Fixture::Angles",
+      "category": "bound-type",
+      "role": "bound-type",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A bound type the Common binding binds (Uses/Common.binding.toml) to Fixture.Common.Angles."
+    },
+    {
+      "name": "Fixture::Damper",
+      "category": "struct",
+      "role": "shared-struct",
+      "size": 8,
+      "alignment": 4,
+      "doc": "A shared struct the Common binding mirrors.",
+      "fields": [
+        {
+          "name": "strength",
+          "offset": 0,
+          "kind": "f32",
+          "default": 1
+        },
+        {
+          "name": "engaged",
+          "offset": 4,
+          "kind": "bool",
+          "default": false
+        }
+      ]
     }
   ]
 }

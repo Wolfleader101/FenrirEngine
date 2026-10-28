@@ -7,6 +7,7 @@
 
 #include "Iris/Iris.hpp"
 #include "Fixture.hpp"
+#include "CommonBound.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -21,6 +22,22 @@ struct Iris::StructMapping<Fixture::Spring>
 };
 static_assert(sizeof(Fixture::Spring) == 8 && alignof(Fixture::Spring) == 4,
               "Fixture::Spring is not the layout Common.api.json describes: "
+              "regenerate the description, then this binding");
+
+static_assert(sizeof(Fixture::Angles) == 8 && alignof(Fixture::Angles) == 4,
+              "Fixture::Angles is not the layout Common.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
+struct Iris::StructMapping<Fixture::Damper>
+{
+    static constexpr std::string_view typeName = "Fixture.Common.Damper";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<float>("Strength", 0),
+        Iris::Field<bool>("Engaged", 4));
+};
+static_assert(sizeof(Fixture::Damper) == 8 && alignof(Fixture::Damper) == 4,
+              "Fixture::Damper is not the layout Common.api.json describes: "
               "regenerate the description, then this binding");
 
 // clang-format on

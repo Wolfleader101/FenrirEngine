@@ -1,8 +1,12 @@
 # FenrirScripting's own selection (ADR-0042, tools/describe-api/README.md): the error enums its built-in natives
-# return, which no shared struct holds. The built-in binding (FenrirScripting.binding.toml) binds these beside
-# FenrirECS's description, so C# switches on their names and no code is spelled by hand on either side.
-headers = ["../include/FenrirScripting/Errors.hpp"]
+# return, which no shared struct holds, and the entity value (ADR-0044). The built-in binding
+# (FenrirScripting.binding.toml) binds these beside FenrirECS's description, so C# switches on the enums' names and no
+# code is spelled by hand on either side, and the bindings that use it take the entity value as its.
+headers = ["../include/FenrirScripting/Errors.hpp", "../include/FenrirScripting/EntityValue.hpp"]
 
 [types]
 "Fenrir::RegistryError" = "enum"
 "Fenrir::ChangeError" = "enum"
+# The one entity value every binding names: bound here, by the SDK defaults' entry, as the Entity the extensions' natives
+# take and return and their shared structs hold.
+"Fenrir::EntityValue" = "bound-type"

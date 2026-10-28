@@ -148,8 +148,9 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// registration zeroes before the native runs (<see cref="BoundNative.Outputs" />). Numbers and bool are themselves, an
 /// alias in <c>[natives] types</c> is the C#
 /// type it names, an enum is its C# enum, and a wrapper (a described struct of one field, or a bound type whose entry
-/// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A result is any of those values, nothing, or a
-/// <c>void*</c>. Anything else fails naming the function and parameter.
+/// names its <c>wrapper</c> kind) is its C# type, crossing as that field. A type a binding in <c>uses</c> describes
+/// and this binding's descriptions do not is named as that binding names it. A result is any of those values, nothing,
+/// or a <c>void*</c>. Anything else fails naming the function and parameter.
 /// <para/>
 /// A native's <c>@facade Class.Method</c> names the public method the facade writer generates over its declaration,
 /// which takes <c>T</c> where the declaration takes <c>in T</c>. The mark is refused, naming the native and the mark,

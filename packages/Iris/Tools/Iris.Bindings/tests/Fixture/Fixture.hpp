@@ -345,4 +345,22 @@ namespace Fixture
         Handle first;
         Handle second;
     };
+
+    // Two types Fixture.api.toml does not select, described by the binding the fixture uses (Uses/Common.api.json) so
+    // the fixture's natives take them as that binding's: its bound type and its mirror, named here and generated
+    // nowhere here.
+
+    /** @brief A bound type the Common binding binds (Uses/Common.binding.toml) to Fixture.Common.Angles. */
+    struct Angles
+    {
+        float pitch = 0.0f;
+        float yaw = 0.0f;
+    };
+
+    /** @brief A shared struct the Common binding mirrors. */
+    struct Damper
+    {
+        float strength = 1.0f;
+        bool engaged = false;
+    };
 } // namespace Fixture

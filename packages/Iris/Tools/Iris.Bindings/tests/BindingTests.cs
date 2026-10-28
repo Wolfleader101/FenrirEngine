@@ -894,6 +894,53 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void ANativeTakesATypeTheBindingItUsesDescribesAndThisOneDoesNot()
+    {
+        // Angles and Damper are the Common binding's alone: its bound type and its mirror.
+        var description = File.ReadAllText(FixtureDescription);
+        Assert.False(description.Contains("Fixture::Angles", StringComparison.Ordinal) || description.Contains("Fixture::Damper", StringComparison.Ordinal),
+                     "The fixture's own description should not describe the Common binding's Angles or Damper.");
+
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var natives = Mirror(generated, "FixtureNative.cs");
+        Assert.True(natives.Contains("using Fixture.Common;\n", StringComparison.Ordinal) &&
+                    natives.Contains("    public static partial void Damp(Entity body, in Damper damper, in Angles angles);\n", StringComparison.Ordinal),
+                    $"Damp should take the Common binding's Damper and Angles by their C# names, with its using, but the class is:\n{natives}");
+        var header = Output(generated, "FixtureNatives.hpp");
+        Assert.True(header.Contains("    void Damp(const Host::CallContext&, Fixture::EntityId body, const Fixture::Damper* damper, " +
+                                    "const Fixture::Angles* angles);\n", StringComparison.Ordinal),
+                    $"The natives header should declare Damp over the C++ types, but is:\n{header}");
+        Assert.False(generated.Keys.Any(path => Path.GetFileName(path) is "Angles.cs" or "Damper.cs"),
+                     "Angles and Damper are the Common binding's, so this one should give them no mirror.");
+        var mappings = Output(generated, "FixtureMappings.hpp");
+        Assert.False(mappings.Contains("Fixture::Angles", StringComparison.Ordinal) || mappings.Contains("Fixture::Damper", StringComparison.Ordinal),
+                     $"The mappings should map neither Angles nor Damper, which the Common binding's do, but are:\n{mappings}");
+    }
+
+    [Fact]
+    public void AFieldHoldsATypeTheBindingItUsesDescribesAndThisOneDoesNot()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        // Hit holds a Damper, which only the Common binding describes: a field holding a nested struct with its own
+        // defaults, as a description records one, without that struct described beside it.
+        var description = WriteDescription(directory, root => Type(root, "Fixture::Hit")["fields"]!.AsArray().Add(new JsonObject
+        {
+            ["name"] = "damper", ["offset"] = 32, ["kind"] = "struct", ["type"] = "Fixture::Damper", ["default"] = new JsonObject(),
+        }));
+
+        var generated = Generator.Generate(config, [description]);
+
+        var hit = Mirror(generated, "Hit.cs");
+        Assert.True(hit.Contains("using Fixture.Common;\n", StringComparison.Ordinal) &&
+                    hit.Contains("    public Damper Damper = new();\n", StringComparison.Ordinal),
+                    $"Hit should hold the Common binding's Damper, with its using, but is:\n{hit}");
+        Assert.False(generated.Keys.Any(path => Path.GetFileName(path) == "Damper.cs"),
+                     "Damper is the Common binding's, so this one should give it no mirror.");
+    }
+
+    [Fact]
     public void NativesTakeTextEnumsAndWrappersByValue()
     {
         var natives = Mirror(Generator.Generate(FixtureConfig, [FixtureDescription]), "FixtureNative.cs");
@@ -917,6 +964,7 @@ public sealed class BindingTests
     [Theory]
     [InlineData("UsedAndExcluded", "Fixture::Spring is mirrored by the binding it uses, ", "but exclude names it too")]
     [InlineData("UsedAndBound", "Fixture::Spring is mirrored by the binding it uses, ", "but [bound-types] names it too")]
+    [InlineData("UsedOnlyThereAndBound", "Fixture::Damper is mirrored by the binding it uses, ", "but [bound-types] names it too")]
     [InlineData("UsedAndSelected", "Fixture::Spring is mirrored by the binding it uses, ",
                 "but Fixture.api.json selects it as a component and Common.api.json as a shared struct: select it as one")]
     [InlineData("UsedWithAnotherLayout", "Fixture::Spring is mirrored by the binding it uses, ", "which describes it with another layout")]
@@ -1000,6 +1048,7 @@ public sealed class BindingTests
         {
             "UsedAndExcluded" => text => text.Replace("[csharp]", "exclude = [\"Fixture::Spring\"]\n\n[csharp]", StringComparison.Ordinal),
             "UsedAndBound" => text => text.Replace("[bound-types]\n", "[bound-types]\n\"Fixture::Spring\" = { type = \"Spring\" }\n", StringComparison.Ordinal),
+            "UsedOnlyThereAndBound" => text => text.Replace("[bound-types]\n", "[bound-types]\n\"Fixture::Damper\" = { type = \"Damper\" }\n", StringComparison.Ordinal),
             "UsedTwice" => text => Uses(text, Other(other => other.Replace("Fixture.Common", "Fixture.Other", StringComparison.Ordinal))),
             "UsesMissing" => text => Uses(text, "Missing.binding.toml"),
             "UsesWithoutDescriptions" => text => Uses(text, Other(other => other.Replace("descriptions = [", "# [", StringComparison.Ordinal))),
@@ -1168,9 +1217,11 @@ public sealed class BindingTests
             ["package"] = name, ["pointerSize"] = 8, ["alignment"] = "natural", ["types"] = new JsonArray(extra, vec3),
         }.ToJsonString());
 
+        // The Common binding's own [bound-types] (its Angles, which this description lacks) replaced by the table given.
         var text = File.ReadAllText(UsesConfig)
                        .Replace("Fixture.Common", "Fixture." + name, StringComparison.Ordinal)
                        .Replace("\"Common.api.json\"", $"\"{description.Replace('\\', '/')}\"", StringComparison.Ordinal);
+        text = text[..text.IndexOf("[bound-types]", StringComparison.Ordinal)];
         var config = Path.Combine(directory.Path, name + ".binding.toml");
         File.WriteAllText(config, text + "\n[bound-types]\n\"Fixture::Extra\" = { type = \"Extra\", include = \"Extra.hpp\" }\n" + boundTypes);
         return config.Replace('\\', '/');

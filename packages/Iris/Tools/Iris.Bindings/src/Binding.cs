@@ -9,13 +9,18 @@ namespace Iris.Bindings;
 /// </summary>
 /// <remarks>
 /// A type that one of the bindings in <c>uses</c> mirrors is that binding's: it is named by its C# name there, and gets
-/// no mirror, mapping, registration or test here.
+/// no mirror, mapping, registration or test here. A type a used binding describes (transitively) that this binding's
+/// descriptions do not is described here all the same, with that binding's mirror or <c>[bound-types]</c> entry in
+/// force: a native here may take, return or point at it, and a field here may hold it.
 /// </remarks>
 internal sealed class Binding
 {
+    // Every type this binding may name, by C++ name: its own described types but those it excludes, then the types the
+    // bindings in `uses` describe that its own descriptions do not.
     private readonly Dictionary<string, DescribedType> types;
 
-    // Each type a binding in `uses` mirrors, by C++ name, with that binding.
+    // Each type a binding in `uses` mirrors, by C++ name, with the binding that mirrors it (through uses of its own,
+    // perhaps).
     private readonly Dictionary<string, Binding> owners = new(StringComparer.Ordinal);
 
     // The bound types in force, by C++ name: this binding's own, its defaults file's, and every used binding's (its own
@@ -31,6 +36,7 @@ internal sealed class Binding
         CheckExcluded(described);
         Types = described.Where(type => !config.Exclude.Contains(type.Name)).ToList();
         types = Types.ToDictionary(type => type.Name, StringComparer.Ordinal);
+        CollectUsedTypes(described);
         Check();
     }
 
@@ -428,6 +434,48 @@ internal sealed class Binding
                 }
 
                 owners.Add(type.Name, used);
+            }
+        }
+    }
+
+    // The types the bindings in `uses` describe (through uses of their own too) that this binding's descriptions do not:
+    // nameable here, by a native's parameter, result or pointee and by a field, with the used binding's mirror or
+    // [bound-types] entry (collected above) in force, and generated nowhere here. A type described here, excluded or
+    // not, is left to the checks above: it is this binding's own, or the used binding's where that one mirrors it.
+    private void CollectUsedTypes(IReadOnlyList<DescribedType> described)
+    {
+        foreach (var used in Uses)
+        {
+            foreach (var type in used.types.Values.Where(type => described.All(own => own.Name != type.Name)))
+            {
+                if (type.Category == Category.BoundType)
+                {
+                    types.TryAdd(type.Name, type);
+                    continue;
+                }
+
+                var owner = used.owners.GetValueOrDefault(type.Name, used);
+                if (owners.TryGetValue(type.Name, out var other))
+                {
+                    if (other.Config.Path != owner.Config.Path)
+                    {
+                        throw new BindingException(
+                            $"{Config.Path}: {type.Name} is mirrored by the binding it uses, {other.Config.Path}, and by " +
+                            $"{owner.Config.Path}: use the type from one of them");
+                    }
+
+                    continue;
+                }
+
+                if (Config.BoundTypes.ContainsKey(type.Name))
+                {
+                    throw new BindingException(
+                        $"{Config.Path}: {type.Name} is mirrored by the binding it uses, {owner.Config.Path}, but [bound-types] " +
+                        "names it too: a used type is that binding's, so name it in neither");
+                }
+
+                types.Add(type.Name, type);
+                owners.Add(type.Name, owner);
             }
         }
     }
