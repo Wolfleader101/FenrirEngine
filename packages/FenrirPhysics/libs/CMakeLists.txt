@@ -1,5 +1,5 @@
 # JoltPhysics, FenrirPhysics's physics backend (ADR-0010), with the settings decided in "How does Jolt join the build?"
-# (.scratch/fenrir-physics/issues/13-how-jolt-joins-the-build.md). Everything set here stays in this directory, so none
+# (the physics map's ticket 13, resolved and removed; commit a5cc20d5 is the last to hold it). Everything set here stays in this directory, so none
 # of it reaches the rest of the engine.
 #
 # Debug and Release match Jolt's configurations. RelWithDebInfo and MinSizeRel build Jolt without its debug-only checks.

@@ -80,6 +80,8 @@ ADR-0028 orders each frame's pose work as base pose, then modifiers, then finali
 - Tickets 28, 29, 31, 32 and 33 build on this; notes are appended to each.
 - *Amended by ADR-0036:* layers and masks are not modifiers; they are blended into the base pose in `Animate`.
 - *Refined by ADR-0039:* C# systems join pose stages as extension stages, at their order among C++ work; stage registration returns a handle that removes the work outside the pipeline.
+- *Extended by ADR-0038:* `PoseOverride` gains a per-bone override weight and its API; its entries, bone order and rebuild rule are unchanged.
+- *Amended by ADR-0040:* `Animate` is also hosted in `PreTick` for tick-posed skeletons (`SkeletonPose::timing`), whose frame pipeline blends their two latest tick base poses instead of animating them; the simulation pose and render pose listed below are defined there.
 - Listed, not built (in *Not yet specified*):
   - **Fixed-tick animation.** `Animate` hosted in `Tick`, with interpolation between tick poses for the frame as a starting point, not a permanent design. A real design defines a **simulation pose** (fixed-tick, authoritative for physics, hit boxes and gameplay) against a **render pose** (interpolated per frame for drawing), tick-time evaluation, interpolation, and how modifiers act on each. Today's per-frame final pose is a render pose and is not promised to serve every simulation purpose.
   - **IK between animation and skinning.** IK is a modifier in `Modify`, ordered after those that move its chain. Its inputs can be targets written in `Update`, and later solvers may query scene transforms or physics through their own integration layer, provided their stage ordering stays safe and deterministic. FenrirSkeleton itself never calls physics.
