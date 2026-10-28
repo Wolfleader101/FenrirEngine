@@ -10,7 +10,6 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirScripting/Errors.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "FenrirScripting/EntityValueMapping.hpp"
 #include "FenrirMathMappings.hpp"
 
 #include <cstdint>
@@ -19,7 +18,7 @@
 template <>
 struct Iris::StructMapping<Fenrir::Entity>
 {
-    static constexpr std::string_view typeName = "Fenrir.Scripting.EntityLink";
+    static constexpr std::string_view typeName = "Fenrir.Scripting.Entity";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<std::uint32_t>("value", 0),
         Iris::Field<void*>("owner", 8));
@@ -81,10 +80,6 @@ struct Iris::EnumMapping<Fenrir::ChangeError>
 };
 static_assert(sizeof(Fenrir::ChangeError) == 4 && alignof(Fenrir::ChangeError) == 4,
               "Fenrir::ChangeError is not the layout FenrirScripting.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::EntityValue) == 4 && alignof(Fenrir::EntityValue) == 4,
-              "Fenrir::EntityValue is not the layout FenrirScripting.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

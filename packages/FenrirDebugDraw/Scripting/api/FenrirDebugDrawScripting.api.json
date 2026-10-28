@@ -58,12 +58,26 @@
       ]
     },
     {
-      "name": "Fenrir::EntityValue",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 4,
-      "alignment": 4,
-      "doc": "A C# Entity: an entity's 32-bit value alone. The wrapper a native takes or returns where C# passes an Entity, and the field a shared struct holds where C# holds one."
+      "name": "Fenrir::Entity",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 8,
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
     },
     {
       "name": "Fenrir::Math::Vec3",
@@ -120,8 +134,8 @@
       "name": "Fenrir::ScriptOptions::ShapeOptions",
       "category": "struct",
       "role": "shared-struct",
-      "size": 20,
-      "alignment": 4,
+      "size": 40,
+      "alignment": 8,
       "doc": "A ShapeOptions without its group, as a native takes it.",
       "fields": [
         {
@@ -133,24 +147,22 @@
         },
         {
           "name": "relativeTo",
-          "offset": 4,
+          "offset": 8,
           "kind": "struct",
-          "type": "Fenrir::EntityValue",
-          "default": {
-            "value": 4294967295
-          },
-          "doc": "The entity the positions are relative to, or Entity.None (Entity::Null)."
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The entity the positions are relative to, or none."
         },
         {
           "name": "thickness",
-          "offset": 8,
+          "offset": 24,
           "kind": "f32",
           "default": 1,
           "doc": "Line thickness in pixels."
         },
         {
           "name": "depth",
-          "offset": 12,
+          "offset": 28,
           "kind": "enum",
           "type": "Fenrir::DepthMode",
           "default": "Tested",
@@ -158,7 +170,7 @@
         },
         {
           "name": "segments",
-          "offset": 16,
+          "offset": 32,
           "kind": "i32",
           "default": 24,
           "doc": "How many straight segments make a full circle of a round shape."
@@ -169,8 +181,8 @@
       "name": "Fenrir::ScriptOptions::TextOptions",
       "category": "struct",
       "role": "shared-struct",
-      "size": 12,
-      "alignment": 4,
+      "size": 32,
+      "alignment": 8,
       "doc": "A TextOptions without its group, as a native takes it.",
       "fields": [
         {
@@ -182,17 +194,15 @@
         },
         {
           "name": "relativeTo",
-          "offset": 4,
+          "offset": 8,
           "kind": "struct",
-          "type": "Fenrir::EntityValue",
-          "default": {
-            "value": 4294967295
-          },
-          "doc": "The entity the item is relative to, or Entity.None (Entity::Null)."
+          "type": "Fenrir::Entity",
+          "default": {},
+          "doc": "The entity the item is relative to, or none."
         },
         {
           "name": "size",
-          "offset": 8,
+          "offset": 24,
           "kind": "f32",
           "default": 16,
           "doc": "The height of the text in pixels."

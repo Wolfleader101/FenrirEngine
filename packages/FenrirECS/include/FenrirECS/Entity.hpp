@@ -105,12 +105,18 @@ namespace Fenrir
 
         /**
          * @brief Check if the entity is valid: alive in its entity list. An entity with no entity list (a zeroed
-         * EntityLink written from a script) is not valid.
+         * Entity written from a script) is not valid.
          *
          * @return true if the entity is valid
          * @return false if the entity is not valid
          */
         bool IsValid() const;
+
+        /**
+         * @brief Whether the entity names an entity list at all: false for a default Entity, and for one a script
+         * zeroed, which name no scene. An entity with a list may still not be valid in it.
+         */
+        bool HasEntityList() const noexcept;
 
         /**
          * @brief Iterate over all the children of the entity and call the function on them

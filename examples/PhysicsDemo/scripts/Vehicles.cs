@@ -14,7 +14,7 @@ namespace PhysicsDemo.Scripts;
 // components, in one system:
 //
 //   The car: a dynamic RigidBody with an unscaled box Collider and a Vehicle (a WheeledVehicle, new), and four unscaled
-//     wheel entities, each a VehicleWheel naming the chassis by EntityLink, not its children. A VehicleDifferential on
+//     wheel entities, each a VehicleWheel naming the chassis by Entity, not its children. A VehicleDifferential on
 //     an entity of its own drives the rear two, and a VehicleAntiRollBar across each axle keeps it level in corners.
 //   The trailer: a 300 kg TrailerVehicle on one axle, hitched to the car by an ordinary ball Joint. Nothing links their
 //     brakes: the driver system copies the car's Brake and Handbrake into the trailer's Input every tick.
@@ -219,9 +219,8 @@ public static class VehiclesScene
         return AngleAxis(MathF.Atan2(-ahead.X, -ahead.Z), new Vector3(0, 1, 0));
     }
 
-    public static string NameOf(EntityLink link) => link.IsNull ? "none" : NameOf(link.Target);
-
-    public static string NameOf(Entity entity) => entity.IsValid ? entity.Get<Name>().Value.GetText() : "?";
+    public static string NameOf(Entity entity) =>
+        entity == Entity.None ? "none" : entity.IsValid ? entity.Get<Name>().Value.GetText() : "?";
 
     public static string Format(Vector3 value) => $"({value.X:0.00}, {value.Y:0.00}, {value.Z:0.00})";
 

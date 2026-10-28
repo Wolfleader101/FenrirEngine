@@ -21,13 +21,13 @@ namespace Fenrir.Physics;
 public readonly partial struct ContactBegin : IEvent
 {
     /// <summary>The body entity (a rigid body or a character body) of A, the lower entity id.</summary>
-    public readonly EntityLink BodyA = EntityLink.None;
+    public readonly Entity BodyA = new();
     /// <summary>The body entity (a rigid body or a character body) of B.</summary>
-    public readonly EntityLink BodyB = EntityLink.None;
+    public readonly Entity BodyB = new();
     /// <summary>A's collider entity touching: `bodyA` itself, or one beneath it in a compound body.</summary>
-    public readonly EntityLink ColliderA = EntityLink.None;
+    public readonly Entity ColliderA = new();
     /// <summary>B's collider entity touching: `bodyB` itself, or one beneath it in a compound body.</summary>
-    public readonly EntityLink ColliderB = EntityLink.None;
+    public readonly Entity ColliderB = new();
     /// <summary>Where they touch, in world space.</summary>
     public readonly Vector3 Point = new(0, 0, 0);
     /// <summary>World space, unit length, pointing from A to B.</summary>

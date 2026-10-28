@@ -9,6 +9,8 @@ namespace Fixture.Bindings;
 // named by its @facade. The hand-written part beside it holds the class's doc and what a description cannot say.
 public static partial class Bodies
 {
-    /// <summary>Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.</summary>
-    public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(body, in force);
+    /// <summary>
+    /// Pushes the body of `body` with `force`: a pointer to an alias, and a const pointer, after the state.
+    /// </summary>
+    public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(in body, in force);
 }

@@ -64,11 +64,25 @@
     },
     {
       "name": "Fenrir::Entity",
-      "category": "bound-type",
-      "role": "bound-type",
+      "category": "struct",
+      "role": "nested",
       "size": 16,
       "alignment": 8,
-      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS"
+      "doc": "Entity class that is used to interact with the entity list. This forms the basis of the ECS",
+      "fields": [
+        {
+          "name": "m_entityId",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_entityList",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
     },
     {
       "name": "Fenrir::GroundState",
@@ -2171,14 +2185,6 @@
       "alignment": 1,
       "doc": "A trailer, wagon or hand cart: a vehicle with no engine and no gearbox, towed by an ordinary Joint. It reads VehicleInput's `brake`, `handbrake` and `steer` (for a steered dolly) and ignores `forward`, `gear` and `clutch`, and every VehicleDifferential: its wheels only roll, brake and steer. Its `state` engine and gear fields stay 0.",
       "fields": []
-    },
-    {
-      "name": "Fenrir::Transform",
-      "category": "bound-type",
-      "role": "bound-type",
-      "size": 40,
-      "alignment": 4,
-      "doc": "An entity's place in the world, relative to its parent: every entity has one."
     },
     {
       "name": "Fenrir::Trigger",

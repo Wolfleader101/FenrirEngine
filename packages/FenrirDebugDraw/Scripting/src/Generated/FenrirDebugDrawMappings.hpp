@@ -9,7 +9,6 @@
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "ScriptOptions.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
-#include "FenrirScripting/EntityValueMapping.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
 
@@ -23,10 +22,6 @@ struct Iris::EnumMapping<Fenrir::DepthMode>
 };
 static_assert(sizeof(Fenrir::DepthMode) == 1 && alignof(Fenrir::DepthMode) == 1,
               "Fenrir::DepthMode is not the layout FenrirDebugDrawScripting.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::EntityValue) == 4 && alignof(Fenrir::EntityValue) == 4,
-              "Fenrir::EntityValue is not the layout FenrirDebugDrawScripting.api.json describes: "
               "regenerate the description, then this binding");
 
 static_assert(sizeof(Fenrir::Math::Vec3) == 12 && alignof(Fenrir::Math::Vec3) == 4,
@@ -51,12 +46,12 @@ struct Iris::StructMapping<Fenrir::ScriptOptions::ShapeOptions>
     static constexpr std::string_view typeName = "Fenrir.DebugDraw.NativeShapeOptions";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<float>("Duration", 0),
-        Iris::Field<Fenrir::EntityValue>("RelativeTo", 4),
-        Iris::Field<float>("Thickness", 8),
-        Iris::Field<Fenrir::DepthMode>("Depth", 12),
-        Iris::Field<std::int32_t>("Segments", 16));
+        Iris::Field<Fenrir::Entity>("RelativeTo", 8),
+        Iris::Field<float>("Thickness", 24),
+        Iris::Field<Fenrir::DepthMode>("Depth", 28),
+        Iris::Field<std::int32_t>("Segments", 32));
 };
-static_assert(sizeof(Fenrir::ScriptOptions::ShapeOptions) == 20 && alignof(Fenrir::ScriptOptions::ShapeOptions) == 4,
+static_assert(sizeof(Fenrir::ScriptOptions::ShapeOptions) == 40 && alignof(Fenrir::ScriptOptions::ShapeOptions) == 8,
               "Fenrir::ScriptOptions::ShapeOptions is not the layout FenrirDebugDrawScripting.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -66,10 +61,10 @@ struct Iris::StructMapping<Fenrir::ScriptOptions::TextOptions>
     static constexpr std::string_view typeName = "Fenrir.DebugDraw.NativeTextOptions";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<float>("Duration", 0),
-        Iris::Field<Fenrir::EntityValue>("RelativeTo", 4),
-        Iris::Field<float>("Size", 8));
+        Iris::Field<Fenrir::Entity>("RelativeTo", 8),
+        Iris::Field<float>("Size", 24));
 };
-static_assert(sizeof(Fenrir::ScriptOptions::TextOptions) == 12 && alignof(Fenrir::ScriptOptions::TextOptions) == 4,
+static_assert(sizeof(Fenrir::ScriptOptions::TextOptions) == 32 && alignof(Fenrir::ScriptOptions::TextOptions) == 8,
               "Fenrir::ScriptOptions::TextOptions is not the layout FenrirDebugDrawScripting.api.json describes: "
               "regenerate the description, then this binding");
 

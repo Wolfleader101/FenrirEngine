@@ -37,7 +37,7 @@ namespace Fenrir.Physics;
 public partial struct VehicleWheel : IComponent
 {
     /// <summary>The chassis entity: the entity with the Vehicle.</summary>
-    public EntityLink Vehicle = EntityLink.None;
+    public Entity Vehicle = new();
     /// <summary>
     /// Chassis-local metres from the chassis origin, scaled with the chassis: the wheel's centre at full extension.
     /// </summary>

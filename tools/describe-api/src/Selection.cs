@@ -5,8 +5,8 @@ namespace DescribeApi;
 
 /// <summary>
 /// A package's selection (<c>&lt;Package&gt;.api.toml</c>): the headers to read and the types to share, each with its
-/// role, and the selected types whose private data members are shared all the same. Header paths are relative to the
-/// selection's own directory.
+/// role, and the types whose private data members are shared all the same (selected ones, or nested ones a selected
+/// type holds: the describer checks that each is reached). Header paths are relative to the selection's own directory.
 /// </summary>
 internal sealed record Selection(string Path, string Package, IReadOnlyList<string> Headers,
                                  IReadOnlyList<KeyValuePair<string, Role>> Types, IReadOnlySet<string> PrivateMembers)
@@ -86,15 +86,17 @@ internal sealed record Selection(string Path, string Package, IReadOnlyList<stri
         {
             if (privateValue is not TomlArray privateArray || privateArray.Any(item => item is not string))
             {
-                throw new DescribeException($"{path}: 'private-members' is a list of selected type names");
+                throw new DescribeException($"{path}: 'private-members' is a list of type names");
             }
 
             foreach (var name in privateArray.Cast<string>())
             {
-                if (types.All(type => type.Key != name) || types.First(type => type.Key == name).Value is Role.BoundType or Role.Enum)
+                // A name the selection does not select may be a nested type a selected type holds: the describer
+                // refuses it once it knows nothing reaches it.
+                if (types.FirstOrDefault(type => type.Key == name).Value is Role.BoundType or Role.Enum)
                 {
                     throw new DescribeException(
-                        $"{path}: 'private-members' names {name}, which [types] does not select as a component, event, resource or shared struct");
+                        $"{path}: 'private-members' names {name}, which [types] selects as a bound type or an enum, not a component, event, resource or shared struct");
                 }
 
                 privateMembers.Add(name);

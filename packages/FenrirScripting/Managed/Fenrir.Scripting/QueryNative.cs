@@ -8,9 +8,13 @@ public static partial class World
 }
 
 // The scratch buffer a query reads its rows from. Two native calls fill it, however many entities there are: one for an
-// upper bound on the rows and one that writes them. A row is the entity followed by a pointer to each component.
+// upper bound on the rows and one that writes them. A row is the entity (two words: an Entity as C++ lays it out, its
+// value and its scene's list) followed by a pointer to each component.
 internal static unsafe class QueryNative
 {
+    // The words a row spends on the entity: sizeof(Entity) in pointers, as the generated query types index a row.
+    internal const int EntityWords = 2;
+
     // Fills a new buffer with every entity that has all the components. Null (and a count of zero) when there are none.
     // The caller owns it: give it back with Release.
     internal static nuint* Fill(int* ids, int count, out int rows)
@@ -28,7 +32,7 @@ internal static unsafe class QueryNative
         if (capacity == 0)
             return null;
 
-        int stride = count + 1;
+        int stride = count + EntityWords;
         var buffer = (nuint*)NativeMemory.Alloc((nuint)capacity * (nuint)stride, (nuint)sizeof(nuint));
         // QueryFill's capacity counts rows, not entries, so the span it takes is `capacity` long: the native gets the
         // same count it always did, and never writes past the buffer.

@@ -124,10 +124,10 @@ public static class Vehicles
 
     public static bool OnGround(uint wheel) => new Entity(wheel).Get<VehicleWheel>().State.OnGround;
 
-    public static uint GroundBody(uint wheel) => new Entity(wheel).Get<VehicleWheel>().State.GroundBody.Target.Value;
+    public static uint GroundBody(uint wheel) => new Entity(wheel).Get<VehicleWheel>().State.GroundBody.Value;
 
     public static uint GroundCollider(uint wheel) =>
-        new Entity(wheel).Get<VehicleWheel>().State.GroundCollider.Target.Value;
+        new Entity(wheel).Get<VehicleWheel>().State.GroundCollider.Value;
 
     public static float Spin(uint wheel) => new Entity(wheel).Get<VehicleWheel>().State.AngularVelocity;
 
@@ -144,7 +144,7 @@ public static class Vehicles
     public static bool WheelStateIsNew(uint wheel)
     {
         ref readonly VehicleWheelState state = ref new Entity(wheel).Get<VehicleWheel>().State;
-        return !state.OnGround && state.GroundBody.IsNull && state.GroundCollider.IsNull &&
+        return !state.OnGround && state.GroundBody == Entity.None && state.GroundCollider == Entity.None &&
                state.ContactPoint == Vector3.Zero && state.ContactNormal == Vector3.Zero &&
                state.GroundVelocity == Vector3.Zero && state.Compression == 0 && state.SuspensionForce == 0 &&
                state.LongitudinalSlip == 0 && state.LateralSlip == 0 && state.AngularVelocity == 0 &&

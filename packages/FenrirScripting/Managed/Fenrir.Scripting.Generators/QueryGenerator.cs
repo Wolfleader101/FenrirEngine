@@ -65,7 +65,8 @@ public sealed class QueryGenerator : IIncrementalGenerator
     {
         string names = Names(arity);
         string constraints = Constraints(arity);
-        string stride = (arity + 1).ToString();
+        // A row is the entity (two words: a C++ Fenrir::Entity, which C# reads whole) and a pointer per component.
+        string stride = (arity + 2).ToString();
         IEnumerable<int> each = Enumerable.Range(1, arity);
 
         // The delegate ForEach takes (a ref struct cannot be a type argument of Action<>, on every runtime we target).
@@ -78,9 +79,9 @@ public sealed class QueryGenerator : IIncrementalGenerator
         text.Append("    public readonly unsafe ref struct QueryRow<").Append(names).Append(">").Append(constraints).Append("\n    {\n");
         text.Append("        private readonly nuint* row;\n");
         text.Append("        internal QueryRow(nuint* row) => this.row = row;\n");
-        text.Append("        /// <summary>The entity.</summary>\n        public Entity Entity => new((uint)row[0]);\n");
+        text.Append("        /// <summary>The entity, with its scene set as C++ holds it.</summary>\n        public Entity Entity => *(Entity*)row;\n");
         foreach (int i in each)
-            text.Append($"        /// <summary>The entity's T{i}.</summary>\n        public Ref<T{i}> Component{i} => new((T{i}*)row[{i}]);\n");
+            text.Append($"        /// <summary>The entity's T{i}.</summary>\n        public Ref<T{i}> Component{i} => new((T{i}*)row[{i + 1}]);\n");
         text.Append("        public void Deconstruct(out Entity entity, ")
             .Append(string.Join(", ", each.Select(static i => $"out Ref<T{i}> component{i}"))).Append(")\n        {\n");
         text.Append("            entity = Entity;\n");
@@ -111,8 +112,8 @@ public sealed class QueryGenerator : IIncrementalGenerator
         AppendFill(text, arity);
         text.Append("            try\n            {\n                for (int index = 0; index < count; index++)\n                {\n");
         text.Append("                    nuint* row = rows + (long)index * ").Append(stride).Append(";\n");
-        text.Append("                    action(new Entity((uint)row[0]), ")
-            .Append(string.Join(", ", each.Select(static i => $"new Ref<T{i}>((T{i}*)row[{i}])"))).Append(");\n");
+        text.Append("                    action(*(Entity*)row, ")
+            .Append(string.Join(", ", each.Select(static i => $"new Ref<T{i}>((T{i}*)row[{i + 1}])"))).Append(");\n");
         text.Append("                }\n            }\n            finally\n            {\n                QueryNative.Release(rows);\n            }\n        }\n    }\n\n");
     }
 
