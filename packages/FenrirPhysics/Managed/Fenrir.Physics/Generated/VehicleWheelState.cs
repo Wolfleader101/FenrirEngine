@@ -20,9 +20,9 @@ public readonly partial struct VehicleWheelState
     /// <summary>
     /// The body entity of the ground, on ground only. A handle: destroyed since, it is no longer valid.
     /// </summary>
-    public readonly EntityLink GroundBody = new();
+    public readonly Entity GroundBody = new();
     /// <summary>The collider entity of the ground touched, on ground only.</summary>
-    public readonly EntityLink GroundCollider = new();
+    public readonly Entity GroundCollider = new();
     /// <summary>World space.</summary>
     public readonly Vector3 ContactPoint = new(0, 0, 0);
     /// <summary>World space, unit length.</summary>

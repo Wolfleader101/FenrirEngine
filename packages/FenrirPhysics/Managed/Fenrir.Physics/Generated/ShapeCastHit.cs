@@ -10,9 +10,9 @@ namespace Fenrir.Physics;
 public partial struct ShapeCastHit
 {
     /// <summary>The entity of the body hit.</summary>
-    public EntityLink Body = new();
+    public Entity Body = new();
     /// <summary>The entity of the collider hit.</summary>
-    public EntityLink Collider = new();
+    public Entity Collider = new();
     /// <summary>Where the cast shape touches the body, on the cast shape, in world space.</summary>
     public Vector3 Point = new(0, 0, 0);
     /// <summary>The body's surface normal where it was hit, pointing towards the cast shape.</summary>

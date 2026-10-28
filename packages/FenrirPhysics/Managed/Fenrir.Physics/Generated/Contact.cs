@@ -10,13 +10,13 @@ namespace Fenrir.Physics;
 public partial struct Contact
 {
     /// <summary>The body entity (a rigid body or a character body) asked about.</summary>
-    public EntityLink Body = new();
+    public Entity Body = new();
     /// <summary>The collider entity of `body` touching: `body` itself, or one beneath it in a compound body.</summary>
-    public EntityLink Collider = new();
+    public Entity Collider = new();
     /// <summary>The body entity (a rigid body or a character body) `body` touches.</summary>
-    public EntityLink OtherBody = new();
+    public Entity OtherBody = new();
     /// <summary>The collider entity of `otherBody` touching.</summary>
-    public EntityLink OtherCollider = new();
+    public Entity OtherCollider = new();
     /// <summary>Where they touch, in world space, as of the last step.</summary>
     public Vector3 Point = new(0, 0, 0);
     /// <summary>World space, unit length, pointing from `body` to `otherBody`, as of the last step.</summary>

@@ -56,14 +56,14 @@ public static class Registry
         name.Text = text;
     }
 
-    // The hierarchy, read-only: the entity value of a link, or uint.MaxValue when there is none.
+    // The hierarchy, read-only: the entity value of a field, or uint.MaxValue when it is Entity.None.
     public static uint ParentOf(uint entity) => Link(new Entity(entity).GetReadOnly<Relationship>().Parent);
 
     public static uint FirstChildOf(uint entity) => Link(new Entity(entity).GetReadOnly<Relationship>().FirstChild);
 
     public static uint NextSiblingOf(uint entity) => Link(new Entity(entity).GetReadOnly<Relationship>().NextSibling);
 
-    private static uint Link(in EntityLink link) => link.IsNull ? uint.MaxValue : link.Target.Value;
+    private static uint Link(Entity link) => link == Entity.None ? uint.MaxValue : link.Value;
 
     public static int HealthSum(uint entity)
     {

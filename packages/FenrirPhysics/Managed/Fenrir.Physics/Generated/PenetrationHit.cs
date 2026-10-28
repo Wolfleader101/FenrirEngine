@@ -10,9 +10,9 @@ namespace Fenrir.Physics;
 public partial struct PenetrationHit
 {
     /// <summary>The entity of the body.</summary>
-    public EntityLink Body = new();
+    public Entity Body = new();
     /// <summary>The entity of the collider.</summary>
-    public EntityLink Collider = new();
+    public Entity Collider = new();
     /// <summary>The shape's deepest point inside the collider, in world space.</summary>
     public Vector3 Point = new(0, 0, 0);
     /// <summary>The unit direction that moves the shape out of the collider along the shortest path.</summary>

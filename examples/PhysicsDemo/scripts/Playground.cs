@@ -230,8 +230,8 @@ public sealed class PlaygroundEvents : ISystem
         {
             if (!active)
                 continue;
-            Entity body = enter.OtherBody.Target;
-            context.Log.Info($"TriggerEnter: {Playground.NameOf(body)} entered the {Playground.NameOf(enter.Trigger.Target)}.");
+            Entity body = enter.OtherBody;
+            context.Log.Info($"TriggerEnter: {Playground.NameOf(body)} entered the {Playground.NameOf(enter.Trigger)}.");
             Retint(body, +1);
         }
 
@@ -239,8 +239,8 @@ public sealed class PlaygroundEvents : ISystem
         {
             if (!active)
                 continue;
-            Entity body = exit.OtherBody.Target;
-            context.Log.Info($"TriggerExit: {Playground.NameOf(body)} left the {Playground.NameOf(exit.Trigger.Target)}.");
+            Entity body = exit.OtherBody;
+            context.Log.Info($"TriggerExit: {Playground.NameOf(body)} left the {Playground.NameOf(exit.Trigger)}.");
             Retint(body, -1);
         }
 
@@ -249,8 +249,8 @@ public sealed class PlaygroundEvents : ISystem
             // Only the hard hits: a resting pile begins small contacts all the time.
             if (!active || contact.RelativeSpeed < 3.0f)
                 continue;
-            context.Log.Info($"ContactBegin: {Playground.NameOf(contact.BodyA.Target)} and " +
-                             $"{Playground.NameOf(contact.BodyB.Target)} met at {contact.RelativeSpeed:0.0} m/s, " +
+            context.Log.Info($"ContactBegin: {Playground.NameOf(contact.BodyA)} and " +
+                             $"{Playground.NameOf(contact.BodyB)} met at {contact.RelativeSpeed:0.0} m/s, " +
                              $"at {Playground.Format(contact.Point)}.");
         }
     }
@@ -314,7 +314,7 @@ public sealed class PlaygroundInput : ISystem
             return;
         }
 
-        Entity body = hit.Body.Target;
+        Entity body = hit.Body;
         context.Log.Info($"Raycast: hit {Playground.NameOf(body)} at {Playground.Format(hit.Point)}, " +
                          $"{hit.Distance:0.0} m away, normal {Playground.Format(hit.Normal)}.");
         if (body.Has<RigidBody>() && body.Get<RigidBody>().MotionType == MotionType.Dynamic)

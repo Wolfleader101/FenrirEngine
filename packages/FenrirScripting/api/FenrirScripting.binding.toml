@@ -2,7 +2,7 @@
 # bound to the Fenrir.Scripting contract and the extension every Scripting includes first. Paths are relative to this
 # file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they are committed.
 namespace = "Fenrir.Scripting"
-# Named so the bindings that use this one (the extensions whose natives take the entity value) can read them.
+# Named so the bindings that use this one (the extensions whose natives take the entity) can read them.
 descriptions = ["../../FenrirECS/api/FenrirECS.api.json", "FenrirScripting.api.json"]
 # FenrirMath's types are the math binding's (ADR-0043): its mappings, which every extension's mappings reach through this
 # binding's, are included here.
@@ -17,9 +17,9 @@ contract = "../Managed/Fenrir.Scripting"
 generated = "../Managed/Fenrir.Scripting/Generated"
 # The engine keeps the hierarchy consistent, so C# only reads a Relationship.
 readonly-structs = ["Fenrir::Relationship"]
-# A link is a value C# holds and assigns whole but never edits: a mirror holding one keeps a writable field.
+# An entity is a value C# holds and assigns whole but never edits: a mirror holding one keeps a writable field.
 immutable-structs = ["Fenrir::Entity"]
-# A link's value and entity list are the engine's: C# reads them through EntityLink's Target and IsNull.
+# An entity's value and entity list are the engine's: C# reads the value through Entity's hand-written part, the owner never.
 private-fields = ["Fenrir::Entity::m_entityId", "Fenrir::Entity::m_entityList"]
 fixed-buffers = ["Fenrir::Name::name"]
 
@@ -41,7 +41,7 @@ setup = "Fenrir::Testing::FixtureApp app;"
 tags = "[scripting][bindings]"
 
 [names]
-"Fenrir::Entity" = "EntityLink"
+"Fenrir::Entity" = "Entity"
 "Fenrir::Entity::m_entityId" = "value"
 "Fenrir::Entity::m_entityList" = "owner"
 "Fenrir::Name::name" = "Text"

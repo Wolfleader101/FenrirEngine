@@ -275,12 +275,11 @@ public sealed class MeshesAndMaterials : ISystem
     {
         if (entity.Has<MeshRenderer>())
             entity.Get<MeshRenderer>().Value.Visible = visible;
-        EntityLink child = entity.GetReadOnly<Relationship>().Value.FirstChild;
-        while (!child.IsNull)
+        Entity child = entity.GetReadOnly<Relationship>().Value.FirstChild;
+        while (child != Entity.None)
         {
-            Entity next = child.Target;
-            SetVisible(next, visible);
-            child = next.GetReadOnly<Relationship>().Value.NextSibling;
+            SetVisible(child, visible);
+            child = child.GetReadOnly<Relationship>().Value.NextSibling;
         }
     }
 

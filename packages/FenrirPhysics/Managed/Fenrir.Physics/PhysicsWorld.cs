@@ -137,7 +137,7 @@ public static partial class PhysicsWorld
     // `default`, every field zero, which as written would find nothing: that one stands for a new filter, which finds
     // every body except triggers. The natives take the engine's QueryFilter as it is.
     private static QueryFilter OrDefault(QueryFilter filter) =>
-        filter.Mask == 0 && filter.Layers == 0 && !filter.HitTriggers && filter.IgnoreBody.Target.Value == 0
+        filter.Mask == 0 && filter.Layers == 0 && !filter.HitTriggers && filter.IgnoreBody.Value == 0
             ? new QueryFilter()
             : filter;
 

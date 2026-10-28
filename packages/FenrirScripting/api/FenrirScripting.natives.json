@@ -61,26 +61,15 @@
       },
       "parameters": [
         {
-          "name": "value",
-          "type": "std::uint32_t",
-          "kind": "u32",
-          "doc": "The engine's full entity value, version bits included."
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The entity; one another scene's list owns is not alive here."
         }
       ]
-    },
-    {
-      "name": "EntityLinkOwner",
-      "namespace": "Fenrir::ScriptingNatives",
-      "source": "../src/Bindings.cpp",
-      "state": "Fenrir::Detail::EngineContext",
-      "doc": "The active scene's entity list: the owner a native Entity holds beside its value. EntityLink's conversion from an Entity stores it, so C++ reads the link as an entity of the active scene, and never hands it to a script.",
-      "returns": {
-        "type": "void*",
-        "kind": "pointer",
-        "pointee": "void",
-        "pointeeKind": "void"
-      },
-      "parameters": []
     },
     {
       "name": "EntityWorldTransform",
@@ -95,9 +84,12 @@
       },
       "parameters": [
         {
-          "name": "value",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "world",
@@ -123,9 +115,12 @@
       },
       "parameters": [
         {
-          "name": "value",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "name": "entity",
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "world",
@@ -224,8 +219,11 @@
         },
         {
           "name": "entity",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         }
       ]
     },
@@ -247,8 +245,11 @@
         },
         {
           "name": "entity",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         }
       ]
     },
@@ -258,13 +259,22 @@
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
       "doc": "A new entity, alive and usable at once; it gets its engine components when changes play back.\n\nThe structural changes (this, EntityDestroy, ComponentAdd and ComponentRemove) never touch the engine's storage: each is recorded and played back, in order, when the native code that called into the script gets control back, so a Ref<T> taken before stays valid.",
-      "notRunning": "Fenrir::Entity::Null",
       "returns": {
-        "type": "std::uint32_t",
-        "kind": "u32",
-        "doc": "The entity's value (uint.MaxValue when there is no active scene)."
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether one was made: false when there is no active scene."
       },
-      "parameters": []
+      "parameters": [
+        {
+          "name": "entity",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The new entity, owned by the active scene's list; no entity (the default Entity, C#'s Entity.None) when none could be made."
+        }
+      ]
     },
     {
       "name": "EntityDestroy",
@@ -281,8 +291,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         }
       ]
     },
@@ -306,8 +319,11 @@
         },
         {
           "name": "entity",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "value",
@@ -340,8 +356,11 @@
         },
         {
           "name": "entity",
-          "type": "std::uint32_t",
-          "kind": "u32"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         }
       ]
     },
@@ -495,7 +514,7 @@
       "namespace": "Fenrir::ScriptingNatives",
       "source": "../src/Bindings.cpp",
       "state": "Fenrir::Detail::EngineContext",
-      "doc": "How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this call and QueryFill however many entities match; a row is the entity followed by the address of its component for each id, in order.",
+      "doc": "How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its scene's list set) followed by the address of its component for each id, in order.",
       "notRunning": "-1",
       "returns": {
         "type": "std::int32_t",

@@ -10,9 +10,9 @@ namespace Fenrir.Physics;
 public partial struct MoveCastHit
 {
     /// <summary>The entity of the body that blocked the shape.</summary>
-    public EntityLink Body = new();
+    public Entity Body = new();
     /// <summary>The entity of the collider that blocked it.</summary>
-    public EntityLink Collider = new();
+    public Entity Collider = new();
     /// <summary>Where the shape touches the body, on the shape, in world space.</summary>
     public Vector3 Point = new(0, 0, 0);
     /// <summary>The body's surface normal where it was touched, pointing towards the shape.</summary>

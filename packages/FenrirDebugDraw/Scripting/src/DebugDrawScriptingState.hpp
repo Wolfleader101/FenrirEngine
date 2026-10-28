@@ -6,7 +6,6 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
@@ -53,8 +52,9 @@ namespace Fenrir
 
         /**
          * @brief The active scene's DebugDraw and the entity `relativeTo` (a null Entity for none) resolved in that
-         * scene by its value, as any entity a native is given, unless the scene has no DebugDraw or the entity is not
-         * alive: then nothing is drawn, and the native guard warns once under the calling native function's name.
+         * scene by the guard's owner rule, as any entity a native is given, unless the scene has no DebugDraw or the
+         * entity is not alive: then nothing is drawn, and the native guard warns once under the calling native
+         * function's name.
          */
         std::optional<Target> TargetFor(const CallContext& context, const Entity& relativeTo = Entity())
         {
@@ -70,7 +70,7 @@ namespace Fenrir
             {
                 return Target{draw, Entity()};
             }
-            const std::optional<Entity> entity = guard.Alive(EntityValue(relativeTo.GetId()));
+            const std::optional<Entity> entity = guard.Alive(relativeTo);
             if (!entity)
             {
                 return std::nullopt;

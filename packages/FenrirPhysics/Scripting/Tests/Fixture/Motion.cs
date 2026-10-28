@@ -18,14 +18,14 @@ public static class Motion
         new() { Position = new Vector3(x, y, z), Rotation = Quaternion.Identity, Scale = Vector3.One };
 
     private static QueryFilter Filter(uint ignoreBody, uint layers) =>
-        new() { Layers = layers, IgnoreBody = new Entity(ignoreBody) };
+        new() { Layers = layers, IgnoreBody = World.Owned(ignoreBody) };
 
     // Moves a unit box from (x, y, z) by (dx, dy, dz).
     public static bool MoveBox(float x, float y, float z, float dx, float dy, float dz, uint ignoreBody, uint layers)
     {
         bool found = PhysicsWorld.MoveCast(new BoxShape(), At(x, y, z), new Vector3(dx, dy, dz), out MoveCastHit hit,
             Filter(ignoreBody, layers));
-        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body.Target, hit.Collider.Target, hit.Point, hit.Normal, hit.Distance);
+        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body, hit.Collider, hit.Point, hit.Normal, hit.Distance);
         return found;
     }
 
@@ -40,15 +40,15 @@ public static class Motion
         return count;
     }
 
-    public static uint PenetrationBody(int index) => penetrations[index].Body.Target.Value;
+    public static uint PenetrationBody(int index) => penetrations[index].Body.Value;
 
-    public static uint PenetrationCollider(int index) => penetrations[index].Collider.Target.Value;
+    public static uint PenetrationCollider(int index) => penetrations[index].Collider.Value;
 
     // Makes overlap `index` the hit read last.
     public static void ReadPenetration(int index)
     {
         PenetrationHit hit = penetrations[index];
-        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body.Target, hit.Collider.Target, hit.Point, hit.Normal, hit.Depth);
+        (hitBody, hitCollider, hitPoint, hitNormal, hitScalar) = (hit.Body, hit.Collider, hit.Point, hit.Normal, hit.Depth);
     }
 
     private static Vector3 offset;
@@ -62,7 +62,7 @@ public static class Motion
     // The body a ray from the origin along +x hits first, or none.
     public static uint RaycastEast(uint ignoreBody, uint layers) =>
         PhysicsWorld.Raycast(Vector3.Zero, new Vector3(1, 0, 0), 100, out RaycastHit hit, Filter(ignoreBody, layers))
-            ? hit.Body.Target.Value
+            ? hit.Body.Value
             : uint.MaxValue;
 
     public static uint HitBody() => hitBody.Value;

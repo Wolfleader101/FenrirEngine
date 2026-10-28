@@ -17,8 +17,11 @@
       "parameters": [
         {
           "name": "camera",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "point",
@@ -54,8 +57,11 @@
       "parameters": [
         {
           "name": "camera",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "point",
@@ -82,12 +88,10 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order enabled camera in the active scene whose viewport holds it.",
-      "notRunning": "Fenrir::EntityValue(Fenrir::Entity::Null)",
-      "facade": "Renderer.CameraAt",
       "returns": {
-        "type": "Fenrir::EntityValue",
-        "kind": "struct",
-        "doc": "The camera entity, or no entity (C#'s Entity.None) when there is none or no renderer."
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether there is one: false when there is none or no renderer."
       },
       "parameters": [
         {
@@ -102,6 +106,15 @@
           "pointee": "Fenrir::Math::Vec2",
           "pointeeKind": "struct",
           "const": true
+        },
+        {
+          "name": "camera",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The camera entity; no entity (the default Entity, C#'s Entity.None) when there is none."
         }
       ]
     },
@@ -120,8 +133,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "bounds",
@@ -164,11 +180,10 @@
       "source": "../src/RendererScripting.cpp",
       "state": "Fenrir::RendererScripting",
       "doc": "Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity: recorded, so it takes effect when the system returns.",
-      "notRunning": "Fenrir::EntityValue(Fenrir::Entity::Null)",
       "returns": {
-        "type": "Fenrir::EntityValue",
-        "kind": "struct",
-        "doc": "The model's root entity, or no entity (C#'s Entity.None) when the app has no store, the model is stale or the parent is not alive."
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether it spawned: false when the app has no store, the model is stale or the parent is not alive."
       },
       "parameters": [
         {
@@ -179,8 +194,21 @@
         },
         {
           "name": "parent",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The entity to spawn under; no entity (Entity.None in C#) for none."
+        },
+        {
+          "name": "root",
+          "type": "Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was spawned."
         }
       ]
     }

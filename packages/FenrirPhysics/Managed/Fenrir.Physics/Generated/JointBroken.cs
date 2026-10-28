@@ -18,11 +18,11 @@ namespace Fenrir.Physics;
 public readonly partial struct JointBroken : IEvent
 {
     /// <summary>The joint entity, whose Joint is now disabled.</summary>
-    public readonly EntityLink Joint = new();
+    public readonly Entity Joint = new();
     /// <summary>The joint's bodyA.</summary>
-    public readonly EntityLink BodyA = new();
+    public readonly Entity BodyA = new();
     /// <summary>The joint's bodyB: empty for the world.</summary>
-    public readonly EntityLink BodyB = new();
+    public readonly Entity BodyB = new();
     /// <summary>
     /// Newtons, world space: what the joint applied to bodyB in the step that broke it (JointState::force).
     /// </summary>

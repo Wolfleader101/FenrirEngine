@@ -56,18 +56,29 @@ public static class World
     public static bool Raycast(float x, float y, float z, float dx, float dy, float dz, float maxDistance) =>
         PhysicsWorld.Raycast(new Vector3(x, y, z), new Vector3(dx, dy, dz), maxDistance, out lastHit);
 
+    // The entity of the active scene with this value, found as a script finds one, through a query (every entity has
+    // a Transform), so it carries its scene: an entity named by id alone has none, and the engine would not match it
+    // against a body. Entity.None when there is none.
+    internal static Entity Owned(uint value)
+    {
+        foreach (var (entity, _) in Fenrir.Scripting.World.Query<Transform>())
+            if (entity.Value == value)
+                return entity;
+        return Entity.None;
+    }
+
     // A ray straight down from (0, y, 0) with every field of the filter given.
     public static uint RaycastDownFiltered(float y, uint mask, uint ignoreBody, bool hitTriggers)
     {
-        var filter = new QueryFilter { Mask = mask, IgnoreBody = new Entity(ignoreBody), HitTriggers = hitTriggers };
+        var filter = new QueryFilter { Mask = mask, IgnoreBody = Owned(ignoreBody), HitTriggers = hitTriggers };
         return PhysicsWorld.Raycast(new Vector3(0, y, 0), new Vector3(0, -1, 0), 100, out RaycastHit hit, filter)
-            ? hit.Body.Target.Value
+            ? hit.Body.Value
             : uint.MaxValue;
     }
 
-    public static uint LastHitBody() => lastHit.Body.Target.Value;
+    public static uint LastHitBody() => lastHit.Body.Value;
 
-    public static uint LastHitCollider() => lastHit.Collider.Target.Value;
+    public static uint LastHitCollider() => lastHit.Collider.Value;
 
     public static float LastHitDistance() => lastHit.Distance;
 
@@ -86,7 +97,7 @@ public static class World
         return count;
     }
 
-    public static uint AllHitBody(int index) => allHits[index].Body.Target.Value;
+    public static uint AllHitBody(int index) => allHits[index].Body.Value;
 
     public static float AllHitDistance(int index) => allHits[index].Distance;
 
@@ -100,7 +111,7 @@ public static class World
         PhysicsWorld.ShapeCast(new SphereShape { Radius = radius }, At(x, y, z), new Vector3(dx, dy, dz), maxDistance,
             out lastCast);
 
-    public static uint LastCastBody() => lastCast.Body.Target.Value;
+    public static uint LastCastBody() => lastCast.Body.Value;
 
     public static float LastCastDistance() => lastCast.Distance;
 
@@ -134,9 +145,9 @@ public static class World
         return count;
     }
 
-    public static uint OverlapBody(int index) => overlaps[index].Body.Target.Value;
+    public static uint OverlapBody(int index) => overlaps[index].Body.Value;
 
-    public static uint OverlapCollider(int index) => overlaps[index].Collider.Target.Value;
+    public static uint OverlapCollider(int index) => overlaps[index].Collider.Value;
 
     public static float GravityY() => PhysicsWorld.Gravity.Y;
 
@@ -162,11 +173,11 @@ public static class World
         return count;
     }
 
-    public static uint ContactBody(int index) => contacts[index].Body.Target.Value;
+    public static uint ContactBody(int index) => contacts[index].Body.Value;
 
-    public static uint ContactOtherBody(int index) => contacts[index].OtherBody.Target.Value;
+    public static uint ContactOtherBody(int index) => contacts[index].OtherBody.Value;
 
-    public static uint ContactOtherCollider(int index) => contacts[index].OtherCollider.Target.Value;
+    public static uint ContactOtherCollider(int index) => contacts[index].OtherCollider.Value;
 
     public static float ContactNormalY(int index) => contacts[index].Normal.Y;
 

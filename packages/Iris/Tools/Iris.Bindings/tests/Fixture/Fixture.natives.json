@@ -7,7 +7,7 @@
       "namespace": "Fixture::Natives",
       "source": "Natives.cpp",
       "state": "Host::State",
-      "doc": "Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.",
+      "doc": "Pushes the body of `body` with `force`: a pointer to an alias, and a const pointer, after the state.",
       "facade": "Bodies.Push",
       "returns": {
         "type": "bool",
@@ -16,8 +16,11 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fixture::EntityId",
-          "kind": "u32"
+          "type": "const Fixture::EntityId*",
+          "kind": "pointer",
+          "pointee": "Fixture::EntityId",
+          "pointeeKind": "u32",
+          "const": true
         },
         {
           "name": "force",
@@ -351,8 +354,11 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fixture::EntityId",
-          "kind": "u32"
+          "type": "const Fixture::EntityId*",
+          "kind": "pointer",
+          "pointee": "Fixture::EntityId",
+          "pointeeKind": "u32",
+          "const": true
         },
         {
           "name": "damper",

@@ -40,9 +40,9 @@ namespace Fenrir.Physics;
 public partial struct Joint : IComponent
 {
     /// <summary>A body entity: a RigidBody's, or a standalone static collider's. Never the world.</summary>
-    public EntityLink BodyA = new();
+    public Entity BodyA = new();
     /// <summary>A body entity, or empty: the world.</summary>
-    public EntityLink BodyB = new();
+    public Entity BodyB = new();
     /// <summary>Local to bodyA's origin.</summary>
     public JointFrame FrameA = new();
     /// <summary>Local to bodyB's origin, or in world space when bodyB is the world.</summary>

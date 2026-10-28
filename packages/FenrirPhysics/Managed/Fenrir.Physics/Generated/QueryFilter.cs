@@ -24,7 +24,7 @@ public partial struct QueryFilter
     /// A body never found, such as the one casting the query: the body of this entity (for a child collider's entity,
     /// the compound body it belongs to). None by default.
     /// </summary>
-    public EntityLink IgnoreBody = new();
+    public Entity IgnoreBody = new();
     /// <summary>Whether triggers are found.</summary>
     public bool HitTriggers = false;
 

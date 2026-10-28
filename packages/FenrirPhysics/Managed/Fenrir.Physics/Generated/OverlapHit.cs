@@ -9,9 +9,9 @@ namespace Fenrir.Physics;
 public partial struct OverlapHit
 {
     /// <summary>The entity of the body.</summary>
-    public EntityLink Body = new();
+    public Entity Body = new();
     /// <summary>The entity of the collider.</summary>
-    public EntityLink Collider = new();
+    public Entity Collider = new();
 
     public OverlapHit()
     {
