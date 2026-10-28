@@ -18,7 +18,7 @@ defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 contract = "../../Managed/Fenrir.DebugDraw"
 generated = "../../Managed/Fenrir.DebugDraw/Generated"
 # None of these is used: the contract has no components or events.
-# The facade's: C# names ShapeOptions and TextOptions, with their group, and converts them to these.
+# The facade's: C# names ShapeOptions and TextOptions, with their group, and each holds its mirror of these.
 internal-structs = ["Fenrir::ScriptOptions::ShapeOptions", "Fenrir::ScriptOptions::TextOptions"]
 
 [cpp]

@@ -12,12 +12,12 @@
 
 **Touches:** `packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs`, `packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs`, `packages/FenrirDebugDraw/Scripting/api/FenrirDebugDraw.binding.toml`, `docs/adr/0043-native-resources-and-facades-move-onto-the-generated-api-pipeline.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -n "NativeShapeOptions(\|NativeTextOptions(" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` finds nothing; `grep -c "= 1.0f\|= 24\|= 16.0f" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` prints 0.
-- [ ] `grep -c "out string group" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs` prints 0; every shape and text method is one expression body.
-- [ ] `grep -c "debug draw options" docs/adr/0043-native-resources-and-facades-move-onto-the-generated-api-pipeline.md` prints 2.
-- [ ] `ctest -R DebugDraw` passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op; `check_tickets.py` and clang-format pass.
+- [x] `grep -n "NativeShapeOptions(\|NativeTextOptions(" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` finds nothing; `grep -c "= 1.0f\|= 24\|= 16.0f" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/Options.cs` prints 0.
+- [x] `grep -c "out string group" packages/FenrirDebugDraw/Managed/Fenrir.DebugDraw/DebugDraw.cs` prints 0; every shape and text method is one expression body.
+- [x] `grep -c "debug draw options" docs/adr/0043-native-resources-and-facades-move-onto-the-generated-api-pipeline.md` prints 2.
+- [x] `ctest -R DebugDraw` passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op; `check_tickets.py` and clang-format pass.
 
 ## Comments
 
