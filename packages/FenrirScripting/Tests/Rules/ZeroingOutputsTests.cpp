@@ -5,6 +5,7 @@
 
 #include "NativeCallHarness.hpp"
 
+#include "FenrirScripting/NativeFunctionMake.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 
