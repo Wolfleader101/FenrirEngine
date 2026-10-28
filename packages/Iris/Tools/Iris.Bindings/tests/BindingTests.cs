@@ -268,7 +268,8 @@ public sealed class BindingTests
     private const string OwnBoundTypesWithoutVec3 =
         "\"Fixture::Quat\" = { type = \"Quaternion\", include = \"BoundMappings.hpp\" }\n" +
         "\"Fixture::Handle\" = { type = \"Handle\", default = \"new()\", include = \"BoundMappings.hpp\" }\n" +
-        "\"Fixture::Size\" = { type = \"Size\", include = \"BoundMappings.hpp\" }\n";
+        "\"Fixture::Size\" = { type = \"Size\", include = \"BoundMappings.hpp\" }\n" +
+        "\"Fixture::Pair<double>\" = { type = \"DoublePair\", include = \"BoundMappings.hpp\" }\n";
 
     [Fact]
     public void AChangedDefaultChangesExactlyItsInitialiser()
@@ -327,6 +328,7 @@ public sealed class BindingTests
                                            "\"Fixture::Quat\" = { type = \"Quaternion\" }\n" +
                                            "\"Fixture::Handle\" = { type = \"Handle\", default = \"Handle.None\" }\n" +
                                            "\"Fixture::Size\" = { type = \"Size\" }\n" +
+                                           "\"Fixture::Pair<double>\" = { type = \"DoublePair\" }\n" +
                                            "\"Fixture::Ticket\" = { type = \"Ticket\", wrapper = \"u32\" }\n");
         var description = WriteDescription(directory, _ => { });
 
