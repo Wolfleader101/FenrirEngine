@@ -12,11 +12,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/tests/Fixture/`, `tools/describe-api/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `fenrir-describe-api` regenerates `packages/Iris/Tools/Iris.Bindings/tests/Fixture/Fixture.api.json` and is a no-op afterwards; `grep -c "Fixture::Pair<double>" <that file>` is at least 1.
-- [ ] `fenrir-generate-bindings` is a no-op after the committed regeneration; Iris.Bindings' tests and the `IrisBindingsDefaults` test pass under the msvc-x64-debug preset.
-- [ ] `check_tickets.py` passes.
+- [x] `fenrir-describe-api` regenerates `packages/Iris/Tools/Iris.Bindings/tests/Fixture/Fixture.api.json` and is a no-op afterwards; `grep -c "Fixture::Pair<double>" <that file>` is at least 1.
+- [x] `fenrir-generate-bindings` is a no-op after the committed regeneration; Iris.Bindings' tests and the `IrisBindingsDefaults` test pass under the msvc-x64-debug preset.
+- [x] `check_tickets.py` passes.
 
 ## Comments
 
