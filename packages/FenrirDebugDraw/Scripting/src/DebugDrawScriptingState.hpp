@@ -6,7 +6,6 @@
 #include "FenrirApp/App.hpp"
 #include "FenrirDebugDraw/DebugDraw.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
@@ -23,8 +22,8 @@ namespace Fenrir
     struct DebugDrawScripting
     {
         /**
-         * @brief Where a call draws: the active scene's DebugDraw, and the relativeTo entity C# named (a null Entity
-         * for none).
+         * @brief Where a call draws: the active scene's DebugDraw, and the relativeTo entity C# named, as a handle of
+         * that scene (a null Entity for none).
          */
         struct Target
         {
@@ -52,11 +51,12 @@ namespace Fenrir
         };
 
         /**
-         * @brief The active scene's DebugDraw and the entity `relativeTo` (Entity::Null for none), unless the scene has
-         * no DebugDraw or the entity is not alive: then nothing is drawn, and the native guard warns once under the
-         * calling native function's name.
+         * @brief The active scene's DebugDraw and the entity `relativeTo` (a null Entity for none) resolved in that
+         * scene by the guard's owner rule, as any entity a native is given, unless the scene has no DebugDraw or the
+         * entity is not alive: then nothing is drawn, and the native guard warns once under the calling native
+         * function's name.
          */
-        std::optional<Target> TargetFor(const CallContext& context, EntityValue relativeTo = EntityValue(Entity::Null))
+        std::optional<Target> TargetFor(const CallContext& context, const Entity& relativeTo = Entity())
         {
             const NativeGuard guard(context, warnings);
             DebugDraw* draw = guard.Require(
@@ -66,7 +66,7 @@ namespace Fenrir
             {
                 return std::nullopt;
             }
-            if (relativeTo.value == Entity::Null)
+            if (relativeTo.GetId() == Entity::Null)
             {
                 return Target{draw, Entity()};
             }

@@ -13,7 +13,7 @@ public static class Driver
         vehicle.Kind.Wheeled.Transmission.Mode = TransmissionMode.Manual;
         ref readonly VehicleState state = ref vehicle.State;
         ref readonly VehicleWheelState contact = ref wheel.State;
-        return state.Shifting || contact.OnGround || !wheel.State.GroundCollider.IsNull;
+        return state.Shifting || contact.OnGround || wheel.State.GroundCollider != Entity.None;
     }
 
     public static float Look(ReadOnlyRef<Vehicle> vehicle) => vehicle.State.EngineRpm;

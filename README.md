@@ -44,7 +44,7 @@ from `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`. Its nati
 C++ definitions in `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`: `fenrir-describe-api` describes them into
 `FenrirPhysics.natives.json` beside the binding's configuration, and the binding generates their C# declarations
 (`PhysicsNative`), their registration and a test of their outputs. FenrirScripting's built-in extension is bound the same
-way, from FenrirECS's description (the engine's Transform, Name, Relationship and entity link) and its natives in
+way, from FenrirECS's description (the engine's Transform, Name, Relationship and Entity) and its natives in
 `packages/FenrirScripting/src/Bindings.cpp`, by `packages/FenrirScripting/api/FenrirScripting.binding.toml`, and so is
 every other engine extension: FenrirInput's, FenrirWindow's, FenrirAssets's, FenrirRenderer's and FenrirDebugDraw's, each by
 its `packages/<Package>/Scripting/api/<Package>.binding.toml`. The Fenrir.Math contract's colour, ray and box are generated

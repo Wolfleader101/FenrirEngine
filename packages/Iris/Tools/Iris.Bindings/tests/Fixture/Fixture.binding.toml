@@ -13,6 +13,8 @@ pointer-type = "ulong"
 readonly-events = true
 # A struct C# reads and never writes: readonly, and so is Body's field holding it.
 readonly-structs = ["Fixture::Limits"]
+# A value C# never edits but assigns whole: readonly, while Body's field holding it stays writable.
+immutable-structs = ["Fixture::Numbers"]
 # Tag's id and owner are C#'s to reach through members a hand-written part would add, and its label a fixed buffer.
 private-fields = ["Fixture::Tag::m_id", "Fixture::Tag::m_owner"]
 fixed-buffers = ["Fixture::Tag::m_label"]

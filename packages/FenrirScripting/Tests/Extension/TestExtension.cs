@@ -9,32 +9,33 @@ public static partial class Gadgets
     [NativeFunction]
     public static partial int Add(int left, int right);
 
+    // An entity crosses as C++'s Fenrir::Entity, by pointer: `in` to the native, `out` back.
     [NativeFunction]
-    public static partial Entity EchoEntity(Entity entity);
+    public static partial void EchoEntity(in Entity entity, out Entity echoed);
 
     // The entity's Transform height, as native code reads it; -1 if it has none.
     [NativeFunction]
-    public static partial float HeightOf(Entity entity);
+    public static partial float HeightOf(in Entity entity);
 
     [NativeFunction]
-    public static partial void Lift(Entity entity, float by);
+    public static partial void Lift(in Entity entity, float by);
 
     // The UTF-8 byte count of the text, times ten, plus the number; the native side keeps the text it received.
     [NativeFunction]
     public static partial int Label(string text, int number);
 
-    // Creates an entity through the change buffer and gives it a Charge of `level` in the same call; returns it.
+    // Creates an entity through the change buffer and gives it a Charge of `level` in the same call.
     [NativeFunction]
-    public static partial Entity SpawnCharged(int level);
+    public static partial void SpawnCharged(int level, out Entity entity);
 
     // Records, in this order: Charge 1 on `kept`, its removal, Charge 3 on it, destroying `doomed`, Charge 9 on `doomed`
     // (skipped at playback), and a Weather of `wind` in the active scene.
     [NativeFunction]
-    public static partial void Rearrange(Entity kept, Entity doomed, float wind);
+    public static partial void Rearrange(in Entity kept, in Entity doomed, float wind);
 
-    // Creates an entity through the change buffer and records parenting it under `parent`; returns it.
+    // Creates an entity through the change buffer and records parenting it under `parent`.
     [NativeFunction]
-    public static partial Entity SpawnUnder(Entity parent);
+    public static partial void SpawnUnder(in Entity parent, out Entity child);
 
     // Adds to the running total the extension keeps in its extension state, and returns the new total.
     [NativeFunction]
@@ -50,12 +51,12 @@ public static partial class Gadgets
 
     // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name.
     [NativeFunction]
-    public static partial void Nudge(Entity entity);
+    public static partial void Nudge(in Entity entity);
 
     // One reading of the entity (a count of one and its height), through the registration that zeroes `reading` before
     // the native runs: zero readings, and a zeroed `reading`, for a dead entity; -1 when no Scripting runs.
     [NativeFunction]
-    public static partial int Weigh(Entity entity, out Reading reading);
+    public static partial int Weigh(in Entity entity, out Reading reading);
 }
 
 /// <summary>A heading, which the test extension's natives take and return by value.</summary>

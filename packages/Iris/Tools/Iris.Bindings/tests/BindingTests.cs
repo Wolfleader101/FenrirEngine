@@ -116,7 +116,7 @@ public sealed class BindingTests
         [
             "#pragma once",
             "#include \"Host/Extension.hpp\"",
-            "namespace Fixture::Natives\n{\n    bool Push(const Host::CallContext&, Host::State&, Fixture::EntityId body, const Fixture::Vec3* force);",
+            "namespace Fixture::Natives\n{\n    bool Push(const Host::CallContext&, Host::State&, const Fixture::EntityId* body, const Fixture::Vec3* force);",
             "    std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);\n} // namespace Fixture::Natives",
             "namespace Fixture\n{\n    void Say(const Host::CallContext&, const char* text, std::int32_t length) noexcept;",
             "namespace Fixture::Bindings\n{\n    void Register(Host::Extension& extension);\n} // namespace Fixture::Bindings",
@@ -388,18 +388,65 @@ public sealed class BindingTests
     }
 
     [Fact]
-    public void AReadOnlyStructThatIsNotADescribedStructFails()
+    public void AnImmutableStructIsReadOnlyButAWritableHolderAssignsItWhole()
     {
         using var directory = new TemporaryDirectory();
-        var config = CopyConfig(directory, "", edit: text => text.Replace("readonly-structs = [\"Fixture::Limits\"]",
-                                                                         "readonly-structs = [\"Fixture::Motion\"]"));
+        var description = WriteDescription(directory, _ => { });
+
+        var generated = Generator.Generate(FixtureConfig, [description]);
+        var numbers = Mirror(generated, "Numbers.cs");
+        var body = Mirror(generated, "Body.cs");
+
+        Assert.True(numbers.Contains("public readonly partial struct Numbers", StringComparison.Ordinal) &&
+                    numbers.Contains("    public readonly sbyte I8 = -8;\n", StringComparison.Ordinal) &&
+                    numbers.Contains("public Numbers()", StringComparison.Ordinal),
+                    $"Numbers is in immutable-structs, so its mirror should be readonly with readonly fields and a constructor, but is:\n{numbers}");
+        Assert.True(body.Contains("    public Numbers Numbers = new();\n", StringComparison.Ordinal),
+                    $"Body holds an immutable-structs mirror, which C# assigns whole, so its field should not be readonly, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AWritableHolderOfAReadOnlyStructGetsAReadOnlyField()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, _ => { });
+
+        var body = Mirror(Generator.Generate(FixtureConfig, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    public readonly Limits Limits = new();\n", StringComparison.Ordinal),
+                    $"Body holds a readonly-structs mirror, which C# cannot write whole, so its field should be readonly, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AStructInBothReadOnlyAndImmutableStructsFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("immutable-structs = [\"Fixture::Numbers\"]",
+                                                                         "immutable-structs = [\"Fixture::Numbers\", \"Fixture::Limits\"]"));
         var description = WriteDescription(directory, _ => { });
 
         var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
 
-        Assert.True(exception.Message.Contains("readonly-structs names Fixture::Motion, which is not a described struct",
+        Assert.True(exception.Message.Contains("Fixture::Limits is in readonly-structs and immutable-structs: pick one",
                                                StringComparison.Ordinal),
-                    $"An enum in readonly-structs should fail naming it, but failed with\n  {exception.Message}");
+                    $"A struct in both lists should fail naming both keys, but failed with\n  {exception.Message}");
+    }
+
+    [Theory]
+    [InlineData("readonly-structs")]
+    [InlineData("immutable-structs")]
+    public void AReadOnlyOrImmutableStructThatIsNotADescribedStructFails(string key)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace(key + " = [\"Fixture::" + (key == "readonly-structs" ? "Limits" : "Numbers") + "\"]",
+                                                                         key + " = [\"Fixture::Motion\"]"));
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains($"{key} names Fixture::Motion, which is not a described struct",
+                                               StringComparison.Ordinal),
+                    $"An enum in {key} should fail naming it, but failed with\n  {exception.Message}");
     }
 
     [Theory]
@@ -672,7 +719,7 @@ public sealed class BindingTests
         foreach (var (part, line) in new[]
                  {
                      (bodies, "public static partial class Bodies"),
-                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(body, in force);"),
+                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(in body, in force);"),
                      (hits, "public static bool Find(Vector3 origin, float distance, out Hit hit) =>"),
                      (hits, "    FixtureNative.Find(in origin, distance, out hit);"),
                      (hits, "public static int Find(Vector3 origin, Span<Hit> hits) => FixtureNative.FindAll(in origin, hits);"),
@@ -687,6 +734,47 @@ public sealed class BindingTests
                     "A facade part whose methods take no span should not declare System:\n" + bodies);
         Assert.True(!bodies.Contains("///", StringComparison.Ordinal) || !bodies.Contains("<summary>The generated part", StringComparison.Ordinal),
                     "The class summary is the hand-written part's: the generated part carries a // comment.\n" + bodies);
+    }
+
+    [Fact]
+    public void AFacadeMarkNamingAMirrorPutsItsMethodOnTheMirrorOnThisWhenItsFirstParameterIsTheMirror()
+    {
+        var generated = Generator.Generate(FixtureConfig, [FixtureDescription]);
+
+        var body = Mirror(generated, "Body.cs");
+        foreach (var line in new[]
+                 {
+                     "// Its methods are the natives of FixtureNative marked @facade Body.<Method> (Fixture.natives.json): change their C++ definitions.",
+                     "    /// <param name=\"mass\">Kilograms.</param>\n    public bool Outweighs(float mass) => FixtureNative.Outweighs(in this, mass);",
+                     "    /// <param name=\"body\">The body; the default when none was made.</param>\n    /// <returns>Whether one was made.</returns>\n" +
+                     "    public static bool TryMake(out Body body, float mass) => FixtureNative.Make(out body, mass);",
+                 })
+        {
+            Assert.True(body.Contains(line, StringComparison.Ordinal), $"The mirror should hold\n  {line}\nbut is:\n{body}");
+        }
+
+        Assert.True(!body.Contains("<param name=\"body\">The body, which", StringComparison.Ordinal),
+                    "The parameter bound to this should get no <param>:\n" + body);
+        Assert.True(generated.Keys.All(path => Path.GetFileName(path) != "Body.cs" || path.Contains("Generated", StringComparison.Ordinal)) &&
+                    generated.Keys.Count(path => Path.GetFileName(path) == "Body.cs") == 1,
+                    "A mark naming a mirror should give no facade part of its own.");
+    }
+
+    [Fact]
+    public void AFacadeMarkNamingAMirrorIsStaticWhenItsFirstParameterIsNotTheMirror()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "");
+        var description = WriteDescription(directory, _ => { });
+        // Push takes an Entity first, not a Body: a static method of Body, as it would be of the Bodies class.
+        WriteNatives(directory, root => Native(root, "Push")["facade"] = "Body.Push");
+
+        var generated = Generator.Generate(config, [description]);
+
+        var body = Mirror(generated, "Body.cs");
+        Assert.True(body.Contains("    public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(in body, in force);", StringComparison.Ordinal),
+                    "A mark naming a mirror on a native whose first parameter is not the mirror should give a static method, but the mirror is:\n" + body);
+        Assert.DoesNotContain(generated.Keys, path => Path.GetFileName(path) == "Bodies.cs");
     }
 
     [Fact]
@@ -711,7 +799,10 @@ public sealed class BindingTests
     [InlineData("Pointer", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it takes void* body")]
     [InlineData("PointerResult", "Fixture.natives.json: Next: @facade Records.Next cannot be public: it returns void*")]
     [InlineData("Doubled", "Fixture.natives.json: Push and Shove: both are @facade Bodies.Push(Entity, Vector3)")]
-    [InlineData("Mirror", "Fixture.natives.json: Push: @facade Body is the name of the mirror of Fixture::Body")]
+    [InlineData("DoubledOnThis", "Fixture.natives.json: Outweighs and Weigh: both are @facade Body.Outweighs(float)")]
+    [InlineData("Enum", "Fixture.natives.json: Push: @facade Motion is the name of the enum Fixture::Motion")]
+    [InlineData("TaggedUnion", "Fixture.natives.json: Push: @facade Shape is the name of the tagged union Fixture::Shape")]
+    [InlineData("Field", "Fixture.natives.json: Push: @facade Body.Mass is the name of a field of the mirror of Fixture::Body")]
     [InlineData("UsedMirror", "Fixture.natives.json: Push: @facade Spring is the name of the mirror of Fixture::Spring in the binding it uses")]
     [InlineData("BoundType", "Fixture.natives.json: Push: @facade Vector3 is the name of the C# type of the bound type Fixture::Vec3")]
     [InlineData("NativesClass", "Fixture.natives.json: Push: @facade FixtureNative is the name of the [natives] class")]
@@ -743,8 +834,21 @@ public sealed class BindingTests
                     shove["name"] = "Shove";
                     root["functions"]!.AsArray().Add(shove);
                     break;
-                case "Mirror":
-                    Native(root, "Push")["facade"] = "Body.Push";
+                case "DoubledOnThis":
+                    // A static Body.Outweighs(float) beside the instance one: C# would refuse them too.
+                    var weigh = Native(root, "Outweighs").DeepClone();
+                    weigh["name"] = "Weigh";
+                    weigh["parameters"]!.AsArray().RemoveAt(0);
+                    root["functions"]!.AsArray().Add(weigh);
+                    break;
+                case "Enum":
+                    Native(root, "Push")["facade"] = "Motion.Push";
+                    break;
+                case "TaggedUnion":
+                    Native(root, "Push")["facade"] = "Shape.Push";
+                    break;
+                case "Field":
+                    Native(root, "Push")["facade"] = "Body.Mass";
                     break;
                 case "UsedMirror":
                     Native(root, "Push")["facade"] = "Spring.Push";
@@ -771,12 +875,13 @@ public sealed class BindingTests
     public void TheMirrorsAndDefaultsClassCompileAgainstStubsOfTheSdk()
     {
         // The natives' class has no bodies until the SDK's generator writes them, and the facade parts call it: the SDK
-        // check compiles them.
+        // check compiles them. Body's methods call it too, so NativeStubs.cs stands in for the natives they call.
         var sources = Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Contract"), "*.cs", SearchOption.AllDirectories)
                           .Where(path => Path.GetFileName(path) is not ("FixtureNative.cs" or "Bodies.cs" or "Hits.cs"))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Uses", "Contract"), "*.cs", SearchOption.AllDirectories))
                           .Concat(Directory.EnumerateFiles(Path.Combine(FixtureDirectory, "Tests", "Generated"), "*.cs"))
                           .Append(Path.Combine(TestsDirectory(), "Checks", "Stubs.cs"))
+                          .Append(Path.Combine(TestsDirectory(), "Checks", "NativeStubs.cs"))
                           .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), Latest, path, cancellationToken: Cancel))
                           .Append(CSharpSyntaxTree.ParseText("global using System;", Latest, cancellationToken: Cancel));
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
@@ -905,10 +1010,10 @@ public sealed class BindingTests
 
         var natives = Mirror(generated, "FixtureNative.cs");
         Assert.True(natives.Contains("using Fixture.Common;\n", StringComparison.Ordinal) &&
-                    natives.Contains("    public static partial void Damp(Entity body, in Damper damper, in Angles angles);\n", StringComparison.Ordinal),
+                    natives.Contains("    public static partial void Damp(in Entity body, in Damper damper, in Angles angles);\n", StringComparison.Ordinal),
                     $"Damp should take the Common binding's Damper and Angles by their C# names, with its using, but the class is:\n{natives}");
         var header = Output(generated, "FixtureNatives.hpp");
-        Assert.True(header.Contains("    void Damp(const Host::CallContext&, Fixture::EntityId body, const Fixture::Damper* damper, " +
+        Assert.True(header.Contains("    void Damp(const Host::CallContext&, const Fixture::EntityId* body, const Fixture::Damper* damper, " +
                                     "const Fixture::Angles* angles);\n", StringComparison.Ordinal),
                     $"The natives header should declare Damp over the C++ types, but is:\n{header}");
         Assert.False(generated.Keys.Any(path => Path.GetFileName(path) is "Angles.cs" or "Damper.cs"),

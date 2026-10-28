@@ -20,7 +20,7 @@ internal static unsafe partial class RendererNative
     /// Whether there is a ray: false with no renderer, no such camera, or a point outside the camera's viewport.
     /// </returns>
     [NativeFunction]
-    public static partial bool ScreenPointToRay(Entity camera, in Vector2 point, out Ray ray);
+    public static partial bool ScreenPointToRay(in Entity camera, in Vector2 point, out Ray ray);
 
     /// <summary>
     /// Where `point`, in world space, appears on `camera`'s target, in window pixels from its top-left.
@@ -28,15 +28,18 @@ internal static unsafe partial class RendererNative
     /// <param name="screenPoint">The point; zero when it does not appear.</param>
     /// <returns>Whether it appears: false with no renderer, no such camera, or a point behind the camera.</returns>
     [NativeFunction]
-    public static partial bool WorldToScreenPoint(Entity camera, in Vector3 point, out Vector2 screenPoint);
+    public static partial bool WorldToScreenPoint(in Entity camera, in Vector3 point, out Vector2 screenPoint);
 
     /// <summary>
     /// The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order enabled
     /// camera in the active scene whose viewport holds it.
     /// </summary>
-    /// <returns>The camera entity, or no entity (C#'s Entity.None) when there is none or no renderer.</returns>
+    /// <param name="camera">
+    /// The camera entity; no entity (the default Entity, C#'s Entity.None) when there is none.
+    /// </param>
+    /// <returns>Whether there is one: false when there is none or no renderer.</returns>
     [NativeFunction]
-    public static partial Entity CameraAt(WindowId window, in Vector2 point);
+    public static partial bool CameraAt(WindowId window, in Vector2 point, out Entity camera);
 
     /// <summary>The world-space box around the drawn meshes of `entity` and its children, now.</summary>
     /// <param name="bounds">The box; the default box when there is none.</param>
@@ -45,7 +48,7 @@ internal static unsafe partial class RendererNative
     /// mesh that does not resolve).
     /// </returns>
     [NativeFunction]
-    public static partial bool GetWorldBounds(Entity entity, out Bounds bounds);
+    public static partial bool GetWorldBounds(in Entity entity, out Bounds bounds);
 
     /// <summary>What the renderer did in the last drawn frame; zeros before the first.</summary>
     /// <param name="stats">The counts; zero with no renderer.</param>
@@ -58,10 +61,13 @@ internal static unsafe partial class RendererNative
     /// takes effect when the system returns.
     /// </summary>
     /// <param name="model">The model's handle, packed as Fenrir.Assets packs one (generation high, index low).</param>
+    /// <param name="parent">The entity to spawn under; no entity (Entity.None in C#) for none.</param>
+    /// <param name="root">
+    /// The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was spawned.
+    /// </param>
     /// <returns>
-    /// The model's root entity, or no entity (C#'s Entity.None) when the app has no store, the model is stale or the
-    /// parent is not alive.
+    /// Whether it spawned: false when the app has no store, the model is stale or the parent is not alive.
     /// </returns>
     [NativeFunction]
-    public static partial Entity SpawnModel(ulong model, Entity parent);
+    public static partial bool SpawnModel(ulong model, in Entity parent, out Entity root);
 }

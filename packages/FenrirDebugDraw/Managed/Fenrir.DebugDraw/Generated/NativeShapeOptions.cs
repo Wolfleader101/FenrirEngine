@@ -10,8 +10,8 @@ internal partial struct NativeShapeOptions
 {
     /// <summary>How long the item is kept, as ShapeOptions.Duration.</summary>
     public float Duration = 0;
-    /// <summary>The entity the positions are relative to, or Entity.None (Entity::Null).</summary>
-    public Entity RelativeTo = new(4294967295);
+    /// <summary>The entity the positions are relative to, or none.</summary>
+    public Entity RelativeTo = new();
     /// <summary>Line thickness in pixels.</summary>
     public float Thickness = 1;
     /// <summary>Whether the shape is depth tested or drawn on top.</summary>

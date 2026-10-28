@@ -1,8 +1,12 @@
 #include "Queries.hpp"
 
 #include <algorithm>
+#include <cstring>
 #include <limits>
 #include <vector>
+
+#include "FenrirECS/Entity.hpp"
+#include "FenrirECS/EntityList.hpp"
 
 namespace Fenrir::Detail
 {
@@ -57,7 +61,10 @@ namespace Fenrir::Detail
             return ids.empty() ? 0 : -1;
         }
 
-        const std::size_t stride = types.size() + 1;
+        static_assert(sizeof(Entity) == EntityWords * sizeof(std::uintptr_t) &&
+                          alignof(Entity) <= alignof(std::uintptr_t),
+                      "a query row holds the entity as the engine lays it out: value, then list");
+        const std::size_t stride = types.size() + EntityWords;
         std::int32_t written = 0;
         entities.ForEachWith(types, [&](std::uint32_t entity) {
             if (written >= capacity)
@@ -65,7 +72,8 @@ namespace Fenrir::Detail
                 return;
             }
             std::uintptr_t* row = rows + static_cast<std::size_t>(written) * stride;
-            row[0] = entity;
+            const Entity handle = entities.HandleOf(entity);
+            std::memcpy(row, &handle, sizeof(Entity));
             for (std::size_t index = 0; index < types.size(); ++index)
             {
                 void* component = entities.Get(types[index], entity);
@@ -73,7 +81,7 @@ namespace Fenrir::Detail
                 {
                     return; // Cannot happen for an entity the query selected; never hand out a null pointer.
                 }
-                row[index + 1] = reinterpret_cast<std::uintptr_t>(component);
+                row[index + EntityWords] = reinterpret_cast<std::uintptr_t>(component);
             }
             ++written;
         });

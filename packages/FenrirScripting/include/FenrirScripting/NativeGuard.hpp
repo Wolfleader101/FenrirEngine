@@ -3,6 +3,7 @@
 // The native guard: what a native function checks a call against before acting, made from its call context and its
 // extension's warn-once record (ADR-0045 for what it need not check: `in` and `out` pointers, and outputs' defaults).
 
+#include <cstdint>
 #include <optional>
 #include <source_location>
 #include <string>
@@ -10,7 +11,6 @@
 
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/EntityList.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
 
@@ -52,16 +52,29 @@ namespace Fenrir
         }
 
         /**
-         * @brief The entity-alive rule: the entity `entity` of the active scene if it is alive, or nothing, warning
-         * once for the caller's call site that the call does nothing.
+         * @brief The entity's value as an entity of `entities`, the owner rule every native resolves an entity it is
+         * given by: its value when `entities` owns it, or when it has no owner (a test names an entity by its id, and
+         * a zeroed field names entity 0 with no scene); Entity::Null, which no list holds, when another scene's list
+         * owns it, so a stale link from another scene is never alive here.
          */
-        [[nodiscard]] std::optional<Entity> Alive(EntityValue entity,
+        [[nodiscard]] static std::uint32_t ValueOf(const Entity& entity, EntityList& entities)
+        {
+            const std::uint32_t value = entity.GetId();
+            return !entity.HasEntityList() || entity == entities.HandleOf(value) ? value : Entity::Null;
+        }
+
+        /**
+         * @brief The entity-alive rule: `entity` as the active scene's handle if it is alive there (ValueOf), or
+         * nothing, warning once for the caller's call site that the call does nothing.
+         */
+        [[nodiscard]] std::optional<Entity> Alive(const Entity& entity,
                                                   std::source_location where = std::source_location::current()) const
         {
             EntityList& entities = m_context->Entities();
-            if (entities.HasEntity(entity.value))
+            const std::uint32_t value = ValueOf(entity, entities);
+            if (entities.HasEntity(value))
             {
-                return entities.GetEntity(entity.value);
+                return entities.GetEntity(value);
             }
             m_warnings->Warn(*m_context, "the entity is not alive, so it does nothing", where);
             return std::nullopt;

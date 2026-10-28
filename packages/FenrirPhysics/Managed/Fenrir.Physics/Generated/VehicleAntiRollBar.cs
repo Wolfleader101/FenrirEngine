@@ -18,9 +18,9 @@ namespace Fenrir.Physics;
 public partial struct VehicleAntiRollBar : IComponent
 {
     /// <summary>A wheel entity, usually on the vehicle's left.</summary>
-    public EntityLink LeftWheel = EntityLink.None;
+    public Entity LeftWheel = new();
     /// <summary>A wheel entity of the same vehicle, usually the left wheel's partner on the right.</summary>
-    public EntityLink RightWheel = EntityLink.None;
+    public Entity RightWheel = new();
     /// <summary>N/m: the push per metre of difference in the two wheels' compression. 0 does nothing.</summary>
     public float Stiffness = 1000;
 

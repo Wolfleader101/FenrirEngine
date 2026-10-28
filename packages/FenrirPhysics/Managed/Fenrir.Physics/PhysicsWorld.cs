@@ -42,7 +42,7 @@ public static partial class PhysicsWorld
     public static bool Raycast(Vector3 origin, Vector3 direction, float maxDistance, out RaycastHit hit,
                                QueryFilter filter = default)
     {
-        return PhysicsNative.Raycast(in origin, in direction, maxDistance, in filter, out hit);
+        return PhysicsNative.Raycast(in origin, in direction, maxDistance, OrDefault(filter), out hit);
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public static partial class PhysicsWorld
     /// </summary>
     public static int RaycastAll(Vector3 origin, Vector3 direction, float maxDistance, Span<RaycastHit> hits,
                                  QueryFilter filter = default) =>
-        PhysicsNative.RaycastAll(in origin, in direction, maxDistance, in filter, hits);
+        PhysicsNative.RaycastAll(in origin, in direction, maxDistance, OrDefault(filter), hits);
 
     /// <summary>
     /// The first body <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), touches when
@@ -62,7 +62,7 @@ public static partial class PhysicsWorld
     public static bool ShapeCast(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
                                  out ShapeCastHit hit, QueryFilter filter = default)
     {
-        return PhysicsNative.ShapeCast(in shape, in pose, in direction, maxDistance, in filter, out hit);
+        return PhysicsNative.ShapeCast(in shape, in pose, in direction, maxDistance, OrDefault(filter), out hit);
     }
 
     /// <summary>
@@ -71,7 +71,7 @@ public static partial class PhysicsWorld
     /// </summary>
     public static int ShapeCastAll(CollisionShape shape, Transform pose, Vector3 direction, float maxDistance,
                                    Span<ShapeCastHit> hits, QueryFilter filter = default) =>
-        PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, in filter, hits);
+        PhysicsNative.ShapeCastAll(in shape, in pose, in direction, maxDistance, OrDefault(filter), hits);
 
     /// <summary>
     /// How far <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), can move along
@@ -92,7 +92,7 @@ public static partial class PhysicsWorld
     public static bool MoveCast(CollisionShape shape, Transform pose, Vector3 motion, out MoveCastHit hit,
                                 QueryFilter filter = default)
     {
-        return PhysicsNative.MoveCast(in shape, in pose, in motion, in filter, out hit);
+        return PhysicsNative.MoveCast(in shape, in pose, in motion, OrDefault(filter), out hit);
     }
 
     /// <summary>
@@ -100,7 +100,7 @@ public static partial class PhysicsWorld
     /// overlaps to <paramref name="hits"/>, each with its body, and returns how many it wrote, stopping when the span is full.
     /// </summary>
     public static int Overlap(CollisionShape shape, Transform pose, Span<OverlapHit> hits, QueryFilter filter = default) =>
-        PhysicsNative.Overlap(in shape, in pose, in filter, hits);
+        PhysicsNative.Overlap(in shape, in pose, OrDefault(filter), hits);
 
     /// <summary>
     /// Writes the colliders <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is),
@@ -111,7 +111,7 @@ public static partial class PhysicsWorld
     /// </summary>
     public static int Penetrations(CollisionShape shape, Transform pose, Span<PenetrationHit> hits,
                                    QueryFilter filter = default) =>
-        PhysicsNative.Penetrations(in shape, in pose, in filter, hits);
+        PhysicsNative.Penetrations(in shape, in pose, OrDefault(filter), hits);
 
     /// <summary>
     /// The offset that moves <paramref name="shape"/>, placed at <paramref name="pose"/> (scaled as a collider is), out
@@ -122,7 +122,7 @@ public static partial class PhysicsWorld
     /// </summary>
     public static Vector3 Depenetrate(CollisionShape shape, Transform pose, QueryFilter filter = default)
     {
-        PhysicsNative.Depenetrate(in shape, in pose, in filter, out Vector3 offset);
+        PhysicsNative.Depenetrate(in shape, in pose, OrDefault(filter), out Vector3 offset);
         return offset;
     }
 
@@ -131,7 +131,15 @@ public static partial class PhysicsWorld
     /// how many it wrote, stopping when the span is full.
     /// </summary>
     public static int OverlapPoint(Vector3 point, Span<OverlapHit> hits, QueryFilter filter = default) =>
-        PhysicsNative.OverlapPoint(in point, in filter, hits);
+        PhysicsNative.OverlapPoint(in point, OrDefault(filter), hits);
+
+    // The filter a query runs with. A parameter's default must be a constant, so a query given no filter gets C#'s
+    // `default`, every field zero, which as written would find nothing: that one stands for a new filter, which finds
+    // every body except triggers. The natives take the engine's QueryFilter as it is.
+    private static QueryFilter OrDefault(QueryFilter filter) =>
+        filter.Mask == 0 && filter.Layers == 0 && !filter.HitTriggers && filter.IgnoreBody.Value == 0
+            ? new QueryFilter()
+            : filter;
 
     /// <summary>
     /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is

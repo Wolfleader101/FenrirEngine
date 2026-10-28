@@ -8,7 +8,6 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/Scripting.hpp"
@@ -82,7 +81,7 @@ struct Iris::StructMapping<TestNative::FloatHealth>
 };
 
 // A component with an Entity field, as a joint names its bodies, mapped to the fixture's Tether. Entity maps to the
-// contract's EntityLink through the built-in binding's generated mapping.
+// contract's Entity, its mirror, through the built-in binding's generated mapping.
 namespace TestNative
 {
     struct Tether
@@ -375,23 +374,24 @@ namespace TestExtension
         return left + right;
     }
 
-    std::uint32_t EchoEntity(const Fenrir::CallContext&, std::uint32_t entity)
+    // An entity crosses as Fenrir::Entity, C#'s Entity, by pointer: `in` to a native and `out` back.
+    void EchoEntity(const Fenrir::CallContext&, const Fenrir::Entity* entity, Fenrir::Entity* echoed)
     {
-        return entity;
+        *echoed = *entity;
     }
 
     // The entity's Transform height in the active scene, or -1 if it has none.
-    float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity)
+    float HeightOf(const Fenrir::CallContext& context, const Fenrir::Entity* entity)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         return found.IsValid() && found.HasComponent<Fenrir::Transform>()
                    ? found.GetComponent<Fenrir::Transform>().pos.y
                    : -1.0F;
     }
 
-    void Lift(const Fenrir::CallContext& context, std::uint32_t entity, float by)
+    void Lift(const Fenrir::CallContext& context, const Fenrir::Entity* entity, float by)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         if (found.IsValid() && found.HasComponent<Fenrir::Transform>())
         {
             found.GetComponent<Fenrir::Transform>().pos.y += by;
@@ -437,32 +437,34 @@ namespace TestExtension
         float Gusts = 0.0F;
     };
 
-    // Creates an entity through the change buffer and gives it a Charge in the same call: it is usable at once.
-    static std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level)
+    // Creates an entity through the change buffer and gives it a Charge in the same call: it is usable at once, and
+    // goes back to C# owned by the active scene's list.
+    static void SpawnCharged(const Fenrir::CallContext& context, std::int32_t level, Fenrir::Entity* entity)
     {
-        const std::uint32_t entity = context.Changes().CreateEntity();
-        (void)context.Changes().AddComponent(entity, Charge{level});
-        return entity;
+        const std::uint32_t created = context.Changes().CreateEntity();
+        (void)context.Changes().AddComponent(created, Charge{level});
+        *entity = context.Entities().HandleOf(created);
     }
 
-    static void Rearrange(const Fenrir::CallContext& context, std::uint32_t kept, std::uint32_t doomed, float wind)
+    static void Rearrange(const Fenrir::CallContext& context, const Fenrir::Entity* kept, const Fenrir::Entity* doomed,
+                          float wind)
     {
         const auto changes = context.Changes();
-        (void)changes.AddComponent(kept, Charge{1});
-        (void)changes.RemoveComponent<Charge>(kept);
-        (void)changes.AddComponent(kept, Charge{3});
-        (void)changes.DestroyEntity(doomed);
-        (void)changes.AddComponent(doomed, Charge{9});
+        (void)changes.AddComponent(kept->GetId(), Charge{1});
+        (void)changes.RemoveComponent<Charge>(kept->GetId());
+        (void)changes.AddComponent(kept->GetId(), Charge{3});
+        (void)changes.DestroyEntity(doomed->GetId());
+        (void)changes.AddComponent(doomed->GetId(), Charge{9});
         changes.InsertSceneResource(Weather{wind, 4});
     }
 
     // Creates an entity and records parenting it under `parent`; a dead parent records no parenting.
-    static std::uint32_t SpawnUnder(const Fenrir::CallContext& context, std::uint32_t parent)
+    static void SpawnUnder(const Fenrir::CallContext& context, const Fenrir::Entity* parent, Fenrir::Entity* child)
     {
         const auto changes = context.Changes();
-        const std::uint32_t child = changes.CreateEntity();
-        (void)changes.AddChild(parent, child);
-        return child;
+        const std::uint32_t created = changes.CreateEntity();
+        (void)changes.AddChild(parent->GetId(), created);
+        *child = context.Entities().HandleOf(created);
     }
 
     // The test extension's extension state: a running total its Tally native adds to, and its warn-once record, as a
@@ -486,10 +488,10 @@ namespace TestExtension
 
     // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name,
     // which this function never spells.
-    void Nudge(const Fenrir::CallContext& context, Tally& tally, std::uint32_t entity)
+    void Nudge(const Fenrir::CallContext& context, Tally& tally, const Fenrir::Entity* entity)
     {
         const Fenrir::NativeGuard guard(context, tally.warnings);
-        if (const std::optional<Fenrir::Entity> found = guard.Alive(Fenrir::EntityValue(entity)))
+        if (const std::optional<Fenrir::Entity> found = guard.Alive(*entity))
         {
             found->GetComponent<Fenrir::Transform>().pos.y += 1.0F;
         }
@@ -509,9 +511,9 @@ namespace TestExtension
      * @return How many readings: one, or zero for a dead entity.
      * @notrunning -1
      */
-    std::int32_t Weigh(const Fenrir::CallContext& context, std::uint32_t entity, Reading* reading)
+    std::int32_t Weigh(const Fenrir::CallContext& context, const Fenrir::Entity* entity, Reading* reading)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         if (!found.IsValid())
         {
             return 0;
@@ -1889,7 +1891,7 @@ namespace
         }
     }
 
-    // ---- entity links written from C#
+    // ---- entity fields written from C#
 
     constexpr const char* LinksType = "Fenrir.ScriptFixture.Links";
 
@@ -1904,7 +1906,7 @@ namespace
         return MakeComponent<TestNative::Tether>("Test.Tether");
     }
 
-    void AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp()
+    void AnEntityFromCreateWrittenIntoAComponentCarriesTheActiveScenesList()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
@@ -1914,16 +1916,43 @@ namespace
         }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto holder = entities.CreateEntity();
-        auto target = entities.CreateEntity();
         holder.AddComponent<TestNative::Tether>();
 
-        Links<void>(scripting, "LinkTo", holder.GetId(), target.GetId());
+        const auto targetId = Links<std::uint32_t>(scripting, "LinkToCreated", holder.GetId());
 
-        // Equal means the same entity value in the same entity list: C# filled the owner with the active scene's.
+        // Equal means the same entity value in the same entity list: EntityCreate stamped the active scene's list on
+        // the entity it handed C#, and C# wrote it whole.
         const Entity written = holder.GetComponent<TestNative::Tether>().target;
         {
-            INFO("The Entity C# wrote is not the target in the active scene");
-            REQUIRE(written == target);
+            INFO("The Entity C# wrote is not the created entity in the active scene");
+            REQUIRE(written == entities.GetEntity(targetId));
+        }
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("C++ could not use the Entity C# wrote");
+            REQUIRE((written.IsValid() && written.HasComponent<Transform>()));
+        }
+    }
+
+    void AnEntityFromAQueryWrittenIntoAComponentCarriesTheActiveScenesList()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto holder = entities.CreateEntity();
+        holder.AddComponent<TestNative::Tether>();
+
+        Links<void>(scripting, "LinkToQueried", holder.GetId());
+
+        // Equal means the same entity value in the same entity list: the query row held the holder as the engine does.
+        const Entity written = holder.GetComponent<TestNative::Tether>().target;
+        {
+            INFO("The Entity a query gave C# is not the holder in the active scene");
+            REQUIRE(written == holder);
         }
         {
             INFO("C++ could not use the Entity C# wrote");
@@ -1983,34 +2012,36 @@ namespace
         Links<void>(scripting, "WriteZeroed", holder.GetId());
 
         {
-            INFO("C# did not read a zeroed link as naming entity 0");
+            INFO("C# did not read a zeroed entity as naming entity 0");
             REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == 0);
         }
-        // Entity 0 is alive in the active scene, but the zeroed link has no scene, so it is neither it nor valid.
+        // Entity 0 is alive in the active scene, but the zeroed entity has no scene, so it is neither it nor valid.
         const Entity zeroed = holder.GetComponent<TestNative::Tether>().target;
         {
-            INFO("A zeroed link read in C++ as entity 0 of the active scene");
+            INFO("A zeroed entity read in C++ as entity 0 of the active scene");
             REQUIRE((zeroed.GetId() == 0 && zeroed != holder));
         }
         {
-            INFO("A zeroed link read in C++ as valid");
+            INFO("A zeroed entity read in C++ as valid");
             REQUIRE(!zeroed.IsValid());
         }
     }
 
-    void AnEntityLinksOwnerIsNotReadableFromCSharp()
+    void AnEntitysOwnerIsNotReadableFromCSharp()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        // The spec's whole readable surface: whether it is empty, the entity it names, and the empty link.
+        // Entity's whole readable surface: its value, whether it is alive, its world transform, and None. The owner
+        // is a private field only the engine reads.
         const auto members = Links<std::optional<std::string>>(scripting, "ReadableMembers");
         {
-            INFO("EntityLink exposes more than IsNull, Target and None to scripts: " + members.value_or("<null>"));
-            REQUIRE(members == "IsNull:Boolean,None:EntityLink,Target:Entity");
+            INFO("Entity exposes more than IsValid, None, Value and WorldTransform to scripts: " +
+                 members.value_or("<null>"));
+            REQUIRE(members == "IsValid:Boolean,None:Entity,Value:UInt32,WorldTransform:Transform");
         }
     }
 
-    void EntityLinkNoneIsTheEmptyLink()
+    void EntityNoneIsTheEmptyEntity()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
@@ -2019,8 +2050,8 @@ namespace
             REQUIRE(scripting.HasScripts());
         }
         {
-            INFO("EntityLink.None was not null in C#");
-            REQUIRE(Links<bool>(scripting, "NoneIsNull"));
+            INFO("Entity.None was not the null value, or was the zeroed entity, or was valid, in C#");
+            REQUIRE(Links<bool>(scripting, "NoneIsEmpty"));
         }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto holder = entities.CreateEntity();
@@ -2029,13 +2060,13 @@ namespace
 
         Links<void>(scripting, "Unlink", holder.GetId());
 
-        // The empty link is a default Entity: the null value and no entity list.
+        // None is a default Entity: the null value and no entity list (an owner of 0).
         {
-            INFO("EntityLink.None did not read in C++ as an empty Entity");
+            INFO("Entity.None did not read in C++ as a default Entity");
             REQUIRE(holder.GetComponent<TestNative::Tether>().target == Entity());
         }
         {
-            INFO("C# did not read the empty link back as null");
+            INFO("C# did not read None back as the null value");
             REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == NullEntity);
         }
     }
@@ -5036,8 +5067,10 @@ namespace
         // The Scripting is gone, so the registered thunk is on its not-running path: the value Make was given, and the
         // zeroing, which sits inside the check, does not run.
         TestExtension::Reading reading{3, 2.5F};
+        // No entity: the thunk is on its not-running path and never reaches the native.
+        const Entity five;
         const std::int32_t result =
-            Detail::NativeFunctionTraits<&TestExtension::ZeroingWeigh::Call>::Call(std::uint32_t{5}, &reading);
+            Detail::NativeFunctionTraits<&TestExtension::ZeroingWeigh::Call>::Call(&five, &reading);
         {
             INFO("A call while no Scripting runs did not return the @notrunning value");
             REQUIRE(result == -1);
@@ -5052,7 +5085,9 @@ namespace
     {
         Testing::NativeCallHarness harness;
         const CallContext context = harness.Context("Gadgets.SpawnCharged");
-        const std::uint32_t spawned = TestExtension::SpawnCharged(context, 7);
+        Entity created;
+        TestExtension::SpawnCharged(context, 7, &created);
+        const std::uint32_t spawned = created.GetId();
         auto& entities = harness.GetApp().GetActiveScene().GetEntityList();
         {
             INFO("The entity the native created is not alive at once");
@@ -5563,14 +5598,19 @@ TEST_CASE("an extension cannot take an engine component's name", "[scripting]")
     AnExtensionCannotTakeAnEngineComponentsName();
 }
 
-TEST_CASE("an Entity field written from C# reads correctly in C++", "[scripting]")
+TEST_CASE("an entity from Entity.Create written into a component carries the active scene's list", "[scripting]")
 {
-    AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp();
+    AnEntityFromCreateWrittenIntoAComponentCarriesTheActiveScenesList();
 }
 
-TEST_CASE("EntityLink.None is the empty link", "[scripting]")
+TEST_CASE("an entity from a query written into a component carries the active scene's list", "[scripting]")
 {
-    EntityLinkNoneIsTheEmptyLink();
+    AnEntityFromAQueryWrittenIntoAComponentCarriesTheActiveScenesList();
+}
+
+TEST_CASE("Entity.None written from C# reads as C++'s default Entity", "[scripting]")
+{
+    EntityNoneIsTheEmptyEntity();
 }
 
 TEST_CASE("a link to an entity created earlier in the same system reads back after playback", "[scripting]")
@@ -5578,14 +5618,14 @@ TEST_CASE("a link to an entity created earlier in the same system reads back aft
     ALinkToAnEntityCreatedInTheSameSystemReadsBackAfterPlayback();
 }
 
-TEST_CASE("a zeroed EntityLink names entity 0 with no scene and reads safely", "[scripting]")
+TEST_CASE("a zeroed Entity names entity 0 with no scene and reads safely", "[scripting]")
 {
     AZeroedLinkNamesEntityZeroWithNoSceneAndReadsSafely();
 }
 
-TEST_CASE("an EntityLink's owner is not readable from C#", "[scripting]")
+TEST_CASE("an Entity's owner is not readable from C#", "[scripting]")
 {
-    AnEntityLinksOwnerIsNotReadableFromCSharp();
+    AnEntitysOwnerIsNotReadableFromCSharp();
 }
 
 TEST_CASE("an extension's resources are read and written from C# through Ref", "[scripting]")

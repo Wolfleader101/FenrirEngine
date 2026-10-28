@@ -32,9 +32,9 @@ public partial struct JointKind
 /// From C#: link the bodies by assigning entities (<c>joint.BodyA = door</c>), including ones made by
 /// <see cref="Entity.Create"/> earlier in the same system. Assign a kind to change it
 /// (<c>joint.Kind = new HingeJoint()</c>) and edit one in place through its view
-/// (<c>joint.Kind.Hinge.Motor.TargetVelocity = 2</c>). <c>new Joint()</c> has both links empty
-/// (<see cref="EntityLink.None"/>). <c>default(Joint)</c> is all zero bytes, as any struct: its links name entity 0 with
-/// no scene, so physics treats it as an inactive joint, with a warning.
+/// (<c>joint.Kind.Hinge.Motor.TargetVelocity = 2</c>). <c>new Joint()</c> has no bodies (<see cref="Entity.None"/>
+/// in each). <c>default(Joint)</c> is all zero bytes, as any struct: its bodies name entity 0 with no scene, so physics
+/// treats it as an inactive joint, with a warning.
 /// </remarks>
 public partial struct Joint
 {
@@ -59,7 +59,7 @@ public partial struct Joint
     public static JointFrames FrameFromWorld(Entity bodyA, JointFrame anchor)
     {
         // The native side reads the empty entity value as C++'s empty Entity, the world.
-        PhysicsNative.FrameFromWorld(bodyA, new Entity(uint.MaxValue), in anchor, out JointFrames frames);
+        PhysicsNative.FrameFromWorld(in bodyA, Entity.None, in anchor, out JointFrames frames);
         return frames;
     }
 }
