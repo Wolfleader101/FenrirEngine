@@ -93,4 +93,19 @@ internal static unsafe partial class FixtureNative
     /// </summary>
     [NativeFunction]
     public static partial void Damp(in Entity body, in Damper damper, in Angles angles);
+
+    /// <summary>
+    /// Whether `body` is heavier than `mass`: marked as a method of the mirror its first parameter is, so an instance
+    /// method of Body.
+    /// </summary>
+    /// <param name="body">The body, which the method is called on.</param>
+    /// <param name="mass">Kilograms.</param>
+    [NativeFunction]
+    public static partial bool Outweighs(in Body body, float mass);
+
+    /// <summary>A body of `mass`: marked as a method of a mirror it only writes, so a static method of Body.</summary>
+    /// <param name="body">The body; the default when none was made.</param>
+    /// <returns>Whether one was made.</returns>
+    [NativeFunction]
+    public static partial bool Make(out Body body, float mass);
 }

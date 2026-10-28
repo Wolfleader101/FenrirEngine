@@ -377,6 +377,62 @@
           "const": true
         }
       ]
+    },
+    {
+      "name": "Outweighs",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "Whether `body` is heavier than `mass`: marked as a method of the mirror its first parameter is, so an instance method of Body.",
+      "facade": "Body.Outweighs",
+      "returns": {
+        "type": "bool",
+        "kind": "bool"
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "const Fixture::Body*",
+          "kind": "pointer",
+          "pointee": "Fixture::Body",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "The body, which the method is called on."
+        },
+        {
+          "name": "mass",
+          "type": "float",
+          "kind": "f32",
+          "doc": "Kilograms."
+        }
+      ]
+    },
+    {
+      "name": "Make",
+      "namespace": "Fixture",
+      "source": "Natives.cpp",
+      "doc": "A body of `mass`: marked as a method of a mirror it only writes, so a static method of Body.",
+      "facade": "Body.TryMake",
+      "returns": {
+        "type": "bool",
+        "kind": "bool",
+        "doc": "Whether one was made."
+      },
+      "parameters": [
+        {
+          "name": "body",
+          "type": "Fixture::Body*",
+          "kind": "pointer",
+          "pointee": "Fixture::Body",
+          "pointeeKind": "struct",
+          "output": true,
+          "doc": "The body; the default when none was made."
+        },
+        {
+          "name": "mass",
+          "type": "float",
+          "kind": "f32"
+        }
+      ]
     }
   ]
 }
