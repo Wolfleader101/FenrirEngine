@@ -42,8 +42,9 @@ add_executable(FenrirScriptingRulesTests
     Rules/RegistryTableTests.cpp
     Rules/ReloadWatcherTests.cpp
     Rules/ScriptDataTests.cpp
+    Rules/QueriesTests.cpp
     Rules/GenerationLifecycleTests.cpp
-    Rules/FakeComponentLoader.hpp
+    Rules/FakeScriptAssemblyLoader.hpp
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp

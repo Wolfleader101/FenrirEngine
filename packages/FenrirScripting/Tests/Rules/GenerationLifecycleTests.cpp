@@ -6,7 +6,7 @@
 // their calls.
 #include <catch2/catch_test_macros.hpp>
 
-#include "FakeComponentLoader.hpp"
+#include "FakeScriptAssemblyLoader.hpp"
 #include "HeadlessApp.hpp"
 
 #include "GenerationLifecycle.hpp"
@@ -101,7 +101,7 @@ namespace
     {
         Scratch scratch;
         Fenrir::Testing::RecordingLogger logger;
-        RulesTest::FakeComponentLoader loader;
+        RulesTest::FakeScriptAssemblyLoader loader;
         GenerationLifecycle generations;
 
         std::vector<std::string> calls;
@@ -118,11 +118,11 @@ namespace
             settings.scratchRoot = scratch.copies;
             settings.unloadTimeout = 1ms;
             GenerationLifecycle::Hooks hooks;
-            hooks.reconcile = [this](Fenrir::Detail::LoadedComponent&) {
+            hooks.reconcile = [this](Fenrir::Detail::LoadedScriptAssembly&) {
                 calls.emplace_back("reconcile");
                 return failReconciles.contains(++reconciles) ? Refused("the report is bad") : Ok();
             };
-            hooks.start = [this](Fenrir::Detail::LoadedComponent&) {
+            hooks.start = [this](Fenrir::Detail::LoadedScriptAssembly&) {
                 calls.emplace_back("start");
                 return failStarts.contains(++starts) ? Refused("the systems could not start") : Ok();
             };

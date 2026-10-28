@@ -897,9 +897,9 @@ it.
 
 The reload rules (the previous copy restored when a build fails, a start failure releasing the generation, retire and
 sweep, the re-entrancy guard) are `Tests/Rules/GenerationLifecycleTests.cpp`: `GenerationLifecycle` loads through its
-`ComponentLoader` seam (`src/ComponentLoader.hpp`), and the rules tests give it `FakeComponentLoader`, which decides
-which loads fail and when a released generation counts as collected, so no .NET is involved. `Scripting.cpp`'s adapter
-over the Iris host is the one that loads real assemblies. What a generation defines and what survives a reload is
+`ScriptAssemblyLoader` seam (`src/ScriptAssemblyLoader.hpp`), and the rules tests give it
+`FakeScriptAssemblyLoader`, which decides which loads fail and when a released generation counts as collected, so no
+.NET is involved. `Scripting.cpp`'s adapter over the Iris host is the one that loads real assemblies. What a generation defines and what survives a reload is
 `ScriptData` (`src/ScriptData.hpp`): `Tests/Rules/ScriptDataTests.cpp` admits literal script reports through it, with no
 .NET, and checks every refusal, what a reload keeps and drops, and that a failed admission leaves nothing behind.
 

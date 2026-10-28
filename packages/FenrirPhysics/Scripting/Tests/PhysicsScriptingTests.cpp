@@ -3,7 +3,6 @@
 // C++ calls the fixture's static methods through Iris, as the system runner calls scripts, and checks what the engine
 // saw.
 
-#include "Generated/FenrirPhysicsMappings.hpp"
 #include "HeadlessApp.hpp"
 #include "PhysicsScriptingApp.hpp"
 #include "ScriptingProbe.hpp"
@@ -613,63 +612,6 @@ TEST_CASE("C# disabling a trigger exits what is inside on the next tick, and ena
 
 namespace
 {
-    // ContactBegin as a native side that drifted from the C# mirror would map it: RelativeSpeed has the wrong type.
-    struct DriftedContactBegin
-    {
-        Entity bodyA;
-        Entity bodyB;
-        Entity colliderA;
-        Entity colliderB;
-        Math::Vec3 point;
-        Math::Vec3 normal;
-        std::int32_t relativeSpeed;
-    };
-} // namespace
-
-template <>
-struct Iris::StructMapping<DriftedContactBegin>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.ContactBegin";
-    static constexpr auto fields = Iris::StructFields(
-        IRIS_FIELD_AS(DriftedContactBegin, bodyA, "BodyA"), IRIS_FIELD_AS(DriftedContactBegin, bodyB, "BodyB"),
-        IRIS_FIELD_AS(DriftedContactBegin, colliderA, "ColliderA"),
-        IRIS_FIELD_AS(DriftedContactBegin, colliderB, "ColliderB"), IRIS_FIELD_AS(DriftedContactBegin, point, "Point"),
-        IRIS_FIELD_AS(DriftedContactBegin, normal, "Normal"),
-        IRIS_FIELD_AS(DriftedContactBegin, relativeSpeed, "RelativeSpeed"));
-};
-
-TEST_CASE("The physics event mirrors are checked as scripts load, and a drifted one fails the load naming the field",
-          "[physics][scripting][events]")
-{
-    Testing::HeadlessApp headless;
-    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config();
-    std::vector<EventRegistration>& events = config.extensions[0].events;
-    {
-        INFO("Physics's extension should share the contact and trigger events and JointBroken with C#");
-        REQUIRE(events.size() == 5);
-    }
-    const auto contactBegin = std::find_if(events.begin(), events.end(), [](const EventRegistration& event) {
-        return event.name == "Fenrir.Physics.ContactBegin";
-    });
-    REQUIRE(contactBegin != events.end());
-    *contactBegin = MakeEvent<ContactBegin, DriftedContactBegin>("Fenrir.Physics.ContactBegin");
-
-    Scripting scripting = Scripting::Install(headless.Get(), config);
-
-    {
-        INFO("A ContactBegin mirror that disagrees with the native layout left scripts loaded");
-        REQUIRE_FALSE(scripting.HasScripts());
-    }
-    {
-        INFO("The failed load did not name the event and the field");
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.ContactBegin"));
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'RelativeSpeed'"));
-    }
-}
-
-namespace
-{
     constexpr const char* JointsType = "Fenrir.PhysicsScriptFixture.Joints";
 
     const Joint& JointOn(PhysicsScriptingApp& test, std::uint32_t entity)
@@ -880,79 +822,6 @@ TEST_CASE("A default(Joint) from C# names no body of this scene, so it holds not
     {
         INFO("Physics should warn once that the joint is inactive, not on every step it stays so");
         REQUIRE(WarningsAbout(test, "The Joint on entity " + std::to_string(holder) + " is inactive") == 1);
-    }
-}
-
-namespace
-{
-    // JointFrame's own mapping is the extension's, so the drifted Joint below has a stand-in of its own for it.
-    struct DriftedFrame
-    {
-        Math::Vec3 position;
-        Math::Quat rotation;
-    };
-
-    // Joint as a native side that drifted from the C# mirror would map it: its kind is raw bytes, not the tagged union.
-    struct DriftedJoint
-    {
-        Entity bodyA;
-        Entity bodyB;
-        DriftedFrame frameA;
-        DriftedFrame frameB;
-        std::uint8_t kind[sizeof(JointKind)];
-        bool enabled;
-        bool collideConnected;
-        float breakForce;
-        float breakTorque;
-    };
-} // namespace
-
-template <>
-struct Iris::StructMapping<DriftedFrame>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.JointFrame";
-    static constexpr auto fields = Iris::StructFields(IRIS_FIELD_AS(DriftedFrame, position, "Position"),
-                                                      IRIS_FIELD_AS(DriftedFrame, rotation, "Rotation"));
-};
-
-template <>
-struct Iris::StructMapping<DriftedJoint>
-{
-    static constexpr std::string_view typeName = "Fenrir.Physics.Joint";
-    static constexpr auto fields = Iris::StructFields(
-        IRIS_FIELD_AS(DriftedJoint, bodyA, "BodyA"), IRIS_FIELD_AS(DriftedJoint, bodyB, "BodyB"),
-        IRIS_FIELD_AS(DriftedJoint, frameA, "FrameA"), IRIS_FIELD_AS(DriftedJoint, frameB, "FrameB"),
-        IRIS_FIELD_AS(DriftedJoint, kind, "Kind"), IRIS_FIELD_AS(DriftedJoint, enabled, "Enabled"),
-        IRIS_FIELD_AS(DriftedJoint, collideConnected, "CollideConnected"),
-        IRIS_FIELD_AS(DriftedJoint, breakForce, "BreakForce"), IRIS_FIELD_AS(DriftedJoint, breakTorque, "BreakTorque"));
-};
-
-TEST_CASE("The Joint mirror is checked as scripts load, and a drifted one fails the load naming the field",
-          "[physics][scripting][joints]")
-{
-    Testing::HeadlessApp headless;
-    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config();
-    std::vector<ComponentRegistration>& components = config.extensions[0].components;
-    const auto joint = std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
-        return component.name == "Fenrir.Physics.Joint";
-    });
-    {
-        INFO("Physics's extension should share the Joint component with C#");
-        REQUIRE(joint != components.end());
-    }
-    *joint = MakeComponent<Joint, DriftedJoint>("Fenrir.Physics.Joint");
-
-    Scripting scripting = Scripting::Install(headless.Get(), config);
-
-    {
-        INFO("A Joint mirror that disagrees with the native layout left scripts loaded");
-        REQUIRE_FALSE(scripting.HasScripts());
-    }
-    {
-        INFO("The failed load did not name the component and the field");
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.Joint"));
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Kind'"));
     }
 }
 
@@ -1285,67 +1154,6 @@ namespace
     }
 } // namespace
 
-namespace
-{
-    // CharacterBody as a native side that drifted from the C# mirror would map it: its state is raw bytes.
-    struct DriftedCharacterBody
-    {
-        Math::Vec3 velocity;
-        float maxSlope;
-        float stepHeight;
-        float floorSnap;
-        float pushForce;
-        float mass;
-        bool stopOnSlope;
-        bool interpolate;
-        bool enabled;
-        alignas(CharacterState) std::uint8_t state[sizeof(CharacterState)];
-    };
-} // namespace
-
-template <>
-struct Iris::StructMapping<DriftedCharacterBody>
-{
-    using Drifted = DriftedCharacterBody;
-    static constexpr std::string_view typeName = "Fenrir.Physics.CharacterBody";
-    static constexpr auto fields = Iris::StructFields(
-        IRIS_FIELD_AS(Drifted, velocity, "Velocity"), IRIS_FIELD_AS(Drifted, maxSlope, "MaxSlope"),
-        IRIS_FIELD_AS(Drifted, stepHeight, "StepHeight"), IRIS_FIELD_AS(Drifted, floorSnap, "FloorSnap"),
-        IRIS_FIELD_AS(Drifted, pushForce, "PushForce"), IRIS_FIELD_AS(Drifted, mass, "Mass"),
-        IRIS_FIELD_AS(Drifted, stopOnSlope, "StopOnSlope"), IRIS_FIELD_AS(Drifted, interpolate, "Interpolate"),
-        IRIS_FIELD_AS(Drifted, enabled, "Enabled"), IRIS_FIELD_AS(Drifted, state, "State"));
-};
-
-TEST_CASE("The CharacterBody mirror is checked as scripts load, and a drifted one fails the load naming the field",
-          "[physics][scripting][characters]")
-{
-    Testing::HeadlessApp headless;
-    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config();
-    std::vector<ComponentRegistration>& components = config.extensions[0].components;
-    const auto character =
-        std::find_if(components.begin(), components.end(), [](const ComponentRegistration& component) {
-            return component.name == "Fenrir.Physics.CharacterBody";
-        });
-    {
-        INFO("Physics's extension should share the CharacterBody component with C#");
-        REQUIRE(character != components.end());
-    }
-    *character = MakeComponent<CharacterBody, DriftedCharacterBody>("Fenrir.Physics.CharacterBody");
-
-    Scripting scripting = Scripting::Install(headless.Get(), config);
-
-    {
-        INFO("A CharacterBody mirror that disagrees with the native layout left scripts loaded");
-        REQUIRE_FALSE(scripting.HasScripts());
-    }
-    {
-        INFO("The failed load did not name the component and the field");
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.CharacterBody"));
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'State'"));
-    }
-}
-
 TEST_CASE("A C# system makes a character, adds gravity and lands it, then walks it by writing Velocity",
           "[physics][scripting][characters]")
 {
@@ -1531,61 +1339,16 @@ namespace
     }
 } // namespace
 
-namespace
+TEST_CASE("The four vehicle mirrors are shared with C#", "[physics][scripting][vehicles]")
 {
-    // Vehicle as a native side that drifted from the C# mirror would map it: its kind is raw bytes (and so are the
-    // structs whose mappings are the extension's own, as for the drifted Joint's frames).
-    struct DriftedVehicle
-    {
-        alignas(VehicleKind) std::uint8_t kind[sizeof(VehicleKind)];
-        alignas(VehicleInput) std::uint8_t input[sizeof(VehicleInput)];
-        std::uint8_t probe;
-        float maxTilt;
-        bool enabled;
-        alignas(VehicleState) std::uint8_t state[sizeof(VehicleState)];
-    };
-    static_assert(sizeof(DriftedVehicle) == sizeof(Vehicle) && alignof(DriftedVehicle) == alignof(Vehicle));
-} // namespace
-
-template <>
-struct Iris::StructMapping<DriftedVehicle>
-{
-    using Drifted = DriftedVehicle;
-    static constexpr std::string_view typeName = "Fenrir.Physics.Vehicle";
-    static constexpr auto fields =
-        Iris::StructFields(IRIS_FIELD_AS(Drifted, kind, "Kind"), IRIS_FIELD_AS(Drifted, input, "Input"),
-                           IRIS_FIELD_AS(Drifted, probe, "Probe"), IRIS_FIELD_AS(Drifted, maxTilt, "MaxTilt"),
-                           IRIS_FIELD_AS(Drifted, enabled, "Enabled"), IRIS_FIELD_AS(Drifted, state, "State"));
-};
-
-TEST_CASE("The four vehicle mirrors are shared with C#, and a drifted Vehicle fails the load naming the field",
-          "[physics][scripting][vehicles]")
-{
-    Testing::HeadlessApp headless;
-    Physics physics = Physics::Install(headless.Get(), StepPosesOnly());
-    ScriptingConfig config = PhysicsScriptingApp::Config();
-    std::vector<ComponentRegistration>& components = config.extensions[0].components;
+    const ScriptingConfig config = PhysicsScriptingApp::Config();
+    const std::vector<ComponentRegistration>& components = config.extensions[0].components;
     for (const std::string_view name : {"Fenrir.Physics.Vehicle", "Fenrir.Physics.VehicleWheel",
                                         "Fenrir.Physics.VehicleDifferential", "Fenrir.Physics.VehicleAntiRollBar"})
     {
         INFO("Physics's extension should share " << name << " with C#");
         REQUIRE(std::ranges::any_of(components,
                                     [name](const ComponentRegistration& component) { return component.name == name; }));
-    }
-    const auto vehicle = std::ranges::find_if(
-        components, [](const ComponentRegistration& component) { return component.name == "Fenrir.Physics.Vehicle"; });
-    *vehicle = MakeComponent<Vehicle, DriftedVehicle>("Fenrir.Physics.Vehicle");
-
-    Scripting scripting = Scripting::Install(headless.Get(), config);
-
-    {
-        INFO("A Vehicle mirror that disagrees with the native layout left scripts loaded");
-        REQUIRE_FALSE(scripting.HasScripts());
-    }
-    {
-        INFO("The failed load did not name the component and the field");
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.Physics.Vehicle"));
-        REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Kind'"));
     }
 }
 

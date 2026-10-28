@@ -6,7 +6,7 @@ fenrir_scripting_rules_tests(Physics SOURCES Rules.cpp TEST_ARGS --order decl)
 fenrir_scripting_tests(Physics SOURCES PhysicsScriptingApp.hpp PhysicsScriptingTests.cpp TEST_ARGS --order decl)
 fenrir_script_fixture(Physics)
 # The library's own src too, for the generated mappings the defaults test walks (private here, since no other binding
-# uses this one) and the bound types' mappings the drifted stand-ins use.
+# uses this one).
 target_include_directories(FenrirPhysicsScriptingTests PRIVATE ../src)
 
 # What the compiler must refuse in a script using the Fenrir.Physics contract: each case is one small C# file built
