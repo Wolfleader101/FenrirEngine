@@ -1,0 +1,26 @@
+# The fixture's selection: the header to read, relative to this file, and each shared type's role, the same roles
+# tools/describe-api/tests/Fixture/Fixture.api.toml gives these types. fenrir-describe-api writes Fixture.api.json beside it.
+headers = ["Fixture.hpp"]
+
+# Types whose private data members are shared all the same.
+private-members = ["Fixture::Tag"]
+
+[types]
+"Fixture::Body" = "component"
+"Fixture::Collider" = "component"
+"Fixture::Touched" = "event"
+"Fixture::Hit" = "shared-struct"
+"Fixture::Tag" = "shared-struct"
+"Fixture::BodyId" = "shared-struct"
+"Fixture::Weather" = "scene-resource"
+"Fixture::Clock" = "app-resource"
+"Fixture::Sky" = "app-resource"
+"Fixture::Vec3" = "bound-type"
+"Fixture::Quat" = "bound-type"
+"Fixture::Handle" = "bound-type"
+"Fixture::Size" = "bound-type"
+# A specialisation named with its arguments, which no alias names and nothing instantiates.
+"Fixture::Pair<double>" = "bound-type"
+"Fixture::Ticket" = "bound-type"
+# Held by no field: described because the selection names it.
+"Fixture::Heading" = "enum"
