@@ -28,9 +28,9 @@ namespace Fenrir::Detail
 
     /**
      * @brief The script assembly as admission sees it: its script report, and the few questions admission asks of it.
-     * Two adapters stand behind it: one over a loaded Iris component (which runs the assembly's generated tables and
-     * reads its types), and one for tests that returns literals. Everything else admission does is rules over the
-     * answers.
+     * Two adapters stand behind it: one over a loaded Iris component (in IrisAdapters.hpp, which
+     * runs the assembly's generated tables and reads its types), and one for tests that returns literals. Everything
+     * else admission does is rules over the answers.
      *
      * The questions are asked in a fixed order: the report, then whether the native components, events and shared
      * structs match their C# structs, then (for what is kept) a layout fingerprint of each definition.
@@ -63,26 +63,6 @@ namespace Fenrir::Detail
          * mismatching field
          */
         [[nodiscard]] virtual Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) = 0;
-    };
-
-    /**
-     * @brief The script assembly as a loaded Iris component: it reports what it defines by running the tables the
-     * SDK's generator wrote into it (through the engine context's reporting slot, which the natives fill), reads its
-     * types for fingerprints, and holds the C# structs the native components are checked against.
-     */
-    class IrisScriptAssembly final : public ScriptAssembly
-    {
-      public:
-        /** @brief `context` is where the natives put what the assembly reports; `component` is the loaded assembly. */
-        IrisScriptAssembly(EngineContext& context, const Iris::Component& component);
-
-        [[nodiscard]] Iris::CallResult<void> Report(ScriptReport& report) override;
-        [[nodiscard]] std::string Fingerprint(const ScriptComponentDescription& description) override;
-        [[nodiscard]] Iris::CallResult<void> CheckNativeAgainstCSharp(const ComponentRegistry& registry) override;
-
-      private:
-        EngineContext& m_context;
-        const Iris::Component& m_component;
     };
 
     /**

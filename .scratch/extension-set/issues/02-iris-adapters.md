@@ -15,11 +15,11 @@ No behaviour changes; no test changes. The `friend class Detail::IrisNativeRegis
 
 **Touches:** `packages/FenrirScripting/src/IrisAdapters.hpp`, `packages/FenrirScripting/src/IrisAdapters.cpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/src/ScriptData.hpp`, `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/CMakeLists.txt`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] Cut `extension-set-02-iris-adapters` from 01's pushed branch, targeting it.
-- [ ] `grep -n "class Iris" packages/FenrirScripting/src/*.hpp packages/FenrirScripting/src/*.cpp` finds the four adapters in `IrisAdapters.hpp` only; `grep -n "IrisScriptAssembly" packages/FenrirScripting/src/ScriptData.hpp packages/FenrirScripting/src/ScriptData.cpp` finds nothing.
-- [ ] The msvc-x64-debug preset builds; `FenrirScriptingRules` and `FenrirScripting` pass unchanged.
+- [x] Cut `extension-set-02-iris-adapters` from 01's pushed branch, targeting it.
+- [x] `grep -n "class Iris" packages/FenrirScripting/src/*.hpp packages/FenrirScripting/src/*.cpp` finds the four adapters in `IrisAdapters.hpp` only; `grep -n "IrisScriptAssembly" packages/FenrirScripting/src/ScriptData.hpp packages/FenrirScripting/src/ScriptData.cpp` finds nothing.
+- [x] The msvc-x64-debug preset builds; `FenrirScriptingRules` and `FenrirScripting` pass unchanged.
 
 ## Comments
 
