@@ -1,6 +1,7 @@
-# A binding the fixture's uses: Common.api.json, Fixture::Spring alone as the package that owns it would describe it, bound
-# to Fixture.Common. Fixture.binding.toml names its Spring rather than mirroring it again. A binding another uses names
-# the descriptions it binds, so that one can read them.
+# A binding the fixture's uses: Common.api.json (Fixture::Spring, Angles and Damper, as the package that owns them would
+# describe them) bound to Fixture.Common. Fixture.binding.toml names its Spring rather than mirroring it again, and takes
+# its Angles and Damper in a native without describing them at all. A binding another uses names the descriptions it
+# binds, so that one can read them.
 namespace = "Fixture.Common"
 descriptions = ["Common.api.json"]
 
@@ -11,3 +12,7 @@ generated = "Contract/Generated"
 [cpp]
 mappings = "Native/Generated/CommonMappings.hpp"
 includes = ["Fixture.hpp"]
+
+# Angles's C# type, in force wherever a binding that uses this one names it. CommonBound.hpp maps it.
+[bound-types]
+"Fixture::Angles" = { type = "Angles", include = "CommonBound.hpp" }

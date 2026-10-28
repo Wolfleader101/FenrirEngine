@@ -3,6 +3,7 @@
 
 using System;
 using Fenrir.Scripting;
+using Fixture.Common;
 
 namespace Fixture.Bindings;
 
@@ -83,4 +84,11 @@ internal static unsafe partial class FixtureNative
     /// <param name="rotation">One rotation, which `turns` does not size.</param>
     [NativeFunction]
     public static partial void Turn(in Quaternion rotation, int turns);
+
+    /// <summary>
+    /// Damps `body` by `damper` toward `angles`: a struct and a bound type the Common binding describes
+    /// (Fixture.binding.toml uses it) and Fixture.api.json does not.
+    /// </summary>
+    [NativeFunction]
+    public static partial void Damp(Entity body, in Damper damper, in Angles angles);
 }

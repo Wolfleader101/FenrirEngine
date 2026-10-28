@@ -143,7 +143,10 @@ as `nested`) is that binding's: this binding names it by that binding's C# name,
 mirrors and natives that name it, includes its mappings header (by a path relative to this one's) in this one's mappings,
 and gives it no mirror, mapping, registration or test of its own. This binding's description may select it too, with
 the role the used binding's gives it (a struct a native here fills through a pointer, say), or hold it as `nested`. Its member and enumerator names in defaults are that
-binding's too.
+binding's too. A type a used binding describes (through its own `uses` too) that this binding's descriptions do not
+is described here all the same, with that binding's mirror or `[bound-types]` entry in force: a native here may take,
+return or point at it and a field here may hold it, named and `using`-ed as above, and it gets no mirror, mapping,
+registration or test here either; this binding's `[bound-types]` may not name a mirror so described.
 
 **Other bindings' bound types.** A binding's bound types are its own `[bound-types]`, its defaults file's, and every
 used binding's (transitively), so a vector every binding holds is named once, in the binding that owns it. An inherited

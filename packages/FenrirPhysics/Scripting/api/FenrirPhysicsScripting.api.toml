@@ -2,7 +2,7 @@
 # the form C# holds them, with each entity as FenrirScripting's EntityValue, a C# Entity's 32-bit value, rather than
 # FenrirPhysics's Entity. The binding (FenrirPhysics.binding.toml) binds these in place of FenrirPhysics's own query
 # types.
-headers = ["../src/ScriptQueries.hpp", "../../../FenrirScripting/include/FenrirScripting/EntityValue.hpp"]
+headers = ["../src/ScriptQueries.hpp"]
 
 [types]
 "Fenrir::ScriptQueries::QueryFilter" = "shared-struct"
@@ -13,6 +13,7 @@ headers = ["../src/ScriptQueries.hpp", "../../../FenrirScripting/include/FenrirS
 "Fenrir::ScriptQueries::OverlapHit" = "shared-struct"
 "Fenrir::ScriptQueries::Contact" = "shared-struct"
 
-# The entity value: held by the hits, and taken by the natives by value.
+# The entity value (FenrirScripting's, reached through ScriptQueries.hpp): held by the hits, and taken by the natives by
+# value.
 "Fenrir::EntityValue" = "bound-type"
 "Fenrir::Math::Vec3" = "bound-type"

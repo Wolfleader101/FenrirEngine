@@ -1,12 +1,13 @@
 # FenrirRenderer's C# binding (ADR-0043, packages/Iris/Tools/Iris.Bindings/README.md): ../../api/FenrirRenderer.api.json
-# and this binding's own FenrirRendererScripting.api.json (the entity value its natives take) bound to the Fenrir.Renderer
-# contract and Renderer::ScriptingExtension(). Paths are relative to this file. `cmake --build <dir> --target
-# fenrir-generate-bindings` regenerates every output below; they are committed.
+# bound to the Fenrir.Renderer contract and Renderer::ScriptingExtension(). Paths are relative to this file. `cmake --build
+# <dir> --target fenrir-generate-bindings` regenerates every output below; they are committed.
 namespace = "Fenrir.Renderer"
-descriptions = ["../../api/FenrirRenderer.api.json", "FenrirRendererScripting.api.json"]
-# The colour, ray and box are the math binding's, the window id FenrirInput's: named as theirs, never mirrored here. The
-# asset handles are FenrirAssets's bound types, and the math types the math binding's, inherited through these.
+descriptions = ["../../api/FenrirRenderer.api.json"]
+# The entity value the natives take and return is the built-in binding's, the colour, ray and box the math binding's, the
+# window id FenrirInput's: named as theirs, never described or mirrored here. The asset handles are FenrirAssets's bound
+# types, and the math types the math binding's, inherited through these.
 uses = [
+    "../../../FenrirScripting/api/FenrirScripting.binding.toml",
     "../../../FenrirScripting/api/FenrirMath.binding.toml",
     "../../../FenrirInput/Scripting/api/FenrirInput.binding.toml",
     "../../../FenrirAssets/Scripting/api/FenrirAssets.binding.toml",
