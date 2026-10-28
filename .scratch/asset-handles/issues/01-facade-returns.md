@@ -12,7 +12,7 @@
 
 **Touches:** `tools/describe-api/src/Natives.cs`, `tools/describe-api/tests/`, `tools/describe-api/SCHEMA.md`, `packages/Iris/docs/natives-description.md`, `packages/Iris/Tools/Iris.Bindings/src/Natives.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/Iris/Tools/Iris.Bindings/tests/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `dotnet test tools/describe-api/tests` and `dotnet test packages/Iris/Tools/Iris.Bindings/tests` pass with the new cases; `fenrir-describe-api` and `fenrir-generate-bindings` leave every engine binding unchanged.
 - [x] The fixture's committed `Fixture.natives.json` carries `facadeReturns` on one native, and its generated facade has a method returning the out's type and no out parameter.
@@ -21,3 +21,5 @@
 ## Comments
 
 Filed from the asset-handles grilling (spec decisions 3, 6, 7). Cut from `dotnet-scripting`; tickets 02 and 03 are each cut from this branch.
+
+Resolved: PR #211 merged (ticket 03 into ticket 01's branch, the rest into the spec's, and the spec #208 into `dotnet-scripting`).

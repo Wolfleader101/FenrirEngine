@@ -10,7 +10,7 @@
 
 **Touches:** `packages/FenrirWindow/Scripting/src/WindowScripting.cpp`, `packages/FenrirWindow/Scripting/api/`, `packages/FenrirWindow/Managed/Fenrir.Window/`, `packages/FenrirPhysics/Scripting/src/PhysicsScripting.cpp`, `packages/FenrirPhysics/Scripting/api/`, `packages/FenrirPhysics/Managed/Fenrir.Physics/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `grep -n "out WindowSize\|out JointState" packages/FenrirWindow/Managed/Fenrir.Window/Window.cs packages/FenrirPhysics/Managed/Fenrir.Physics/PhysicsWorld.cs` finds nothing; both stages regenerate to a clean tree.
 - [x] `FenrirWindowScripting` (and its display test where a display exists) and `FenrirPhysicsScripting` pass under the msvc-x64-debug preset.
@@ -19,3 +19,5 @@
 ## Comments
 
 Filed from the asset-handles grilling (spec decision 3). Cut from ticket 01's branch; disjoint from ticket 02.
+
+Resolved: PR #212 merged (ticket 03 into ticket 01's branch, the rest into the spec's, and the spec #208 into `dotnet-scripting`).

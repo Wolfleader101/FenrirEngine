@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Asset handles: a native takes the handle as the bound type it already is, and a facade returns one output as a value
 

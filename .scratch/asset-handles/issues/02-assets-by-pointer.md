@@ -15,7 +15,7 @@
 
 **Touches:** `packages/FenrirAssets/Scripting/`, `packages/FenrirAssets/Managed/Fenrir.Assets/`, `packages/FenrirRenderer/Scripting/src/RendererScripting.cpp`, `packages/FenrirRenderer/Scripting/api/`, `packages/FenrirRenderer/Scripting/Tests/NoOps.cpp`, `packages/FenrirRenderer/Managed/Fenrir.Renderer/`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `AssetHandleBits.hpp` does not exist; `grep -rn "FromBits\|\.Bits\b\|AssetHandleBits" packages/FenrirAssets packages/FenrirRenderer` finds nothing outside `Tests/`; `grep -c "std::uint64_t" packages/FenrirAssets/Scripting/src/AssetsScripting.cpp` is 0.
 - [x] `Assets.cs` holds six methods (three generic, three overloads); `Renderer.cs` holds one; both stages regenerate to a clean tree.
@@ -25,3 +25,5 @@
 ## Comments
 
 Filed from the asset-handles grilling (spec decisions 1, 2, 4, 5, 8). Cut from ticket 01's branch; disjoint from ticket 03.
+
+Resolved: PR #213 merged (ticket 03 into ticket 01's branch, the rest into the spec's, and the spec #208 into `dotnet-scripting`).
