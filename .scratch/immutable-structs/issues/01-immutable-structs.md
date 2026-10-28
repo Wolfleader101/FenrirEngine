@@ -16,9 +16,9 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/Tests/`, `packages/Iris/Tools/Iris.Bindings/tests/Fixture/`, `packages/Iris/Tools/Iris.Bindings/README.md`, `packages/FenrirScripting/api/FenrirScripting.binding.toml`, `packages/FenrirPhysics/api/FenrirPhysics.api.toml`, `packages/FenrirPhysics/api/FenrirPhysics.api.json`, `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml`, `packages/FenrirPhysics/Managed/Fenrir.Physics/Generated/`, `packages/FenrirPhysics/Scripting/include/FenrirPhysicsScripting/Generated/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] Iris.Bindings' tests pass with the three new cases; `grep -n "IsReadOnly" packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs` finds no use in the holder-field clause.
+- [x] Iris.Bindings' tests pass with the three new cases; `grep -n "IsReadOnly" packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs` finds no use in the holder-field clause.
 - [ ] `grep -n "bound-type" packages/FenrirPhysics/api/FenrirPhysics.api.toml packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing; `git diff --stat` of the physics `Generated/` after regeneration shows only the `new()` initialisers, `using` lines and the mappings header's include and asserts.
 - [ ] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset; `fenrir-describe-api` and `fenrir-generate-bindings` are no-ops after the commit; `check_tickets.py` and clang-format pass.
 

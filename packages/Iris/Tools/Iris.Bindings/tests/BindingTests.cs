@@ -388,18 +388,65 @@ public sealed class BindingTests
     }
 
     [Fact]
-    public void AReadOnlyStructThatIsNotADescribedStructFails()
+    public void AnImmutableStructIsReadOnlyButAWritableHolderAssignsItWhole()
     {
         using var directory = new TemporaryDirectory();
-        var config = CopyConfig(directory, "", edit: text => text.Replace("readonly-structs = [\"Fixture::Limits\"]",
-                                                                         "readonly-structs = [\"Fixture::Motion\"]"));
+        var description = WriteDescription(directory, _ => { });
+
+        var generated = Generator.Generate(FixtureConfig, [description]);
+        var numbers = Mirror(generated, "Numbers.cs");
+        var body = Mirror(generated, "Body.cs");
+
+        Assert.True(numbers.Contains("public readonly partial struct Numbers", StringComparison.Ordinal) &&
+                    numbers.Contains("    public readonly sbyte I8 = -8;\n", StringComparison.Ordinal) &&
+                    numbers.Contains("public Numbers()", StringComparison.Ordinal),
+                    $"Numbers is in immutable-structs, so its mirror should be readonly with readonly fields and a constructor, but is:\n{numbers}");
+        Assert.True(body.Contains("    public Numbers Numbers = new();\n", StringComparison.Ordinal),
+                    $"Body holds an immutable-structs mirror, which C# assigns whole, so its field should not be readonly, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AWritableHolderOfAReadOnlyStructGetsAReadOnlyField()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, _ => { });
+
+        var body = Mirror(Generator.Generate(FixtureConfig, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    public readonly Limits Limits = new();\n", StringComparison.Ordinal),
+                    $"Body holds a readonly-structs mirror, which C# cannot write whole, so its field should be readonly, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AStructInBothReadOnlyAndImmutableStructsFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("immutable-structs = [\"Fixture::Numbers\"]",
+                                                                         "immutable-structs = [\"Fixture::Numbers\", \"Fixture::Limits\"]"));
         var description = WriteDescription(directory, _ => { });
 
         var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
 
-        Assert.True(exception.Message.Contains("readonly-structs names Fixture::Motion, which is not a described struct",
+        Assert.True(exception.Message.Contains("Fixture::Limits is in readonly-structs and immutable-structs: pick one",
                                                StringComparison.Ordinal),
-                    $"An enum in readonly-structs should fail naming it, but failed with\n  {exception.Message}");
+                    $"A struct in both lists should fail naming both keys, but failed with\n  {exception.Message}");
+    }
+
+    [Theory]
+    [InlineData("readonly-structs")]
+    [InlineData("immutable-structs")]
+    public void AReadOnlyOrImmutableStructThatIsNotADescribedStructFails(string key)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace(key + " = [\"Fixture::" + (key == "readonly-structs" ? "Limits" : "Numbers") + "\"]",
+                                                                         key + " = [\"Fixture::Motion\"]"));
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains($"{key} names Fixture::Motion, which is not a described struct",
+                                               StringComparison.Ordinal),
+                    $"An enum in {key} should fail naming it, but failed with\n  {exception.Message}");
     }
 
     [Theory]

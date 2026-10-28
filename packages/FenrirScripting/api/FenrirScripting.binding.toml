@@ -15,8 +15,10 @@ defaults = "FenrirScripting.binding-defaults.toml"
 [csharp]
 contract = "../Managed/Fenrir.Scripting"
 generated = "../Managed/Fenrir.Scripting/Generated"
-# The engine keeps the hierarchy consistent, so C# only reads a Relationship and the links in it.
-readonly-structs = ["Fenrir::Relationship", "Fenrir::Entity"]
+# The engine keeps the hierarchy consistent, so C# only reads a Relationship.
+readonly-structs = ["Fenrir::Relationship"]
+# A link is a value C# holds and assigns whole but never edits: a mirror holding one keeps a writable field.
+immutable-structs = ["Fenrir::Entity"]
 # A link's value and entity list are the engine's: C# reads them through EntityLink's Target and IsNull.
 private-fields = ["Fenrir::Entity::m_entityId", "Fenrir::Entity::m_entityList"]
 fixed-buffers = ["Fenrir::Name::name"]

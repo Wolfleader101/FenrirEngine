@@ -66,6 +66,7 @@ read-only-resource-interface = "IReadOnlyResource"
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
 readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
+immutable-structs = ["My::Link"]       # Optional: read-only structs C# assigns whole (a link, an id).
 private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
 fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
 internal-structs = ["My::ShapeOptions"]  # Optional: structs mirrored internal, for the contract's own use.
@@ -173,8 +174,9 @@ configured `default` for its own default. A struct with any default that is not 
 `public T() {}`, so `new T()` runs the initialisers; one whose defaults are all zero (a bound type's own default counts
 as zero unless it has a `default`) has bare fields and no constructor, since `default` already holds them, so mirroring
 it adds no member C# did not have. A read-only mirror (an event under `readonly-events`, or a struct in
-`readonly-structs`) is a `readonly struct` of `readonly` fields, always with the constructor, and a field holding a
-read-only struct is `readonly` too. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
+`readonly-structs` or `immutable-structs`) is a `readonly struct` of `readonly` fields, always with the constructor. Only
+a field holding a `readonly-structs` mirror (a C++-owned copy C# reads in place) or a read-only resource is `readonly`
+too; one holding an `immutable-structs` mirror (a value C# assigns whole, a link or an id) is as writable as its holder. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
 interface, an event the event attribute and interface, and a scene or app resource the resource attribute and interface (a
 tagged union's mirror too); a resource in `read-only` gets the read-only interface and, unless it is a tagged union, is a
 `readonly struct`. A struct in `internal-structs` is `internal`, and a public mirror cannot hold one. An array is an `[InlineArray(N)]` struct nested in its mirror
@@ -281,7 +283,8 @@ Everything the tool cannot bind fails the run with a message naming the type and
 unknown key in the configuration, a description for another target, a bound type with no `[bound-types]` entry, two
 types with one C# name, a tagged union whose default kind is not tag 0 or whose kind is not a struct, a default of a form
 the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
-description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, a
+description describes or one that a type it binds holds, a `readonly-structs` or `immutable-structs` entry that is not a
+described struct, a struct in both `readonly-structs` and `immutable-structs`, a
 `private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
 of numbers or is in a read-only mirror, a component, event, tagged union or resource with no attribute, interface or
 (with a registration listing it) factory (each SDK name is needed only by the kind of type that uses it, so a binding

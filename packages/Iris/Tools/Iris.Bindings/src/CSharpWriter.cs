@@ -189,8 +189,10 @@ internal static class CSharpWriter
         {
             var memberName = binding.MemberName(type, member.Name);
             var access = binding.IsPrivate(type, member) ? "private" : "public";
-            // A field holding a read-only struct is read-only too, so C# cannot write the struct whole.
-            var field = readOnly || (member.Kind.Kind == "struct" && binding.IsReadOnly(binding.Type(member.Kind.Type!)))
+            // A field holding a C++-owned copy (a readonly-structs entry, a read-only resource) is read-only too, so C#
+            // cannot write the struct whole; one holding an immutable value (an immutable-structs entry) is not, since
+            // C# assigns such a value whole.
+            var field = readOnly || (member.Kind.Kind == "struct" && binding.HoldersAreReadOnly(binding.Type(member.Kind.Type!)))
                             ? $"{access} readonly"
                             : access;
             Doc(text, member.Doc);
