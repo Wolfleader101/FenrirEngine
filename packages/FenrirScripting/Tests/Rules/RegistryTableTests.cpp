@@ -3,12 +3,14 @@
 // private to FenrirScripting (this executable is given its source directory) and is tested through its interface.
 #include <catch2/catch_test_macros.hpp>
 
+#include "../HeadlessApp.hpp"
 #include "RulesTypes.hpp"
 
 #include "ComponentRegistry.hpp"
 
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/Errors.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
 
 #include <cstdint>
 #include <string>
@@ -210,4 +212,94 @@ TEST_CASE("RemoveScriptDefined sweeps the components and events a script defined
              registry.Events().Find("Rules.ScriptEvent") == -1));
     INFO("A native component or event was swept");
     REQUIRE((registry.Components().Find("Rules.Native") == 0 && registry.Events().Find("Rules.NativeEvent") == 0));
+}
+
+namespace
+{
+    // An extension that gives one of each kind.
+    ScriptingExtension OneOfEachKind()
+    {
+        ScriptingExtension extension;
+        extension.name = "Rules";
+        extension.components = {Component("Rules.Velocity")};
+        extension.events = {Event("Rules.Ping")};
+        extension.sharedStructs = {MakeSharedStruct<Velocity>("Rules.Shared")};
+        extension.resources = {MakeSceneResource<Ping>("Rules.Weather")};
+        return extension;
+    }
+} // namespace
+
+TEST_CASE("AddExtension registers an extension's four kinds and names its event queues", "[registry-table]")
+{
+    Testing::HeadlessApp headless;
+    ComponentRegistry registry;
+    ScriptingExtension extension = OneOfEachKind();
+
+    const auto failure = registry.AddExtension(extension, headless.Get());
+
+    INFO("Registering one of each kind failed: " << failure.value_or(""));
+    REQUIRE(!failure.has_value());
+    INFO("Each kind should be in its own table under its name");
+    REQUIRE((registry.Components().Find("Rules.Velocity") >= 0 && registry.Events().Find("Rules.Ping") >= 0 &&
+             registry.SharedStructs().Find("Rules.Shared") >= 0 && registry.Resources().Find("Rules.Weather") >= 0));
+    INFO("The event's queue should be the App's named queue");
+    REQUIRE(headless.Get().FindEventQueue("Rules.Ping") != nullptr);
+}
+
+TEST_CASE("AddExtension refuses a name another kind holds, naming the kind that failed", "[registry-table]")
+{
+    Testing::HeadlessApp headless;
+    ComponentRegistry registry;
+    REQUIRE(registry.Components().Add(Component("Rules.Taken")) == 0);
+
+    SECTION("an event takes a component's name")
+    {
+        ScriptingExtension extension;
+        extension.name = "Rules";
+        extension.events = {Event("Rules.Taken")};
+        REQUIRE(registry.AddExtension(extension, headless.Get()) ==
+                "an event in extension 'Rules' has an empty or duplicate name");
+    }
+    SECTION("a shared struct takes a component's name")
+    {
+        ScriptingExtension extension;
+        extension.name = "Rules";
+        extension.sharedStructs = {MakeSharedStruct<Velocity>("Rules.Taken")};
+        REQUIRE(registry.AddExtension(extension, headless.Get()) ==
+                "a shared struct in extension 'Rules' has an empty or duplicate name");
+    }
+    INFO("A refused registration should leave the registry as it was");
+    REQUIRE((registry.Events().All().empty() && registry.SharedStructs().All().empty()));
+}
+
+TEST_CASE("AddExtension refuses an event whose queue the app holds under another type", "[registry-table]")
+{
+    Testing::HeadlessApp headless;
+    ComponentRegistry registry;
+    // The app already has a queue of another type under the event's name.
+    REQUIRE(headless.Get().NameEvent<Velocity>("Rules.Ping"));
+    ScriptingExtension extension;
+    extension.name = "Rules";
+    extension.events = {Event("Rules.Ping")};
+
+    REQUIRE(registry.AddExtension(extension, headless.Get()) ==
+            "the event 'Rules.Ping' in extension 'Rules' names a queue the app already has under another type");
+    INFO("An event whose queue could not be named should not be registered");
+    REQUIRE(registry.Events().Find("Rules.Ping") < 0);
+}
+
+TEST_CASE("A failure midway leaves what AddExtension added before it", "[registry-table]")
+{
+    Testing::HeadlessApp headless;
+    ComponentRegistry registry;
+    ScriptingExtension extension;
+    extension.name = "Rules";
+    extension.components = {Component("Rules.First")};
+    // The event's queue is named without trouble; the event then takes the component's name.
+    extension.events = {Event("Rules.First")};
+
+    REQUIRE(registry.AddExtension(extension, headless.Get()) ==
+            "an event in extension 'Rules' has an empty or duplicate name");
+    INFO("Install discards the registry with the Scripting it was building, so what was added stays (documented)");
+    REQUIRE(registry.Components().Find("Rules.First") >= 0);
 }

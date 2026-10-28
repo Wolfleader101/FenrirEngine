@@ -14,15 +14,15 @@
 
 namespace Fenrir::ScriptingNatives
 {
-    void Log(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t level, const char* text, std::int32_t length);
+    void Log(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t level, std::string_view text);
     float TimeDeltaTime(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     float TimeTickRate(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     bool EntityIsValid(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::uint32_t value);
     void* EntityLinkOwner(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     bool EntityWorldTransform(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::uint32_t value, Fenrir::Transform* world);
     bool EntitySetWorldTransform(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::uint32_t value, const Fenrir::Transform* world);
-    std::int32_t ComponentIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength);
-    bool RegisterScriptComponent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment);
+    std::int32_t ComponentIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::string_view typeName);
+    bool RegisterScriptComponent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::int32_t size, std::int32_t alignment);
     std::uint32_t RegistryGeneration(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     void* ComponentGet(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, std::uint32_t entity);
     bool ComponentHas(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, std::uint32_t entity);
@@ -32,13 +32,13 @@ namespace Fenrir::ScriptingNatives
     Fenrir::ChangeError ComponentRemove(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, std::uint32_t entity);
     std::int32_t ChangesApply(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
     void ChangesDiscard(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&);
-    std::int32_t EventIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength);
-    bool RegisterScriptEvent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, std::int32_t size, std::int32_t alignment);
+    std::int32_t EventIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::string_view typeName);
+    bool RegisterScriptEvent(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::int32_t size, std::int32_t alignment);
     Fenrir::ChangeError EventSend(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t event, const void* value);
     bool EventReadAfter(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t event, std::uint64_t* seen, Fenrir::Detail::NativeAddress* view);
     std::int32_t QueryCount(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const std::int32_t* ids, std::int32_t count);
     std::int32_t QueryFill(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const std::int32_t* ids, std::int32_t count, Fenrir::Detail::NativeAddress* rows, std::int32_t capacity);
-    std::int32_t ResourceIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, const char* name, std::int32_t length, const char* typeName, std::int32_t typeLength);
+    std::int32_t ResourceIdOf(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::string_view name, std::string_view typeName);
     void* ResourceGet(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id);
     Fenrir::ChangeError ResourceInsert(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id, const void* value);
     Fenrir::ChangeError ResourceRemove(const Fenrir::CallContext&, Fenrir::Detail::EngineContext&, std::int32_t id);
