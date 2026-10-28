@@ -531,7 +531,22 @@ internal static class CSharpWriter
         var config = binding.Config.Natives!;
         var function = native.Function;
         NativeDoc(text, native, facade: true);
-        var start = $"public {(native.FacadeOnThis ? "" : "static ")}{native.Result} {native.Facade!.Method}(";
+        var start = $"public {(native.FacadeOnThis ? "" : "static ")}{native.FacadeResult} {native.Facade!.Method}(";
+        if (native.FacadeReturned is not null)
+        {
+            // A block body: the call declares the returned output in place and drops a bool result, and the method
+            // returns the output as the call left it (the registration zeroed it before the native ran).
+            var returning = $"{config.Class}.{function.Name}({string.Join(", ", native.FacadeReturningArguments)});";
+            Signature(text, start, native.FacadeParameters, ")");
+            text.Line("{");
+            text.Indent();
+            text.Line(native.Result == "void" ? returning : "_ = " + returning);
+            text.Line($"return {native.FacadeReturnedName};");
+            text.Outdent();
+            text.Line("}");
+            return;
+        }
+
         var call = $"{config.Class}.{function.Name}({string.Join(", ", native.FacadeArguments)});";
         var single = $"{start}{string.Join(", ", native.FacadeParameters)}) => {call}";
         if (text.Indentation + single.Length <= Width)
@@ -554,13 +569,22 @@ internal static class CSharpWriter
         var function = native.Function;
         Doc(text, function.Doc);
         var receiver = facade ? native.FacadeReceiver : null;
+        // A facade method that returns an output documents it as its result, not as a parameter.
+        var returned = facade ? function.FacadeReturns : null;
         foreach (var parameter in function.Parameters.Where(parameter => parameter.Doc != null && parameter.Name != receiver &&
+                                                                         parameter.Name != returned &&
                                                                          !native.Folded.Contains(parameter.Name)))
         {
             Tagged(text, $"<param name=\"{parameter.Name}\">", Escape(parameter.Doc!), "</param>");
         }
 
-        if (function.ReturnsDoc != null)
+        if (returned is not null)
+        {
+            var doc = function.Parameters.First(parameter => parameter.Name == returned).Doc;
+            var value = doc is null ? "" : Escape(doc.TrimEnd('.')) + "; ";
+            Tagged(text, "<returns>", value + "the C++ default when the call did nothing.", "</returns>");
+        }
+        else if (function.ReturnsDoc != null)
         {
             Tagged(text, "<returns>", Escape(function.ReturnsDoc), "</returns>");
         }

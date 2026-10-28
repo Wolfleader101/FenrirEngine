@@ -199,6 +199,18 @@ public sealed class DescribeTests
     }
 
     [Fact]
+    public void AFacadeMarksReturnsNamesTheSingleOutputTheMethodGivesBack()
+    {
+        var selection = NativesSelection.Read(Path.Combine(FixtureDirectory(), "Fixture.binding.toml"));
+        var functions = NativesDescriber.Describe(selection, []).Functions;
+        var nearest = functions.Single(function => function.Name == "Nearest");
+        var find = functions.Single(function => function.Name == "Find");
+
+        Assert.Equal(("Hits.Nearest", "hit"), (nearest.Facade, nearest.FacadeReturns));
+        Assert.Equal(("Hits.Find", null), (find.Facade, find.FacadeReturns));
+    }
+
+    [Fact]
     public void TheCallContextComesFromTheDefaultsFileWhenTheBindingStatesNone()
     {
         using var directory = new TemporaryDirectory();
@@ -229,8 +241,13 @@ public sealed class DescribeTests
     [InlineData("PointerToPointer::values: is a pointer to a pointer, which the description cannot record")]
     [InlineData("Wide::wide: its type 'long double' is not a kind the description records")]
     [InlineData("TextByPointer::text: is a pointer to a std::string_view: a native takes text as a std::string_view by value")]
-    [InlineData("MalformedFacade: @facade names a public method as Class.Method")]
+    [InlineData("MalformedFacade: @facade names a public method as Class.Method, followed at most by 'returns <parameter>'")]
     [InlineData("DoubledFacade: is marked @facade twice; a native names one public method")]
+    [InlineData("ReturnsMissing: @facade returns 'missing', which names no parameter of the native")]
+    [InlineData("ReturnsInput: @facade returns 'origin', which is not a single output (a pointer documented @param[out])")]
+    [InlineData("ReturnsOneOfTwo: @facade returns one output, but the native has more than one: the method could return only one")]
+    [InlineData("ReturnsBesideCount: @facade returns an output, but the native's result is std::int32_t, which the method " +
+                "would lose: only a bool result, or none, is dropped")]
     public void EachUndescribableNativeFailsNamingTheFunctionAndParameter(string diagnostic)
     {
         using var directory = new TemporaryDirectory();

@@ -23,6 +23,17 @@ public static partial class Hits
         FixtureNative.Find(in origin, distance, out hit);
 
     /// <summary>
+    /// The nearest hit from `origin` as a value: `returns` names the single output the facade method gives back,
+    /// dropping the bool.
+    /// </summary>
+    /// <returns>Where it hit; the C++ default when the call did nothing.</returns>
+    public static Hit Nearest(Vector3 origin)
+    {
+        _ = FixtureNative.Nearest(in origin, out Hit hit);
+        return hit;
+    }
+
+    /// <summary>
     /// Writes up to `capacity` hits: a stateless native, and a pointer followed by its count. Named as Hits.Find too: a
     /// second public method of that name, told apart by its parameters.
     /// </summary>

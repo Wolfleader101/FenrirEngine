@@ -15,7 +15,8 @@ internal sealed record NativeParameter(string Name, NativeType Type, bool Output
 /// <summary>
 /// One described native function (<c>docs/natives-description.md</c>). <c>NotRunning</c> is the C++ expression of what a
 /// caller gets when it cannot be called; <c>Facade</c> is its <c>@facade</c> mark, <c>Class.Method</c>, the public
-/// static class and method name the binding gives it.
+/// static class and method name the binding gives it, and <c>FacadeReturns</c> the single output the mark's
+/// <c>returns</c> names, which that method gives as its value (null when the mark names none).
 /// </summary>
 internal sealed record NativeFunction(
     string Name,
@@ -28,7 +29,8 @@ internal sealed record NativeFunction(
     string? ReturnsDoc,
     IReadOnlyList<NativeParameter> Parameters,
     string? NotRunning,
-    string? Facade)
+    string? Facade,
+    string? FacadeReturns)
 {
     /// <summary>The C++ function's qualified name.</summary>
     public string QualifiedName => Namespace.Length == 0 ? Name : $"{Namespace}::{Name}";
@@ -67,7 +69,8 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
                     return new NativeParameter(parameterName, ReadType(parameter, $"{where}::{parameterName}"),
                                                Flag(parameter, "output"), Flag(parameter, "inOut"),
                                                Flag(parameter, "input"), Description.OptionalString(parameter, "doc"));
-                }).ToList(), Description.OptionalString(function, "notRunning"), Description.OptionalString(function, "facade"));
+                }).ToList(), Description.OptionalString(function, "notRunning"), Description.OptionalString(function, "facade"),
+                Description.OptionalString(function, "facadeReturns"));
         }).ToList();
         return new NativesDescription(path, Description.String(root, "context", path), functions);
     }
@@ -117,11 +120,42 @@ internal sealed record FacadeName(string Class, string Method)
 /// Whether the method is an instance method of <paramref name="FacadeMirror" />: the declaration's first parameter is
 /// <c>in</c> that mirror, and the method passes <c>in this</c> for it.
 /// </param>
+/// <param name="FacadeReturned">
+/// The declaration's <c>out T name</c> parameter the mark's <c>returns</c> names, which the facade method declares in
+/// its call and gives back as its value, dropping the native's <c>bool</c>; null when the mark names none.
+/// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
                                    IReadOnlyList<string> Named, IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded,
                                    FacadeName? Facade, IReadOnlyList<string> FacadeParameters, DescribedType? FacadeMirror,
-                                   bool FacadeOnThis)
+                                   bool FacadeOnThis, string? FacadeReturned = null)
 {
+    /// <summary>The facade method's result: the returned output's type when the mark names one, else the declaration's.</summary>
+    public string FacadeResult => FacadeReturned is null ? Result : TypeOf(FacadeReturned);
+
+    /// <summary>The name of the output the facade method returns, or null.</summary>
+    public string? FacadeReturnedName => FacadeReturned is null ? null : ParameterName(FacadeReturned);
+
+    /// <summary>
+    /// The arguments the facade method passes when it returns an output: <see cref="FacadeArguments" />, with the
+    /// returned output declared in place (<c>out Hit hit</c>) rather than passed by name.
+    /// </summary>
+    public IEnumerable<string> FacadeReturningArguments =>
+        Parameters.Select((parameter, index) => parameter == FacadeReturned ? parameter
+                                                : FacadeOnThis && index == 0 ? "in this"
+                                                : parameter.StartsWith("in ", StringComparison.Ordinal) ||
+                                                  parameter.StartsWith("out ", StringComparison.Ordinal)
+                                                    ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
+                                                    : ParameterName(parameter));
+
+    // The type of a `[modifier] Type name` parameter, without its modifier.
+    private static string TypeOf(string parameter)
+    {
+        var type = parameter[..parameter.LastIndexOf(' ')];
+        return type.StartsWith("out ", StringComparison.Ordinal) ? type["out ".Length..]
+               : type.StartsWith("in ", StringComparison.Ordinal) ? type["in ".Length..]
+               : type;
+    }
+
     /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
     public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
                                                            parameter.StartsWith("ReadOnlySpan<", StringComparison.Ordinal));
@@ -376,14 +410,49 @@ internal static class Natives
                                                                    binding.CSharpName(type) == facade.Class);
         var onThis = mirror is not null && parameters.Count > 0 &&
                      parameters[0].StartsWith($"in {binding.CSharpName(mirror)} ", StringComparison.Ordinal);
+        var returned = facade is null ? null : FacadeReturned(function, facade, parameters, result, outputs, where);
         var facadeParameters = facade is null
                                    ? []
                                    : parameters.Skip(onThis ? 1 : 0)
+                                               .Where(parameter => parameter != returned)
                                                .Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
                                                                         ? parameter["in ".Length..]
                                                                         : parameter).ToList();
         return new BoundNative(function, result, parameters, named.Distinct().ToList(), outputs, folded, facade,
-                               facadeParameters, mirror, onThis);
+                               facadeParameters, mirror, onThis, returned);
+    }
+
+    // The `out T name` parameter the mark's `returns` names, or null without one. Refused, naming the native and the
+    // mark, when the name is not a single out of the declaration, when the declaration has another single out, or when
+    // its result is neither bool nor void: the header reader refuses those shapes too, so a description it wrote never
+    // reaches here with them, but one written by hand may.
+    private static string? FacadeReturned(NativeFunction function, FacadeName facade, IReadOnlyList<string> parameters,
+                                          string result, IReadOnlyList<int> outputs, string where)
+    {
+        if (function.FacadeReturns is null)
+        {
+            return null;
+        }
+
+        var name = Identifier(function.FacadeReturns);
+        var returned = parameters.FirstOrDefault(parameter => parameter.StartsWith("out ", StringComparison.Ordinal) &&
+                                                              parameter[(parameter.LastIndexOf(' ') + 1)..] == name);
+        if (returned is null)
+        {
+            throw new BindingException($"{where}: @facade {facade} returns '{function.FacadeReturns}', which is not an out of its declaration");
+        }
+
+        if (outputs.Count > 1)
+        {
+            throw new BindingException($"{where}: @facade {facade} returns one output, but the declaration has {outputs.Count} outs");
+        }
+
+        if (result is not ("bool" or "void"))
+        {
+            throw new BindingException($"{where}: @facade {facade} returns an output, but the declaration's result is {result}, which the method would lose");
+        }
+
+        return returned;
     }
 
     // The native's @facade as a class and method, or null without one. The mark is refused when the declaration cannot

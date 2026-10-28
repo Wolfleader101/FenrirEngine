@@ -29,6 +29,7 @@ namespace Fixture::Bindings
         extension.functions = {
             Host::NativeFunction::Make<&Fixture::Natives::Push>("Fixture.Bindings.FixtureNative.Push"),
             Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Find, 4>::Call>("Fixture.Bindings.FixtureNative.Find"),
+            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Nearest, 3>::Call>("Fixture.Bindings.FixtureNative.Nearest"),
             Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Natives::Extremes, 3, 4>::Call>("Fixture.Bindings.FixtureNative.Extremes"),
             Host::NativeFunction::Make<&Fixture::Natives::FindAll>("Fixture.Bindings.FixtureNative.FindAll"),
             Host::NativeFunction::Make<&Fixture::Say>("Fixture.Bindings.FixtureNative.Say"),
