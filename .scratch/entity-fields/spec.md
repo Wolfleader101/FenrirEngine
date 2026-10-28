@@ -49,9 +49,25 @@ Two semantics are pinned in `EntityLink.cs`:
 - The examples (`examples/PhysicsDemo/scripts/*.cs`, `examples/RendererDemo/scripts/MeshesAndMaterials.cs`) lose their `EntityLink` helpers and `EntityLink.None` spellings. The user checks the examples; sessions leave DemoApp alone.
 - `GLOSSARY.md` "Entity link" says a script sees an entity field as an `Entity`, and `EntityLink` is how a mirror stores one.
 
+### Removing `EntityLink` entirely: an engine decision (ticket 04)
+
+The projection hides `EntityLink` from scripts but keeps it as storage, because the stored bytes are C++ `Fenrir::Entity`'s 16. Removing the type outright means a component stores 4 bytes, which is a change to the engine, not the generator. Surveyed 2026-10-28:
+
+- C++ `Entity` is `entt::entity` plus `EntityList*`; the pointer serves `AddComponent`, `GetComponent`, `HasComponent`, `IsValid`, the hierarchy calls and `operator==` (which compares the list too). Those methods are called at about 1,755 sites across the packages and examples.
+- About 160 of those sites call a method on an entity read out of a component or event field (`joint.bodyA.GetComponent<T>()`, `relationship.firstChild.IsValid()`): 6 in `FenrirPhysics/src`, 5 in `FenrirECS/src/Entity.cpp`, 4 in FenrirScripting's tests, the rest in physics's tests (about 100) and the PhysicsDemo (about 40).
+- 47 `Entity` fields sit in shared headers: physics's `Events.hpp` (17), `Queries.hpp` (11), `Vehicles.hpp` (7), `PhysicsWorld.hpp` (4), `Joints.hpp` and `Characters.hpp` (2 each), DebugDraw (3), SpawnNodes (1), plus `Relationship`'s four in `Entity.hpp`.
+- The app holds several scenes, each with its own `EntityList`; one is active. The link's owner is how C++ reads a script-written link as an entity of the active scene. FenrirECS's tests make local `EntityList`s.
+
+Three ways to go:
+
+- **A. Keep the projection (tickets 01 to 03).** No engine change; `EntityLink` stays as storage behind the property. Scripts never spell it.
+- **B. `Fenrir::Entity` becomes 4 bytes and finds its list through context.** A current entity list (thread-local, set by a scene while its systems run and by an `EntityList` when it is made with none current) serves every method, so the 1,755 call sites stand; equality is by id. The mirror of `Fenrir::Entity` is then the 4-byte `Entity` itself: `EntityLink.cs`, `Native.EntityLinkOwner` and the projection all go, and tickets 01 to 03 are not needed. Costs: a hidden context the coding standards' locality rule weighs against; an entity of an inactive scene resolves against the wrong list unless the context is switched around it; parallel systems must run one scene per thread.
+- **C. Components store a 4-byte `EntityId`; `Fenrir::Entity` keeps its pointer and its API.** A stored reference is the id alone, as `entt::entity` and a Unity instance id are; code reading one out of a component resolves it through the list in hand (`entities.GetEntity(joint.bodyA)`), which every system and test already has. The 47 fields retype and the 160 reading sites change, mostly physics tests and the demo; the engine's `Relationship` and `EntityList` hierarchy code go with them. The mirror of `EntityId` is `Entity` through a bound type, as `EntityValue` is today; `EntityLink.cs` and `Native.EntityLinkOwner` go, and tickets 01 to 03 are not needed. No hidden state; equality by id.
+
+Recommendation: **C**. It removes the type the user does not want, keeps `entity.GetComponent<T>()` on the handles code holds, and makes "a stored entity reference is an id you resolve against the list you have" the one rule in both languages, with no global behind it. B is the smaller edit but trades the pointer for a hidden current list. A is what to keep only if the engine change is not wanted now. The decision is the user's, on ticket 04: choosing B or C marks tickets 01 to 03 `wontfix`, and ticket 01's session (started 2026-10-28) is stopped.
+
 ### Out of scope
 
-- Dropping the `EntityList*` from C++ `Fenrir::Entity` so it is a 4-byte handle, as `entt::entity` is, and resolving the list through context. That would make the mirror `Entity` with nothing to project, but every C++ `entity.GetComponent<T>()` on a link found in a component relies on the pointer, so it is an engine-wide change for the same script-facing result. The projection leaves it open.
 - A projection for any type but `Fenrir::Entity`. The key is general so the rule has one shape, but no other type needs it.
 - Natives: they take and return `Entity` through the `EntityValue` bound type already.
 
@@ -62,7 +78,8 @@ Two semantics are pinned in `EntityLink.cs`:
 3. `EntityLink` stays public, as storage, with its hand-written surface; converting `Entity.None` yields `EntityLink.None`.
 4. A projected field is a property: getter and setter on a writable mirror, getter only on a read-only one; no `ref`/`in`, no arrays.
 5. The built-in `Relationship`, physics's holders, the scripting test fixture's `Tether`, the examples and the glossary follow.
-6. No ADR: ADR-0044's rule (bindings use other bindings' mirrors) is unchanged; the projection is a mirror's presentation. The glossary entry changes.
+6. No ADR for the projection: ADR-0044's rule (bindings use other bindings' mirrors) is unchanged; the projection is a mirror's presentation. The glossary entry changes.
+7. Open: whether `EntityLink` is removed outright by changing what a component stores (ticket 04, options B and C above). That one gets an ADR, since it changes what a stored entity reference is in C++.
 
 ## Tickets
 
@@ -71,8 +88,9 @@ Two semantics are pinned in `EntityLink.cs`:
 | 01 | `project-as` in Iris.Bindings: writer, validation, README, tests, fixture | none |
 | 02 | The built-in binding projects `Fenrir::Entity`; `EntityLink.cs`'s `None` conversion; the scripting link tests and `Registry.cs`; the glossary | 01 |
 | 03 | Physics regenerated; its hand-written docs; the examples' scripts | 02 |
+| 04 | Remove `EntityLink`: decide B or C, then the engine change, the bindings and the scripts | none (a decision; supersedes 01 to 03 when taken) |
 
-A stack: 02's regenerated outputs need 01's generator, and 03's need 02's configuration. Branch `entity-fields-01` from this spec's branch, each later ticket from the previous ticket's pushed branch.
+01 to 03 are a stack: 02's regenerated outputs need 01's generator, and 03's need 02's configuration. Branch `entity-fields-01` from this spec's branch, each later ticket from the previous ticket's pushed branch. 04 is the user's decision first; if B or C is chosen, 01 to 03 are marked `wontfix` and 04 is cut from `dotnet-scripting` on top of PR #199.
 
 ## Done looks like
 
