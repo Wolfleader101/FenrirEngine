@@ -374,8 +374,8 @@ internal static class CppWriter
 
     /// <summary>
     /// The defaults test: one case per registered type, calling the C# class's method for it and comparing the value with
-    /// C++'s <c>T{}</c> field by field through the mapping. Padding is never compared, and of a tagged union only the tag
-    /// and the kind it selects.
+    /// C++'s <c>T{}</c> through <c>Iris::FieldDifferences</c>, which walks the mapping field by field (never padding, and
+    /// of a tagged union only the tag and the kind it selects). The test hands it the binding's tagged unions.
     /// </summary>
     public static string DefaultsTest(Binding binding, TestsConfig tests)
     {
@@ -388,12 +388,9 @@ internal static class CppWriter
         }
 
         text.Line();
+        text.Line("#include <Iris/FieldDifferences.hpp>");
         text.Line("#include <catch2/catch_test_macros.hpp>");
         text.Line();
-        text.Line("#include <cstddef>");
-        text.Line("#include <cstdint>");
-        text.Line("#include <cstring>");
-        text.Line("#include <span>");
         text.Line("#include <string>");
         text.Line("#include <string_view>");
         text.Line("#include <vector>");
@@ -405,7 +402,7 @@ internal static class CppWriter
         text.Line();
         Unions(binding, text);
         text.Line();
-        foreach (var line in Comparison)
+        foreach (var line in CheckDefaults)
         {
             text.Line(line);
         }
@@ -430,23 +427,11 @@ internal static class CppWriter
     }
 
     // Each tagged union by mapped name, with each tag value (its bytes as an unsigned integer) and the index in the
-    // mapping of the kind it selects.
+    // mapping of the kind it selects: which kind a tag selects is the binding's knowledge, so the test hands it to Iris.
     private static void Unions(Binding binding, Writer text)
     {
-        text.Line("struct UnionKind");
-        text.Line("{");
-        text.Line("    std::uint64_t tag;");
-        text.Line("    std::size_t field;");
-        text.Line("};");
-        text.Line();
-        text.Line("struct TaggedUnion");
-        text.Line("{");
-        text.Line("    std::string_view typeName;");
-        text.Line("    std::vector<UnionKind> kinds;");
-        text.Line("};");
-        text.Line();
         text.Line("// Of a tagged union only the tag and the kind it selects are compared: the other kinds' bytes are not set.");
-        text.Line("const std::vector<TaggedUnion> taggedUnions = {");
+        text.Line("const std::vector<Iris::UnionLayout> taggedUnions = {");
         foreach (var union in binding.Types.Where(type => type.Category == Category.TaggedUnion))
         {
             var tag = binding.Type(union.Tag!.Kind.Type!);
@@ -462,116 +447,9 @@ internal static class CppWriter
         text.Line("};");
     }
 
-    // The comparison, written into every defaults test so the test needs only Iris's headers. It walks Iris's own record
-    // of a mapping, which is what the bridge checks the C# struct against.
-    private static readonly string[] Comparison =
+    // Written into every defaults test: the C# call and the asserts. The comparison itself is Iris's.
+    private static readonly string[] CheckDefaults =
     [
-        "using Iris::Detail::StructInfo;",
-        "using Iris::Detail::ValueKind;",
-        "",
-        "std::size_t ScalarSize(ValueKind kind)",
-        "{",
-        "    switch (kind)",
-        "    {",
-        "    case ValueKind::Bool:",
-        "    case ValueKind::Int8:",
-        "    case ValueKind::UInt8:",
-        "        return 1;",
-        "    case ValueKind::Int16:",
-        "    case ValueKind::UInt16:",
-        "    case ValueKind::Char:",
-        "        return 2;",
-        "    case ValueKind::Int32:",
-        "    case ValueKind::UInt32:",
-        "    case ValueKind::Float:",
-        "        return 4;",
-        "    default:",
-        "        return 8;",
-        "    }",
-        "}",
-        "",
-        "std::string Hex(std::span<const std::byte> bytes)",
-        "{",
-        "    constexpr std::string_view digits = \"0123456789abcdef\";",
-        "    std::string text;",
-        "    for (const std::byte byte : bytes)",
-        "    {",
-        "        text += digits[static_cast<unsigned>(byte) >> 4];",
-        "        text += digits[static_cast<unsigned>(byte) & 15];",
-        "    }",
-        "    return text;",
-        "}",
-        "",
-        "struct Comparison",
-        "{",
-        "    std::span<const std::byte> native;",
-        "    std::span<const std::byte> managed;",
-        "    std::vector<std::string> differences;",
-        "",
-        "    void Bytes(std::size_t offset, std::size_t size, const std::string& path)",
-        "    {",
-        "        const auto cpp = native.subspan(offset, size);",
-        "        const auto cs = managed.subspan(offset, size);",
-        "        if (std::memcmp(cpp.data(), cs.data(), size) != 0)",
-        "        {",
-        "            differences.push_back(path + \" at offset \" + std::to_string(offset) + \": C++ \" + Hex(cpp) + \", C# \" + Hex(cs));",
-        "        }",
-        "    }",
-        "",
-        "    std::uint64_t Unsigned(std::size_t offset, std::size_t size) const",
-        "    {",
-        "        std::uint64_t value = 0;",
-        "        std::memcpy(&value, native.subspan(offset, size).data(), size);",
-        "        return value;",
-        "    }",
-        "",
-        "    void Value(ValueKind kind, const StructInfo* nested, std::size_t offset, const std::string& path)",
-        "    {",
-        "        if (kind == ValueKind::Struct)",
-        "            Struct(*nested, offset, path);",
-        "        else",
-        "            Bytes(offset, kind == ValueKind::Enum ? nested->size : ScalarSize(kind), path);",
-        "    }",
-        "",
-        "    void Struct(const StructInfo& info, std::size_t offset, const std::string& path)",
-        "    {",
-        "        for (const TaggedUnion& union_ : taggedUnions)",
-        "        {",
-        "            if (union_.typeName != info.typeName)",
-        "                continue;",
-        "            const auto& tag = info.fields[0];",
-        "            Value(tag.kind, tag.nested, offset + tag.offset, path + \".\" + std::string(tag.name));",
-        "            const std::uint64_t value = Unsigned(offset + tag.offset, tag.nested->size);",
-        "            for (const UnionKind& kind : union_.kinds)",
-        "            {",
-        "                if (kind.tag == value)",
-        "                {",
-        "                    const auto& field = info.fields[kind.field];",
-        "                    Value(field.kind, field.nested, offset + field.offset, path + \".\" + std::string(field.name));",
-        "                }",
-        "            }",
-        "            return;",
-        "        }",
-        "        for (const auto& field : info.fields)",
-        "        {",
-        "            const std::string name = path + \".\" + std::string(field.name);",
-        "            if (field.kind != ValueKind::InlineArray)",
-        "            {",
-        "                Value(field.kind, field.nested, offset + field.offset, name);",
-        "                continue;",
-        "            }",
-        "            const std::size_t size = field.element == ValueKind::Struct || field.element == ValueKind::Enum",
-        "                                         ? field.nested->size",
-        "                                         : ScalarSize(field.element);",
-        "            for (std::size_t index = 0; index < field.length; ++index)",
-        "            {",
-        "                Value(field.element, field.nested, offset + field.offset + index * size,",
-        "                      name + \"[\" + std::to_string(index) + \"]\");",
-        "            }",
-        "        }",
-        "    }",
-        "};",
-        "",
         "// Calls the C# class's method for T and compares what it returns with T{}, naming every field that differs.",
         "template <typename T>",
         "void CheckDefaults(const Iris::Component* component, std::string_view method)",
@@ -597,14 +475,12 @@ internal static class CppWriter
         "    }",
         "    const T managed = *result.value;",
         "    const T native{};",
-        "    Comparison comparison{std::as_bytes(std::span(&native, 1)), std::as_bytes(std::span(&managed, 1)), {}};",
-        "    const StructInfo& info = Iris::Detail::StructInfoOf<T>;",
-        "    comparison.Struct(info, 0, std::string(info.typeName));",
+        "    const std::vector<std::string> differing = Iris::FieldDifferences(native, managed, taggedUnions);",
         "    std::string differences;",
-        "    for (const std::string& difference : comparison.differences)",
+        "    for (const std::string& difference : differing)",
         "        differences += \"\\n  \" + difference;",
         "    INFO(\"These fields of C#'s new() differ from C++'s T{}:\" << differences);",
-        "    REQUIRE(comparison.differences.empty());",
+        "    REQUIRE(differing.empty());",
         "}",
     ];
 

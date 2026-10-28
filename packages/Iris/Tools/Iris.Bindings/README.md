@@ -191,10 +191,12 @@ it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.
 the constructor, which makes the kind whose tag value is 0, so a union whose C++ default is another kind fails.
 
 **The defaults test.** Each case runs `setup`, calls the C# class's method for the type through Iris and compares the
-value with C++'s `T{}` through the type's mapping: the bytes of each field at its offset, recursing into nested structs
-and array elements, never padding, and of a tagged union only the tag and the kind it selects. A failure names every
-field that differs, with both sides' bytes. The C# test assembly compiles the generated class; the C++ test target
-compiles the generated source with `[tests] includes` on its include path.
+value with C++'s `T{}` through `Iris::FieldDifferences` (`Iris/FieldDifferences.hpp`): the comparison is Iris's, walking
+the type's mapping field by field, never padding, and of a tagged union only the tag and the kind it selects. The
+generated test holds only the binding's part, which kind each tagged union's tag values select (an `Iris::UnionLayout`
+table), and the C# call. A failure names every field that differs, with both sides' bytes. The C# test assembly
+compiles the generated class; the C++ test target compiles the generated source with `[tests] includes` on its include
+path.
 
 **Natives.** With `[natives]`, the tool also reads the binding's **natives description** (`<Name>.natives.json`,
 [its format](../../docs/natives-description.md)), which a source reader writes from the C++ functions themselves, so a
