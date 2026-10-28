@@ -5,8 +5,8 @@
 // systems, the playback after each, a system that throws) is C#'s, pinned by ScriptingTests through the real runtime.
 #include <catch2/catch_test_macros.hpp>
 
-#include "../HeadlessApp.hpp"
 #include "FakeSystemHost.hpp"
+#include "HeadlessApp.hpp"
 
 #include "ScriptSystems.hpp"
 

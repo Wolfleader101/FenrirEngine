@@ -5,7 +5,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
-#include "../HeadlessApp.hpp"
+#include "HeadlessApp.hpp"
 #include "RulesTypes.hpp"
 
 #include "ComponentRegistry.hpp"

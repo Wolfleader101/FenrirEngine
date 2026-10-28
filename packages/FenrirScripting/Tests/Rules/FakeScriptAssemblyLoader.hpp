@@ -3,7 +3,7 @@
 // The rules tests' adapter at the GenerationLifecycle's loader seam: it loads nothing, decides which loads fail and
 // when a released generation counts as collected, and records what the lifecycle asked of it, so each reload rule is
 // checked with no .NET and no assembly.
-#include "ComponentLoader.hpp"
+#include "ScriptAssemblyLoader.hpp"
 
 #include <chrono>
 #include <filesystem>
@@ -14,7 +14,7 @@
 
 namespace RulesTest
 {
-    class FakeComponentLoader final : public Fenrir::Detail::ComponentLoader
+    class FakeScriptAssemblyLoader final : public Fenrir::Detail::ScriptAssemblyLoader
     {
       public:
         // What a case tells the fake to do.
@@ -26,7 +26,7 @@ namespace RulesTest
         std::vector<int> released; // The loads (counted from 1) whose generation was released, in order.
         int waits = 0;
 
-        Iris::CallResult<std::unique_ptr<Fenrir::Detail::LoadedComponent>> Load(
+        Iris::CallResult<std::unique_ptr<Fenrir::Detail::LoadedScriptAssembly>> Load(
             const std::filesystem::path& path) override
         {
             loaded.push_back(path);
@@ -40,9 +40,9 @@ namespace RulesTest
         }
 
       private:
-        struct Generation final : Fenrir::Detail::LoadedComponent
+        struct Generation final : Fenrir::Detail::LoadedScriptAssembly
         {
-            Generation(FakeComponentLoader& owner, int number) : owner(owner), number(number)
+            Generation(FakeScriptAssemblyLoader& owner, int number) : owner(owner), number(number)
             {
             }
 
@@ -65,7 +65,7 @@ namespace RulesTest
                 return {Iris::CallStatus::Success, state, {}, false};
             }
 
-            FakeComponentLoader& owner;
+            FakeScriptAssemblyLoader& owner;
             int number;
             int waited = 0;
             bool isReleased = false;

@@ -3,7 +3,7 @@
 // as it is, and sit inside the not-running check.
 #include <catch2/catch_test_macros.hpp>
 
-#include "../NativeCallHarness.hpp"
+#include "NativeCallHarness.hpp"
 
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"

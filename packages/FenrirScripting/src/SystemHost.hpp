@@ -5,7 +5,7 @@
 
 #include <Iris/Iris.hpp>
 
-#include "ComponentLoader.hpp"
+#include "ScriptAssemblyLoader.hpp"
 
 namespace Fenrir::Detail
 {
@@ -54,6 +54,6 @@ namespace Fenrir::Detail
          *
          * @return the host; NotFound when the script defines no systems; otherwise why it could not be bound
          */
-        [[nodiscard]] virtual Iris::CallResult<std::unique_ptr<SystemHost>> Find(LoadedComponent& generation) = 0;
+        [[nodiscard]] virtual Iris::CallResult<std::unique_ptr<SystemHost>> Find(LoadedScriptAssembly& generation) = 0;
     };
 } // namespace Fenrir::Detail
