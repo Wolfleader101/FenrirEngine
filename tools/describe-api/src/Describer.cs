@@ -120,6 +120,14 @@ internal sealed class Describer
             }
         }
 
+        // A private-members name the selection does not select is a nested type some selected type holds, or nothing.
+        foreach (var name in m_selection.PrivateMembers.Where(name => m_selection.Types.All(type => type.Key != name) &&
+                                                                       !m_described.ContainsKey(name)))
+        {
+            m_errors.Add($"{m_selection.Path}: error: 'private-members' names {name}, which [types] does not select " +
+                         "and no selected type holds");
+        }
+
         if (m_errors.Count > 0)
         {
             throw new DescribeException(string.Join("\n", m_errors));

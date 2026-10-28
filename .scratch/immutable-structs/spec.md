@@ -24,7 +24,7 @@ The built-in binding also lists `Fenrir::Entity`, for a different reason: an `En
 
 ### Physics uses the built-in binding
 
-- `packages/FenrirPhysics/api/FenrirPhysics.api.toml` drops `"Fenrir::Transform" = "bound-type"` and `"Fenrir::Entity" = "bound-type"`; `fenrir-describe-api` then records both as `nested` in `FenrirPhysics.api.json`, as the other packages' descriptions record the types they hold from elsewhere.
+- `packages/FenrirPhysics/api/FenrirPhysics.api.toml` drops `"Fenrir::Transform" = "bound-type"` and `"Fenrir::Entity" = "bound-type"`; `fenrir-describe-api` then records `Entity` as `nested` in `FenrirPhysics.api.json`, as the other packages' descriptions record the types they hold from elsewhere. Two things found while building: `Entity` keeps its value and entity list private, and describe-api honoured `private-members` for selected types only, so the tool now lets `private-members` name a nested type a selected type holds (refusing one that is neither selected nor held), and the physics selection says `private-members = ["Fenrir::Entity"]`; and no physics type holds a `Transform` (only its natives take one, named through the built-in binding), so `Transform` leaves the physics description rather than becoming `nested`.
 - `packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` adds `"../../../FenrirScripting/api/FenrirScripting.binding.toml"` to `uses` and deletes its `[bound-types]` table and the comment above it. Its header comment stops saying it binds the two itself.
 - `fenrir-generate-bindings`: the physics mirrors hold the built-in binding's `Transform` and `EntityLink` as used mirrors, with the `using` the generator adds. The one expected text change is each `= EntityLink.None` initialiser becoming `= new()`: `Entity`'s described default is `0xFFFFFFFF`, the generated constructor sets it, and the built-in `Relationship` already spells its links `= new()`. The defaults tests prove the bytes. The physics mappings header loses its two bound-type asserts and includes the built-in mappings header through `uses`. Every other generated line of physics is byte-identical; any that is not stops the ticket and is reported.
 - The physics compile-fail tests (`CharacterStateWrite`, `VehicleStateWrite`, `WheelStateWrite` and their field variants) still fail to compile as they must: those three states stay in `readonly-structs`.
@@ -39,7 +39,7 @@ The built-in binding also lists `Fenrir::Entity`, for a different reason: an `En
 
 1. Split the intent, not the rule: `immutable-structs` is a second list, and `readonly-structs` keeps every behaviour it has.
 2. `Fenrir::Entity` is immutable; `Relationship` and the physics and input state copies stay read-only.
-3. Physics describes `Transform` and `Entity` as nested and `uses` the built-in binding; its `[bound-types]` table goes.
+3. Physics describes `Entity` as nested (naming it in `private-members`, which describe-api now allows for a nested type) and `uses` the built-in binding; its `[bound-types]` table goes, and `Transform` leaves its description.
 4. `= new()` is accepted for the physics `EntityLink` initialisers.
 5. The `EntityValue` selection lines stay.
 6. No ADR (the decision is a configuration key with the existing rule's scope made precise); no glossary change.
@@ -54,6 +54,6 @@ One ticket, cut from `dotnet-scripting`. Branch `immutable-structs-01`.
 
 ## Done looks like
 
-- `grep -n "bound-types" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing; `grep -n "bound-type" packages/FenrirPhysics/api/FenrirPhysics.api.toml` finds nothing.
-- `grep -rn '"Fenrir::Entity"' packages/*/api/*.api.toml packages/*/Scripting/api/*.api.toml` finds no selection outside FenrirECS's and the built-in binding's.
+- `grep -n "bound-types" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing; `grep -n "bound-type" packages/FenrirPhysics/api/FenrirPhysics.api.toml` finds only the math binding's `Vec3` and `Quat`.
+- `grep -rn '"Fenrir::Entity"' packages/*/api/*.api.toml packages/*/Scripting/api/*.api.toml` finds no selection outside FenrirECS's and the built-in binding's (physics's `private-members` line names it without selecting it).
 - The physics compile-fail tests pass (the writes still fail to compile); every scripting test passes under the msvc-x64-debug preset; both generators are no-ops after the commit.

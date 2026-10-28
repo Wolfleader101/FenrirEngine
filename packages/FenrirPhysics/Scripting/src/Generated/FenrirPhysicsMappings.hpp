@@ -16,8 +16,8 @@
 #include "ScriptQueries.hpp"
 #include "FenrirScripting/BoundMappings.hpp"
 #include "FenrirScripting/EntityValueMapping.hpp"
-#include "FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 #include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirMathMappings.hpp"
+#include "../../../../FenrirScripting/include/FenrirScripting/Generated/FenrirScriptingMappings.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -57,10 +57,6 @@ struct Iris::StructMapping<Fenrir::CapsuleShape>
 };
 static_assert(sizeof(Fenrir::CapsuleShape) == 8 && alignof(Fenrir::CapsuleShape) == 4,
               "Fenrir::CapsuleShape is not the layout FenrirPhysics.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::Entity) == 16 && alignof(Fenrir::Entity) == 8,
-              "Fenrir::Entity is not the layout FenrirPhysics.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>
@@ -632,10 +628,6 @@ struct Iris::StructMapping<Fenrir::TrailerVehicle>
 };
 static_assert(sizeof(Fenrir::TrailerVehicle) == 1 && alignof(Fenrir::TrailerVehicle) == 1,
               "Fenrir::TrailerVehicle is not the layout FenrirPhysics.api.json describes: "
-              "regenerate the description, then this binding");
-
-static_assert(sizeof(Fenrir::Transform) == 40 && alignof(Fenrir::Transform) == 4,
-              "Fenrir::Transform is not the layout FenrirPhysics.api.json describes: "
               "regenerate the description, then this binding");
 
 template <>

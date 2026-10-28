@@ -32,10 +32,10 @@ The roles:
 | `bound-type` | A type every binding has its own of (a vector, a quaternion, an entity handle): recorded by layout only. |
 | `enum` | An enum no field holds that is shared all the same (a native function takes it). An enum a field holds is described without being named. |
 
-A selected component, event, resource or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer).
+A component, event, resource or shared struct with private data members is refused unless the selection names it in `private-members`, before `[types]`: its members stay private in C++, but their layout is shared all the same (an entity's value and list, a name's buffer). The name is a selected type's, or a nested type's that a selected type holds (another package's entity, held by a component here); one that is neither selected nor held by a selected type is refused.
 
 ```toml
-private-members = ["MyPackage::Hit"]
+private-members = ["MyPackage::Hit", "Other::Entity"]
 ```
 
 A bound type may be a class template's specialisation, named by an alias (`"Math::Quat"`) or with its arguments (`"MyPackage::Handle<MyPackage::Mesh>"`); the tool instantiates one the headers never do to read its layout.
@@ -72,6 +72,7 @@ Everything the tool cannot describe fails it, naming the type and member, and ev
 | `has no default member initialiser` | A number, enum, pointer or array of them with no initialiser. |
 | `cannot tell which component of <T> each argument sets: ...` | A bound type's constructor whose parameters are not named after its components. |
 | `a private data member outside the tagged-union shape (one enum tag followed by one anonymous union); ...` | A private (or protected) member of a class that is not a tagged union, unless `private-members` names it. |
+| `'private-members' names <T>, which [types] does not select and no selected type holds` | A `private-members` entry that is neither a selected type nor a nested type a selected type holds. |
 | `an anonymous struct or union outside the tagged-union shape (...)` | The same, for an anonymous member. |
 | `a reference member: a shared type holds values, not references` | A reference member. |
 | `a virtual function: a shared type is plain data` | A virtual function. |

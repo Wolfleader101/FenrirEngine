@@ -13,13 +13,13 @@ namespace Fenrir.Physics;
 public readonly partial struct TriggerExit : IEvent
 {
     /// <summary>The trigger's collider entity, as in its TriggerEnter.</summary>
-    public readonly EntityLink Trigger = EntityLink.None;
+    public readonly EntityLink Trigger = new();
     /// <summary>
     /// The body entity (a rigid body or a character body) of the collider that left, as in its TriggerEnter.
     /// </summary>
-    public readonly EntityLink OtherBody = EntityLink.None;
+    public readonly EntityLink OtherBody = new();
     /// <summary>The collider entity that left, as in its TriggerEnter.</summary>
-    public readonly EntityLink OtherCollider = EntityLink.None;
+    public readonly EntityLink OtherCollider = new();
 
     public TriggerExit()
     {

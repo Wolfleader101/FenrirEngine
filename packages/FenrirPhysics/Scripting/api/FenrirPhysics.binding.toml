@@ -3,8 +3,9 @@
 # are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings` regenerates every output below; they
 # are committed.
 namespace = "Fenrir.Physics"
-# FenrirMath's colour, ray and box are the math binding's: named as Fenrir.Math's, never mirrored here.
-uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml"]
+# FenrirMath's colour, ray and box are the math binding's, and the engine's Transform and Entity the built-in binding's:
+# named as Fenrir.Math's and Fenrir.Scripting's, never mirrored here.
+uses = ["../../../FenrirScripting/api/FenrirMath.binding.toml", "../../../FenrirScripting/api/FenrirScripting.binding.toml"]
 # The scripting SDK's names are its defaults file's (FenrirScripting.binding-defaults.toml): this file states only what is this binding's.
 defaults = "../../../FenrirScripting/api/FenrirScripting.binding-defaults.toml"
 
@@ -54,13 +55,6 @@ class = "Fenrir.PhysicsScriptFixture.Defaults"
 includes = ["PhysicsScriptingApp.hpp"]
 setup = "Fenrir::Testing::PhysicsScriptingApp app;"
 tags = "[physics][scripting][bindings]"
-
-# The built-in binding's mirrors, bound here by layout (FenrirPhysics.api.toml selects them as bound types) and mapped by
-# its generated mappings header, included where they are bound.
-[bound-types]
-"Fenrir::Transform" = { type = "Transform", include = "FenrirScripting/Generated/FenrirScriptingMappings.hpp" }
-# A default Entity names no entity, which C#'s new EntityLink() (all zero) does not say.
-"Fenrir::Entity" = { type = "EntityLink", default = "EntityLink.None", include = "FenrirScripting/Generated/FenrirScriptingMappings.hpp" }
 
 [nouns]
 "Fenrir::CollisionShape" = "shape"
