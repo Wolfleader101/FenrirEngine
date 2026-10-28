@@ -38,6 +38,7 @@ add_library(Iris STATIC
     include/Iris/InternalCall.hpp
     include/Iris/Iris.hpp
     include/Iris/CallResult.hpp
+    include/Iris/FieldDifferences.hpp
     include/Iris/Array.hpp
     include/Iris/Component.hpp
     include/Iris/Log.hpp

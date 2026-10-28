@@ -100,6 +100,13 @@ iris_deploy(IrisFakeChecks)
 add_test(NAME Fake COMMAND IrisFakeChecks "[fake]" --order decl)
 set_tests_properties(Fake PROPERTIES TIMEOUT 60)
 
+# Iris::FieldDifferences over a mapped struct and a tagged union, with no bridge and no managed build.
+add_executable(IrisFieldDifferencesChecks field_differences.cpp)
+target_link_libraries(IrisFieldDifferencesChecks PRIVATE Iris::Iris Catch2::Catch2WithMain)
+iris_deploy(IrisFieldDifferencesChecks)
+add_test(NAME FieldDifferences COMMAND IrisFieldDifferencesChecks "[differences]")
+set_tests_properties(FieldDifferences PROPERTIES TIMEOUT 60)
+
 # The numbers both sides of the bridge give to the same things (value kinds, snapshot kinds, visibilities, statuses, log
 # levels, unload states) are written once, in numbering.txt. This check reads it against the native definitions and the
 # managed check (the "numbering" group of ManagedContracts) reads it against the bridge's.

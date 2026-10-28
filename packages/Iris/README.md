@@ -408,6 +408,12 @@ const auto sum = add.Invoke(Vec3{1, 2, 3}, Vec3{10, 20, 30});   // CallResult<Ve
   and copied once on the way back; there is no allocation per call beyond the bridge's return block.
 - Padding bytes are not compared. Declare the `StructMapping` before anything uses the struct as an
   argument, return or member, since the library tests for it at compile time.
+- **Comparing two values through a mapping.** `Iris::FieldDifferences(left, right)` (`Iris/FieldDifferences.hpp`)
+  returns the fields of two values of a mapped struct that differ, each as `<path> at offset <n>: left <hex>, right
+  <hex>` with the path from the mapping's type name, recursing into nested structs and fixed-size array elements and
+  never comparing padding. Of a tagged union listed in its optional `std::span<const Iris::UnionLayout>` (the type name,
+  and per tag value the index of the field it selects) only the tag and the kind the left value's tag selects are
+  compared. The binding generator's defaults test is written over it.
 
 ### Bindings generated from a description
 
@@ -764,6 +770,7 @@ collection.
 | `Components` | Every public feature against the real bridge: owners, types, methods, objects, members, strings, structs, arrays, internal calls, discovery, replacement, release, outliving the host, shared assemblies. |
 | `Components-unbound` | The same program with no internal calls registered: loading a component that declares them fails and names them. |
 | `Fake` | The native modules against a scripted bridge function table that lives in the test process (`Tests/Fake/FakeBridge.hpp`), with no .NET runtime: how a response the bridge gives is handled, malformed ones included, and that every block it hands out is given back (type snapshots, strings, handles, arrays, statuses and diagnostics). |
+| `FieldDifferences` | `Iris::FieldDifferences` over a mapped struct (a scalar, a nested struct, a fixed-size array, an enum, padding) and a tagged union, with no .NET runtime. |
 | `Numbering-native` | The numbers the native side gives to value kinds, snapshot type kinds, visibilities, statuses, log levels and unload states, against the one table both sides share (`Tests/numbering.txt`). The managed side reads the same table in the "numbering" group of `ManagedContracts`. |
 | `ConsumerPackage` | Installs the build, then configures, builds and runs `Examples/Consumer` (a small script host: discovery, objects, strings, structs, arrays, an internal call, the log sink) against it. |
 | `UnsupportedTypeDoesNotCompile` | A signature with an unsupported C++ type fails to compile with Iris's own message. |
@@ -797,6 +804,9 @@ Each release lists every public change and what it replaces, as ADR-0006 (amende
   or `ulong`. It replaces hand-written stand-in structs that put a 64-bit integer where the pointer is.
 - **Added zero-field structs**: `Iris::StructFields()` with no arguments maps an empty struct. A managed struct with
   no fields used to be refused ("has no fields"); this replaces a private placeholder field added to make it map.
+- **Added `Iris::FieldDifferences`** (`Iris/FieldDifferences.hpp`, with `Iris::UnionLayout` and `Iris::UnionKind`): the
+  fields of two values of a mapped struct that differ, walked through the mapping. It replaces the comparison the
+  binding generator used to write into every defaults test over `Iris::Detail`'s mapping record (not API).
 - **Added the binding generator** (`Tools/Iris.Bindings`, `iris_generate_binding()` in `cmake/IrisBindings.cmake`): C#
   mirrors, mappings, registration lists and a defaults test generated from an API description. It replaces writing
   each of those by hand; the public headers do not change.
