@@ -81,11 +81,6 @@ internal sealed record NativesDescription(string Path, string Context, IReadOnly
         element.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.True;
 }
 
-/// <summary>What crosses for one C++ parameter: the bound function pointer's parameter.</summary>
-/// <param name="Type">The C# type of the function pointer's parameter (<c>void*</c>, <c>byte</c> for bool, ...).</param>
-/// <param name="Output">For an output, the C# type of the value it points at; null otherwise.</param>
-internal sealed record WireParameter(string Type, string? Output);
-
 /// <summary>The public static class and method name a native's <c>@facade</c> mark gives it.</summary>
 internal sealed record FacadeName(string Class, string Method)
 {
@@ -93,13 +88,11 @@ internal sealed record FacadeName(string Class, string Method)
 }
 
 /// <summary>
-/// A native function resolved against a binding: its C# declaration, what crosses, what is zeroed, and the public
-/// method its <c>@facade</c> names.
+/// A native function resolved against a binding: its C# declaration, what is zeroed, and the public method its
+/// <c>@facade</c> names.
 /// </summary>
 /// <param name="Result">The C# result type of the declaration.</param>
 /// <param name="Parameters">The C# parameters of the declaration, each <c>[modifier] Type name</c>.</param>
-/// <param name="WireResult">The C# type of the bound function pointer's result.</param>
-/// <param name="Wire">One per C++ parameter after the context and state, in order.</param>
 /// <param name="Named">The described types its declaration names, by C++ name.</param>
 /// <param name="Outputs">
 /// The indices, into the C++ function's full parameter list (the call context and the state counted), of the single
@@ -116,9 +109,8 @@ internal sealed record FacadeName(string Class, string Method)
 /// <c>Vector3 force</c>, passed as <c>in force</c>), everything else as declared. Empty with no mark.
 /// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
-                                   string WireResult, IReadOnlyList<WireParameter> Wire, IReadOnlyList<string> Named,
-                                   IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded, FacadeName? Facade,
-                                   IReadOnlyList<string> FacadeParameters)
+                                   IReadOnlyList<string> Named, IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded,
+                                   FacadeName? Facade, IReadOnlyList<string> FacadeParameters)
 {
     /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
     public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
@@ -240,29 +232,26 @@ internal static class Natives
     {
         var named = new List<string>();
         string result;
-        string wireResult;
         switch (function.Returns)
         {
             case { Kind: "void" }:
-                (result, wireResult) = ("void", "void");
+                result = "void";
                 break;
             case { Kind: "pointer", PointeeKind: "void" }:
-                (result, wireResult) = ("void*", "void*");
+                result = "void*";
                 break;
             case { Kind: "pointer" or "string" }:
                 throw Unmappable(where + " (result)", function.Returns,
                                  "a native returns a number, a bool, an enum, a wrapper, nothing or a void*");
             case { Kind: "struct" or "enum" } type:
-                var (crosses, kind) = ByValue(binding, type, where + " (result)", named);
-                (result, wireResult) = (crosses, Wire(kind));
+                result = ByValue(binding, type, where + " (result)", named);
                 break;
             case var type:
-                (result, wireResult) = (Scalar(type.Kind, where + " (result)", type), Wire(type.Kind));
+                result = Scalar(type.Kind, where + " (result)", type);
                 break;
         }
 
         var parameters = new List<string>();
-        var wire = new List<WireParameter>();
         var outputs = new List<int>();
         var folded = new List<string>();
         // The described parameters follow the call context and, when the native takes one, its state.
@@ -285,8 +274,6 @@ internal static class Natives
                 if (type.Const && type.Pointee == "char" && countFollows)
                 {
                     parameters.Add($"string {name}");
-                    wire.Add(new WireParameter("void*", null));
-                    wire.Add(new WireParameter("int", null));
                     folded.Add(all[++index].Name);
                     continue;
                 }
@@ -300,7 +287,6 @@ internal static class Natives
                 if (parameter.Output)
                 {
                     parameters.Add($"out {pointee} {name}");
-                    wire.Add(new WireParameter($"{pointee}*", pointee));
                     outputs.Add(leading + index);
                 }
                 else if (countFollows && !parameter.Input && !parameter.InOut && type.PointeeKind != "void")
@@ -315,19 +301,15 @@ internal static class Natives
                     }
 
                     parameters.Add($"{(type.Const ? "ReadOnlySpan" : "Span")}<{pointee}> {name}");
-                    wire.Add(new WireParameter("void*", null));
-                    wire.Add(new WireParameter("int", null));
                     folded.Add(all[++index].Name);
                 }
                 else if (parameter.InOut || type.PointeeKind == "void")
                 {
                     parameters.Add($"{pointee}* {name}");
-                    wire.Add(new WireParameter("void*", null));
                 }
                 else if (type.Const)
                 {
                     parameters.Add($"in {pointee} {name}");
-                    wire.Add(new WireParameter("void*", null));
                 }
                 else
                 {
@@ -342,24 +324,18 @@ internal static class Natives
             if (config.Types.TryGetValue(type.Spelling, out var mapped))
             {
                 parameters.Add($"{mapped} {name}");
-                wire.Add(new WireParameter(Wire(type.Kind), null));
             }
             else if (type.Kind == "string")
             {
                 parameters.Add($"{BoundNative.TextType} {name}");
-                wire.Add(new WireParameter("void*", null));
-                wire.Add(new WireParameter("int", null));
             }
             else if (type.Kind is "struct" or "enum")
             {
-                var (crosses, kind) = ByValue(binding, type, subject, named);
-                parameters.Add($"{crosses} {name}");
-                wire.Add(new WireParameter(Wire(kind), null));
+                parameters.Add($"{ByValue(binding, type, subject, named)} {name}");
             }
             else
             {
                 parameters.Add($"{Scalar(type.Kind, subject, type)} {name}");
-                wire.Add(new WireParameter(Wire(type.Kind), null));
             }
         }
 
@@ -369,8 +345,8 @@ internal static class Natives
                                    : parameters.Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
                                                                         ? parameter["in ".Length..]
                                                                         : parameter).ToList();
-        return new BoundNative(function, result, parameters, wireResult, wire, named.Distinct().ToList(), outputs, folded,
-                               facade, facadeParameters);
+        return new BoundNative(function, result, parameters, named.Distinct().ToList(), outputs, folded, facade,
+                               facadeParameters);
     }
 
     // The native's @facade as a class and method, or null without one. The mark is refused when the declaration cannot
@@ -411,13 +387,10 @@ internal static class Natives
         return facade;
     }
 
-    // The C# type of the function pointer's parameter or result for a value of this kind: a bool crosses as a byte.
-    private static string Wire(string kind) => kind == "bool" ? "byte" : Binding.CSharpScalar(kind);
-
-    // An enum or wrapper a native takes or returns by value: its C# type, and the kind it crosses as. An enum crosses as
-    // its underlying integer, a described struct of one field as that field, and a bound type as the kind its
-    // [bound-types] entry gives as its wrapper.
-    private static (string Type, string Kind) ByValue(Binding binding, NativeType type, string subject, List<string> named)
+    // An enum or wrapper a native takes or returns by value: its C# type. An enum crosses as its underlying integer, a
+    // described struct of one field as that field, and a bound type as the kind its [bound-types] entry gives as its
+    // wrapper.
+    private static string ByValue(Binding binding, NativeType type, string subject, List<string> named)
     {
         if (binding.Find(type.Spelling) is not { } described)
         {
@@ -428,12 +401,9 @@ internal static class Natives
         switch (described.Category)
         {
             case Category.Enum:
-                return (binding.CSharpName(described), described.Underlying!);
-            case Category.Struct when described.Fields is [{ Kind: { Kind: not ("struct" or "array" or "pointer") } field }]:
-                return (binding.CSharpName(described),
-                        field.Kind == "enum" ? binding.Type(field.Type!).Underlying! : field.Kind);
-            case Category.BoundType when binding.BoundTypeOf(described).Wrapper is { } wrapper:
-                return (binding.CSharpName(described), wrapper);
+            case Category.Struct when described.Fields is [{ Kind.Kind: not ("struct" or "array" or "pointer") }]:
+            case Category.BoundType when binding.BoundTypeOf(described).Wrapper is not null:
+                return binding.CSharpName(described);
             default:
                 throw Unmappable(subject, type,
                                  "a struct crosses by value only as a wrapper (one field of a number, bool, char or enum, " +
