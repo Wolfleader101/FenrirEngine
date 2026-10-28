@@ -2,10 +2,27 @@
 # implementation, the one place outside src that sees FenrirScripting's private modules.
 add_subdirectory(Support)
 
-# The headless scripting tests: an App with no window runs a few frames around a fixture script assembly.
+# The headless scripting tests: an App with no window runs a few frames around a fixture script assembly. The cases are
+# split by theme, each source under 1000 lines, over two helper headers: the fixture calls and the test-only extension.
+# The test runs with --order decl, which follows link order across files, so the sources are listed in the order the
+# cases ran before the split.
 add_executable(FenrirScriptingTests
-    ScriptingTests.cpp
+    HostingTests.cpp
+    NativeComponentTests.cpp
+    MathTests.cpp
+    AdmissionTests.cpp
+    TaggedUnionTests.cpp
+    ScriptComponentTests.cpp
+    QueryTests.cpp
+    SystemTests.cpp
+    EventTests.cpp
+    ReloadTests.cpp
+    NativeTests.cpp
+    ResourceTests.cpp
+    TestExtension.cpp
+    FixtureCalls.hpp
     FixtureApp.hpp
+    TestExtension.hpp
     Generated/FenrirScriptingDefaultsTests.cpp
     Generated/FenrirMathDefaultsTests.cpp
 )

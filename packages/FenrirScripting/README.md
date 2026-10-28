@@ -854,7 +854,8 @@ null call. Rules to remember:
   should only touch what the App owns, and (see "The change buffer from a native function") must not make structural
   changes except through the change buffer, as the engine's own entity functions do.
 - Test it with a method on the fixture script assembly (`Tests/Fixture/Fixture.cs`) that calls the new wrapper, and a
-  `TEST_CASE` in `Tests/ScriptingTests.cpp` that calls that method with `Call<...>` and checks what the engine saw.
+  `TEST_CASE` in the themed source under `Tests/` it belongs to (`HostingTests.cpp`, `NativeTests.cpp`, ...) that
+  calls that method with `Call<...>` and checks what the engine saw.
 - A package outside FenrirScripting does not edit any of this: it uses its own extension ("Scripting extensions").
 
 ## Tests
