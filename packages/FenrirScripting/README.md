@@ -894,7 +894,8 @@ logger, and `Run(n)` runs exactly `n` frames.
 
 `Tests/Support/NativeCallHarness.hpp` is the test seam for native functions: `Fenrir::Testing::NativeCallHarness` owns a
 `HeadlessApp` and a change buffer, `Context("PhysicsNative.Raycast")` gives the call context the registration's thunk
-would build for that native, and `ApplyChanges()` plays back what the native recorded, so a native is called from C++
+(`Detail::NativeFunctionCall` in `include/FenrirScripting/NativeFunctionMake.hpp`, with `NativeFunction::Make`'s
+definition; only a registration includes it) would build for that native, and `ApplyChanges()` plays back what the native recorded, so a native is called from C++
 and its rules (no world, stale handle, dead entity, each warning once) are asserted on the app and its logger with no
 .NET and no fixture assembly. `CallContext` names it as a friend. The change buffer and the registry behind it are the
 package's private modules, so they sit behind a pimpl in `Tests/Support/NativeCallHarness.cpp`, and `ApplyChanges()`

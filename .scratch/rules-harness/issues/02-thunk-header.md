@@ -12,11 +12,11 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp`, `packages/FenrirScripting/include/FenrirScripting/NativeFunctionMake.hpp`, `packages/FenrirScripting/api/FenrirScripting.binding-defaults.toml`, `packages/FenrirScripting/src/Bindings.cpp`, `packages/FenrirScripting/Tests/TestExtension.cpp`, `packages/FenrirScripting/Tests/AdmissionTests.cpp`, `packages/FenrirScripting/Tests/Rules/ZeroingOutputsTests.cpp`, `packages/FenrirScripting/README.md`, `packages/*/Scripting/src/Generated/*Natives.hpp`, `packages/FenrirScripting/src/Generated/FenrirScriptingNatives.hpp`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -n "Iris/Iris.hpp\|NativeFunctionCall\b.*{\|NativeFunctionTraits\|StateTypeOf" packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp` finds nothing but the friend's forward declaration.
-- [ ] Every generated natives header includes `FenrirScripting/NativeFunctionMake.hpp`; `fenrir-generate-bindings` re-run changes nothing further.
-- [ ] Every `*Scripting*` CTest passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
+- [x] `grep -n "Iris/Iris.hpp\|NativeFunctionCall\b.*{\|NativeFunctionTraits\|StateTypeOf" packages/FenrirScripting/include/FenrirScripting/ScriptingExtension.hpp` finds nothing but the friend's forward declaration.
+- [x] Every generated natives header includes `FenrirScripting/NativeFunctionMake.hpp`; `fenrir-generate-bindings` re-run changes nothing further.
+- [x] Every `*Scripting*` CTest passes under the msvc-x64-debug preset; `check_tickets.py` and clang-format pass.
 
 ## Comments
 
