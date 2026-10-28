@@ -22,7 +22,6 @@
 #include "FenrirPhysics/Physics.hpp"
 #include "FenrirPhysics/PhysicsWorld.hpp"
 #include "FenrirPhysics/Queries.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "Generated/FenrirPhysicsNatives.hpp"
@@ -103,6 +102,7 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
     Testing::NativeCallHarness harness;
     PhysicsScripting physics;
     const std::uint32_t entity = Place(harness);
+    const Entity body = Entities(harness).HandleOf(entity);
     // No frame has run with a body in the scene, so there is no physics world.
     REQUIRE(PhysicsWorld::Of(harness.GetApp().GetActiveScene()) == nullptr);
 
@@ -111,7 +111,7 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
         for (int call = 0; call < 2; ++call)
         {
             INFO("An impulse with no world should return false, not throw");
-            REQUIRE_FALSE(PhysicsNatives::AddImpulse(context, physics, EntityValue(entity), &Up));
+            REQUIRE_FALSE(PhysicsNatives::AddImpulse(context, physics, &body, &Up));
         }
         INFO("Two impulses with no world did not warn exactly once, prefixed by the extension and the native's name");
         REQUIRE(Warnings(harness, Logged("AddImpulse", NoWorld)) == once);
@@ -154,9 +154,8 @@ TEST_CASE("With no physics world, a physics native does nothing, returns false o
         const CallContext context = harness.Context("PhysicsNative.ContactsOf");
         Contact contacts[4];
         INFO("Body state with no world should be zero or false");
-        REQUIRE(PhysicsNatives::ContactsOf(context, physics, EntityValue(entity), contacts, 4) == 0);
-        REQUIRE_FALSE(
-            PhysicsNatives::IsSleeping(harness.Context("PhysicsNative.IsSleeping"), physics, EntityValue(entity)));
+        REQUIRE(PhysicsNatives::ContactsOf(context, physics, &body, contacts, 4) == 0);
+        REQUIRE_FALSE(PhysicsNatives::IsSleeping(harness.Context("PhysicsNative.IsSleeping"), physics, &body));
     }
     {
         // Index 2 is `gravity`.
@@ -192,13 +191,15 @@ TEST_CASE("On an entity without a body, a physics native does nothing, returns f
     const std::uint32_t plain = Place(harness);
     const std::uint32_t dead = Place(harness);
     Entities(harness).DestroyEntity(dead);
+    const Entity plainEntity = Entities(harness).HandleOf(plain);
+    const Entity deadEntity = Entities(harness).HandleOf(dead);
 
     {
         const CallContext context = harness.Context("PhysicsNative.AddImpulse");
         for (int call = 0; call < 2; ++call)
         {
             INFO("An impulse on an entity with no body should return false");
-            REQUIRE_FALSE(PhysicsNatives::AddImpulse(context, physics, EntityValue(plain), &Up));
+            REQUIRE_FALSE(PhysicsNatives::AddImpulse(context, physics, &plainEntity, &Up));
         }
         INFO("Two impulses on an entity with no body did not warn exactly once, under the native's name");
         REQUIRE(Warnings(harness, Logged("AddImpulse", NoBody)) == once);
@@ -207,19 +208,17 @@ TEST_CASE("On an entity without a body, a physics native does nothing, returns f
         Contact contacts[4];
         Math::AABB bounds;
         INFO("An entity with no body has no contacts, does not sleep and has no bounds");
-        REQUIRE(PhysicsNatives::ContactsOf(harness.Context("PhysicsNative.ContactsOf"), physics, EntityValue(plain),
-                                           contacts, 4) == 0);
-        REQUIRE_FALSE(
-            PhysicsNatives::IsSleeping(harness.Context("PhysicsNative.IsSleeping"), physics, EntityValue(plain)));
-        REQUIRE_FALSE(
-            PhysicsNatives::Bounds(harness.Context("PhysicsNative.Bounds"), physics, EntityValue(plain), &bounds));
+        REQUIRE(PhysicsNatives::ContactsOf(harness.Context("PhysicsNative.ContactsOf"), physics, &plainEntity, contacts,
+                                           4) == 0);
+        REQUIRE_FALSE(PhysicsNatives::IsSleeping(harness.Context("PhysicsNative.IsSleeping"), physics, &plainEntity));
+        REQUIRE_FALSE(PhysicsNatives::Bounds(harness.Context("PhysicsNative.Bounds"), physics, &plainEntity, &bounds));
     }
     {
         const CallContext context = harness.Context("PhysicsNative.IsSleeping");
         for (int call = 0; call < 2; ++call)
         {
             INFO("An entity that is not alive should read as not sleeping");
-            REQUIRE_FALSE(PhysicsNatives::IsSleeping(context, physics, EntityValue(dead)));
+            REQUIRE_FALSE(PhysicsNatives::IsSleeping(context, physics, &deadEntity));
         }
         INFO("An entity that is not alive did not warn exactly once through the guard's entity-alive rule");
         REQUIRE(Warnings(harness, Logged("IsSleeping", NotAlive)) == once);
@@ -233,6 +232,7 @@ TEST_CASE("GetJointState reads zeroed with no world and on an entity without a J
     PhysicsScripting physics;
     const CallContext context = harness.Context("PhysicsNative.GetJointState");
     const std::uint32_t plain = Place(harness);
+    const Entity plainEntity = Entities(harness).HandleOf(plain);
     // Called as the registration calls it, with its output zeroed first (ADR-0045): index 3 is `state`.
     using Native = ZeroingOutputs<&PhysicsNatives::GetJointState, 3>;
     const auto zeroed = [](const JointState& state) {
@@ -245,7 +245,7 @@ TEST_CASE("GetJointState reads zeroed with no world and on an entity without a J
     REQUIRE(PhysicsWorld::Of(harness.GetApp().GetActiveScene()) == nullptr);
     for (int call = 0; call < 2; ++call)
     {
-        Native::Call(context, physics, EntityValue(plain), &state);
+        Native::Call(context, physics, &plainEntity, &state);
         INFO("With no physics world, the state should read zeroed");
         REQUIRE(zeroed(state));
     }
@@ -258,13 +258,13 @@ TEST_CASE("GetJointState reads zeroed with no world and on an entity without a J
     for (int call = 0; call < 2; ++call)
     {
         state.force = Math::Vec3(3.0f);
-        Native::Call(context, physics, EntityValue(plain), &state);
+        Native::Call(context, physics, &plainEntity, &state);
         INFO("On an entity with no Joint, the state should read zeroed");
         REQUIRE(zeroed(state));
     }
     Entities(harness).DestroyEntity(plain);
     state.force = Math::Vec3(3.0f);
-    Native::Call(context, physics, EntityValue(plain), &state);
+    Native::Call(context, physics, &plainEntity, &state);
     {
         INFO("On an entity no longer alive, likewise");
         REQUIRE(zeroed(state));

@@ -27,16 +27,9 @@ internal static unsafe partial class Native
     public static partial float TimeTickRate();
 
     /// <summary>Whether the entity is alive in the active scene.</summary>
-    /// <param name="value">The engine's full entity value, version bits included.</param>
+    /// <param name="entity">The entity; one another scene's list owns is not alive here.</param>
     [NativeFunction]
-    public static partial bool EntityIsValid(uint value);
-
-    /// <summary>
-    /// The active scene's entity list: the owner a native Entity holds beside its value. EntityLink's conversion from
-    /// an Entity stores it, so C++ reads the link as an entity of the active scene, and never hands it to a script.
-    /// </summary>
-    [NativeFunction]
-    public static partial void* EntityLinkOwner();
+    public static partial bool EntityIsValid(in Entity entity);
 
     /// <summary>
     /// The entity's world transform (FenrirECS GetWorldTransform), composed through its parents on each call.
@@ -44,7 +37,7 @@ internal static unsafe partial class Native
     /// <param name="world">The world transform; the default Transform when the entity is not alive or has none.</param>
     /// <returns>False when the entity is not alive or has no Transform.</returns>
     [NativeFunction]
-    public static partial bool EntityWorldTransform(uint value, out Transform world);
+    public static partial bool EntityWorldTransform(in Entity entity, out Transform world);
 
     /// <summary>
     /// Sets the entity's Transform so its world transform is `world` (FenrirECS SetWorldTransform). Component data
@@ -52,7 +45,7 @@ internal static unsafe partial class Native
     /// </summary>
     /// <returns>False, touching nothing, when the entity is not alive or has no Transform.</returns>
     [NativeFunction]
-    public static partial bool EntitySetWorldTransform(uint value, in Transform world);
+    public static partial bool EntitySetWorldTransform(in Entity entity, in Transform world);
 
     /// <summary>
     /// The id of the native component registered under `name` for the C# type `typeName` (its full name). An id is good
@@ -79,11 +72,11 @@ internal static unsafe partial class Native
     /// </summary>
     /// <returns>Null when the entity is not alive or does not have it.</returns>
     [NativeFunction]
-    public static partial void* ComponentGet(int id, uint entity);
+    public static partial void* ComponentGet(int id, in Entity entity);
 
     /// <summary>Whether the entity is alive and has the component.</summary>
     [NativeFunction]
-    public static partial bool ComponentHas(int id, uint entity);
+    public static partial bool ComponentHas(int id, in Entity entity);
 
     /// <summary>
     /// A new entity, alive and usable at once; it gets its engine components when changes play back.
@@ -93,16 +86,20 @@ internal static unsafe partial class Native
     /// each is recorded and played back, in order, when the native code that called into the script gets control back,
     /// so a Ref&lt;T&gt; taken before stays valid.
     /// </remarks>
-    /// <returns>The entity's value (uint.MaxValue when there is no active scene).</returns>
+    /// <param name="entity">
+    /// The new entity, owned by the active scene's list; no entity (the default Entity, C#'s Entity.None) when none
+    /// could be made.
+    /// </param>
+    /// <returns>Whether one was made: false when there is no active scene.</returns>
     [NativeFunction]
-    public static partial uint EntityCreate();
+    public static partial bool EntityCreate(out Entity entity);
 
     /// <summary>Records the entity's destruction, for playback.</summary>
     /// <returns>
     /// None when recorded, otherwise why it was refused: EntityNotAlive, or NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial ChangeError EntityDestroy(uint entity);
+    public static partial ChangeError EntityDestroy(in Entity entity);
 
     /// <summary>Records adding the component to the entity, for playback.</summary>
     /// <param name="value">The component's bytes, or null for a default one.</param>
@@ -111,7 +108,7 @@ internal static unsafe partial class Native
     /// NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial ChangeError ComponentAdd(int id, uint entity, void* value);
+    public static partial ChangeError ComponentAdd(int id, in Entity entity, void* value);
 
     /// <summary>Records removing the component from the entity, for playback.</summary>
     /// <returns>
@@ -119,7 +116,7 @@ internal static unsafe partial class Native
     /// Required (the engine needs every entity to have it), or NotActive when scripting is not running.
     /// </returns>
     [NativeFunction]
-    public static partial ChangeError ComponentRemove(int id, uint entity);
+    public static partial ChangeError ComponentRemove(int id, in Entity entity);
 
     /// <summary>
     /// Plays back the structural changes recorded since the last time. The system runner calls it after each system.
@@ -176,8 +173,8 @@ internal static unsafe partial class Native
 
     /// <summary>
     /// How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is this
-    /// call and QueryFill however many entities match; a row is the entity followed by the address of its component for
-    /// each id, in order.
+    /// call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its
+    /// scene's list set) followed by the address of its component for each id, in order.
     /// </summary>
     /// <returns>The count; negative when an id is unknown.</returns>
     [NativeFunction]

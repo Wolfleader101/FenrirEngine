@@ -31,10 +31,10 @@ namespace Fenrir::Generated
             extension.functions = {
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::ScreenPointToRay, 4>::Call>("Fenrir.Renderer.RendererNative.ScreenPointToRay"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::WorldToScreenPoint, 4>::Call>("Fenrir.Renderer.RendererNative.WorldToScreenPoint"),
-                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::CameraAt>("Fenrir.Renderer.RendererNative.CameraAt", Fenrir::EntityValue(Fenrir::Entity::Null)),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::CameraAt, 4>::Call>("Fenrir.Renderer.RendererNative.CameraAt"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::GetWorldBounds, 3>::Call>("Fenrir.Renderer.RendererNative.GetWorldBounds"),
                 Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::Stats, 2>::Call>("Fenrir.Renderer.RendererNative.Stats"),
-                Fenrir::NativeFunction::Make<&Fenrir::RendererNatives::SpawnModel>("Fenrir.Renderer.RendererNative.SpawnModel", Fenrir::EntityValue(Fenrir::Entity::Null)),
+                Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::RendererNatives::SpawnModel, 4>::Call>("Fenrir.Renderer.RendererNative.SpawnModel"),
             };
         }
     } // namespace

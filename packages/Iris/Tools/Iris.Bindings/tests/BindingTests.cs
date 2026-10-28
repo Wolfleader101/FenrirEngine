@@ -116,7 +116,7 @@ public sealed class BindingTests
         [
             "#pragma once",
             "#include \"Host/Extension.hpp\"",
-            "namespace Fixture::Natives\n{\n    bool Push(const Host::CallContext&, Host::State&, Fixture::EntityId body, const Fixture::Vec3* force);",
+            "namespace Fixture::Natives\n{\n    bool Push(const Host::CallContext&, Host::State&, const Fixture::EntityId* body, const Fixture::Vec3* force);",
             "    std::int32_t FindAll(const Host::CallContext&, const Fixture::Vec3* origin, Fixture::Hit* hits, std::int32_t capacity);\n} // namespace Fixture::Natives",
             "namespace Fixture\n{\n    void Say(const Host::CallContext&, const char* text, std::int32_t length) noexcept;",
             "namespace Fixture::Bindings\n{\n    void Register(Host::Extension& extension);\n} // namespace Fixture::Bindings",
@@ -719,7 +719,7 @@ public sealed class BindingTests
         foreach (var (part, line) in new[]
                  {
                      (bodies, "public static partial class Bodies"),
-                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(body, in force);"),
+                     (bodies, "public static bool Push(Entity body, Vector3 force) => FixtureNative.Push(in body, in force);"),
                      (hits, "public static bool Find(Vector3 origin, float distance, out Hit hit) =>"),
                      (hits, "    FixtureNative.Find(in origin, distance, out hit);"),
                      (hits, "public static int Find(Vector3 origin, Span<Hit> hits) => FixtureNative.FindAll(in origin, hits);"),
@@ -952,10 +952,10 @@ public sealed class BindingTests
 
         var natives = Mirror(generated, "FixtureNative.cs");
         Assert.True(natives.Contains("using Fixture.Common;\n", StringComparison.Ordinal) &&
-                    natives.Contains("    public static partial void Damp(Entity body, in Damper damper, in Angles angles);\n", StringComparison.Ordinal),
+                    natives.Contains("    public static partial void Damp(in Entity body, in Damper damper, in Angles angles);\n", StringComparison.Ordinal),
                     $"Damp should take the Common binding's Damper and Angles by their C# names, with its using, but the class is:\n{natives}");
         var header = Output(generated, "FixtureNatives.hpp");
-        Assert.True(header.Contains("    void Damp(const Host::CallContext&, Fixture::EntityId body, const Fixture::Damper* damper, " +
+        Assert.True(header.Contains("    void Damp(const Host::CallContext&, const Fixture::EntityId* body, const Fixture::Damper* damper, " +
                                     "const Fixture::Angles* angles);\n", StringComparison.Ordinal),
                     $"The natives header should declare Damp over the C++ types, but is:\n{header}");
         Assert.False(generated.Keys.Any(path => Path.GetFileName(path) is "Angles.cs" or "Damper.cs"),

@@ -13,9 +13,11 @@ namespace Fixture.Bindings;
 /// </summary>
 internal static unsafe partial class FixtureNative
 {
-    /// <summary>Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.</summary>
+    /// <summary>
+    /// Pushes the body of `body` with `force`: a pointer to an alias, and a const pointer, after the state.
+    /// </summary>
     [NativeFunction]
-    public static partial bool Push(Entity body, in Vector3 force);
+    public static partial bool Push(in Entity body, in Vector3 force);
 
     /// <summary>
     /// The nearest hit from `origin`.
@@ -90,5 +92,5 @@ internal static unsafe partial class FixtureNative
     /// (Fixture.binding.toml uses it) and Fixture.api.json does not.
     /// </summary>
     [NativeFunction]
-    public static partial void Damp(Entity body, in Damper damper, in Angles angles);
+    public static partial void Damp(in Entity body, in Damper damper, in Angles angles);
 }

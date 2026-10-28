@@ -17,8 +17,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "force",
@@ -45,8 +48,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "impulse",
@@ -73,8 +79,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "torque",
@@ -101,8 +110,11 @@
       "parameters": [
         {
           "name": "entity",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "impulse",
@@ -608,8 +620,11 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "contacts",
@@ -640,8 +655,11 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         }
       ]
     },
@@ -660,8 +678,11 @@
       "parameters": [
         {
           "name": "body",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "bounds",
@@ -811,14 +832,20 @@
       "parameters": [
         {
           "name": "bodyA",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "bodyB",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct",
-          "doc": "The empty value (uint.MaxValue in C#) is the world; any other names an entity of the active scene."
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true,
+          "doc": "No entity (Entity.None in C#) is the world; any other names an entity of the active scene."
         },
         {
           "name": "anchor",
@@ -852,8 +879,11 @@
       "parameters": [
         {
           "name": "joint",
-          "type": "Fenrir::EntityValue",
-          "kind": "struct"
+          "type": "const Fenrir::Entity*",
+          "kind": "pointer",
+          "pointee": "Fenrir::Entity",
+          "pointeeKind": "struct",
+          "const": true
         },
         {
           "name": "state",

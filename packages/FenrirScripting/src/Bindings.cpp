@@ -5,6 +5,7 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/NativeMarshalling.hpp"
 
 #include <atomic>
@@ -21,11 +22,14 @@
 // types, called with the call context of the running Scripting. The declaration is the contract (ADR-0045): an `in` or
 // `out` pointer is never null, and a native's single output is zeroed by its registration, so no native checks or
 // zeroes one; text arrives as std::string_view (ADR-0044); a span arrives as its first element and a count, read
-// through SpanOf. A code a native returns is ChangeBuffer's or the registry's rule, not this file's. A C++ exception
-// that escapes one is stopped and logged by Iris, so none can unwind into managed code. None runs unless a Scripting is
-// active: C# then gets its @notrunning value, or zero, false or null. Each takes the built-in extension's state, the
-// running Scripting's EngineContext, after the call context. Each is written once, here: describe-api's natives mode
-// reads them into api/FenrirScripting.natives.json, from which their C# declarations and registration are generated.
+// through SpanOf; an entity arrives as C#'s Entity, the mirror of Fenrir::Entity, and is resolved in the active scene
+// by NativeGuard's owner rule (ValueOf): one another scene's list owns is never alive here, and one with no owner, as a
+// test names by id, is looked up by value. A code a native returns is ChangeBuffer's or the registry's rule, not this
+// file's. A C++ exception that escapes one is stopped and logged by Iris, so none can unwind into managed code. None
+// runs unless a Scripting is active: C# then gets its @notrunning value, or zero, false or null. Each takes the
+// built-in extension's state, the running Scripting's EngineContext, after the call context. Each is written once,
+// here: describe-api's natives mode reads them into api/FenrirScripting.natives.json, from which their C# declarations
+// and registration are generated.
 namespace Fenrir::ScriptingNatives
 {
     /**
@@ -64,21 +68,12 @@ namespace Fenrir::ScriptingNatives
 
     /**
      * @brief Whether the entity is alive in the active scene.
-     * @param value The engine's full entity value, version bits included.
+     * @param entity The entity; one another scene's list owns is not alive here.
      */
-    bool EntityIsValid(const CallContext& context, Detail::EngineContext&, std::uint32_t value)
+    bool EntityIsValid(const CallContext& context, Detail::EngineContext&, const Entity* entity)
     {
-        return context.Entities().HasEntity(value);
-    }
-
-    /**
-     * @brief The active scene's entity list: the owner a native Entity holds beside its value. EntityLink's conversion
-     * from an Entity stores it, so C++ reads the link as an entity of the active scene, and never hands it to a
-     * script.
-     */
-    void* EntityLinkOwner(const CallContext& context, Detail::EngineContext&)
-    {
-        return &context.Entities();
+        EntityList& entities = context.Entities();
+        return entities.HasEntity(NativeGuard::ValueOf(*entity, entities));
     }
 
     /**
@@ -86,18 +81,21 @@ namespace Fenrir::ScriptingNatives
      * @param[out] world The world transform; the default Transform when the entity is not alive or has none.
      * @return False when the entity is not alive or has no Transform.
      */
-    bool EntityWorldTransform(const CallContext& context, Detail::EngineContext&, std::uint32_t value, Transform* world)
+    bool EntityWorldTransform(const CallContext& context, Detail::EngineContext&, const Entity* entity,
+                              Transform* world)
     {
-        if (!context.Entities().HasEntity(value))
+        EntityList& entities = context.Entities();
+        const std::uint32_t value = NativeGuard::ValueOf(*entity, entities);
+        if (!entities.HasEntity(value))
         {
             return false;
         }
-        const Entity entity = context.Entities().GetEntity(value);
-        if (!entity.HasComponent<Transform>())
+        const Entity alive = entities.GetEntity(value);
+        if (!alive.HasComponent<Transform>())
         {
             return false;
         }
-        *world = GetWorldTransform(entity);
+        *world = GetWorldTransform(alive);
         return true;
     }
 
@@ -106,19 +104,21 @@ namespace Fenrir::ScriptingNatives
      * data only, so it takes effect at once.
      * @return False, touching nothing, when the entity is not alive or has no Transform.
      */
-    bool EntitySetWorldTransform(const CallContext& context, Detail::EngineContext&, std::uint32_t value,
+    bool EntitySetWorldTransform(const CallContext& context, Detail::EngineContext&, const Entity* entity,
                                  const Transform* world)
     {
-        if (!context.Entities().HasEntity(value))
+        EntityList& entities = context.Entities();
+        const std::uint32_t value = NativeGuard::ValueOf(*entity, entities);
+        if (!entities.HasEntity(value))
         {
             return false;
         }
-        const Entity entity = context.Entities().GetEntity(value);
-        if (!entity.HasComponent<Transform>())
+        const Entity alive = entities.GetEntity(value);
+        if (!alive.HasComponent<Transform>())
         {
             return false;
         }
-        SetWorldTransform(entity, *world);
+        SetWorldTransform(alive, *world);
         return true;
     }
 
@@ -163,17 +163,19 @@ namespace Fenrir::ScriptingNatives
      * storage.
      * @return Null when the entity is not alive or does not have it.
      */
-    void* ComponentGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
+    void* ComponentGet(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, const Entity* entity)
     {
         const auto* component = engine.components->Components().Get(id);
-        return component == nullptr ? nullptr : context.Entities().Get(component->type, entity);
+        EntityList& entities = context.Entities();
+        return component == nullptr ? nullptr : entities.Get(component->type, NativeGuard::ValueOf(*entity, entities));
     }
 
     /** @brief Whether the entity is alive and has the component. */
-    bool ComponentHas(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, std::uint32_t entity)
+    bool ComponentHas(const CallContext& context, Detail::EngineContext& engine, std::int32_t id, const Entity* entity)
     {
         const auto* component = engine.components->Components().Get(id);
-        return component != nullptr && context.Entities().Has(component->type, entity);
+        EntityList& entities = context.Entities();
+        return component != nullptr && entities.Has(component->type, NativeGuard::ValueOf(*entity, entities));
     }
 
     /**
@@ -182,12 +184,20 @@ namespace Fenrir::ScriptingNatives
      * The structural changes (this, EntityDestroy, ComponentAdd and ComponentRemove) never touch the engine's storage:
      * each is recorded and played back, in order, when the native code that called into the script gets control back,
      * so a Ref<T> taken before stays valid.
-     * @return The entity's value (uint.MaxValue when there is no active scene).
-     * @notrunning Fenrir::Entity::Null
+     * @param[out] entity The new entity, owned by the active scene's list; no entity (the default Entity, C#'s
+     * Entity.None) when none could be made.
+     * @return Whether one was made: false when there is no active scene.
      */
-    std::uint32_t EntityCreate(const CallContext& context, Detail::EngineContext& engine)
+    bool EntityCreate(const CallContext& context, Detail::EngineContext& engine, Entity* entity)
     {
-        return engine.changes->Create(context.Entities());
+        EntityList& entities = context.Entities();
+        const std::uint32_t value = engine.changes->Create(entities);
+        if (value == Entity::Null)
+        {
+            return false;
+        }
+        *entity = entities.HandleOf(value);
+        return true;
     }
 
     /**
@@ -196,9 +206,10 @@ namespace Fenrir::ScriptingNatives
      * running.
      * @notrunning Fenrir::ChangeError::NotActive
      */
-    ChangeError EntityDestroy(const CallContext& context, Detail::EngineContext& engine, std::uint32_t entity)
+    ChangeError EntityDestroy(const CallContext& context, Detail::EngineContext& engine, const Entity* entity)
     {
-        return engine.changes->Destroy(context.Entities(), entity);
+        EntityList& entities = context.Entities();
+        return engine.changes->Destroy(entities, NativeGuard::ValueOf(*entity, entities));
     }
 
     /**
@@ -209,9 +220,10 @@ namespace Fenrir::ScriptingNatives
      * @notrunning Fenrir::ChangeError::NotActive
      */
     ChangeError ComponentAdd(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
-                             std::uint32_t entity, const void* value)
+                             const Entity* entity, const void* value)
     {
-        return engine.changes->Add(context.Entities(), *engine.components, id, entity, value);
+        EntityList& entities = context.Entities();
+        return engine.changes->Add(entities, *engine.components, id, NativeGuard::ValueOf(*entity, entities), value);
     }
 
     /**
@@ -221,9 +233,10 @@ namespace Fenrir::ScriptingNatives
      * @notrunning Fenrir::ChangeError::NotActive
      */
     ChangeError ComponentRemove(const CallContext& context, Detail::EngineContext& engine, std::int32_t id,
-                                std::uint32_t entity)
+                                const Entity* entity)
     {
-        return engine.changes->Remove(context.Entities(), *engine.components, id, entity);
+        EntityList& entities = context.Entities();
+        return engine.changes->Remove(entities, *engine.components, id, NativeGuard::ValueOf(*entity, entities));
     }
 
     /**
@@ -316,8 +329,8 @@ namespace Fenrir::ScriptingNatives
 
     /**
      * @brief How many entities have every component in `ids`: an upper bound on the rows QueryFill writes. A query is
-     * this call and QueryFill however many entities match; a row is the entity followed by the address of its
-     * component for each id, in order.
+     * this call and QueryFill however many entities match; a row is the entity (two words: a Fenrir::Entity, with its
+     * scene's list set) followed by the address of its component for each id, in order.
      * @return The count; negative when an id is unknown.
      * @notrunning -1
      */

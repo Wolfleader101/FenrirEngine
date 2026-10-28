@@ -25,7 +25,6 @@
 #include "FenrirMath/Math.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/ZeroingOutputs.hpp"
 #include "Generated/FenrirRendererNatives.hpp"
@@ -49,8 +48,8 @@ namespace
     constexpr const char* NoStore = "the app has no asset store (FenrirAssets is not installed), so it does nothing";
     constexpr const char* StaleModel = "the model handle is empty or stale, so it does nothing";
 
-    // C#'s Entity.None.
-    const EntityValue noEntity(Entity::Null);
+    // C#'s Entity.None: a default Entity.
+    const Entity noEntity;
 
     // How many warnings the app logged that read `text`.
     std::size_t Warnings(const Testing::NativeCallHarness& harness, const std::string& text)
@@ -102,6 +101,8 @@ namespace
     using WorldToScreenPoint = ZeroingOutputs<&RendererNatives::WorldToScreenPoint, 4>;
     using GetWorldBounds = ZeroingOutputs<&RendererNatives::GetWorldBounds, 3>;
     using Stats = ZeroingOutputs<&RendererNatives::Stats, 2>;
+    using CameraAtCall = ZeroingOutputs<&RendererNatives::CameraAt, 4>;
+    using SpawnModelCall = ZeroingOutputs<&RendererNatives::SpawnModel, 4>;
 
     const Math::Vec2 centre(640.0f, 360.0f);
     const Math::Vec3 origin(0.0f);
@@ -114,26 +115,27 @@ TEST_CASE("With no renderer, picking, bounds and stats do nothing, leave their o
     RendererScripting renderer;
     Entity camera = Entities(harness).CreateEntity();
     camera.AddComponent<Camera>();
-    const EntityValue cameraValue(camera.GetId());
 
     for (int call = 0; call < 2; ++call)
     {
         INFO("Call " << call << ": each native should return false, zero or no entity and write nothing");
         Math::Ray ray;
         ray.origin = Math::Vec3(3.0f);
-        REQUIRE_FALSE(ScreenPointToRay::Call(harness.Context("RendererNative.ScreenPointToRay"), renderer, cameraValue,
+        REQUIRE_FALSE(ScreenPointToRay::Call(harness.Context("RendererNative.ScreenPointToRay"), renderer, &camera,
                                              &centre, &ray));
         REQUIRE(ray.origin == Math::Ray{}.origin);
         Math::Vec2 screenPoint(3.0f);
-        REQUIRE_FALSE(WorldToScreenPoint::Call(harness.Context("RendererNative.WorldToScreenPoint"), renderer,
-                                               cameraValue, &origin, &screenPoint));
+        REQUIRE_FALSE(WorldToScreenPoint::Call(harness.Context("RendererNative.WorldToScreenPoint"), renderer, &camera,
+                                               &origin, &screenPoint));
         REQUIRE(screenPoint == Math::Vec2(0.0f));
-        REQUIRE(RendererNatives::CameraAt(harness.Context("RendererNative.CameraAt"), renderer, WindowId{1}, &centre) ==
-                noEntity);
+        Entity found;
+        REQUIRE_FALSE(
+            CameraAtCall::Call(harness.Context("RendererNative.CameraAt"), renderer, WindowId{1}, &centre, &found));
+        REQUIRE(found == noEntity);
         Math::AABB bounds{};
         bounds.max = Math::Vec3(3.0f);
         REQUIRE_FALSE(
-            GetWorldBounds::Call(harness.Context("RendererNative.GetWorldBounds"), renderer, cameraValue, &bounds));
+            GetWorldBounds::Call(harness.Context("RendererNative.GetWorldBounds"), renderer, &camera, &bounds));
         REQUIRE(bounds.max == Math::AABB{}.max);
         RendererStats stats;
         stats.draws = 3;
@@ -162,13 +164,15 @@ TEST_CASE("SpawnModel needs no renderer", "[renderer][scripting][noops]")
     const Entity parent = Entities(harness).CreateEntity();
     const AssetHandle<Model> model = LoadModel(installed.Store());
 
-    const EntityValue root = RendererNatives::SpawnModel(harness.Context("RendererNative.SpawnModel"), renderer,
-                                                         AssetHandleBits(model), EntityValue(parent.GetId()));
+    Entity root;
+    const bool spawned = RendererNatives::SpawnModel(harness.Context("RendererNative.SpawnModel"), renderer,
+                                                     AssetHandleBits(model), &parent, &root);
     (void)harness.ApplyChanges();
     INFO("The model should spawn under the parent with no renderer installed");
+    REQUIRE(spawned);
     REQUIRE(root != noEntity);
-    REQUIRE(Entities(harness).HasEntity(root.value));
-    REQUIRE(Entities(harness).GetEntity(root.value).GetComponent<Relationship>().parent == parent);
+    REQUIRE(Entities(harness).HasEntity(root.GetId()));
+    REQUIRE(Entities(harness).GetEntity(root.GetId()).GetComponent<Relationship>().parent == parent);
     REQUIRE(Warnings(harness, "RendererNative.SpawnModel") == 0);
 }
 
@@ -184,7 +188,9 @@ TEST_CASE("SpawnModel with no asset store spawns nothing and says so once, in As
     for (int call = 0; call < 2; ++call)
     {
         INFO("Call " << call << ": with no store there is no model to spawn");
-        REQUIRE(RendererNatives::SpawnModel(context, renderer, first, noEntity) == noEntity);
+        Entity root;
+        REQUIRE_FALSE(SpawnModelCall::Call(context, renderer, first, &noEntity, &root));
+        REQUIRE(root == noEntity);
     }
     {
         INFO("Nothing should have been recorded to spawn");
@@ -203,6 +209,7 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
     RendererScripting renderer;
     const std::uint32_t dead = Entities(harness).CreateEntity().GetId();
     Entities(harness).DestroyEntity(dead);
+    const Entity deadEntity = Entities(harness).HandleOf(dead);
     const Entity plain = Entities(harness).CreateEntity();
     // Loading a path again gives the same handle, so the stale one is made first: loaded, unloaded, and the live one
     // loaded after it under a new generation.
@@ -221,13 +228,15 @@ TEST_CASE("A dead entity, no Camera, a stale or empty model or a dead parent do 
     {
         INFO("Call " << call << ": each native should return false or no entity");
         Math::Ray out;
-        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, EntityValue(dead), &centre, &out));
-        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, EntityValue(plain.GetId()), &centre, &out));
+        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, &deadEntity, &centre, &out));
+        REQUIRE_FALSE(RendererNatives::ScreenPointToRay(ray, renderer, &plain, &centre, &out));
         Math::AABB box{};
-        REQUIRE_FALSE(RendererNatives::GetWorldBounds(bounds, renderer, EntityValue(dead), &box));
-        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, AssetHandleBits(unloaded), noEntity) == noEntity);
-        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, 0, noEntity) == noEntity);
-        REQUIRE(RendererNatives::SpawnModel(spawn, renderer, AssetHandleBits(model), EntityValue(dead)) == noEntity);
+        REQUIRE_FALSE(RendererNatives::GetWorldBounds(bounds, renderer, &deadEntity, &box));
+        Entity root;
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, AssetHandleBits(unloaded), &noEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, 0, &noEntity, &root));
+        REQUIRE_FALSE(SpawnModelCall::Call(spawn, renderer, AssetHandleBits(model), &deadEntity, &root));
+        REQUIRE(root == noEntity);
     }
     {
         INFO("Nothing should have been recorded to spawn");
