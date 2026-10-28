@@ -1,7 +1,7 @@
 # FenrirScripting
 
 C# scripting for FenrirEngine, built on [Iris](../Iris/README.md). The design is in
-[ADR-0007](../../docs/adr/0007-ecs-first-csharp-scripting.md) and `.scratch/engine-scripting/spec.md`.
+[ADR-0007](../../docs/adr/0007-ecs-first-csharp-scripting.md) and the engine scripting spec, `.scratch/engine-scripting/spec.md` (built and removed; commit a5cc20d5 is the last to hold it).
 
 The package exists only when the root build is configured with `-DFENRIR_ENABLE_SCRIPTING=ON`. With it OFF,
 CMake never looks for .NET, never adds Iris or this package, and never runs `dotnet`.

@@ -18,9 +18,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] Not cut until the test-support tickets touching `packages/FenrirScripting/Tests/CMakeLists.txt` and `src/ComponentLoader.hpp` have merged into `dotnet-scripting`; then cut from `dotnet-scripting` and target it.
-- [ ] The spec's "Done looks like" greps hold; the seven Rules cases pass in under a second each.
-- [ ] The msvc-x64-debug preset builds; `FenrirScriptingRules` and `FenrirScripting` pass, "systems run in phase and order" and "a phase does nothing after Shutdown" included.
+- [x] Not cut until the test-support tickets touching `packages/FenrirScripting/Tests/CMakeLists.txt` and `src/ComponentLoader.hpp` have merged into `dotnet-scripting`; then cut from `dotnet-scripting` and target it.
+- [x] The spec's "Done looks like" greps hold; the seven Rules cases pass in under a second each.
+- [x] The msvc-x64-debug preset builds; `FenrirScriptingRules` and `FenrirScripting` pass, "systems run in phase and order" and "a phase does nothing after Shutdown" included.
 
 ## Comments
 

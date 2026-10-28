@@ -29,6 +29,8 @@ add_executable(FenrirScriptingRulesTests
     Rules/ScriptDataTests.cpp
     Rules/GenerationLifecycleTests.cpp
     Rules/FakeComponentLoader.hpp
+    Rules/ScriptSystemsTests.cpp
+    Rules/FakeSystemHost.hpp
     Rules/NativeGuardTests.cpp
     Rules/NativeMarshallingTests.cpp
     Rules/ZeroingOutputsTests.cpp

@@ -17,7 +17,7 @@ Considered and rejected for colliders:
 - **A handle to a shared shape resource** (Godot's `Shape3D`, Avian's `SharedShape`): editing a size needs a physics call, and every primitive becomes a resource to release. Sharing is kept anyway: identical shapes share one backend shape through a private cache keyed by value. Only convex hull and mesh data, which must be cooked, sit behind a FenrirPhysics-owned handle.
 - **A flat struct holding every kind's fields:** meaningless fields on every collider, and nothing to stop editing a box's radius.
 
-C# components cannot hold a tagged union today, so scripting needs that capability before C# can reach `Collider` (tracked as ".scratch/fenrir-physics/issues/16-csharp-tagged-union-components.md"). It is a general capability: light kinds and camera projections have the same shape.
+C# components could not hold a tagged union when this was decided, so scripting needed that capability before C# could reach `Collider`; the `[TaggedUnion]` generator gives it (decided in the physics map's ticket 16, resolved and removed; commit a5cc20d5 is the last to hold it). It is a general capability: light kinds and camera projections have the same shape.
 
 *Amended 2026-10-16:* that capability now exists. A component may hold a tagged union, written in C# by hand in one pattern (FenrirScripting's README, "Tagged unions"), and C# reads and writes `Collider` and its `CollisionShape` that way.
 

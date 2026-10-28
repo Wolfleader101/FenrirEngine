@@ -21,7 +21,7 @@ Be precise about it, because the goal is easy to overstate.
 - **Source:** code outside `FenrirECS` that follows the rule never names EnTT, so replacing the library means rewriting `FenrirECS` and not editing that code. A CTest in the scripting package (`ScriptingDoesNotUseEnTT`) enforces it for that package by scanning its source text.
 - **Compilation:** it does not remove the dependency from the build. `FenrirECS`'s public headers still include EnTT, because `Entity` and `EntityList` have templates built on it (`GetComponent<T>`, `View`, `Group`, `ForEach`) that are instantiated in the callers' translation units, and so is `ComponentType::Native<T>()`. Other packages therefore still compile against EnTT's headers, and would need recompiling (not editing) after a swap. The guard cannot see that, since it reads text.
 - **What would remove it:** redesigning `Entity` and `EntityList` around type-erased component access, so the headers need no library. That is a larger change, and a separate decision.
-- **Not yet following the rule:** the DemoApp includes `<entt/container/dense_map.hpp>` in `Material.hpp` and uses `View`/`Group` in the renderer. They predate this decision and are not changed by it.
+- **Not yet following the rule:** the old DemoApp included `<entt/container/dense_map.hpp>` in `Material.hpp` and used `View`/`Group` in its renderer; they predated this decision and were not changed by it. *Amended 2026-10-28:* the DemoApp is gone (the renderer foundation, PR #88), and no code outside `FenrirECS` names EnTT. The mentions left are doc comments in describe-api and the generators' test fixtures, which compare an `Id` enum's null to `entt::null`.
 
 ## Cost
 
