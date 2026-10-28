@@ -38,6 +38,7 @@ internal sealed record CSharpConfig(
     string PointerType,
     bool ReadOnlyEvents,
     IReadOnlySet<string> ReadOnlyStructs,
+    IReadOnlySet<string> ImmutableStructs,
     IReadOnlySet<string> PrivateFields,
     IReadOnlySet<string> FixedBuffers,
     IReadOnlySet<string> InternalStructs);
@@ -164,7 +165,8 @@ internal sealed record BindingConfig(
         reader.Keys(csharp, "csharp", "contract", "generated", "usings", "component-attribute", "component-interface",
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
                     "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
-                    "readonly-events", "readonly-structs", "private-fields", "fixed-buffers", "internal-structs");
+                    "readonly-events", "readonly-structs", "immutable-structs", "private-fields", "fixed-buffers",
+                    "internal-structs");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes");
 
@@ -267,6 +269,7 @@ internal sealed record BindingConfig(
                              csharp.ContainsKey("pointer-type") ? reader.String(csharp, "pointer-type") : "ulong",
                              csharp.ContainsKey("readonly-events") && reader.Boolean(csharp, "readonly-events"),
                              reader.Strings(csharp, "readonly-structs").ToHashSet(StringComparer.Ordinal),
+                             reader.Strings(csharp, "immutable-structs").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),

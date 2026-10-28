@@ -17,14 +17,13 @@ namespace Fenrir::Generated
         };
         extension.events = {};
         extension.sharedStructs = {
-            Fenrir::MakeSharedStruct<Fenrir::Entity>("Fenrir.Scripting.EntityLink"),
+            Fenrir::MakeSharedStruct<Fenrir::Entity>("Fenrir.Scripting.Entity"),
         };
         extension.functions = {
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::Log>("Fenrir.Scripting.Native.Log"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::TimeDeltaTime>("Fenrir.Scripting.Native.TimeDeltaTime"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::TimeTickRate>("Fenrir.Scripting.Native.TimeTickRate"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityIsValid>("Fenrir.Scripting.Native.EntityIsValid"),
-            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityLinkOwner>("Fenrir.Scripting.Native.EntityLinkOwner"),
             Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::ScriptingNatives::EntityWorldTransform, 3>::Call>("Fenrir.Scripting.Native.EntityWorldTransform"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntitySetWorldTransform>("Fenrir.Scripting.Native.EntitySetWorldTransform"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentIdOf>("Fenrir.Scripting.Native.ComponentIdOf", static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)),
@@ -32,7 +31,7 @@ namespace Fenrir::Generated
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::RegistryGeneration>("Fenrir.Scripting.Native.RegistryGeneration"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentGet>("Fenrir.Scripting.Native.ComponentGet"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentHas>("Fenrir.Scripting.Native.ComponentHas"),
-            Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityCreate>("Fenrir.Scripting.Native.EntityCreate", Fenrir::Entity::Null),
+            Fenrir::NativeFunction::Make<&Fenrir::ZeroingOutputs<&Fenrir::ScriptingNatives::EntityCreate, 2>::Call>("Fenrir.Scripting.Native.EntityCreate"),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::EntityDestroy>("Fenrir.Scripting.Native.EntityDestroy", Fenrir::ChangeError::NotActive),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentAdd>("Fenrir.Scripting.Native.ComponentAdd", Fenrir::ChangeError::NotActive),
             Fenrir::NativeFunction::Make<&Fenrir::ScriptingNatives::ComponentRemove>("Fenrir.Scripting.Native.ComponentRemove", Fenrir::ChangeError::NotActive),

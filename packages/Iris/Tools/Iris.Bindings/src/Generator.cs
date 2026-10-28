@@ -20,12 +20,7 @@ internal static class Generator
             throw new BindingException(string.Join('\n', handWritten));
         }
 
-        var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, text) in CSharpWriter.Mirrors(binding))
-        {
-            files.Add(Path.Combine(config.CSharp.Generated, name), text);
-        }
-
+        // The natives first: a mirror's file carries the methods their @facade marks give it.
         NativesDescription? natives = null;
         IReadOnlyList<BoundNative> bound = [];
         if (config.Natives is { } nativesConfig)
@@ -37,7 +32,16 @@ internal static class Generator
                 throw new BindingException(
                     $"{config.Path}: [natives] class {nativesConfig.Class} is also the C# name of a mirrored type");
             }
+        }
 
+        var files = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (name, text) in CSharpWriter.Mirrors(binding, natives, bound))
+        {
+            files.Add(Path.Combine(config.CSharp.Generated, name), text);
+        }
+
+        if (natives is not null)
+        {
             var (name, text) = CSharpWriter.Natives(binding, natives, bound);
             files.Add(Path.Combine(config.CSharp.Generated, name), text);
             foreach (var (facade, part) in CSharpWriter.Facades(binding, natives, bound))

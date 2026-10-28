@@ -11,6 +11,10 @@ headers = [
     "../include/FenrirPhysics/PhysicsWorld.hpp",
 ]
 
+# Joint, CharacterState and the events hold the engine's Entity, which keeps its value and entity list private: described
+# here as nested with the layout FenrirECS shares, and mirrored by the built-in binding.
+private-members = ["Fenrir::Entity"]
+
 [types]
 # The physics extension's components.
 "Fenrir::RigidBody" = "component"
@@ -50,5 +54,3 @@ headers = [
 # Types every binding has its own of.
 "Fenrir::Math::Vec3" = "bound-type"
 "Fenrir::Math::Quat" = "bound-type"
-"Fenrir::Transform" = "bound-type"
-"Fenrir::Entity" = "bound-type"

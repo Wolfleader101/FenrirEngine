@@ -79,10 +79,10 @@ namespace Fenrir
          * viewport.
          * @facade Renderer.ScreenPointToRay
          */
-        bool ScreenPointToRay(const CallContext& context, RendererScripting& renderer, EntityValue camera,
+        bool ScreenPointToRay(const CallContext& context, RendererScripting& renderer, const Entity* camera,
                               const Math::Vec2* point, Math::Ray* ray)
         {
-            const std::optional<Entity> entity = renderer.CameraFor(context, camera);
+            const std::optional<Entity> entity = renderer.CameraFor(context, *camera);
             return entity && Write(Renderer::ScreenPointToRay(context.GetApp(), *entity, *point), ray);
         }
 
@@ -92,29 +92,33 @@ namespace Fenrir
          * @return Whether it appears: false with no renderer, no such camera, or a point behind the camera.
          * @facade Renderer.WorldToScreenPoint
          */
-        bool WorldToScreenPoint(const CallContext& context, RendererScripting& renderer, EntityValue camera,
+        bool WorldToScreenPoint(const CallContext& context, RendererScripting& renderer, const Entity* camera,
                                 const Math::Vec3* point, Math::Vec2* screenPoint)
         {
-            const std::optional<Entity> entity = renderer.CameraFor(context, camera);
+            const std::optional<Entity> entity = renderer.CameraFor(context, *camera);
             return entity && Write(Renderer::WorldToScreenPoint(context.GetApp(), *entity, *point), screenPoint);
         }
 
         /**
          * @brief The camera drawn last at `point` of `window`, in window pixels from its top-left: the highest-order
          * enabled camera in the active scene whose viewport holds it.
-         * @return The camera entity, or no entity (C#'s Entity.None) when there is none or no renderer.
-         * @notrunning Fenrir::EntityValue(Fenrir::Entity::Null)
-         * @facade Renderer.CameraAt
+         * @param[out] camera The camera entity; no entity (the default Entity, C#'s Entity.None) when there is none.
+         * @return Whether there is one: false when there is none or no renderer.
          */
-        EntityValue CameraAt(const CallContext& context, RendererScripting& renderer, WindowId window,
-                             const Math::Vec2* point)
+        bool CameraAt(const CallContext& context, RendererScripting& renderer, WindowId window, const Math::Vec2* point,
+                      Entity* camera)
         {
             if (!renderer.HasRenderer(context))
             {
-                return EntityValue(Entity::Null);
+                return false;
             }
-            // A null Entity's id is Entity::Null, C#'s Entity.None.
-            return EntityValue(Renderer::CameraAt(context.GetApp(), window, *point).GetId());
+            const Entity found = Renderer::CameraAt(context.GetApp(), window, *point);
+            if (!found.IsValid())
+            {
+                return false;
+            }
+            *camera = found;
+            return true;
         }
 
         /**
@@ -124,7 +128,7 @@ namespace Fenrir
          * MeshRenderer, or a mesh that does not resolve).
          * @facade Renderer.GetWorldBounds
          */
-        bool GetWorldBounds(const CallContext& context, RendererScripting& renderer, EntityValue entity,
+        bool GetWorldBounds(const CallContext& context, RendererScripting& renderer, const Entity* entity,
                             Math::AABB* bounds)
         {
             if (!renderer.HasRenderer(context))
@@ -132,7 +136,7 @@ namespace Fenrir
                 return false;
             }
             const NativeGuard guard(context, renderer.warnings);
-            const std::optional<Entity> alive = guard.Alive(entity);
+            const std::optional<Entity> alive = guard.Alive(*entity);
             return alive && Write(Renderer::GetWorldBounds(context.GetApp(), *alive), bounds);
         }
 
@@ -156,38 +160,40 @@ namespace Fenrir
          * @brief Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity:
          * recorded, so it takes effect when the system returns.
          * @param model The model's handle, packed as Fenrir.Assets packs one (generation high, index low).
-         * @return The model's root entity, or no entity (C#'s Entity.None) when the app has no store, the model is
-         * stale or the parent is not alive.
-         * @notrunning Fenrir::EntityValue(Fenrir::Entity::Null)
+         * @param parent The entity to spawn under; no entity (Entity.None in C#) for none.
+         * @param[out] root The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was
+         * spawned.
+         * @return Whether it spawned: false when the app has no store, the model is stale or the parent is not alive.
          */
-        EntityValue SpawnModel(const CallContext& context, RendererScripting& renderer, std::uint64_t model,
-                               EntityValue parent)
+        bool SpawnModel(const CallContext& context, RendererScripting& renderer, std::uint64_t model,
+                        const Entity* parent, Entity* root)
         {
-            const EntityValue none(Entity::Null);
             const NativeGuard guard(context, renderer.warnings);
             // The handle rule is Assets' (AssetResolve.hpp), so the words are too, under this native's name.
             AssetStore* store = Resolve<Model>(guard, model);
             if (store == nullptr)
             {
-                return none;
+                return false;
             }
-            const bool parented = parent != none;
-            if (parented && !guard.Alive(parent))
+            const bool parented = parent->GetId() != Entity::Null;
+            const std::optional<Entity> under = parented ? guard.Alive(*parent) : std::nullopt;
+            if (parented && !under)
             {
-                return none;
+                return false;
             }
             // C++'s SpawnModel makes the tree, in a scene of its own, so that there is one place that says what a
             // spawned model is; the tree is then recorded into the active scene, which a native function may not change
             // directly (ADR-0029).
             Scene scratch(std::string(context.Native()));
-            const Entity root = Fenrir::SpawnModel(*store, scratch, AssetHandleFromBits<Model>(model));
-            if (!root.IsValid())
+            const Entity spawned = Fenrir::SpawnModel(*store, scratch, AssetHandleFromBits<Model>(model));
+            if (!spawned.IsValid())
             {
-                return none;
+                return false;
             }
-            return EntityValue(
-                Record(context.Changes(), root,
-                       parented ? std::optional<std::uint32_t>(parent.value) : std::optional<std::uint32_t>()));
+            *root = context.Entities().HandleOf(
+                Record(context.Changes(), spawned,
+                       under ? std::optional<std::uint32_t>(under->GetId()) : std::optional<std::uint32_t>()));
+            return true;
         }
     } // namespace RendererNatives
 

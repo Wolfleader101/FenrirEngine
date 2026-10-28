@@ -43,7 +43,7 @@ public static unsafe partial class Physics
     public static partial void Write(string text, ReadOnlySpan<char> more, int level);
 
     [NativeFunction]
-    public static partial Entity Pick(Entity from, float range);
+    public static partial bool Pick(in Entity from, float range, out Entity picked);
 
     [NativeFunction]
     public static partial bool Raycast(in Hit origin, ref Hit hit, out Hit last);

@@ -383,8 +383,10 @@ namespace
         // The Scripting is gone, so the registered thunk is on its not-running path: the value Make was given, and the
         // zeroing, which sits inside the check, does not run.
         TestExtension::Reading reading{3, 2.5F};
+        // No entity: the thunk is on its not-running path and never reaches the native.
+        const Entity five;
         const std::int32_t result =
-            Detail::NativeFunctionTraits<&TestExtension::ZeroingWeigh::Call>::Call(std::uint32_t{5}, &reading);
+            Detail::NativeFunctionTraits<&TestExtension::ZeroingWeigh::Call>::Call(&five, &reading);
         {
             INFO("A call while no Scripting runs did not return the @notrunning value");
             REQUIRE(result == -1);
@@ -399,7 +401,9 @@ namespace
     {
         Testing::NativeCallHarness harness;
         const CallContext context = harness.Context("Gadgets.SpawnCharged");
-        const std::uint32_t spawned = TestExtension::SpawnCharged(context, 7);
+        Entity created;
+        TestExtension::SpawnCharged(context, 7, &created);
+        const std::uint32_t spawned = created.GetId();
         auto& entities = harness.GetApp().GetActiveScene().GetEntityList();
         {
             INFO("The entity the native created is not alive at once");

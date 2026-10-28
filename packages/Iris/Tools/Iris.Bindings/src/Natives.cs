@@ -106,11 +106,21 @@ internal sealed record FacadeName(string Class, string Method)
 /// <param name="Facade">The public class and method its <c>@facade</c> names; null for a native with no mark.</param>
 /// <param name="FacadeParameters">
 /// The parameters of its facade method: the declaration's with <c>in</c> dropped (<c>in Vector3 force</c> becomes
-/// <c>Vector3 force</c>, passed as <c>in force</c>), everything else as declared. Empty with no mark.
+/// <c>Vector3 force</c>, passed as <c>in force</c>), everything else as declared, and without the first when it is
+/// <c>this</c>. Empty with no mark.
+/// </param>
+/// <param name="FacadeMirror">
+/// The struct this binding mirrors that the mark names as its class, whose generated part gets the method; null for
+/// a facade class.
+/// </param>
+/// <param name="FacadeOnThis">
+/// Whether the method is an instance method of <paramref name="FacadeMirror" />: the declaration's first parameter is
+/// <c>in</c> that mirror, and the method passes <c>in this</c> for it.
 /// </param>
 internal sealed record BoundNative(NativeFunction Function, string Result, IReadOnlyList<string> Parameters,
                                    IReadOnlyList<string> Named, IReadOnlyList<int> Outputs, IReadOnlyList<string> Folded,
-                                   FacadeName? Facade, IReadOnlyList<string> FacadeParameters)
+                                   FacadeName? Facade, IReadOnlyList<string> FacadeParameters, DescribedType? FacadeMirror,
+                                   bool FacadeOnThis)
 {
     /// <summary>Whether its declaration takes a span (text, a <c>ReadOnlySpan&lt;char&gt;</c>, among them), which <c>System</c> declares.</summary>
     public bool NeedsSystem => Parameters.Any(parameter => parameter.StartsWith("Span<", StringComparison.Ordinal) ||
@@ -118,13 +128,18 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 
     /// <summary>
     /// The arguments the facade method passes to the declaration, one per parameter: <c>in</c> or <c>out</c> and the
-    /// name where the declaration has the modifier, the name alone otherwise.
+    /// name where the declaration has the modifier, the name alone otherwise, and <c>in this</c> for the first of an
+    /// instance method.
     /// </summary>
     public IEnumerable<string> FacadeArguments =>
-        Parameters.Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal) ||
-                                       parameter.StartsWith("out ", StringComparison.Ordinal)
-                                           ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
-                                           : ParameterName(parameter));
+        Parameters.Select((parameter, index) => FacadeOnThis && index == 0 ? "in this"
+                                                : parameter.StartsWith("in ", StringComparison.Ordinal) ||
+                                                  parameter.StartsWith("out ", StringComparison.Ordinal)
+                                                    ? $"{parameter[..parameter.IndexOf(' ')]} {ParameterName(parameter)}"
+                                                    : ParameterName(parameter));
+
+    /// <summary>The C++ parameter an instance method binds to <c>this</c>, which its doc does not name; null otherwise.</summary>
+    public string? FacadeReceiver => FacadeOnThis ? Function.Parameters[0].Name : null;
 
     /// <summary>The types of the facade method's parameters, which tell two methods of one name apart.</summary>
     public IEnumerable<string> FacadeParameterTypes =>
@@ -153,10 +168,13 @@ internal sealed record BoundNative(NativeFunction Function, string Result, IRead
 /// or a <c>void*</c>. Anything else fails naming the function and parameter.
 /// <para/>
 /// A native's <c>@facade Class.Method</c> names the public method the facade writer generates over its declaration,
-/// which takes <c>T</c> where the declaration takes <c>in T</c>. The mark is refused, naming the native and the mark,
-/// on a native whose declaration cannot be public (it takes a type in <c>internal-structs</c>, or a pointer); when two
-/// marks give one class and method the same parameter types; and when the class is named as a mirror this binding or
-/// one it uses generates, as a bound type's C# type, or as the <c>[natives] class</c>.
+/// which takes <c>T</c> where the declaration takes <c>in T</c>. When the class is a struct this binding mirrors, the
+/// method goes into the mirror's generated part: an instance method, binding the declaration's first parameter to
+/// <c>this</c>, when that parameter is <c>in</c> the mirror, and a static method otherwise. The mark is refused, naming
+/// the native and the mark, on a native whose declaration cannot be public (it takes a type in <c>internal-structs</c>,
+/// or a pointer); when two marks give one class and method the same parameter types; when the class is named as a
+/// mirror a binding it uses generates, as an enum or tagged union mirrored here, as a bound type's C# type, or as the
+/// <c>[natives] class</c>; and when the method is named as a field of the mirror.
 /// </summary>
 internal static class Natives
 {
@@ -213,17 +231,26 @@ internal static class Natives
             {
                 yield return $"{natives.Path}: {native.Function.Name}: @facade {facade.Class} is the name of {taken}";
             }
+            else if (native.FacadeMirror is { } mirror &&
+                     mirror.Fields.Any(field => binding.MemberName(mirror, field.Name) == facade.Method))
+            {
+                yield return $"{natives.Path}: {native.Function.Name}: @facade {facade} is the name of a field of the mirror of {mirror.Name}";
+            }
         }
     }
 
-    // What a described type of that C# name is, in this binding or one it uses (transitively): a mirror, a bound type.
+    // What a described type of that C# name is that a facade cannot be, in this binding or one it uses (transitively):
+    // a used binding's mirror, an enum or tagged union mirrored here (neither holds a method), a bound type. A struct
+    // mirrored here is null: its generated part takes the method.
     private static string? NamedType(Binding binding, string name)
     {
         foreach (var type in binding.Types.Where(type => binding.CSharpName(type) == name))
         {
-            return type.Category == Category.BoundType
-                       ? $"the C# type of the bound type {type.Name}"
-                       : binding.IsUsed(type) ? $"the mirror of {type.Name} in the binding it uses" : $"the mirror of {type.Name}";
+            return type.Category == Category.BoundType ? $"the C# type of the bound type {type.Name}"
+                   : binding.IsUsed(type) ? $"the mirror of {type.Name} in the binding it uses"
+                   : type.Category == Category.Enum ? $"the enum {type.Name}"
+                   : type.Category == Category.TaggedUnion ? $"the tagged union {type.Name}"
+                   : null;
         }
 
         return binding.Uses.Select(used => NamedType(used, name)).FirstOrDefault(taken => taken is not null);
@@ -341,13 +368,22 @@ internal static class Natives
         }
 
         var facade = Facade(binding, function, parameters, result, named, where);
+        // A mark naming a struct mirrored here puts its method on the mirror: an instance method when the declaration's
+        // first parameter is `in` that mirror (the method passes `in this` for it), else a static one.
+        var mirror = facade is null
+                         ? null
+                         : binding.Mirrored.FirstOrDefault(type => type.Category == Category.Struct &&
+                                                                   binding.CSharpName(type) == facade.Class);
+        var onThis = mirror is not null && parameters.Count > 0 &&
+                     parameters[0].StartsWith($"in {binding.CSharpName(mirror)} ", StringComparison.Ordinal);
         var facadeParameters = facade is null
                                    ? []
-                                   : parameters.Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
+                                   : parameters.Skip(onThis ? 1 : 0)
+                                               .Select(parameter => parameter.StartsWith("in ", StringComparison.Ordinal)
                                                                         ? parameter["in ".Length..]
                                                                         : parameter).ToList();
         return new BoundNative(function, result, parameters, named.Distinct().ToList(), outputs, folded, facade,
-                               facadeParameters);
+                               facadeParameters, mirror, onThis);
     }
 
     // The native's @facade as a class and method, or null without one. The mark is refused when the declaration cannot

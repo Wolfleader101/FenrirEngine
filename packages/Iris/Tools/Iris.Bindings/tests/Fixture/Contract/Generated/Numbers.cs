@@ -11,26 +11,26 @@ namespace Fixture.Bindings;
 /// <remarks>
 /// A second paragraph, which is kept apart from the first.
 /// </remarks>
-public partial struct Numbers
+public readonly partial struct Numbers
 {
-    public sbyte I8 = -8;
-    public byte U8 = 200;
-    public short I16 = -16;
-    public ushort U16 = 65535;
-    public int I32 = -32;
+    public readonly sbyte I8 = -8;
+    public readonly byte U8 = 200;
+    public readonly short I16 = -16;
+    public readonly ushort U16 = 65535;
+    public readonly int I32 = -32;
     /// <summary>All bits set, written `~0u`.</summary>
-    public uint U32 = 4294967295;
-    public long I64 = -64;
-    public ulong U64 = 18446744073709551615;
-    public float F32 = 0.05f;
-    public double Double = 0.1;
-    public bool Flag = true;
-    public char Letter = 'A';
+    public readonly uint U32 = 4294967295;
+    public readonly long I64 = -64;
+    public readonly ulong U64 = 18446744073709551615;
+    public readonly float F32 = 0.05f;
+    public readonly double Double = 0.1;
+    public readonly bool Flag = true;
+    public readonly char Letter = 'A';
     /// <summary>An integer literal for a float.</summary>
-    public float Whole = 1;
-    public uint Shifted = 8;
-    public float Zero = 0;
-    public Offset Offset = Offset.Back;
+    public readonly float Whole = 1;
+    public readonly uint Shifted = 8;
+    public readonly float Zero = 0;
+    public readonly Offset Offset = Offset.Back;
 
     public Numbers()
     {

@@ -12,6 +12,7 @@ public static class Defaults
     public static global::Fenrir.Physics.CollisionShape CollisionShape() => new();
     public static global::Fenrir.Physics.Collider Collider() => new();
     public static global::Fenrir.Physics.CollisionFilter CollisionFilter() => new();
+    public static global::Fenrir.Physics.Contact Contact() => new();
     public static global::Fenrir.Physics.ContactBegin ContactBegin() => new();
     public static global::Fenrir.Physics.ContactEnd ContactEnd() => new();
     public static global::Fenrir.Physics.ContactEvents ContactEvents() => new();
@@ -20,8 +21,14 @@ public static class Defaults
     public static global::Fenrir.Physics.JointBroken JointBroken() => new();
     public static global::Fenrir.Physics.JointFrames JointFrames() => new();
     public static global::Fenrir.Physics.JointState JointState() => new();
+    public static global::Fenrir.Physics.MoveCastHit MoveCastHit() => new();
+    public static global::Fenrir.Physics.OverlapHit OverlapHit() => new();
+    public static global::Fenrir.Physics.PenetrationHit PenetrationHit() => new();
     public static global::Fenrir.Physics.PhysicsMaterial PhysicsMaterial() => new();
+    public static global::Fenrir.Physics.QueryFilter QueryFilter() => new();
+    public static global::Fenrir.Physics.RaycastHit RaycastHit() => new();
     public static global::Fenrir.Physics.RigidBody RigidBody() => new();
+    public static global::Fenrir.Physics.ShapeCastHit ShapeCastHit() => new();
     public static global::Fenrir.Physics.Trigger Trigger() => new();
     public static global::Fenrir.Physics.TriggerEnter TriggerEnter() => new();
     public static global::Fenrir.Physics.TriggerExit TriggerExit() => new();
@@ -29,11 +36,4 @@ public static class Defaults
     public static global::Fenrir.Physics.VehicleAntiRollBar VehicleAntiRollBar() => new();
     public static global::Fenrir.Physics.VehicleDifferential VehicleDifferential() => new();
     public static global::Fenrir.Physics.VehicleWheel VehicleWheel() => new();
-    public static global::Fenrir.Physics.Contact Contact() => new();
-    public static global::Fenrir.Physics.MoveCastHit MoveCastHit() => new();
-    public static global::Fenrir.Physics.OverlapHit OverlapHit() => new();
-    public static global::Fenrir.Physics.PenetrationHit PenetrationHit() => new();
-    public static global::Fenrir.Physics.QueryFilter QueryFilter() => new();
-    public static global::Fenrir.Physics.RaycastHit RaycastHit() => new();
-    public static global::Fenrir.Physics.ShapeCastHit ShapeCastHit() => new();
 }

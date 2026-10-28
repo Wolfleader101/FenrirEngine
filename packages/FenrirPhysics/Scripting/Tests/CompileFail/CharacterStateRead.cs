@@ -10,7 +10,7 @@ public static class Controller
     {
         body.Velocity.Y = body.State.Ground == GroundState.OnGround ? 5 : body.Velocity.Y;
         ref readonly CharacterState state = ref body.State;
-        return state.ShapeBlocked || !body.State.GroundBody.IsNull;
+        return state.ShapeBlocked || body.State.GroundBody != Entity.None;
     }
 
     public static GroundState Look(ReadOnlyRef<CharacterBody> body) => body.State.Ground;

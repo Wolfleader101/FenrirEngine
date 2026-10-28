@@ -14,7 +14,6 @@
 
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/Scripting.hpp"
 
@@ -25,23 +24,24 @@ namespace TestExtension
         return left + right;
     }
 
-    std::uint32_t EchoEntity(const Fenrir::CallContext&, std::uint32_t entity)
+    // An entity crosses as Fenrir::Entity, C#'s Entity, by pointer: `in` to a native and `out` back.
+    void EchoEntity(const Fenrir::CallContext&, const Fenrir::Entity* entity, Fenrir::Entity* echoed)
     {
-        return entity;
+        *echoed = *entity;
     }
 
     // The entity's Transform height in the active scene, or -1 if it has none.
-    float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity)
+    float HeightOf(const Fenrir::CallContext& context, const Fenrir::Entity* entity)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         return found.IsValid() && found.HasComponent<Fenrir::Transform>()
                    ? found.GetComponent<Fenrir::Transform>().pos.y
                    : -1.0F;
     }
 
-    void Lift(const Fenrir::CallContext& context, std::uint32_t entity, float by)
+    void Lift(const Fenrir::CallContext& context, const Fenrir::Entity* entity, float by)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         if (found.IsValid() && found.HasComponent<Fenrir::Transform>())
         {
             found.GetComponent<Fenrir::Transform>().pos.y += by;
@@ -62,30 +62,31 @@ namespace TestExtension
         return 0;
     }
 
-    std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level)
+    void SpawnCharged(const Fenrir::CallContext& context, std::int32_t level, Fenrir::Entity* entity)
     {
-        const std::uint32_t entity = context.Changes().CreateEntity();
-        (void)context.Changes().AddComponent(entity, Charge{level});
-        return entity;
+        const std::uint32_t created = context.Changes().CreateEntity();
+        (void)context.Changes().AddComponent(created, Charge{level});
+        *entity = context.Entities().HandleOf(created);
     }
 
-    void Rearrange(const Fenrir::CallContext& context, std::uint32_t kept, std::uint32_t doomed, float wind)
+    void Rearrange(const Fenrir::CallContext& context, const Fenrir::Entity* kept, const Fenrir::Entity* doomed,
+                   float wind)
     {
         const auto changes = context.Changes();
-        (void)changes.AddComponent(kept, Charge{1});
-        (void)changes.RemoveComponent<Charge>(kept);
-        (void)changes.AddComponent(kept, Charge{3});
-        (void)changes.DestroyEntity(doomed);
-        (void)changes.AddComponent(doomed, Charge{9});
+        (void)changes.AddComponent(kept->GetId(), Charge{1});
+        (void)changes.RemoveComponent<Charge>(kept->GetId());
+        (void)changes.AddComponent(kept->GetId(), Charge{3});
+        (void)changes.DestroyEntity(doomed->GetId());
+        (void)changes.AddComponent(doomed->GetId(), Charge{9});
         changes.InsertSceneResource(Weather{wind, 4});
     }
 
-    std::uint32_t SpawnUnder(const Fenrir::CallContext& context, std::uint32_t parent)
+    void SpawnUnder(const Fenrir::CallContext& context, const Fenrir::Entity* parent, Fenrir::Entity* child)
     {
         const auto changes = context.Changes();
-        const std::uint32_t child = changes.CreateEntity();
-        (void)changes.AddChild(parent, child);
-        return child;
+        const std::uint32_t created = changes.CreateEntity();
+        (void)changes.AddChild(parent->GetId(), created);
+        *child = context.Entities().HandleOf(created);
     }
 
     std::int32_t AddToTally(const Fenrir::CallContext&, Tally& tally, std::int32_t by)
@@ -96,18 +97,18 @@ namespace TestExtension
 
     // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name,
     // which this function never spells.
-    void Nudge(const Fenrir::CallContext& context, Tally& tally, std::uint32_t entity)
+    void Nudge(const Fenrir::CallContext& context, Tally& tally, const Fenrir::Entity* entity)
     {
         const Fenrir::NativeGuard guard(context, tally.warnings);
-        if (const std::optional<Fenrir::Entity> found = guard.Alive(Fenrir::EntityValue(entity)))
+        if (const std::optional<Fenrir::Entity> found = guard.Alive(*entity))
         {
             found->GetComponent<Fenrir::Transform>().pos.y += 1.0F;
         }
     }
 
-    std::int32_t Weigh(const Fenrir::CallContext& context, std::uint32_t entity, Reading* reading)
+    std::int32_t Weigh(const Fenrir::CallContext& context, const Fenrir::Entity* entity, Reading* reading)
     {
-        const Fenrir::Entity found = context.Entities().GetEntity(entity);
+        const Fenrir::Entity found = context.Entities().GetEntity(entity->GetId());
         if (!found.IsValid())
         {
             return 0;

@@ -61,4 +61,5 @@ FenrirSkeleton's tests cover this with no physics: a chain skeleton, plain entit
 - *Extends ADR-0033's `PoseOverride`* with override weights and their API; ADR-0033's entries, bone order and rebuild rule are unchanged.
 - `SkeletonData` gains a subtree query; FenrirSkeleton gains base-pose reads (`GetBaseLocal`, lazy `GetBaseModel`).
 - The physics map's ragdoll spec receives: bone names, indices and parents from `SkeletonData`, the subtree query, world-target writes through `PoseOverride`, override weights, base-pose reads, and the timing above. The bone-to-body mapping, offsets, bodies, joints, motors, collision groups and the skeleton entity's follow policy are its own.
+- *Refined by ADR-0040:* powered ragdolls on tick-posed skeletons read their motor targets at tick time, with `PoseKind::Simulation`, instead of a frame late; on frame-posed skeletons the timing above stands.
 - Listed, not built: a dedicated ragdoll modifier with its own ownership; override weights kept across compatible rebuilds; tick-time motor targets with fixed-tick animation.

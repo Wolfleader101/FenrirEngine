@@ -24,9 +24,9 @@ namespace Fenrir.Physics;
 public partial struct VehicleDifferential : IComponent
 {
     /// <summary>A wheel entity, or empty for none.</summary>
-    public EntityLink LeftWheel = EntityLink.None;
+    public Entity LeftWheel = new();
     /// <summary>A wheel entity of the same vehicle, or empty for none.</summary>
-    public EntityLink RightWheel = EntityLink.None;
+    public Entity RightWheel = new();
     /// <summary>The gearbox's turns per turn of the wheels.</summary>
     public float Ratio = 3.42f;
     /// <summary>How the torque is split across the two wheels: 0 all left, 0.5 even, 1 all right.</summary>

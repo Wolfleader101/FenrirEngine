@@ -293,7 +293,7 @@ public sealed class JointsBuilder : ISystem
             MaxDistance = JointsScene.RopeLength,
             Spring = new JointSpring { Frequency = 1, Damping = 0.03f },
         };
-        MakeJoint(new Joint { BodyA = weight, BodyB = EntityLink.None, Kind = rope, Enabled = false },
+        MakeJoint(new Joint { BodyA = weight, BodyB = Entity.None, Kind = rope, Enabled = false },
             new JointRole { Part = JointPart.Rope });
     }
 
@@ -347,8 +347,8 @@ public sealed class JointsBuilder : ISystem
         {
             ref Joint value = ref joint.Value;
             JointFrame anchor = JointsScene.AnchorOf(role.Value);
-            Entity bodyA = value.BodyA.Target;
-            if (value.BodyB.IsNull)
+            Entity bodyA = value.BodyA;
+            if (value.BodyB == Entity.None)
             {
                 // The world overload: FrameB is the anchor itself, in world space. A rope's world end is the hook, so
                 // its frames are apart by the distance the weight starts from the hook.
@@ -358,7 +358,7 @@ public sealed class JointsBuilder : ISystem
             }
             else
             {
-                JointFrames frames = Joint.FrameFromWorld(bodyA, value.BodyB.Target, anchor);
+                JointFrames frames = Joint.FrameFromWorld(bodyA, value.BodyB, anchor);
                 value.FrameA = frames.FrameA;
                 value.FrameB = frames.FrameB;
             }
@@ -367,7 +367,7 @@ public sealed class JointsBuilder : ISystem
 
             // A swing forwards, about world X (the limb frame's Y), which its cone stops.
             if (role.Value.Part == JointPart.Limb)
-                value.BodyB.Target.Get<RigidBody>().Value.AngularVelocity = new Vector3(8, 0, 0);
+                value.BodyB.Get<RigidBody>().Value.AngularVelocity = new Vector3(8, 0, 0);
         }
 
         // Its keys are in the scaffold's help (F1), from src/Joints.cpp.
@@ -386,7 +386,7 @@ public sealed class JointsBreaks : ISystem
         bool active = JointsScene.IsActive(in context);
         foreach (var broken in breaks.Read())
         {
-            Entity joint = broken.Joint.Target;
+            Entity joint = broken.Joint;
             if (!active || !joint.Has<JointRole>())
                 continue;
             context.Log.Info($"JointBroken: {JointsScene.LabelOf(joint.Get<JointRole>().Value)} broke at " +

@@ -486,7 +486,7 @@ namespace
         return MakeComponent<TestNative::Tether>("Test.Tether");
     }
 
-    void AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp()
+    void AnEntityFromCreateWrittenIntoAComponentCarriesTheActiveScenesList()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
@@ -496,16 +496,43 @@ namespace
         }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto holder = entities.CreateEntity();
-        auto target = entities.CreateEntity();
         holder.AddComponent<TestNative::Tether>();
 
-        Links<void>(scripting, "LinkTo", holder.GetId(), target.GetId());
+        const auto targetId = Links<std::uint32_t>(scripting, "LinkToCreated", holder.GetId());
 
-        // Equal means the same entity value in the same entity list: C# filled the owner with the active scene's.
+        // Equal means the same entity value in the same entity list: EntityCreate stamped the active scene's list on
+        // the entity it handed C#, and C# wrote it whole.
         const Entity written = holder.GetComponent<TestNative::Tether>().target;
         {
-            INFO("The Entity C# wrote is not the target in the active scene");
-            REQUIRE(written == target);
+            INFO("The Entity C# wrote is not the created entity in the active scene");
+            REQUIRE(written == entities.GetEntity(targetId));
+        }
+        (void)ScriptingProbe::ApplyChanges(scripting);
+        {
+            INFO("C++ could not use the Entity C# wrote");
+            REQUIRE((written.IsValid() && written.HasComponent<Transform>()));
+        }
+    }
+
+    void AnEntityFromAQueryWrittenIntoAComponentCarriesTheActiveScenesList()
+    {
+        HeadlessApp headless;
+        auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
+        {
+            INFO("The component with an Entity field was refused: " + Errors(headless));
+            REQUIRE(scripting.HasScripts());
+        }
+        auto& entities = headless.Get().GetActiveScene().GetEntityList();
+        auto holder = entities.CreateEntity();
+        holder.AddComponent<TestNative::Tether>();
+
+        Links<void>(scripting, "LinkToQueried", holder.GetId());
+
+        // Equal means the same entity value in the same entity list: the query row held the holder as the engine does.
+        const Entity written = holder.GetComponent<TestNative::Tether>().target;
+        {
+            INFO("The Entity a query gave C# is not the holder in the active scene");
+            REQUIRE(written == holder);
         }
         {
             INFO("C++ could not use the Entity C# wrote");
@@ -565,34 +592,36 @@ namespace
         Links<void>(scripting, "WriteZeroed", holder.GetId());
 
         {
-            INFO("C# did not read a zeroed link as naming entity 0");
+            INFO("C# did not read a zeroed entity as naming entity 0");
             REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == 0);
         }
-        // Entity 0 is alive in the active scene, but the zeroed link has no scene, so it is neither it nor valid.
+        // Entity 0 is alive in the active scene, but the zeroed entity has no scene, so it is neither it nor valid.
         const Entity zeroed = holder.GetComponent<TestNative::Tether>().target;
         {
-            INFO("A zeroed link read in C++ as entity 0 of the active scene");
+            INFO("A zeroed entity read in C++ as entity 0 of the active scene");
             REQUIRE((zeroed.GetId() == 0 && zeroed != holder));
         }
         {
-            INFO("A zeroed link read in C++ as valid");
+            INFO("A zeroed entity read in C++ as valid");
             REQUIRE(!zeroed.IsValid());
         }
     }
 
-    void AnEntityLinksOwnerIsNotReadableFromCSharp()
+    void AnEntitysOwnerIsNotReadableFromCSharp()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture));
-        // The spec's whole readable surface: whether it is empty, the entity it names, and the empty link.
+        // Entity's whole readable surface: its value, whether it is alive, its world transform, and None. The owner
+        // is a private field only the engine reads.
         const auto members = Links<std::optional<std::string>>(scripting, "ReadableMembers");
         {
-            INFO("EntityLink exposes more than IsNull, Target and None to scripts: " + members.value_or("<null>"));
-            REQUIRE(members == "IsNull:Boolean,None:EntityLink,Target:Entity");
+            INFO("Entity exposes more than IsValid, None, Value and WorldTransform to scripts: " +
+                 members.value_or("<null>"));
+            REQUIRE(members == "IsValid:Boolean,None:Entity,Value:UInt32,WorldTransform:Transform");
         }
     }
 
-    void EntityLinkNoneIsTheEmptyLink()
+    void EntityNoneIsTheEmptyEntity()
     {
         HeadlessApp headless;
         auto scripting = Scripting::Install(headless.Get(), ConfigFor(fixture, {TetherComponent()}));
@@ -601,8 +630,8 @@ namespace
             REQUIRE(scripting.HasScripts());
         }
         {
-            INFO("EntityLink.None was not null in C#");
-            REQUIRE(Links<bool>(scripting, "NoneIsNull"));
+            INFO("Entity.None was not the null value, or was the zeroed entity, or was valid, in C#");
+            REQUIRE(Links<bool>(scripting, "NoneIsEmpty"));
         }
         auto& entities = headless.Get().GetActiveScene().GetEntityList();
         auto holder = entities.CreateEntity();
@@ -611,13 +640,13 @@ namespace
 
         Links<void>(scripting, "Unlink", holder.GetId());
 
-        // The empty link is a default Entity: the null value and no entity list.
+        // None is a default Entity: the null value and no entity list (an owner of 0).
         {
-            INFO("EntityLink.None did not read in C++ as an empty Entity");
+            INFO("Entity.None did not read in C++ as a default Entity");
             REQUIRE(holder.GetComponent<TestNative::Tether>().target == Entity());
         }
         {
-            INFO("C# did not read the empty link back as null");
+            INFO("C# did not read None back as the null value");
             REQUIRE(Links<std::uint32_t>(scripting, "TargetOf", holder.GetId()) == NullEntity);
         }
     }
@@ -700,14 +729,19 @@ TEST_CASE("the engine components come with their rules", "[scripting]")
     TheEngineComponentsComeWithTheirRules();
 }
 
-TEST_CASE("an Entity field written from C# reads correctly in C++", "[scripting]")
+TEST_CASE("an entity from Entity.Create written into a component carries the active scene's list", "[scripting]")
 {
-    AnEntityFieldWrittenFromCSharpReadsCorrectlyInCpp();
+    AnEntityFromCreateWrittenIntoAComponentCarriesTheActiveScenesList();
 }
 
-TEST_CASE("EntityLink.None is the empty link", "[scripting]")
+TEST_CASE("an entity from a query written into a component carries the active scene's list", "[scripting]")
 {
-    EntityLinkNoneIsTheEmptyLink();
+    AnEntityFromAQueryWrittenIntoAComponentCarriesTheActiveScenesList();
+}
+
+TEST_CASE("Entity.None written from C# reads as C++'s default Entity", "[scripting]")
+{
+    EntityNoneIsTheEmptyEntity();
 }
 
 TEST_CASE("a link to an entity created earlier in the same system reads back after playback", "[scripting]")
@@ -715,12 +749,12 @@ TEST_CASE("a link to an entity created earlier in the same system reads back aft
     ALinkToAnEntityCreatedInTheSameSystemReadsBackAfterPlayback();
 }
 
-TEST_CASE("a zeroed EntityLink names entity 0 with no scene and reads safely", "[scripting]")
+TEST_CASE("a zeroed Entity names entity 0 with no scene and reads safely", "[scripting]")
 {
     AZeroedLinkNamesEntityZeroWithNoSceneAndReadsSafely();
 }
 
-TEST_CASE("an EntityLink's owner is not readable from C#", "[scripting]")
+TEST_CASE("an Entity's owner is not readable from C#", "[scripting]")
 {
-    AnEntityLinksOwnerIsNotReadableFromCSharp();
+    AnEntitysOwnerIsNotReadableFromCSharp();
 }

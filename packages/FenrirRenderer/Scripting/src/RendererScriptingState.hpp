@@ -6,7 +6,6 @@
 #include "FenrirECS/Entity.hpp"
 #include "FenrirRenderer/Components.hpp"
 #include "FenrirRenderer/Renderer.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/NativeGuard.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "FenrirScripting/WarnOnceRecord.hpp"
@@ -37,17 +36,18 @@ namespace Fenrir
         }
 
         /**
-         * @brief The camera entity `id` if the app has a renderer and it is alive with a Camera; warns once if not:
-         * through the guard's entity-alive rule when it is not alive, and that it has no Camera when it is.
+         * @brief `entity` as the active scene's handle if the app has a renderer and it is alive there with a Camera;
+         * warns once if not: through the guard's entity-alive rule when it is not alive, and that it has no Camera when
+         * it is.
          */
-        std::optional<Entity> CameraFor(const CallContext& context, EntityValue id)
+        std::optional<Entity> CameraFor(const CallContext& context, const Entity& entity)
         {
             if (!HasRenderer(context))
             {
                 return std::nullopt;
             }
             const NativeGuard guard(context, warnings);
-            const std::optional<Entity> camera = guard.Alive(id);
+            const std::optional<Entity> camera = guard.Alive(entity);
             if (camera && !camera->HasComponent<Camera>())
             {
                 guard.Warn("the entity has no Camera, so it does nothing");

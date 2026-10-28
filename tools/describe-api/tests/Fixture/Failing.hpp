@@ -84,4 +84,10 @@ namespace Failing
     {
         Pair pair = Pair(1.0f, 2.0f);
     };
+
+    /** @brief Holds a nested type with a private member: described only when private-members names PrivateMember. */
+    struct HoldsPrivateMember
+    {
+        PrivateMember member;
+    };
 } // namespace Failing

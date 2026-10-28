@@ -14,13 +14,13 @@ namespace Fenrir.Physics;
 public readonly partial struct ContactEnd : IEvent
 {
     /// <summary>The body entity (a rigid body or a character body) of A, as in its ContactBegin.</summary>
-    public readonly EntityLink BodyA = EntityLink.None;
+    public readonly Entity BodyA = new();
     /// <summary>The body entity (a rigid body or a character body) of B, as in its ContactBegin.</summary>
-    public readonly EntityLink BodyB = EntityLink.None;
+    public readonly Entity BodyB = new();
     /// <summary>A's collider entity, as in its ContactBegin.</summary>
-    public readonly EntityLink ColliderA = EntityLink.None;
+    public readonly Entity ColliderA = new();
     /// <summary>B's collider entity, as in its ContactBegin.</summary>
-    public readonly EntityLink ColliderB = EntityLink.None;
+    public readonly Entity ColliderB = new();
 
     public ContactEnd()
     {

@@ -31,11 +31,6 @@ make-scene-resource = "Fenrir::MakeSceneResource"
 includes = ["ScriptingProbe.hpp"]
 component = "Fenrir::ScriptingProbe::Component(app.scripting)"
 
-# The one entity value every binding names (ADR-0044): a C# Entity, which natives take and return by value as its one
-# field and shared structs hold. Its mapping and wrapper trait are FenrirScripting's, included where it is bound.
-[bound-types]
-"Fenrir::EntityValue" = { type = "Entity", constructor = ["value"], wrapper = "u32", include = "FenrirScripting/EntityValueMapping.hpp" }
-
 [natives]
 # Every native takes the call context first; tools/describe-api's natives mode reads this to find them.
 context = "Fenrir::CallContext"

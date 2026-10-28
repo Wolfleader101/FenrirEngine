@@ -16,3 +16,5 @@ We write it ourselves rather than adopting Coral or Mono:
 - This replaces the earlier plan's rule against "a general reflection framework or arbitrary marshalling until a requirement justifies it". This ADR is that requirement. The rest of the plan's discipline stays: one narrow, verified slice at a time.
 - No engine package may become a dependency of the hosting core.
 - Automated CI and cross-platform runners are deliberately deferred. Verification is local, and the docs must say which platforms were actually tested.
+
+*Amended 2026-10-28:* CI exists. `.github/workflows/build-and-test.yml` builds and tests one Windows preset on every pull request, and `api-descriptions.yml` regenerates the API descriptions and bindings (ADR-0042) and fails on a dirty tree. The Linux job is written but off until the Actions budget allows it, and macOS has never been run, so the docs still say which platforms were tested.

@@ -57,6 +57,10 @@ add_library(FenrirScripting STATIC
     src/Queries.hpp
     src/ChangeBuffer.hpp
     src/ScriptData.cpp
+    src/ScriptSystems.cpp
+    src/ScriptSystems.hpp
+    src/SystemHost.hpp
+    src/SystemHostNames.hpp
     src/GenerationLifecycle.cpp
     src/ReloadWatcher.cpp
     src/ReloadWatcher.hpp
@@ -67,8 +71,6 @@ add_library(FenrirScripting STATIC
     src/ComponentRegistry.hpp
     include/FenrirScripting/BoundMappings.hpp
     include/FenrirScripting/ComponentRegistry.hpp
-    include/FenrirScripting/EntityValue.hpp
-    include/FenrirScripting/EntityValueMapping.hpp
     include/FenrirScripting/Generated/FenrirMathMappings.hpp
     include/FenrirScripting/Generated/FenrirScriptingMappings.hpp
     include/FenrirScripting/NativeGuard.hpp

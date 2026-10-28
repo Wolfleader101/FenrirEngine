@@ -88,12 +88,8 @@ The one process-wide native callback (`Host::SetLogSink`) that receives bridge e
 Scripting is ECS-first (ADR-0007): C# code adds components and systems to the same ECS as C++, not per-entity behaviour objects.
 
 **Entity**
-An ID in the active scene's ECS, including a version, so an ID that is destroyed and reused is detected as stale. In C# it is a small value with helper methods, not an object.
-*Avoid:* game object, actor, node.
-
-**Entity link**
-An entity named inside a component or event (a parent, a contact's body, a joint's bodies), as scripts see it. A link may be empty, naming no entity. A script reads the entity a link names and makes a link from any entity of the active scene; it never sees which scene the link belongs to.
-*Avoid:* entity reference, entity handle (a *handle* is Iris's term).
+An ID in a scene's ECS, including a version, so an ID that is destroyed and reused is detected as stale, beside the entity list of the scene that owns it. C#'s `Entity` is the mirror of C++'s `Fenrir::Entity`: the same shape in both languages (the value, and the owner only C++ reads), with helper methods, not an object, so a component or event field holding an entity (a parent, a contact's body, a joint's bodies) is `Entity` on both sides. `Entity.None` is no entity, C++'s default `Entity`; `default(Entity)` names entity 0 with no scene and is never valid. A script gets every entity from C++ with its owner set (a native's `out Entity`, a field, a query row) and never sets one; a native takes an entity as `in Entity` and resolves it in the active scene, so one another scene owns is not alive there.
+*Avoid:* game object, actor, node, entity link, entity reference, entity handle (a *handle* is Iris's term).
 
 **Component**
 Plain data attached to an entity, with no behaviour. A *native component* is a C++ struct, and a *C# component* is an `IComponent` struct. Both live in the ECS and are queried the same way. In engine code and docs, *component* always means this. Say *Iris component* for the other sense.
@@ -113,6 +109,10 @@ A value naming one kind of component, native or C#, that the ECS's runtime opera
 **System**
 Logic that runs once per frame phase over the entities a query selects. Native systems are C++ functions, and C# systems are `ISystem` classes.
 *Avoid:* script, behaviour, manager.
+
+**System host**
+The one managed object the generator writes per script assembly, found by its name when a generation loads and called once per phase: it makes the script's systems and runs them in order. In C++ it is the seam of the same name (`SystemHost`), behind which `ScriptSystems` keeps the engine's rules: which phases run, on which thread, and what a failure means.
+*Avoid:* runner, scheduler.
 
 **Event**
 Plain data one system sends and others read. Each reader sees each event once, including events sent after it last ran, as long as it reads before its queue swaps twice; a queue swaps at the end of each frame that ran a tick, so reading once a frame is enough (ADR-0012). A new reader starts at the oldest event its queue still holds. C++ and C# events of the same name share one queue. A C# send waits until the sending system returns.
@@ -196,7 +196,7 @@ A static C# class over a package's generated native functions, its generated par
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**
-A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`, `Entity`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). C#'s `Entity` is spelled `EntityValue` in C++, FenrirScripting's one type for it, wherever a native or a shared struct holds one.
+A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). An `Entity` is not one: it is a mirror of two fields, and crosses by pointer.
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses packed), strong typedef, newtype.
 
 **Call context**

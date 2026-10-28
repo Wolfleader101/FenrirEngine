@@ -67,7 +67,7 @@ struct Iris::StructMapping<TestNative::FloatHealth>
 };
 
 // A component with an Entity field, as a joint names its bodies, mapped to the fixture's Tether. Entity maps to the
-// contract's EntityLink through the built-in binding's generated mapping.
+// contract's Entity, its mirror, through the built-in binding's generated mapping.
 namespace TestNative
 {
     struct Tether
@@ -357,12 +357,12 @@ namespace TestExtension
 
     std::int32_t Add(const Fenrir::CallContext&, std::int32_t left, std::int32_t right);
 
-    std::uint32_t EchoEntity(const Fenrir::CallContext&, std::uint32_t entity);
+    void EchoEntity(const Fenrir::CallContext&, const Fenrir::Entity* entity, Fenrir::Entity* echoed);
 
     // The entity's Transform height in the active scene, or -1 if it has none.
-    float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity);
+    float HeightOf(const Fenrir::CallContext& context, const Fenrir::Entity* entity);
 
-    void Lift(const Fenrir::CallContext& context, std::uint32_t entity, float by);
+    void Lift(const Fenrir::CallContext& context, const Fenrir::Entity* entity, float by);
 
     // The last text Label received, so a test can compare it with what C# sent.
     extern std::string labelled;
@@ -397,12 +397,13 @@ namespace TestExtension
     };
 
     // Creates an entity through the change buffer and gives it a Charge in the same call: it is usable at once.
-    std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level);
+    void SpawnCharged(const Fenrir::CallContext& context, std::int32_t level, Fenrir::Entity* entity);
 
-    void Rearrange(const Fenrir::CallContext& context, std::uint32_t kept, std::uint32_t doomed, float wind);
+    void Rearrange(const Fenrir::CallContext& context, const Fenrir::Entity* kept, const Fenrir::Entity* doomed,
+                   float wind);
 
     // Creates an entity and records parenting it under `parent`; a dead parent records no parenting.
-    std::uint32_t SpawnUnder(const Fenrir::CallContext& context, std::uint32_t parent);
+    void SpawnUnder(const Fenrir::CallContext& context, const Fenrir::Entity* parent, Fenrir::Entity* child);
 
     // The test extension's extension state: a running total its Tally native adds to, and its warn-once record, as a
     // package's state holds one.
@@ -421,7 +422,7 @@ namespace TestExtension
 
     // Raises the entity's Transform by one, behind the native guard: a dead entity warns once under the native's name,
     // which this function never spells.
-    void Nudge(const Fenrir::CallContext& context, Tally& tally, std::uint32_t entity);
+    void Nudge(const Fenrir::CallContext& context, Tally& tally, const Fenrir::Entity* entity);
 
     // The test extension's shared struct, and a mapping of its C# mirror that has drifted: its first field renamed.
     struct Reading
@@ -437,7 +438,7 @@ namespace TestExtension
      * @return How many readings: one, or zero for a dead entity.
      * @notrunning -1
      */
-    std::int32_t Weigh(const Fenrir::CallContext& context, std::uint32_t entity, Reading* reading);
+    std::int32_t Weigh(const Fenrir::CallContext& context, const Fenrir::Entity* entity, Reading* reading);
     using ZeroingWeigh = Fenrir::ZeroingOutputs<&Weigh, 2>;
 
     struct DriftedReading
