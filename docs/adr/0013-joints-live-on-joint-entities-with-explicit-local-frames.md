@@ -43,4 +43,4 @@ struct Joint
 
 - Physics keeps a private index from each body to its joints. The backend does not remove a constraint when its body goes, and a constraint outliving its body is undefined, so physics removes a joint's constraint before either body's whenever a body is destroyed or rebuilt.
 - Editing a frame, a body or the kind recreates the backend constraint, which is cheap but loses one step of warm starting. Limits, motors and springs are live edits (their fields are a later decision).
-- `Joint` is the second component holding a tagged union, which reopens whether the deferred `[TaggedUnion]` source generator is now due.
+- `Joint` is the second component holding a tagged union, which reopens whether the deferred `[TaggedUnion]` source generator is now due. *Resolved:* the third union, `VehicleKind` (ADR-0015), triggered it; the generator is built and `JointKind` uses it (ADR-0011's 2026-10-20 amendment).
