@@ -12,12 +12,12 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/Natives.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs`, `packages/Iris/Tools/Iris.Bindings/src/CppWriter.cs`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -c "StartsWith\|LastIndexOf\|IndexOf(' ')\|EndsWith" packages/Iris/Tools/Iris.Bindings/src/Natives.cs` is 0 and `grep -c '== "void"' packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs` is 0.
-- [ ] `dotnet test packages/Iris/Tools/Iris.Bindings/tests` passes 118 and `dotnet test tools/describe-api/tests` passes 38, both unchanged.
-- [ ] Every fixture output and all eight engine bindings regenerate with 0 changed (`git status` clean).
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `grep -c "StartsWith\|LastIndexOf\|IndexOf(' ')\|EndsWith" packages/Iris/Tools/Iris.Bindings/src/Natives.cs` is 0 and `grep -c '== "void"' packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs` is 0.
+- [x] `dotnet test packages/Iris/Tools/Iris.Bindings/tests` passes 118 and `dotnet test tools/describe-api/tests` passes 38, both unchanged.
+- [x] Every fixture output and all eight engine bindings regenerate with 0 changed (`git status` clean).
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
 

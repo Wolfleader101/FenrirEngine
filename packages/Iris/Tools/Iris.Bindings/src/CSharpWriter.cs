@@ -461,7 +461,8 @@ internal static class CSharpWriter
             var function = native.Function;
             NativeDoc(text, native);
             text.Line($"[{config.Attribute}]");
-            Signature(text, $"public static partial {native.Result} {function.Name}(", native.Parameters, ");");
+            Signature(text, $"public static partial {native.Result.Declaration} {function.Name}(",
+                      native.Parameters.Select(parameter => parameter.Declaration).ToList(), ");");
         }
 
         text.Outdent();
@@ -532,15 +533,16 @@ internal static class CSharpWriter
         var function = native.Function;
         NativeDoc(text, native, facade: true);
         var start = $"public {(native.FacadeOnThis ? "" : "static ")}{native.FacadeResult} {native.Facade!.Method}(";
+        var parameters = native.FacadeParameters.Select(parameter => parameter.FacadeParameter).ToList();
         if (native.FacadeReturned is not null)
         {
             // A block body: the call declares the returned output in place and drops a bool result, and the method
             // returns the output as the call left it (the registration zeroed it before the native ran).
             var returning = $"{config.Class}.{function.Name}({string.Join(", ", native.FacadeReturningArguments)});";
-            Signature(text, start, native.FacadeParameters, ")");
+            Signature(text, start, parameters, ")");
             text.Line("{");
             text.Indent();
-            text.Line(native.Result == "void" ? returning : "_ = " + returning);
+            text.Line(native.Result.Form == Crossing.None ? returning : "_ = " + returning);
             text.Line($"return {native.FacadeReturnedName};");
             text.Outdent();
             text.Line("}");
@@ -548,7 +550,7 @@ internal static class CSharpWriter
         }
 
         var call = $"{config.Class}.{function.Name}({string.Join(", ", native.FacadeArguments)});";
-        var single = $"{start}{string.Join(", ", native.FacadeParameters)}) => {call}";
+        var single = $"{start}{string.Join(", ", parameters)}) => {call}";
         if (text.Indentation + single.Length <= Width)
         {
             text.Line(single);
@@ -556,7 +558,7 @@ internal static class CSharpWriter
         }
 
         // The call on its own line, and the parameters broken as a declaration's are when they overflow too.
-        Signature(text, start, native.FacadeParameters, ") =>");
+        Signature(text, start, parameters, ") =>");
         text.Indent();
         text.Line(call);
         text.Outdent();
