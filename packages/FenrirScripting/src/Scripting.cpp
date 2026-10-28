@@ -2,7 +2,9 @@
 
 #include "ComponentRegistry.hpp"
 #include "EngineContext.hpp"
+#include "ExtensionSet.hpp"
 #include "GenerationLifecycle.hpp"
+#include "NativeRegistrar.hpp"
 #include "ScriptComponents.hpp"
 #include "ScriptData.hpp"
 #include "ScriptSystems.hpp"
@@ -13,7 +15,6 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <functional>
 #include <memory>
@@ -22,8 +23,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <typeindex>
-#include <unordered_map>
 #include <utility>
 
 #if defined(_WIN32)
@@ -39,10 +38,6 @@
 #include <mach-o/dyld.h>
 #endif
 #include <unistd.h>
-#endif
-
-#if __has_include(<cxxabi.h>)
-#include <cxxabi.h>
 #endif
 
 namespace Fenrir
@@ -94,23 +89,21 @@ namespace Fenrir
             return static_cast<int>(getpid());
 #endif
         }
-
-        // A type's name as its source spells it, for a diagnostic. MSVC's type_info already gives it; the Itanium ABI
-        // (GCC, and clang off Windows) gives the mangled name, which is demangled here.
-        std::string ReadableName(const std::type_index& type)
-        {
-#if __has_include(<cxxabi.h>)
-            int status = 0;
-            const std::unique_ptr<char, decltype(&std::free)> demangled(
-                abi::__cxa_demangle(type.name(), nullptr, nullptr, &status), &std::free);
-            if (status == 0 && demangled != nullptr)
-            {
-                return demangled.get();
-            }
-#endif
-            return type.name();
-        }
     } // namespace
+
+    namespace Detail
+    {
+        // The extension set's registrar over Iris: the one line that reaches Iris's registration. NativeFunction's
+        // registrar sets the function's not-running value, state and name, then registers it under its binding name.
+        class IrisNativeRegistrar final : public NativeRegistrar
+        {
+          public:
+            Iris::CallResult<void> Register(const NativeFunction& function, void* state) override
+            {
+                return function.Register(state);
+            }
+        };
+    } // namespace Detail
 
     namespace
     {
@@ -280,8 +273,10 @@ namespace Fenrir
         // native functions.
         std::shared_ptr<Detail::EngineContext> context = std::make_shared<Detail::EngineContext>();
         bool contextActive = false;
-        // Every extension's extension state, kept alive as long as the native functions that receive it can be called.
-        std::vector<std::shared_ptr<void>> extensionStates;
+        // Every extension, its native functions registered and its state kept alive as long as they can be called;
+        // built after the context is active (registering re-points each native's state at this Install's), and never
+        // released (Iris cannot unregister).
+        std::optional<Detail::ExtensionSet> extensions;
 
         // Scripting is live when the engine context points at this state and an App is attached: only then can scripts
         // act on the scene, and only then do changes and reloads mean anything.
@@ -588,24 +583,6 @@ namespace Fenrir
         std::filesystem::path math;
         Detail::GenerationLifecycle::Settings settings;
 
-        // Why `function` cannot be listed by `extension`: it takes an extension state the extension does not carry, or
-        // one of another type. Nothing for a stateless function.
-        const auto checkState = [](const NativeFunction& function,
-                                   const ScriptingExtension& extension) -> std::optional<StartupFailure> {
-            const auto& wanted = function.StateType();
-            const auto& carried = extension.m_stateType;
-            if (!wanted.has_value() || wanted == carried)
-            {
-                return std::nullopt;
-            }
-            const std::string start = "the native function '" + function.Name() + "' of extension '" + extension.name +
-                                      "' takes an extension state of type '" + ReadableName(*wanted) +
-                                      "', but the extension ";
-            return StartupFailure{carried.has_value() ? start + "carries one of type '" + ReadableName(*carried) + "'"
-                                                      : start + "carries none",
-                                  {}};
-        };
-
         // Starting is a list of stages, run in order, and the first to fail ends it: one place reports why, gives
         // everything back and returns a Scripting without scripts. The order matters where the comments say so.
         const std::vector<StartupStage> stages = {
@@ -662,64 +639,23 @@ namespace Fenrir
                 }
                 return std::nullopt;
             },
-            // Every extension's native functions are named Namespace.Type.Method, no name is declared twice, and each
-            // one that takes an extension state is listed by an extension carrying a state of its type.
-            [&]() -> std::optional<StartupFailure> {
-                std::unordered_map<std::string, std::string> declaredBy;
-                for (const auto& extension : config.extensions)
-                {
-                    for (const auto& function : extension.functions)
-                    {
-                        if (function.BindingName().empty())
-                        {
-                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
-                                                      extension.name + "' is not named Namespace.Type.Method",
-                                                  {}};
-                        }
-                        if (auto failure = checkState(function, extension))
-                        {
-                            return failure;
-                        }
-                        const auto [first, added] = declaredBy.emplace(function.Name(), extension.name);
-                        if (!added)
-                        {
-                            return StartupFailure{first->second == extension.name
-                                                      ? "the native function '" + function.Name() +
-                                                            "' is declared twice by extension '" + extension.name + "'"
-                                                      : "the native function '" + function.Name() +
-                                                            "' is declared by both extension '" + first->second +
-                                                            "' and extension '" + extension.name + "'",
-                                                  {}};
-                        }
-                    }
-                }
-                return std::nullopt;
-            },
-            // Only one Scripting is active in a process, and the native functions are registered before .NET starts.
+            // Only one Scripting is active in a process; then the extension set: every extension's native functions
+            // checked (named Namespace.Type.Method, declared once, taking a state their extension carries) and
+            // registered with their states, before the host shares the extensions' contracts, since sharing binds their
+            // fields to these.
             [&]() -> std::optional<StartupFailure> {
                 if (!Detail::ActivateEngineContext(state->context.get()))
                 {
                     return StartupFailure{"another Scripting is already active in this process", {}};
                 }
                 state->contextActive = true;
-                // Before the host shares the extensions' contracts: sharing binds their fields to these.
-                for (const auto& extension : config.extensions)
+                Detail::IrisNativeRegistrar registrar;
+                auto installed = Detail::ExtensionSet::Install(std::move(config.extensions), registrar);
+                if (!installed.Succeeded())
                 {
-                    if (extension.m_state != nullptr)
-                    {
-                        state->extensionStates.push_back(extension.m_state);
-                    }
-                    for (const auto& function : extension.functions)
-                    {
-                        // A stateless function ignores the state; checkState made sure a stateful one gets its type.
-                        if (const auto registered = function.Register(extension.m_state.get()); !registered.Succeeded())
-                        {
-                            return StartupFailure{"the native function '" + function.Name() + "' of extension '" +
-                                                      extension.name + "' could not be registered",
-                                                  registered.diagnostic};
-                        }
-                    }
+                    return StartupFailure{std::move(installed.diagnostic), {}};
                 }
+                state->extensions = std::move(*installed);
                 return std::nullopt;
             },
             // .NET, with the contract shared, and Iris's messages going to the engine's logger.
@@ -731,12 +667,9 @@ namespace Fenrir
                 // Every extension's contract, in order, so the built-in extension's (Fenrir.Math, then the scripting
                 // contract) come first: the others may refer to them, and each is bound as it is shared.
                 // A relative path is beside the scripting contract, where the build deploys a package's contract.
-                for (const auto& extension : config.extensions)
+                for (const auto& assembly : state->extensions->SharedAssemblies())
                 {
-                    for (const auto& assembly : extension.sharedAssemblies)
-                    {
-                        configuration.sharedAssemblies.push_back(bridgeDirectory / assembly);
-                    }
+                    configuration.sharedAssemblies.push_back(bridgeDirectory / assembly);
                 }
 
                 state->logger = &logger;

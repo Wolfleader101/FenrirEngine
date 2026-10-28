@@ -159,6 +159,10 @@ What one engine package, or the app, gives scripting (`ScriptingExtension`, ADR-
 What a scripting extension carries for its native functions to work on: one value of a type the extension names, handed to each of its native functions that asks for it. It is the only way a native function reaches anything of its package beyond the call context.
 *Avoid:* owner, global, user data.
 
+**Extension set**
+Every scripting extension an Install was given, the built-in first, once its native functions have passed the naming, state and duplicate rules and been registered through the `NativeRegistrar` seam (`ExtensionSet`): it keeps the extension states alive for as long as the natives can be called and gives the contracts in extension order, so the contracts are shared only after the natives they bind are registered. The registrar is the seam's Iris adapter in `Scripting.cpp`; the rules tests' fake is the other.
+*Avoid:* registry (that is the components', events', shared structs' and resources'), plugin list.
+
 **Shared struct**
 Plain data a native function takes or returns by pointer that is neither a component nor an event (a query filter, a hit). It is mirrored in C# like a component and checked against its mapping when a script assembly loads.
 *Avoid:* query mirror, parameter struct.

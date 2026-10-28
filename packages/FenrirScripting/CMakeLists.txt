@@ -52,6 +52,9 @@ include(cmake/FenrirScriptingExtension.cmake)
 add_library(FenrirScripting STATIC
     src/Scripting.cpp
     src/Bindings.cpp
+    src/ExtensionSet.cpp
+    src/ExtensionSet.hpp
+    src/NativeRegistrar.hpp
     src/ChangeBuffer.cpp
     src/Queries.cpp
     src/Queries.hpp

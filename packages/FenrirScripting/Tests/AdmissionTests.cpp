@@ -1,6 +1,7 @@
 // What Install and a load refuse, whole and with a message naming the culprit: mismatched and duplicate components,
 // events, shared structs and resources; a script assembly whose report the engine cannot accept; a C# field with no
-// native function, or one whose signature or state differs; and names an extension cannot take.
+// native function, or one whose signature differs; and names an extension cannot take. The extension set's own rules
+// (naming, duplicate and state) are the rules tests' (Rules/ExtensionSetTests.cpp).
 
 #include "FixtureCalls.hpp"
 #include "HeadlessApp.hpp"
@@ -299,25 +300,6 @@ namespace
         }
     }
 
-    void TwoExtensionsDeclaringOneNativeFunctionFailInstallAndNameBoth()
-    {
-        HeadlessApp headless;
-        ScriptingExtension copy;
-        copy.name = "copying extension";
-        copy.functions = {NativeFunction::Make<&TestExtension::Add>("Fenrir.TestExtension.Gadgets.Add")};
-        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(), copy}));
-        {
-            INFO("Scripts ran although two extensions declare one native function");
-            REQUIRE(!scripting.HasScripts());
-        }
-        {
-            INFO("The failure did not name the function and both extensions");
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Fenrir.TestExtension.Gadgets.Add"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'test extension'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'copying extension'"));
-        }
-    }
-
     void AnExtensionCannotTakeAnEngineComponentsName()
     {
         HeadlessApp headless;
@@ -338,44 +320,6 @@ namespace
         {
             INFO("The app did not keep running after the failed install");
             REQUIRE(headless.FramesRun() == Frames);
-        }
-    }
-
-    void ANativeFunctionTakingAStateItsExtensionLacksFailsInstallAndNamesIt()
-    {
-        HeadlessApp headless;
-        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({TheTestExtension(nullptr)}));
-        {
-            INFO("Scripts ran although a native function takes a state its extension does not carry");
-            REQUIRE(!scripting.HasScripts());
-        }
-        {
-            INFO("The failure did not name the function and its state type, say the extension carries none and say the "
-                 "app runs without scripts");
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Fenrir.TestExtension.Gadgets.Tally'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "carries none"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "running without scripts"));
-        }
-    }
-
-    void ANativeFunctionTakingAStateOfAnotherTypeFailsInstallAndNamesBothTypes()
-    {
-        HeadlessApp headless;
-        auto extension = TheTestExtension(nullptr);
-        extension.SetState(std::make_shared<TestExtension::Other>());
-        auto scripting = Scripting::Install(headless.Get(), ExtensionConfig({std::move(extension)}));
-        {
-            INFO("Scripts ran although a native function takes a state of another type than its extension's");
-            REQUIRE(!scripting.HasScripts());
-        }
-        {
-            // The state types are spelled by type_index::name(), which GCC and Clang mangle ("...5OtherE"), so only
-            // the type's own name is looked for.
-            INFO("The failure did not name the function and both state types");
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "'Fenrir.TestExtension.Gadgets.Tally'"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Tally"));
-            REQUIRE(headless.Logger().Contains(Testing::LogLevel::Error, "Other"));
         }
     }
 
@@ -518,21 +462,6 @@ TEST_CASE("a C# field with no native function fails Install and names it", "[scr
 TEST_CASE("a native function whose signature differs from its C# field fails Install and names it", "[scripting]")
 {
     ANativeFunctionWhoseSignatureDiffersFromItsFieldFailsInstallAndNamesIt();
-}
-
-TEST_CASE("two extensions declaring one native function fail Install and name both", "[scripting]")
-{
-    TwoExtensionsDeclaringOneNativeFunctionFailInstallAndNameBoth();
-}
-
-TEST_CASE("a native function taking a state its extension lacks fails Install and names it", "[scripting]")
-{
-    ANativeFunctionTakingAStateItsExtensionLacksFailsInstallAndNamesIt();
-}
-
-TEST_CASE("a native function taking a state of another type fails Install and names both types", "[scripting]")
-{
-    ANativeFunctionTakingAStateOfAnotherTypeFailsInstallAndNamesBothTypes();
 }
 
 TEST_CASE("a shared struct whose C# mirror drifted fails the load and names it", "[scripting]")
