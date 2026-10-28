@@ -15,6 +15,15 @@
     <ProjectReference Include="../../../FenrirMath/Managed/Fenrir.Math/Fenrir.Math.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The test fixtures name an entity by the id C++ hands them, through Entity's internal constructor; a script gets
+         its entities from C++, with the scene set. -->
+    <InternalsVisibleTo Include="Fenrir.ScriptFixture" />
+    <InternalsVisibleTo Include="Fenrir.TestExtensionScript" />
+    <InternalsVisibleTo Include="Fenrir.PhysicsScriptFixture" />
+    <InternalsVisibleTo Include="Fenrir.RendererScriptFixture" />
+    <InternalsVisibleTo Include="Fenrir.DebugDrawScriptFixture" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- The engine's own components (Transform, Name, Relationship) live in this assembly, so the generator that gives
          every component its Ref<T> accessors runs on it too. -->
     <ProjectReference Include="../Fenrir.Scripting.Generators/Fenrir.Scripting.Generators.csproj"

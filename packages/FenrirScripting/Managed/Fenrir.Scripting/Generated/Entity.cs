@@ -6,12 +6,12 @@ namespace Fenrir.Scripting;
 #pragma warning disable CS0169, CS0414, CS0649
 
 /// <summary>Entity class that is used to interact with the entity list. This forms the basis of the ECS</summary>
-public readonly partial struct EntityLink
+public readonly partial struct Entity
 {
     private readonly uint value = 4294967295;
     private readonly ulong owner = 0;
 
-    public EntityLink()
+    public Entity()
     {
     }
 }
