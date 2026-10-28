@@ -662,56 +662,13 @@ namespace Fenrir
                 state->context->app = &app;
                 state->context->components = &state->components;
                 state->context->changes = &state->changes;
-                // Every extension's components, events, shared structs and resources, in order, by the same rules: the
-                // registry refuses a name that is empty or that any of its tables already holds, whatever its kind.
+                // Every extension's components, events, shared structs and resources, in order, by the registry's one
+                // rule for every kind (ComponentRegistry::AddExtension).
                 for (auto& extension : config.extensions)
                 {
-                    const std::string source = "extension '" + extension.name + "'";
-                    auto addAll = [&](auto& registrations, auto& table,
-                                      auto&& before) -> std::optional<StartupFailure> {
-                        for (auto& registration : registrations)
-                        {
-                            if (auto failure = before(registration))
-                            {
-                                return failure;
-                            }
-                            if (table.Add(std::move(registration)) < 0)
-                            {
-                                const std::string noun(table.Noun());
-                                const char* article =
-                                    std::string_view("aeiou").find(noun[0]) == std::string_view::npos ? "a " : "an ";
-                                return StartupFailure{
-                                    article + noun + " in " + source + " has an empty or duplicate name", {}};
-                            }
-                        }
-                        return std::nullopt;
-                    };
-                    auto nothing = [](const auto&) -> std::optional<StartupFailure> { return std::nullopt; };
-                    // An event's queue is the App's: it is named before the event is registered.
-                    auto bindQueue = [&](EventRegistration& registration) -> std::optional<StartupFailure> {
-                        if (registration.bind && !registration.bind(app))
-                        {
-                            return StartupFailure{"the event '" + registration.name + "' in " + source +
-                                                      " names a queue the app already has under another type",
-                                                  {}};
-                        }
-                        return std::nullopt;
-                    };
-                    if (auto failure = addAll(extension.components, state->components.Components(), nothing))
+                    if (auto failure = state->components.AddExtension(extension, app))
                     {
-                        return failure;
-                    }
-                    if (auto failure = addAll(extension.events, state->components.Events(), bindQueue))
-                    {
-                        return failure;
-                    }
-                    if (auto failure = addAll(extension.sharedStructs, state->components.SharedStructs(), nothing))
-                    {
-                        return failure;
-                    }
-                    if (auto failure = addAll(extension.resources, state->components.Resources(), nothing))
-                    {
-                        return failure;
+                        return StartupFailure{std::move(*failure), {}};
                     }
                 }
                 return std::nullopt;

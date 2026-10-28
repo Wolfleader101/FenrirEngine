@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -9,8 +10,10 @@
 #include <utility>
 #include <vector>
 
+#include "FenrirApp/App.hpp"
 #include "FenrirScripting/ComponentRegistry.hpp"
 #include "FenrirScripting/Errors.hpp"
+#include "FenrirScripting/ScriptingExtension.hpp"
 
 namespace Fenrir::Detail
 {
@@ -204,6 +207,39 @@ namespace Fenrir::Detail
             return m_resources;
         }
 
+        // Registers everything `extension` gives C# by name, moving its lists into the tables in the order Install
+        // always used: components, events (each event's queue is named in `app` before the event is added, since the
+        // queue is the App's), shared structs, resources, all under the one rule that a name names one thing across
+        // every kind. Returns why it stopped, phrased for Scripting::Install's startup failure, or nothing. A failure
+        // midway leaves what was added before it: Install discards the registry with the Scripting it was building, so
+        // nothing reads a half-registered extension.
+        [[nodiscard]] std::optional<std::string> AddExtension(ScriptingExtension& extension, App& app)
+        {
+            const std::string source = "extension '" + extension.name + "'";
+            const auto nothing = [](const auto&) -> std::optional<std::string> { return std::nullopt; };
+            const auto nameQueue = [&](const EventRegistration& registration) -> std::optional<std::string> {
+                if (registration.bind && !registration.bind(app))
+                {
+                    return "the event '" + registration.name + "' in " + source +
+                           " names a queue the app already has under another type";
+                }
+                return std::nullopt;
+            };
+            if (auto failure = AddAllOf(extension.components, m_components, source, nothing))
+            {
+                return failure;
+            }
+            if (auto failure = AddAllOf(extension.events, m_events, source, nameQueue))
+            {
+                return failure;
+            }
+            if (auto failure = AddAllOf(extension.sharedStructs, m_sharedStructs, source, nothing))
+            {
+                return failure;
+            }
+            return AddAllOf(extension.resources, m_resources, source, nothing);
+        }
+
         // Forgets every component and event a script assembly defined (what a released generation leaves), keeping the
         // native ones. Only those two tables take script-defined entries.
         void RemoveScriptDefined()
@@ -219,6 +255,30 @@ namespace Fenrir::Detail
         }
 
       private:
+        // Moves `registrations` into `table`, running `before` on each first; the message names the kind as the table's
+        // noun ("a component", "an event") and the extension it came from.
+        template <typename Registration, typename Before>
+        static std::optional<std::string> AddAllOf(std::vector<Registration>& registrations,
+                                                   RegistryTable<Registration>& table, const std::string& source,
+                                                   Before before)
+        {
+            for (auto& registration : registrations)
+            {
+                if (auto failure = before(registration))
+                {
+                    return failure;
+                }
+                if (table.Add(std::move(registration)) < 0)
+                {
+                    const std::string noun(table.Noun());
+                    const char* article =
+                        std::string_view("aeiou").find(noun[0]) == std::string_view::npos ? "a " : "an ";
+                    return article + noun + " in " + source + " has an empty or duplicate name";
+                }
+            }
+            return std::nullopt;
+        }
+
         std::uint32_t m_generation = NextRegistryGeneration();
         std::unordered_set<std::string> m_names;
         RegistryTable<ComponentRegistration> m_components{m_generation, m_names, "component"};

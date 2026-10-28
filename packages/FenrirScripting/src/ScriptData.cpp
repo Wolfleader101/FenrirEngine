@@ -242,12 +242,15 @@ namespace Fenrir::Detail
                 registrations.reserve(found.size());
                 for (const auto& description : found)
                 {
+                    // Its C# struct is the definition: there is no mapping to check it against, so `validate` stays
+                    // empty.
                     registrations.push_back(ComponentRegistration{
-                        .name = description.name,
-                        .typeName = description.name,
-                        .type = ComponentType::Dynamic(ToDynamicType(description)),
-                        .scriptDefined = true,
-                        .validate = {}, // Its C# struct is the definition: there is no mapping to check it against.
+                        MirrorRegistration{.name = description.name,
+                                           .typeName = description.name,
+                                           .size = description.size,
+                                           .alignment = description.alignment,
+                                           .scriptDefined = true},
+                        ComponentType::Dynamic(ToDynamicType(description)),
                     });
                 }
                 // All or none: the checks make a refusal impossible, but if one happens nothing is half-registered.

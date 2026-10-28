@@ -12,11 +12,11 @@
 
 **Touches:** `packages/FenrirScripting/include/FenrirScripting/ComponentRegistry.hpp`, `packages/FenrirScripting/src/ComponentRegistry.hpp`, `packages/FenrirScripting/src/Scripting.cpp`, `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/Tests/Rules/RegistryTableTests.cpp`
 
-**Status:** open
+**Status:** claimed
 
-- [ ] `include/FenrirScripting/ComponentRegistry.hpp` declares `typeName`, `size`, `alignment` and `validate` once, in `MirrorRegistration`; the header is shorter than today's 337 lines.
-- [ ] `grep -n "addAll\|bindQueue" packages/FenrirScripting/src/Scripting.cpp` finds nothing.
-- [ ] The new `RegistryTableTests.cpp` cases pass; every scripting test passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op (the generated registrations call the same makers); `check_tickets.py` and clang-format pass.
+- [x] `include/FenrirScripting/ComponentRegistry.hpp` declares `typeName`, `size`, `alignment` and `validate` once, in `MirrorRegistration`; the header is shorter than today's 337 lines.
+- [x] `grep -n "addAll\|bindQueue" packages/FenrirScripting/src/Scripting.cpp` finds nothing.
+- [x] The new `RegistryTableTests.cpp` cases pass; every scripting test passes under the msvc-x64-debug preset; `fenrir-generate-bindings` is a no-op (the generated registrations call the same makers); `check_tickets.py` and clang-format pass.
 
 ## Comments
 
