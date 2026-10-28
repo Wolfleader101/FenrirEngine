@@ -16,7 +16,7 @@ internal static unsafe partial class Native
     /// string.
     /// </summary>
     [NativeFunction]
-    public static partial void Log(int level, string text);
+    public static partial void Log(int level, ReadOnlySpan<char> text);
 
     /// <summary>The length of the frame being run, in seconds.</summary>
     [NativeFunction]
@@ -63,12 +63,12 @@ internal static unsafe partial class Native
     /// it is registered for a different C# type (so a script cannot claim a native component with a struct of its own).
     /// </returns>
     [NativeFunction]
-    public static partial int ComponentIdOf(string name, string typeName);
+    public static partial int ComponentIdOf(ReadOnlySpan<char> name, ReadOnlySpan<char> typeName);
 
     /// <summary>A script assembly reports a component type it defines, while it loads.</summary>
     /// <returns>False when nothing is loading.</returns>
     [NativeFunction]
-    public static partial bool RegisterScriptComponent(string name, int size, int alignment);
+    public static partial bool RegisterScriptComponent(ReadOnlySpan<char> name, int size, int alignment);
 
     /// <summary>Which registry ids belong to: it changes every time a registry is created.</summary>
     [NativeFunction]
@@ -143,12 +143,12 @@ internal static unsafe partial class Native
     /// different C# type.
     /// </returns>
     [NativeFunction]
-    public static partial int EventIdOf(string name, string typeName);
+    public static partial int EventIdOf(ReadOnlySpan<char> name, ReadOnlySpan<char> typeName);
 
     /// <summary>A script assembly reports an event type it defines, while it loads.</summary>
     /// <returns>False when nothing is loading.</returns>
     [NativeFunction]
-    public static partial bool RegisterScriptEvent(string name, int size, int alignment);
+    public static partial bool RegisterScriptEvent(ReadOnlySpan<char> name, int size, int alignment);
 
     /// <summary>Records an event to send when the system returns (see ChangeBuffer::SendEvent).</summary>
     /// <returns>
@@ -199,7 +199,7 @@ internal static unsafe partial class Native
     /// it is registered for a different C# type.
     /// </returns>
     [NativeFunction]
-    public static partial int ResourceIdOf(string name, string typeName);
+    public static partial int ResourceIdOf(ReadOnlySpan<char> name, ReadOnlySpan<char> typeName);
 
     /// <summary>
     /// A pointer to the resource in the engine's storage (the active scene's, for a scene resource), good until the
