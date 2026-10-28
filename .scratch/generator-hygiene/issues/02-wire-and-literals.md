@@ -11,11 +11,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/Natives.cs`, `packages/Iris/Tools/Iris.Bindings/src/Binding.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpWriter.cs`, `packages/Iris/Tools/Iris.Bindings/src/CSharpLiteral.cs`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -n "Wire" packages/Iris/Tools/Iris.Bindings/src/*.cs` finds nothing; `grep -n "CultureInfo" packages/Iris/Tools/Iris.Bindings/src/Binding.cs` finds nothing.
-- [ ] Iris.Bindings' tests pass unchanged; `fenrir-generate-bindings` is a no-op after the commit (no generated file changes).
-- [ ] `check_tickets.py` passes.
+- [x] `grep -n "Wire" packages/Iris/Tools/Iris.Bindings/src/*.cs` finds nothing; `grep -n "CultureInfo" packages/Iris/Tools/Iris.Bindings/src/Binding.cs` finds nothing.
+- [x] Iris.Bindings' tests pass unchanged; `fenrir-generate-bindings` is a no-op after the commit (no generated file changes).
+- [x] `check_tickets.py` passes.
 
 ## Comments
 

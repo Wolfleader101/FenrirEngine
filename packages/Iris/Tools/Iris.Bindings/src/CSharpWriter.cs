@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 namespace Iris.Bindings;
 
@@ -10,9 +11,45 @@ internal static class CSharpWriter
 {
     private const int Width = 120;
 
-    /// <summary>Each mirror's file name (<c>&lt;Type&gt;.cs</c>) and text.</summary>
-    public static IEnumerable<KeyValuePair<string, string>> Mirrors(Binding binding) =>
-        binding.Mirrored.Select(type => KeyValuePair.Create(binding.CSharpName(type) + ".cs", Mirror(binding, type)));
+    /// <summary>
+    /// Each mirror's file name (<c>&lt;Type&gt;.cs</c>) and text. Every mirrored field's recorded default is spelled first,
+    /// whether or not its mirror initialises it, so one the writer cannot spell fails naming the field before anything is
+    /// written.
+    /// </summary>
+    public static IEnumerable<KeyValuePair<string, string>> Mirrors(Binding binding)
+    {
+        foreach (var type in binding.Mirrored)
+        {
+            CheckDefaults(binding, type);
+        }
+
+        return binding.Mirrored.Select(type => KeyValuePair.Create(binding.CSharpName(type) + ".cs", Mirror(binding, type)));
+    }
+
+    private static void CheckDefaults(Binding binding, DescribedType type)
+    {
+        foreach (var field in type.Fields)
+        {
+            var where = $"{type.Source}: {type.Name}::{field.Name}";
+            if (field.Kind.IsArray)
+            {
+                if (field.Default.ValueKind != JsonValueKind.Array || field.Default.GetArrayLength() != field.Kind.Length)
+                {
+                    throw new BindingException($"{where}: an array's default is a list of {field.Kind.Length} elements");
+                }
+
+                var index = 0;
+                foreach (var element in field.Default.EnumerateArray())
+                {
+                    _ = ElementDefault(binding, field.Kind, element, $"{where}[{index++}]");
+                }
+            }
+            else
+            {
+                _ = Default(binding, field.Kind.Kind, field.Kind.Type, field.Default, where);
+            }
+        }
+    }
 
     private static string Mirror(Binding binding, DescribedType type)
     {
@@ -167,7 +204,7 @@ internal static class CSharpWriter
             }
             else if (initialised)
             {
-                var value = binding.Default(member.Kind.Kind, member.Kind.Type, member.Default, member.Name);
+                var value = Default(binding, member.Kind.Kind, member.Kind.Type, member.Default, member.Name);
                 text.Line($"{field} {binding.CSharpType(member.Kind.Kind, member.Kind.Type)} {memberName} = {value};");
             }
             else
@@ -191,7 +228,7 @@ internal static class CSharpWriter
                 var index = 0;
                 foreach (var element in member.Default.EnumerateArray())
                 {
-                    text.Line($"{memberName}[{index}] = {binding.ElementDefault(member.Kind, element, member.Name)};");
+                    text.Line($"{memberName}[{index}] = {ElementDefault(binding, member.Kind, element, member.Name)};");
                     index++;
                 }
             }
@@ -217,6 +254,109 @@ internal static class CSharpWriter
             text.Line("}");
         }
     }
+
+    /// <summary>
+    /// The C# expression for a recorded default of a field of this kind and type, or null when the field needs none (an
+    /// array, which the constructor fills). <paramref name="where" /> names the field in diagnostics.
+    /// </summary>
+    private static string? Default(Binding binding, string kind, string? type, JsonElement value, string where)
+    {
+        switch (kind)
+        {
+            case "array":
+                return null;
+            case "pointer":
+                return CSharpLiteral.Pointer(value, where);
+            case "bool":
+                return CSharpLiteral.Bool(value, where);
+            case "char16":
+                return CSharpLiteral.Char(value, where);
+            case "f32":
+            case "f64":
+                return CSharpLiteral.Float(value, kind == "f32", where);
+            case "enum":
+            {
+                var described = binding.Type(type!);
+                var name = value.ValueKind == JsonValueKind.String ? value.GetString()! : "";
+                if (described.Values.All(enumerator => enumerator.Name != name))
+                {
+                    throw new BindingException($"{where}: the default {value} is not an enumerator of {described.Name}");
+                }
+
+                return $"{binding.CSharpName(described)}.{binding.MemberName(described, name)}";
+            }
+            case "struct":
+                return StructDefault(binding, binding.Type(type!), value, where);
+            default:
+                return CSharpLiteral.Integer(value, kind, where);
+        }
+    }
+
+    private static string StructDefault(Binding binding, DescribedType type, JsonElement value, string where)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new BindingException($"{where}: a struct's default is an object, not {value}");
+        }
+
+        var members = value.EnumerateObject().ToList();
+        if (members.Count == 0)
+        {
+            return type.Category == Category.BoundType && binding.BoundTypeOf(type).Default is { } own ? own : "new()";
+        }
+
+        if (type.Category == Category.BoundType)
+        {
+            // A bound type's components, by name in storage order: through its configured constructor, else by name.
+            // Their kinds are not described, so an integral value is written as the integer it is (as a float a large
+            // one would round), which C# converts to the component's type as C++ does.
+            var bound = binding.BoundTypeOf(type);
+            var components = members.ToDictionary(member => member.Name,
+                                                  member => member.Value.ValueKind == JsonValueKind.Number &&
+                                                            !member.Value.GetRawText().Any(c => c is '.' or 'e' or 'E')
+                                                                ? member.Value.GetRawText()
+                                                                : CSharpLiteral.Float(member.Value, true, where));
+            if (bound.Constructor is { } parameters)
+            {
+                var missing = parameters.Where(parameter => !components.ContainsKey(parameter))
+                                  .Concat(components.Keys.Where(component => !parameters.Contains(component)))
+                                  .ToList();
+                if (missing.Count > 0)
+                {
+                    throw new BindingException(
+                        $"{where}: the default names components {string.Join(", ", components.Keys)}, but " +
+                        $"{type.Name}'s constructor in [bound-types] takes {string.Join(", ", parameters)}");
+                }
+
+                return $"new({string.Join(", ", parameters.Select(parameter => components[parameter]))})";
+            }
+
+            return "new() { " +
+                   string.Join(", ", members.Select(member => $"{binding.MemberName(type, member.Name)} = {components[member.Name]}")) +
+                   " }";
+        }
+
+        if (type.Category != Category.Struct)
+        {
+            throw new BindingException($"{where}: a default may set members only of a struct, not of {type.Name}");
+        }
+
+        var assignments = new List<string>();
+        foreach (var member in members)
+        {
+            var field = type.Fields.FirstOrDefault(field => field.Name == member.Name) ??
+                        throw new BindingException($"{where}: the default sets '{member.Name}', which {type.Name} lacks");
+            var expression = Default(binding, field.Kind.Kind, field.Kind.Type, member.Value, $"{where}.{member.Name}") ??
+                             throw new BindingException($"{where}: a default cannot set the array '{member.Name}'");
+            assignments.Add($"{binding.MemberName(type, field.Name)} = {expression}");
+        }
+
+        return "new() { " + string.Join(", ", assignments) + " }";
+    }
+
+    /// <summary>The C# expression of one array element's default.</summary>
+    private static string ElementDefault(Binding binding, FieldKind array, JsonElement value, string where) =>
+        Default(binding, array.ElementKind!, array.ElementType, value, where)!;
 
     /// <summary>The defaults test's C# class: one static method per registered type, returning its <c>new T()</c>.</summary>
     public static string Defaults(Binding binding, TestsConfig tests, string cppTestName)
