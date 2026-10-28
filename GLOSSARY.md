@@ -200,7 +200,7 @@ A struct of exactly one field, which a native function takes or returns by value
 *Avoid:* handle (an `AssetHandle<T>` has two fields and crosses by pointer, as a bound type), strong typedef, newtype.
 
 **Crossing form**
-The form in which a native function's parameter or result crosses to C#, decided once by the binding from the natives description and the binding's configuration: a value, `in T`, `out T`, a pointer (`T*`, `void*`), a span, a read-only span, or text. The registration zeroes each `out` before the native runs; a span or text folds the C++ count or length after it. Iris.Bindings carries it as a typed record (`BoundParameter`, the `.scratch/bound-parameter` spec), and the description stays raw: a pointee's C# name, a wrapper and a `[natives] types` alias are the binding's facts, not the C++ header's.
+The form in which a native function's parameter or result crosses to C#, decided once by the binding from the natives description and the binding's configuration: a value, `in T`, `out T`, a pointer (`T*`, `void*`), a span, a read-only span, or text. The registration zeroes each `out` before the native runs; a span or text folds the C++ count or length after it. Iris.Bindings carries it as a typed record (`BoundParameter`; the `.scratch/bound-parameter` spec, built and removed, is last held by commit ed1516a7), and the description stays raw: a pointee's C# name, a wrapper and a `[natives] types` alias are the binding's facts, not the C++ header's.
 *Avoid:* parameter kind (the description's `kind` is the C++ type's), modifier (only `in` and `out` have one), marshalling.
 
 **Call context**
