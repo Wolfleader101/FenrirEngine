@@ -13,24 +13,24 @@ public static partial class PhysicsWorld
 {
     /// <summary>Pushes the entity's body with `force` (newtons, world space) for the next step only.</summary>
     /// <returns>Whether the force was queued: false with no physics world or no body.</returns>
-    public static bool AddForce(Entity entity, Vector3 force) => PhysicsNative.AddForce(entity, in force);
+    public static bool AddForce(Entity entity, Vector3 force) => PhysicsNative.AddForce(in entity, in force);
 
     /// <summary>
     /// Changes the velocity of the entity's body by `impulse` (newton seconds) over its mass, at the next step.
     /// </summary>
     /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
-    public static bool AddImpulse(Entity entity, Vector3 impulse) => PhysicsNative.AddImpulse(entity, in impulse);
+    public static bool AddImpulse(Entity entity, Vector3 impulse) => PhysicsNative.AddImpulse(in entity, in impulse);
 
     /// <summary>Twists the entity's body with `torque` (newton metres, world space) for the next step only.</summary>
     /// <returns>Whether the torque was queued: false with no physics world or no body.</returns>
-    public static bool AddTorque(Entity entity, Vector3 torque) => PhysicsNative.AddTorque(entity, in torque);
+    public static bool AddTorque(Entity entity, Vector3 torque) => PhysicsNative.AddTorque(in entity, in torque);
 
     /// <summary>
     /// Changes the angular velocity of the entity's body by `impulse` over its moment of inertia, at the next step.
     /// </summary>
     /// <returns>Whether the impulse was queued: false with no physics world or no body.</returns>
     public static bool AddAngularImpulse(Entity entity, Vector3 impulse) =>
-        PhysicsNative.AddAngularImpulse(entity, in impulse);
+        PhysicsNative.AddAngularImpulse(in entity, in impulse);
 
     /// <summary>
     /// Writes the contacts the body entity `body` (a rigid body or a character body) has now, as of the last step, to
@@ -41,16 +41,16 @@ public static partial class PhysicsWorld
     /// </summary>
     /// <param name="contacts">Where to write at most `capacity` contacts.</param>
     /// <returns>How many it wrote.</returns>
-    public static int ContactsOf(Entity body, Span<Contact> contacts) => PhysicsNative.ContactsOf(body, contacts);
+    public static int ContactsOf(Entity body, Span<Contact> contacts) => PhysicsNative.ContactsOf(in body, contacts);
 
     /// <summary>
     /// Whether the body of `body` (a child collider's entity stands for its compound body) is asleep: false with no
     /// world or no body.
     /// </summary>
-    public static bool IsSleeping(Entity body) => PhysicsNative.IsSleeping(body);
+    public static bool IsSleeping(Entity body) => PhysicsNative.IsSleeping(in body);
 
     /// <summary>The world-space box around the body of `body` (PhysicsWorld::Bounds).</summary>
     /// <param name="bounds">The box; the default when there is none.</param>
     /// <returns>Whether the entity has a body; `bounds` is default when it does not.</returns>
-    public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(body, out bounds);
+    public static bool Bounds(Entity body, out Bounds bounds) => PhysicsNative.Bounds(in body, out bounds);
 }

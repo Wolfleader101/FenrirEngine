@@ -29,7 +29,7 @@ if(TARGET IrisManagedBuild)
 endif()
 
 add_executable(IrisBindingsDefaults tests/Fixture/Tests/Generated/FixtureDefaultsTests.cpp)
-target_include_directories(IrisBindingsDefaults PRIVATE tests/Fixture tests/Fixture/Native tests/Fixture/Tests)
+target_include_directories(IrisBindingsDefaults PRIVATE tests/Fixture tests/Fixture/Native tests/Fixture/Tests tests/Fixture/Uses/Native)
 target_link_libraries(IrisBindingsDefaults PRIVATE Iris::Iris Catch2::Catch2WithMain)
 add_dependencies(IrisBindingsDefaults IrisBindingsFixtureAssembly)
 iris_deploy(IrisBindingsDefaults)

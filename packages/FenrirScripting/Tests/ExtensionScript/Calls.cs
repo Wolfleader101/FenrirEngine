@@ -8,7 +8,11 @@ public static class Calls
 {
     public static int Add(int left, int right) => Gadgets.Add(left, right);
 
-    public static uint EchoEntity(uint entity) => Gadgets.EchoEntity(new Entity(entity)).Value;
+    public static uint EchoEntity(uint entity)
+    {
+        Gadgets.EchoEntity(new Entity(entity), out Entity echoed);
+        return echoed.Value;
+    }
 
     public static float HeightOf(uint entity) => Gadgets.HeightOf(new Entity(entity));
 
@@ -113,7 +117,7 @@ public static class Calls
     // The change buffer from an extension's native function: a created entity is usable at once.
     public static uint SpawnCharged(int level)
     {
-        Entity entity = Gadgets.SpawnCharged(level);
+        Gadgets.SpawnCharged(level, out Entity entity);
         if (!entity.IsValid)
             throw new InvalidOperationException("The entity a native function created is not alive in the same call.");
         return entity.Value;
@@ -121,7 +125,11 @@ public static class Calls
 
     public static void Rearrange(uint kept, uint doomed, float wind) => Gadgets.Rearrange(new Entity(kept), new Entity(doomed), wind);
 
-    public static uint SpawnUnder(uint parent) => Gadgets.SpawnUnder(new Entity(parent)).Value;
+    public static uint SpawnUnder(uint parent)
+    {
+        Gadgets.SpawnUnder(new Entity(parent), out Entity child);
+        return child.Value;
+    }
 
     private static string? Message(Action action)
     {

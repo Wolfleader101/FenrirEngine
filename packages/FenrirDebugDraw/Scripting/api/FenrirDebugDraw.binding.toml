@@ -5,8 +5,8 @@
 # Paths are relative to this file. `cmake --build <dir> --target fenrir-generate-bindings`
 # regenerates every output below; they are committed.
 namespace = "Fenrir.DebugDraw"
-# The entity value the options hold is the built-in binding's, and FenrirMath's colour and box the math binding's: named
-# as theirs, never mirrored here.
+# The entity the options hold is the built-in binding's mirror of the engine's, and FenrirMath's colour and box the math
+# binding's: named as theirs, never mirrored here.
 uses = [
     "../../../FenrirScripting/api/FenrirScripting.binding.toml",
     "../../../FenrirScripting/api/FenrirMath.binding.toml",

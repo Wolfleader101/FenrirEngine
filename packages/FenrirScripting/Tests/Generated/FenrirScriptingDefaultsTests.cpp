@@ -179,10 +179,10 @@ namespace
     }
 } // namespace
 
-TEST_CASE("C#'s new EntityLink() has C++'s Fenrir::Entity{} defaults, field by field", "[scripting][bindings]")
+TEST_CASE("C#'s new Entity() has C++'s Fenrir::Entity{} defaults, field by field", "[scripting][bindings]")
 {
     Fenrir::Testing::FixtureApp app;
-    CheckDefaults<Fenrir::Entity>(Fenrir::ScriptingProbe::Component(app.scripting), "EntityLink");
+    CheckDefaults<Fenrir::Entity>(Fenrir::ScriptingProbe::Component(app.scripting), "Entity");
 }
 
 TEST_CASE("C#'s new Name() has C++'s Fenrir::Name{} defaults, field by field", "[scripting][bindings]")

@@ -13,9 +13,11 @@ namespace Fixture.Bindings;
 /// </summary>
 internal static unsafe partial class FixtureNative
 {
-    /// <summary>Pushes the body of `body` with `force`: an alias, and a const pointer, after the state.</summary>
+    /// <summary>
+    /// Pushes the body of `body` with `force`: a pointer to an alias, and a const pointer, after the state.
+    /// </summary>
     [NativeFunction]
-    public static partial bool Push(Entity body, in Vector3 force);
+    public static partial bool Push(in Entity body, in Vector3 force);
 
     /// <summary>
     /// The nearest hit from `origin`.
@@ -90,5 +92,20 @@ internal static unsafe partial class FixtureNative
     /// (Fixture.binding.toml uses it) and Fixture.api.json does not.
     /// </summary>
     [NativeFunction]
-    public static partial void Damp(Entity body, in Damper damper, in Angles angles);
+    public static partial void Damp(in Entity body, in Damper damper, in Angles angles);
+
+    /// <summary>
+    /// Whether `body` is heavier than `mass`: marked as a method of the mirror its first parameter is, so an instance
+    /// method of Body.
+    /// </summary>
+    /// <param name="body">The body, which the method is called on.</param>
+    /// <param name="mass">Kilograms.</param>
+    [NativeFunction]
+    public static partial bool Outweighs(in Body body, float mass);
+
+    /// <summary>A body of `mass`: marked as a method of a mirror it only writes, so a static method of Body.</summary>
+    /// <param name="body">The body; the default when none was made.</param>
+    /// <returns>Whether one was made.</returns>
+    [NativeFunction]
+    public static partial bool Make(out Body body, float mass);
 }

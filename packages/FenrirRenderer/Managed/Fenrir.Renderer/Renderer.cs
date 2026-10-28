@@ -1,4 +1,6 @@
 using Fenrir.Assets;
+using Fenrir.Input;
+using Fenrir.Math;
 using Fenrir.Scripting;
 
 namespace Fenrir.Renderer;
@@ -6,8 +8,8 @@ namespace Fenrir.Renderer;
 // The renderer's components (MeshRenderer, Camera and its unions, DirectionalLight), its scene resources (AmbientLight, Sky),
 // RendererStats and RendererNative are generated from FenrirRenderer's headers and Scripting/src/RendererScripting.cpp
 // (Generated/), and so are Renderer's pass-throughs (Generated/Renderer.cs, from the natives' @facade marks: picking,
-// bounds and stats). This part of the facade holds what a description cannot say: the class doc and SpawnModel, which
-// defaults the parent and packs the model handle.
+// bounds and stats). This part of the facade holds what a description cannot say: the class doc, CameraAt, which returns
+// the native's output as a value, and SpawnModel, which defaults the parent and packs the model handle.
 
 /// <summary>
 /// The renderer from C#: picking, bounds, stats and spawning models, as FenrirRenderer's <c>Renderer</c> and
@@ -27,6 +29,14 @@ namespace Fenrir.Renderer;
 public static partial class Renderer
 {
     /// <summary>
+    /// The camera drawn last at <paramref name="point"/> of <paramref name="window"/>, in window pixels from its top-left:
+    /// the highest-order enabled camera in the active scene whose viewport holds it.
+    /// </summary>
+    /// <returns>The camera entity, or <see cref="Entity.None"/> when there is none or no renderer.</returns>
+    public static Entity CameraAt(WindowId window, Vector2 point) =>
+        RendererNative.CameraAt(window, in point, out Entity camera) ? camera : Entity.None;
+
+    /// <summary>
     /// Spawns <paramref name="model"/> into the active scene as drawn entities, as C++'s <c>SpawnModel</c> does: a root named
     /// after the file holding one entity per node, each mesh a <see cref="MeshRenderer"/>. The root is usable at once (alive,
     /// so it can be given components or parented in the same call); the tree is made, as every structural change is, when
@@ -40,5 +50,5 @@ public static partial class Renderer
     /// <see cref="Entity.None"/>. A parent that is not alive spawns nothing.
     /// </summary>
     public static Entity SpawnModel(AssetHandle<Model> model, Entity parent) =>
-        RendererNative.SpawnModel(model.Bits, parent);
+        RendererNative.SpawnModel(model.Bits, in parent, out Entity root) ? root : Entity.None;
 }

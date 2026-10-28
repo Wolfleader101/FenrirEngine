@@ -111,23 +111,66 @@ public sealed class DescribeTests
                     $"A struct selected as an enum should fail naming it, but failed with\n  {exception.Message}");
     }
 
-    [Theory]
-    [InlineData("\"Failing::NoInitialiser\" = \"component\"")]
-    [InlineData("\"Failing::PrivateMember\" = \"bound-type\"")]
-    public void PrivateMembersNamingATypeTheSelectionDoesNotShareFails(string types)
+    [Fact]
+    public void PrivateMembersNamingABoundTypeFails()
     {
         using var directory = new TemporaryDirectory();
         var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
         var selection = Path.Combine(directory.Path, "Private.api.toml");
         File.WriteAllText(selection,
-                          $"headers = [\"{header}\"]\nprivate-members = [\"Failing::PrivateMember\"]\n\n[types]\n{types}\n");
+                          $"headers = [\"{header}\"]\nprivate-members = [\"Failing::PrivateMember\"]\n\n[types]\n" +
+                          "\"Failing::PrivateMember\" = \"bound-type\"\n");
 
         var exception = Assert.Throws<DescribeException>(() => Selection.Read(selection));
 
-        Assert.True(exception.Message.Contains("'private-members' names Failing::PrivateMember, which [types] does not " +
-                                               "select as a component, event, resource or shared struct", StringComparison.Ordinal),
-                    "A private-members entry that is not a selected plain-data type should fail naming it, but failed " +
-                    $"with\n  {exception.Message}");
+        Assert.True(exception.Message.Contains("'private-members' names Failing::PrivateMember, which [types] selects as a " +
+                                               "bound type or an enum, not a component, event, resource or shared struct",
+                                               StringComparison.Ordinal),
+                    $"A private-members entry selected as a bound type should fail naming it, but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void PrivateMembersNamingATypeNothingSelectedHoldsFails()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Private.api.toml");
+        File.WriteAllText(selection,
+                          $"headers = [\"{header}\"]\nprivate-members = [\"Failing::PrivateMember\"]\n\n[types]\n" +
+                          "\"Failing::NoInitialiser\" = \"component\"\n");
+
+        var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
+
+        Assert.True(exception.Message.Contains("error: 'private-members' names Failing::PrivateMember, which [types] does " +
+                                               "not select and no selected type holds", StringComparison.Ordinal),
+                    "A private-members entry that is neither selected nor held by a selected type should fail naming it, " +
+                    $"but failed with\n  {exception.Message}");
+    }
+
+    [Fact]
+    public void ANestedTypeWithAPrivateMemberIsDescribedOnlyWhenPrivateMembersNamesIt()
+    {
+        using var directory = new TemporaryDirectory();
+        var header = Path.Combine(FixtureDirectory(), "Failing.hpp").Replace('\\', '/');
+        var selection = Path.Combine(directory.Path, "Holds.api.toml");
+        const string types = "[types]\n\"Failing::HoldsPrivateMember\" = \"component\"\n";
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\n\n{types}");
+
+        var exception = Assert.Throws<DescribeException>(() => Describer.Describe(Selection.Read(selection), []));
+        Assert.True(exception.Message.Contains("error: Failing::PrivateMember::m_hidden: a private data member outside the " +
+                                               "tagged-union shape", StringComparison.Ordinal) &&
+                    exception.Message.Contains("(reached through Failing::HoldsPrivateMember::member)", StringComparison.Ordinal),
+                    "Without private-members, a nested type's private member should fail naming the field it is reached " +
+                    $"through, but failed with\n  {exception.Message}");
+
+        File.WriteAllText(selection, $"headers = [\"{header}\"]\nprivate-members = [\"Failing::PrivateMember\"]\n\n{types}");
+
+        var description = Describer.Describe(Selection.Read(selection), []);
+
+        var nested = (StructDescription)description.Types.Single(type => type.Name == "Failing::PrivateMember");
+        Assert.True(nested.Role == Role.Nested && nested.Fields.Select(field => field.Name).SequenceEqual(["visible", "m_hidden"]),
+                    "With private-members naming it, the nested type should be described with its private member, but is " +
+                    $"{nested.Role} with fields {string.Join(", ", nested.Fields.Select(field => field.Name))}");
     }
 
     [Fact]

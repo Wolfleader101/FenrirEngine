@@ -227,14 +227,12 @@ public static class CharacterScene
         return entity.Has<CharacterPlayer>() ? "the character" : entity.Get<Name>().Value.GetText();
     }
 
-    public static string NameOf(EntityLink link) => link.IsNull ? "nothing" : NameOf(link.Target);
-
     // The friction of what the character stands on: its collider's PhysicsMaterial, or the default.
     public static float GroundFriction(in CharacterState state)
     {
-        if (state.GroundCollider.IsNull)
+        if (state.GroundCollider == Entity.None)
             return DefaultFriction;
-        Entity ground = state.GroundCollider.Target;
+        Entity ground = state.GroundCollider;
         return ground.Has<PhysicsMaterial>() ? ground.Get<PhysicsMaterial>().Value.Friction : DefaultFriction;
     }
 
@@ -772,13 +770,13 @@ public sealed class CharacterTriggers : ISystem
         foreach (var enter in enters.Read())
         {
             if (active)
-                context.Log.Info($"TriggerEnter: {CharacterScene.NameOf(enter.OtherBody)} ({enter.OtherBody.Target}) " +
+                context.Log.Info($"TriggerEnter: {CharacterScene.NameOf(enter.OtherBody)} ({enter.OtherBody}) " +
                                  $"entered the {CharacterScene.NameOf(enter.Trigger)}");
         }
         foreach (var exit in exits.Read())
         {
             if (active)
-                context.Log.Info($"TriggerExit: {CharacterScene.NameOf(exit.OtherBody)} ({exit.OtherBody.Target}) " +
+                context.Log.Info($"TriggerExit: {CharacterScene.NameOf(exit.OtherBody)} ({exit.OtherBody}) " +
                                  $"left the {CharacterScene.NameOf(exit.Trigger)}");
         }
     }
@@ -843,7 +841,7 @@ public sealed class CharacterReadings : ISystem
     {
         ref readonly CharacterState state = ref body.State;
         string reading = CharacterScene.NameOf(state.Ground);
-        if (!state.GroundBody.IsNull)
+        if (state.GroundBody != Entity.None)
             reading += $": {CharacterScene.NameOf(state.GroundBody)}";
         reading += $", v {CharacterScene.Format(body.Velocity)}, moved {CharacterScene.Format(state.MovedVelocity)}";
         if (state.CarriedVelocity != Vector3.Zero)

@@ -126,32 +126,37 @@ own API").
 var t = new Entity(id).Get<Transform>();        // a Ref<Transform> into the engine's storage
 t.Position.X += 1;                              // visible to C++ through GetComponent<Transform>() at once
 new Entity(id).Get<Name>().Text = "Player";     // a string in, UTF-8 in the shared buffer
-var parent = new Entity(id).GetReadOnly<Relationship>().Parent;   // an EntityLink; check IsNull, then use Target
+var parent = new Entity(id).GetReadOnly<Relationship>().Parent;   // an Entity; Entity.None when there is none
 bool has = new Entity(id).Has<Transform>();
 ```
 
-### Entity links
+### Entity fields
 
-An `Entity` inside a component or event is an `EntityLink` in C#: read `IsNull`, then `Target`. In a component C# may
-write, a link is made by assigning an `Entity`, so every native component with an `Entity` field is writable from C#:
+An `Entity` inside a component or event is an `Entity` in C# too. C#'s `Entity` is the generated mirror of C++'s
+`Fenrir::Entity`: 16 bytes, the entity's value and the entity list of the scene that owns it, a private field only C++
+reads. Compare a field with `Entity.None` for "no entity" and use it as any entity. In a component C# may write, assign an
+entity, so every native component with an `Entity` field is writable from C#:
 
 ```csharp
 var tether = holder.Get<Tether>();
-tether.Target = door;                 // a link to door in the active scene; C++ reads it as door's Entity
-tether.Target = EntityLink.None;      // the empty link; C++ reads a default Entity
+tether.Target = door;                 // C++ reads it as door's Entity, owned by the active scene
+tether.Target = Entity.None;          // no entity; C++ reads a default Entity
 var created = Entity.Create();
-tether.Target = created;              // fine: a created entity's value is reserved at once
+tether.Target = created;              // fine: a created entity is alive at once, with its scene set
 ```
 
-- **A link names an entity of the active scene.** The conversion stores the active scene's entity list beside the value,
-  where a native `Entity` keeps it (the `EntityLinkOwner` native function gives it). Scripts never see that part: an
-  `EntityLink` shows only `IsNull`, `Target` and `None`.
-- **`default(EntityLink)` is not `None`.** `new EntityLink()` is `None`, as C++'s default `Entity` is, but a zeroed link
-  names entity 0 with no scene, so a component made with `default` names entity 0 in each `Entity` field. C++'s `IsValid` is false for it; it does not crash, but write `EntityLink.None`
-  where you mean "no entity".
-- The `ScriptingTests` entity-link tests are the proof: a link C# writes reads in C++ as the same entity of the active
-  scene, `None` reads as a default `Entity`, a link to an entity created earlier in the same system survives playback, a
-  zeroed link reads safely, and `EntityLink` exposes nothing more.
+- **C++ sets every owner; C# never does.** Every entity a script holds came from C++ with its scene's list set: a
+  native's `out Entity` (`Entity.Create`, `Renderer.SpawnModel`), a component or event field, a query row. A native takes
+  an entity as `in Entity` (a `const Fenrir::Entity*`) and resolves it in the active scene by the guard's owner rule
+  (`NativeGuard::ValueOf`): one owned by the active scene's list, or by none (a test naming an entity by id; a zeroed
+  field), is looked up by value, and one another scene's list owns is not alive here. Scripts never see the owner:
+  `Entity` shows `Value`, `IsValid`, `WorldTransform`, `None` and its methods.
+- **`default(Entity)` is not `None`.** `new Entity()` is `None`, as C++'s default `Entity` is, but a zeroed entity names
+  entity 0 with no scene, so a component made with `default` names entity 0 in each `Entity` field. C++'s `IsValid` is
+  false for it; it does not crash, but write `Entity.None` where you mean "no entity".
+- The `ScriptingTests` entity-field tests are the proof: an entity from `Entity.Create` or a query written into a
+  component carries the active scene's list, `None` reads as a default `Entity`, an entity created earlier in the same
+  system survives playback, a zeroed entity reads safely, and `Entity`'s owner is not readable.
 
 `Get` and `GetReadOnly` throw `InvalidOperationException` with a message that says why: the entity is not alive, it has
 no such component, the engine has nothing registered under the type's name, or the type has no `[NativeComponent]`
@@ -197,14 +202,15 @@ public struct Health : IComponent { public int Current; public int Max; }
 - **Engine types as fields.** A component, event, shared struct or resource holding a `Math::Vec3`, `Math::Quat`,
   `Transform` or `Entity` includes `FenrirScripting/Generated/FenrirScriptingMappings.hpp`, the built-in binding's
   mappings, which name them as `Fenrir.Math`'s `Vector3` and `Quaternion` and the contract's `Transform` and
-  `EntityLink`. An `Entity` member then maps as itself, and C# sees it as an `EntityLink`, as in `Relationship`. The same
+  `Entity`. An `Entity` member then maps as itself, and C# sees it as an `Entity`, as in `Relationship`. The same
   header brings the math binding's (`include/FenrirScripting/Generated/FenrirMathMappings.hpp`, from
   `api/FenrirMath.binding.toml`): FenrirMath's `Fenrir::Colour`, `Math::Ray` and `Math::AABB`, generated as
   `Fenrir.Math`'s `Colour`, `Ray` and `Bounds`, and the hand-written mappings of its glm types
   (`include/FenrirScripting/BoundMappings.hpp`): `Math::Vec2`, `Vec4` and `Mat4` as `Vector2`, `Vector4` and
   `Matrix4x4` (glm keeps a matrix's columns private, so its mapping gives `Column0` to `Column3` by offset). A generated
-  binding names these through `uses` rather than mirroring them again (ADR-0043). In a writable component the link is writable too: assigning an `Entity` makes a link to it in the active scene, and
-  `EntityLink.None` is the empty link (C++'s default `Entity`). See "Entity links" below.
+  binding names these through `uses` rather than mirroring them again (ADR-0043). In a writable component the entity
+  field is writable too: assign an `Entity`, or `Entity.None` for none (C++'s default `Entity`). See "Entity fields"
+  below.
 - **Field names and order matter.** Fields are listed in the C# declaration order; `IRIS_FIELD_AS(Type, member, "Name")`
   gives a field its C# name when it differs from the C++ member (that is how `pos` is `Position`).
   This is not pedantry: it caught a real bug. `glm::quat` keeps `w` first in memory, so the C# `Quaternion` declares
@@ -692,18 +698,19 @@ the buffer `Entity.Create`, `Add`, `Remove`, `Destroy` and `Resources.Insert` re
 together, in the order it was recorded, when the calling system returns:
 
 ```cpp
-std::uint32_t SpawnCharged(const Fenrir::CallContext& context, std::int32_t level)
+void SpawnCharged(const Fenrir::CallContext& context, std::int32_t level, Fenrir::Entity* spawned)
 {
     const auto changes = context.Changes();
     const std::uint32_t entity = changes.CreateEntity();          // alive at once: usable in this call
     changes.AddComponent(entity, Charge{level});                  // played back after the system
     changes.InsertSceneResource(Weather{2.0F, 1});
-    return entity;                                                // C# gets a usable Entity
+    *spawned = context.Entities().HandleOf(entity);               // C# gets a usable Entity, with its scene set
 }
 ```
 
-- **A created entity is usable at once**: alive, so its id can be returned to C# and given components in the same call. It
-  gets its Transform, Name and Relationship at playback, before the changes recorded after it.
+- **A created entity is usable at once**: alive, so it can be handed to C# (through an `out` entity, as `Entity.Create`
+  is) and given components in the same call. It gets its Transform, Name and Relationship at playback, before the changes
+  recorded after it.
 - **Everything else waits**: `DestroyEntity`, `AddChild` (the child becomes the parent's last child, as
   `Entity::AddChild` makes it; use it on an entity with no parent, such as one just created), `AddComponent` (which
   replaces a component the entity has), `RemoveComponent`, `InsertSceneResource`, `RemoveSceneResource`,
@@ -761,7 +768,7 @@ extension.
 1. **The C++ function**, taking the `CallContext` first:
 
    ```cpp
-   float HeightOf(const Fenrir::CallContext& context, std::uint32_t entity) { /* context.Entities() ... */ }
+   float HeightOf(const Fenrir::CallContext& context, const Fenrir::Entity* entity) { /* context.Entities() ... */ }
    ```
 
 2. **The C# declaration**, in the extension's contract: a `static partial` method marked `[NativeFunction]`, in a partial
@@ -772,7 +779,7 @@ extension.
    public static partial class Queries
    {
        [NativeFunction]
-       public static partial float HeightOf(Entity entity);
+       public static partial float HeightOf(in Entity entity);
    }
    ```
 
@@ -784,11 +791,12 @@ What crosses, and how:
 | --- | --- |
 | sized integers, `float`, `double`, `bool`, `char`, pointers | the same (`char16_t` for `char`); `bool` and `char` need `[assembly: DisableRuntimeMarshalling]` |
 | an enum | the C++ enum, crossing as its underlying integer, which must match the C# enum's |
-| a wrapper: an unmanaged struct of one field or auto-property of the kinds above, such as `Entity` | the C++ struct with an `Iris::WrapperOf` specialization (see Iris's README), or the field's type itself (`std::uint32_t` for `Entity`, its value) |
+| a wrapper: an unmanaged struct of one field or auto-property of the kinds above, such as `WindowId` | the C++ struct with an `Iris::WrapperOf` specialization (see Iris's README), or the field's type itself (`std::uint32_t` for `WindowId`, its value) |
+| `in Entity`, `out Entity` | `const Fenrir::Entity*`, `Fenrir::Entity*`: the mirror crosses by pointer, never by value, and C++ sets the owner of every entity it hands out (see "Entity fields") |
 | `string` or `ReadOnlySpan<char>` parameter | `std::string_view`, UTF-8 (a lone surrogate becomes U+FFFD), valid for the call |
 | `in`, `ref` or `out` unmanaged struct | a pointer to it, valid for the call |
 
-A wrapper result is built with a constructor taking its member's type when the declaring type can call one (as `Entity`
+A wrapper result is built with a constructor taking its member's type when the declaring type can call one (as `WindowId`
 has), and otherwise with an object initializer setting the member; a wrapper with neither cannot be a result. A string is
 never a result, and any other struct does not cross by value. The generator refuses at build time a native function that
 is not `static partial` (FENRIR0020, FENRIR0021), is in a type that is not partial (FENRIR0022), is generic (FENRIR0023),

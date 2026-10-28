@@ -53,7 +53,7 @@ public static class Characters
     public static bool StateIsNew(uint character)
     {
         ref readonly CharacterState state = ref new Entity(character).Get<CharacterBody>().State;
-        return state.Ground == GroundState.InAir && state.GroundBody.IsNull && state.GroundCollider.IsNull &&
+        return state.Ground == GroundState.InAir && state.GroundBody == Entity.None && state.GroundCollider == Entity.None &&
                state.GroundPoint == Vector3.Zero && state.GroundNormal == Vector3.Zero &&
                state.GroundVelocity == Vector3.Zero && state.GroundAngularVelocity == Vector3.Zero &&
                state.MovedVelocity == Vector3.Zero && state.CarriedVelocity == Vector3.Zero && !state.OnWall &&
@@ -65,7 +65,7 @@ public static class Characters
     // Read through Ref<CharacterBody>, the reference a controller writes Velocity through.
     public static int Ground(uint character) => (int)new Entity(character).Get<CharacterBody>().State.Ground;
 
-    public static uint GroundBody(uint character) => new Entity(character).Get<CharacterBody>().State.GroundBody.Target.Value;
+    public static uint GroundBody(uint character) => new Entity(character).Get<CharacterBody>().State.GroundBody.Value;
 
     public static float Height(uint character) => new Entity(character).Get<Transform>().Position.Y;
 

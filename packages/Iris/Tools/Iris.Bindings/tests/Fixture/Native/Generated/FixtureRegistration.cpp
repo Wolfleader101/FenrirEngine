@@ -40,6 +40,8 @@ namespace Fixture::Bindings
             Host::NativeFunction::Make<&Fixture::Sum>("Fixture.Bindings.FixtureNative.Sum"),
             Host::NativeFunction::Make<&Fixture::Turn>("Fixture.Bindings.FixtureNative.Turn"),
             Host::NativeFunction::Make<&Fixture::Damp>("Fixture.Bindings.FixtureNative.Damp"),
+            Host::NativeFunction::Make<&Fixture::Outweighs>("Fixture.Bindings.FixtureNative.Outweighs"),
+            Host::NativeFunction::Make<&Host::ZeroingOutputs<&Fixture::Make, 1>::Call>("Fixture.Bindings.FixtureNative.Make"),
         };
     }
 } // namespace Fixture::Bindings

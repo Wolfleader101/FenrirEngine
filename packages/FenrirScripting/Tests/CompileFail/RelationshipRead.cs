@@ -6,7 +6,7 @@ namespace CompileFail;
 public static class ReadRelationship
 {
     public static uint Parent(ReadOnlyRef<Relationship> relationship) =>
-        relationship.Parent.IsNull ? uint.MaxValue : relationship.Parent.Target.Value;
+        relationship.Parent == Entity.None ? uint.MaxValue : relationship.Parent.Value;
 
     public static Relationship Copy(ReadOnlyRef<Relationship> relationship) => relationship.Value;
 }

@@ -18,7 +18,7 @@ public static class Motion
         new() { Position = new Vector3(x, y, z), Rotation = Quaternion.Identity, Scale = Vector3.One };
 
     private static QueryFilter Filter(uint ignoreBody, uint layers) =>
-        new() { Layers = layers, IgnoreBody = new Entity(ignoreBody) };
+        new() { Layers = layers, IgnoreBody = World.Owned(ignoreBody) };
 
     // Moves a unit box from (x, y, z) by (dx, dy, dz).
     public static bool MoveBox(float x, float y, float z, float dx, float dy, float dz, uint ignoreBody, uint layers)

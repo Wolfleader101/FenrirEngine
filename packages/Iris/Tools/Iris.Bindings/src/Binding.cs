@@ -261,13 +261,26 @@ internal sealed class Binding
 
     /// <summary>
     /// Whether a struct's mirror is a <c>readonly struct</c> of <c>readonly</c> fields: an event under
-    /// <c>readonly-events</c>, a struct <c>readonly-structs</c> names, or a resource registered read-only. A type a binding
-    /// in <c>uses</c> mirrors is as that binding mirrors it.
+    /// <c>readonly-events</c>, a struct <c>readonly-structs</c> or <c>immutable-structs</c> names, or a resource registered
+    /// read-only. A type a binding in <c>uses</c> mirrors is as that binding mirrors it.
     /// </summary>
     public bool IsReadOnly(DescribedType type) =>
         owners.TryGetValue(type.Name, out var owner)
             ? owner.IsReadOnly(owner.Type(type.Name))
             : (type.Role == Role.Event && Config.CSharp.ReadOnlyEvents) || Config.CSharp.ReadOnlyStructs.Contains(type.Name) ||
+              Config.CSharp.ImmutableStructs.Contains(type.Name) ||
+              (IsResource(type) && type.Category == Category.Struct && IsRegisteredReadOnly(type));
+
+    /// <summary>
+    /// Whether a field holding the struct is <c>readonly</c> whatever its holder is, so C# cannot write the struct
+    /// whole: a C++-owned copy, which is a struct <c>readonly-structs</c> names or a resource registered read-only. An
+    /// <c>immutable-structs</c> entry is a value C# assigns whole, so a field holding one is as writable as its holder. A
+    /// type a binding in <c>uses</c> mirrors is as that binding mirrors it.
+    /// </summary>
+    public bool HoldersAreReadOnly(DescribedType type) =>
+        owners.TryGetValue(type.Name, out var owner)
+            ? owner.HoldersAreReadOnly(owner.Type(type.Name))
+            : Config.CSharp.ReadOnlyStructs.Contains(type.Name) ||
               (IsResource(type) && type.Category == Category.Struct && IsRegisteredReadOnly(type));
 
     /// <summary>
@@ -544,12 +557,21 @@ internal sealed class Binding
             }
         }
 
-        foreach (var name in Config.CSharp.ReadOnlyStructs)
+        foreach (var (key, list) in new[] { ("readonly-structs", Config.CSharp.ReadOnlyStructs), ("immutable-structs", Config.CSharp.ImmutableStructs) })
         {
-            if (!types.TryGetValue(name, out var mirrored) || mirrored.Category != Category.Struct)
+            foreach (var name in list)
             {
-                throw new BindingException($"{Config.Path}: readonly-structs names {name}, which is not a described struct");
+                if (!types.TryGetValue(name, out var mirrored) || mirrored.Category != Category.Struct)
+                {
+                    throw new BindingException($"{Config.Path}: {key} names {name}, which is not a described struct");
+                }
             }
+        }
+
+        // The two lists are two intents (a C++-owned copy, an immutable value): one struct has one of them.
+        foreach (var name in Config.CSharp.ReadOnlyStructs.Intersect(Config.CSharp.ImmutableStructs, StringComparer.Ordinal))
+        {
+            throw new BindingException($"{Config.Path}: {name} is in readonly-structs and immutable-structs: pick one");
         }
 
         foreach (var (key, list) in new[] { ("private-fields", Config.CSharp.PrivateFields), ("fixed-buffers", Config.CSharp.FixedBuffers) })

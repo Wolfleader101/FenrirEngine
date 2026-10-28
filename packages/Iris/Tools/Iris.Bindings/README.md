@@ -66,6 +66,7 @@ read-only-resource-interface = "IReadOnlyResource"
 pointer-type = "ulong"                 # Optional (ulong): the C# type of an opaque pointer field.
 readonly-events = true                 # Optional (false): events as readonly structs with readonly fields.
 readonly-structs = ["My::BodyState"]    # Optional: structs C# only reads, mirrored the same way.
+immutable-structs = ["My::Link"]       # Optional: read-only structs C# assigns whole (a link, an id).
 private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
 fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
 internal-structs = ["My::ShapeOptions"]  # Optional: structs mirrored internal, for the contract's own use.
@@ -128,7 +129,7 @@ types = { "My::EntityId" = "Entity" }  # The C# type of an alias a native takes,
 
 | Output | Contents |
 | --- | --- |
-| `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. |
+| `<generated>/<Type>.cs` | A `partial struct` per described struct and tagged union, an `enum` per enum. Bound types have their own C# types and get none. With natives, a struct's holds the methods the `@facade <Type>.Method` marks give it ("Facade parts" below). |
 | `[cpp] mappings` | An `Iris::StructMapping<T>` per struct and tagged union, every field as `Iris::Field<Kind>("Name", offset)`, and an `Iris::EnumMapping<T>` per enum, each with a `static_assert` of the size and alignment the description records (bound types get only the assert: the binding maps them, and the header includes each bound type's `include`). |
 | `[registration] source` | The function that sets the extension's `components`, `events` and `sharedStructs`, each `Make...<T>("Namespace.Type")`, and, when `[registration]` names a resource factory, its `resources`. A type in `by-hand` is in none of the lists. The source includes the mappings header and, with natives, the natives header; it declares nothing itself. With `maker`, the function is in an anonymous namespace and the **extension maker** is defined beside it: `<extension> <maker>(std::shared_ptr<State> state)`, `State` the extension state the natives take, sets the extension's `name` to the binding's name (the configuration's `<Name>`), `SetState(std::move(state))`, `sharedAssemblies` to `{"<namespace>.dll"}` (the contract's file name), calls the function and returns it. |
 
@@ -173,8 +174,9 @@ configured `default` for its own default. A struct with any default that is not 
 `public T() {}`, so `new T()` runs the initialisers; one whose defaults are all zero (a bound type's own default counts
 as zero unless it has a `default`) has bare fields and no constructor, since `default` already holds them, so mirroring
 it adds no member C# did not have. A read-only mirror (an event under `readonly-events`, or a struct in
-`readonly-structs`) is a `readonly struct` of `readonly` fields, always with the constructor, and a field holding a
-read-only struct is `readonly` too. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
+`readonly-structs` or `immutable-structs`) is a `readonly struct` of `readonly` fields, always with the constructor. Only
+a field holding a `readonly-structs` mirror (a C++-owned copy C# reads in place) or a read-only resource is `readonly`
+too; one holding an `immutable-structs` mirror (a value C# assigns whole, a link or an id) is as writable as its holder. A component gets the component attribute (`[NativeComponent("Namespace.Type")]`) and
 interface, an event the event attribute and interface, and a scene or app resource the resource attribute and interface (a
 tagged union's mirror too); a resource in `read-only` gets the read-only interface and, unless it is a tagged union, is a
 `readonly struct`. A struct in `internal-structs` is `internal`, and a public mirror cannot hold one. An array is an `[InlineArray(N)]` struct nested in its mirror
@@ -201,7 +203,7 @@ native function is written by hand once, as its C++ definition. It writes:
 | Output | Contents |
 | --- | --- |
 | `<generated>/<class>.cs` | `internal static unsafe partial class <class>` with one `[<attribute>] public static partial R Name(...)` per native, in the description's order, documented from its C++ doc (`@param` and `@return` as `<param>` and `<returns>`). The SDK's generator writes the bodies. |
-| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. |
+| `<generated>/<Class>.cs` | For each facade class the natives' `@facade Class.Method` marks name, `public static partial class <Class>` with one `public static R Method(...) => <class>.Name(...);` per mark, in the description's order, documented as the declaration is. The hand-written part beside it is the rest of the facade. A mark naming a struct this binding mirrors gives no part: its method goes into the mirror's own file, static or on `this`. |
 | `[natives] header` | The **natives header**: `#pragma once`, the `[natives] includes` (the SDK's first, then the binding's: what the declarations name), each native's C++ declaration in its namespace, and the registration function's declaration (the maker's in its place, with `<memory>`, when `[registration]` names one). The registration includes it by file name, the natives' own source includes it so a definition that drifts from the committed description fails in that source's compile, and the extension's tests include it in place of declarations of their own. It is private to the library: the natives take the extension state. |
 | `[registration] source` | Also `extension.functions = { <make><&Ns::F>("Namespace.Class.F"), ... }` in the same function, with its `notRunning` expression as the second argument when it has one. A native with outputs is made as `<make><&<zero-outputs><&Ns::F, i, j>::Call>(...)`, naming the indices of its outputs in its full C++ parameter list (the context and state counted), so the host's template zeroes each before the native runs and a native that returns early writes nothing. |
 
@@ -233,9 +235,25 @@ give one class and method when their parameter types differ: C# overloads them. 
 and holds what a description cannot say: overloads that are not renames, generics, properties over outputs, constants,
 defaults, conversions and an `out` returned as a value. A mark is refused, naming the native and the mark, on a native
 whose declaration cannot be public (it takes a type in `internal-structs`, or a pointer: a `void*`, an `[in,out]` `T*`),
-when two marks give one class and method the same parameter types, and when the class is named as a mirror this binding
-or one it uses generates, as a bound type's C# type, or as the `[natives] class`. A facade class no mark names any more
-is deleted as a mirror no longer described is.
+when two marks give one class and method the same parameter types, and when the class is named as a mirror a binding
+it uses generates, as an enum or tagged union mirrored here, as a bound type's C# type, or as the `[natives] class`. A
+facade class no mark names any more is deleted as a mirror no longer described is.
+
+**Facade methods on a mirror.** The class a mark names may be a struct this binding mirrors (`@facade Entity.Destroy`
+on a native of the built-in binding, whose `Entity` is the mirror of `Fenrir::Entity`). The method then goes into the
+mirror's generated file, after its layout, with the same doc, result, parameters and body as on a facade class, and one
+rule says which kind it is: when the declaration's first parameter is `in` that mirror, the method is an instance
+method that passes `in this` for it and drops it from its parameters and its `<param>`s (`ChangeError
+EntityDestroy(const CallContext&, EngineContext&, const Entity* entity)` gives `public ChangeError Destroy() =>
+Native.EntityDestroy(in this);`); otherwise it is `public static`, an `out` of the mirror included (`bool
+EntityCreate(..., Entity* entity)`, marked `@param[out]`, gives `public static bool TryCreate(out Entity entity)`). The
+mark names no field and no receiver: a native takes the entity it acts on as a pointer to the mirror, which is already
+`in` in C#, so the parameter itself says the method is on `this`, and a mark `Class.Method` is what the header reader
+accepts today. A static method taking the mirror first is therefore not expressible by a mark and stays hand-written.
+The mirror's file names the natives class and the description its methods come from in its header comment; the
+hand-written part beside it keeps what wraps a result (a throw on `false`, a property over an `out`). A mark naming a
+mirror is refused when its method is named as a field of the mirror, and a mark naming an enum or a tagged union
+(neither holds a method) as any other type's name is.
 
 The C++ outputs turn clang-format off, so a formatting check passes them as written.
 
@@ -281,7 +299,8 @@ Everything the tool cannot bind fails the run with a message naming the type and
 unknown key in the configuration, a description for another target, a bound type with no `[bound-types]` entry, two
 types with one C# name, a tagged union whose default kind is not tag 0 or whose kind is not a struct, a default of a form
 the description does not record, a field named as its struct, a hand-written field, an `exclude` naming a type no
-description describes or one that a type it binds holds, a `readonly-structs` entry that is not a described struct, a
+description describes or one that a type it binds holds, a `readonly-structs` or `immutable-structs` entry that is not a
+described struct, a struct in both `readonly-structs` and `immutable-structs`, a
 `private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
 of numbers or is in a read-only mirror, a component, event, tagged union or resource with no attribute, interface or
 (with a registration listing it) factory (each SDK name is needed only by the kind of type that uses it, so a binding
@@ -299,7 +318,8 @@ another layout, and
 a native parameter or result it cannot map (above), a `[natives] types` alias no native takes, a `[natives] class`
 that is also a mirror's name, a `@facade` mark on a native whose declaration cannot be public (an `internal-structs`
 type or a pointer among its parameters or result), two marks giving one class and method the same parameter types, a
-facade class named as a mirror (this binding's or a used one's), a bound type's C# type or the `[natives] class`, a
+facade class named as a used binding's mirror, an enum or tagged union mirrored here, a bound type's C# type or the
+`[natives] class`, a mark on a mirror naming one of its fields as the method, a
 `facade` that is not `Class.Method`, a `[tests]` still naming the natives test (`natives-cpp`, `natives-csharp`,
 `natives-class`), which the zeroing registration replaced, a `[registration] includes`, which moved to
 `[natives] includes` with the declarations it served, or a `[registration] maker` without `[natives]`, whose natives
@@ -312,8 +332,10 @@ take no extension state, or whose natives take two.
 `Fixture.hpp`) and its natives (`tests/Fixture/Fixture.natives.json`, a copy of describe-api's, every form of native
 parameter) give their committed outputs byte for byte, with a resource of each scope and a read-only one, an internal
 mirror, a by-hand type, a type of the binding it uses (`tests/Fixture/Uses`, a binding of Spring alone), and natives
-taking text, an enum and wrappers; the three marked `@facade` give two facade parts, one method taking by value what
-its declaration takes `in`, one a span, and two of one name told apart by their parameters, a mark a binding cannot
+taking text, an enum and wrappers; the five marked `@facade` give two facade parts, one method taking by value what
+its declaration takes `in`, one a span, and two of one name told apart by their parameters, and two methods on the
+mirror `Body`, one on `this` from a native taking a `const Body*` first and one static from a native filling a
+`Body*`, with a mark on a mirror whose native takes it elsewhere giving a static method; a mark a binding cannot
 honour fails naming the native and the mark, and a facade class no mark names is deleted; a changed default changes
 exactly its initialiser; the natives header declares each native and the registration function and the
 registration declares nothing; a configuration keeping `[registration] includes` is told where they moved; with a
@@ -326,5 +348,7 @@ against stand-ins for the SDK (`tests/Checks/Stubs.cs`) and, when FenrirEngine's
 with its source generators (`tests/Checks/Sdk`). The `BindingDefaults` CTest builds the fixture's C# assembly
 (`tests/Checks/Runtime`) and runs the fixture's generated defaults test against it. The fixture is itself a binding, so
 the bindings target regenerates its outputs. Its natives' C# class has no bodies without the SDK's generator, so only the
-SDK check compiles it and the facade parts that call it, and its registration is never compiled: Iris has no extension
+SDK check compiles it and the facade parts that call it (the mirror `Body`'s methods call it too, so the checks without
+the SDK compile `tests/Checks/NativeStubs.cs`, a stand-in for the two natives they call, in its place), and its
+registration is never compiled: Iris has no extension
 to register natives with.
