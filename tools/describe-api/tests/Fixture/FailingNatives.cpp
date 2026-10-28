@@ -1,6 +1,7 @@
 // Native functions the natives mode refuses, one per diagnostic. The tests describe the file once and check that every
 // diagnostic is reported. It is read, never compiled.
 
+#include <cstdint>
 #include <string_view>
 
 namespace Host
@@ -12,6 +13,17 @@ namespace Host
 
 namespace Failing
 {
+    // Plain data the `returns` cases point at; never described.
+    struct Vec3
+    {
+        float x = 0.0f;
+    };
+
+    struct Hit
+    {
+        float distance = 0.0f;
+    };
+
     namespace
     {
         bool Hidden(const Host::CallContext&)
@@ -87,5 +99,42 @@ namespace Failing
     bool DoubledFacade(const Host::CallContext&)
     {
         return false;
+    }
+
+    /**
+     * @param[out] hit Where it hit.
+     * @facade Facades.ReturnsMissing returns missing
+     */
+    bool ReturnsMissing(const Host::CallContext&, Hit* hit)
+    {
+        return hit != nullptr;
+    }
+
+    /**
+     * @param[out] hit Where it hit.
+     * @facade Facades.ReturnsInput returns origin
+     */
+    bool ReturnsInput(const Host::CallContext&, const Vec3* origin, Hit* hit)
+    {
+        return origin != nullptr && hit != nullptr;
+    }
+
+    /**
+     * @param[out] nearest The nearest hit.
+     * @param[out] farthest The farthest hit.
+     * @facade Facades.ReturnsOneOfTwo returns nearest
+     */
+    bool ReturnsOneOfTwo(const Host::CallContext&, Hit* nearest, Hit* farthest)
+    {
+        return nearest != nullptr && farthest != nullptr;
+    }
+
+    /**
+     * @param[out] hit Where it hit.
+     * @facade Facades.ReturnsBesideCount returns hit
+     */
+    std::int32_t ReturnsBesideCount(const Host::CallContext&, Hit* hit)
+    {
+        return hit != nullptr ? 1 : 0;
     }
 } // namespace Failing

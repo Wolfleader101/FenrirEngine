@@ -7,7 +7,6 @@
 
 #include "FenrirApp/App.hpp"
 #include "FenrirAssets/AssetStore.hpp"
-#include "FenrirAssetsScripting/AssetHandleBits.hpp"
 #include "FenrirAssetsScripting/AssetResolve.hpp"
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
@@ -104,6 +103,7 @@ namespace Fenrir
          * enabled camera in the active scene whose viewport holds it.
          * @param[out] camera The camera entity; no entity (the default Entity, C#'s Entity.None) when there is none.
          * @return Whether there is one: false when there is none or no renderer.
+         * @facade Renderer.CameraAt returns camera
          */
         bool CameraAt(const CallContext& context, RendererScripting& renderer, WindowId window, const Math::Vec2* point,
                       Entity* camera)
@@ -157,20 +157,24 @@ namespace Fenrir
         }
 
         /**
-         * @brief Spawns `model` into the active scene as SpawnModel does, under `parent` unless it is no entity:
-         * recorded, so it takes effect when the system returns.
-         * @param model The model's handle, packed as Fenrir.Assets packs one (generation high, index low).
-         * @param parent The entity to spawn under; no entity (Entity.None in C#) for none.
+         * @brief Spawns `model` into the active scene as C++'s SpawnModel does, under `parent` unless it is no entity:
+         * a root named after the file holding one entity per node, each mesh a MeshRenderer. The root is usable at once
+         * (alive, so it can be given components or parented in the same call); the tree is made, as every structural
+         * change is, when the system returns. It needs no renderer in the app.
+         * @param model The model's handle.
+         * @param parent The entity to spawn under; no entity (Entity.None in C#) for none. A parent that is not alive
+         * spawns nothing.
          * @param[out] root The model's root entity; no entity (the default Entity, C#'s Entity.None) when nothing was
-         * spawned.
+         * spawned: an empty or stale model handle, no asset store, or a parent not alive.
          * @return Whether it spawned: false when the app has no store, the model is stale or the parent is not alive.
+         * @facade Renderer.SpawnModel returns root
          */
-        bool SpawnModel(const CallContext& context, RendererScripting& renderer, std::uint64_t model,
+        bool SpawnModel(const CallContext& context, RendererScripting& renderer, const AssetHandle<Model>* model,
                         const Entity* parent, Entity* root)
         {
             const NativeGuard guard(context, renderer.warnings);
             // The handle rule is Assets' (AssetResolve.hpp), so the words are too, under this native's name.
-            AssetStore* store = Resolve<Model>(guard, model);
+            AssetStore* store = Resolve<Model>(guard, *model);
             if (store == nullptr)
             {
                 return false;
@@ -185,7 +189,7 @@ namespace Fenrir
             // spawned model is; the tree is then recorded into the active scene, which a native function may not change
             // directly (ADR-0029).
             Scene scratch(std::string(context.Native()));
-            const Entity spawned = Fenrir::SpawnModel(*store, scratch, AssetHandleFromBits<Model>(model));
+            const Entity spawned = Fenrir::SpawnModel(*store, scratch, *model);
             if (!spawned.IsValid())
             {
                 return false;

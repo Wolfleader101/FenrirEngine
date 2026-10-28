@@ -121,6 +121,18 @@ static_assert(sizeof(Fenrir::Math::Vec4) == 16 && alignof(Fenrir::Math::Vec4) ==
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fenrir::ScriptAssetHandle>
+{
+    static constexpr std::string_view typeName = "Fenrir.Assets.NativeAssetHandle";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("Index", 0),
+        Iris::Field<std::uint32_t>("Generation", 4));
+};
+static_assert(sizeof(Fenrir::ScriptAssetHandle) == 8 && alignof(Fenrir::ScriptAssetHandle) == 4,
+              "Fenrir::ScriptAssetHandle is not the layout FenrirAssetsScripting.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::EnumMapping<Fenrir::ScriptAssetOwner>
 {
     static constexpr std::string_view typeName = "Fenrir.Assets.AssetOwner";

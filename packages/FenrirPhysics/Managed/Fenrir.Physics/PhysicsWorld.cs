@@ -4,7 +4,7 @@ using Fenrir.Scripting;
 namespace Fenrir.Physics;
 
 // The facade over the generated PhysicsNative (Generated/, from Scripting/src/PhysicsScripting.cpp). Its pass-throughs
-// (the forces, ContactsOf, IsSleeping and Bounds) are generated beside it from the natives' @facade marks
+// (the forces, ContactsOf, IsSleeping, Bounds and GetJointState) are generated beside it from the natives' @facade marks
 // (Generated/PhysicsWorld.cs); this part holds what a description cannot say: the class doc, the queries' default
 // filter, the values returned from an output, the Gravity property and the handle packing.
 
@@ -140,17 +140,6 @@ public static partial class PhysicsWorld
         filter.Mask == 0 && filter.Layers == 0 && !filter.HitTriggers && filter.IgnoreBody.Value == 0
             ? new QueryFilter()
             : filter;
-
-    /// <summary>
-    /// How the joint on <paramref name="joint"/> sits and how hard it pulls, as of the last step. Only reads: nothing is
-    /// written into its Joint. While a joint's bodies sleep, the force and torque keep the values they had when they fell
-    /// asleep; while it is disabled they are 0. The pose readings are always current.
-    /// </summary>
-    public static JointState GetJointState(Entity joint)
-    {
-        PhysicsNative.GetJointState(joint, out JointState state);
-        return state;
-    }
 
     /// <summary>
     /// The world's gravity, in metres per second squared. Setting it takes effect from the next step on and wakes the

@@ -79,6 +79,21 @@ namespace Fixture
         }
 
         /**
+         * @brief The nearest hit from `origin` as a value: `returns` names the single output the facade method gives
+         * back, dropping the bool.
+         * @param[out] hit Where it hit.
+         * @return Whether it hit.
+         * @facade Hits.Nearest returns hit
+         */
+        bool Nearest(const Host::CallContext& context, Host::State& state, const Vec3* origin, Hit* hit)
+        {
+            (void)context;
+            (void)state;
+            *hit = Hit{};
+            return origin != nullptr;
+        }
+
+        /**
          * @brief The nearest and farthest hits from `origin`: two outputs, each zeroed by the registration.
          * @param[out] nearest The nearest hit; the default when there is none.
          * @param[out] farthest The farthest hit; the default when there is none.

@@ -11,6 +11,8 @@ headers = [
 
 [types]
 "Fenrir::ScriptShaderParameter" = "shared-struct"
+# The kind-generic natives' handle, mirrored internal (FenrirAssets.binding.toml's internal-structs).
+"Fenrir::ScriptAssetHandle" = "shared-struct"
 # Held by no field, but taken by the natives: described all the same.
 "Fenrir::Detail::AssetKind" = "enum"
 "Fenrir::ScriptAssetOwner" = "enum"

@@ -2,8 +2,11 @@
 
 // The plain data the assets natives take and give in C#'s form, which FenrirAssets's own types do not say: described
 // from this binding's selection (api/FenrirAssetsScripting.api.toml), so their C# mirrors and mappings are generated
-// (api/FenrirAssets.binding.toml). Public, because another package's binding that uses this one (FenrirRenderer's)
-// includes the generated mappings, which include this header.
+// (api/FenrirAssets.binding.toml). A typed handle is not here: a native takes and gives an AssetHandle<T> through a
+// pointer, as the bound type the binding already names (ADR-0044, amended by the asset-handles spec); only the three
+// kind-generic natives, which know their kind at run time, take the kind-neutral ScriptAssetHandle below. Public,
+// because another package's binding that uses this one (FenrirRenderer's) includes the generated mappings, which
+// include this header.
 
 #include <cstdint>
 
@@ -12,6 +15,21 @@
 
 namespace Fenrir
 {
+    // C#'s NativeAssetHandle (named so in the binding's [names], mirrored internal through its internal-structs):
+    // the kind-generic natives' handle (Load, Unload, IsValid), which take FenrirAssets's Detail::AssetKind beside it
+    // and convert it to and from AssetHandle<T> once the kind is known. Every other native takes the typed handle.
+    /**
+     * @brief An asset handle of no stated kind, laid out as AssetHandle<T> is: C#'s AssetHandle<T>.ToNative() and
+     * FromNative(). Default is the empty handle.
+     */
+    struct ScriptAssetHandle
+    {
+        /** @brief The slot in the store's table of the kind. */
+        std::uint32_t index = 0;
+        /** @brief The slot's generation when the asset was made; zero only in the empty handle. */
+        std::uint32_t generation = 0;
+    };
+
     // C#'s AssetOwner (named so in the binding's [names]): the natives turn it into FenrirAssets's AssetOwner, which
     // holds the scene itself.
     /**

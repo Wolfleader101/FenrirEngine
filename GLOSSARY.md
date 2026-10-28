@@ -192,12 +192,12 @@ A plain-data C++ resource, scene or app, that C# sees as a blittable struct mark
 *Avoid:* singleton, global, resource mirror (informal).
 
 **Facade**
-A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`.
+A static C# class over a package's generated native functions, its generated part the pass-throughs each native's `@facade` names and its hand-written part what a description cannot say: overloads that are not renames, generic methods, properties over outputs, constants, defaults and conversions. It stands for a C++ resource with behaviour (`Keyboard`, `Mouse`, `Gamepads`, `Window`, `Assets`, `Materials`, `Renderer`, `DebugDraw`, physics's `PhysicsWorld`): its answers come from C++, so C# never re-implements the rules (ADR-0029, ADR-0043). A generated facade method takes by value what its declaration takes `in`, and when its mark names one output (`returns`) gives that output as its value, the C++ default when the call did nothing.
 *Avoid:* wrapper (that is a one-field struct), API class, service.
 
 **Wrapper**
 A struct of exactly one field, which a native function takes or returns by value as that field (`WindowId`, `GamepadId`, `CollisionMesh`), under Iris's wrapper trait on the C++ side and the SDK generator's rule on the C# side (ADR-0044). An `Entity` is not one: it is a mirror of two fields, and crosses by pointer.
-*Avoid:* handle (an `AssetHandle<T>` has two fields and crosses packed), strong typedef, newtype.
+*Avoid:* handle (an `AssetHandle<T>` has two fields and crosses by pointer, as a bound type), strong typedef, newtype.
 
 **Call context**
 What a native function receives first (`CallContext`): the App the running Scripting serves, through it the active scene's entities and the change buffer, and the name of the native function being called (its type-and-method part, `PhysicsNative.Raycast`), built for each call by the registration's thunk. A native function may read and write component and resource data through it, and makes structural changes only by recording them in the change buffer (ADR-0029). It carries nothing of any extension: that is the extension state.
@@ -555,8 +555,8 @@ One piece of plain data FenrirAssets holds: a mesh, image, material, skeleton, c
 *Avoid:* resource (Iris and physics use it otherwise), file.
 
 **Asset handle**
-`AssetHandle<T>`: a typed index plus generation naming an asset. Plain data that keeps nothing alive; once its asset is freed, the generation no longer matches and users skip it.
-*Avoid:* reference, pointer, asset id.
+`AssetHandle<T>`: a typed index plus generation naming an asset. Plain data that keeps nothing alive; once its asset is freed, the generation no longer matches and users skip it. Each binding has its own (C#'s `AssetHandle<T>` is laid out the same), so it is a *bound type*, and a native function takes or gives one by pointer like any struct of two fields (ADR-0044, as amended by the asset-handles spec); a native that serves every kind at once takes the kind and a kind-neutral handle instead.
+*Avoid:* reference, pointer, asset id, packed handle (the 64-bit form natives once took).
 
 **Asset owner**
 The app or a scene, named when an asset is loaded or added. An asset is freed when its last owner ends, or when it is unloaded explicitly.
