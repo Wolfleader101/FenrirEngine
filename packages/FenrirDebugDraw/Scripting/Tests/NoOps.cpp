@@ -20,7 +20,6 @@
 #include "FenrirECS/EntityList.hpp"
 #include "FenrirMath/Colour.hpp"
 #include "FenrirMath/Math.hpp"
-#include "FenrirScripting/EntityValue.hpp"
 #include "FenrirScripting/ScriptingExtension.hpp"
 #include "Generated/FenrirDebugDrawNatives.hpp"
 #include "ScriptOptions.hpp"
@@ -72,9 +71,9 @@ TEST_CASE("Items drawn relative to an entity that is not alive draw nothing and 
     const std::uint32_t dead = entities.CreateEntity().GetId();
     entities.DestroyEntity(dead);
     ScriptOptions::ShapeOptions shape;
-    shape.relativeTo = EntityValue(dead);
+    shape.relativeTo = Entity(dead, &entities);
     ScriptOptions::TextOptions text;
-    text.relativeTo = EntityValue(dead);
+    text.relativeTo = Entity(dead, &entities);
 
     for (int call = 0; call < 2; ++call)
     {

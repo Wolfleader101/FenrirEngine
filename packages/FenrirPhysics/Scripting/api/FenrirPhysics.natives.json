@@ -149,17 +149,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hit",
-          "type": "Fenrir::ScriptQueries::RaycastHit*",
+          "type": "Fenrir::RaycastHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::RaycastHit",
+          "pointee": "Fenrir::RaycastHit",
           "pointeeKind": "struct",
           "output": true,
           "doc": "Where it hit; the default when it did not."
@@ -201,17 +201,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hits",
-          "type": "Fenrir::ScriptQueries::RaycastHit*",
+          "type": "Fenrir::RaycastHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::RaycastHit",
+          "pointee": "Fenrir::RaycastHit",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` hits."
         },
@@ -265,17 +265,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hit",
-          "type": "Fenrir::ScriptQueries::ShapeCastHit*",
+          "type": "Fenrir::ShapeCastHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::ShapeCastHit",
+          "pointee": "Fenrir::ShapeCastHit",
           "pointeeKind": "struct",
           "output": true,
           "doc": "Where it touched; the default when it did not."
@@ -325,17 +325,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hits",
-          "type": "Fenrir::ScriptQueries::ShapeCastHit*",
+          "type": "Fenrir::ShapeCastHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::ShapeCastHit",
+          "pointee": "Fenrir::ShapeCastHit",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` hits."
         },
@@ -384,17 +384,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hit",
-          "type": "Fenrir::ScriptQueries::MoveCastHit*",
+          "type": "Fenrir::MoveCastHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::MoveCastHit",
+          "pointee": "Fenrir::MoveCastHit",
           "pointeeKind": "struct",
           "output": true,
           "doc": "What blocks it; the default when nothing does."
@@ -431,17 +431,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hits",
-          "type": "Fenrir::ScriptQueries::OverlapHit*",
+          "type": "Fenrir::OverlapHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::OverlapHit",
+          "pointee": "Fenrir::OverlapHit",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` hits."
         },
@@ -482,17 +482,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hits",
-          "type": "Fenrir::ScriptQueries::PenetrationHit*",
+          "type": "Fenrir::PenetrationHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::PenetrationHit",
+          "pointee": "Fenrir::PenetrationHit",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` hits."
         },
@@ -533,9 +533,9 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
@@ -572,17 +572,17 @@
         },
         {
           "name": "filter",
-          "type": "const Fenrir::ScriptQueries::QueryFilter*",
+          "type": "const Fenrir::QueryFilter*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::QueryFilter",
+          "pointee": "Fenrir::QueryFilter",
           "pointeeKind": "struct",
           "const": true
         },
         {
           "name": "hits",
-          "type": "Fenrir::ScriptQueries::OverlapHit*",
+          "type": "Fenrir::OverlapHit*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::OverlapHit",
+          "pointee": "Fenrir::OverlapHit",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` hits."
         },
@@ -613,9 +613,9 @@
         },
         {
           "name": "contacts",
-          "type": "Fenrir::ScriptQueries::Contact*",
+          "type": "Fenrir::Contact*",
           "kind": "pointer",
-          "pointee": "Fenrir::ScriptQueries::Contact",
+          "pointee": "Fenrir::Contact",
           "pointeeKind": "struct",
           "doc": "Where to write at most `capacity` contacts."
         },

@@ -13,11 +13,11 @@
 
 **Touches:** `packages/FenrirPhysics/Scripting/`, `packages/FenrirPhysics/Managed/Fenrir.Physics/Generated/`, `packages/FenrirDebugDraw/Scripting/`, `packages/FenrirDebugDraw/Managed/`, `examples/PhysicsDemo/scripts/`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `grep -rn "EntityValue" --include=*.hpp packages/FenrirPhysics packages/FenrirDebugDraw` finds only natives' parameters; `ScriptQueries.hpp` is gone; `grep -n "exclude" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing.
-- [ ] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset; both generators are no-ops afterwards.
-- [ ] clang-format and `check_tickets.py` pass.
+- [x] `grep -rn "EntityValue" --include=*.hpp packages/FenrirPhysics packages/FenrirDebugDraw` finds only natives' parameters; `ScriptQueries.hpp` is gone; `grep -n "exclude" packages/FenrirPhysics/Scripting/api/FenrirPhysics.binding.toml` finds nothing.
+- [x] `ctest -R "Scripting|PhysicsCompile"` passes under the msvc-x64-debug preset; both generators are no-ops afterwards.
+- [x] clang-format and `check_tickets.py` pass.
 
 ## Comments
 
