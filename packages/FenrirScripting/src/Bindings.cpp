@@ -5,37 +5,36 @@
 #include "FenrirECS/DefaultComponents.hpp"
 #include "FenrirECS/Entity.hpp"
 #include "FenrirECS/WorldTransform.hpp"
+#include "FenrirScripting/NativeMarshalling.hpp"
 
 #include <atomic>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
 
 // The engine side of the built-in extension's native functions, the contract's Native class: plain functions over C
-// types, called with the call context of the running Scripting, where pointers and lengths arrive exactly as the C#
-// declaration gives them (a C# string arrives as UTF-8 and its length). A C++ exception that escapes one is stopped and
-// logged by Iris, so none can unwind into managed code. None runs unless a Scripting is active: C# then gets its
-// @notrunning value, or zero, false or null. Each takes the built-in extension's state, the running Scripting's
-// EngineContext, after the call context. Each is written once, here: describe-api's natives mode reads them into
-// api/FenrirScripting.natives.json, from which their C# declarations and registration are generated.
+// types, called with the call context of the running Scripting. The declaration is the contract (ADR-0045): an `in` or
+// `out` pointer is never null, and a native's single output is zeroed by its registration, so no native checks or
+// zeroes one; text arrives as std::string_view (ADR-0044); a span arrives as its first element and a count, read
+// through SpanOf. A code a native returns is ChangeBuffer's or the registry's rule, not this file's. A C++ exception
+// that escapes one is stopped and logged by Iris, so none can unwind into managed code. None runs unless a Scripting is
+// active: C# then gets its @notrunning value, or zero, false or null. Each takes the built-in extension's state, the
+// running Scripting's EngineContext, after the call context. Each is written once, here: describe-api's natives mode
+// reads them into api/FenrirScripting.natives.json, from which their C# declarations and registration are generated.
 namespace Fenrir::ScriptingNatives
 {
     /**
      * @brief Writes `text` to the engine's logger at `level`: 0 Info, 1 Warn, 2 Error. The text is data, never a
      * format string.
      */
-    void Log(const CallContext& context, Detail::EngineContext&, std::int32_t level, const char* text,
-             std::int32_t length)
+    void Log(const CallContext& context, Detail::EngineContext&, std::int32_t level, std::string_view text)
     {
-        if (text == nullptr || length < 0)
-        {
-            return;
-        }
-        const std::string message(text, static_cast<std::size_t>(length));
+        const std::string message(text);
         auto& logger = *context.GetApp().Logger();
         switch (level)
         {
@@ -89,11 +88,6 @@ namespace Fenrir::ScriptingNatives
      */
     bool EntityWorldTransform(const CallContext& context, Detail::EngineContext&, std::uint32_t value, Transform* world)
     {
-        if (world == nullptr)
-        {
-            return false;
-        }
-        *world = Transform{};
         if (!context.Entities().HasEntity(value))
         {
             return false;
@@ -115,7 +109,7 @@ namespace Fenrir::ScriptingNatives
     bool EntitySetWorldTransform(const CallContext& context, Detail::EngineContext&, std::uint32_t value,
                                  const Transform* world)
     {
-        if (world == nullptr || !context.Entities().HasEntity(value))
+        if (!context.Entities().HasEntity(value))
         {
             return false;
         }
@@ -136,31 +130,25 @@ namespace Fenrir::ScriptingNatives
      * struct of its own).
      * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
-    std::int32_t ComponentIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
-                               const char* typeName, std::int32_t typeLength)
+    std::int32_t ComponentIdOf(const CallContext&, Detail::EngineContext& engine, std::string_view name,
+                               std::string_view typeName)
     {
-        if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
-        {
-            return static_cast<std::int32_t>(RegistryError::NotRegistered);
-        }
-        return engine.components->Components().Resolve(
-            std::string_view(name, static_cast<std::size_t>(length)),
-            std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Components().Resolve(name, typeName);
     }
 
     /**
      * @brief A script assembly reports a component type it defines, while it loads.
      * @return False when nothing is loading.
      */
-    bool RegisterScriptComponent(const CallContext&, Detail::EngineContext& engine, const char* name,
-                                 std::int32_t length, std::int32_t size, std::int32_t alignment)
+    bool RegisterScriptComponent(const CallContext&, Detail::EngineContext& engine, std::string_view name,
+                                 std::int32_t size, std::int32_t alignment)
     {
-        if (engine.reporting == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
+        if (engine.reporting == nullptr || name.empty() || size <= 0 || alignment <= 0)
         {
             return false;
         }
-        engine.reporting->components.push_back({std::string(name, static_cast<std::size_t>(length)),
-                                                static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+        engine.reporting->components.push_back(
+            {std::string(name), static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
         return true;
     }
 
@@ -261,30 +249,25 @@ namespace Fenrir::ScriptingNatives
      * registered for a different C# type.
      * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
-    std::int32_t EventIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
-                           const char* typeName, std::int32_t typeLength)
+    std::int32_t EventIdOf(const CallContext&, Detail::EngineContext& engine, std::string_view name,
+                           std::string_view typeName)
     {
-        if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
-        {
-            return static_cast<std::int32_t>(RegistryError::NotRegistered);
-        }
-        return engine.components->Events().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
-                                                   std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Events().Resolve(name, typeName);
     }
 
     /**
      * @brief A script assembly reports an event type it defines, while it loads.
      * @return False when nothing is loading.
      */
-    bool RegisterScriptEvent(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
+    bool RegisterScriptEvent(const CallContext&, Detail::EngineContext& engine, std::string_view name,
                              std::int32_t size, std::int32_t alignment)
     {
-        if (engine.reporting == nullptr || name == nullptr || length <= 0 || size <= 0 || alignment <= 0)
+        if (engine.reporting == nullptr || name.empty() || size <= 0 || alignment <= 0)
         {
             return false;
         }
-        engine.reporting->events.push_back({std::string(name, static_cast<std::size_t>(length)),
-                                            static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
+        engine.reporting->events.push_back(
+            {std::string(name), static_cast<std::size_t>(size), static_cast<std::size_t>(alignment)});
         return true;
     }
 
@@ -313,10 +296,6 @@ namespace Fenrir::ScriptingNatives
     bool EventReadAfter(const CallContext& context, Detail::EngineContext& engine, std::int32_t event,
                         std::uint64_t* seen, Detail::NativeAddress* view)
     {
-        if (seen == nullptr || view == nullptr)
-        {
-            return false;
-        }
         const auto* registration = engine.components->Events().Get(event);
         const IEventQueue* queue =
             registration == nullptr ? nullptr : context.GetApp().FindEventQueue(registration->name);
@@ -345,13 +324,13 @@ namespace Fenrir::ScriptingNatives
     std::int32_t QueryCount(const CallContext& context, Detail::EngineContext& engine, const std::int32_t* ids,
                             std::int32_t count)
     {
-        if (ids == nullptr || count <= 0)
+        const std::span<const std::int32_t> idList = SpanOf(ids, count);
+        if (idList.empty())
         {
             return -1;
         }
         ++engine.queryCalls;
-        return Detail::CountQueryRows(context.Entities(), *engine.components,
-                                      std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)));
+        return Detail::CountQueryRows(context.Entities(), *engine.components, idList);
     }
 
     /**
@@ -362,14 +341,15 @@ namespace Fenrir::ScriptingNatives
     std::int32_t QueryFill(const CallContext& context, Detail::EngineContext& engine, const std::int32_t* ids,
                            std::int32_t count, Detail::NativeAddress* rows, std::int32_t capacity)
     {
-        if (ids == nullptr || count <= 0 || rows == nullptr || capacity < 0)
+        const std::span<const std::int32_t> idList = SpanOf(ids, count);
+        const std::span<Detail::NativeAddress> rowList = SpanOf(rows, capacity);
+        if (idList.empty())
         {
             return -1;
         }
         ++engine.queryCalls;
-        return Detail::FillQueryRows(context.Entities(), *engine.components,
-                                     std::span<const std::int32_t>(ids, static_cast<std::size_t>(count)), rows,
-                                     capacity);
+        return Detail::FillQueryRows(context.Entities(), *engine.components, idList, rowList.data(),
+                                     static_cast<std::int32_t>(rowList.size()));
     }
 
     /**
@@ -379,15 +359,10 @@ namespace Fenrir::ScriptingNatives
      * WrongType when it is registered for a different C# type.
      * @notrunning static_cast<std::int32_t>(Fenrir::RegistryError::NotRegistered)
      */
-    std::int32_t ResourceIdOf(const CallContext&, Detail::EngineContext& engine, const char* name, std::int32_t length,
-                              const char* typeName, std::int32_t typeLength)
+    std::int32_t ResourceIdOf(const CallContext&, Detail::EngineContext& engine, std::string_view name,
+                              std::string_view typeName)
     {
-        if (name == nullptr || length < 0 || typeName == nullptr || typeLength < 0)
-        {
-            return static_cast<std::int32_t>(RegistryError::NotRegistered);
-        }
-        return engine.components->Resources().Resolve(std::string_view(name, static_cast<std::size_t>(length)),
-                                                      std::string_view(typeName, static_cast<std::size_t>(typeLength)));
+        return engine.components->Resources().Resolve(name, typeName);
     }
 
     /**

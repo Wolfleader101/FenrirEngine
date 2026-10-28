@@ -20,16 +20,8 @@
         },
         {
           "name": "text",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         }
       ]
     },
@@ -160,29 +152,13 @@
       "parameters": [
         {
           "name": "name",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         },
         {
           "name": "typeName",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "typeLength",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         }
       ]
     },
@@ -200,16 +176,8 @@
       "parameters": [
         {
           "name": "name",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         },
         {
           "name": "size",
@@ -417,29 +385,13 @@
       "parameters": [
         {
           "name": "name",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         },
         {
           "name": "typeName",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "typeLength",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         }
       ]
     },
@@ -457,16 +409,8 @@
       "parameters": [
         {
           "name": "name",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         },
         {
           "name": "size",
@@ -629,29 +573,13 @@
       "parameters": [
         {
           "name": "name",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "length",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         },
         {
           "name": "typeName",
-          "type": "const char*",
-          "kind": "pointer",
-          "pointee": "char",
-          "pointeeKind": "i8",
-          "const": true
-        },
-        {
-          "name": "typeLength",
-          "type": "std::int32_t",
-          "kind": "i32"
+          "type": "std::string_view",
+          "kind": "string"
         }
       ]
     },
