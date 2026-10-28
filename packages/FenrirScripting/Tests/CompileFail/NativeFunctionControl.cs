@@ -81,8 +81,9 @@ public static unsafe partial class Physics
         Write("text", "more".AsSpan(), 1);
         Hit hit = default;
         Raycast(in hit, ref hit, out Hit last);
+        Pick(default, 1, out Entity picked);
         Tick();
         Badge badge = Rebadge(Weigh(new Badge { Code = 2 }), Face(Turn(Heading.North, default)), Next(new Slot(1)));
-        return badge.Code + Add(1, 2) + (int)Nested.Half(4) + (int)Pick(default, 1).Value + last.Id;
+        return badge.Code + Add(1, 2) + (int)Nested.Half(4) + (int)picked.Value + last.Id;
     }
 }
