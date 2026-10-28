@@ -65,6 +65,28 @@
       ]
     },
     {
+      "name": "Fixture::Link",
+      "category": "struct",
+      "role": "nested",
+      "size": 16,
+      "alignment": 8,
+      "doc": "A link to another body, as an engine's entity handle is: a value and the list that owns it. The binding shows a field holding one as an Id (Fixture.binding.toml, project-as). Its members are private, so the selection's private-members names it (one public and one private would not be standard layout, which Iris needs).",
+      "fields": [
+        {
+          "name": "value",
+          "offset": 0,
+          "kind": "u32",
+          "default": 4294967295
+        },
+        {
+          "name": "m_owner",
+          "offset": 8,
+          "kind": "pointer",
+          "default": null
+        }
+      ]
+    },
+    {
       "name": "Fixture::Marker",
       "category": "struct",
       "role": "nested",
@@ -270,7 +292,7 @@
       "name": "Fixture::Body",
       "category": "struct",
       "role": "component",
-      "size": 280,
+      "size": 296,
       "alignment": 8,
       "doc": "A component using each kind of field: enums, bound types, nested structs, arrays and pointers. Its doc comment is wrapped over three lines.",
       "fields": [
@@ -363,29 +385,37 @@
           "default": {}
         },
         {
-          "name": "numbers",
+          "name": "parent",
           "offset": 96,
+          "kind": "struct",
+          "type": "Fixture::Link",
+          "default": {},
+          "doc": "The body this one hangs from: shown as an Id over a Link."
+        },
+        {
+          "name": "numbers",
+          "offset": 112,
           "kind": "struct",
           "type": "Fixture::Numbers",
           "default": {}
         },
         {
           "name": "limits",
-          "offset": 168,
+          "offset": 184,
           "kind": "struct",
           "type": "Fixture::Limits",
           "default": {}
         },
         {
           "name": "marker",
-          "offset": 216,
+          "offset": 232,
           "kind": "struct",
           "type": "Fixture::Marker",
           "default": {}
         },
         {
           "name": "samples",
-          "offset": 220,
+          "offset": 236,
           "kind": "array",
           "elementKind": "f32",
           "length": 4,
@@ -398,7 +428,7 @@
         },
         {
           "name": "modes",
-          "offset": 236,
+          "offset": 252,
           "kind": "array",
           "elementKind": "enum",
           "elementType": "Fixture::Motion",
@@ -410,7 +440,7 @@
         },
         {
           "name": "springs",
-          "offset": 240,
+          "offset": 256,
           "kind": "array",
           "elementKind": "struct",
           "elementType": "Fixture::Spring",
@@ -422,7 +452,7 @@
         },
         {
           "name": "zeros",
-          "offset": 256,
+          "offset": 272,
           "kind": "array",
           "elementKind": "u8",
           "length": 3,
@@ -434,13 +464,13 @@
         },
         {
           "name": "userData",
-          "offset": 264,
+          "offset": 280,
           "kind": "pointer",
           "default": null
         },
         {
           "name": "next",
-          "offset": 272,
+          "offset": 288,
           "kind": "pointer",
           "default": null
         }
@@ -743,7 +773,7 @@
       "name": "Fixture::Touched",
       "category": "struct",
       "role": "event",
-      "size": 32,
+      "size": 48,
       "alignment": 8,
       "doc": "An event between two handles.",
       "fields": [
@@ -760,6 +790,14 @@
           "kind": "struct",
           "type": "Fixture::Handle",
           "default": {}
+        },
+        {
+          "name": "other",
+          "offset": 32,
+          "kind": "struct",
+          "type": "Fixture::Link",
+          "default": {},
+          "doc": "Who touched: a read-only holder of a Link, so its Id has a getter only."
         }
       ]
     },

@@ -47,8 +47,8 @@ public sealed class BindingTests
             Assert.True(generated.ContainsKey(Path.GetFullPath(file)), $"{file} is committed but no longer generated.");
         }
 
-        Assert.True(generated.Count == 27,
-                    $"The fixture should give 19 mirrors, the natives' class, its two facade parts, the mappings, the " +
+        Assert.True(generated.Count == 28,
+                    $"The fixture should give 20 mirrors, the natives' class, its two facade parts, the mappings, the " +
                     $"natives header, the registration and the defaults test's two files, but gave {generated.Count} files.");
     }
 
@@ -418,6 +418,101 @@ public sealed class BindingTests
     }
 
     [Fact]
+    public void AWritableHolderOfAProjectedMirrorGetsAPropertyOverAPrivateBackingField()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, _ => { });
+
+        var body = Mirror(Generator.Generate(FixtureConfig, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    /// <summary>The body this one hangs from: shown as an Id over a Link.</summary>\n" +
+                                  "    public Id Parent { get => parent.Target; set => parent = value; }\n" +
+                                  "    private Link parent = new();\n", StringComparison.Ordinal),
+                    "Body holds a Link, which project-as shows as an Id, so its field should be a property with a getter " +
+                    $"and a setter over a private backing field with the field's initialiser, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AReadOnlyHolderOfAProjectedMirrorGetsAGetterOnlyPropertyAndAReadOnlyBackingField()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, _ => { });
+
+        var touched = Mirror(Generator.Generate(FixtureConfig, [description]), "Touched.cs");
+
+        Assert.True(touched.Contains("    public Id Other { get => other.Target; }\n    private readonly Link other = new();\n",
+                                     StringComparison.Ordinal),
+                    "Touched is read-only and holds a Link, so its field should be a getter-only property over a readonly " +
+                    $"backing field, but Touched is:\n{touched}");
+    }
+
+    [Fact]
+    public void AUsedBindingsProjectionIsInherited()
+    {
+        using var directory = new TemporaryDirectory();
+        // The Common binding shows its Spring as a Stiffness, written through a named conversion; the fixture holds Spring in
+        // four fields and an array, which a projected mirror cannot be in, so the array goes.
+        var common = Path.Combine(directory.Path, "Common.binding.toml");
+        File.WriteAllText(common, File.ReadAllText(UsesConfig)
+                                      .Replace("\"Common.api.json\"",
+                                               $"\"{Path.Combine(FixtureDirectory, "Uses", "Common.api.json").Replace('\\', '/')}\"",
+                                               StringComparison.Ordinal)
+                                      .Replace("generated = \"Contract/Generated\"\n",
+                                               "generated = \"Contract/Generated\"\n" +
+                                               "project-as = { \"Fixture::Spring\" = { type = \"Stiffness\", get = \"Value\", set = \"Spring.From(value)\" } }\n",
+                                               StringComparison.Ordinal));
+        var config = CopyConfig(directory, "", edit: text => text.Replace(UsesConfig.Replace('\\', '/'), common.Replace('\\', '/'),
+                                                                         StringComparison.Ordinal));
+        var description = WriteDescription(directory, root =>
+        {
+            var fields = Type(root, "Fixture::Body")["fields"]!.AsArray();
+            fields.Remove(fields.First(field => (string)field!["name"]! == "springs"));
+        });
+
+        var body = Mirror(Generator.Generate(config, [description]), "Body.cs");
+
+        Assert.True(body.Contains("    public Stiffness Spring { get => spring.Value; set => spring = Spring.From(value); }\n" +
+                                  "    private Spring spring = new();\n", StringComparison.Ordinal) &&
+                    body.Contains("    public Stiffness Tuned { get => tuned.Value; set => tuned = Spring.From(value); }\n" +
+                                  "    private Spring tuned = new() { Stiffness = 4 };\n", StringComparison.Ordinal),
+                    "The binding the fixture uses shows Spring as a Stiffness, so Body's Spring fields should be properties " +
+                    $"with the configured setter over backing fields keeping their initialisers, but Body is:\n{body}");
+    }
+
+    [Fact]
+    public void AProjectedMirrorHeldInAnArrayFailsNamingTheField()
+    {
+        using var directory = new TemporaryDirectory();
+        var description = WriteDescription(directory, root => Field(root, "Fixture::Body", "springs")["elementType"] = "Fixture::Link");
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(FixtureConfig, [description]));
+
+        Assert.True(exception.Message.Contains("Fixture::Body::springs is an array of Fixture::Link, which project-as shows as Id: " +
+                                               "a projected mirror is held singly", StringComparison.Ordinal),
+                    $"An array of a projected mirror should fail naming the field, but failed with\n  {exception.Message}");
+    }
+
+    [Theory]
+    [InlineData("\"Fixture::Motion\" = { type = \"Id\", get = \"Target\" }",
+                "project-as names Fixture::Motion, which is not a described struct")]
+    [InlineData("\"Fixture::Spring\" = { type = \"Id\", get = \"Target\" }",
+                "project-as names Fixture::Spring, which is not a described struct this binding mirrors")]
+    [InlineData("\"Fixture::Link\" = { type = \"Id\", get = \"Target\", sets = \"value\" }",
+                "unknown key 'sets' in [csharp.project-as.\"Fixture::Link\"] (known: type, get, set)")]
+    public void AProjectionTheBindingCannotHonourFailsSayingWhy(string entry, string diagnostic)
+    {
+        using var directory = new TemporaryDirectory();
+        var config = CopyConfig(directory, "", edit: text => text.Replace("\"Fixture::Link\" = { type = \"Id\", get = \"Target\" }", entry,
+                                                                         StringComparison.Ordinal));
+        var description = WriteDescription(directory, _ => { });
+
+        var exception = Assert.Throws<BindingException>(() => Generator.Generate(config, [description]));
+
+        Assert.True(exception.Message.Contains(diagnostic, StringComparison.Ordinal),
+                    $"Binding should fail with\n  {diagnostic}\nbut failed with\n  {exception.Message}");
+    }
+
+    [Fact]
     public void AStructInBothReadOnlyAndImmutableStructsFails()
     {
         using var directory = new TemporaryDirectory();
@@ -513,7 +608,7 @@ public sealed class BindingTests
         var first = Generator.Write(config, Generator.Generate(config, [description]));
         var second = Generator.Write(config, Generator.Generate(config, [description]));
 
-        Assert.True(first.Count == 27, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
+        Assert.True(first.Count == 28, $"The first run should write every file, but reported:\n{string.Join('\n', first)}");
         Assert.True(second.Count == 0, $"A second run should write nothing, but reported:\n{string.Join('\n', second)}");
     }
 

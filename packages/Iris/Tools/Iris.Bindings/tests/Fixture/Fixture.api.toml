@@ -2,8 +2,8 @@
 # tools/describe-api/tests/Fixture/Fixture.api.toml gives these types. fenrir-describe-api writes Fixture.api.json beside it.
 headers = ["Fixture.hpp"]
 
-# Types whose private data members are shared all the same.
-private-members = ["Fixture::Tag"]
+# Types whose private data members are shared all the same: a selected one, and a nested one Body and Touched hold.
+private-members = ["Fixture::Tag", "Fixture::Link"]
 
 [types]
 "Fixture::Body" = "component"

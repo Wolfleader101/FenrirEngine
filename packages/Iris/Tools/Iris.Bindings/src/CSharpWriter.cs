@@ -192,27 +192,39 @@ internal static class CSharpWriter
             // A field holding a C++-owned copy (a readonly-structs entry, a read-only resource) is read-only too, so C#
             // cannot write the struct whole; one holding an immutable value (an immutable-structs entry) is not, since
             // C# assigns such a value whole.
-            var field = readOnly || (member.Kind.Kind == "struct" && binding.HoldersAreReadOnly(binding.Type(member.Kind.Type!)))
-                            ? $"{access} readonly"
-                            : access;
+            var readOnlyField = readOnly ||
+                                (member.Kind.Kind == "struct" && binding.HoldersAreReadOnly(binding.Type(member.Kind.Type!)));
+            var field = readOnlyField ? $"{access} readonly" : access;
             Doc(text, member.Doc);
             if (binding.IsFixedBuffer(type, member))
             {
                 text.Line($"{field} fixed {binding.CSharpType(member.Kind.ElementKind!, null)} {memberName}[{member.Kind.Length}];");
+                continue;
             }
-            else if (member.Kind.IsArray)
+
+            if (member.Kind.IsArray)
             {
                 text.Line($"{field} {Binding.ArrayTypeName(memberName)} {memberName};");
+                continue;
             }
-            else if (initialised)
+
+            var mirror = binding.CSharpType(member.Kind.Kind, member.Kind.Type);
+            var initialiser = initialised
+                                  ? $" = {Default(binding, member.Kind.Kind, member.Kind.Type, member.Default, member.Name)}"
+                                  : "";
+            if (member.Kind.Kind == "struct" && binding.Projection(binding.Type(member.Kind.Type!)) is { } projection)
             {
-                var value = Default(binding, member.Kind.Kind, member.Kind.Type, member.Default, member.Name);
-                text.Line($"{field} {binding.CSharpType(member.Kind.Kind, member.Kind.Type)} {memberName} = {value};");
+                // The mirror is storage: the property shows it as the projected type, over a private backing field (the
+                // name the mapping gives the member), with the initialiser and `readonly` the field would have had. A
+                // readonly backing field gets a getter only, so writing the property fails as writing the field would.
+                var backing = binding.FieldName(type, member);
+                var setter = readOnlyField ? "" : $" set => {backing} = {projection.Set ?? "value"};";
+                text.Line($"{access} {projection.Type} {memberName} {{ get => {backing}.{projection.Get};{setter} }}");
+                text.Line($"private{(readOnlyField ? " readonly" : "")} {mirror} {backing}{initialiser};");
+                continue;
             }
-            else
-            {
-                text.Line($"{field} {binding.CSharpType(member.Kind.Kind, member.Kind.Type)} {memberName};");
-            }
+
+            text.Line($"{field} {mirror} {memberName}{initialiser};");
         }
 
         if (initialised)

@@ -148,6 +148,21 @@ namespace Fixture
     };
 
     /**
+     * @brief A link to another body, as an engine's entity handle is: a value and the list that owns it. The binding
+     * shows a field holding one as an Id (Fixture.binding.toml, project-as). Its members are private, so the
+     * selection's private-members names it (one public and one private would not be standard layout, which Iris needs).
+     */
+    class Link
+    {
+      public:
+        Link() = default;
+
+      private:
+        std::uint32_t value = ~0u;
+        void* m_owner = nullptr;
+    };
+
+    /**
      * @brief A component using each kind of field: enums, bound types, nested structs, arrays and pointers. Its doc
      * comment is wrapped over
      * three lines.
@@ -168,6 +183,8 @@ namespace Fixture
         /** @brief Sets one member; the other keeps the nested struct's own default. */
         Spring tuned = {.stiffness = 4.0f};
         Handle owner;
+        /** @brief The body this one hangs from: shown as an Id over a Link. */
+        Link parent;
         Numbers numbers;
         Limits limits;
         Marker marker;
@@ -344,6 +361,8 @@ namespace Fixture
     {
         Handle first;
         Handle second;
+        /** @brief Who touched: a read-only holder of a Link, so its Id has a getter only. */
+        Link other;
     };
 
     // Two types Fixture.api.toml does not select, described by the binding the fixture uses (Uses/Common.api.json) so

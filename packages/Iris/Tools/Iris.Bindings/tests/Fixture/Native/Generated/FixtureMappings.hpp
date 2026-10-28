@@ -35,6 +35,18 @@ static_assert(sizeof(Fixture::Limits) == 48 && alignof(Fixture::Limits) == 8,
               "regenerate the description, then this binding");
 
 template <>
+struct Iris::StructMapping<Fixture::Link>
+{
+    static constexpr std::string_view typeName = "Fixture.Bindings.Link";
+    static constexpr auto fields = Iris::StructFields(
+        Iris::Field<std::uint32_t>("Value", 0),
+        Iris::Field<void*>("owner", 8));
+};
+static_assert(sizeof(Fixture::Link) == 16 && alignof(Fixture::Link) == 8,
+              "Fixture::Link is not the layout Fixture.api.json describes: "
+              "regenerate the description, then this binding");
+
+template <>
 struct Iris::StructMapping<Fixture::Marker>
 {
     static constexpr std::string_view typeName = "Fixture.Bindings.Marker";
@@ -111,17 +123,18 @@ struct Iris::StructMapping<Fixture::Body>
         Iris::Field<Fixture::Spring>("Plain", 64),
         Iris::Field<Fixture::Spring>("Tuned", 72),
         Iris::Field<Fixture::Handle>("Owner", 80),
-        Iris::Field<Fixture::Numbers>("Numbers", 96),
-        Iris::Field<Fixture::Limits>("Limits", 168),
-        Iris::Field<Fixture::Marker>("Marker", 216),
-        Iris::Field<float[4]>("Samples", 220),
-        Iris::Field<Fixture::Motion[2]>("Modes", 236),
-        Iris::Field<Fixture::Spring[2]>("Springs", 240),
-        Iris::Field<std::uint8_t[3]>("Zeros", 256),
-        Iris::Field<void*>("UserData", 264),
-        Iris::Field<void*>("Next", 272));
+        Iris::Field<Fixture::Link>("parent", 96),
+        Iris::Field<Fixture::Numbers>("Numbers", 112),
+        Iris::Field<Fixture::Limits>("Limits", 184),
+        Iris::Field<Fixture::Marker>("Marker", 232),
+        Iris::Field<float[4]>("Samples", 236),
+        Iris::Field<Fixture::Motion[2]>("Modes", 252),
+        Iris::Field<Fixture::Spring[2]>("Springs", 256),
+        Iris::Field<std::uint8_t[3]>("Zeros", 272),
+        Iris::Field<void*>("UserData", 280),
+        Iris::Field<void*>("Next", 288));
 };
-static_assert(sizeof(Fixture::Body) == 280 && alignof(Fixture::Body) == 8,
+static_assert(sizeof(Fixture::Body) == 296 && alignof(Fixture::Body) == 8,
               "Fixture::Body is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 
@@ -269,9 +282,10 @@ struct Iris::StructMapping<Fixture::Touched>
     static constexpr std::string_view typeName = "Fixture.Bindings.Touched";
     static constexpr auto fields = Iris::StructFields(
         Iris::Field<Fixture::Handle>("First", 0),
-        Iris::Field<Fixture::Handle>("Second", 16));
+        Iris::Field<Fixture::Handle>("Second", 16),
+        Iris::Field<Fixture::Link>("other", 32));
 };
-static_assert(sizeof(Fixture::Touched) == 32 && alignof(Fixture::Touched) == 8,
+static_assert(sizeof(Fixture::Touched) == 48 && alignof(Fixture::Touched) == 8,
               "Fixture::Touched is not the layout Fixture.api.json describes: "
               "regenerate the description, then this binding");
 

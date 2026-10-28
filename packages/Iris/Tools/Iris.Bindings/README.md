@@ -70,6 +70,7 @@ immutable-structs = ["My::Link"]       # Optional: read-only structs C# assigns 
 private-fields = ["My::Link::m_owner"]  # Optional: fields mirrored private, for hand-written members to reach.
 fixed-buffers = ["My::Label::text"]     # Optional: arrays of numbers mirrored as fixed buffers, not [InlineArray] structs.
 internal-structs = ["My::ShapeOptions"]  # Optional: structs mirrored internal, for the contract's own use.
+project-as = { "My::Link" = { type = "Entity", get = "Target" } }  # Optional: a field holding the mirror is a property of that type (below).
 
 [cpp]
 mappings = "src/Generated/MyPhysicsMappings.hpp"
@@ -183,7 +184,15 @@ tagged union's mirror too); a resource in `read-only` gets the read-only interfa
 (`SamplesArray Samples`, with `N` as its `Length` constant), filled by the constructor, since C# cannot initialise one; an array in `fixed-buffers` is a
 `fixed` buffer (`public fixed byte Text[256];`) in an `unsafe` mirror instead, which a read-only mirror cannot hold. A
 field in `private-fields` is `private`, and its mirror turns off the compiler's unused-field warnings: native code reads
-it. A pointer is `pointer-type` at its offset, an empty struct an empty struct.
+it. A pointer is `pointer-type` at its offset, an empty struct an empty struct. A field holding a mirror in `project-as`
+is a property of the configured type over a private backing field of the mirror, named for the field in camelCase and
+keeping the initialiser and `readonly` the field would have had: `public Entity Parent { get => parent.Target; set =>
+parent = value; } private EntityLink parent = new();`, the getter reading the entry's `get` member of the backing field and
+the setter assigning its `set` expression (the projected `value` itself, through the mirror's conversion, when the entry
+has none), with the doc comment on the property and a getter only on a read-only mirror, where the backing field is
+`readonly`. The mapping names the backing field, since the bridge matches a mirror's fields to its mapping by name. A
+projected field cannot be passed by `ref` or `in`, since it is a property, and cannot be an array: a projected mirror is
+held singly. A binding that `uses` one with a projection inherits it, as it does the mirror's name.
 
 **Tagged unions.** The mirror holds the storage only, as the scripting SDK's tagged-union generator consumes it:
 `[TaggedUnion]`, `[StructLayout(LayoutKind.Explicit)]`, `[FieldOffset(0)] private Tag _type;` and one
@@ -286,7 +295,8 @@ the description does not record, a field named as its struct, a hand-written fie
 description describes or one that a type it binds holds, a `readonly-structs` or `immutable-structs` entry that is not a
 described struct, a struct in both `readonly-structs` and `immutable-structs`, a
 `private-fields` or `fixed-buffers` entry that is not a field of a described struct, a fixed buffer that is not an array
-of numbers or is in a read-only mirror, a component, event, tagged union or resource with no attribute, interface or
+of numbers or is in a read-only mirror, a `project-as` entry that is not a described struct this binding mirrors, an
+array or fixed buffer of a projected mirror (named by its field), a component, event, tagged union or resource with no attribute, interface or
 (with a registration listing it) factory (each SDK name is needed only by the kind of type that uses it, so a binding
 with no components states no component names),
 a `read-only` entry that is not a component or resource, a `by-hand` entry that is not a type the registration would

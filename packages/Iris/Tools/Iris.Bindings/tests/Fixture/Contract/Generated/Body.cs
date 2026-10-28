@@ -28,6 +28,9 @@ public partial struct Body : IComponent
     /// <summary>Sets one member; the other keeps the nested struct's own default.</summary>
     public Spring Tuned = new() { Stiffness = 4 };
     public Handle Owner = new();
+    /// <summary>The body this one hangs from: shown as an Id over a Link.</summary>
+    public Id Parent { get => parent.Target; set => parent = value; }
+    private Link parent = new();
     public Numbers Numbers = new();
     public readonly Limits Limits = new();
     public Marker Marker = new();

@@ -12,11 +12,11 @@
 
 **Touches:** `packages/Iris/Tools/Iris.Bindings/src/`, `packages/Iris/Tools/Iris.Bindings/tests/`, `packages/Iris/Tools/Iris.Bindings/README.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] Iris.Bindings' tests pass with the new cases; the fixture's committed outputs are regenerated and the fixture assembly compiles (`IrisBindingsFixtureAssembly`).
-- [ ] No built-in or extension output changes: no binding sets `project-as` yet, so `fenrir-generate-bindings` is a no-op outside the fixture.
-- [ ] clang-format and `check_tickets.py` pass.
+- [x] Iris.Bindings' tests pass with the new cases; the fixture's committed outputs are regenerated and the fixture assembly compiles (`IrisBindingsFixtureAssembly`).
+- [x] No built-in or extension output changes: no binding sets `project-as` yet, so `fenrir-generate-bindings` is a no-op outside the fixture.
+- [x] clang-format and `check_tickets.py` pass.
 
 ## Comments
 

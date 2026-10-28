@@ -18,9 +18,17 @@ internal sealed record BoundType(string Type, IReadOnlyList<string>? Constructor
 }
 
 /// <summary>
+/// How a field holding a mirror is shown (<c>[csharp] project-as</c>): the C# type of the property over it, the member of
+/// the backing field its getter reads, and the expression its setter assigns (the projected <c>value</c> itself, through
+/// the mirror's conversion, when null).
+/// </summary>
+internal sealed record Projection(string Type, string Get, string? Set);
+
+/// <summary>
 /// Where the C# mirrors go, the names of the SDK types they use (each only when the binding mirrors a type that needs
 /// it: <see cref="Binding" />'s accessors say which), the fields (<c>Type::member</c>) mirrored as private, or as fixed
-/// buffers rather than <c>[InlineArray]</c> structs, and the structs mirrored <c>internal</c>.
+/// buffers rather than <c>[InlineArray]</c> structs, the structs mirrored <c>internal</c>, and the mirrors a field
+/// holding one shows as another type (by C++ name).
 /// </summary>
 internal sealed record CSharpConfig(
     string Contract,
@@ -41,7 +49,8 @@ internal sealed record CSharpConfig(
     IReadOnlySet<string> ImmutableStructs,
     IReadOnlySet<string> PrivateFields,
     IReadOnlySet<string> FixedBuffers,
-    IReadOnlySet<string> InternalStructs);
+    IReadOnlySet<string> InternalStructs,
+    IReadOnlyDictionary<string, Projection> Projections);
 
 /// <summary>Where the Iris mappings go, and the headers they include.</summary>
 internal sealed record CppConfig(string Mappings, IReadOnlyList<string> Includes);
@@ -166,7 +175,7 @@ internal sealed record BindingConfig(
                     "read-only-component-interface", "event-attribute", "event-interface", "tagged-union-attribute",
                     "resource-attribute", "resource-interface", "read-only-resource-interface", "pointer-type",
                     "readonly-events", "readonly-structs", "immutable-structs", "private-fields", "fixed-buffers",
-                    "internal-structs");
+                    "internal-structs", "project-as");
         var cpp = reader.Table(table, "cpp");
         reader.Keys(cpp, "cpp", "mappings", "includes");
 
@@ -272,7 +281,8 @@ internal sealed record BindingConfig(
                              reader.Strings(csharp, "immutable-structs").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "private-fields").ToHashSet(StringComparer.Ordinal),
                              reader.Strings(csharp, "fixed-buffers").ToHashSet(StringComparer.Ordinal),
-                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal)),
+                             reader.Strings(csharp, "internal-structs").ToHashSet(StringComparer.Ordinal),
+                             ReadProjections(reader, csharp, path)),
             new CppConfig(reader.PathOf(cpp, "mappings"), reader.Strings(cpp, "includes")), registration, tests,
             nativesConfig, boundTypes, reader.StringTable(table, "names"), reader.StringTable(table, "nouns"),
             reader.Strings(table, "exclude").ToHashSet(StringComparer.Ordinal));
@@ -298,6 +308,31 @@ internal sealed record BindingConfig(
         }
 
         return boundTypes;
+    }
+
+    // The [csharp] project-as table: each described type name to how a field holding its mirror is shown.
+    private static Dictionary<string, Projection> ReadProjections(Reader reader, TomlTable csharp, string path)
+    {
+        var projections = new Dictionary<string, Projection>(StringComparer.Ordinal);
+        if (!csharp.ContainsKey("project-as"))
+        {
+            return projections;
+        }
+
+        foreach (var (name, value) in reader.Table(csharp, "project-as"))
+        {
+            if (value is not TomlTable projection)
+            {
+                throw new BindingException(
+                    $"{path}: project-as '{name}' is a table: {{ type = \"<C# type>\", get = \"<member>\", set = \"<expression>\" }}");
+            }
+
+            reader.Keys(projection, $"csharp.project-as.\"{name}\"", "type", "get", "set");
+            projections.Add(name, new Projection(reader.String(projection, "type"), reader.String(projection, "get"),
+                                                 reader.OptionalString(projection, "set")));
+        }
+
+        return projections;
     }
 
     private sealed class Reader(string path)

@@ -75,8 +75,8 @@ internal static class CppWriter
         }
         else
         {
-            fields.AddRange(type.Fields.Select(field => Field(binding.CppType(field.Kind),
-                                                              binding.MemberName(type, field.Name), field.Offset)));
+            fields.AddRange(type.Fields.Select(field => Field(binding.CppType(field.Kind), binding.FieldName(type, field),
+                                                              field.Offset)));
         }
 
         text.Line("template <>");

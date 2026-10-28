@@ -15,11 +15,15 @@ readonly-events = true
 readonly-structs = ["Fixture::Limits"]
 # A value C# never edits but assigns whole: readonly, while Body's field holding it stays writable.
 immutable-structs = ["Fixture::Numbers"]
-# Tag's id and owner are C#'s to reach through members a hand-written part would add, and its label a fixed buffer.
-private-fields = ["Fixture::Tag::m_id", "Fixture::Tag::m_owner"]
+# Tag's id and owner are C#'s to reach through members a hand-written part would add, and its label a fixed buffer; a
+# Link's owner is the engine's.
+private-fields = ["Fixture::Tag::m_id", "Fixture::Tag::m_owner", "Fixture::Link::m_owner"]
 fixed-buffers = ["Fixture::Tag::m_label"]
 # Tag is the contract's own: internal, so the defaults test has no case for it.
 internal-structs = ["Fixture::Tag"]
+# Link is storage: a field holding one is a property of the hand-written Id (Contract/Id.cs), read through Link's Target
+# and written through its conversion from an Id (Contract/Link.cs).
+project-as = { "Fixture::Link" = { type = "Id", get = "Target" } }
 
 [cpp]
 mappings = "Native/Generated/FixtureMappings.hpp"
@@ -67,6 +71,7 @@ types = { "Fixture::EntityId" = "Entity" }
 "Fixture::Tag::m_id" = "id"
 "Fixture::Tag::m_owner" = "owner"
 "Fixture::Tag::m_label" = "Label"
+"Fixture::Link::m_owner" = "owner"
 "f64" = "Double"
 
 [nouns]

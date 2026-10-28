@@ -11,6 +11,9 @@ public readonly partial struct Touched : IEvent
 {
     public readonly Handle First = new();
     public readonly Handle Second = new();
+    /// <summary>Who touched: a read-only holder of a Link, so its Id has a getter only.</summary>
+    public Id Other { get => other.Target; }
+    private readonly Link other = new();
 
     public Touched()
     {

@@ -284,6 +284,29 @@ internal sealed class Binding
               (IsResource(type) && type.Category == Category.Struct && IsRegisteredReadOnly(type));
 
     /// <summary>
+    /// The C# field that holds a member's storage, which the mapping names (the bridge matches each mirror field to its
+    /// mapping by name, in order): the member's C# name, or for a member whose struct is projected the private backing
+    /// field under the property, the member's C# name in camelCase.
+    /// </summary>
+    public string FieldName(DescribedType owner, Field field)
+    {
+        var name = MemberName(owner, field.Name);
+        return field.Kind.Kind == "struct" && Projection(Type(field.Kind.Type!)) != null
+                   ? char.ToLowerInvariant(name[0]) + name[1..]
+                   : name;
+    }
+
+    /// <summary>
+    /// How a field holding the struct's mirror is shown (<c>[csharp] project-as</c>): a property of the projected type
+    /// over a private backing field of the mirror, or null when the field is the mirror itself. A type a binding in
+    /// <c>uses</c> mirrors is as that binding shows it.
+    /// </summary>
+    public Projection? Projection(DescribedType type) =>
+        owners.TryGetValue(type.Name, out var owner)
+            ? owner.Projection(owner.Type(type.Name))
+            : Config.CSharp.Projections.GetValueOrDefault(type.Name);
+
+    /// <summary>
     /// Whether a struct's mirror gets field initialisers and an explicit <c>public T() {}</c> to run them: when some
     /// field's default is not all zero bytes, which is what C#'s <c>default</c> is. A read-only mirror always gets
     /// them: C# never writes its fields, so <c>new T()</c> is the one way it names a value, and the constructor stays
@@ -624,6 +647,7 @@ internal sealed class Binding
         CheckSdkNames();
         CheckResources();
         CheckInternal();
+        CheckProjections();
         foreach (var (file, entries) in new[] { (Config.Path, Config.BoundTypes), (Config.Defaults ?? "", Config.DefaultBoundTypes) })
         {
             foreach (var (name, entry) in entries.Where(entry => entry.Value.Wrapper != null))
@@ -757,6 +781,35 @@ internal sealed class Binding
             {
                 throw new BindingException(
                     $"{Config.Path}: internal-structs names {held}, but the public {type.Name} holds one: list it too");
+            }
+        }
+    }
+
+    // Each projected type is a struct mirrored here (a used binding's projection is that binding's to state), and no
+    // mirror holds a projected mirror in an array or a fixed buffer: a property stands over one field, and an indexer
+    // over projected elements is nothing a binding needs yet.
+    private void CheckProjections()
+    {
+        foreach (var name in Config.CSharp.Projections.Keys)
+        {
+            if (!types.TryGetValue(name, out var type) || type.Category != Category.Struct || IsUsed(type))
+            {
+                throw new BindingException(
+                    $"{Config.Path}: project-as names {name}, which is not a described struct this binding mirrors");
+            }
+        }
+
+        foreach (var type in Mirrored)
+        {
+            foreach (var field in type.Fields.Where(field => field.Kind.IsArray && field.Kind.ElementKind == "struct"))
+            {
+                var element = Type(field.Kind.ElementType!);
+                if (Projection(element) is { } projection)
+                {
+                    throw new BindingException(
+                        $"{Config.Path}: {type.Name}::{field.Name} is an array of {element.Name}, which project-as shows as " +
+                        $"{projection.Type}: a projected mirror is held singly");
+                }
             }
         }
     }
