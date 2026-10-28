@@ -1,5 +1,6 @@
 #include "ScriptData.hpp"
 
+#include "GeneratedNames.hpp"
 #include "ScriptComponents.hpp"
 
 #include <cctype>
@@ -348,10 +349,10 @@ namespace Fenrir::Detail
         struct Table
         {
             const char* noun;
-            const char* type;
+            std::string_view type;
         };
-        constexpr Table tables[] = {{"component", "Fenrir.Scripting.Generated.ComponentTable"},
-                                    {"event", "Fenrir.Scripting.Generated.EventTable"}};
+        constexpr Table tables[] = {{"component", GeneratedNames::ComponentTable},
+                                    {"event", GeneratedNames::EventTable}};
         for (const auto& [noun, type] : tables)
         {
             const auto table = m_component.FindType(type);
@@ -364,7 +365,7 @@ namespace Fenrir::Detail
                 return Result{table.status,
                               std::string("The ") + noun + " table could not be read: " + table.diagnostic, false};
             }
-            const auto run = table.value->FindMethod<void()>("Register");
+            const auto run = table.value->FindMethod<void()>(GeneratedNames::Register);
             if (!run.Succeeded())
             {
                 return Result{run.status,

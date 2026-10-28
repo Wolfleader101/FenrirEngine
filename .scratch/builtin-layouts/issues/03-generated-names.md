@@ -13,13 +13,16 @@
 
 **Touches:** `packages/FenrirScripting/src/GeneratedNames.hpp` (renamed from `SystemHostNames.hpp`), `packages/FenrirScripting/src/ScriptData.cpp`, `packages/FenrirScripting/src/Scripting.cpp` (lines 9 and 167 to 190 only; overlaps candidate 4's spec), `packages/FenrirScripting/CMakeLists.txt`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/GeneratedNames.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/ComponentFieldsGenerator.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/EventGenerator.cs`, `packages/FenrirScripting/Managed/Fenrir.Scripting.Generators/SystemGenerator.cs`, `packages/FenrirScripting/README.md`
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] `packages/FenrirScripting/src/SystemHostNames.hpp` does not exist; `grep -rn "Fenrir.Scripting.Generated" packages/FenrirScripting/src packages/FenrirScripting/Managed/Fenrir.Scripting.Generators --include=*.cpp --include=*.hpp --include=*.cs` finds a string literal only in `GeneratedNames.hpp` and `GeneratedNames.cs` (doc comments excepted).
-- [ ] The generated `.g.cs` text is byte-for-byte what it was (compare a fixture's generated output before and after, or rely on the end-to-end tests passing with no fixture change).
-- [ ] The scripting tests pass under the msvc-x64-debug preset; `Tests/Rules/ScriptSystemsTests.cpp` and `Tests/Rules/FakeSystemHost.hpp` compile unchanged (they name the `SystemHost` seam, not the names header).
-- [ ] `check_tickets.py` and clang-format pass.
+- [x] `packages/FenrirScripting/src/SystemHostNames.hpp` does not exist; `grep -rn "Fenrir.Scripting.Generated" packages/FenrirScripting/src packages/FenrirScripting/Managed/Fenrir.Scripting.Generators --include=*.cpp --include=*.hpp --include=*.cs` finds a string literal only in `GeneratedNames.hpp` and `GeneratedNames.cs` (doc comments excepted).
+- [x] The generated `.g.cs` text is byte-for-byte what it was (compare a fixture's generated output before and after, or rely on the end-to-end tests passing with no fixture change).
+- [x] The scripting tests pass under the msvc-x64-debug preset; `Tests/Rules/ScriptSystemsTests.cpp` and `Tests/Rules/FakeSystemHost.hpp` compile unchanged (they name the `SystemHost` seam, not the names header).
+- [x] `check_tickets.py` and clang-format pass.
 
 ## Comments
+
+Built 2026-10-28 in the spec worktree, stacked on the spec branch. `Table::type` became `std::string_view` for `FindType`. The README had no mention of the old header. msvc-x64-debug: 17/17 scripting tests, every fixture built by the changed generators.
+
 
 Filed from the builtin-layouts grilling (spec decisions 5, 7). Cut from `dotnet-scripting`; runs side by side with 01 and 02.
